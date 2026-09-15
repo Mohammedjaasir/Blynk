@@ -1,0 +1,55 @@
+# ==============================================================================
+# BLYNK MONOREPO .GITIGNORE
+# ==============================================================================
+
+# OS and Editor
+.DS_Store
+*.class
+*.log
+*.pyc
+*.swp
+.history
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Environment Variables & Secrets
+.env
+.env*.local
+*.pem
+*.key
+
+# Node.js / Backend
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database & Local Volumes
+postgres-data/
+*.sqlite
+
+# Flutter / Dart / Pub
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+app.*.symbols
+app.*.map.json
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Ephemeral scratch & extract files
+extracted_prd.txt
+scratch/
+graphify-out/cache/

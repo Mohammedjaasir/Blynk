@@ -1,0 +1,722 @@
+{
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/.vscode/settings.json": {
+    "mtime": 1788848539.214506,
+    "ast_hash": "974d93c150b668c66dcaea157cb358ae",
+    "semantic_hash": "974d93c150b668c66dcaea157cb358ae"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/Assets/auth.json": {
+    "mtime": 1788848539.288236,
+    "ast_hash": "bf71ee6e2560ad2b1612817e0b6f9907",
+    "semantic_hash": "bf71ee6e2560ad2b1612817e0b6f9907"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/Assets/cart_packing.json": {
+    "mtime": 1788848539.290236,
+    "ast_hash": "54844a70ef95980c159b81fdb63016a4",
+    "semantic_hash": "54844a70ef95980c159b81fdb63016a4"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/android/app/build.gradle": {
+    "mtime": 1788848539.2995834,
+    "ast_hash": "a2714561a8a73c5ca8ecb71c9ee30a6c",
+    "semantic_hash": "a2714561a8a73c5ca8ecb71c9ee30a6c"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/android/app/src/main/kotlin/dev/sarthakag/blinkit/ecom/MainActivity.kt": {
+    "mtime": 1788848539.3065844,
+    "ast_hash": "63d9adc570e6b37f7252b7b1c9da8fef",
+    "semantic_hash": "63d9adc570e6b37f7252b7b1c9da8fef"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/android/build.gradle": {
+    "mtime": 1788848539.3321216,
+    "ast_hash": "a9d624e015cc7c68362ca7ca833ddd68",
+    "semantic_hash": "a9d624e015cc7c68362ca7ca833ddd68"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/android/settings.gradle": {
+    "mtime": 1788848539.3341217,
+    "ast_hash": "b673a8efad7eaed18692f958a191f21a",
+    "semantic_hash": "b673a8efad7eaed18692f958a191f21a"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/ios/RunnerTests/RunnerTests.swift": {
+    "mtime": 1788848539.3583415,
+    "ast_hash": "24e5d095048eb86c30423f4e04b6e57b",
+    "semantic_hash": "24e5d095048eb86c30423f4e04b6e57b"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/ios/Runner/AppDelegate.swift": {
+    "mtime": 1788848539.3436627,
+    "ast_hash": "b431e1eaead2cfc3718b75ba2c5f45aa",
+    "semantic_hash": "b431e1eaead2cfc3718b75ba2c5f45aa"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/ios/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json": {
+    "mtime": 1788848539.3446586,
+    "ast_hash": "31a08e429403e265cabfb31b3d65f049",
+    "semantic_hash": "31a08e429403e265cabfb31b3d65f049"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json": {
+    "mtime": 1788848539.3534544,
+    "ast_hash": "b9e927ac17345f2d5f052fe68a3487f9",
+    "semantic_hash": "b9e927ac17345f2d5f052fe68a3487f9"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/ios/Runner/Runner-Bridging-Header.h": {
+    "mtime": 1788848539.3583415,
+    "ast_hash": "7ad7b5cea096132de13ba526b2b9efbe",
+    "semantic_hash": "7ad7b5cea096132de13ba526b2b9efbe"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Infrastructure/AsyncAction/async_actions.dart": {
+    "mtime": 1788848539.3603437,
+    "ast_hash": "e5a5c76f3f73c054ffc64d519d3e9076",
+    "semantic_hash": "e5a5c76f3f73c054ffc64d519d3e9076"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Infrastructure/HttpMethods/requesting_methods.dart": {
+    "mtime": 1788848539.3613434,
+    "ast_hash": "ead11345bf2be3a32ff058fc39770740",
+    "semantic_hash": "ead11345bf2be3a32ff058fc39770740"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/Auth/login_screen.dart": {
+    "mtime": 1788852042.864737,
+    "ast_hash": "53110bfa8f332614c53eb3368bf59270",
+    "semantic_hash": "53110bfa8f332614c53eb3368bf59270"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/Auth/otp_verification_screen.dart": {
+    "mtime": 1788851280.280818,
+    "ast_hash": "661bd0dd2871395f9b18685ad4245622",
+    "semantic_hash": "661bd0dd2871395f9b18685ad4245622"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/app_about_screen.dart": {
+    "mtime": 1788848539.3643427,
+    "ast_hash": "2250b6a4999044bb2d16efc4dabe667e",
+    "semantic_hash": "2250b6a4999044bb2d16efc4dabe667e"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/cart_gift_screen.dart": {
+    "mtime": 1788848539.3643427,
+    "ast_hash": "ad50d3e97058cfcc8e43e5d8abafbfec",
+    "semantic_hash": "ad50d3e97058cfcc8e43e5d8abafbfec"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/coupons_screeen.dart": {
+    "mtime": 1788848539.3653417,
+    "ast_hash": "7fd7b0b009d8811bb204d99b16621fdb",
+    "semantic_hash": "7fd7b0b009d8811bb204d99b16621fdb"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/error_screen.dart": {
+    "mtime": 1788848539.3653417,
+    "ast_hash": "9fb9ddba06a6e258ec5d38b4bf8e8655",
+    "semantic_hash": "9fb9ddba06a6e258ec5d38b4bf8e8655"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/home_screen.dart": {
+    "mtime": 1788851908.0580435,
+    "ast_hash": "3e2e8d916a7367b72489c31d496d091e",
+    "semantic_hash": "3e2e8d916a7367b72489c31d496d091e"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/order_confirmation_screen.dart": {
+    "mtime": 1788852049.9144964,
+    "ast_hash": "7a521c0d2e9f0e6cf422d3ec6e36a32c",
+    "semantic_hash": "7a521c0d2e9f0e6cf422d3ec6e36a32c"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/order_summary_screen.dart": {
+    "mtime": 1788848539.3673434,
+    "ast_hash": "e8edbe720e4553472287eeaadfd3a4f5",
+    "semantic_hash": "e8edbe720e4553472287eeaadfd3a4f5"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/pdf_view_screen.dart": {
+    "mtime": 1788848539.3683438,
+    "ast_hash": "126315e4180d116ca849eb0511c98b0d",
+    "semantic_hash": "126315e4180d116ca849eb0511c98b0d"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/products_screen.dart": {
+    "mtime": 1788848539.3683438,
+    "ast_hash": "d23bf478292b7cdc1932fed148d5e31d",
+    "semantic_hash": "d23bf478292b7cdc1932fed148d5e31d"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/profile_screen.dart": {
+    "mtime": 1788848539.3693442,
+    "ast_hash": "9eab84787304cc732d256000b191d4c7",
+    "semantic_hash": "9eab84787304cc732d256000b191d4c7"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/user_address_screen.dart": {
+    "mtime": 1788848539.3693442,
+    "ast_hash": "a01c7e95e9143fbf2bdc2ca0acd99b27",
+    "semantic_hash": "a01c7e95e9143fbf2bdc2ca0acd99b27"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/user_cart_screen.dart": {
+    "mtime": 1788848539.370344,
+    "ast_hash": "eacf4b3816c554ac029059ae669a27b8",
+    "semantic_hash": "eacf4b3816c554ac029059ae669a27b8"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Screens/user_orders_screen.dart": {
+    "mtime": 1788848539.370344,
+    "ast_hash": "d21be29c7ee2aaf4bacd2f123d15a1eb",
+    "semantic_hash": "d21be29c7ee2aaf4bacd2f123d15a1eb"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Services/Exceptions/api_exception.dart": {
+    "mtime": 1788848539.3713424,
+    "ast_hash": "6379d6b5797cbd8763b19cf79178b8c5",
+    "semantic_hash": "6379d6b5797cbd8763b19cf79178b8c5"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/Services/Providers/auth.provider.dart": {
+    "mtime": 1788848539.3723416,
+    "ast_hash": "7d143d7ad118dc5b74c82df3f3726623",
+    "semantic_hash": "7d143d7ad118dc5b74c82df3f3726623"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/add_to_cart_button.dart": {
+    "mtime": 1788848539.373341,
+    "ast_hash": "e51a63867f595145ea48d5e2083f5219",
+    "semantic_hash": "e51a63867f595145ea48d5e2083f5219"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_add_address.dart": {
+    "mtime": 1788848539.3743467,
+    "ast_hash": "4ce7143bf17b7ad5e24085287b820abf",
+    "semantic_hash": "4ce7143bf17b7ad5e24085287b820abf"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_address_screen.dart": {
+    "mtime": 1788848539.3743467,
+    "ast_hash": "6eb2c96d5d7a33dae16a2415e32e52e3",
+    "semantic_hash": "6eb2c96d5d7a33dae16a2415e32e52e3"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_cancellation_policy.dart": {
+    "mtime": 1788848539.3753471,
+    "ast_hash": "6eb2bbeaf279ded4b94fcec0ff0a3073",
+    "semantic_hash": "6eb2bbeaf279ded4b94fcec0ff0a3073"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_gift_cart_screen.dart": {
+    "mtime": 1788848539.3753471,
+    "ast_hash": "f55898e2bd125220454a1c8b726690e6",
+    "semantic_hash": "f55898e2bd125220454a1c8b726690e6"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_individual_price.dart": {
+    "mtime": 1788848539.3763473,
+    "ast_hash": "9c8026d743b55be712af831b8333fcf8",
+    "semantic_hash": "9c8026d743b55be712af831b8333fcf8"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_order_details.dart": {
+    "mtime": 1788848539.3763473,
+    "ast_hash": "08f4ce2e7ce2fb42fe7e3aa8ba13df13",
+    "semantic_hash": "08f4ce2e7ce2fb42fe7e3aa8ba13df13"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_product.dart": {
+    "mtime": 1788848539.3763473,
+    "ast_hash": "ce815b8865788ba45a47efea4aa659f6",
+    "semantic_hash": "ce815b8865788ba45a47efea4aa659f6"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_product_cart_screen.dart": {
+    "mtime": 1788848539.3773482,
+    "ast_hash": "071a64a190fd759ed9148159549905fa",
+    "semantic_hash": "071a64a190fd759ed9148159549905fa"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_product_list.dart": {
+    "mtime": 1788848539.3773482,
+    "ast_hash": "0893230cd4f56c31ced765b36463232e",
+    "semantic_hash": "0893230cd4f56c31ced765b36463232e"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/card_product_order_summary.dart": {
+    "mtime": 1788848539.3783474,
+    "ast_hash": "8ce0585755b8633d8219be4a478f2060",
+    "semantic_hash": "8ce0585755b8633d8219be4a478f2060"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/category_widget.dart": {
+    "mtime": 1788848539.3783474,
+    "ast_hash": "9a523815cdd96bb39fb941bd40169430",
+    "semantic_hash": "9a523815cdd96bb39fb941bd40169430"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/custom_button.dart": {
+    "mtime": 1788848539.3795345,
+    "ast_hash": "9543313583bf81e04194d478997e4a8e",
+    "semantic_hash": "9543313583bf81e04194d478997e4a8e"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/custom_text_field.dart": {
+    "mtime": 1788848539.3795345,
+    "ast_hash": "3b2f170cdb8af91cb6db936455f7e957",
+    "semantic_hash": "3b2f170cdb8af91cb6db936455f7e957"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/home_screen_floating_button.dart": {
+    "mtime": 1788848539.3795345,
+    "ast_hash": "e1454c383d9125b6c17f3827cc545748",
+    "semantic_hash": "e1454c383d9125b6c17f3827cc545748"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/list_tile.dart": {
+    "mtime": 1788848539.380825,
+    "ast_hash": "be7577e129a123cc273932bcea28288a",
+    "semantic_hash": "be7577e129a123cc273932bcea28288a"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Atoms/repeat_order_cta.dart": {
+    "mtime": 1788848539.3819258,
+    "ast_hash": "4575b8ee3d38225bec79bf99b5288a26",
+    "semantic_hash": "4575b8ee3d38225bec79bf99b5288a26"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/bottom_cart_container.dart": {
+    "mtime": 1788848539.3819258,
+    "ast_hash": "dd1cd6ac8283b68014f16611de013ec5",
+    "semantic_hash": "dd1cd6ac8283b68014f16611de013ec5"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/card_apply_coupon.dart": {
+    "mtime": 1788848539.382936,
+    "ast_hash": "cff26f24ec28bf0a25eccc8dcddd2dfa",
+    "semantic_hash": "cff26f24ec28bf0a25eccc8dcddd2dfa"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/card_cart_prices_detail.dart": {
+    "mtime": 1788848539.382936,
+    "ast_hash": "f00916109373c61ef3c5a877e300368e",
+    "semantic_hash": "f00916109373c61ef3c5a877e300368e"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/card_cart_time_total_items.dart": {
+    "mtime": 1788848539.3839352,
+    "ast_hash": "008beb407397f4890fdc2c3a5d3eefb4",
+    "semantic_hash": "008beb407397f4890fdc2c3a5d3eefb4"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/cart_screen_address_container.dart": {
+    "mtime": 1788848539.3839352,
+    "ast_hash": "8aa032b502455978d5b7ec5fb87ef13b",
+    "semantic_hash": "8aa032b502455978d5b7ec5fb87ef13b"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/cart_screen_payment_container.dart": {
+    "mtime": 1788848539.3849366,
+    "ast_hash": "d67a2fc44395fcf913cfcba95fc193f2",
+    "semantic_hash": "d67a2fc44395fcf913cfcba95fc193f2"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/category_with_products.dart": {
+    "mtime": 1788848539.3849366,
+    "ast_hash": "ba7e705ce497e745ab9b87f9b684474d",
+    "semantic_hash": "ba7e705ce497e745ab9b87f9b684474d"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/cupertino_logout_dialog.dart": {
+    "mtime": 1788848539.3862684,
+    "ast_hash": "d181514603f8e2a7bb512bad71e80126",
+    "semantic_hash": "d181514603f8e2a7bb512bad71e80126"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/home_screen_app_bar.dart": {
+    "mtime": 1788851913.13439,
+    "ast_hash": "ebd4bbb444c862e99482e871be96aa31",
+    "semantic_hash": "ebd4bbb444c862e99482e871be96aa31"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/home_screen_carousel.dart": {
+    "mtime": 1788848539.3862684,
+    "ast_hash": "34902a328487771e3377bb9fc7f9cbf0",
+    "semantic_hash": "34902a328487771e3377bb9fc7f9cbf0"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/home_screen_category_builder.dart": {
+    "mtime": 1788848539.3872762,
+    "ast_hash": "1fd411517bc4fbe11eeb31823188371a",
+    "semantic_hash": "1fd411517bc4fbe11eeb31823188371a"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/home_screen_floating_action_button_widget.dart": {
+    "mtime": 1788848539.3872762,
+    "ast_hash": "8ba31f83cf5626be1de489fe92142114",
+    "semantic_hash": "8ba31f83cf5626be1de489fe92142114"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/home_screen_search_bar.dart": {
+    "mtime": 1788851697.1436977,
+    "ast_hash": "637d86b43a7c8175cb71face85fcd258",
+    "semantic_hash": "637d86b43a7c8175cb71face85fcd258"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/login_screen_otp_sheet.dart": {
+    "mtime": 1788848539.3885972,
+    "ast_hash": "03ba0c87c745c77079860f7a565d84e6",
+    "semantic_hash": "03ba0c87c745c77079860f7a565d84e6"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/order_summary_screen_product_details_card.dart": {
+    "mtime": 1788848539.3891668,
+    "ast_hash": "85a45da5aff590474dfcc47618bda18e",
+    "semantic_hash": "85a45da5aff590474dfcc47618bda18e"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/product_description_modal_opener.dart": {
+    "mtime": 1788848539.3901901,
+    "ast_hash": "6b19831fcf20b738e5faf92e216f3bef",
+    "semantic_hash": "6b19831fcf20b738e5faf92e216f3bef"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/products_screen_grid.dart": {
+    "mtime": 1788848539.3901901,
+    "ast_hash": "85bf89a990fb4210b5b50559948a302f",
+    "semantic_hash": "85bf89a990fb4210b5b50559948a302f"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/Widgets/Organisms/products_screen_sub_category_list.dart": {
+    "mtime": 1788848539.3901901,
+    "ast_hash": "e0ada7bd4a3953b552196057a58252af",
+    "semantic_hash": "e0ada7bd4a3953b552196057a58252af"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/custom_search_delegate.dart": {
+    "mtime": 1788848539.3916261,
+    "ast_hash": "20d6566b2f024706f59b808e7042c0e3",
+    "semantic_hash": "20d6566b2f024706f59b808e7042c0e3"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/UI/custom_sliver_delegate.dart": {
+    "mtime": 1788848539.3916261,
+    "ast_hash": "21e55d371ed67f4b248b4e5a83b0686f",
+    "semantic_hash": "21e55d371ed67f4b248b4e5a83b0686f"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/app_colors.dart": {
+    "mtime": 1788848539.3927171,
+    "ast_hash": "072bf33dd21409766c2616ebde6d7c6f",
+    "semantic_hash": "072bf33dd21409766c2616ebde6d7c6f"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/app_theme.dart": {
+    "mtime": 1788848539.3927171,
+    "ast_hash": "0e1126204ad0143ce42585f75a7adaf9",
+    "semantic_hash": "0e1126204ad0143ce42585f75a7adaf9"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/constants.dart": {
+    "mtime": 1788848539.3938515,
+    "ast_hash": "c3567ed8bdc6ace5e98bd84e2e152352",
+    "semantic_hash": "c3567ed8bdc6ace5e98bd84e2e152352"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/main.dart": {
+    "mtime": 1788852199.7911007,
+    "ast_hash": "d8668b4f5dd4c4b2f1c99aba0a205867",
+    "semantic_hash": "d8668b4f5dd4c4b2f1c99aba0a205867"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/lib/route_generator.dart": {
+    "mtime": 1788852207.0974343,
+    "ast_hash": "fd470139c7018b4120f6876b7f72d00c",
+    "semantic_hash": "fd470139c7018b4120f6876b7f72d00c"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/linux/flutter/generated_plugin_registrant.cc": {
+    "mtime": 1789408695.952249,
+    "ast_hash": "d07afe003d5837167bdd357d593f20a0",
+    "semantic_hash": "d07afe003d5837167bdd357d593f20a0"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/linux/flutter/generated_plugin_registrant.h": {
+    "mtime": 1788849017.985586,
+    "ast_hash": "d295462c9da9f7fef22dc86c34492318",
+    "semantic_hash": "d295462c9da9f7fef22dc86c34492318"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/linux/main.cc": {
+    "mtime": 1788848539.398432,
+    "ast_hash": "539395bcd63dba20afed0838d136189f",
+    "semantic_hash": "539395bcd63dba20afed0838d136189f"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/linux/my_application.cc": {
+    "mtime": 1788848539.399431,
+    "ast_hash": "2574b7b0f533b2710bbf8a9ec0354773",
+    "semantic_hash": "2574b7b0f533b2710bbf8a9ec0354773"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/linux/my_application.h": {
+    "mtime": 1788848539.399431,
+    "ast_hash": "f6b37d58752c8671078b6f660e33e8c1",
+    "semantic_hash": "f6b37d58752c8671078b6f660e33e8c1"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/macos/Flutter/GeneratedPluginRegistrant.swift": {
+    "mtime": 1789408695.9969058,
+    "ast_hash": "8607f3eeb821b57de7e996a7d765d77d",
+    "semantic_hash": "8607f3eeb821b57de7e996a7d765d77d"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/macos/RunnerTests/RunnerTests.swift": {
+    "mtime": 1788848539.4205105,
+    "ast_hash": "491b4028786d09d80b109a6d3d775ef6",
+    "semantic_hash": "491b4028786d09d80b109a6d3d775ef6"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/macos/Runner/AppDelegate.swift": {
+    "mtime": 1788848539.4071372,
+    "ast_hash": "f35757566ef1832592cec47b89197f94",
+    "semantic_hash": "f35757566ef1832592cec47b89197f94"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json": {
+    "mtime": 1788848539.408644,
+    "ast_hash": "1d48e925145d4b573a3b5d7960a1c585",
+    "semantic_hash": "1d48e925145d4b573a3b5d7960a1c585"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/macos/Runner/MainFlutterWindow.swift": {
+    "mtime": 1788848539.4193916,
+    "ast_hash": "93c22dae2d93f3dc1402e121901f582b",
+    "semantic_hash": "93c22dae2d93f3dc1402e121901f582b"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/test/widget_test.dart": {
+    "mtime": 1788848539.4234254,
+    "ast_hash": "0cccf5c7a9074fae19737f48f34e8f3f",
+    "semantic_hash": "0cccf5c7a9074fae19737f48f34e8f3f"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/web/manifest.json": {
+    "mtime": 1788848539.4290962,
+    "ast_hash": "62df53d42ede5db96e59613cc8e6d711",
+    "semantic_hash": "62df53d42ede5db96e59613cc8e6d711"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/flutter/generated_plugin_registrant.cc": {
+    "mtime": 1789408695.9617658,
+    "ast_hash": "a8f91348d8d9090f22ec69d597c41e1f",
+    "semantic_hash": "a8f91348d8d9090f22ec69d597c41e1f"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/flutter/generated_plugin_registrant.h": {
+    "mtime": 1788849017.995587,
+    "ast_hash": "0ea33875f9f8e118f9c2ded03e2e2835",
+    "semantic_hash": "0ea33875f9f8e118f9c2ded03e2e2835"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/runner/flutter_window.cpp": {
+    "mtime": 1789020306.0357437,
+    "ast_hash": "2f463f9b7da67a2d692a012f9ea85e0c",
+    "semantic_hash": "2f463f9b7da67a2d692a012f9ea85e0c"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/runner/flutter_window.h": {
+    "mtime": 1788848539.4350948,
+    "ast_hash": "7defcc89d4a26d56e801241d624d48fb",
+    "semantic_hash": "7defcc89d4a26d56e801241d624d48fb"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/runner/main.cpp": {
+    "mtime": 1788848539.4350948,
+    "ast_hash": "1658087d4695225ac84685f5869b0e86",
+    "semantic_hash": "1658087d4695225ac84685f5869b0e86"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/runner/resource.h": {
+    "mtime": 1788848539.436095,
+    "ast_hash": "1ade5dd15e613479a15e8832ed276f2b",
+    "semantic_hash": "1ade5dd15e613479a15e8832ed276f2b"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/runner/utils.cpp": {
+    "mtime": 1788848539.4380932,
+    "ast_hash": "3d7ba99ef466af433ffd4ef72b7c5c35",
+    "semantic_hash": "3d7ba99ef466af433ffd4ef72b7c5c35"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/runner/utils.h": {
+    "mtime": 1788848539.4380932,
+    "ast_hash": "fd81e143f5614eb6fd75efe539002853",
+    "semantic_hash": "fd81e143f5614eb6fd75efe539002853"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/runner/win32_window.cpp": {
+    "mtime": 1788848539.4390955,
+    "ast_hash": "571eb8234dbc2661be03aa5f2a4d2fca",
+    "semantic_hash": "571eb8234dbc2661be03aa5f2a4d2fca"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/windows/runner/win32_window.h": {
+    "mtime": 1788848539.4390955,
+    "ast_hash": "7569387d58711ab975940f4df3b4bcda",
+    "semantic_hash": "7569387d58711ab975940f4df3b4bcda"
+  },
+  "backend/api/package.json": {
+    "mtime": 1789406719.6474216,
+    "ast_hash": "6c716f4ceb327d79a1d92458375f15b3",
+    "semantic_hash": "6c716f4ceb327d79a1d92458375f15b3"
+  },
+  "backend/api/src/app.ts": {
+    "mtime": 1789406460.0210786,
+    "ast_hash": "de3342dd73cc1b08d98144eb102229b4",
+    "semantic_hash": "de3342dd73cc1b08d98144eb102229b4"
+  },
+  "backend/api/src/config/env.ts": {
+    "mtime": 1789405617.772763,
+    "ast_hash": "8b4bc2b223518209fe061e8419764f8f",
+    "semantic_hash": "8b4bc2b223518209fe061e8419764f8f"
+  },
+  "backend/api/src/database/connection.ts": {
+    "mtime": 1789405884.4632602,
+    "ast_hash": "d3817410b59da872bb5778a28bd515b9",
+    "semantic_hash": "d3817410b59da872bb5778a28bd515b9"
+  },
+  "backend/api/src/database/migrate.ts": {
+    "mtime": 1789405907.9078605,
+    "ast_hash": "c567f160ea25f47804606aba4ef71bd3",
+    "semantic_hash": "c567f160ea25f47804606aba4ef71bd3"
+  },
+  "backend/api/src/database/migrations/001_initial_schema.sql": {
+    "mtime": 1789405797.2937593,
+    "ast_hash": "197218c48bba223017667a94a4aceace",
+    "semantic_hash": "197218c48bba223017667a94a4aceace"
+  },
+  "backend/api/src/database/migrations/001_initial_schema_down.sql": {
+    "mtime": 1789405831.1789525,
+    "ast_hash": "1856867bef8c89c2760d6a942f30fe2d",
+    "semantic_hash": "1856867bef8c89c2760d6a942f30fe2d"
+  },
+  "backend/api/src/database/seeds/dev_seed.ts": {
+    "mtime": 1789406990.334,
+    "ast_hash": "421d5dfad037b271de3d032ee4cc1666",
+    "semantic_hash": "421d5dfad037b271de3d032ee4cc1666"
+  },
+  "backend/api/src/database/types.ts": {
+    "mtime": 1789405852.3727705,
+    "ast_hash": "95c1b4bcefe6fc11bff2dd04ee07d57b",
+    "semantic_hash": "95c1b4bcefe6fc11bff2dd04ee07d57b"
+  },
+  "backend/api/src/middleware/auth.middleware.ts": {
+    "mtime": 1789406068.124604,
+    "ast_hash": "2e236867fc732a5acec75c7d58ac1c68",
+    "semantic_hash": "2e236867fc732a5acec75c7d58ac1c68"
+  },
+  "backend/api/src/middleware/error.middleware.ts": {
+    "mtime": 1789405999.944115,
+    "ast_hash": "e10b0a12a5f7d3286d069f0cb22c9dfe",
+    "semantic_hash": "e10b0a12a5f7d3286d069f0cb22c9dfe"
+  },
+  "backend/api/src/middleware/request-id.middleware.ts": {
+    "mtime": 1789405971.686802,
+    "ast_hash": "2325fb69531cc55208d2274182a75b6f",
+    "semantic_hash": "2325fb69531cc55208d2274182a75b6f"
+  },
+  "backend/api/src/middleware/role.middleware.ts": {
+    "mtime": 1789406103.584112,
+    "ast_hash": "75ab960979a788c859876015af768014",
+    "semantic_hash": "75ab960979a788c859876015af768014"
+  },
+  "backend/api/src/middleware/validate.middleware.ts": {
+    "mtime": 1789406033.559092,
+    "ast_hash": "3b92e2873a92ae88e23720d40b92bda6",
+    "semantic_hash": "3b92e2873a92ae88e23720d40b92bda6"
+  },
+  "backend/api/src/modules/admin/index.ts": {
+    "mtime": 1789406378.3550355,
+    "ast_hash": "30f5d0933e3edba81655745b66535629",
+    "semantic_hash": "30f5d0933e3edba81655745b66535629"
+  },
+  "backend/api/src/modules/audit/index.ts": {
+    "mtime": 1789406406.0632927,
+    "ast_hash": "e872aa38cd1082f2eb86fbef4ad99365",
+    "semantic_hash": "e872aa38cd1082f2eb86fbef4ad99365"
+  },
+  "backend/api/src/modules/auth/index.ts": {
+    "mtime": 1789406119.4100509,
+    "ast_hash": "3b96ea08a1b09b2a0f345aadb633a1f7",
+    "semantic_hash": "3b96ea08a1b09b2a0f345aadb633a1f7"
+  },
+  "backend/api/src/modules/catalog/index.ts": {
+    "mtime": 1789406179.4989796,
+    "ast_hash": "b4f9f55297f5d757d53c2bd139dc1dc1",
+    "semantic_hash": "b4f9f55297f5d757d53c2bd139dc1dc1"
+  },
+  "backend/api/src/modules/configuration/index.ts": {
+    "mtime": 1789406426.4900553,
+    "ast_hash": "5abd03eeb6a71c55db2cc69723c7b611",
+    "semantic_hash": "5abd03eeb6a71c55db2cc69723c7b611"
+  },
+  "backend/api/src/modules/deliveries/index.ts": {
+    "mtime": 1789406288.2378309,
+    "ast_hash": "dd5f1d8e0a1d8930088642f08ec8ae8b",
+    "semantic_hash": "dd5f1d8e0a1d8930088642f08ec8ae8b"
+  },
+  "backend/api/src/modules/inventory/index.ts": {
+    "mtime": 1789406229.6429791,
+    "ast_hash": "7bcdbf7e00d11927226679447edaf3cb",
+    "semantic_hash": "7bcdbf7e00d11927226679447edaf3cb"
+  },
+  "backend/api/src/modules/notifications/index.ts": {
+    "mtime": 1789406338.8872604,
+    "ast_hash": "378b6a3d8358fc234058a5f8b91321d7",
+    "semantic_hash": "378b6a3d8358fc234058a5f8b91321d7"
+  },
+  "backend/api/src/modules/orders/index.ts": {
+    "mtime": 1789406245.8603969,
+    "ast_hash": "88ca4d794f136105f5ec9f303ce00e5c",
+    "semantic_hash": "88ca4d794f136105f5ec9f303ce00e5c"
+  },
+  "backend/api/src/modules/payments/index.ts": {
+    "mtime": 1789406267.7666302,
+    "ast_hash": "18940bc7cea935ce2e28b3716f3b17e1",
+    "semantic_hash": "18940bc7cea935ce2e28b3716f3b17e1"
+  },
+  "backend/api/src/modules/pricing/index.ts": {
+    "mtime": 1789406198.2078454,
+    "ast_hash": "7438237a2011e9af92312504865af0f2",
+    "semantic_hash": "7438237a2011e9af92312504865af0f2"
+  },
+  "backend/api/src/modules/riders/index.ts": {
+    "mtime": 1789406312.0411365,
+    "ast_hash": "78105a0b2ddb53403285d73c8f28a38b",
+    "semantic_hash": "78105a0b2ddb53403285d73c8f28a38b"
+  },
+  "backend/api/src/modules/users/index.ts": {
+    "mtime": 1789406151.4566805,
+    "ast_hash": "b12b35d3acb910c2155aa96b4a3b7822",
+    "semantic_hash": "b12b35d3acb910c2155aa96b4a3b7822"
+  },
+  "backend/api/src/server.ts": {
+    "mtime": 1789406487.3136423,
+    "ast_hash": "8cd80d4de3826923482cf98da246b7cb",
+    "semantic_hash": "8cd80d4de3826923482cf98da246b7cb"
+  },
+  "backend/api/src/utils/geo.ts": {
+    "mtime": 1789405727.343096,
+    "ast_hash": "696ecdee9c3ef2540ebc066b3b6c38b5",
+    "semantic_hash": "696ecdee9c3ef2540ebc066b3b6c38b5"
+  },
+  "backend/api/src/utils/logger.ts": {
+    "mtime": 1789405655.1414635,
+    "ast_hash": "2ae17af1daf668127beb52caf66da788",
+    "semantic_hash": "2ae17af1daf668127beb52caf66da788"
+  },
+  "backend/api/src/utils/phone.ts": {
+    "mtime": 1789405700.285554,
+    "ast_hash": "8fe1efd0a5bd7a0bbc9f71a3392cb71a",
+    "semantic_hash": "8fe1efd0a5bd7a0bbc9f71a3392cb71a"
+  },
+  "backend/api/src/utils/time.ts": {
+    "mtime": 1789405758.8275888,
+    "ast_hash": "5b131f9cb069cfe1bdb1655d5f041e72",
+    "semantic_hash": "5b131f9cb069cfe1bdb1655d5f041e72"
+  },
+  "backend/api/tests/error.test.ts": {
+    "mtime": 1789406578.1112516,
+    "ast_hash": "a9afe28963a74eba183f246931de3d38",
+    "semantic_hash": "a9afe28963a74eba183f246931de3d38"
+  },
+  "backend/api/tests/health.test.ts": {
+    "mtime": 1789406521.1434512,
+    "ast_hash": "6c5ad4e857445d644170cdf43ef7b584",
+    "semantic_hash": "6c5ad4e857445d644170cdf43ef7b584"
+  },
+  "backend/api/tests/utils.test.ts": {
+    "mtime": 1789406554.419821,
+    "ast_hash": "503e1cdd6d8a40160a66d8ba4682bcb2",
+    "semantic_hash": "503e1cdd6d8a40160a66d8ba4682bcb2"
+  },
+  "backend/api/tests/validation.test.ts": {
+    "mtime": 1789406599.2457223,
+    "ast_hash": "e55a39a341c60d79c4a083f3c90e173e",
+    "semantic_hash": "e55a39a341c60d79c4a083f3c90e173e"
+  },
+  "backend/api/tsconfig.json": {
+    "mtime": 1789405413.0912938,
+    "ast_hash": "6b63262957f25812cc7f21328ad7cde3",
+    "semantic_hash": "6b63262957f25812cc7f21328ad7cde3"
+  },
+  "apps/customer/blinkit-clone-Flutter-ecommerce-/README.md": {
+    "mtime": 1788848539.2965832,
+    "ast_hash": "6c1f0dda5caf1caacca4c4567cb7aeff",
+    "semantic_hash": "6c1f0dda5caf1caacca4c4567cb7aeff"
+  },
+  "backend/api/README.md": {
+    "mtime": 1789406691.3944538,
+    "ast_hash": "5536bdd7785751797251ebc0f5c52af7",
+    "semantic_hash": "5536bdd7785751797251ebc0f5c52af7"
+  },
+  "docs/01-product/blynk_prd.md": {
+    "mtime": 1789411013.3493893,
+    "ast_hash": "b2200c46077570778224c2a973d9e108",
+    "semantic_hash": "b2200c46077570778224c2a973d9e108"
+  },
+  "docs/02-architecture/blynk_architecture.md": {
+    "mtime": 1789410896.1318479,
+    "ast_hash": "d092c9585aafbdcda0ea03c14b458d90",
+    "semantic_hash": "d092c9585aafbdcda0ea03c14b458d90"
+  },
+  "docs/02-architecture/blynk_backend_api_architecture.md": {
+    "mtime": 1789408977.1718469,
+    "ast_hash": "dc4ede4688d545ea468b4eddec8a35f6",
+    "semantic_hash": "dc4ede4688d545ea468b4eddec8a35f6"
+  },
+  "docs/02-architecture/blynk_database_design.md": {
+    "mtime": 1789396935.558053,
+    "ast_hash": "4bda49dbcd0d337fc5c877610fc1aba1",
+    "semantic_hash": "4bda49dbcd0d337fc5c877610fc1aba1"
+  },
+  "docs/03-decisions/adr-001-platform-strategy.md": {
+    "mtime": 1789408440.432368,
+    "ast_hash": "9a88b5bced24cb4df5ba745ff0d85f57",
+    "semantic_hash": "9a88b5bced24cb4df5ba745ff0d85f57"
+  },
+  "docs/03-decisions/adr-002-modular-monolith.md": {
+    "mtime": 1789408459.684262,
+    "ast_hash": "6a83c34f0fa29f543b36b6ae022d2637",
+    "semantic_hash": "6a83c34f0fa29f543b36b6ae022d2637"
+  },
+  "docs/03-decisions/adr-003-postgresql.md": {
+    "mtime": 1789408493.9036386,
+    "ast_hash": "27412982029cf2d0eb2b1f47d0d22265",
+    "semantic_hash": "27412982029cf2d0eb2b1f47d0d22265"
+  },
+  "docs/03-decisions/adr-004-client-side-cart.md": {
+    "mtime": 1789408513.7477567,
+    "ast_hash": "7291293708a1c6f595a05fe988ca4c2c",
+    "semantic_hash": "7291293708a1c6f595a05fe988ca4c2c"
+  },
+  "docs/04-business/business-rules.md": {
+    "mtime": 1789411132.5387237,
+    "ast_hash": "00a39a538880b93e1be87081ff66c8b5",
+    "semantic_hash": "00a39a538880b93e1be87081ff66c8b5"
+  },
+  "docs/05-implementation/implementation-status.md": {
+    "mtime": 1789408591.7158785,
+    "ast_hash": "dd6cb39f806f2c87b65907564a565efa",
+    "semantic_hash": "dd6cb39f806f2c87b65907564a565efa"
+  }
+}
