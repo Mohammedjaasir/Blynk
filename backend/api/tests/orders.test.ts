@@ -40,6 +40,21 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
   let addressBeyond4kmId: string;
   let riderId: string;
 
+  /**
+   * Sources every item still PENDING through the real sourcing endpoint:
+   * packing requires items sourced and bagged (architecture §G; dispatch D7).
+   */
+  async function sourceAllPending(orderId: string) {
+    const pending = await pool.query(`SELECT id FROM order_items WHERE order_id = $1 AND item_status = 'PENDING'`, [orderId]);
+    for (const { id } of pending.rows) {
+      const res = await request(app)
+        .post(`/api/v1/admin/orders/${orderId}/items/${id}/source`)
+        .set('Authorization', `Bearer ${tokenAdmin}`)
+        .send({ actual_unit_cost: 400 });
+      expect(res.status).toBe(200);
+    }
+  }
+
   beforeAll(async () => {
     // Ensure customer B exists
     await pool.query(`
@@ -371,7 +386,8 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
         });
       const orderId = createRes.body.data.order.id;
 
-      // 2. Admin moves order to PACKED
+      // 2. Admin moves order to PACKED (items sourced first)
+      await sourceAllPending(orderId);
       await request(app)
         .patch(`/api/v1/admin/orders/${orderId}/status`)
         .set('Authorization', `Bearer ${tokenAdmin}`)
@@ -473,6 +489,7 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
     });
 
     it('allows store staff to transition order to PACKED', async () => {
+      await sourceAllPending(storeOrderId);
       const res = await request(app)
         .patch(`/api/v1/admin/orders/${storeOrderId}/status`)
         .set('Authorization', `Bearer ${tokenAdmin}`)
@@ -499,8 +516,9 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
         .set('Authorization', `Bearer ${tokenAdmin}`)
         .send({ rider_id: riderId });
 
-      // PostgreSQL unique constraint error handled
-      expect(res.status).toBe(500);
+      // One active assignment per order: reported as a conflict, not a server error
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('ORDER_ALREADY_ASSIGNED');
     });
   });
 
@@ -522,6 +540,14 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
           items: [{ product_id: 'b0000001-0000-0000-0000-000000000001', quantity: 1 }],
         });
       deliveryOrderId = createRes.body.data.order.id;
+
+      // Only a packed order can be assigned and picked up (architecture §G, §H).
+      await sourceAllPending(deliveryOrderId);
+      const packRes = await request(app)
+        .patch(`/api/v1/admin/orders/${deliveryOrderId}/status`)
+        .set('Authorization', `Bearer ${tokenAdmin}`)
+        .send({ status: 'PACKED' });
+      expect(packRes.status).toBe(200);
 
       // Admin assigns to test rider
       const assignRes = await request(app)

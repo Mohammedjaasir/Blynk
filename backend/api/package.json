@@ -5,14 +5,20 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'); fs.cpSync('src/database/migrations', 'dist/database/migrations', { recursive: true });\"",
     "start": "node dist/server.js",
+    "start:worker": "node dist/worker.js",
     "dev": "tsx watch src/server.ts",
+    "dev:worker": "tsx watch src/worker.ts",
     "migrate:up": "tsx src/database/migrate.ts up",
     "migrate:down": "tsx src/database/migrate.ts down",
+    "migrate:up:prod": "node dist/database/migrate.js up",
+    "migrate:down:prod": "node dist/database/migrate.js down",
     "seed": "tsx src/database/seeds/dev_seed.ts",
+    "seed:prod": "node dist/database/seeds/dev_seed.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:hygiene": "vitest run --mode hygiene",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
@@ -25,6 +31,7 @@
   "author": "Blynk Platform Team",
   "license": "UNLICENSED",
   "dependencies": {
+    "@types/multer": "^2.2.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -33,6 +40,7 @@
     "jsonwebtoken": "^9.0.3",
     "kysely": "^0.27.5",
     "luxon": "^3.5.0",
+    "multer": "^2.4.0",
     "pg": "^8.13.3",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",

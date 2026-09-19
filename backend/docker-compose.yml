@@ -1,3 +1,13 @@
+# ==============================================================================
+# BLYNK BACKEND - DOCKER COMPOSE SPECIFICATION
+# ==============================================================================
+# Services:
+#   1. postgres  - PostgreSQL 16 Alpine with readiness healthcheck
+#   2. migration - Schema migration job (runs 001->002->003 then exits)
+#   3. api       - Express REST API (port 3000)
+#   4. worker    - Notification Outbox Worker daemon
+# ==============================================================================
+
 version: '3.8'
 
 services:
@@ -6,18 +16,119 @@ services:
     container_name: blynk_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: blynk_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-blynk_db}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - blynk_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d blynk_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-blynk_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 5s
+    networks:
+      - blynk_network
+
+  migration:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: blynk_migration
+    restart: "no"
+    command: ["node", "dist/database/migrate.js", "up"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-blynk_db}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_jwt_access_secret_change_me_in_production_min_32_chars!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_jwt_refresh_secret_change_me_in_production_min_32_chars!}
+      OTP_SECRET: ${OTP_SECRET:-dev_otp_hmac_secret_min_32_chars_random_string!}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - blynk_network
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: blynk_api
+    restart: unless-stopped
+    command: ["node", "dist/server.js"]
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      API_PREFIX: /api/v1
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-blynk_db}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_jwt_access_secret_change_me_in_production_min_32_chars!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_jwt_refresh_secret_change_me_in_production_min_32_chars!}
+      OTP_SECRET: ${OTP_SECRET:-dev_otp_hmac_secret_min_32_chars_random_string!}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NOTIFICATION_WORKER_ENABLED: "false"
+      SMS_PROVIDER: ${SMS_PROVIDER:-notifylk}
+      SMS_API_KEY: ${SMS_API_KEY:-dev_notifylk_api_key_placeholder}
+      SMS_USER_ID: ${SMS_USER_ID:-dev_notifylk_user_id_placeholder}
+      SMS_SENDER_ID: ${SMS_SENDER_ID:-Blynk}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-dev_whatsapp_token_placeholder}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-dev_whatsapp_phone_number_id_placeholder}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - blynk_network
+
+  worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: blynk_worker
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-blynk_db}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_jwt_access_secret_change_me_in_production_min_32_chars!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_jwt_refresh_secret_change_me_in_production_min_32_chars!}
+      OTP_SECRET: ${OTP_SECRET:-dev_otp_hmac_secret_min_32_chars_random_string!}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NOTIFICATION_WORKER_ENABLED: "true"
+      NOTIFICATION_WORKER_INTERVAL_MS: ${NOTIFICATION_WORKER_INTERVAL_MS:-3000}
+      NOTIFICATION_WORKER_BATCH_SIZE: ${NOTIFICATION_WORKER_BATCH_SIZE:-20}
+      NOTIFICATION_MAX_ATTEMPTS: ${NOTIFICATION_MAX_ATTEMPTS:-3}
+      NOTIFICATION_PROCESSING_TIMEOUT_MS: ${NOTIFICATION_PROCESSING_TIMEOUT_MS:-300000}
+      SMS_PROVIDER: ${SMS_PROVIDER:-notifylk}
+      SMS_API_KEY: ${SMS_API_KEY:-dev_notifylk_api_key_placeholder}
+      SMS_USER_ID: ${SMS_USER_ID:-dev_notifylk_user_id_placeholder}
+      SMS_SENDER_ID: ${SMS_SENDER_ID:-Blynk}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-dev_whatsapp_token_placeholder}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-dev_whatsapp_phone_number_id_placeholder}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    networks:
+      - blynk_network
 
 volumes:
   blynk_pgdata:
+    name: blynk_pgdata
+
+networks:
+  blynk_network:
+    name: blynk_network
+    driver: bridge

@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { catalogController } from './catalog.controller.js';
+import { requireAuth } from '../../middleware/auth.middleware.js';
+import { requireRoles } from '../../middleware/role.middleware.js';
 
 // ----------------------------------------------------------------------------
 // 1. CUSTOMER CATEGORIES ROUTER (/api/v1/categories)
@@ -18,12 +20,13 @@ productsRouter.get('/:id', catalogController.getProductById.bind(catalogControll
 // 3. ADMIN CATALOG ROUTER
 // ----------------------------------------------------------------------------
 export const adminCatalogRouter = Router();
-adminCatalogRouter.get('/categories', catalogController.getCategoriesAdmin.bind(catalogController));
-adminCatalogRouter.post('/categories', catalogController.createCategoryAdmin.bind(catalogController));
-adminCatalogRouter.patch('/categories/:id', catalogController.updateCategoryAdmin.bind(catalogController));
-adminCatalogRouter.get('/products/:id', catalogController.getProductByIdAdmin.bind(catalogController));
-adminCatalogRouter.post('/products', catalogController.createProductAdmin.bind(catalogController));
-adminCatalogRouter.patch('/products/:id', catalogController.updateProductAdmin.bind(catalogController));
+adminCatalogRouter.get('/categories', requireAuth, requireRoles('ADMIN'), catalogController.getCategoriesAdmin.bind(catalogController));
+adminCatalogRouter.post('/categories', requireAuth, requireRoles('ADMIN'), catalogController.createCategoryAdmin.bind(catalogController));
+adminCatalogRouter.patch('/categories/:id', requireAuth, requireRoles('ADMIN'), catalogController.updateCategoryAdmin.bind(catalogController));
+adminCatalogRouter.get('/products', requireAuth, requireRoles('ADMIN'), catalogController.listProductsAdmin.bind(catalogController));
+adminCatalogRouter.get('/products/:id', requireAuth, requireRoles('ADMIN'), catalogController.getProductByIdAdmin.bind(catalogController));
+adminCatalogRouter.post('/products', requireAuth, requireRoles('ADMIN'), catalogController.createProductAdmin.bind(catalogController));
+adminCatalogRouter.patch('/products/:id', requireAuth, requireRoles('ADMIN'), catalogController.updateProductAdmin.bind(catalogController));
 
 // ----------------------------------------------------------------------------
 // 4. MAIN CATALOG ROUTER (/api/v1/catalog)

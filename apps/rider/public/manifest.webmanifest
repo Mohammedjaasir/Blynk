@@ -1,0 +1,11 @@
+{
+  "name": "Blynk Rider",
+  "short_name": "Rider",
+  "description": "Assigned Blynk deliveries: pick up, deliver, collect cash.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBFAF5",
+  "theme_color": "#12151F",
+  "icons": [{ "src": "/favicon.png", "sizes": "any", "type": "image/png" }]
+}

@@ -893,6 +893,8 @@ Logs are output to `stdout` in structured JSON format (Pino):
 }
 ```
 
+> **Update (2026-09-19, Customer Order Experience phase):** the real implementation's customer order responses (list, detail, create, cancel — see `sanitizeCustomerOrder` in `backend/api/src/modules/orders/order.service.ts`) use snake_case field names, not the camelCase shown in the two examples above, and additionally carry `can_cancel: boolean` — whether the customer may call `POST /orders/:id/cancel` right now. It is derived from the same lifecycle catalogue the cancel action itself checks under the order lock (`CATALOGUE.CUSTOMER_CANCEL.from`, currently `PLACED`/`PACKED`), so the client never keeps its own copy of the rule; the field is advisory only — the cancel endpoint remains the sole authority and refuses a stale `true` with its existing error codes (`ORDER_ALREADY_OUT_FOR_DELIVERY`, `ORDER_ALREADY_CANCELLED`, `ORDER_CANNOT_BE_CANCELLED`). The detail response also carries `history[]` (`{id, order_id, old_status, new_status, created_at}`, D11: no staff notes or actor) and, when a delivery exists, `delivery {assignment_status, assigned_at, picked_up_at, delivered_at}` — no rider identity or location.
+
 ### 6. Update Order Status to Packed (`PATCH /api/v1/admin/orders/:id/status`)
 #### Request:
 ```json

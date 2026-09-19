@@ -1,4 +1,21 @@
-const appCurrencySybmbol = "₹";
+import 'package:ecom/Services/Validation/app_validators.dart';
+
+const appCurrencySybmbol = "Rs.";
+const appCurrencySymbol = "LKR";
+
+// Displayed to the customer while building the cart, before checkout. The
+// backend independently computes and returns the authoritative delivery fee
+// on the created order - this is not trusted as the final charged amount.
+const double kDeliveryFeeEstimate = 70.0;
+
+// Both delegate to AppValidators so the app has exactly one definition of
+// a valid Sri Lankan mobile number, matching the backend's
+// normalizeSriLankanPhone (see lib/Services/Validation/app_validators.dart).
+bool isValidSriLankanPhone(String? input) => AppValidators.isValidPhone(input);
+
+/// E.164 for the API, or the input unchanged when it isn't a number the
+/// backend would accept (the caller validates first).
+String formatToE164(String input) => AppValidators.normalizePhone(input) ?? input;
 
 enum RequestingMethods { get, post, put, delete }
 
@@ -40,18 +57,18 @@ List kDummyCoupons = [
     "couponCode": "NEWUSER",
     "dataPoints": [
       "Get 10% off on your first order",
-      "Minimum order value: ₹500",
-      "Maximum discount: ₹100",
-      "Valid till: 31st December 2021",
+      "Minimum order value: Rs.500",
+      "Maximum discount: Rs.100",
+      "Valid till: 31st December 2026",
     ],
   },
   {
-    "headline": "Flat ₹50 off on fruits",
+    "headline": "Flat Rs.50 off on fruits",
     "couponCode": "FRUITS50",
     "dataPoints": [
-      "Flat ₹50 off on fruits",
-      "Minimum order value: ₹200",
-      "Valid till: 31st December 2021",
+      "Flat Rs.50 off on fruits",
+      "Minimum order value: Rs.200",
+      "Valid till: 31st December 2026",
     ],
   },
   {
@@ -59,16 +76,16 @@ List kDummyCoupons = [
     "couponCode": "VEGGIES",
     "dataPoints": [
       "Buy 1 get 1 free on vegetables",
-      "Valid till: 31st December 2021",
+      "Valid till: 31st December 2026",
     ],
   },
   {
-    "headline": "₹100 off on groceries",
+    "headline": "Rs.100 off on groceries",
     "couponCode": "GROCERY100",
     "dataPoints": [
-      "₹100 off on groceries",
-      "Minimum order value: ₹1000",
-      "Valid till: 31st December 2021",
+      "Rs.100 off on groceries",
+      "Minimum order value: Rs.1000",
+      "Valid till: 31st December 2026",
     ],
   },
   {
@@ -76,18 +93,18 @@ List kDummyCoupons = [
     "couponCode": "DAIRY20",
     "dataPoints": [
       "Flat 20% off on dairy products",
-      "Minimum order value: ₹300",
-      "Maximum discount: ₹50",
-      "Valid till: 31st December 2021",
+      "Minimum order value: Rs.300",
+      "Maximum discount: Rs.50",
+      "Valid till: 31st December 2026",
     ],
   },
   {
-    "headline": "₹75 off on personal care items",
+    "headline": "Rs.75 off on personal care items",
     "couponCode": "CARE75",
     "dataPoints": [
-      "₹75 off on personal care items",
-      "Minimum order value: ₹500",
-      "Valid till: 31st December 2021",
+      "Rs.75 off on personal care items",
+      "Minimum order value: Rs.500",
+      "Valid till: 31st December 2026",
     ],
   },
   {
@@ -95,9 +112,9 @@ List kDummyCoupons = [
     "couponCode": "HOUSE15",
     "dataPoints": [
       "Flat 15% off on household products",
-      "Minimum order value: ₹400",
-      "Maximum discount: ₹100",
-      "Valid till: 31st December 2021",
+      "Minimum order value: Rs.400",
+      "Maximum discount: Rs.100",
+      "Valid till: 31st December 2026",
     ],
   },
   {
@@ -105,16 +122,16 @@ List kDummyCoupons = [
     "couponCode": "SNACKS",
     "dataPoints": [
       "Buy 2 get 1 free on snacks",
-      "Valid till: 31st December 2021",
+      "Valid till: 31st December 2026",
     ],
   },
   {
-    "headline": "Flat ₹30 off on beverages",
+    "headline": "Flat Rs.30 off on beverages",
     "couponCode": "BEV30",
     "dataPoints": [
-      "Flat ₹30 off on beverages",
-      "Minimum order value: ₹200",
-      "Valid till: 31st December 2021",
+      "Flat Rs.30 off on beverages",
+      "Minimum order value: Rs.200",
+      "Valid till: 31st December 2026",
     ],
   }
 ];

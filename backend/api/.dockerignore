@@ -1,0 +1,43 @@
+# ==============================================================================
+# BLYNK QUICK-COMMERCE BACKEND API - DOCKER IGNORE
+# ==============================================================================
+
+# Dependencies & Build Outputs
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Environment & Secrets (NEVER BAKE SECRETS INTO IMAGES)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Git & Repository Metadata
+.git/
+.github/
+.gitignore
+
+# Tests & Tooling
+tests/
+vitest.config.ts
+vitest.config.js
+
+# IDE & Editor Temporary Files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local Database Files
+postgres-data/
+*.sqlite

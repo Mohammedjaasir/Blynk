@@ -77,7 +77,7 @@ class _CouponsSelectionScreenState extends State<CouponsSelectionScreen> {
                                     horizontal: 15, vertical: 2),
                                 decoration: BoxDecoration(
                                     color: AppColors.primaryGreenColor
-                                        .withOpacity(0.1),
+                                        .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(10.0),
                                     border: Border.all(
                                       width: 1,

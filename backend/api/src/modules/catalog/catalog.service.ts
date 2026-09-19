@@ -186,6 +186,48 @@ export class CatalogService {
   // PRODUCTS (ADMIN)
   // --------------------------------------------------------------------------
 
+  /**
+   * Admin product listing. Same numeric normalization as
+   * getProductByIdAdmin, and it deliberately includes inactive products so
+   * operations can see and re-enable them.
+   */
+  async listProductsAdmin(params: {
+    search?: string;
+    category_id?: string;
+    is_active?: boolean;
+    limit?: number;
+    page?: number;
+  }) {
+    const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
+    const page = Math.max(params.page ?? 1, 1);
+
+    const rows = await catalogRepository.findAllProductsAdmin({
+      search: params.search,
+      category_id: params.category_id,
+      is_active: params.is_active,
+      limit,
+      offset: (page - 1) * limit,
+    });
+
+    return {
+      products: rows.map((product) => ({
+        ...product,
+        purchase_cost: Number(Number(product.purchase_cost).toFixed(2)),
+        custom_markup_percent:
+          product.custom_markup_percent !== null
+            ? Number(product.custom_markup_percent)
+            : null,
+        effective_markup_percent: Number(
+          Number(product.effective_markup_percent).toFixed(2)
+        ),
+        calculated_selling_price: Number(
+          Number(product.calculated_selling_price).toFixed(2)
+        ),
+      })),
+      pagination: { page, limit },
+    };
+  }
+
   async getProductByIdAdmin(id: string) {
     const product = await catalogRepository.findProductByIdAdmin(id);
     if (!product) {

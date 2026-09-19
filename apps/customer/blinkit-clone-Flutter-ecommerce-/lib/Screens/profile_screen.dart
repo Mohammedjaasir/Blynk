@@ -1,7 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/constants.dart';
 import '../UI/Widgets/Atoms/list_tile.dart';
 import '../UI/Widgets/Organisms/cupertino_logout_dialog.dart';
@@ -23,19 +25,35 @@ class ProfileScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'My Account',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Text(
-              '9565256525',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w300,
-              ),
+            Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                final user = auth.currentUser;
+                final displayName = (user?.fullName != null && user!.fullName!.isNotEmpty)
+                    ? user.fullName!
+                    : 'My Account';
+                final displayPhone = user?.phone ?? '';
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (displayPhone.isNotEmpty)
+                      Text(
+                        displayPhone,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
             Container(
               decoration: const BoxDecoration(
@@ -92,8 +110,8 @@ class ProfileScreen extends StatelessWidget {
               title: 'Share the app',
               callback: () {
                 Share.share(
-                  'blinkit app',
-                  subject: "Grocery App",
+                  'Blynk Quick-Commerce App',
+                  subject: "Blynk App",
                 );
               },
             ),
@@ -120,7 +138,7 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget buildIconWithLabel({@required assetName, @required String? title}) {
+  Widget buildIconWithLabel({required dynamic assetName, required String? title}) {
     return Column(
       children: [
         SizedBox(

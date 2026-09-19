@@ -22,17 +22,20 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
   flutter_lints: ^2.0.0
   flutter_native_splash:
 
 flutter_native_splash:
   image: Assets/splash2.png
-  color: "#FFE141"
+  color: "#FFFFFF"
   ios: false
   web: false
   android_12:
-    image: Assets/splash2.png
-    icon_background_color: "#FFE141"
+    image: Assets/splash_android12.png
+    color: "#FFFFFF"
+    icon_background_color: "#FFFFFF"
 
 
 flutter:
@@ -44,6 +47,7 @@ flutter:
     - Assets/SubCategories/
     - Assets/Products/
     - Assets/Images/
+    - .env
 
 
   fonts:

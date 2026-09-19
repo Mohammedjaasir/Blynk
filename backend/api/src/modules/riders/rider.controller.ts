@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { riderService } from './rider.service.js';
-import { DeliveryAssignmentStatus } from '../../database/types.js';
+import { riderRepository } from './rider.repository.js';
+import { updateDeliveryStatusSchema, collectCodSchema, deliveryParamsSchema } from './rider.schema.js';
 
 export class RiderController {
   async getActiveDeliveries(req: Request, res: Response, next: NextFunction) {
@@ -17,7 +18,8 @@ export class RiderController {
 
   async getDeliveryById(req: Request, res: Response, next: NextFunction) {
     try {
-      const delivery = await riderService.getDeliveryById(req.params.id as string, req.user!.id);
+      const { id } = deliveryParamsSchema.parse(req.params);
+      const delivery = await riderService.getDeliveryById(id, req.user!.id);
       res.status(200).json({
         success: true,
         data: { delivery },
@@ -29,12 +31,13 @@ export class RiderController {
 
   async updateDeliveryStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      const { status, failure_reason } = req.body;
+      const { id } = deliveryParamsSchema.parse(req.params);
+      const input = updateDeliveryStatusSchema.parse(req.body);
       const delivery = await riderService.updateDeliveryStatus(
-        req.params.id as string,
+        id,
         req.user!.id,
-        status as DeliveryAssignmentStatus,
-        failure_reason
+        input.status,
+        input.failure_reason
       );
       res.status(200).json({
         success: true,
@@ -47,11 +50,12 @@ export class RiderController {
 
   async collectCod(req: Request, res: Response, next: NextFunction) {
     try {
-      const { amount } = req.body;
+      const { id } = deliveryParamsSchema.parse(req.params);
+      const input = collectCodSchema.parse(req.body);
       const settlement = await riderService.collectCod(
-        req.params.id as string,
+        id,
         req.user!.id,
-        Number(amount)
+        input.amount
       );
       res.status(200).json({
         success: true,
@@ -64,3 +68,13 @@ export class RiderController {
 }
 
 export const riderController = new RiderController();
+
+/** Staff-facing: GET /admin/riders (ADMIN) for the manual assignment picker. */
+export async function listRidersForAssignment(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const riders = await riderRepository.listActiveRidersForAssignment();
+    res.status(200).json({ success: true, data: { riders } });
+  } catch (err) {
+    next(err);
+  }
+}

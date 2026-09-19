@@ -55,6 +55,26 @@
 - **Phase 1 Inventory Model**: On-demand sourcing/purchasing from local merchants upon customer order placement (untracked dark-store inventory).
 - **Phase 2+ Inventory Model**: Transition to stocked dark-store warehouse inventory with tracked bin-level counts.
 
+### 6.1 When stock changes (implemented 2026-09-19; inventory stock-integrity plan)
+Each product is `UNTRACKED` (bought at market for each order; the count is never read) or `TRACKED` (counted stock on the dark-store shelf), switched by an admin. Only a `TRACKED` count moves. Every movement is one row in the append-only ledger (`inventory_adjustments`), with the count before and after, who did it and, for order movements, the order.
+
+| Event | Tracked stock | Ledger type | Why |
+|---|---|---|---|
+| Customer places an order | **no change** | – | No reservation, no checkout stock check (Inventory D1). Availability to customers is Admin's `is_available`. |
+| Staff source an item (Inventory) | **− units sourced** | `ORDER_FULFILLMENT` | The units physically leave the counted shelf into this order's bag. Refused (409) if the count is short. |
+| Pack, assign, hand over, pickup, arrive | no change | – | The units are already in the bag. |
+| Delivered (rider COD or admin) | no change | – | Taken once, at sourcing; delivery never deducts again. |
+| Failed / customer unavailable | no change | – | The bag comes back to the store but still belongs to the order. |
+| Re-stage (FAILED → PACKED) | no change | – | Same bag, replacement rider; its items stay PACKED and cannot be sourced (taken) again. |
+| **Order cancelled** (customer: PLACED/PACKED; admin: PLACED/ITEM_UNAVAILABLE/PACKED) | **+ what this order took** | `ORDER_CANCELLATION_RESTORE` | The bag is unpacked and the units go back on the shelf, in the same transaction as the cancellation. The amount is this order's own ledger net, so it is exact and can never be returned twice. It comes back even if tracking was switched off since; nothing comes back for items sourced while untracked. |
+| Abandoning a failed order | + what it took | `ORDER_CANCELLATION_RESTORE` | Re-stage, then cancel (both existing transitions). |
+| Admin restock / write-off / count | ± entered | `PURCHASE_RESTOCK` (+), `DAMAGE_WRITE_OFF` (−), `INVENTORY_AUDIT_ADJUSTMENT` (±) | Tracked products only; never below zero. |
+
+- **Cancellation after pickup** is impossible for anyone, so stock never needs returning from the road.
+- **Partial sourcing**: sourcing fewer units than ordered takes only those units, but the customer is still billed for the full ordered quantity (known limitation; shortfalls should be marked unavailable instead).
+- **Substitution**: there is no "add substitute item" step yet. A `SUBSTITUTED` line keeps its original product, so its stock and cost follow the original product. A substitute of a different tracked product cannot be represented and is therefore not counted (known limitation).
+- `ORDER_RESERVATION` exists in the schema but is not used: there is no reservation in this model.
+
 ---
 
 ## 7. Logistics & Rider Fleet

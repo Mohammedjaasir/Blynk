@@ -191,6 +191,44 @@ export async function runDevSeed(): Promise<void> {
         SET vehicle_registration_number = EXCLUDED.vehicle_registration_number, is_available = EXCLUDED.is_available;
     `, [storeId]);
 
+    // 10. Phase 1 Market Suppliers
+    await client.query(`
+      INSERT INTO suppliers (id, name, code, contact_person, contact_phone, address, notes, is_active)
+      VALUES 
+        (
+          'd0000001-0000-0000-0000-000000000001',
+          'Dharga Town Central Grocery',
+          'SUP-DHARGA-MAIN',
+          'M. Rameez',
+          '+94342271111',
+          'Main Street, Dharga Town',
+          'Primary supplier for dairy, bread, and general FMCG goods',
+          TRUE
+        ),
+        (
+          'd0000001-0000-0000-0000-000000000002',
+          'Al-Barakah Egg & Poultry Wholesale',
+          'SUP-DHARGA-EGGS',
+          'A. Hameed',
+          '+94342272222',
+          'Hospital Road, Dharga Town',
+          'Dedicated source for fresh farm brown eggs',
+          TRUE
+        ),
+        (
+          'd0000001-0000-0000-0000-000000000003',
+          'Nawaz Super City Mart',
+          'SUP-DHARGA-ALT',
+          'N. Farook',
+          '+94342273333',
+          'Station Road, Dharga Town',
+          'Alternate backup local store for biscuits and snacks',
+          TRUE
+        )
+      ON CONFLICT (code) DO UPDATE 
+        SET name = EXCLUDED.name, contact_person = EXCLUDED.contact_person, updated_at = CURRENT_TIMESTAMP;
+    `);
+
     await client.query('COMMIT');
     logger.info('Development database seed completed successfully.');
   } catch (err) {
@@ -202,8 +240,14 @@ export async function runDevSeed(): Promise<void> {
   }
 }
 
-// Direct execution
-if (process.argv[1] && process.argv[1].endsWith('dev_seed.ts')) {
+// Direct execution: tsx src/database/seeds/dev_seed.ts or node dist/database/seeds/dev_seed.js
+const isMainScript =
+  process.argv[1] &&
+  (process.argv[1].endsWith('dev_seed.ts') ||
+    process.argv[1].endsWith('dev_seed.js') ||
+    process.argv[1].includes('dev_seed'));
+
+if (isMainScript) {
   runDevSeed()
     .then(() => process.exit(0))
     .catch(() => process.exit(1));

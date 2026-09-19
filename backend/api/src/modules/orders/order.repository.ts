@@ -1,6 +1,8 @@
 import { sql, Transaction } from 'kysely';
 import { db } from '../../database/connection.js';
 import { Database, OrderStatus, ItemFulfillmentStatus } from '../../database/types.js';
+import { ACTIVE_DELIVERY_STATUSES, INITIAL_ORDER_STATUS } from './lifecycle/catalogue.js';
+import { recordOrderPlaced } from './lifecycle/status-writer.js';
 
 export type DBConnection = Transaction<Database> | typeof db;
 
@@ -134,7 +136,7 @@ export class OrderRepository {
           idempotency_key: data.idempotency_key,
           customer_id: data.customer_id,
           dark_store_id: data.dark_store_id,
-          order_status: 'PLACED',
+          order_status: INITIAL_ORDER_STATUS,
           payment_method: 'COD',
           payment_status: 'PENDING',
           subtotal_amount: data.subtotal_amount,
@@ -189,17 +191,8 @@ export class OrderRepository {
         .returningAll()
         .execute();
 
-      // 4. Record initial status in order_status_history
-      await trx
-        .insertInto('order_status_history')
-        .values({
-          order_id: order.id,
-          old_status: null,
-          new_status: 'PLACED',
-          changed_by_user_id: data.customer_id,
-          reason_or_notes: 'Order placed by customer',
-        })
-        .execute();
+      // 4. Record initial status in order_status_history (lifecycle PLACE_ORDER)
+      await recordOrderPlaced(trx, order.id, data.customer_id);
 
       // 5. Enqueue outbox notification
       await trx
@@ -276,9 +269,12 @@ export class OrderRepository {
         .execute(),
       executor
         .selectFrom('deliveries')
-        .selectAll()
-        .where('order_id', '=', orderId)
-        .where('assignment_status', 'not in', ['FAILED', 'REJECTED'])
+        .innerJoin('riders', 'riders.id', 'deliveries.rider_id')
+        .innerJoin('users', 'users.id', 'riders.user_id')
+        .selectAll('deliveries')
+        .select('users.full_name as rider_name')
+        .where('deliveries.order_id', '=', orderId)
+        .where('deliveries.assignment_status', 'not in', ['FAILED', 'REJECTED'])
         .executeTakeFirst(),
     ]);
 
@@ -330,11 +326,29 @@ export class OrderRepository {
       .offset(offset)
       .execute();
 
+    // The list shows what is in each order ("2 items"): one query for the page.
+    const items = orders.length
+      ? await executor
+          .selectFrom('order_items')
+          .selectAll()
+          .where('order_id', 'in', orders.map((o) => o.id))
+          .orderBy('created_at', 'asc')
+          .orderBy('id', 'asc')
+          .execute()
+      : [];
+
     return orders.map((o) => ({
       ...o,
       subtotal_amount: Number(Number(o.subtotal_amount).toFixed(2)),
       delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
       total_amount: Number(Number(o.total_amount).toFixed(2)),
+      items: items
+        .filter((it) => it.order_id === o.id)
+        .map((it) => ({
+          ...it,
+          unit_selling_price: Number(Number(it.unit_selling_price).toFixed(2)),
+          subtotal: Number(Number(it.subtotal).toFixed(2)),
+        })),
     }));
   }
 
@@ -352,224 +366,97 @@ export class OrderRepository {
     return result ? parseInt(result.count, 10) : 0;
   }
 
-  /**
-   * Cancels order.
-   */
-  async cancelOrder(
-    orderId: string,
-    userId: string,
-    reason?: string,
-    executor: DBConnection = db
-  ) {
-    return await executor.transaction().execute(async (trx) => {
-      const [order] = await trx
-        .updateTable('orders')
-        .set({
-          order_status: 'CANCELLED',
-          cancellation_reason: reason || 'Cancelled by customer',
-          cancelled_by_user_id: userId,
-          cancelled_at: new Date(),
-          updated_at: new Date(),
-        })
-        .where('id', '=', orderId)
-        .returningAll()
-        .execute();
-
-      await trx
-        .insertInto('order_status_history')
-        .values({
-          order_id: orderId,
-          old_status: order.order_status,
-          new_status: 'CANCELLED',
-          changed_by_user_id: userId,
-          reason_or_notes: reason || 'Cancelled by customer',
-        })
-        .execute();
-
-      return order;
-    });
-  }
-
   // --------------------------------------------------------------------------
   // STORE / ADMIN OPERATIONS
   // --------------------------------------------------------------------------
 
   /**
-   * Retrieves orders for admin / packing queue.
+   * Orders for the staff screens (packing queue, Orders board), oldest first,
+   * each with its item progress and its active rider - two grouped queries
+   * for the whole page, not one per order.
    */
   async findAdminOrders(
-    params: { status?: OrderStatus; limit: number; offset: number },
+    params: { statuses?: OrderStatus[]; since?: Date; limit: number; offset: number },
     executor: DBConnection = db
   ) {
-    let query = executor
-      .selectFrom('orders')
-      .selectAll();
+    let query = executor.selectFrom('orders').selectAll();
+    if (params.statuses?.length) query = query.where('order_status', 'in', params.statuses);
+    if (params.since) query = query.where('updated_at', '>=', params.since);
 
-    if (params.status) {
-      query = query.where('order_status', '=', params.status);
-    }
+    const orders = await query.orderBy('placed_at', 'asc').orderBy('id', 'asc').limit(params.limit).offset(params.offset).execute();
+    if (orders.length === 0) return [];
+    const ids = orders.map((o) => o.id);
 
-    return await query
-      .orderBy('placed_at', 'asc')
-      .limit(params.limit)
-      .offset(params.offset)
+    const summaries = await executor
+      .selectFrom('order_items')
+      .select([
+        'order_id',
+        sql<number>`count(*)::int`.as('total'),
+        sql<number>`(count(*) filter (where item_status = 'PENDING'))::int`.as('pending'),
+        sql<number>`(count(*) filter (where item_status = 'SOURCED'))::int`.as('sourced'),
+        sql<number>`(count(*) filter (where item_status = 'PACKED'))::int`.as('packed'),
+        sql<number>`(count(*) filter (where item_status = 'UNAVAILABLE'))::int`.as('unavailable'),
+        sql<number>`(count(*) filter (where item_status = 'SUBSTITUTED'))::int`.as('substituted'),
+      ])
+      .where('order_id', 'in', ids)
+      .groupBy('order_id')
       .execute();
+
+    const active = await executor
+      .selectFrom('deliveries')
+      .innerJoin('riders', 'riders.id', 'deliveries.rider_id')
+      .innerJoin('users', 'users.id', 'riders.user_id')
+      .select([
+        'deliveries.id',
+        'deliveries.order_id',
+        'deliveries.assignment_status',
+        'deliveries.rider_id',
+        'users.full_name as rider_name',
+      ])
+      .where('deliveries.order_id', 'in', ids)
+      .where('deliveries.assignment_status', 'in', ACTIVE_DELIVERY_STATUSES)
+      .execute();
+
+    return orders.map((o) => {
+      const summary = summaries.find((s) => s.order_id === o.id);
+      const delivery = active.find((d) => d.order_id === o.id);
+      return {
+        ...o,
+        subtotal_amount: Number(Number(o.subtotal_amount).toFixed(2)),
+        delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
+        total_amount: Number(Number(o.total_amount).toFixed(2)),
+        items_summary: {
+          total: summary?.total ?? 0,
+          pending: summary?.pending ?? 0,
+          sourced: summary?.sourced ?? 0,
+          packed: summary?.packed ?? 0,
+          unavailable: summary?.unavailable ?? 0,
+          substituted: summary?.substituted ?? 0,
+        },
+        active_delivery: delivery
+          ? {
+              id: delivery.id,
+              assignment_status: delivery.assignment_status,
+              rider_id: delivery.rider_id,
+              rider_name: delivery.rider_name,
+            }
+          : null,
+      };
+    });
   }
 
-  async countAdminOrders(status?: OrderStatus, executor: DBConnection = db) {
-    let query = executor
-      .selectFrom('orders')
-      .select(sql<string>`count(*)`.as('count'));
-
-    if (status) {
-      query = query.where('order_status', '=', status);
-    }
-
+  async countAdminOrders(params: { statuses?: OrderStatus[]; since?: Date } = {}, executor: DBConnection = db) {
+    let query = executor.selectFrom('orders').select(sql<string>`count(*)`.as('count'));
+    if (params.statuses?.length) query = query.where('order_status', 'in', params.statuses);
+    if (params.since) query = query.where('updated_at', '>=', params.since);
     const res = await query.executeTakeFirst();
     return res ? parseInt(res.count, 10) : 0;
   }
 
-  /**
-   * Updates order status (e.g. PLACED -> PACKED).
-   */
-  async updateOrderStatus(
-    orderId: string,
-    newStatus: OrderStatus,
-    changedByUserId: string,
-    notes?: string,
-    executor: DBConnection = db
-  ) {
-    return await executor.transaction().execute(async (trx) => {
-      const current = await trx
-        .selectFrom('orders')
-        .selectAll()
-        .where('id', '=', orderId)
-        .forUpdate()
-        .executeTakeFirst();
-
-      if (!current) return null;
-
-      const updateData: any = {
-        order_status: newStatus,
-        updated_at: new Date(),
-      };
-
-      if (newStatus === 'PACKED') {
-        updateData.packed_at = new Date();
-      } else if (newStatus === 'OUT_FOR_DELIVERY') {
-        updateData.dispatched_at = new Date();
-      } else if (newStatus === 'DELIVERED') {
-        updateData.delivered_at = new Date();
-      }
-
-      const [updated] = await trx
-        .updateTable('orders')
-        .set(updateData)
-        .where('id', '=', orderId)
-        .returningAll()
-        .execute();
-
-      await trx
-        .insertInto('order_status_history')
-        .values({
-          order_id: orderId,
-          old_status: current.order_status,
-          new_status: newStatus,
-          changed_by_user_id: changedByUserId,
-          reason_or_notes: notes || `Status updated to ${newStatus}`,
-        })
-        .execute();
-
-      return updated;
-    });
-  }
-
-  /**
-   * Out-of-Stock Resolution: Marks an order item UNAVAILABLE and recalculates totals.
-   */
-  async resolveUnavailableItem(
-    orderId: string,
-    itemId: string,
-    itemStatus: ItemFulfillmentStatus = 'UNAVAILABLE',
-    executor: DBConnection = db
-  ) {
-    return await executor.transaction().execute(async (trx) => {
-      // 1. Update item status
-      await trx
-        .updateTable('order_items')
-        .set({ item_status: itemStatus })
-        .where('id', '=', itemId)
-        .where('order_id', '=', orderId)
-        .execute();
-
-      // 2. Recalculate remaining active items subtotal
-      const activeItems = await trx
-        .selectFrom('order_items')
-        .selectAll()
-        .where('order_id', '=', orderId)
-        .where('item_status', '!=', 'UNAVAILABLE')
-        .execute();
-
-      const newSubtotal = activeItems.reduce(
-        (sum, it) => sum + Number(it.subtotal),
-        0
-      );
-
-      const order = await trx
-        .selectFrom('orders')
-        .selectAll()
-        .where('id', '=', orderId)
-        .forUpdate()
-        .executeTakeFirstOrThrow();
-
-      const newTotal = Number((newSubtotal + Number(order.delivery_fee)).toFixed(2));
-
-      // 3. Update orders subtotal and total
-      const [updatedOrder] = await trx
-        .updateTable('orders')
-        .set({
-          subtotal_amount: Number(newSubtotal.toFixed(2)),
-          total_amount: newTotal,
-          order_status: 'ITEM_UNAVAILABLE',
-          updated_at: new Date(),
-        })
-        .where('id', '=', orderId)
-        .returningAll()
-        .execute();
-
-      // 4. Update payment amount
-      await trx
-        .updateTable('payments')
-        .set({
-          amount: newTotal,
-          updated_at: new Date(),
-        })
-        .where('order_id', '=', orderId)
-        .execute();
-
-      return updatedOrder;
-    });
-  }
-
-  /**
-   * Assigns order to rider (enforces partial unique index uq_deliveries_active_assignment).
-   */
-  async assignRider(orderId: string, riderId: string, executor: DBConnection = db) {
-    return await executor.transaction().execute(async (trx) => {
-      const [delivery] = await trx
-        .insertInto('deliveries')
-        .values({
-          order_id: orderId,
-          rider_id: riderId,
-          assignment_status: 'ASSIGNED',
-          cod_collected_amount: 0.0,
-          assigned_at: new Date(),
-        })
-        .returningAll()
-        .execute();
-
-      return delivery;
-    });
+  /** The current status only - for choosing a lifecycle action before it locks. */
+  async findOrderStatus(orderId: string, executor: DBConnection = db) {
+    const row = await executor.selectFrom('orders').select('order_status').where('id', '=', orderId).executeTakeFirst();
+    return row?.order_status ?? null;
   }
 }
 

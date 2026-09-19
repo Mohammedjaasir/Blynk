@@ -1,6 +1,13 @@
+import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { DBConnection } from '../orders/order.repository.js';
-import { DeliveryAssignmentStatus } from '../../database/types.js';
+import { ACTIVE_DELIVERY_STATUSES, CLOSED_ORDER_STATUSES } from '../orders/lifecycle/catalogue.js';
+
+/** Assignments the rider still holds. */
+const ACTIVE_ASSIGNMENT_STATUSES = ACTIVE_DELIVERY_STATUSES;
+
+/** Midnight today in the store's timezone (business rules §4: Asia/Colombo). */
+const startOfTodayColombo = sql<Date>`(date_trunc('day', now() AT TIME ZONE 'Asia/Colombo') AT TIME ZONE 'Asia/Colombo')`;
 
 export class RiderRepository {
   /**
@@ -15,7 +22,37 @@ export class RiderRepository {
   }
 
   /**
-   * Lists active assigned deliveries for a rider.
+   * Active riders the store manager can assign (architecture: GET
+   * /admin/riders), with how many deliveries each already holds - counted
+   * from real rows. No availability flag: nothing maintains one (plan C10).
+   */
+  async listActiveRidersForAssignment(executor: DBConnection = db) {
+    return await executor
+      .selectFrom('riders')
+      .innerJoin('users', 'users.id', 'riders.user_id')
+      .select((eb) => [
+        'riders.id',
+        'users.full_name',
+        'users.phone',
+        'riders.vehicle_type',
+        'riders.vehicle_registration_number',
+        eb
+          .selectFrom('deliveries')
+          .select(sql<number>`count(*)::int`.as('n'))
+          .whereRef('deliveries.rider_id', '=', 'riders.id')
+          .where('deliveries.assignment_status', 'in', ACTIVE_ASSIGNMENT_STATUSES)
+          .as('open_deliveries'),
+      ])
+      .where('riders.is_active', '=', true)
+      .where('users.is_active', '=', true)
+      .orderBy('users.full_name')
+      .execute();
+  }
+
+  /**
+   * Lists a rider's deliveries for today: everything still in hand, plus
+   * what was delivered (or closed under them) since midnight Asia/Colombo.
+   * Oldest assignment first - the order the rider works in.
    */
   async findActiveDeliveries(riderId: string, executor: DBConnection = db) {
     const rows = await executor
@@ -43,8 +80,27 @@ export class RiderRepository {
         'orders.delivery_instructions',
       ])
       .where('deliveries.rider_id', '=', riderId)
-      .where('deliveries.assignment_status', 'not in', ['FAILED', 'REJECTED'])
-      .orderBy('deliveries.assigned_at', 'desc')
+      .where((eb) =>
+        eb.or([
+          // Work in hand; a closed order (e.g. cancelled after assignment)
+          // stays visible for the rest of the day so the rider knows not to
+          // pick it up, then drops off.
+          eb.and([
+            eb('deliveries.assignment_status', 'in', ACTIVE_ASSIGNMENT_STATUSES),
+            eb.or([
+              eb('orders.order_status', 'not in', CLOSED_ORDER_STATUSES),
+              eb('orders.updated_at', '>=', startOfTodayColombo),
+            ]),
+          ]),
+          // Delivered today.
+          eb.and([
+            eb('deliveries.assignment_status', '=', 'DELIVERED'),
+            eb('deliveries.delivered_at', '>=', startOfTodayColombo),
+          ]),
+        ])
+      )
+      .orderBy('deliveries.assigned_at', 'asc')
+      .orderBy('deliveries.id', 'asc')
       .execute();
 
     return rows.map((row) => ({
@@ -97,8 +153,20 @@ export class RiderRepository {
     const row = await query.executeTakeFirst();
     if (!row) return null;
 
+    // What is in the bag: names and quantities only - no prices or costs.
+    // Items resolved as unavailable were removed from the order.
+    const items = await executor
+      .selectFrom('order_items')
+      .select(['id', 'product_name_snapshot', 'quantity', 'item_status'])
+      .where('order_id', '=', row.order_id)
+      .where('item_status', '!=', 'UNAVAILABLE')
+      .orderBy('created_at', 'asc')
+      .orderBy('id', 'asc')
+      .execute();
+
     return {
       ...row,
+      items,
       total_amount: Number(Number(row.total_amount).toFixed(2)),
       cod_collected_amount: Number(Number(row.cod_collected_amount).toFixed(2)),
       delivery_latitude: Number(row.delivery_latitude),
@@ -106,186 +174,6 @@ export class RiderRepository {
     };
   }
 
-  /**
-   * Transitions delivery status and syncs order status.
-   */
-  async updateDeliveryStatus(
-    deliveryId: string,
-    riderId: string,
-    newStatus: DeliveryAssignmentStatus,
-    userId: string,
-    failureReason?: string,
-    executor: DBConnection = db
-  ) {
-    return await executor.transaction().execute(async (trx) => {
-      const current = await trx
-        .selectFrom('deliveries')
-        .selectAll()
-        .where('id', '=', deliveryId)
-        .where('rider_id', '=', riderId)
-        .forUpdate()
-        .executeTakeFirst();
-
-      if (!current) return null;
-
-      const updateData: any = {
-        assignment_status: newStatus,
-        updated_at: new Date(),
-      };
-
-      if (newStatus === 'ACCEPTED') {
-        updateData.accepted_at = new Date();
-      } else if (newStatus === 'PICKED_UP') {
-        updateData.picked_up_at = new Date();
-      } else if (newStatus === 'DELIVERED') {
-        updateData.delivered_at = new Date();
-      } else if (newStatus === 'FAILED' || newStatus === 'REJECTED') {
-        updateData.failed_at = new Date();
-        updateData.failure_reason = failureReason || `Delivery ${newStatus}`;
-      }
-
-      const [updatedDelivery] = await trx
-        .updateTable('deliveries')
-        .set(updateData)
-        .where('id', '=', deliveryId)
-        .returningAll()
-        .execute();
-
-      // Sync Order Status:
-      if (newStatus === 'PICKED_UP') {
-        await trx
-          .updateTable('orders')
-          .set({
-            order_status: 'OUT_FOR_DELIVERY',
-            dispatched_at: new Date(),
-            updated_at: new Date(),
-          })
-          .where('id', '=', current.order_id)
-          .execute();
-
-        await trx
-          .insertInto('order_status_history')
-          .values({
-            order_id: current.order_id,
-            old_status: 'PACKED',
-            new_status: 'OUT_FOR_DELIVERY',
-            changed_by_user_id: userId,
-            reason_or_notes: 'Rider picked up order for delivery',
-          })
-          .execute();
-      } else if (newStatus === 'FAILED') {
-        await trx
-          .updateTable('orders')
-          .set({
-            order_status: 'FAILED',
-            updated_at: new Date(),
-          })
-          .where('id', '=', current.order_id)
-          .execute();
-
-        await trx
-          .insertInto('order_status_history')
-          .values({
-            order_id: current.order_id,
-            old_status: 'OUT_FOR_DELIVERY',
-            new_status: 'FAILED',
-            changed_by_user_id: userId,
-            reason_or_notes: failureReason || 'Delivery failed',
-          })
-          .execute();
-      }
-
-      return updatedDelivery;
-    });
-  }
-
-  /**
-   * Doorstep COD Cash Collection: Transitions Delivery -> DELIVERED, Payment -> PAID, Order -> DELIVERED.
-   */
-  async collectCod(
-    deliveryId: string,
-    riderId: string,
-    collectedAmount: number,
-    userId: string,
-    executor: DBConnection = db
-  ) {
-    return await executor.transaction().execute(async (trx) => {
-      const delivery = await trx
-        .selectFrom('deliveries')
-        .selectAll()
-        .where('id', '=', deliveryId)
-        .where('rider_id', '=', riderId)
-        .forUpdate()
-        .executeTakeFirst();
-
-      if (!delivery) return null;
-
-      const order = await trx
-        .selectFrom('orders')
-        .selectAll()
-        .where('id', '=', delivery.order_id)
-        .forUpdate()
-        .executeTakeFirstOrThrow();
-
-      const now = new Date();
-
-      // 1. Mark Delivery DELIVERED & record collected cash
-      await trx
-        .updateTable('deliveries')
-        .set({
-          assignment_status: 'DELIVERED',
-          cod_collected_amount: collectedAmount,
-          delivered_at: now,
-          updated_at: now,
-        })
-        .where('id', '=', deliveryId)
-        .execute();
-
-      // 2. Mark Payment PAID
-      await trx
-        .updateTable('payments')
-        .set({
-          payment_status: 'PAID',
-          paid_at: now,
-          updated_at: now,
-        })
-        .where('order_id', '=', order.id)
-        .execute();
-
-      // 3. Mark Order DELIVERED
-      await trx
-        .updateTable('orders')
-        .set({
-          order_status: 'DELIVERED',
-          payment_status: 'PAID',
-          delivered_at: now,
-          updated_at: now,
-        })
-        .where('id', '=', order.id)
-        .execute();
-
-      // 4. Log status history
-      await trx
-        .insertInto('order_status_history')
-        .values({
-          order_id: order.id,
-          old_status: order.order_status,
-          new_status: 'DELIVERED',
-          changed_by_user_id: userId,
-          reason_or_notes: `Delivered and collected ${collectedAmount.toFixed(2)} LKR in cash`,
-        })
-        .execute();
-
-      return {
-        delivery_id: deliveryId,
-        order_id: order.id,
-        order_status: 'DELIVERED',
-        payment_status: 'PAID',
-        cod_collected_amount: collectedAmount,
-        delivered_at: now,
-      };
-    });
-  }
 }
 
 export const riderRepository = new RiderRepository();

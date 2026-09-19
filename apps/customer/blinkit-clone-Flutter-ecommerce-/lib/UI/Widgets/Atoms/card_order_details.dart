@@ -1,108 +1,91 @@
 import 'package:flutter/material.dart';
 
+import '../../../Models/order_model.dart';
+import '../../../app_design.dart';
+
+/// Section 5 of the order detail: where the order is going.
+///
+/// Status, payment and the cancel action live in their own sections now -
+/// this card is only the delivery details the customer gave us, written as
+/// an address is written rather than as a grid of label/value pairs.
 class OrderDetailsCard extends StatelessWidget {
-  const OrderDetailsCard({
-    super.key,
-  });
+  const OrderDetailsCard({super.key, required this.order});
+
+  final OrderModel order;
 
   @override
   Widget build(BuildContext context) {
+    final line2 = order.deliveryAddressLine2;
+    final instructions = order.deliveryInstructions;
+    final notes = order.customerNotes;
+
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+      key: const Key('order-delivery-to'),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      // Reference detail, not an answer: no border and a quieter fill, so it
+      // recedes behind the bill above it.
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10.0),
+        color: AppSurfaces.subtle,
+        borderRadius: AppRadius.cardBorder,
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Orders details',
+          const Text(
+            'Delivery to',
             style: TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: AppTextColors.primary,
             ),
           ),
-          SizedBox(
-            height: 10,
-          ),
-          Text(
-            'Order ID',
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
+          const SizedBox(height: AppSpacing.md),
+          if (order.deliveryRecipientName.isNotEmpty)
+            Text(
+              order.deliveryRecipientName,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppTextColors.primary,
+              ),
             ),
-          ),
-          Text(
-            '123456789',
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
+          if (order.deliveryRecipientPhone.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              order.deliveryRecipientPhone,
+              style: const TextStyle(fontSize: 14, color: AppTextColors.secondary),
             ),
-          ),
-          SizedBox(
-            height: 10,
-          ),
-          Text(
-            'Payment Method',
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          if (order.deliveryAddressLine1.isNotEmpty)
+            Text(
+              order.deliveryAddressLine1,
+              style: const TextStyle(fontSize: 14, color: AppTextColors.primary),
             ),
-          ),
-          Text(
-            'Cash on Delivery',
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
+          if (line2 != null && line2.trim().isNotEmpty)
+            Text(
+              line2,
+              style: const TextStyle(fontSize: 14, color: AppTextColors.primary),
             ),
-          ),
-          SizedBox(
-            height: 10,
-          ),
-          Text(
-            'Delivery Address',
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
+          if (order.deliveryCity.isNotEmpty)
+            Text(
+              order.deliveryCity,
+              style: const TextStyle(fontSize: 14, color: AppTextColors.primary),
             ),
-          ),
-          Text(
-            '123, Lorem Ipsum, Dolor Sit Amet, Consectetur Adipiscing Elit',
-            maxLines: 1,
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
+          if (instructions != null && instructions.trim().isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Instructions: $instructions',
+              style: const TextStyle(fontSize: 13, color: AppTextColors.secondary),
             ),
-          ),
-          SizedBox(
-            height: 10,
-          ),
-          Text(
-            'Order Places',
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
+          ],
+          if (notes != null && notes.trim().isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Your note: $notes',
+              style: const TextStyle(fontSize: 13, color: AppTextColors.secondary),
             ),
-          ),
-          Text(
-            'Placed on Sun, 02 Jul\'23, 9:22 PM',
-            maxLines: 1,
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
-            ),
-          ),
+          ],
         ],
       ),
     );

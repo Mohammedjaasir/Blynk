@@ -1,68 +1,55 @@
 import 'package:flutter/material.dart';
 
-import 'package:ecom/app_colors.dart';
+import '../../../Models/order_model.dart';
+import '../../../app_design.dart';
 import '../Atoms/card_product_order_summary.dart';
 
+/// Section 3 of the order detail: what was ordered, straight from the
+/// order's item snapshots (name, unit, quantity and line subtotal as the
+/// backend recorded them at placement).
 class OrderSummaryProductsDetails extends StatelessWidget {
   const OrderSummaryProductsDetails({
     super.key,
+    required this.order,
   });
+
+  final OrderModel order;
 
   @override
   Widget build(BuildContext context) {
+    final itemCount = order.items.fold<int>(0, (sum, i) => sum + i.quantity);
+
     return Container(
-      color: Colors.white,
-      child: ListView(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-        shrinkWrap: true,
+      key: const Key('order-items'),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppRadius.cardBorder,
+        border: Border.all(color: AppSurfaces.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Order Summary',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 22,
-            ),
-          ),
-          GestureDetector(
-            onTap: () {
-              Navigator.of(context).pushNamed("/order/invoice");
-            },
-            child: const Text(
-              'Download Invoice',
-              style: TextStyle(
-                color: AppColors.primaryGreenColor,
-                fontSize: 16,
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Items',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppTextColors.primary,
+                  ),
+                ),
               ),
-            ),
+              Text(
+                '$itemCount ${itemCount == 1 ? 'item' : 'items'}',
+                style: const TextStyle(fontSize: 13, color: AppTextColors.secondary),
+              ),
+            ],
           ),
-          const Text(
-            'Arrived at 9:29 pm',
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 15,
-              color: Colors.grey,
-            ),
-          ),
-          const Text(
-            '2 items in this order',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(
-            height: 10,
-          ),
-          const Divider(),
-          ListView.builder(
-            shrinkWrap: true,
-            itemCount: 3,
-            physics: const NeverScrollableScrollPhysics(),
-            itemBuilder: (context, index) {
-              return OrderSummaryProductCard(index: index);
-            },
-          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (final item in order.items) OrderSummaryProductCard(item: item),
         ],
       ),
     );

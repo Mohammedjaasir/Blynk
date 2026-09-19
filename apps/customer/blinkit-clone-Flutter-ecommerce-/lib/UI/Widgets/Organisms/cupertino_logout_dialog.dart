@@ -1,7 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../app_colors.dart';
+import '../../../Services/Providers/auth.provider.dart';
 
 class CupertinoLogoutDialog extends StatelessWidget {
   const CupertinoLogoutDialog({
@@ -41,9 +43,17 @@ class CupertinoLogoutDialog extends StatelessWidget {
           ),
         ),
         CupertinoDialogAction(
-          onPressed: () {
-            Navigator.of(context)
-                .pushNamedAndRemoveUntil('/', (Route<dynamic> route) => false);
+          onPressed: () async {
+            final authProvider =
+                Provider.of<AuthProvider>(context, listen: false);
+            await authProvider.logout();
+
+            if (context.mounted) {
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                '/',
+                (Route<dynamic> route) => false,
+              );
+            }
           },
           child: const Text(
             'Logout',
@@ -58,5 +68,3 @@ class CupertinoLogoutDialog extends StatelessWidget {
     );
   }
 }
-
-// TODO: Change the Icons From Network to Assets 

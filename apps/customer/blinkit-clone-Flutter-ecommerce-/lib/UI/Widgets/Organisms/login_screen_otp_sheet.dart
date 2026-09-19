@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:ecom/Services/Validation/app_validators.dart';
+import 'package:ecom/UI/Widgets/Atoms/app_toast.dart';
+import 'package:provider/provider.dart';
 
 import '../../../app_colors.dart';
+import '../../../constants.dart';
+import '../../../Services/Providers/auth.provider.dart';
 import '../Atoms/custom_button.dart';
 import '../Atoms/custom_text_field.dart';
 
@@ -15,6 +21,8 @@ class LoginwithMobileWidget extends StatefulWidget {
 
 class _LoginwithMobileWidgetState extends State<LoginwithMobileWidget> {
   late TextEditingController _textEditingController;
+  final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -24,18 +32,58 @@ class _LoginwithMobileWidgetState extends State<LoginwithMobileWidget> {
 
   @override
   void dispose() {
-    super.dispose();
     _textEditingController.dispose();
+    super.dispose();
   }
 
-  Future _authorizeWithPhoneNumber(context) async {
+  Future<void> _authorizeWithPhoneNumber(BuildContext context) async {
     FocusScope.of(context).unfocus();
-    return Navigator.of(context).popAndPushNamed(
-      '/otp/verify',
-      arguments: {
-        "phoneNumber": _textEditingController.text,
-      },
-    );
+
+    final input = _textEditingController.text.trim();
+    if (AppValidators.phone(input) != null) {
+      showAppToast(
+        msg: "Enter a valid Sri Lankan mobile number",
+        backgroundColor: Colors.redAccent,
+        textColor: Colors.white,
+      );
+      return;
+    }
+
+    final formattedPhone = formatToE164(input);
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.requestOtp(formattedPhone);
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (!context.mounted) return;
+      Navigator.of(context).popAndPushNamed(
+        '/otp/verify',
+        arguments: {
+          "phoneNumber": formattedPhone,
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+
+      final message = e.toString().replaceAll('Exception: ', '');
+      showAppToast(
+        msg: message,
+        backgroundColor: Colors.redAccent,
+        textColor: Colors.white,
+      );
+    }
   }
 
   @override
@@ -55,61 +103,93 @@ class _LoginwithMobileWidgetState extends State<LoginwithMobileWidget> {
           ),
         ),
         child: Center(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Log in or Sign up',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Log in or Sign up',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(
-                height: 10,
-              ),
-              customTextField(
-                isPhoneNumberField: true,
-                textEditingController: _textEditingController,
-                prefix: "+91  ",
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return "Please enter a valid phone number";
-                  }
-                  if (value.length != 10) {
-                    return "Please enter a valid phone number";
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(
-                height: 10,
-              ),
-              customTextButton(
-                context,
-                callback: () async {
-                  _authorizeWithPhoneNumber(context);
-                },
-                title: "Continue",
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 110,
-                  vertical: 8,
+                const SizedBox(
+                  height: 10,
                 ),
-                color: AppColors.primaryGreenColor,
-              ),
-              const SizedBox(
-                height: 10,
-              ),
-              const Text(
-                'By continuing, you agree to our terms of service and privacy policy',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
+                customTextField(
+                  isPhoneNumberField: true,
+                  textEditingController: _textEditingController,
+                  prefix: "+94  ",
+                  maxLength: 16,
+                  hintText: "07XXXXXXXX",
+                  // One phone rule for the whole app, matching the
+                  // backend's normalizeSriLankanPhone.
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9 +()-]')),
+                  ],
+                  validator: AppValidators.phone,
                 ),
-              )
-            ],
+                const SizedBox(
+                  height: 10,
+                ),
+                _isLoading
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: CircularProgressIndicator(
+                            color: AppColors.primaryGreenColor,
+                          ),
+                        ),
+                      )
+                    : customTextButton(
+                        context,
+                        callback: () async {
+                          await _authorizeWithPhoneNumber(context);
+                        },
+                        title: "Continue",
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 110,
+                          vertical: 8,
+                        ),
+                        color: AppColors.primaryGreenColor,
+                      ),
+                const SizedBox(
+                  height: 6,
+                ),
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pushNamedAndRemoveUntil(
+                        '/home',
+                        (route) => false,
+                      );
+                    },
+                    child: const Text(
+                      'Skip for now',
+                      style: TextStyle(
+                        color: AppColors.primaryGreenColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(
+                  height: 6,
+                ),
+                const Text(
+                  'By continuing, you agree to our terms of service and privacy policy',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                )
+              ],
+            ),
           ),
         ),
       ),

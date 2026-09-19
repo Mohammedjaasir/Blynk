@@ -18,7 +18,8 @@ class CancellationPolicyCard extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           Text(
-            'Orders cannot be cancelled once packed for delivery. In case of unexpected delays, a refund will be provided, If applicable',
+            // Matches the backend rule: cancellable while PLACED or PACKED.
+            'You can cancel your order until it is out for delivery.',
             style: TextStyle(
               fontWeight: FontWeight.w400,
               fontSize: 10,

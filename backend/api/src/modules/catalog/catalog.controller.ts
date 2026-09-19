@@ -94,6 +94,25 @@ export class CatalogController {
     }
   }
 
+  async listProductsAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await catalogService.listProductsAdmin({
+        search: typeof req.query.search === 'string' ? req.query.search : undefined,
+        category_id:
+          typeof req.query.category_id === 'string' ? req.query.category_id : undefined,
+        is_active:
+          req.query.is_active === undefined
+            ? undefined
+            : req.query.is_active === 'true',
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        page: req.query.page ? Number(req.query.page) : undefined,
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getProductByIdAdmin(req: Request, res: Response, next: NextFunction) {
     try {
       const product = await catalogService.getProductByIdAdmin(req.params.id as string);

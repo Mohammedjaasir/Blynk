@@ -22,7 +22,9 @@ export async function runMigrations(direction: 'up' | 'down' = 'up'): Promise<vo
   try {
     await ensureMigrationTable(client);
 
-    const migrationsDir = path.join(__dirname, 'migrations');
+    const defaultDir = path.join(__dirname, 'migrations');
+    const fallbackDir = path.join(__dirname, '../../src/database/migrations');
+    const migrationsDir = fs.existsSync(defaultDir) ? defaultDir : fallbackDir;
     const files = fs.readdirSync(migrationsDir).sort();
 
     if (direction === 'up') {
@@ -37,6 +39,17 @@ export async function runMigrations(direction: 'up' | 'down' = 'up'): Promise<vo
 
         logger.info({ migration: file }, 'Applying migration (up)...');
         const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+
+        // PostgreSQL invariant: New enum values added via ALTER TYPE ... ADD VALUE cannot be used
+        // in index/table expressions within the same transaction block (error 55P04: check_safe_enum_use).
+        // Pre-commit any enum values in autocommit mode prior to the transactional DDL execution.
+        if (sql.includes("notification_status_enum ADD VALUE")) {
+          try {
+            await client.query("ALTER TYPE notification_status_enum ADD VALUE IF NOT EXISTS 'PROCESSING'");
+          } catch {
+            // Ignore if already present
+          }
+        }
 
         await client.query('BEGIN');
         try {
@@ -86,8 +99,14 @@ export async function runMigrations(direction: 'up' | 'down' = 'up'): Promise<vo
   }
 }
 
-// Allow direct CLI execution: tsx src/database/migrate.ts up|down
-if (process.argv[1] && process.argv[1].endsWith('migrate.ts')) {
+// Allow direct CLI execution: tsx src/database/migrate.ts up|down or node dist/database/migrate.js up|down
+const isMainScript =
+  process.argv[1] &&
+  (process.argv[1].endsWith('migrate.ts') ||
+    process.argv[1].endsWith('migrate.js') ||
+    process.argv[1].includes('migrate'));
+
+if (isMainScript) {
   const direction = process.argv[2] === 'down' ? 'down' : 'up';
   runMigrations(direction)
     .then(() => {

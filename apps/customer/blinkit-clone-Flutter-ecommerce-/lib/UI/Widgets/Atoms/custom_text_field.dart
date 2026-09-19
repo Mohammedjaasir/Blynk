@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 const kBorderTextField = OutlineInputBorder(
   borderSide: BorderSide(color: Colors.grey, width: 1.0),
@@ -7,10 +8,11 @@ const kBorderTextField = OutlineInputBorder(
 
 Widget customTextField({
   TextEditingController? textEditingController,
+  List<TextInputFormatter>? inputFormatters,
   String? hintText,
   bool isPhoneNumberField = false,
   String? prefix = "",
-  int? maxLength = 10,
+  int? maxLength,
   String? Function(String?)? validator,
   String? Function(String?)? onFieldSubmitted,
   Widget? suffixIcon,
@@ -20,8 +22,16 @@ Widget customTextField({
     TextFormField(
       onFieldSubmitted: onFieldSubmitted,
       controller: textEditingController,
-      maxLength: maxLength,
+      maxLength: maxLength ?? (isPhoneNumberField ? 16 : null),
+      buildCounter: (
+        BuildContext context, {
+        required int currentLength,
+        required bool isFocused,
+        required int? maxLength,
+      }) =>
+          null, // Hide character counter (e.g. 10/10)
       validator: validator,
+      inputFormatters: inputFormatters,
       textCapitalization: TextCapitalization.characters,
       autofocus: isAutoFocus ?? true,
       cursorColor: Colors.grey,
@@ -37,15 +47,18 @@ Widget customTextField({
         hintText: hintText ?? 'Enter Mobile Number',
         fillColor: backgroundColor ?? Colors.white,
         filled: true,
-        prefix: Text(
-          prefix ?? "+91  ",
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        counterText: "",
+        prefix: (prefix != null && prefix.isNotEmpty)
+            ? Text(
+                prefix,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              )
+            : null,
         suffixIcon: suffixIcon ??
             IconButton(
-              onPressed: () => textEditingController!.clear(),
+              onPressed: () => textEditingController?.clear(),
               icon: const Icon(
                 Icons.cancel,
                 color: Colors.black,

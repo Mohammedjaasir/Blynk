@@ -39,7 +39,7 @@ export type DeliveryAssignmentStatus =
   | 'REJECTED';
 
 export type NotificationChannel = 'SMS' | 'WHATSAPP' | 'IN_APP' | 'EMAIL';
-export type NotificationStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED';
+export type NotificationStatus = 'QUEUED' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'FAILED';
 
 export interface SystemConfigurationsTable {
   key: string;
@@ -303,11 +303,18 @@ export interface NotificationsTable {
   recipient: string;
   payload: unknown;
   status: Generated<NotificationStatus>;
+  attempts: Generated<number>;
+  max_attempts: Generated<number>;
+  next_attempt_at: Generated<Date>;
+  locked_at: Date | null;
+  locked_by: string | null;
   provider_name: string | null;
   provider_message_id: string | null;
   error_message: string | null;
   sent_at: Date | null;
+  failed_at: Date | null;
   created_at: Generated<Date>;
+  updated_at: Generated<Date>;
 }
 
 export interface AuditLogsTable {
@@ -343,6 +350,53 @@ export interface ProductCatalogView {
   is_active: boolean;
 }
 
+export interface SuppliersTable {
+  id: Generated<string>;
+  name: string;
+  code: string | null;
+  contact_person: string | null;
+  contact_phone: string | null;
+  address: string | null;
+  notes: string | null;
+  is_active: Generated<boolean>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface SourcingRecordsTable {
+  id: Generated<string>;
+  order_id: string;
+  order_item_id: string;
+  product_id: string;
+  supplier_id: string | null;
+  quantity_sourced: number;
+  estimated_unit_cost: ColumnType<number, number | string, number | string>;
+  actual_unit_cost: ColumnType<number, number | string, number | string>;
+  sourcing_status: Generated<ItemFulfillmentStatus>;
+  notes: string | null;
+  sourced_by_user_id: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PromotionsTable {
+  id: Generated<string>;
+  title: string;
+  subtitle: string | null;
+  image_url: string | null;
+  background_type: 'SOLID' | 'GRADIENT' | 'IMAGE';
+  background_color: string | null;
+  background_color_end: string | null;
+  background_image_url: string | null;
+  cta_label: string | null;
+  cta_destination_type: 'CATEGORY' | 'PRODUCT' | 'CATALOG' | null;
+  cta_destination_value: string | null;
+  display_order: Generated<number>;
+  is_active: Generated<boolean>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
 export interface Database {
   system_configurations: SystemConfigurationsTable;
   dark_stores: DarkStoresTable;
@@ -353,8 +407,11 @@ export interface Database {
   customer_addresses: CustomerAddressesTable;
   categories: CategoriesTable;
   products: ProductsTable;
+  promotions: PromotionsTable;
   inventory: InventoryTable;
   inventory_adjustments: InventoryAdjustmentsTable;
+  suppliers: SuppliersTable;
+  sourcing_records: SourcingRecordsTable;
   orders: OrdersTable;
   order_items: OrderItemsTable;
   order_status_history: OrderStatusHistoryTable;

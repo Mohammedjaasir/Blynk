@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { pool, db } from '../src/database/connection.js';
@@ -15,6 +15,27 @@ describe('Stage 2 Authentication & OTP Module', () => {
     authRateLimiter.reset();
   });
 
+  // Two tests sign in as the seeded customer and admin. Signing in records an
+  // OTP, a refresh token and last_login_at (and phone_verified_at if unset);
+  // they are put back exactly as found, so a run leaves no trace (plan Task 7).
+  const SEEDED = [
+    { id: 'a0000001-0000-0000-0000-000000000001', phone: '+94771234567' },
+    { id: 'a0000001-0000-0000-0000-000000000003', phone: '+94775551122' },
+  ];
+  let runStart: Date;
+  // As text: a JS Date would drop Postgres's microseconds and not restore exactly.
+  let seededBefore: { id: string; last_login_at: string | null; phone_verified_at: string | null; updated_at: string }[] = [];
+
+  beforeAll(async () => {
+    runStart = (await pool.query('SELECT clock_timestamp() AS t')).rows[0].t;
+    seededBefore = (
+      await pool.query(
+        'SELECT id, last_login_at::text, phone_verified_at::text, updated_at::text FROM users WHERE id = ANY($1)',
+        [SEEDED.map((u) => u.id)]
+      )
+    ).rows;
+  });
+
   afterAll(async () => {
     // Clean up test users and tokens created during testing
     await pool.query(`
@@ -22,6 +43,16 @@ describe('Stage 2 Authentication & OTP Module', () => {
       DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM users WHERE phone LIKE '+947700000%');
       DELETE FROM users WHERE phone LIKE '+947700000%';
     `);
+    await pool.query('DELETE FROM otp_verifications WHERE phone = ANY($1) AND created_at >= $2', [SEEDED.map((u) => u.phone), runStart]);
+    await pool.query('DELETE FROM refresh_tokens WHERE user_id = ANY($1) AND created_at >= $2', [SEEDED.map((u) => u.id), runStart]);
+    for (const u of seededBefore) {
+      await pool.query('UPDATE users SET last_login_at = $2::timestamptz, phone_verified_at = $3::timestamptz, updated_at = $4::timestamptz WHERE id = $1', [
+        u.id,
+        u.last_login_at,
+        u.phone_verified_at,
+        u.updated_at,
+      ]);
+    }
   });
 
   // ==========================================================================

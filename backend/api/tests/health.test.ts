@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 
@@ -13,6 +13,15 @@ describe('Health and System Routes', () => {
     expect(res.body.data).toHaveProperty('version', '1.0.0');
     expect(res.body.data).toHaveProperty('database');
     expect(res.body.data.database).toHaveProperty('status');
+  });
+
+  it('GET /ready returns 200 OK with process uptime and ready status', async () => {
+    const res = await request(app).get('/ready');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.status).toBe('ready');
+    expect(typeof res.body.data.uptime).toBe('number');
+    expect(res.body.data.timestamp).toBeDefined();
   });
 
   it('GET /unknown-route returns standardized 404 error format', async () => {

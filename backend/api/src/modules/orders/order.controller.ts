@@ -1,7 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { orderService } from './order.service.js';
-import { createOrderSchema, cancelOrderSchema, orderQuerySchema } from './order.schema.js';
-import { OrderStatus, ItemFulfillmentStatus } from '../../database/types.js';
+import {
+  createOrderSchema,
+  cancelOrderSchema,
+  orderQuerySchema,
+  adminUpdateOrderStatusSchema,
+  adminAssignRiderSchema,
+  adminOrderQuerySchema,
+  resolveItemSchema,
+  orderItemParamsSchema,
+} from './order.schema.js';
 
 export class OrderController {
   // --------------------------------------------------------------------------
@@ -42,7 +50,8 @@ export class OrderController {
 
   async getCustomerOrderById(req: Request, res: Response, next: NextFunction) {
     try {
-      const order = await orderService.getCustomerOrderById(req.params.id as string, req.user!.id);
+      const { id } = orderItemParamsSchema.parse(req.params);
+      const order = await orderService.getCustomerOrderById(id, req.user!.id);
       res.status(200).json({
         success: true,
         data: { order },
@@ -54,10 +63,11 @@ export class OrderController {
 
   async cancelOrder(req: Request, res: Response, next: NextFunction) {
     try {
+      const { id } = orderItemParamsSchema.parse(req.params);
       const input = cancelOrderSchema.parse(req.body);
       const order = await orderService.cancelOrderCustomer(
-        req.params.id as string,
-        req.user!.id,
+        id,
+        { id: req.user!.id, role: req.user!.role },
         input.reason
       );
       res.status(200).json({
@@ -87,11 +97,8 @@ export class OrderController {
 
   async getAdminOrders(req: Request, res: Response, next: NextFunction) {
     try {
-      const status = req.query.status as OrderStatus | undefined;
-      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
-
-      const result = await orderService.getAdminOrders({ status, page, limit });
+      const query = adminOrderQuerySchema.parse(req.query);
+      const result = await orderService.getAdminOrders(query);
       res.status(200).json({
         success: true,
         data: result,
@@ -103,7 +110,8 @@ export class OrderController {
 
   async getAdminOrderById(req: Request, res: Response, next: NextFunction) {
     try {
-      const order = await orderService.getAdminOrderById(req.params.id as string);
+      const { id } = orderItemParamsSchema.parse(req.params);
+      const order = await orderService.getAdminOrderById(id);
       res.status(200).json({
         success: true,
         data: { order },
@@ -115,12 +123,13 @@ export class OrderController {
 
   async updateOrderStatusAdmin(req: Request, res: Response, next: NextFunction) {
     try {
-      const { status, notes } = req.body;
+      const { id } = orderItemParamsSchema.parse(req.params);
+      const input = adminUpdateOrderStatusSchema.parse(req.body);
       const order = await orderService.updateOrderStatusAdmin(
-        req.params.id as string,
-        status as OrderStatus,
-        req.user!.id,
-        notes
+        id,
+        input.status,
+        { id: req.user!.id, role: req.user!.role },
+        input.notes
       );
       res.status(200).json({
         success: true,
@@ -133,12 +142,19 @@ export class OrderController {
 
   async resolveUnavailableItem(req: Request, res: Response, next: NextFunction) {
     try {
-      const itemStatus = (req.body.item_status || 'UNAVAILABLE') as ItemFulfillmentStatus;
-      const order = await orderService.resolveUnavailableItem(
-        req.params.id as string,
-        req.params.itemId as string,
-        itemStatus
-      );
+      const params = orderItemParamsSchema.parse(req.params);
+      const input = resolveItemSchema.parse(req.body);
+      // PATCH /orders/:id/items/:itemId — item ID from route param
+      // POST  /orders/:id/resolve-item  — item ID must be in body
+      const itemId = params.itemId || input.item_id;
+      if (!itemId) {
+        res.status(400).json({ success: false, error: 'item_id is required' });
+        return;
+      }
+      const order = await orderService.resolveUnavailableItem(params.id, itemId, input.item_status, {
+        id: req.user!.id,
+        role: req.user!.role,
+      });
       res.status(200).json({
         success: true,
         data: { order },
@@ -150,8 +166,12 @@ export class OrderController {
 
   async assignRiderAdmin(req: Request, res: Response, next: NextFunction) {
     try {
-      const { rider_id } = req.body;
-      const delivery = await orderService.assignRiderAdmin(req.params.id as string, rider_id);
+      const { id } = orderItemParamsSchema.parse(req.params);
+      const input = adminAssignRiderSchema.parse(req.body);
+      const delivery = await orderService.assignRiderAdmin(id, input.rider_id, {
+        id: req.user!.id,
+        role: req.user!.role,
+      });
       res.status(200).json({
         success: true,
         data: { delivery },

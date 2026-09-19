@@ -434,6 +434,9 @@ effective_markup =
 - Staff contacts customer if item is unavailable after order
 
 **Phase 2 (stocked warehouse):**
+
+> **Status (2026-09-19): not implemented as designed below.** The implemented and approved model takes tracked stock when an order item is **sourced** (`ORDER_FULFILLMENT`) and returns it when the order is **cancelled** (`ORDER_CANCELLATION_RESTORE`); there is no checkout reservation and delivery does not deduct again. See business rules §6.1. The reservation design below remains a possible future phase.
+
 - `inventory.tracking_mode = 'TRACKED'`
 - `quantity` = physical stock count
 - `reserved_quantity` = sum of PLACED + PACKED orders for this product
@@ -1307,7 +1310,8 @@ Order status → PACKED
 
 ---
 
-PHASE 2 (TRACKED / Stocked):
+PHASE 2 (TRACKED / Stocked) - DESIGN ONLY, NOT IMPLEMENTED (see business rules §6.1 for the implemented flow:
+sourcing takes the units, cancellation returns them, nothing else moves stock):
 
 Order Placed
     ↓

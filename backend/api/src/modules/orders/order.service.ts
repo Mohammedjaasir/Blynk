@@ -4,13 +4,84 @@ import { calculateSellingPrice } from '../pricing/index.js';
 import { isWithinDeliveryRadius } from '../../utils/geo.js';
 import { calculateScheduledDeliveryTime } from '../../utils/time.js';
 import { AppError } from '../../middleware/error.middleware.js';
-import { OrderStatus, ItemFulfillmentStatus } from '../../database/types.js';
+import { OrderStatus } from '../../database/types.js';
 import { logger } from '../../utils/logger.js';
+import { runTransition } from './lifecycle/engine.js';
+import type { Actor } from './lifecycle/types.js';
+import { adminStatusAction, CATALOGUE } from './lifecycle/catalogue.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const randomSuffix = Math.floor(1000 + Math.random() * 9000);
   return `BL-${dateStr}-${randomSuffix}`;
+}
+
+/** Four random digits a day collide; how many fresh numbers to try before giving up. */
+const ORDER_NUMBER_ATTEMPTS = 5;
+
+/**
+ * Inserts the order, drawing a fresh order number if the generated one is
+ * already taken today (UNIQUE orders_order_number_key). Any other failure,
+ * including a duplicate idempotency key, is rethrown untouched.
+ */
+async function createWithUniqueNumber(data: CreateOrderData) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await orderRepository.createOrderAtomic(data);
+    } catch (err) {
+      const e = err as { code?: string; constraint?: string };
+      if (e.code !== '23505' || e.constraint !== 'orders_order_number_key' || attempt >= ORDER_NUMBER_ATTEMPTS) throw err;
+      data = { ...data, order_number: generateOrderNumber() };
+    }
+  }
+}
+
+export function sanitizeCustomerOrderItem(it: any) {
+  if (!it) return it;
+  const { estimated_unit_cost, actual_unit_cost, markup_percentage_applied, ...safeItem } = it;
+  return safeItem;
+}
+
+/**
+ * The customer's view of the delivery: where it is in the handover, never
+ * which rider, the cash ledger, or the rider's notes.
+ */
+export function sanitizeCustomerDelivery(delivery: any) {
+  if (!delivery) return delivery;
+  const { assignment_status, assigned_at, picked_up_at, delivered_at } = delivery;
+  return { assignment_status, assigned_at, picked_up_at, delivered_at };
+}
+
+/**
+ * The customer's view of the order history: which status and when (D11).
+ * Notes are written by staff and riders for each other; who made the change
+ * is internal too.
+ */
+export function sanitizeCustomerHistory(entry: any) {
+  const { id, order_id, old_status, new_status, created_at } = entry;
+  return { id, order_id, old_status, new_status, created_at };
+}
+
+/**
+ * Whether the customer may cancel right now: the CUSTOMER_CANCEL rule itself,
+ * so the app never keeps its own list. Advisory - the cancel action re-checks
+ * under the order lock.
+ */
+export function customerCanCancel(status: OrderStatus): boolean {
+  return CATALOGUE.CUSTOMER_CANCEL.from.includes(status);
+}
+
+export function sanitizeCustomerOrder(order: any) {
+  if (!order) return order;
+  // internal_notes is staff-only; the customer's own notes are customer_notes.
+  const { internal_notes, ...safeOrder } = order;
+  return {
+    ...safeOrder,
+    can_cancel: customerCanCancel(order.order_status),
+    items: Array.isArray(order.items) ? order.items.map(sanitizeCustomerOrderItem) : order.items,
+    ...('delivery' in order ? { delivery: sanitizeCustomerDelivery(order.delivery) } : {}),
+    ...(Array.isArray(order.history) ? { history: order.history.map(sanitizeCustomerHistory) } : {}),
+  };
 }
 
 export class OrderService {
@@ -32,7 +103,7 @@ export class OrderService {
         { orderId: existingOrder.id, idempotencyKey },
         'Idempotent checkout request replayed'
       );
-      return { order: existingOrder, is_idempotent_replay: true };
+      return { order: sanitizeCustomerOrder(existingOrder), is_idempotent_replay: true };
     }
 
     // 2. Address verification (ownership + active)
@@ -143,10 +214,10 @@ export class OrderService {
       items: orderItemsData,
     };
 
-    const createdOrder = await orderRepository.createOrderAtomic(orderData);
+    const createdOrder = await createWithUniqueNumber(orderData);
     logger.info({ orderId: createdOrder.id, orderNumber: createdOrder.order_number }, 'Order placed successfully');
 
-    return { order: createdOrder, is_idempotent_replay: false };
+    return { order: sanitizeCustomerOrder(createdOrder), is_idempotent_replay: false };
   }
 
   /**
@@ -162,7 +233,7 @@ export class OrderService {
     ]);
 
     return {
-      orders,
+      orders: orders.map(sanitizeCustomerOrder),
       pagination: {
         page,
         limit,
@@ -180,40 +251,17 @@ export class OrderService {
     if (!order) {
       throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
     }
-    return order;
+    return sanitizeCustomerOrder(order);
   }
 
   /**
-   * Customer self-service cancellation window.
+   * Customer self-service cancellation (lifecycle #1 CUSTOMER_CANCEL): the
+   * rules and codes live in the lifecycle and are checked under the lock.
    */
-  async cancelOrderCustomer(orderId: string, customerId: string, reason?: string) {
-    const order = await orderRepository.findOrderById(orderId, customerId);
-    if (!order) {
-      throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
-    }
-
-    if (order.order_status === 'OUT_FOR_DELIVERY' || order.order_status === 'DELIVERED') {
-      throw new AppError(
-        'Order is already out for delivery or delivered and cannot be cancelled online.',
-        400,
-        'ORDER_ALREADY_OUT_FOR_DELIVERY'
-      );
-    }
-
-    if (order.order_status === 'CANCELLED') {
-      throw new AppError('Order is already cancelled.', 400, 'ORDER_ALREADY_CANCELLED');
-    }
-
-    if (!['PLACED', 'PACKED'].includes(order.order_status)) {
-      throw new AppError(
-        `Order cannot be cancelled in '${order.order_status}' status.`,
-        400,
-        'ORDER_CANNOT_BE_CANCELLED'
-      );
-    }
-
-    await orderRepository.cancelOrder(orderId, customerId, reason);
-    return await orderRepository.findOrderById(orderId, customerId);
+  async cancelOrderCustomer(orderId: string, actor: Actor, reason?: string) {
+    await runTransition('CUSTOMER_CANCEL', { actor, orderId, input: { reason } });
+    const updated = await orderRepository.findOrderById(orderId, actor.id);
+    return sanitizeCustomerOrder(updated);
   }
 
   // --------------------------------------------------------------------------
@@ -221,17 +269,17 @@ export class OrderService {
   // --------------------------------------------------------------------------
 
   async getPackingQueue() {
-    return await orderRepository.findAdminOrders({ status: 'PLACED', limit: 100, offset: 0 });
+    return await orderRepository.findAdminOrders({ statuses: ['PLACED'], limit: 100, offset: 0 });
   }
 
-  async getAdminOrders(params: { status?: OrderStatus; page?: number; limit?: number }) {
+  async getAdminOrders(params: { status?: OrderStatus[]; since?: Date; page?: number; limit?: number }) {
     const page = params.page || 1;
     const limit = params.limit || 50;
     const offset = (page - 1) * limit;
 
     const [orders, total] = await Promise.all([
-      orderRepository.findAdminOrders({ status: params.status, limit, offset }),
-      orderRepository.countAdminOrders(params.status),
+      orderRepository.findAdminOrders({ statuses: params.status, since: params.since, limit, offset }),
+      orderRepository.countAdminOrders({ statuses: params.status, since: params.since }),
     ]);
 
     return {
@@ -253,32 +301,42 @@ export class OrderService {
     return order;
   }
 
-  async updateOrderStatusAdmin(orderId: string, newStatus: OrderStatus, userId: string, notes?: string) {
-    const updated = await orderRepository.updateOrderStatus(orderId, newStatus, userId, notes);
-    if (!updated) {
+  /**
+   * PATCH /admin/orders/:id/status. The requested status names a lifecycle
+   * action (catalogue adminStatusAction); the action re-checks everything
+   * under its locks, so a status that changed since this read is a
+   * deterministic 422/409, never a bypass.
+   */
+  async updateOrderStatusAdmin(orderId: string, requested: OrderStatus, actor: Actor, notes?: string) {
+    const current = await orderRepository.findOrderStatus(orderId);
+    if (!current) {
       throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
     }
+    const action = adminStatusAction(requested, current);
+    if (!action) {
+      throw new AppError(`An order in ${current} cannot move to ${requested}.`, 422, 'INVALID_STATUS_TRANSITION', {
+        current_status: current,
+        requested_status: requested,
+      });
+    }
+    await runTransition(action, { actor, orderId, input: { notes } });
     return await orderRepository.findOrderById(orderId);
   }
 
-  async resolveUnavailableItem(orderId: string, itemId: string, itemStatus: ItemFulfillmentStatus) {
+  /** Lifecycle #2 RESOLVE_ITEM. */
+  async resolveUnavailableItem(orderId: string, itemId: string, itemStatus: 'UNAVAILABLE' | 'SUBSTITUTED', actor: Actor) {
     const order = await orderRepository.findOrderById(orderId);
     if (!order) {
       throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
     }
 
-    await orderRepository.resolveUnavailableItem(orderId, itemId, itemStatus);
+    await runTransition('RESOLVE_ITEM', { actor, orderId, itemId, input: { item_status: itemStatus } });
     return await orderRepository.findOrderById(orderId);
   }
 
-  async assignRiderAdmin(orderId: string, riderId: string) {
-    const order = await orderRepository.findOrderById(orderId);
-    if (!order) {
-      throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
-    }
-
-    const delivery = await orderRepository.assignRider(orderId, riderId);
-    return delivery;
+  /** Lifecycle #4 ASSIGN_RIDER. */
+  async assignRiderAdmin(orderId: string, riderId: string, actor: Actor) {
+    return await runTransition('ASSIGN_RIDER', { actor, orderId, input: { rider_id: riderId } });
   }
 }
 

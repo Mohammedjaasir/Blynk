@@ -4,8 +4,14 @@ import 'package:ecom/Screens/Auth/login_screen.dart';
 import 'package:ecom/Screens/Auth/otp_verification_screen.dart';
 import 'package:ecom/Screens/app_about_screen.dart';
 import 'package:ecom/Screens/cart_gift_screen.dart';
+import 'package:ecom/Screens/categories_screen.dart';
+import 'package:ecom/Screens/checkout_screen.dart';
+import 'package:ecom/Screens/customer_shell.dart';
 import 'package:ecom/Screens/error_screen.dart';
-import 'package:ecom/Screens/home_screen.dart';
+import 'package:ecom/Screens/help_screen.dart';
+import 'package:ecom/Screens/search_screen.dart';
+import 'package:ecom/Screens/product_details_screen.dart';
+import 'package:ecom/Models/product_model.dart';
 import 'package:ecom/Screens/order_confirmation_screen.dart';
 import 'package:ecom/Screens/order_summary_screen.dart';
 import 'package:ecom/Screens/pdf_view_screen.dart';
@@ -31,16 +37,48 @@ class AppRouter {
             data: settings.arguments,
           ),
         );
+      // '/home' is the persistent four-tab customer shell (Shop / Orders /
+      // Help / Profile), not a bare Home page - every existing
+      // pushNamedAndRemoveUntil('/home', ...) call lands on the Shop tab.
       case '/home':
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => const HomeScreen(),
+          builder: (_) => const CustomerShell(),
+        );
+      case '/categories':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const CategoriesScreen(),
+        );
+      case '/search':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => SearchScreen(
+            initialCategorySlug: settings.arguments as String?,
+          ),
+        );
+      // Accepts the tapped ProductModel (renders instantly, then refreshes)
+      // or a bare product id.
+      case '/product':
+        final args = settings.arguments;
+        final initial = args is ProductModel ? args : null;
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => ProductDetailsScreen(
+            productId: initial?.id ?? (args is String ? args : ''),
+            initialProduct: initial,
+          ),
+        );
+      case '/help':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const HelpScreen(),
         );
       case '/products':
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => ProductsScreen(
-            categoryName: settings.arguments.toString(),
+            categorySlug: (settings.arguments as String?) ?? '',
           ),
         );
       case '/coupons':
@@ -59,6 +97,11 @@ class AppRouter {
           settings: settings,
           builder: (_) => const CartScreen(),
         );
+      case '/checkout':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const CheckoutScreen(),
+        );
       case "/orders":
         return MaterialPageRoute(
           settings: settings,
@@ -67,7 +110,9 @@ class AppRouter {
       case "/order":
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => const OrderSummaryScreen(),
+          builder: (_) => OrderSummaryScreen(
+            orderId: (settings.arguments as String?) ?? '',
+          ),
         );
       case "/order/invoice":
         return MaterialPageRoute(
@@ -145,7 +190,6 @@ class ScalePageRoute extends PageRouteBuilder {
                   child: child,
                 );
               case AnimationDirection.center:
-              default:
                 return ScaleTransition(
                   scale: Tween<double>(
                     begin: 0.0,

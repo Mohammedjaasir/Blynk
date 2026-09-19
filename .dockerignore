@@ -1,0 +1,48 @@
+# ==============================================================================
+# BLYNK MONOREPO - DOCKER IGNORE
+# ==============================================================================
+
+# Dependencies & Build Outputs
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+coverage/
+**/coverage/
+*.tsbuildinfo
+
+# Secrets & Environment Files
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Flutter & Mobile Assets
+apps/
+.dart_tool/
+.packages
+
+# Git & Repository Metadata
+.git/
+.github/
+
+# Logs
+*.log
+
+# IDE & Editor Temporary Files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Ephemeral scratch & extract files
+scratch/
+extracted_prd.txt
+graphify-out/
+raw/

@@ -263,11 +263,58 @@ export class CatalogRepository {
   /**
    * Admin: Retrieves complete product details including purchase_cost and markups.
    */
+  /**
+   * Admin: lists products including inactive ones, so operations can find
+   * and re-enable a disabled product. The customer listing
+   * (findActiveProducts) stays active-only.
+   */
+  async findAllProductsAdmin(params: {
+    search?: string;
+    category_id?: string;
+    is_active?: boolean;
+    limit: number;
+    offset: number;
+  }) {
+    // v_product_catalog has the customer-facing and priced columns;
+    // updated_at lives on products itself and operations wants it in the
+    // table. (tracking_mode is an inventory concern, not a product one.)
+    let query = db
+      .selectFrom('v_product_catalog')
+      .innerJoin('products', 'products.id', 'v_product_catalog.id')
+      .selectAll('v_product_catalog')
+      .select('products.updated_at');
+
+    if (params.category_id) {
+      query = query.where('v_product_catalog.category_id', '=', params.category_id);
+    }
+    if (params.is_active !== undefined) {
+      query = query.where('v_product_catalog.is_active', '=', params.is_active);
+    }
+    if (params.search) {
+      const searchPattern = `%${params.search}%`;
+      query = query.where((eb) =>
+        eb.or([
+          eb('v_product_catalog.name', 'ilike', searchPattern),
+          eb('v_product_catalog.sku', 'ilike', searchPattern),
+          eb('v_product_catalog.barcode', 'ilike', searchPattern),
+        ])
+      );
+    }
+
+    return await query
+      .orderBy('v_product_catalog.name', 'asc')
+      .limit(params.limit)
+      .offset(params.offset)
+      .execute();
+  }
+
   async findProductByIdAdmin(id: string) {
     return await db
       .selectFrom('v_product_catalog')
-      .selectAll()
-      .where('id', '=', id)
+      .innerJoin('products', 'products.id', 'v_product_catalog.id')
+      .selectAll('v_product_catalog')
+      .select('products.updated_at')
+      .where('v_product_catalog.id', '=', id)
       .executeTakeFirst();
   }
 

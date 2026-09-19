@@ -16,9 +16,13 @@
 
 # Environment Variables & Secrets
 .env
-.env*.local
+.env.*
+!.env.example
 *.pem
 *.key
+*.cert
+*.crt
+docker-compose.override.yml
 
 # Node.js / Backend
 node_modules/
@@ -52,4 +56,10 @@ app.*.map.json
 # Ephemeral scratch & extract files
 extracted_prd.txt
 scratch/
-graphify-out/cache/
+graphify-out/
+
+# Admin-uploaded media (product photos, promotion visuals). Stored on
+# disk by the API; the database only holds the URL.
+backend/api/uploads/
+uploads/
+*.tsbuildinfo
