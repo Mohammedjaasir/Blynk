@@ -4,7 +4,7 @@ import path from 'path';
 import request from 'supertest';
 import { fileURLToPath } from 'url';
 import { createApp } from '../src/app.js';
-import { validateEnv, envSchema } from '../src/config/env.js';
+import { env, validateEnv, envSchema } from '../src/config/env.js';
 import { NotificationWorker } from '../src/modules/notifications/notification.worker.js';
 import { SmsProvider } from '../src/modules/notifications/providers/sms.provider.js';
 import { WhatsAppProvider } from '../src/modules/notifications/providers/whatsapp.provider.js';
@@ -183,6 +183,10 @@ describe('Stage 7: Deployment, Docker & Environment Packaging', () => {
   describe('3. Production Gateway Mock Prevention', () => {
     it('SmsProvider rejects mock delivery when executed under production environment', async () => {
       const originalNodeEnv = process.env.NODE_ENV;
+      // Placeholder credentials, whatever the developer's .env holds: this is
+      // about refusing a mock in production, not about a real key.
+      const originalKey = env.SMS_API_KEY;
+      env.SMS_API_KEY = 'dev_placeholder';
       try {
         process.env.NODE_ENV = 'production';
         const sms = new SmsProvider();
@@ -198,6 +202,7 @@ describe('Stage 7: Deployment, Docker & Environment Packaging', () => {
         expect(result.errorMessage).toContain('Mock SMS is strictly prohibited in production');
       } finally {
         process.env.NODE_ENV = originalNodeEnv;
+        env.SMS_API_KEY = originalKey;
       }
     });
 

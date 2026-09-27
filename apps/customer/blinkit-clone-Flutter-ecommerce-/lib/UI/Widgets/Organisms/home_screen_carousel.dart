@@ -84,10 +84,14 @@ class _HomeScreenCarouselState extends State<HomeScreenCarousel> {
 
   /// How long each promotion is shown before the carousel moves on.
   ///
-  /// Deliberately unhurried: a shopper must be able to read the slide and
-  /// decide to tap it. A fast carousel is one that moves the target out from
-  /// under the finger reaching for it.
-  static const Duration _autoAdvanceEvery = Duration(seconds: 6);
+  /// 3 s (was 5, 2026-09-27 - the owner wanted it livelier): still long
+  /// enough to read a slide's headline, and a finger on the carousel holds
+  /// it still, so a shopper reaching for a slide never has it pulled away.
+  static const Duration _autoAdvanceEvery = Duration(seconds: 3);
+
+  /// How long after the shopper lets go before the loop picks up again.
+  static const Duration _resumeAfterTouch = Duration(seconds: 4);
+  Timer? _resume;
 
   Timer? _autoAdvance;
 
@@ -107,13 +111,34 @@ class _HomeScreenCarouselState extends State<HomeScreenCarousel> {
       if (count < 2 || !_pageController.hasClients) return;
       _pageController.animateToPage(
         (_currentPage + 1) % count,
-        duration: BlynkMotion.base,
+        duration: BlynkMotion.emphasized,
         curve: Curves.easeInOutCubic,
       );
     });
   }
 
-  /// Called the moment the shopper interacts. Idempotent.
+  /// A touch: hold still while the finger is down, then loop again once the
+  /// shopper has let go for [_resumeAfterTouch]. 2026-09-26: a touch used to
+  /// stop the carousel for good, so a thumb brushing it while scrolling Home
+  /// froze it - the product owner saw a static banner. Keyboard focus, arrow
+  /// keys and the screen-reader adjust gesture still stop it for good: that
+  /// is the WCAG 2.2.2 pause mechanism, and reduced motion still turns the
+  /// loop off entirely.
+  void _pauseForTouch() {
+    _resume?.cancel();
+    _autoAdvance?.cancel();
+    _autoAdvance = null;
+  }
+
+  void _resumeAfterRelease() {
+    _resume?.cancel();
+    if (_userTookOver || (MediaQuery.maybeDisableAnimationsOf(context) ?? false)) return;
+    _resume = Timer(_resumeAfterTouch, () {
+      if (mounted) _startAutoAdvance();
+    });
+  }
+
+  /// Keyboard / assistive-technology takeover. Idempotent.
   void _stopAutoAdvance() {
     if (_userTookOver) return;
     _userTookOver = true;
@@ -145,6 +170,7 @@ class _HomeScreenCarouselState extends State<HomeScreenCarousel> {
   @override
   void dispose() {
     _autoAdvance?.cancel();
+    _resume?.cancel();
     _pageController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -174,7 +200,9 @@ class _HomeScreenCarouselState extends State<HomeScreenCarousel> {
       // (not GestureDetector) so it sees the press without competing with the
       // PageView's drag or the slide's own tap.
       child: Listener(
-        onPointerDown: (_) => _stopAutoAdvance(),
+        onPointerDown: (_) => _pauseForTouch(),
+        onPointerUp: (_) => _resumeAfterRelease(),
+        onPointerCancel: (_) => _resumeAfterRelease(),
         child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(
           dragDevices: _dragDevices,
@@ -870,17 +898,18 @@ class _Entrance extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final duration = BlynkMotion.resolve(context, Duration(milliseconds: 360 + delayMs));
-    final fade = BlynkMotion.resolve(context, Duration(milliseconds: 260 + delayMs));
+    final delay = Duration(milliseconds: delayMs);
+    final duration = BlynkMotion.resolve(context, BlynkMotion.emphasized + delay);
+    final fade = BlynkMotion.resolve(context, BlynkMotion.slow + delay);
 
     return AnimatedSlide(
       offset: isActive ? Offset.zero : Offset(offsetX, 0.24),
       duration: duration,
-      curve: Curves.easeOutCubic,
+      curve: BlynkMotion.easeOut,
       child: AnimatedScale(
         scale: isActive ? 1 : scaleFrom,
         duration: duration,
-        curve: Curves.easeOutCubic,
+        curve: BlynkMotion.easeOut,
         child: AnimatedOpacity(
           opacity: isActive ? 1 : 0,
           duration: fade,

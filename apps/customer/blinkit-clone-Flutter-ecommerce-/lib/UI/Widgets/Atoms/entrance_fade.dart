@@ -21,6 +21,13 @@ import '../../../design/motion.dart';
 /// Honours the platform's reduced-motion setting through
 /// [BlynkMotion.resolve]: the child is then simply visible, immediately, with
 /// no controller running at all.
+///
+/// **Once means once, even after a rebuild.** A card in a lazy list that
+/// scrolls past the cache extent is disposed and built again on the way back;
+/// a self-contained entrance would replay. Inside an [EntranceScope] this
+/// widget records its [key] the first time it plays and renders at rest on
+/// every later build with that key, so scrolling back through a grid shows
+/// cards that are simply there. Without a scope it behaves as before.
 class EntranceFade extends StatefulWidget {
   const EntranceFade({
     super.key,
@@ -40,11 +47,11 @@ class EntranceFade extends StatefulWidget {
   static const double travel = 0.06;
 
   /// The gap between one item's arrival and the next.
-  static const Duration step = Duration(milliseconds: 45);
+  static const Duration step = BlynkMotion.staggerStep;
 
   /// How many items still stagger. Past this the delay is flat, so the last
   /// tile of a long grid is not left waiting on the first.
-  static const int staggerCap = 8;
+  static const int staggerCap = BlynkMotion.staggerCap;
 
   /// The delay for the item at [index] in a staggered list.
   static Duration delayFor(int index) =>
@@ -67,8 +74,13 @@ class _EntranceFadeState extends State<EntranceFade>
     if (_resolved) return;
     _resolved = true;
 
-    final motion = BlynkMotion.resolve(context, BlynkMotion.base);
+    final motion = BlynkMotion.resolve(context, BlynkMotion.entrance);
     if (motion == Duration.zero) return; // no controller: child is just visible
+
+    // Already played on this screen: at rest, no controller.
+    final scope = EntranceScope.maybeOf(context);
+    final key = widget.key;
+    if (scope != null && key != null && !scope.markPlayed(key)) return;
 
     final total = widget.delay + motion;
     final controller = AnimationController(vsync: this, duration: total);
@@ -93,7 +105,7 @@ class _EntranceFadeState extends State<EntranceFade>
   @override
   Widget build(BuildContext context) {
     final curve = _curve;
-    if (curve == null) return widget.child; // reduced motion
+    if (curve == null) return widget.child; // reduced motion, or already played
 
     return FadeTransition(
       opacity: curve,
@@ -106,4 +118,43 @@ class _EntranceFadeState extends State<EntranceFade>
       ),
     );
   }
+}
+
+/// Remembers which [EntranceFade] keys have already played on a screen.
+///
+/// One per screen, above its lists. The set lives in this widget's state, so
+/// it survives every rebuild of the lists beneath it and is discarded with
+/// the screen - a fresh visit to the same screen is a fresh entrance.
+class EntranceScope extends StatefulWidget {
+  const EntranceScope({super.key, required this.child});
+
+  final Widget child;
+
+  static EntranceRegistry? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<EntranceRegistry>();
+
+  @override
+  State<EntranceScope> createState() => _EntranceScopeState();
+}
+
+class _EntranceScopeState extends State<EntranceScope> {
+  final Set<Key> _played = <Key>{};
+
+  @override
+  Widget build(BuildContext context) =>
+      EntranceRegistry(played: _played, child: widget.child);
+}
+
+/// The scope's record. Public only so [EntranceScope.maybeOf] can name it;
+/// screens never build one directly.
+class EntranceRegistry extends InheritedWidget {
+  const EntranceRegistry({super.key, required this.played, required super.child});
+
+  final Set<Key> played;
+
+  /// True if [key] had not played yet - and it is now recorded as played.
+  bool markPlayed(Key key) => played.add(key);
+
+  @override
+  bool updateShouldNotify(EntranceRegistry old) => false;
 }

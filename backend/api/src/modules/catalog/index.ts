@@ -1,3 +1,4 @@
+import { streamCatalogEvents } from './catalog.events.js';
 import { Router } from 'express';
 import { catalogController } from './catalog.controller.js';
 import { requireAuth } from '../../middleware/auth.middleware.js';
@@ -35,6 +36,8 @@ export const catalogRouter = Router();
 catalogRouter.get('/status', (_req, res) => {
   res.json({ module: 'catalog', status: 'ready' });
 });
+// Live updates: one Server-Sent Event whenever the catalog changes.
+catalogRouter.get('/events', streamCatalogEvents);
 catalogRouter.use('/categories', categoriesRouter);
 catalogRouter.use('/products', productsRouter);
 
@@ -42,3 +45,4 @@ export * from './catalog.schema.js';
 export * from './catalog.repository.js';
 export * from './catalog.service.js';
 export * from './catalog.controller.js';
+export * from './catalog.events.js';

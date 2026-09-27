@@ -85,9 +85,28 @@ abstract final class BlynkScale {
   static const double radiusMd = 12;
   static const double radiusLg = 20;
 
+  // Motion. Raw milliseconds only; the meaning of each lives in motion.dart.
+  static const Duration instant = Duration(milliseconds: 60);
   static const Duration fast = Duration(milliseconds: 120);
   static const Duration base = Duration(milliseconds: 200);
   static const Duration slow = Duration(milliseconds: 280);
+  static const Duration emphasized = Duration(milliseconds: 320);
+
+  /// An arrival the eye is meant to follow (a section, a card, a counting
+  /// number). 2026-09-26: the first pass used 200 ms here and a screen
+  /// recording showed Home's whole entrance finishing inside the route fade -
+  /// present in code, invisible in use.
+  static const Duration entrance = Duration(milliseconds: 450);
+
+  /// The gap between beats of a screen's entrance.
+  static const Duration entranceStep = Duration(milliseconds: 90);
+
+  /// A map camera fit. Longer than any UI motion because the whole viewport
+  /// moves and the eye needs the extra time to keep its bearings.
+  static const Duration camera = Duration(milliseconds: 500);
+
+  /// The gap between one staggered item's start and the next's.
+  static const Duration stagger = Duration(milliseconds: 40);
 
   /// The inline glyph that sits on a 12 px caption line (a status pill, an
   /// inline field error). [iconSm] is 20 and visibly overpowers that line.

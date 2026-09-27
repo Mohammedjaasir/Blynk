@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:ecom/design/tokens.dart';
+import 'UI/Widgets/Atoms/blynk_page_transition.dart';
 
 /// The Blynk theme, built entirely from `lib/design/` tokens. The colour
 /// scheme is ink-primary so no Material default can fall back to yellow;
@@ -128,6 +129,9 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      // One route transition for all 21 routes: a short fade-through that
+      // sits under the product image's Hero instead of fighting it.
+      pageTransitionsTheme: blynkPageTransitions,
       colorScheme: _scheme,
       fontFamily: BlynkText.family,
       textTheme: textTheme,

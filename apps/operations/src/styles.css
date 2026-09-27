@@ -1310,6 +1310,13 @@ input {
   height: 132px;
 }
 
+.focal__preview--circle {
+  /* Customer category tiles are circles: the square crop, masked round. */
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+}
+
 .focal__preview--wide {
   width: 232px;
   /* The carousel card's own proportion, not a guess: _HeroMetrics' phone band

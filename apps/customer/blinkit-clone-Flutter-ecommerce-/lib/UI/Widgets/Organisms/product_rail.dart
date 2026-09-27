@@ -4,6 +4,8 @@ import '../Atoms/app_skeleton.dart';
 import '../Atoms/card_product.dart';
 import '../../../Models/product_model.dart';
 import '../../../app_responsive.dart';
+import '../Atoms/entrance_fade.dart';
+import '../../../design/motion.dart';
 
 /// The horizontal product scroller Home sections are built from. It renders
 /// the same [ProductCard] the grids do — there is deliberately no separate
@@ -75,7 +77,11 @@ class ProductRail extends StatelessWidget {
               width: cardWidth,
               child: loading
                   ? const ProductCardSkeleton()
-                  : ProductCard(product: products[index]),
+                  : EntranceFade(
+                      key: ValueKey(products[index].id),
+                      delay: BlynkMotion.staggerFor(index),
+                      child: ProductCard(product: products[index]),
+                    ),
             ),
           ),
         );

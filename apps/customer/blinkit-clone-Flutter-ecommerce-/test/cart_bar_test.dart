@@ -74,7 +74,9 @@ void main() {
 
   Future<void> settle(WidgetTester tester) async {
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    // The bar rises over emphasized and the total counts over entrance.
+    await tester.pump(BlynkMotion.entrance);
+    await tester.pump();
   }
 
   group('visibility', () {
@@ -99,12 +101,12 @@ void main() {
       expect(find.textContaining('item'), findsNothing);
     });
 
-    testWidgets('slides over BlynkMotion.base', (tester) async {
+    testWidgets('slides over BlynkMotion.emphasized', (tester) async {
       await pumpBar(tester);
       final tween = tester.widget<TweenAnimationBuilder<double>>(
         find.byType(TweenAnimationBuilder<double>),
       );
-      expect(tween.duration, BlynkMotion.base);
+      expect(tween.duration, BlynkMotion.emphasized);
 
       cart.add(_product('milk', 540));
       await tester.pump();

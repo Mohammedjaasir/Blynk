@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:ecom/design/scroll_behavior.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +21,7 @@ import 'package:ecom/Services/Providers/product.provider.dart';
 import 'package:ecom/app_theme.dart';
 import 'package:ecom/route_generator.dart';
 import 'package:ecom/Screens/session_gate.dart';
+import 'package:ecom/UI/Widgets/Organisms/blynk_launch_screen.dart';
 
 // Shared so lib/UI/Widgets/Atoms/app_toast.dart can show a SnackBar
 // without needing a BuildContext.
@@ -54,7 +58,30 @@ void main() async {
     );
   }
 
+  // Hold Flutter's first frame until the intro's logo is decoded (capped).
+  // Android's splash fades away the moment Flutter draws; if that first frame
+  // is drawn before the logo image is ready, the fade reveals an empty white
+  // frame and the logo blinks. A screen recording caught exactly that.
+  WidgetsBinding.instance.deferFirstFrame();
   runApp(buildRootWidget(config));
+  unawaited(_decodeLaunchLogo().whenComplete(WidgetsBinding.instance.allowFirstFrame));
+}
+
+/// Decodes the intro logo into the image cache, or gives up after a short
+/// cap so a missing asset can never hold startup hostage.
+Future<void> _decodeLaunchLogo() {
+  final done = Completer<void>();
+  final stream = const AssetImage(BlynkLaunchScreen.logoAsset)
+      .resolve(ImageConfiguration.empty);
+  late final ImageStreamListener listener;
+  listener = ImageStreamListener(
+    (_, __) { if (!done.isCompleted) done.complete(); },
+    onError: (_, __) { if (!done.isCompleted) done.complete(); },
+  );
+  stream.addListener(listener);
+  return done.future
+      .timeout(const Duration(milliseconds: 600), onTimeout: () {})
+      .whenComplete(() => stream.removeListener(listener));
 }
 
 /// What the app shows first: the "not configured" screen when [config] is
@@ -111,6 +138,8 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Blynk',
+      // No stretch overscroll: it bent photos and text (see the class).
+      scrollBehavior: const BlynkScrollBehavior(),
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       navigatorKey: rootNavigatorKey,

@@ -5,8 +5,8 @@ import '../../../Models/order_format.dart';
 import '../../../Services/Providers/cart.provider.dart';
 import '../../../app_design.dart' show appButtonTextScale, kStackButtonsAboveTextScale;
 import '../../../design/tokens.dart';
-import '../Atoms/money_text.dart';
 import '../Atoms/blynk_button.dart';
+import '../Atoms/blynk_animated_number.dart';
 
 /// The floating cart bar: ink, 56 dp, raised. The left is two lines — the
 /// item count above, quiet, and the items total below, loud — and the right
@@ -18,7 +18,7 @@ import '../Atoms/blynk_button.dart';
 /// "Total" is not used for a figure that is not the final one.
 ///
 /// It is absent from the tree while the cart is empty, and slides in and out
-/// over [BlynkMotion.base] (instantly under reduced motion). Its height is
+/// over [BlynkMotion.emphasized] (instantly under reduced motion). Its height is
 /// part of its own layout, so placed in a column it pushes the content up
 /// instead of covering it; placed in a Stack it simply floats.
 class CartBar extends StatelessWidget {
@@ -40,7 +40,7 @@ class CartBar extends StatelessWidget {
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: hasItems ? 1 : 0),
-      duration: BlynkMotion.resolve(context, BlynkMotion.base),
+      duration: BlynkMotion.resolve(context, BlynkMotion.emphasized),
       curve: hasItems ? BlynkMotion.easeOut : BlynkMotion.easeIn,
       builder: (context, t, _) {
         if (t == 0) return const SizedBox.shrink();
@@ -106,10 +106,10 @@ class _BarState extends State<_Bar> {
           overflow: TextOverflow.ellipsis,
           style: BlynkText.caption.copyWith(color: BlynkColors.onInkMuted),
         ),
-        MoneyText(
+        // Counts to the new total rather than cutting to it: the one number
+        // the customer watches as they tap, shown to be the effect of the tap.
+        BlynkAnimatedNumber(
           total,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: BlynkText.price.copyWith(color: BlynkColors.onInk),
         ),
       ],

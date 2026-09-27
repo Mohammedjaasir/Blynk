@@ -5,7 +5,11 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { authRepository } from './auth.repository.js';
 import { authRateLimiter } from './auth.rate-limiter.js';
 import { generateOtp, hashOtp, compareOtp } from './otp.service.js';
+import { SmsProvider } from '../notifications/providers/sms.provider.js';
 import { generateAccessToken, generateRefreshToken, hashToken } from './token.service.js';
+
+
+const otpSms = new SmsProvider();
 
 export interface RequestOtpResult {
   message: string;
@@ -75,6 +79,31 @@ export class AuthService {
     });
 
     logger.info({ phone, expiresAt }, 'OTP challenge issued successfully');
+
+    // Deliver the code by SMS (Notify.lk). Until 2026-09-26 the code was only
+    // stored and, outside production, returned as dev_otp - no SMS was ever
+    // sent. With dev_ placeholder credentials the provider simulates the
+    // send, so local development without a key still works.
+    const sms = await otpSms.send({
+      notificationId: `otp_${Date.now()}`,
+      recipient: phone,
+      message: `Your Blynk verification code is ${otp}. It expires in ${env.OTP_EXPIRY_MINUTES} minutes. Do not share this code with anyone.`,
+    });
+    if (!sms.success) {
+      logger.error(
+        { provider: sms.providerName, errorType: sms.errorType, error: sms.errorMessage },
+        'OTP SMS delivery failed'
+      );
+      // In production a code nobody receives is a dead end: say so. Outside
+      // production the dev_otp below still lets sign-in proceed.
+      if (env.NODE_ENV === 'production') {
+        throw new AppError(
+          'We could not send the verification code. Please try again shortly.',
+          502,
+          'OTP_DELIVERY_FAILED'
+        );
+      }
+    }
 
     // In dev / test environments, attach dev_otp to allow automated verification
     const isDevOrTest = env.NODE_ENV !== 'production';

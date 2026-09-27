@@ -23,6 +23,7 @@ import 'package:ecom/UI/Widgets/Organisms/home_product_sections.dart';
 import 'package:ecom/UI/Widgets/Organisms/home_screen_app_bar.dart';
 import 'package:ecom/UI/Widgets/Organisms/home_screen_carousel.dart';
 import 'package:ecom/UI/Widgets/Organisms/home_screen_search_bar.dart';
+import 'package:ecom/UI/Widgets/Atoms/section_header.dart';
 import 'package:ecom/app_responsive.dart';
 import 'package:ecom/app_theme.dart';
 import 'package:ecom/design/tokens.dart';
@@ -218,6 +219,10 @@ Future<CartProvider> _pumpHome(
   await tester.pumpAndSettle();
   return cart;
 }
+
+/// A Home shelf's section header (not the category tile of the same name).
+Finder _shelf(String title) =>
+    find.widgetWithText(BlynkSectionHeader, title, skipOffstage: false);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -660,7 +665,7 @@ void main() {
       final backend = _Backend();
       await _pumpHome(tester, backend: backend);
 
-      expect(find.text(HomeProductSections.allTitle), findsOneWidget);
+      expect(_shelf('Dairy & Eggs'), findsOneWidget);
       await tester.tap(find.text('Biscuits & Snacks'));
       await tester.pumpAndSettle();
 
@@ -668,27 +673,191 @@ void main() {
           reason: 'the products screen runs that query, not Home');
     });
 
-    testWidgets('coming back leaves Home on "Browse all"', (tester) async {
+    testWidgets('coming back leaves Home on its shelves', (tester) async {
       await _pumpHome(tester);
-      expect(find.text(HomeProductSections.allTitle), findsOneWidget);
+      expect(_shelf('Dairy & Eggs'), findsOneWidget);
 
       await tester.tap(find.text('Biscuits & Snacks'));
       await tester.pumpAndSettle();
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
 
-      expect(find.text(HomeProductSections.allTitle), findsOneWidget);
+      expect(_shelf('Dairy & Eggs'), findsOneWidget);
       expect(find.text('Kotmale Fresh Milk 1L'), findsOneWidget);
     });
   });
 
+  group('search hint', () {
+    // 2026-09-26: the hint rotates through the store's real categories,
+    // each word sliding in - and only real ones.
+    testWidgets('rotates to real category names, and back', (tester) async {
+      await _pumpHome(tester);
+      expect(find.text(HomeScreenSearchBar.placeholder), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Search "dairy & eggs"'), findsOneWidget);
+      expect(find.text(HomeScreenSearchBar.placeholder), findsNothing);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Search "biscuits & snacks"'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text(HomeScreenSearchBar.placeholder), findsOneWidget,
+          reason: 'the cycle returns to the plain placeholder');
+      // The field still announces its fixed purpose, not the rotating word.
+      expect(find.bySemanticsLabel('Search groceries and essentials'), findsOneWidget);
+    });
+
+    testWidgets('reduced motion: the plain placeholder, never rotating', (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      await _pumpHome(tester);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+      expect(find.text(HomeScreenSearchBar.placeholder), findsOneWidget);
+      expect(find.textContaining('Search "'), findsNothing);
+    });
+  });
+
   group('product grid', () {
-    testWidgets('renders the real catalogue products under an honest title', (tester) async {
+    // 2026-09-26: Home is shelves by category (the reference app's layout),
+    // in the store's category order, each shelf a way into its category.
+    testWidgets('each product sits on its own category shelf, in category order',
+        (tester) async {
+      final backend = _Backend();
+      Future<dynamic> request(String url, Map<String, dynamic> query) async {
+        if (url != '/catalog/products') return backend.call(url, query);
+        Map<String, dynamic> p(String id, String name, String cat) =>
+            {..._product(id, name, '1 pc', 100), 'category_id': cat};
+        return {
+          'success': true,
+          'data': {
+            'products': [
+              p('s1', 'Maliban Lemon Puff', 'c2'),
+              p('d1', 'Kotmale Fresh Milk 1L', 'c1'),
+              p('s2', 'Munchee Cream Cracker', 'c2'),
+            ],
+            'pagination': {'page': 1, 'limit': 100, 'total': 3, 'total_pages': 1},
+          },
+        };
+      }
+
+      final routes = <String>[];
+      final args = <Object?>[];
+      tester.view.physicalSize = const Size(400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ProductProvider>(create: (_) => ProductProvider(request: request)),
+          ChangeNotifierProvider<CartProvider>(create: (_) => CartProvider()),
+          ChangeNotifierProvider<AddressProvider>(
+            create: (_) => AddressProvider(
+              request: ({methodType, url, body}) async => {'data': {'addresses': []}},
+            ),
+          ),
+          ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+          ChangeNotifierProvider<OrderProvider>(create: (_) => OrderProvider()),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.appTHeme,
+          home: const HomeScreen(),
+          onGenerateRoute: (settings) {
+            routes.add(settings.name ?? '');
+            args.add(settings.arguments);
+            return MaterialPageRoute(builder: (_) => const Scaffold());
+          },
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final dairy = tester.getTopLeft(_shelf('Dairy & Eggs')).dy;
+      final snacks = tester.getTopLeft(_shelf('Biscuits & Snacks')).dy;
+      expect(dairy, lessThan(snacks), reason: 'category display_order, not product order');
+
+      // Milk is under Dairy; both snacks are under Biscuits & Snacks.
+      final milk = tester.getTopLeft(find.text('Kotmale Fresh Milk 1L')).dy;
+      final puff = tester.getTopLeft(find.text('Maliban Lemon Puff')).dy;
+      final cracker = tester.getTopLeft(find.text('Munchee Cream Cracker')).dy;
+      expect(milk, inInclusiveRange(dairy, snacks));
+      expect(puff, greaterThan(snacks));
+      expect(cracker, greaterThan(snacks));
+
+      await tester.tap(find.descendant(of: _shelf('Biscuits & Snacks'), matching: find.text('See all')));
+      await tester.pumpAndSettle();
+      expect(routes.last, '/products');
+      expect(args.last, 'biscuits-snacks');
+    });
+
+    // 2026-09-26: Home lists every available product, fetched across every
+    // page - not a 6-row preview behind "See all".
+    testWidgets('lists every available product, across pages',
+        (tester) async {
+      final pages = <int>[];
+      final backend = _Backend();
+      final catalogue = [
+        for (var i = 1; i <= 45; i++)
+          {..._product('q$i', 'Item $i', '1 pc', 100 + i), if (i == 7) 'is_available': false},
+      ];
+      Future<dynamic> request(String url, Map<String, dynamic> query) async {
+        if (url != '/catalog/products') return backend.call(url, query);
+        final page = (query['page'] as int?) ?? 1;
+        pages.add(page);
+        final slice = page == 1 ? catalogue.sublist(0, 30) : catalogue.sublist(30);
+        return {
+          'success': true,
+          'data': {
+            'products': slice,
+            'pagination': {'page': page, 'limit': 30, 'total': 45, 'total_pages': 2},
+          },
+        };
+      }
+
+      tester.view.physicalSize = const Size(400, 860);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ProductProvider>(create: (_) => ProductProvider(request: request)),
+          ChangeNotifierProvider<CartProvider>(create: (_) => CartProvider()),
+          ChangeNotifierProvider<AddressProvider>(
+            create: (_) => AddressProvider(
+              request: ({methodType, url, body}) async => {'data': {'addresses': []}},
+            ),
+          ),
+          ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+          ChangeNotifierProvider<OrderProvider>(create: (_) => OrderProvider()),
+        ],
+        child: MaterialApp(theme: AppTheme.appTHeme, home: const HomeScreen()),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(pages, containsAllInOrder([1, 2]), reason: 'the second page must be fetched');
+      await tester.scrollUntilVisible(find.text('Item 45'), 400,
+          scrollable: find.byType(Scrollable).first);
+      expect(find.text('Item 45'), findsOneWidget);
+      await tester.pumpAndSettle();
+      final provider = tester.element(find.byType(HomeScreen)).read<ProductProvider>();
+      expect(provider.productsFor('').length, 45);
+      // Walk back up: the unavailable product is never on Home.
+      await tester.scrollUntilVisible(find.text('Item 1'), -400,
+          scrollable: find.byType(Scrollable).first);
+      expect(find.text('Item 7'), findsNothing);
+    });
+
+    testWidgets('renders the real products on shelves named for their real categories', (tester) async {
       await _pumpHome(tester);
 
-      // A signed-out visitor has no behaviour to rank against, so the
-      // section is literally GET /catalog/products in the backend's order.
-      expect(find.text(HomeProductSections.allTitle), findsOneWidget);
+      // Every fixture product is in Dairy & Eggs; Biscuits & Snacks has
+      // none, so it gets no empty shelf. A signed-out visitor has nothing to
+      // rank against, so there is no personalised shelf either.
+      expect(_shelf('Dairy & Eggs'), findsOneWidget);
+      expect(_shelf('Biscuits & Snacks'), findsNothing, reason: 'no empty shelves');
+      expect(find.text(HomeProductSections.allTitle), findsNothing);
       expect(find.text(HomeProductSections.personalisedTitle), findsNothing,
           reason: 'no orders, no claim to be based on them');
 
@@ -755,10 +924,12 @@ void main() {
           .map((c) => c.product.name)
           .toList();
       expect(names.first, 'Maliban Lemon Puff');
-      // Reordering, not filtering: the rest of the catalogue follows behind
-      // it. (That nothing is dropped is proven exhaustively in
-      // `product_ranking_test.dart`; only the first row is built here.)
-      expect(names, contains('Kotmale Fresh Milk 1L'));
+      // The personalised shelf adds to the shop, it does not replace it:
+      // the full category shelf follows, milk included.
+      await tester.scrollUntilVisible(find.text('Kotmale Fresh Milk 1L'), 300,
+          scrollable: find.byType(Scrollable).first);
+      expect(find.text('Kotmale Fresh Milk 1L'), findsOneWidget);
+      expect(_shelf('Dairy & Eggs'), findsOneWidget);
     });
 
     testWidgets('a signed-in customer with no orders yet is not personalised',
@@ -768,7 +939,7 @@ void main() {
       await _pumpHome(tester, auth: _SignedIn(), orders: _ordersContaining(const []));
       await tester.pumpAndSettle();
 
-      expect(find.text(HomeProductSections.allTitle), findsOneWidget);
+      expect(_shelf('Dairy & Eggs'), findsOneWidget);
       expect(find.text(HomeProductSections.personalisedTitle), findsNothing);
 
       final names = tester
@@ -793,7 +964,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(ordersRequested, isFalse);
-      expect(find.text(HomeProductSections.allTitle), findsOneWidget);
+      expect(find.text(HomeProductSections.personalisedTitle), findsNothing);
     });
 
     testWidgets('is three cards across on this phone, from the shared grid rule', (tester) async {

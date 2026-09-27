@@ -225,7 +225,20 @@ class _BarItemState extends State<_BarItem> {
     final iconColor = selected ? BlynkNav.selectedIcon : BlynkNav.unselectedIcon;
     final labelColor = selected ? BlynkNav.selectedLabel : BlynkNav.unselectedLabel;
 
-    Widget icon = Icon(selected ? d.selectedIcon : d.icon, size: BlynkNav.iconSize, color: iconColor);
+    // One Icon, always: the glyph swaps between its outlined and filled
+    // forms while the colour tweens over one fast beat. A null-begin tween
+    // starts at rest, so the first build does not fade the icon in.
+    final motion = BlynkMotion.resolve(context, BlynkMotion.base);
+    Widget icon = TweenAnimationBuilder<Color?>(
+      tween: ColorTween(end: iconColor),
+      duration: motion,
+      curve: BlynkMotion.easeOut,
+      builder: (context, color, _) => Icon(
+        selected ? d.selectedIcon : d.icon,
+        size: BlynkNav.iconSize,
+        color: color,
+      ),
+    );
     if (d.hasBadge) icon = _dot(icon);
 
     return Semantics(
@@ -254,8 +267,12 @@ class _BarItemState extends State<_BarItem> {
                 // 2026-09 redesign (spec §3 "Bottom nav"): the selected item
                 // sits on a `signal` rounded-square tile behind the icon
                 // (was a 3 dp bar above it).
-                Container(
+                // The tile's fill moves over one fast beat: the yellow is
+                // seen to arrive on the new tab and leave the old one.
+                AnimatedContainer(
                   key: ValueKey('nav-indicator-${d.label}'),
+                  duration: motion,
+                  curve: BlynkMotion.easeOut,
                   padding: BlynkNav.tilePadding,
                   decoration: BoxDecoration(
                     color: selected ? BlynkNav.selectedTile : BlynkNav.unselectedTile,
@@ -264,13 +281,20 @@ class _BarItemState extends State<_BarItem> {
                   child: icon,
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  d.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: BlynkNav.label.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: labelColor,
+                // The label keeps its own style - tests and screen readers
+                // read it - and only its colour rides the tile's beat.
+                TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: labelColor),
+                  duration: motion,
+                  curve: BlynkMotion.easeOut,
+                  builder: (context, color, _) => Text(
+                    d.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: BlynkNav.label.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
                   ),
                 ),
               ],

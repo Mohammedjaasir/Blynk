@@ -23,6 +23,7 @@ import 'package:ecom/Services/Providers/product.provider.dart';
 import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/UI/Widgets/Atoms/offline_banner.dart';
 import 'package:ecom/app_theme.dart';
+import 'package:ecom/design/motion.dart';
 import 'package:ecom/main.dart' show buildAppProviders;
 
 const _bannerText = "You're offline. Showing saved items.";
@@ -245,9 +246,18 @@ void main() {
 
       hint.record(ApiException(503, 'x', code: 'NETWORK_ERROR'));
       await tester.pump();
+      // The banner arrives over one motion beat (M9); its sliver is offstage until it has height.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump();
       expect(find.text(_bannerText), findsOneWidget);
 
       hint.record(null);
+      await tester.pump();
+      // The banner leaves over one motion beat (M9), not in the same frame.
+      // Two beats: the crossfade, then the AnimatedSize collapse that follows
+      // its own extra layout frame - and the switcher drops the outgoing banner.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump(BlynkMotion.base);
       await tester.pump();
       expect(find.byType(OfflineBanner), findsNothing);
     });
@@ -256,6 +266,12 @@ void main() {
       await tester.pumpWidget(host(tester, const HomeScreen()));
       await tester.pumpAndSettle();
       hint.record(ApiException(500, 'x'));
+      await tester.pump();
+      // The banner leaves over one motion beat (M9), not in the same frame.
+      // Two beats: the crossfade, then the AnimatedSize collapse that follows
+      // its own extra layout frame - and the switcher drops the outgoing banner.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump(BlynkMotion.base);
       await tester.pump();
       expect(find.byType(OfflineBanner), findsNothing);
     });
@@ -269,6 +285,9 @@ void main() {
       await tester.pumpAndSettle();
       hint.record(ApiException(503, 'x', code: 'NETWORK_ERROR'));
       await tester.pump();
+      // The banner arrives over one motion beat (M9); its sliver is offstage until it has height.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump();
 
       expect(find.byType(OfflineBanner), findsNothing);
       expect(find.text("You're offline"), findsOneWidget);
@@ -278,6 +297,9 @@ void main() {
       await tester.pumpWidget(host(tester, const HomeScreen()));
       await tester.pumpAndSettle();
       hint.record(ApiException(503, 'x', code: 'NETWORK_ERROR'));
+      await tester.pump();
+      // The banner arrives over one motion beat (M9); its sliver is offstage until it has height.
+      await tester.pump(BlynkMotion.base);
       await tester.pump();
 
       final before = productCalls;
@@ -297,9 +319,18 @@ void main() {
 
       hint.record(ApiException(503, 'x', code: 'NETWORK_ERROR'));
       await tester.pump();
+      // The banner arrives over one motion beat (M9); its sliver is offstage until it has height.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump();
       expect(find.text(_bannerText), findsOneWidget);
 
       hint.record(null);
+      await tester.pump();
+      // The banner leaves over one motion beat (M9), not in the same frame.
+      // Two beats: the crossfade, then the AnimatedSize collapse that follows
+      // its own extra layout frame - and the switcher drops the outgoing banner.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump(BlynkMotion.base);
       await tester.pump();
       expect(find.byType(OfflineBanner), findsNothing);
     });
@@ -308,6 +339,12 @@ void main() {
       await tester.pumpWidget(host(tester, const SearchScreen()));
       await tester.pumpAndSettle();
       hint.record(ApiException(503, 'x', code: 'NETWORK_ERROR'));
+      await tester.pump();
+      // The banner leaves over one motion beat (M9), not in the same frame.
+      // Two beats: the crossfade, then the AnimatedSize collapse that follows
+      // its own extra layout frame - and the switcher drops the outgoing banner.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump(BlynkMotion.base);
       await tester.pump();
       expect(find.byType(OfflineBanner), findsNothing);
     });
@@ -320,9 +357,18 @@ void main() {
 
       hint.record(ApiException(503, 'x', code: 'NETWORK_ERROR'));
       await tester.pump();
+      // The banner arrives over one motion beat (M9); its sliver is offstage until it has height.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump();
       expect(find.text(_bannerText), findsOneWidget);
 
       hint.record(null);
+      await tester.pump();
+      // The banner leaves over one motion beat (M9), not in the same frame.
+      // Two beats: the crossfade, then the AnimatedSize collapse that follows
+      // its own extra layout frame - and the switcher drops the outgoing banner.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump(BlynkMotion.base);
       await tester.pump();
       expect(find.byType(OfflineBanner), findsNothing);
     });
@@ -331,6 +377,12 @@ void main() {
       await tester.pumpWidget(host(tester, const CartScreen()));
       await tester.pumpAndSettle();
       hint.record(ApiException(503, 'x', code: 'NETWORK_ERROR'));
+      await tester.pump();
+      // The banner leaves over one motion beat (M9), not in the same frame.
+      // Two beats: the crossfade, then the AnimatedSize collapse that follows
+      // its own extra layout frame - and the switcher drops the outgoing banner.
+      await tester.pump(BlynkMotion.base);
+      await tester.pump(BlynkMotion.base);
       await tester.pump();
       expect(find.byType(OfflineBanner), findsNothing);
     });
@@ -348,6 +400,9 @@ void main() {
       await tester.pumpWidget(host(tester, const CartScreen()));
       await tester.pumpAndSettle();
       hint.record(ApiException(503, 'x', code: 'NETWORK_ERROR'));
+      await tester.pump();
+      // The banner arrives over one motion beat (M9); its sliver is offstage until it has height.
+      await tester.pump(BlynkMotion.base);
       await tester.pump();
 
       final node = tester.getSemantics(find.text(_bannerText));

@@ -5,6 +5,8 @@ import 'image_well.dart';
 import 'money_text.dart';
 import '../../../Models/product_model.dart';
 import '../../../design/tokens.dart';
+import 'blynk_press.dart';
+import 'product_hero.dart';
 
 /// The single product tile used by Home rails, category grids and search
 /// results. There is deliberately only one of these — every product surface in
@@ -118,7 +120,14 @@ class ProductCard extends StatelessWidget {
     // Only ever read from the backend - never inferred or faked client-side.
     final isAvailable = product.isAvailable;
 
-    return InkWell(
+    // The press response wraps the whole card, ripple included, so the card
+    // settles under the thumb before it opens. BlynkPress only observes the
+    // pointer; the InkWell keeps the tap.
+    // A repaint boundary per card: a press, an entrance or a stepper tick
+    // repaints this card alone, not the whole grid it sits in (M12).
+    return RepaintBoundary(
+      child: BlynkPress(
+      child: InkWell(
       borderRadius: BlynkCardProduct.radius,
       onTap: () => Navigator.of(context).pushNamed('/product', arguments: product),
       child: Container(
@@ -132,10 +141,14 @@ class ProductCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: ProductImageWell(
-                product: product,
-                semantic: false,
-                overlay: isAvailable ? null : const _UnavailableWash(),
+              // The image is the one thing that travels to the detail screen.
+              child: ProductHero(
+                productId: product.id,
+                child: ProductImageWell(
+                  product: product,
+                  semantic: false,
+                  overlay: isAvailable ? null : const _UnavailableWash(),
+                ),
               ),
             ),
             const SizedBox(height: gap),
@@ -179,6 +192,8 @@ class ProductCard extends StatelessWidget {
           ],
         ),
       ),
+    ),
+    ),
     );
   }
 }

@@ -288,12 +288,44 @@ void main() {
       expect(BlynkSpace.gutterFor(1920), 32);
     });
 
-    test('durations are 120 / 200 / 280 ms', () {
+    test('durations are 60 / 120 / 200 / 280 / 320 ms, camera 500', () {
+      expect(BlynkMotion.instant, const Duration(milliseconds: 60));
       expect(BlynkMotion.fast, const Duration(milliseconds: 120));
       expect(BlynkMotion.base, const Duration(milliseconds: 200));
       expect(BlynkMotion.slow, const Duration(milliseconds: 280));
-      expect(BlynkMotion.easeIn, Curves.easeInCubic);
+      expect(BlynkMotion.emphasized, const Duration(milliseconds: 320));
+      expect(BlynkMotion.camera, const Duration(milliseconds: 500));
+      // Strictly ordered, so a token name always means what its neighbour
+      // implies: nothing "fast" may take longer than something "base".
+      expect(BlynkMotion.instant < BlynkMotion.fast, isTrue);
+      expect(BlynkMotion.fast < BlynkMotion.base, isTrue);
+      expect(BlynkMotion.base < BlynkMotion.slow, isTrue);
+      expect(BlynkMotion.slow < BlynkMotion.emphasized, isTrue);
+      expect(BlynkMotion.emphasized < BlynkMotion.camera, isTrue);
+    });
+
+    test('curves: enter decelerates, exit accelerates, standard eases both', () {
       expect(BlynkMotion.easeOut, Curves.easeOutCubic);
+      expect(BlynkMotion.easeIn, Curves.easeInCubic);
+      expect(BlynkMotion.standard, Curves.easeInOutCubic);
+    });
+
+    test('press and entrance are felt, not watched', () {
+      expect(BlynkMotion.pressScale, 0.97);
+      expect(BlynkMotion.entranceTravel, 16);
+      expect(BlynkMotion.entrance, const Duration(milliseconds: 450));
+      expect(BlynkMotion.entranceStep, const Duration(milliseconds: 90));
+      expect(BlynkMotion.entranceRise, 24);
+    });
+
+    test('stagger: 40 ms a step, capped at 6, so a long list never waits on itself', () {
+      expect(BlynkMotion.staggerStep, const Duration(milliseconds: 40));
+      expect(BlynkMotion.staggerCap, 6);
+      expect(BlynkMotion.staggerFor(0), Duration.zero);
+      expect(BlynkMotion.staggerFor(3), const Duration(milliseconds: 120));
+      expect(BlynkMotion.staggerFor(6), const Duration(milliseconds: 240));
+      expect(BlynkMotion.staggerFor(40), BlynkMotion.staggerFor(6),
+          reason: 'past the cap every item shares the cap delay');
     });
 
     test('icon sizes are 20 / 24 / 32', () {

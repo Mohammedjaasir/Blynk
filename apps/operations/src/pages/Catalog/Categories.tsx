@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { catalog } from '../../api/resources';
 import type { Category } from '../../api/types';
-import { ImageUploader } from '../../components/ImageUploader';
+import { ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { Badge, Field, Spinner } from '../../components/ui';
 import { catalogErrorMessage } from '../../lib/catalog';
@@ -126,6 +126,10 @@ function CategoryDialog({ category, onClose, onSaved }: { category: Category | n
   const [name, setName] = useState(category?.name ?? '');
   const [description, setDescription] = useState(category?.description ?? '');
   const [imageUrl, setImageUrl] = useState<string | null>(category?.image_url ?? null);
+  const [focal, setFocal] = useState<FocalPoint>({
+    x: category?.image_focal_x ?? 50,
+    y: category?.image_focal_y ?? 50,
+  });
   const [displayOrder, setDisplayOrder] = useState(String(category?.display_order ?? 0));
   const [isActive, setIsActive] = useState(category?.is_active ?? true);
   const [saving, setSaving] = useState(false);
@@ -144,6 +148,8 @@ function CategoryDialog({ category, onClose, onSaved }: { category: Category | n
         name: name.trim(),
         description: description.trim() || null,
         image_url: imageUrl,
+        image_focal_x: focal.x,
+        image_focal_y: focal.y,
         display_order: Number(displayOrder) || 0,
         is_active: isActive,
       };
@@ -175,11 +181,14 @@ function CategoryDialog({ category, onClose, onSaved }: { category: Category | n
           folder="categories"
           label="Category image"
           onChange={setImageUrl}
+          focal={focal}
+          onFocalChange={setFocal}
+          focalShape="circle"
         />
         <p className="field__hint">
           Shown on the customer Home and Categories screens, cropped to a circle.
-          Keep the subject centred. Without one, the category falls back to its
-          Blynk icon.
+          Click the part of the image that must stay visible. Without an image,
+          the category falls back to its Blynk icon.
         </p>
         <Field label="Display order">
           <input className="input" inputMode="numeric" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />

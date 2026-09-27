@@ -352,7 +352,7 @@ class _CartLineList extends StatefulWidget {
 }
 
 class _CartLineListState extends State<_CartLineList> {
-  static const _removeDuration = Duration(milliseconds: 260);
+  static const _removeDuration = BlynkMotion.slow;
 
   final _listKey = GlobalKey<SliverAnimatedListState>();
   CartProvider? _cart;

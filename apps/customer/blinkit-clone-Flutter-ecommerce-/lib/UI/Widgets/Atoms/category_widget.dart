@@ -219,6 +219,9 @@ class _Disc extends StatelessWidget {
               ? Image.network(
                   url,
                   fit: BoxFit.cover,
+                  // The operator's chosen focal point (Blynk Ops), not always
+                  // the centre.
+                  alignment: category.imageAlignment,
                   width: double.infinity,
                   height: double.infinity,
                   errorBuilder: (_, __, ___) => _FallbackGlyph(

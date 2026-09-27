@@ -17,6 +17,7 @@ import '../UI/Widgets/Organisms/bottom_cart_container.dart';
 import '../UI/Widgets/Organisms/products_screen_grid.dart';
 import '../app_responsive.dart';
 import '../design/tokens.dart';
+import 'package:ecom/UI/Widgets/Atoms/entrance_fade.dart';
 
 /// Catalog search. Results come from the backend's server-side search
 /// (ProductProvider.search), rendered with the app's single ProductCard, so
@@ -174,7 +175,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final hasResults = context
         .select<ProductProvider, bool>((p) => p.searchResults.isNotEmpty);
 
-    return Scaffold(
+    // One EntranceScope per screen: a card that scrolls off and back is rebuilt at rest, not replayed.
+    return EntranceScope(
+      child: Scaffold(
       backgroundColor: BlynkColors.paper,
       appBar: AppBar(title: const Text('Search')),
       body: Stack(
@@ -220,6 +223,7 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -285,14 +289,22 @@ class _SearchField extends StatelessWidget {
             counterText: '',
             constraints:
                 const BoxConstraints(minHeight: BlynkControl.minHeight),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: BlynkSpace.s16,
-              vertical: BlynkSpace.s12,
+            contentPadding: const EdgeInsets.fromLTRB(
+              0,
+              BlynkSpace.s12,
+              BlynkSpace.s16,
+              BlynkSpace.s12,
             ),
-            prefixIcon: const Icon(
-              BlynkIcons.search,
-              color: BlynkColors.ink,
-              size: BlynkIcons.md,
+            // Same geometry as Home's search field (16 dp in from the edge,
+            // 12 dp to the text), so tapping through does not shift the icon.
+            // It used to have no horizontal room at all and sat on the border.
+            prefixIcon: const Padding(
+              padding: EdgeInsets.only(left: BlynkSpace.s16, right: BlynkSpace.s12),
+              child: Icon(
+                BlynkIcons.search,
+                color: BlynkColors.ink,
+                size: BlynkIcons.md,
+              ),
             ),
             prefixIconConstraints:
                 const BoxConstraints(minHeight: BlynkControl.minHeight),
@@ -312,7 +324,9 @@ class _SearchField extends StatelessWidget {
                 const BoxConstraints(minHeight: BlynkControl.minHeight),
             border: _border(BlynkColors.lineStrong, 1),
             enabledBorder: _border(BlynkColors.lineStrong, 1),
-            focusedBorder: _border(BlynkColors.ink, BlynkCta.focusRingWidth),
+            // Focus is still unmistakable, but a quiet 1.5 dp line rather
+            // than a heavy black box around the one field on the screen.
+            focusedBorder: _border(BlynkColors.ink2, 1.5),
           ),
         ),
       ),
@@ -551,8 +565,11 @@ class _ResultsView extends StatelessWidget {
               sliver: SliverGrid(
                 gridDelegate: gridDelegate,
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) =>
-                      ProductCard(product: provider.searchResults[index]),
+                  (context, index) => EntranceFade(
+                    key: ValueKey(provider.searchResults[index].id),
+                    delay: BlynkMotion.staggerFor(index),
+                    child: ProductCard(product: provider.searchResults[index]),
+                  ),
                   childCount: provider.searchResults.length,
                 ),
               ),

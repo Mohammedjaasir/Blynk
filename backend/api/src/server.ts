@@ -28,6 +28,10 @@ async function bootstrap() {
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
 
+  // Live catalog updates for customer apps (migration 011 + catalog.events).
+  const { startCatalogEvents, stopCatalogEvents } = await import('./modules/catalog/catalog.events.js');
+  startCatalogEvents();
+
   // 3. Start Notification Outbox Worker daemon (if enabled)
   const { notificationWorker } = await import('./modules/notifications/index.js');
   if (env.NOTIFICATION_WORKER_ENABLED) {
@@ -57,6 +61,7 @@ async function bootstrap() {
     // end on its own.
     const { closeAllStreams } = await import('./modules/realtime/location-stream.js');
     closeAllStreams();
+    await stopCatalogEvents();
 
     server.close(async () => {
       logger.info('HTTP server closed.');

@@ -172,6 +172,50 @@ void main() {
       expect(platform.lastMap.currentMarkers[const gm.MarkerId('rider')]!.position, const gm.LatLng(6.4550, 80.0450));
     });
 
+    testWidgets('a small move glides between two real fixes over one slow beat', (tester) async {
+      const riderNear = GeoPoint(6.4505, 80.0400); // ~55 m north of _riderA
+      await tester.pumpWidget(_host(_tracking({_dest(), _rider(_riderA)})));
+      await settle(tester);
+      platform.lastMap.markerUpdates.clear(); // the initial adds are not the move
+
+      await tester.pumpWidget(_host(_tracking({_dest(), _rider(riderNear)})));
+      await tester.pump();
+      await tester.pump(BlynkMotion.slow ~/ 2);
+      final mid = platform.lastMap.currentMarkers[const gm.MarkerId('rider')]!.position;
+      expect(mid.latitude, greaterThan(_riderA.latitude), reason: 'on its way north');
+      expect(mid.latitude, lessThan(riderNear.latitude), reason: 'not there yet');
+      expect(mid.longitude, closeTo(_riderA.longitude, 1e-9), reason: 'straight line between the fixes');
+
+      await tester.pump(BlynkMotion.slow);
+      await tester.pump();
+      expect(platform.lastMap.currentMarkers[const gm.MarkerId('rider')]!.position,
+          gm.LatLng(riderNear.latitude, riderNear.longitude));
+      expect(platform.lastMap.changed, everyElement(const gm.MarkerId('rider')), reason: 'only the rider ever updates');
+      expect(platform.lastMap.added, isEmpty);
+      expect(platform.lastMap.removed, isEmpty);
+    });
+
+    testWidgets('a large jump cuts to the new fix at once: no invented path', (tester) async {
+      await tester.pumpWidget(_host(_tracking({_dest(), _rider(_riderA)})));
+      await settle(tester);
+      await tester.pumpWidget(_host(_tracking({_dest(), _rider(_riderB)}))); // ~780 m
+      await settle(tester);
+      expect(platform.lastMap.currentMarkers[const gm.MarkerId('rider')]!.position,
+          gm.LatLng(_riderB.latitude, _riderB.longitude));
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('reduced motion: even a small move cuts', (tester) async {
+      const riderNear = GeoPoint(6.4505, 80.0400);
+      await tester.pumpWidget(_host(_tracking({_dest(), _rider(_riderA)}), disableAnimations: true));
+      await settle(tester);
+      await tester.pumpWidget(_host(_tracking({_dest(), _rider(riderNear)}), disableAnimations: true));
+      await settle(tester);
+      expect(platform.lastMap.currentMarkers[const gm.MarkerId('rider')]!.position,
+          gm.LatLng(riderNear.latitude, riderNear.longitude));
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
     testWidgets('going stale re-icons the same marker id in place', (tester) async {
       await tester.pumpWidget(_host(_tracking({_dest(), _rider(_riderA)})));
       await settle(tester);

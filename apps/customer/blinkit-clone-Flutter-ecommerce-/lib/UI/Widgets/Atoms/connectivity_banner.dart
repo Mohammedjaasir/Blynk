@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../Services/Providers/connectivity_hint.dart';
 import 'offline_banner.dart';
+import '../../../design/motion.dart';
+import 'blynk_crossfade.dart';
 
 /// The [OfflineBanner] while the last network call failed for lack of a
 /// connection and the screen is showing saved content ([hasContent]).
@@ -54,7 +56,25 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
   @override
   Widget build(BuildContext context) {
     final offline = _hint?.isOffline ?? false;
-    if (!offline || !widget.hasContent) return const SizedBox.shrink();
-    return OfflineBanner(onRetry: widget.onRetry);
+    final show = offline && widget.hasContent;
+    // The banner arrives and leaves over one beat: its height grows from
+    // nothing while it fades in, and the reverse on the way out, so the
+    // content beneath it moves with it rather than jumping. Nothing here
+    // runs while the banner is at rest, shown or hidden.
+    final fade = BlynkCrossfade(
+      child: show
+          ? OfflineBanner(key: const ValueKey('offline-banner-on'), onRetry: widget.onRetry)
+          : const SizedBox(key: ValueKey('offline-banner-off'), width: double.infinity, height: 0),
+    );
+    // Under reduced motion the size step is skipped outright rather than run
+    // at zero length: a zero-duration AnimatedSize completes inside its own
+    // layout pass and asserts (RenderAnimatedSize mutated in performLayout).
+    if (BlynkMotion.reduced(context)) return fade;
+    return AnimatedSize(
+      duration: BlynkMotion.base,
+      curve: BlynkMotion.easeOut,
+      alignment: Alignment.topCenter,
+      child: fade,
+    );
   }
 }

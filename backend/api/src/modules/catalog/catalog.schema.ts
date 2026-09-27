@@ -61,6 +61,9 @@ export const createCategorySchema = z.object({
   image_url: z.string().trim().url('Must be a valid URL').nullable().optional(),
   display_order: z.number().int().default(0).optional(),
   is_active: z.boolean().default(true).optional(),
+  // Migration 010: the category image's focal point, whole percentages.
+  image_focal_x: z.number().int().min(0).max(100).optional(),
+  image_focal_y: z.number().int().min(0).max(100).optional(),
 });
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;

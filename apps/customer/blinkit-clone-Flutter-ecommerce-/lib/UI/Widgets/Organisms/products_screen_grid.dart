@@ -6,6 +6,7 @@ import '../Atoms/card_product.dart';
 import '../../../Models/product_model.dart';
 import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
+import '../Atoms/entrance_fade.dart';
 
 /// The responsive product grid, built on the one rule in [BlynkProductGrid]:
 /// 2 columns compact, 3 medium, 4 expanded, 5 at 1440 and above, with the
@@ -52,7 +53,12 @@ Widget buildProductsGrid(BuildContext context, List<ProductModel> products) {
         gridDelegate: productGridDelegate(context, width),
         itemCount: products.length,
         itemBuilder: (BuildContext context, int index) {
-          return ProductCard(product: products[index]);
+          final product = products[index];
+          return EntranceFade(
+            key: ValueKey(product.id),
+            delay: BlynkMotion.staggerFor(index),
+            child: ProductCard(product: product),
+          );
         },
       );
     },

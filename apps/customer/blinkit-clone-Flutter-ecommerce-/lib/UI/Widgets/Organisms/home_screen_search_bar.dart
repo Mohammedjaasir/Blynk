@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../Services/Providers/product.provider.dart';
 import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
 
@@ -74,35 +78,122 @@ class HomeScreenSearchBar extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints:
                       const BoxConstraints(minHeight: BlynkControl.minHeight),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const SizedBox(width: BlynkSpace.s16),
-                      const Icon(
+                      SizedBox(width: BlynkSpace.s16),
+                      Icon(
                         BlynkIcons.search,
                         color: BlynkColors.ink,
                         size: BlynkIcons.md,
                       ),
-                      const SizedBox(width: BlynkSpace.s12),
+                      SizedBox(width: BlynkSpace.s12),
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
+                          padding: EdgeInsets.symmetric(
                             vertical: BlynkSpace.s12,
                           ),
-                          child: Text(
-                            placeholder,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: _placeholder,
-                          ),
+                          child: _RotatingHint(),
                         ),
                       ),
-                      const SizedBox(width: BlynkSpace.s16),
+                      SizedBox(width: BlynkSpace.s16),
                     ],
                   ),
                 ),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The placeholder that changes: `Search "dairy & eggs"`, then the next
+/// category, each word sliding up out of the field as the next rises into
+/// it (2026-09-26, asked for from the reference app).
+///
+/// - **Only real words.** The terms are the store's own category names from
+///   the backend, so the hint never suggests something Blynk does not sell.
+///   It opens on the plain [HomeScreenSearchBar.placeholder] and returns to
+///   it every cycle; with no categories loaded it simply stays on it.
+/// - **Reduced motion:** no rotation at all - the plain placeholder, still.
+/// - It pauses while Home is covered by another route (TickerMode), so a
+///   screen underneath is never animating for nobody.
+/// - Screen readers hear the field's fixed label, never the rotating word.
+class _RotatingHint extends StatefulWidget {
+  const _RotatingHint();
+
+  /// How long each word stays.
+  static const Duration hold = Duration(seconds: 2);
+
+  @override
+  State<_RotatingHint> createState() => _RotatingHintState();
+}
+
+class _RotatingHintState extends State<_RotatingHint> {
+  Timer? _timer;
+  int _index = 0;
+
+  List<String> _hints(BuildContext context) => [
+        HomeScreenSearchBar.placeholder,
+        for (final c in context.select<ProductProvider, List<String>>(
+          (p) => [for (final c in p.categories) c.name.trim()],
+        ))
+          if (c.isNotEmpty) 'Search "${c.toLowerCase()}"',
+      ];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _timer?.cancel();
+    _timer = BlynkMotion.reduced(context)
+        ? null
+        : Timer.periodic(_RotatingHint.hold, (_) {
+            if (!mounted || !TickerMode.valuesOf(context).enabled) return;
+            setState(() => _index++);
+          });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hints = _hints(context);
+    final text = BlynkMotion.reduced(context)
+        ? HomeScreenSearchBar.placeholder
+        : hints[_index % hints.length];
+    return ClipRect(
+      child: AnimatedSwitcher(
+        duration: BlynkMotion.resolve(context, BlynkMotion.emphasized),
+        switchInCurve: BlynkMotion.easeOut,
+        switchOutCurve: BlynkMotion.easeIn,
+        layoutBuilder: (current, previous) => Stack(
+          alignment: Alignment.centerLeft,
+          children: [...previous, if (current != null) current],
+        ),
+        transitionBuilder: (child, animation) {
+          // The incoming word rises from below; the outgoing one (whose
+          // animation runs backwards) leaves through the top.
+          final incoming = child.key == ValueKey(text);
+          final slide = Tween<Offset>(
+            begin: incoming ? const Offset(0, 1) : const Offset(0, -1),
+            end: Offset.zero,
+          ).animate(animation);
+          return SlideTransition(
+            position: slide,
+            child: FadeTransition(opacity: animation, child: child),
+          );
+        },
+        child: Text(
+          text,
+          key: ValueKey(text),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _placeholder,
         ),
       ),
     );

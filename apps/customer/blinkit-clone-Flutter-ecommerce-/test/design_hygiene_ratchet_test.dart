@@ -614,9 +614,12 @@ void main() {
           'BlynkCardProduct.price',
           'BlynkCardProduct.unavailableWashOpacity',
         ],
+        // Motion M4: the rail's rows are CategoryWidget now, which owns the
+        // selected look (BlynkCategory.selectedRing = BlynkColors.signal), so
+        // the rail no longer names the yellow itself. Its tap-target floor
+        // is still its own.
         'lib/UI/Widgets/Organisms/products_screen_sub_category_list.dart': [
           'BlynkControl.minHeight',
-          'BlynkColors.signal',
         ],
         'lib/Screens/product_details_screen.dart': [
           'BlynkCardProduct.unavailableWashColor',
@@ -700,7 +703,8 @@ void main() {
       // `Image.network` directly — instead of ProductImageWell — fails this.
       const nonProduct = <String>{
         'lib/UI/Widgets/Atoms/category_widget.dart', // category tile artwork
-        'lib/UI/Widgets/Organisms/products_screen_sub_category_list.dart', // sub-category tiles
+        // products_screen_sub_category_list.dart: dropped with motion M4 - its rows
+        // are CategoryWidget, which is the category_widget.dart entry above.
         'lib/UI/Widgets/Organisms/dental_widgets.dart', // clinic / doctor photos
         'lib/UI/Widgets/Organisms/home_screen_carousel.dart', // operator promo backgrounds
       };

@@ -144,4 +144,65 @@ void main() {
       expect(boundsFor(const GeoPoint(6, 80), const GeoPoint(6, double.infinity)), isNull);
     });
   });
+
+  group('marker motion (M11)', () {
+    test('distance: two fixes 55 m apart, and the jump the tests use is ~780 m', () {
+      expect(distanceMeters(const GeoPoint(6.4500, 80.0400), const GeoPoint(6.4505, 80.0400)), closeTo(55, 2));
+      expect(distanceMeters(const GeoPoint(6.4500, 80.0400), const GeoPoint(6.4550, 80.0450)), closeTo(780, 15));
+      expect(distanceMeters(const GeoPoint(1, 2), const GeoPoint(1, 2)), 0);
+    });
+
+    test('lerp is linear between the two real points and never beyond them', () {
+      const a = GeoPoint(6.4500, 80.0400);
+      const b = GeoPoint(6.4510, 80.0420);
+      expect(lerpGeo(a, b, 0), a);
+      expect(lerpGeo(a, b, 1), b);
+      final mid = lerpGeo(a, b, 0.5);
+      expect(mid.latitude, closeTo(6.4505, 1e-9));
+      expect(mid.longitude, closeTo(80.0410, 1e-9));
+    });
+
+    test('a small move glides: shown position is between the fixes mid-way, at the fix at the end', () {
+      final m = MarkerMotion();
+      m.retarget({_dest(), _rider(6.4500, 80.0400)});
+      expect(m.retarget({_dest(), _rider(6.4505, 80.0400)}), isTrue, reason: 'needs a glide');
+      m.tick(0.5);
+      final shown = m.shownSpecs({_dest(), _rider(6.4505, 80.0400)}).singleWhere((s) => s.id == 'rider');
+      expect(shown.position.latitude, closeTo(6.45025, 1e-9));
+      m.tick(1);
+      expect(m.shownSpecs({_dest(), _rider(6.4505, 80.0400)}).singleWhere((s) => s.id == 'rider').position,
+          const GeoPoint(6.4505, 80.0400));
+      expect(m.moving, isEmpty);
+    });
+
+    test('a jump beyond the snap distance cuts: no glide, no path the rider never took', () {
+      final m = MarkerMotion();
+      m.retarget({_rider(6.4500, 80.0400)});
+      expect(m.retarget({_rider(6.4550, 80.0450)}), isFalse);
+      expect(m.shownSpecs({_rider(6.4550, 80.0450)}).single.position, const GeoPoint(6.4550, 80.0450));
+    });
+
+    test('reduced motion (snapAll) cuts even a small move', () {
+      final m = MarkerMotion();
+      m.retarget({_rider(6.4500, 80.0400)});
+      expect(m.retarget({_rider(6.4505, 80.0400)}, snapAll: true), isFalse);
+      expect(m.shownSpecs({_rider(6.4505, 80.0400)}).single.position, const GeoPoint(6.4505, 80.0400));
+    });
+
+    test('the first sighting of a marker is a cut, and a removed marker is forgotten', () {
+      final m = MarkerMotion();
+      expect(m.retarget({_rider(6.45, 80.04)}), isFalse);
+      expect(m.retarget({_dest()}), isFalse);
+      expect(m.shownSpecs({_dest()}).single.id, 'destination');
+      // Seen again after removal: a cut, not a glide from where it last was.
+      expect(m.retarget({_dest(), _rider(6.4505, 80.0400)}), isFalse);
+    });
+
+    test('the destination never moves, so it never glides', () {
+      final m = MarkerMotion();
+      m.retarget({_dest(), _rider(6.4500, 80.0400)});
+      expect(m.retarget({_dest(), _rider(6.4505, 80.0400)}), isTrue);
+      expect(m.moving, ['rider']);
+    });
+  });
 }

@@ -5,6 +5,7 @@ import '../../../Models/category_model.dart';
 import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
 import '../../../Services/Providers/product.provider.dart';
+import '../Atoms/category_widget.dart';
 
 // The backend's catalog is flat (categories, no nested subcategories - see
 // backend/api/src/database/migrations/001_initial_schema.sql), so this is
@@ -13,10 +14,16 @@ import '../../../Services/Providers/product.provider.dart';
 //
 // 2026-09 redesign (W3): the rail is a `paper` column that stays put while the
 // grid beside it scrolls. The selected row keeps its ink edge bar - that is
-// what `audit_fixes_test` pins as the selection signal - and gains the same
-// `signal` tile the category chip and the navigation shell use for "where you
-// are". That tile is chrome, not an action, so it does not consume the
-// screen's one yellow action (T2's reading of plan section 4.3).
+// what `audit_fixes_test` pins as the selection signal.
+//
+// 2026-09-26 (motion M4): each row is now the same [CategoryWidget] Home
+// uses, at the rail's own diameter. Before this the rail drew a private
+// tile - a solid `signal` disc with a generic `Icons.category_outlined` - and
+// was the last surface still wearing the look the category redesign replaced
+// everywhere else. One component now means one selected appearance (the
+// `signalWash` well with a `signal` ring), one press response, one `fast`
+// transition, and the category's own glyph from `fallbackGlyphFor`, so a
+// category and the products inside it show the same symbol.
 class CategorySidebar extends StatelessWidget {
   const CategorySidebar({super.key, required this.activeSlug, required this.onSelect});
 
@@ -35,11 +42,13 @@ class CategorySidebar extends StatelessWidget {
           ? compactWidth
           : expandedWidth;
 
-  /// Diameter of the category circle inside a row.
-  static const double _tileSize = 44;
+  /// Diameter of the category circle inside a row. Smaller than Home's
+  /// [BlynkCategory.diameterCompact] because the rail is 88 dp wide; the
+  /// tile is the same component, only sized for where it sits.
+  static const double tileSize = 44;
 
   /// The selected row's edge bar.
-  static const double _activeBarWidth = 3;
+  static const double activeBarWidth = 3;
 
   @override
   Widget build(BuildContext context) {
@@ -77,69 +86,25 @@ class CategorySidebar extends StatelessWidget {
                     ? const Border(
                         right: BorderSide(
                           color: BlynkColors.ink,
-                          width: _activeBarWidth,
+                          width: activeBarWidth,
                         ),
                       )
                     : null,
               ),
-              child: Column(
-                children: [
-                  _CategoryTile(category: category, isActive: isActive),
-                  const SizedBox(height: BlynkSpace.s4),
-                  Text(
-                    category.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: isActive
-                        ? BlynkText.caption.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: BlynkColors.ink,
-                          )
-                        : BlynkText.caption.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: BlynkColors.ink3,
-                          ),
-                  ),
-                ],
+              // The tile owns the disc, the glyph, the label and the
+              // selected / pressed transitions; the rail owns the edge bar.
+              // onTap is passed so the tile selects in place rather than
+              // pushing a second Products screen, which is its default.
+              child: CategoryWidget(
+                category: category,
+                isActive: isActive,
+                diameter: tileSize,
+                onTap: () => onSelect(category),
               ),
             ),
           ),
         );
       },
-    );
-  }
-}
-
-/// The circle a category's image (or its fallback glyph) sits in. Selected is
-/// a filled `signal` tile, matching `CategoryWidget` on Home and Categories so
-/// the app has one selected-category appearance.
-class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({required this.category, required this.isActive});
-
-  final CategoryModel category;
-  final bool isActive;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = category.imageUrl?.trim() ?? '';
-
-    return Container(
-      width: CategorySidebar._tileSize,
-      height: CategorySidebar._tileSize,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: isActive ? BlynkColors.signal : BlynkColors.well,
-        shape: BoxShape.circle,
-      ),
-      child: url.isEmpty
-          ? const Icon(Icons.category_outlined, color: BlynkColors.ink2)
-          : Image.network(
-              url,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.category_outlined, color: BlynkColors.ink2),
-            ),
     );
   }
 }

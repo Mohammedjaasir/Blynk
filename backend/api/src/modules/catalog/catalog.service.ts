@@ -62,6 +62,8 @@ export class CatalogService {
       description: c.description,
       image_url: c.image_url,
       display_order: c.display_order,
+      image_focal_x: clampFocal(c.image_focal_x),
+      image_focal_y: clampFocal(c.image_focal_y),
     }));
   }
 
@@ -92,6 +94,8 @@ export class CatalogService {
       image_url: input.image_url,
       display_order: input.display_order ?? 0,
       is_active: input.is_active ?? true,
+      image_focal_x: input.image_focal_x,
+      image_focal_y: input.image_focal_y,
     });
 
     logger.info({ categoryId: created.id, slug: created.slug }, 'Category created by admin');
@@ -122,6 +126,8 @@ export class CatalogService {
       ...(input.image_url !== undefined ? { image_url: input.image_url } : {}),
       ...(input.display_order !== undefined ? { display_order: input.display_order } : {}),
       ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
+      ...(input.image_focal_x !== undefined ? { image_focal_x: input.image_focal_x } : {}),
+      ...(input.image_focal_y !== undefined ? { image_focal_y: input.image_focal_y } : {}),
     });
 
     logger.info({ categoryId: id }, 'Category updated by admin');

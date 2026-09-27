@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -5,6 +7,7 @@ import '../Models/order_model.dart';
 import '../Services/Providers/auth.provider.dart';
 import '../Services/Providers/order.provider.dart';
 import '../Services/Providers/product.provider.dart';
+import '../Services/catalog_live_updates.dart';
 import '../UI/Widgets/Organisms/adaptive_scaffold.dart';
 import '../UI/Widgets/Organisms/cart_bar.dart';
 import '../design/tokens.dart';
@@ -30,9 +33,19 @@ import 'user_orders_screen.dart';
 /// pushed on top of this shell as full routes, which is why they keep their
 /// own back buttons.
 class CustomerShell extends StatefulWidget {
-  const CustomerShell({super.key, this.initialTab = 0, this.tabs});
+  const CustomerShell({
+    super.key,
+    this.initialTab = 0,
+    this.tabs,
+    this.catalogEvents,
+  });
 
   final int initialTab;
+
+  /// Opens the live catalog event stream. Null: the real
+  /// `GET /catalog/events` (none at all under `flutter test`).
+  @visibleForTesting
+  final Stream<String> Function()? catalogEvents;
 
   /// Replaces the four destinations; tests use it to exercise the shell's
   /// own behaviour without mounting every screen and its providers.
@@ -86,10 +99,41 @@ class _CustomerShellState extends State<CustomerShell>
     super.initState();
     CustomerShell._tabRequests.addListener(_onTabRequest);
     WidgetsBinding.instance.addObserver(this);
+    _startLiveRefresh();
+    final open = widget.catalogEvents ??
+        (catalogLiveUpdatesSupported ? openCatalogEvents : null);
+    if (open != null) {
+      _live = CatalogLiveUpdates(
+        open: open,
+        // Forced: the server says something changed, so the throttle that
+        // guards against focus flicker must not swallow it.
+        onChange: () {
+          if (mounted) context.read<ProductProvider>().refreshCatalog(force: true);
+        },
+      )..start();
+    }
+  }
+
+  /// Pushed catalog changes from the backend - the fast path. The periodic
+  /// [_liveRefresh] below is the safety net if the stream cannot be held.
+  CatalogLiveUpdates? _live;
+
+  /// Re-reads the catalog every [ProductProvider.liveRefreshEvery] while the
+  /// app is in the foreground, so Ops changes appear without the customer
+  /// doing anything. Stopped in the background; restarted on resume.
+  Timer? _liveRefresh;
+
+  void _startLiveRefresh() {
+    _liveRefresh?.cancel();
+    _liveRefresh = Timer.periodic(ProductProvider.liveRefreshEvery, (_) {
+      if (mounted) _refreshCatalog();
+    });
   }
 
   @override
   void dispose() {
+    _liveRefresh?.cancel();
+    _live?.stop();
     WidgetsBinding.instance.removeObserver(this);
     CustomerShell._tabRequests.removeListener(_onTabRequest);
     super.dispose();
@@ -97,7 +141,15 @@ class _CustomerShellState extends State<CustomerShell>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refreshCatalog();
+    if (state == AppLifecycleState.resumed) {
+      _refreshCatalog();
+      _startLiveRefresh();
+      _live?.start();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _liveRefresh?.cancel();
+      _live?.stop();
+    }
   }
 
   // Unforced: ProductProvider skips it if the catalog was refreshed a

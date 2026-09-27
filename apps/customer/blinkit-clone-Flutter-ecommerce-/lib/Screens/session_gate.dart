@@ -7,10 +7,10 @@ import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Screens/Auth/login_screen.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/app_session_cleaner.dart';
-import 'package:ecom/UI/Widgets/Atoms/blynk_logo.dart';
-import 'package:ecom/UI/Widgets/Atoms/blynk_spinner.dart';
 import 'package:ecom/UI/Widgets/Atoms/snackbar_helper.dart';
 import 'package:ecom/design/tokens.dart';
+import 'package:ecom/UI/Widgets/Atoms/blynk_crossfade.dart';
+import 'package:ecom/UI/Widgets/Organisms/blynk_launch_screen.dart';
 
 /// The message shown after a login the server no longer accepts.
 const String kSessionEndedMessage = "You've been logged out. Log in again to see your orders.";
@@ -28,7 +28,15 @@ class SessionGate extends StatefulWidget {
 }
 
 class _SessionGateState extends State<SessionGate> {
+  bool? _signedIn;
+  bool _introDone = false;
   bool _showLogin = false;
+  Timer? _cap;
+
+  /// [AuthProvider.restoreSession] reads device storage only, so this cap
+  /// only covers storage itself not answering: the intro never becomes a
+  /// loading screen.
+  static const Duration _decisionCap = Duration(seconds: 5);
 
   @override
   void initState() {
@@ -36,9 +44,34 @@ class _SessionGateState extends State<SessionGate> {
     unawaited(_decide());
   }
 
+  @override
+  void dispose() {
+    _cap?.cancel();
+    super.dispose();
+  }
+
   Future<void> _decide() async {
     final signedIn = await context.read<AuthProvider>().restoreSession();
     if (!mounted) return;
+    _signedIn = signedIn;
+    _leaveIfReady();
+  }
+
+  void _onIntroLeaving() {
+    if (!mounted) return;
+    _introDone = true;
+    if (_signedIn == null) {
+      _cap = Timer(_decisionCap, () {
+        if (mounted && _signedIn == null) setState(() => _showLogin = true);
+      });
+    }
+    _leaveIfReady();
+  }
+
+  void _leaveIfReady() {
+    final signedIn = _signedIn;
+    if (!mounted || !_introDone || signedIn == null) return;
+    _cap?.cancel();
     if (signedIn) {
       unawaited(Navigator.of(context).pushReplacementNamed('/home'));
     } else {
@@ -48,19 +81,20 @@ class _SessionGateState extends State<SessionGate> {
 
   @override
   Widget build(BuildContext context) {
-    if (_showLogin) return const LoginScreen();
-    return const Scaffold(
-      backgroundColor: BlynkColors.paper,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            BlynkLogo(height: 48),
-            SizedBox(height: BlynkSpace.s32),
-            BlynkSpinner(size: 28, strokeWidth: 3),
-          ],
-        ),
-      ),
+    // The intro is on screen from Flutter's first frame (it matches the
+    // native splash exactly), so there is never a blank white frame between
+    // the two. The login screen crossfades in over the intro's exit; Home
+    // arrives through the app's route transition. BlynkCrossfade shows its
+    // first child at full opacity - it only ever animates a change.
+    return BlynkCrossfade(
+      duration: BlynkMotion.slow,
+      alignment: Alignment.center,
+      child: _showLogin
+          ? const KeyedSubtree(key: ValueKey('gate-login'), child: LoginScreen())
+          : KeyedSubtree(
+              key: const ValueKey('gate-intro'),
+              child: BlynkLaunchScreen(onLeave: _onIntroLeaving),
+            ),
     );
   }
 }
