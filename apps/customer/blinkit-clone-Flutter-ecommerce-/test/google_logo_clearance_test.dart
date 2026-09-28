@@ -39,6 +39,9 @@ void main() {
   tearDown(() => MapProviderConfig.debugOverride = null);
 
   group('OrderTrackingMap over a Google map', () {
+    // Google is opt-in since MapLibre became the default (2026-09-28).
+    setUp(() => MapProviderConfig.debugOverride = MapProviderKind.google);
+
     late SpyLocationProvider provider;
 
     Future<void> pumpTracking(WidgetTester tester, {bool withRider = true}) async {
@@ -59,7 +62,7 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('draws no OpenStreetMap credit (the default provider is Google)', (tester) async {
+    testWidgets('draws no OpenStreetMap credit (Google selected)', (tester) async {
       await pumpTracking(tester);
       expect(MapProviderConfig.kind, MapProviderKind.google);
       expect(find.byKey(const Key('map-attribution')), findsNothing);
@@ -131,6 +134,8 @@ void main() {
   });
 
   group('the location picker screen over a Google map', () {
+    setUp(() => MapProviderConfig.debugOverride = MapProviderKind.google);
+
     testWidgets('only the fixed pin sits over the map; the info panel is below it; no OSM credit', (tester) async {
       tester.view.physicalSize = const Size(400, 900);
       tester.view.devicePixelRatio = 1.0;

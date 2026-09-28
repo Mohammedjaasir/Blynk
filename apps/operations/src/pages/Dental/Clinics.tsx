@@ -1,3 +1,5 @@
+import { LocationPickerMap } from '../../components/LocationPickerMap';
+import { toLatLng } from '../../lib/route';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { dental } from '../../api/resources';
@@ -261,6 +263,11 @@ function ClinicDialog({
             onChange={(e) => setForm({ ...form, address_line: e.target.value })}
           />
         </Field>
+        <LocationPickerMap
+          label="Hospital location"
+          value={toLatLng(form.latitude, form.longitude)}
+          onChange={(p) => setForm((f) => ({ ...f, latitude: String(p.lat), longitude: String(p.lng) }))}
+        />
         <div className="form__row">
           <Field label="Latitude" error={errors.latitude}>
             <input

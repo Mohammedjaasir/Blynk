@@ -114,7 +114,7 @@ void main() {
     await pumpScreen(tester);
     await settle(tester);
 
-    expect(find.text('No dental clinics available yet'), findsOneWidget);
+    expect(find.text('No doctors available yet'), findsOneWidget);
   });
 
   testWidgets('shows the error view with retry, and retry reloads', (tester) async {

@@ -120,8 +120,8 @@ void main() {
     expect(find.text('Dr. Nadeesha Perera'), findsNWidgets(2));
     expect(find.text('Orthodontist'), findsOneWidget);
     // The fee shown is c1's (3500), never c2's (5000) - clinic-doctor scoped.
-    expect(find.text('Rs. 3,500'), findsOneWidget);
-    expect(find.text('Rs. 5,000'), findsNothing);
+    expect(find.text('LKR 3,500'), findsOneWidget);
+    expect(find.text('LKR 5,000'), findsNothing);
     expect(find.byKey(const Key('book-appointment-cta')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -144,7 +144,7 @@ void main() {
     await settle(tester);
 
     expect(find.text('Not available'), findsOneWidget);
-    expect(find.textContaining('Rs.'), findsNothing);
+    expect(find.textContaining('LKR'), findsNothing);
   });
 
   testWidgets('shows the error view with retry, and retry reloads', (tester) async {

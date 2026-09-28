@@ -146,7 +146,7 @@ export function Products() {
                 <p className="cat-row__meta">
                   {product.sku} · {product.unit} · {product.category_name ?? categoryName(product.category_id)}
                 </p>
-                <p className="cat-row__price">Rs. {Number(product.calculated_selling_price ?? 0).toFixed(2)}</p>
+                <p className="cat-row__price">LKR {Number(product.calculated_selling_price ?? 0).toFixed(2)}</p>
                 <div className="cat-row__badges">
                   <Badge tone={product.is_active ? 'active' : 'inactive'}>{product.is_active ? 'Active' : 'Inactive'}</Badge>
                   {!product.is_available ? <Badge tone="muted">Unavailable</Badge> : null}

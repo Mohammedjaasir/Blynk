@@ -8,7 +8,6 @@ import 'package:ecom/Screens/order_confirmation_screen.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/design/tokens.dart';
-import 'package:lottie/lottie.dart';
 
 import 'fixtures/order_fixtures.dart';
 
@@ -72,7 +71,7 @@ void main() {
       final order = OrderModel.fromJson(orderJson(id: 'o1', number: 'BL-20260919-0001', detail: false));
       await pumpScreen(tester, order);
       expect(find.byKey(const Key('confirmation-amount')), findsOneWidget);
-      expect(find.text('Rs. 1,955 · Cash on delivery'), findsOneWidget);
+      expect(find.text('LKR 1,955 · Cash on delivery'), findsOneWidget);
     });
 
     testWidgets('a scheduled order shows the schedule line', (tester) async {
@@ -122,7 +121,7 @@ void main() {
       });
       await pumpScreen(tester, order);
       expect(find.byKey(const Key('confirmation-amount')), findsOneWidget);
-      expect(find.text('Rs. 1,955'), findsOneWidget);
+      expect(find.text('LKR 1,955'), findsOneWidget);
       expect(find.textContaining('Cash on delivery'), findsNothing);
     });
 
@@ -148,7 +147,6 @@ void main() {
     testWidgets('the hero is a check mark that settles once: no Lottie, nothing loops', (tester) async {
       final order = OrderModel.fromJson(orderJson(id: 'o1', number: 'BL-20260919-0001', detail: false));
       await pumpScreen(tester, order);
-      expect(find.byType(Lottie), findsNothing);
       final check = tester.widget<Icon>(find.byIcon(BlynkIcons.check));
       expect(check.color, BlynkColors.positive);
       // Motion M10: the medallion settles in once (scale + fade, emphasized).

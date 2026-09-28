@@ -145,13 +145,13 @@ void main() {
 
       expect(cart.itemCount, 3);
       expect(find.text('3 items'), findsOneWidget);
-      expect(find.text('Rs. 1,885.50'), findsOneWidget);
+      expect(find.text('LKR 1,885.50'), findsOneWidget);
       expect(find.text('View cart'), findsOneWidget);
 
       cart.decrement(_product('a', 540));
       await settle(tester);
       expect(find.text('2 items'), findsOneWidget);
-      expect(find.text('Rs. 1,345.50'), findsOneWidget);
+      expect(find.text('LKR 1,345.50'), findsOneWidget);
     });
 
     testWidgets('one item is singular', (tester) async {
@@ -179,7 +179,7 @@ void main() {
       await settle(tester);
 
       final countStyle = tester.widget<Text>(find.text('1 item')).style!;
-      final totalStyle = tester.widget<Text>(find.text('Rs. 540')).style!;
+      final totalStyle = tester.widget<Text>(find.text('LKR 540')).style!;
 
       // Hierarchy is three ramps at once, not one. If any of them collapses
       // the bar goes back to reading as one flat run of text, which is the
@@ -199,7 +199,7 @@ void main() {
       // Count above, total below.
       expect(
         tester.getTopLeft(find.text('1 item')).dy,
-        lessThan(tester.getTopLeft(find.text('Rs. 540')).dy),
+        lessThan(tester.getTopLeft(find.text('LKR 540')).dy),
       );
     });
 
@@ -280,7 +280,7 @@ void main() {
   });
 
   group('semantics and navigation', () {
-    testWidgets('one node: "Cart, N items, Rs. X. View cart"', (tester) async {
+    testWidgets('one node: "Cart, N items, LKR X. View cart"', (tester) async {
       final handle = tester.ensureSemantics();
       cart
         ..add(_product('a', 540))
@@ -289,7 +289,7 @@ void main() {
       await settle(tester);
 
       final node = tester.getSemantics(
-        find.bySemanticsLabel('Cart, 2 items, Rs. 1,080. View cart'),
+        find.bySemanticsLabel('Cart, 2 items, LKR 1,080. View cart'),
       );
       expect(node.flagsCollection.isButton, isTrue);
       expect(find.bySemanticsLabel('View cart'), findsNothing, reason: 'the pill is not a second node');
@@ -301,7 +301,7 @@ void main() {
       cart.add(_product('a', 540));
       await pumpBar(tester);
       await settle(tester);
-      expect(find.bySemanticsLabel('Cart, 1 item, Rs. 540. View cart'), findsOneWidget);
+      expect(find.bySemanticsLabel('Cart, 1 item, LKR 540. View cart'), findsOneWidget);
       handle.dispose();
     });
 
@@ -420,7 +420,7 @@ void main() {
       cart.add(_product('a', 540));
       await pumpBar(tester);
       await settle(tester);
-      expect(find.bySemanticsLabel('Cart, 1 item, Rs. 540. View cart'), findsOneWidget);
+      expect(find.bySemanticsLabel('Cart, 1 item, LKR 540. View cart'), findsOneWidget);
       await tester.tap(find.text('View cart'));
       await tester.pumpAndSettle();
       expect(pushed, contains('/cart'));

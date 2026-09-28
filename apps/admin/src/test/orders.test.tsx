@@ -250,7 +250,7 @@ describe('Orders board', () => {
     await user.click(await screen.findByRole('button', { name: /^Open order/ }));
     await user.click(within(await screen.findByRole('complementary', { name: /Order #/ })).getByRole('button', { name: 'Mark delivered' }));
     const dialog = await screen.findByRole('dialog', { name: /Mark delivered/ });
-    expect(dialog).toHaveTextContent('Records Rs. 1,690 cash as collected');
+    expect(dialog).toHaveTextContent('Records LKR 1,690 cash as collected');
     await user.type(within(dialog).getByLabelText(/Note/), 'Rider phone died; cash counted at the store');
     await user.click(within(dialog).getByRole('button', { name: 'Mark delivered' }));
     await waitFor(() => expect(api.find('PATCH', `/admin/orders/${o.id}/status`)[0]?.body).toMatchObject({ status: 'DELIVERED' }));

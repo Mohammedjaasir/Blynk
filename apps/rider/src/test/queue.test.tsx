@@ -56,7 +56,7 @@ describe('Deliveries (home)', () => {
     expect(within(now).getByText('14 Mosque Road')).toBeInTheDocument();
     expect(within(now).getByText('Near the clock tower')).toBeInTheDocument();
     expect(within(now).getByText('#0042')).toBeInTheDocument();
-    expect(within(now).getByText('Rs. 1,690')).toBeInTheDocument();
+    expect(within(now).getByText('LKR 1,690')).toBeInTheDocument();
     expect(within(now).getByText('Ready to pick up')).toBeInTheDocument();
     expect(within(now).getByRole('link', { name: 'Open delivery #0042' })).toHaveAttribute('href', '/deliveries/d-1');
   });
@@ -74,7 +74,7 @@ describe('Deliveries (home)', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('#0002');
     expect(rows[0]).toHaveTextContent('Being packed');
-    expect(rows[0]).toHaveTextContent('Rs. 805');
+    expect(rows[0]).toHaveTextContent('LKR 805');
     expect(rows[1]).toHaveTextContent("Cancelled — don't pick up");
     expect(within(screen.getByRole('region', { name: 'Now' })).getByText('#0001')).toBeInTheDocument();
   });
@@ -88,7 +88,7 @@ describe('Deliveries (home)', () => {
     });
     const done = await screen.findByRole('region', { name: 'Done today' });
     expect(done).toHaveTextContent('2 delivered');
-    expect(done).toHaveTextContent('Rs. 1,415 collected');
+    expect(done).toHaveTextContent('LKR 1,415 collected');
     expect(screen.getByText('No deliveries assigned to you right now.')).toBeInTheDocument();
   });
 

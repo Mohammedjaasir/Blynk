@@ -172,7 +172,7 @@ void main() {
       // real one; this line shows one amount, the one the backend sent.
       final amounts = tester
           .widgetList<Text>(find.byType(Text))
-          .where((t) => (t.data ?? '').startsWith('Rs. '));
+          .where((t) => (t.data ?? '').startsWith('LKR '));
       expect(amounts, hasLength(1));
       expect(find.byType(StruckPrice), findsNothing);
     });
@@ -206,12 +206,12 @@ void main() {
       final order = OrderModel.fromJson(orderJson(status: 'PLACED', paymentStatus: 'PENDING'));
       await _pump(tester, OrderBillCard(order: order));
 
-      expect(find.text('Rs. 1,885'), findsOneWidget);
-      expect(find.text('Rs. 70'), findsOneWidget);
-      expect(find.text('Rs. 1,955'), findsOneWidget);
+      expect(find.text('LKR 1,885'), findsOneWidget);
+      expect(find.text('LKR 70'), findsOneWidget);
+      expect(find.text('LKR 1,955'), findsOneWidget);
       expect(find.byKey(const Key('order-payment-line')), findsOneWidget);
       expect(find.text(paymentLine(order)), findsOneWidget);
-      expect(find.text('Cash on delivery — pay Rs. 1,955 to the rider'), findsOneWidget);
+      expect(find.text('Cash on delivery — pay LKR 1,955 to the rider'), findsOneWidget);
     });
 
     testWidgets('paid order shows "Paid in cash"', (tester) async {

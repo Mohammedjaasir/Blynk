@@ -141,7 +141,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.byIcon(Icons.add), findsOneWidget);
-        expect(find.textContaining('Rs.'), findsWidgets);
+        expect(find.textContaining('LKR'), findsWidgets);
         // The stepper never leaves the card.
         final card = tester.getRect(find.byType(CartProductCard));
         expect(tester.getRect(find.byIcon(Icons.add)).right, lessThanOrEqualTo(card.right));

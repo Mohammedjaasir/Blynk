@@ -147,15 +147,15 @@ void main() {
     expect(find.text('Butter 200g'), findsOneWidget);
     expect(find.text('1 pc × 2'), findsOneWidget);
     expect(find.text('1 pc × 1'), findsOneWidget);
-    expect(find.text('Rs. 1,080'), findsOneWidget);
-    expect(find.text('Rs. 805'), findsOneWidget);
+    expect(find.text('LKR 1,080'), findsOneWidget);
+    expect(find.text('LKR 805'), findsOneWidget);
 
     // Bill (section 4).
     expect(find.text('Bill'), findsOneWidget);
-    expect(find.text('Rs. 1,885'), findsOneWidget);
-    expect(find.text('Rs. 70'), findsOneWidget);
-    expect(find.text('Rs. 1,955'), findsOneWidget);
-    expect(find.text('Cash on delivery — pay Rs. 1,955 to the rider'), findsOneWidget);
+    expect(find.text('LKR 1,885'), findsOneWidget);
+    expect(find.text('LKR 70'), findsOneWidget);
+    expect(find.text('LKR 1,955'), findsOneWidget);
+    expect(find.text('Cash on delivery — pay LKR 1,955 to the rider'), findsOneWidget);
 
     // Delivery to (section 5).
     expect(find.text('Delivery to'), findsOneWidget);
@@ -468,7 +468,7 @@ void main() {
 
     final name = tester.widget<Text>(find.text('Kotmale Fresh Milk 1L'));
     expect(name.style?.decoration, TextDecoration.lineThrough);
-    final subtotal = tester.widget<Text>(find.text('Rs. 1,080'));
+    final subtotal = tester.widget<Text>(find.text('LKR 1,080'));
     expect(subtotal.style?.decoration, TextDecoration.lineThrough);
 
     final sourcedName = tester.widget<Text>(find.text('Rice 5kg'));

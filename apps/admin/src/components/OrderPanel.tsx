@@ -17,6 +17,9 @@ import type { UserRole } from '../api/types';
 import { Spinner } from './ui';
 
 /** The Inventory app, where items are sourced (separate application). */
+// Dev default: the Inventory dev server. A build may set VITE_INVENTORY_URL
+// to the hosted Inventory, or to an empty string for the Android app, where
+// Inventory is a separate app with no web address to link to.
 const INVENTORY_URL = (import.meta.env.VITE_INVENTORY_URL as string | undefined) ?? 'http://localhost:5174';
 
 /**
@@ -93,9 +96,15 @@ export function OrderPanel({
               ))}
             </ul>
             {stillSourcing ? (
-              <a className="link" href={`${INVENTORY_URL}/sourcing`} target="_blank" rel="noreferrer">
-                Source items in Inventory →
-              </a>
+              // In the Android app there is no Inventory web address to open:
+              // Inventory is its own app, so say where to go instead.
+              INVENTORY_URL ? (
+                <a className="link" href={`${INVENTORY_URL}/sourcing`} target="_blank" rel="noreferrer">
+                  Source items in Inventory →
+                </a>
+              ) : (
+                <p className="order-panel__hint">Source these items in the Blynk Inventory app → Sourcing.</p>
+              )
             ) : null}
           </section>
 

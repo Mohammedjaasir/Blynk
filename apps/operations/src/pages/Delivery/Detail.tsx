@@ -5,6 +5,8 @@ import { delivery as deliveryApi } from '../../api/resources';
 import type { DeliveryDetail } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { TrackingStatus } from '../../components/TrackingStatus';
+import { DeliveryMap } from '../../components/DeliveryMap';
+import { toLatLng } from '../../lib/route';
 import { canReportFailure, deliveryErrorMessage, isTrackable, nextAction, stage } from '../../lib/delivery';
 import { errorCode } from '../../lib/errors';
 import { formatClock, formatMoney, shortNumber } from '../../lib/orders';
@@ -190,6 +192,7 @@ export function Detail() {
   const action = nextAction(data);
   const done = action.kind === 'none' && action.reason === 'done';
   const closed = action.kind === 'none' && (action.reason === 'cancelled' || action.reason === 'failed');
+  const destination = toLatLng(data.delivery_latitude, data.delivery_longitude);
   const canFail = canReportFailure(data);
   const number = shortNumber(data.order_number);
 
@@ -231,6 +234,9 @@ export function Detail() {
       {action.kind === 'none' && action.reason === 'failed' && data.failure_reason ? (
         <p className="page__note">You reported: {data.failure_reason}</p>
       ) : null}
+
+      {/* The route to the customer while the delivery is still to be made. */}
+      {destination && !done && !closed ? <DeliveryMap destination={destination} /> : null}
 
       <section className="order-detail__section" aria-label="Destination">
         <h2 className="order-detail__label">Destination</h2>

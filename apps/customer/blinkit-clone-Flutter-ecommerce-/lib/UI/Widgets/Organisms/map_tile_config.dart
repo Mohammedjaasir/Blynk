@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:ecom/Services/app_config.dart';
 
 /// Tile-source configuration for the map (pure functions, no map SDK).
@@ -21,6 +23,39 @@ import 'package:ecom/Services/app_config.dart';
 const String kTilesUrlPlaceholder = '__TILES_URL__';
 const String kMapTilesPath = '/map-tiles/blynk-service-area.pmtiles';
 const String kMapStyleAsset = 'Assets/map/blynk_map_style.json';
+
+/// The worldwide map (2026-09-28). The bundled style only covered the Dharga
+/// Town box and had no fonts, so no street names; the owner asked for a map
+/// that works everywhere. OpenFreeMap is open source, free, needs no key and
+/// has no usage limits, and its Liberty style covers the whole world with
+/// labels. Override at build time with `--dart-define=MAP_STYLE_URL=<https
+/// style URL>`, or `MAP_STYLE_URL=self-hosted` for the bundled style over the
+/// API's own PMTiles file (the old, service-area-only map).
+const String kDefaultMapStyleUrl = 'https://tiles.openfreemap.org/styles/liberty';
+const String kSelfHostedStyle = 'self-hosted';
+const String _kDefineMapStyleUrl = String.fromEnvironment('MAP_STYLE_URL');
+
+/// Test-only: replaces [resolveMapStyleSource] for the map widgets (return
+/// null to exercise "Map unavailable"). Reset it to null in tearDown.
+@visibleForTesting
+String? Function()? debugMapStyleSource;
+
+/// What the MapLibre view should load: a style URL, [kSelfHostedStyle], or
+/// null when the configured value is not a usable https URL (the map then
+/// shows "Map unavailable" instead of guessing).
+/// The style the map widgets load right now: the test override if one is set,
+/// otherwise [resolveMapStyleSource].
+String? currentMapStyleSource() =>
+    debugMapStyleSource != null ? debugMapStyleSource!() : resolveMapStyleSource();
+
+String? resolveMapStyleSource({String configured = _kDefineMapStyleUrl}) {
+  final value = configured.trim();
+  if (value.isEmpty) return kDefaultMapStyleUrl;
+  if (value.toLowerCase() == kSelfHostedStyle) return kSelfHostedStyle;
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
+  return value;
+}
 
 /// True for an absolute http(s) URL with a host and no unsubstituted token:
 /// the only shape `pmtiles://<url>` can use on native MapLibre.

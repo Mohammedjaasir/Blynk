@@ -76,7 +76,7 @@ void main() {
 
     // Visible without any scroll: hitTestable at the default viewport.
     expect(find.byKey(const Key('dental-clinics-entry')).hitTestable(), findsOneWidget);
-    expect(find.text('Dental clinics'), findsOneWidget);
+    expect(find.text('Channel doctors'), findsOneWidget);
   });
 
   testWidgets('tapping the entry navigates to /dental/clinics', (tester) async {

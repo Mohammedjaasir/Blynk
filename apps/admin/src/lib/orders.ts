@@ -165,7 +165,7 @@ export function formatAge(placedAt: string, now: Date = new Date()): string {
 export const shortNumber = (orderNumber: string) => orderNumber.split('-').pop() ?? orderNumber;
 
 const money = new Intl.NumberFormat('en-LK', { maximumFractionDigits: 2 });
-export const formatMoney = (value: number) => `Rs. ${money.format(value)}`;
+export const formatMoney = (value: number) => `LKR ${money.format(value)}`;
 
 const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Colombo' });
 /** Store-local clock time (Asia/Colombo). */

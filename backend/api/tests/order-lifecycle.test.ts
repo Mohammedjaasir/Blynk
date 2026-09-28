@@ -23,8 +23,8 @@ describe('Order lifecycle', () => {
   const RIDER_A = 'f0000001-0000-0000-0000-000000000001';
   const RIDER_B = 'f0000009-0000-0000-0000-00000000000c';
   const DARK_STORE = '018dc3f0-4a82-789a-8b1b-947f61ad8821';
-  const MILK = 'b0000001-0000-0000-0000-000000000001'; // Rs. 540, UNTRACKED
-  const BUTTER = 'b0000001-0000-0000-0000-000000000002'; // Rs. 805, UNTRACKED
+  const MILK = 'b0000001-0000-0000-0000-000000000001'; // LKR 540, UNTRACKED
+  const BUTTER = 'b0000001-0000-0000-0000-000000000002'; // LKR 805, UNTRACKED
   const tokens = {
     customer: generateAccessToken(customer),
     admin: generateAccessToken(admin),

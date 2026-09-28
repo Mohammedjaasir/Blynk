@@ -179,7 +179,7 @@ void main() {
     testWidgets('shows the item names and the total', (tester) async {
       await pumpList(tester, [_order(id: 'o1', number: 'BL-20260919-0001', status: 'PLACED', quantities: [2, 1])]);
       expect(find.text('Kotmale Fresh Milk 1L, Butter 200g'), findsOneWidget);
-      expect(find.text('Rs. 1,955'), findsOneWidget);
+      expect(find.text('LKR 1,955'), findsOneWidget);
     });
 
     testWidgets('a three-item order shows the first two names plus "+1 more"', (tester) async {
@@ -233,7 +233,7 @@ void main() {
       final handle = tester.ensureSemantics();
       await pumpList(tester, [_order(id: 'o1', number: 'BL-20260919-0001', status: 'OUT_FOR_DELIVERY')]);
       expect(
-        find.bySemanticsLabel('BL-20260919-0001, Out for delivery, Rs. 1,955'),
+        find.bySemanticsLabel('BL-20260919-0001, Out for delivery, LKR 1,955'),
         findsOneWidget,
       );
       handle.dispose();

@@ -142,6 +142,25 @@ class _Backend {
   }
 }
 
+/// Ten categories: more than the grid's 8 tiles, so "More" appears.
+class _ManyCategoriesBackend extends _Backend {
+  @override
+  Future<dynamic> call(String url, Map<String, dynamic> query) async {
+    if (url == '/catalog/categories') {
+      return {
+        'success': true,
+        'data': {
+          'categories': [
+            for (var i = 1; i <= 10; i++)
+              {'id': 'c$i', 'name': 'Category $i', 'slug': 'category-$i', 'image_url': null, 'display_order': i},
+          ],
+        },
+      };
+    }
+    return super.call(url, query);
+  }
+}
+
 /// A realistic long Sri Lankan address, in the shape GET /me/addresses
 /// returns. Long on purpose: the destination line must not elide it.
 const _longAddressJson = {
@@ -602,12 +621,37 @@ void main() {
   // important assertions here are the negative ones: Home must not re-query,
   // and Home must not hold a selection.
   group('category tiles', () {
-    testWidgets('are the real backend categories behind an "All" tile', (tester) async {
+    // 2026-09-28: a 4-across grid of rounded tiles (owner's reference) in
+    // place of the scrolling row of circles with an "All" tile.
+    testWidgets('are the real backend categories, as rounded tiles, with no "All"', (tester) async {
       await _pumpHome(tester);
 
       final tiles = tester.widgetList<CategoryWidget>(find.byType(CategoryWidget)).toList();
-      expect(tiles.map((t) => t.category.name).toList(),
-          ['All', 'Dairy & Eggs', 'Biscuits & Snacks']);
+      expect(tiles.map((t) => t.category.name).toList(), ['Dairy & Eggs', 'Biscuits & Snacks']);
+      expect(tiles.every((t) => t.rounded), isTrue);
+      expect(find.byKey(const Key('categories-more')), findsNothing, reason: 'only 2 categories: nothing more to show');
+    });
+
+    testWidgets('with more than 8 categories: two rows of 7 plus "More", which opens every category',
+        (tester) async {
+      final routes = <String>[];
+      await _pumpHome(tester, backend: _ManyCategoriesBackend(), routeLog: routes);
+
+      final tiles = tester.widgetList<CategoryWidget>(find.byType(CategoryWidget)).toList();
+      expect(tiles.map((t) => t.category.name).toList(), [
+        for (var i = 1; i <= 7; i++) 'Category $i',
+        'More',
+      ]);
+      // Four across: the 5th tile starts the second row.
+      double rowOf(String name) => tester
+          .getTopLeft(find.descendant(of: find.byType(CategoryWidget), matching: find.text(name)))
+          .dy;
+      expect(rowOf('Category 5'), greaterThan(rowOf('Category 4')));
+      expect(rowOf('Category 4'), rowOf('Category 1'));
+
+      await tester.tap(find.byKey(const Key('categories-more')));
+      await tester.pumpAndSettle();
+      expect(routes.last, '/categories');
     });
 
     testWidgets('none of them is ever drawn selected: Home holds no filter',
@@ -642,20 +686,6 @@ void main() {
       expect(routes, contains('/products'));
       expect(args.last, 'biscuits-snacks');
       expect(find.text('route:/products'), findsOneWidget);
-    });
-
-    testWidgets('"All" opens the same screen with no slug, like a real category',
-        (tester) async {
-      final routes = <String>[];
-      final args = <Object?>[];
-      await _pumpHome(tester, routeLog: routes, argsLog: args);
-
-      await tester.tap(find.text('All'));
-      await tester.pumpAndSettle();
-
-      expect(routes, contains('/products'));
-      expect(args.last, isNull,
-          reason: 'no slug is what the products screen reads as "everything"');
     });
 
     testWidgets('Home never re-queries a category in place', (tester) async {
@@ -863,7 +893,7 @@ void main() {
 
       expect(find.text('Kotmale Fresh Milk 1L'), findsOneWidget);
       expect(find.text('1 L'), findsOneWidget);
-      expect(find.textContaining('Rs. 540'), findsWidgets);
+      expect(find.textContaining('LKR 540'), findsWidgets);
     });
 
     // 2026-09-24: Home may now reorder "Browse all" against the customer's

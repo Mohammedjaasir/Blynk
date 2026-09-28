@@ -90,7 +90,7 @@ class _DentalClinicsScreenState extends State<DentalClinicsScreen> {
     return Scaffold(
       backgroundColor: BlynkColors.paper,
       appBar: AppBar(
-        title: const Text('Dental clinics'),
+        title: const Text('Channel doctors'),
         // Task F5: gives '/dental/appointments' (F4's list screen) an actual
         // caller so it is reachable in the running app - the Home entry
         // point only ever leads to discovery, never straight to "my
@@ -155,7 +155,7 @@ class _DentalClinicsScreenState extends State<DentalClinicsScreen> {
     }
     if (_clinics.isEmpty) {
       return const AppStateView.empty(
-        title: 'No dental clinics available yet',
+        title: 'No doctors available yet',
       );
     }
     return RefreshIndicator(

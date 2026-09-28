@@ -69,7 +69,7 @@ describe('Delivery', () => {
     const bag = screen.getByRole('region', { name: 'In the bag' });
     expect(within(bag).getByText('Kotmale Fresh Milk 1L')).toBeInTheDocument();
     expect(within(bag).getByText('2 ×')).toBeInTheDocument();
-    expect(screen.getByText('Rs. 610')).toBeInTheDocument();
+    expect(screen.getByText('LKR 610')).toBeInTheDocument();
     expect(within(actionBar()).getAllByRole('button')).toHaveLength(1);
     expect(within(actionBar()).getByRole('button', { name: 'Picked up' })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Progress' })).toHaveTextContent('Pick up');
@@ -205,7 +205,7 @@ describe('Delivery', () => {
 
   it('does not start tracking for a delivery that is not on the road yet, or already at the door', async () => {
     renderAs(RIDER, ROUTE, { 'GET /riders/deliveries/:id': () => ok({ delivery: detail(atDoor) }) });
-    await screen.findByRole('button', { name: 'Collect Rs. 610' });
+    await screen.findByRole('button', { name: 'Collect LKR 610' });
     expect(capacitorTrackingPlugin.start).not.toHaveBeenCalled();
   });
 
@@ -304,13 +304,13 @@ describe('Delivery', () => {
         return ok({ settlement: { order_status: 'DELIVERED', payment_status: 'PAID', cod_collected_amount: 1690 } });
       },
     });
-    await user.click(await screen.findByRole('button', { name: 'Collect Rs. 1,690' }));
-    const sheet = screen.getByRole('dialog', { name: 'Collect Rs. 1,690 in cash' });
+    await user.click(await screen.findByRole('button', { name: 'Collect LKR 1,690' }));
+    const sheet = screen.getByRole('dialog', { name: 'Collect LKR 1,690 in cash' });
     expect(sheet).toHaveTextContent('from Rider Test');
     expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')).toHaveLength(0);
     await user.click(within(sheet).getByRole('button', { name: 'Cash collected — complete' }));
     expect(await screen.findByText('Delivered')).toBeInTheDocument();
-    expect(screen.getByText('Rs. 1,690 collected')).toBeInTheDocument();
+    expect(screen.getByText('LKR 1,690 collected')).toBeInTheDocument();
     expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')[0].body).toEqual({ amount: 1690 });
     expect(screen.queryByRole('group', { name: 'Delivery actions' })).not.toBeInTheDocument();
   });
@@ -318,10 +318,10 @@ describe('Delivery', () => {
   it('the confirm sheet can be dismissed without sending anything', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(RIDER, ROUTE, { 'GET /riders/deliveries/:id': () => ok({ delivery: detail(atDoor) }) });
-    await user.click(await screen.findByRole('button', { name: 'Collect Rs. 610' }));
+    await user.click(await screen.findByRole('button', { name: 'Collect LKR 610' }));
     await user.click(screen.getByRole('button', { name: 'Not yet' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Collect Rs. 610' }));
+    await user.click(screen.getByRole('button', { name: 'Collect LKR 610' }));
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')).toHaveLength(0);
@@ -410,7 +410,7 @@ describe('Delivery', () => {
           }),
         }),
     });
-    expect(await screen.findByText('Rs. 610 collected')).toBeInTheDocument();
+    expect(await screen.findByText('LKR 610 collected')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Delivery actions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /^Call/ })).not.toBeInTheDocument();
   });

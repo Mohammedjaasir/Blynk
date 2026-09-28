@@ -137,7 +137,7 @@ void main() {
     expect(catalog.searchCalls, hasLength(1));
     expect(catalog.searchCalls.single['search'], 'milk');
     expect(find.text('Kotmale Fresh Milk 1L'), findsOneWidget);
-    expect(find.text('Rs. 540'), findsOneWidget);
+    expect(find.text('LKR 540'), findsOneWidget);
     expect(find.text('"milk"'), findsOneWidget);
     // Count comes from the backend's pagination.total, not a made-up number.
     expect(find.text('1 product'), findsOneWidget);

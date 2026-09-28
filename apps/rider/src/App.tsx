@@ -1,4 +1,5 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Welcome, hasSeenIntro } from './pages/Welcome';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Delivery } from './pages/Delivery';
 import { Login } from './pages/Login';
@@ -21,10 +22,24 @@ function RequireRider({ children }: { children: JSX.Element }) {
   return children;
 }
 
+/**
+ * The welcome screen opens on every launch (2026-09-28, as in Blynk Ops): the
+ * first navigation of a launch goes to /welcome, carrying where it was headed.
+ */
+function IntroGate({ children }: { children: JSX.Element }) {
+  const location = useLocation();
+  if (!hasSeenIntro() && location.pathname !== '/welcome') {
+    return <Navigate to="/welcome" replace state={{ from: location }} />;
+  }
+  return children;
+}
+
 export function AppRoutes() {
   return (
+    <IntroGate>
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/welcome" element={<Welcome />} />
       <Route
         path="/"
         element={
@@ -43,6 +58,7 @@ export function AppRoutes() {
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </IntroGate>
   );
 }
 

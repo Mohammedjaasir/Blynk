@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
 import type { AdminAppointment, DentalClinic, DentalDoctor } from '../api/types';
 import { ADMIN_WITH_RIDER, fail, ok, renderAs } from './helpers';
+// The maplibre-gl stand-in from test/setup.ts exposes what the map was asked.
+// @ts-expect-error - mapInstances exists only on the test stand-in.
+import { mapInstances } from 'maplibre-gl';
 
 /**
  * Dental appointments (admin list + admin-cancel) and the clinic location
@@ -251,8 +254,13 @@ describe('Dental appointments - admin cancel', () => {
 
 // ------------------------------------------------------------ Clinic location map
 describe('Clinic location map (ClinicDetail)', () => {
-  it("renders the single pin at the clinic's real coordinates when a key is configured", async () => {
-    vi.stubEnv('VITE_GOOGLE_MAPS_STATIC_KEY', 'test-key-123');
+  // 2026-09-28: the free MapLibre + OpenFreeMap map replaced the Google static
+  // image (which needed a key and showed "Map unavailable" without one).
+  afterEach(() => {
+    mapInstances.length = 0;
+  });
+
+  it("pins the clinic's real coordinates on the free map, no key needed", async () => {
     const c = clinic({ name: 'Smile Dental', latitude: 6.9271, longitude: 79.8612 });
     renderAs(ADMIN_WITH_RIDER, `/catalog/dental/clinics/${c.id}`, {
       'GET /admin/dental/clinics/:id': () => ok({ clinic: c }),
@@ -261,18 +269,15 @@ describe('Clinic location map (ClinicDetail)', () => {
     });
     await screen.findByText('Smile Dental — doctors');
 
-    const img = await screen.findByAltText("Map showing Smile Dental's location");
-    const src = new URL(img.getAttribute('src')!);
-    expect(src.hostname).toBe('maps.googleapis.com');
-    expect(src.pathname).toBe('/maps/api/staticmap');
-    expect(src.searchParams.get('center')).toBe('6.9271,79.8612');
-    expect(src.searchParams.get('markers')).toBe('color:red|6.9271,79.8612');
-    expect(src.searchParams.get('key')).toBe('test-key-123');
+    expect(await screen.findByRole('img', { name: "Map showing Smile Dental's location" })).toBeInTheDocument();
+    const map = mapInstances[mapInstances.length - 1];
+    expect(map.options.center).toEqual([79.8612, 6.9271]);
+    expect(map.markers[0].lngLat).toEqual([79.8612, 6.9271]);
     expect(screen.queryByText('Map unavailable')).not.toBeInTheDocument();
   });
 
-  it('renders the honest "Map unavailable" fallback when no key is configured, without crashing', async () => {
-    const c = clinic({ name: 'Smile Dental' });
+  it('says "Map unavailable" when the clinic has no usable coordinates, without crashing', async () => {
+    const c = clinic({ name: 'Smile Dental', latitude: 0, longitude: 0 });
     renderAs(ADMIN_WITH_RIDER, `/catalog/dental/clinics/${c.id}`, {
       'GET /admin/dental/clinics/:id': () => ok({ clinic: c }),
       'GET /admin/dental/clinics/:clinicId/doctors': () => ok({ doctors: [] }),
@@ -280,7 +285,6 @@ describe('Clinic location map (ClinicDetail)', () => {
     });
     await screen.findByText('Smile Dental — doctors');
     expect(await screen.findByText('Map unavailable')).toBeInTheDocument();
-    expect(screen.queryByAltText(/Map showing/)).not.toBeInTheDocument();
   });
 });
 

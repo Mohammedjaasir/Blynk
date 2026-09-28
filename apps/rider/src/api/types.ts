@@ -51,6 +51,9 @@ export interface DeliverySummary {
   delivery_address_line1: string;
   delivery_address_line2: string | null;
   delivery_city: string;
+  /** The customer's pin. NUMERIC columns can arrive as strings; see lib/route.ts toLatLng. */
+  delivery_latitude?: number | string | null;
+  delivery_longitude?: number | string | null;
   delivery_instructions: string | null;
 }
 

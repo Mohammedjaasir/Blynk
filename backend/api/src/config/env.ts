@@ -40,6 +40,9 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 
   // Notification Providers (Phase 1 SMS via NotifyLK & WhatsApp Cloud API)
+  // Self-hosted OSRM for delivery route lines (modules/routing). Optional:
+  // unset, routes are simply not drawn.
+  OSRM_URL: z.string().url().optional(),
   SMS_PROVIDER: z.string().optional().default('notifylk'),
   SMS_API_KEY: z.string().optional(),
   SMS_USER_ID: z.string().optional(),

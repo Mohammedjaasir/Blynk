@@ -10,7 +10,7 @@ const _months = [
 
 const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-/// 'Rs. 1,955' when the amount is a whole number, 'Rs. 1,214.50' when it
+/// 'LKR 1,955' when the amount is a whole number, 'LKR 1,214.50' when it
 /// carries cents - it is the cash the rider collects (C5).
 ///
 /// The whole-vs-cents decision and the digits shown both come from the same
@@ -18,7 +18,7 @@ const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 /// 1000.00) is correctly treated as whole rather than showing spurious
 /// cents from the pre-rounding fractional part.
 ///
-/// [alwaysShowCents] keeps the two decimals on a whole amount ('Rs. 1,955.00')
+/// [alwaysShowCents] keeps the two decimals on a whole amount ('LKR 1,955.00')
 /// for right-aligned bill columns; it never changes the digits.
 String formatLkr(double amount, {bool alwaysShowCents = false}) {
   final cents = (amount * 100).round();
@@ -28,9 +28,9 @@ String formatLkr(double amount, {bool alwaysShowCents = false}) {
     RegExp(r'\B(?=(\d{3})+(?!\d))'),
     (match) => ',',
   );
-  if (whole) return 'Rs. $withCommas';
+  if (whole) return 'LKR $withCommas';
   final fraction = (cents % 100).toString().padLeft(2, '0');
-  return 'Rs. $withCommas.$fraction';
+  return 'LKR $withCommas.$fraction';
 }
 
 String _time12h(DateTime d) {

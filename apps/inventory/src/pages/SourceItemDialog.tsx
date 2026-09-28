@@ -118,7 +118,7 @@ export function SourceItemDialog({
         </dl>
 
         <div className="form__row">
-          <Field label="Actual unit cost (Rs.)" hint="What you paid per unit.">
+          <Field label="Actual unit cost (LKR)" hint="What you paid per unit.">
             <input
               className="input input--mono"
               inputMode="decimal"

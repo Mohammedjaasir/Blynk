@@ -270,7 +270,7 @@ export function ProductForm() {
         <section className="form__section">
           <h2 className="form__section-title">Pricing</h2>
           <div className="form__row">
-            <Field label="Purchase cost (Rs.)" error={errors.purchase_cost}>
+            <Field label="Purchase cost (LKR)" error={errors.purchase_cost}>
               <input
                 className="input"
                 inputMode="decimal"
@@ -298,7 +298,7 @@ export function ProductForm() {
           <p className="form__note">
             {previewPrice === null
               ? 'Selling price is calculated by the backend when you save.'
-              : `Preview selling price: Rs. ${previewPrice.toFixed(2)} (the backend recalculates on save).`}
+              : `Preview selling price: LKR ${previewPrice.toFixed(2)} (the backend recalculates on save).`}
           </p>
         </section>
 

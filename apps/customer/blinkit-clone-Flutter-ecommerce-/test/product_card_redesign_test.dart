@@ -81,7 +81,7 @@ void main() {
 
       expect(find.text('Kotmale Milk'), findsOneWidget);
       expect(find.text('1 L'), findsOneWidget);
-      expect(find.text('Rs. 605.50'), findsOneWidget);
+      expect(find.text('LKR 605.50'), findsOneWidget);
 
       // NO fabricated commerce data: the backend has no rating, review count,
       // discount, original price or per-unit price, and there is no wishlist
@@ -166,7 +166,7 @@ void main() {
       expect(find.text('N/A'), findsOneWidget);
       // Still legible: the name, unit and price are all still on screen.
       expect(find.text('Out Of Stock Item'), findsOneWidget);
-      expect(find.text('Rs. 605.50'), findsOneWidget);
+      expect(find.text('LKR 605.50'), findsOneWidget);
 
       final wash = tester.widget<ColoredBox>(
         find.ancestor(of: find.text('Unavailable'), matching: find.byType(ColoredBox)).first,

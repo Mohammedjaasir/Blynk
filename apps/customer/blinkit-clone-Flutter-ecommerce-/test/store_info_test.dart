@@ -40,7 +40,7 @@ void main() {
         '8 AM': RegExp(r'8(:00)? AM'),
         '9 PM': RegExp(r'9(:00)? PM'),
         '4 km': RegExp(r'\b4 km\b'),
-        'Rs. 70': RegExp(r'Rs\. 70\b'),
+        'LKR 70': RegExp(r'Rs\. 70\b'),
         'Cash on Delivery': RegExp(r'[Cc]ash on [Dd]elivery'),
       };
       final offenders = <String>[];

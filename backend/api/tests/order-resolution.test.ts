@@ -30,8 +30,8 @@ describe('Order resolution integrity (mark unavailable)', () => {
   const tokenStaff = generateAccessToken(staff);
   const tokenAdmin = generateAccessToken(admin);
 
-  const MILK = 'b0000001-0000-0000-0000-000000000001'; // Kotmale 1L, Rs. 540, UNTRACKED
-  const BUTTER = 'b0000001-0000-0000-0000-000000000002'; // Pelwatte 200g, Rs. 805, UNTRACKED
+  const MILK = 'b0000001-0000-0000-0000-000000000001'; // Kotmale 1L, LKR 540, UNTRACKED
+  const BUTTER = 'b0000001-0000-0000-0000-000000000002'; // Pelwatte 200g, LKR 805, UNTRACKED
 
   const createdOrders: string[] = [];
   let addressId = '';

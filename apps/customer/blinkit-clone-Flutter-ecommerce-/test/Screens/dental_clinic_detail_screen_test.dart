@@ -13,6 +13,7 @@ import 'package:ecom/Services/Providers/dental.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/app_skeleton.dart';
 import 'package:ecom/UI/Widgets/Organisms/google_map_view.dart';
 import 'package:ecom/UI/Widgets/Organisms/map_provider.dart';
+import 'package:ecom/UI/Widgets/Organisms/map_provider_config.dart';
 
 import '../fixtures/dental_fixtures.dart';
 import '../fixtures/fake_google_maps_platform.dart';
@@ -153,7 +154,7 @@ void main() {
     // Doctor roster.
     expect(find.text('Dr. Nadeesha Perera'), findsOneWidget);
     expect(find.text('Orthodontist'), findsOneWidget);
-    expect(find.text('Rs. 3,500'), findsOneWidget);
+    expect(find.text('LKR 3,500'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -224,6 +225,9 @@ void main() {
     late FakeGoogleMapsPlatform platform;
 
     setUp(() {
+      // Google is opt-in since MapLibre became the default (2026-09-28).
+      MapProviderConfig.debugOverride = MapProviderKind.google;
+      addTearDown(() => MapProviderConfig.debugOverride = null);
       platform = FakeGoogleMapsPlatform.install();
       GoogleMarkerIcons.clearCache();
       GoogleMarkerIcons.debugRenderer =

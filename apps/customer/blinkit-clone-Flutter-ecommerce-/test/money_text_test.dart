@@ -25,30 +25,30 @@ void main() {
         expect(find.text(text), findsOneWidget);
       }
 
-      await expectShows(0, 'Rs. 0');
-      await expectShows(50, 'Rs. 50');
-      await expectShows(605.50, 'Rs. 605.50');
-      await expectShows(1250.00, 'Rs. 1,250');
-      await expectShows(1250.5, 'Rs. 1,250.50');
-      await expectShows(1250.05, 'Rs. 1,250.05');
+      await expectShows(0, 'LKR 0');
+      await expectShows(50, 'LKR 50');
+      await expectShows(605.50, 'LKR 605.50');
+      await expectShows(1250.00, 'LKR 1,250');
+      await expectShows(1250.5, 'LKR 1,250.50');
+      await expectShows(1250.05, 'LKR 1,250.05');
     });
 
     testWidgets('compact: false keeps .00 on whole amounts and changes nothing else', (tester) async {
       await tester.pumpWidget(componentHost(tester, const MoneyText(1250, compact: false)));
-      expect(find.text('Rs. 1,250.00'), findsOneWidget);
+      expect(find.text('LKR 1,250.00'), findsOneWidget);
       await tester.pumpWidget(componentHost(tester, const MoneyText(605.5, compact: false)));
-      expect(find.text('Rs. 605.50'), findsOneWidget);
+      expect(find.text('LKR 605.50'), findsOneWidget);
     });
 
     testWidgets('uses the price style by default and lets the caller override', (tester) async {
       await tester.pumpWidget(componentHost(tester, const MoneyText(50)));
-      var style = tester.widget<Text>(find.text('Rs. 50')).style!;
+      var style = tester.widget<Text>(find.text('LKR 50')).style!;
       expect(style.fontWeight, BlynkText.price.fontWeight);
       expect(style.fontSize, BlynkText.price.fontSize);
       expect(style.color, BlynkColors.ink);
 
       await tester.pumpWidget(componentHost(tester, const MoneyText(50, style: TextStyle(color: BlynkColors.positiveInk))));
-      style = tester.widget<Text>(find.text('Rs. 50')).style!;
+      style = tester.widget<Text>(find.text('LKR 50')).style!;
       expect(style.color, BlynkColors.positiveInk);
       expect(style.fontWeight, BlynkText.price.fontWeight);
     });
@@ -57,7 +57,7 @@ void main() {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(componentHost(tester, const MoneyText(1250.5)));
       final data = tester.getSemantics(find.byType(MoneyText)).getSemanticsData();
-      expect(data.label, 'Rs. 1,250.50');
+      expect(data.label, 'LKR 1,250.50');
       handle.dispose();
     });
 
@@ -73,10 +73,10 @@ void main() {
       final heights = <double>[];
       for (final scale in kTextScales) {
         await tester.pumpWidget(componentHost(tester, const MoneyText(1250.5), textScale: scale));
-        final paragraph = tester.renderObject<RenderParagraph>(find.text('Rs. 1,250.50'));
+        final paragraph = tester.renderObject<RenderParagraph>(find.text('LKR 1,250.50'));
         expect(paragraph.didExceedMaxLines, isFalse);
         expect(tester.takeException(), isNull);
-        final size = tester.getSize(find.text('Rs. 1,250.50'));
+        final size = tester.getSize(find.text('LKR 1,250.50'));
         widths.add(size.width);
         heights.add(size.height);
       }
@@ -96,17 +96,17 @@ void main() {
 
   group('formatLkr(alwaysShowCents)', () {
     test('default output is unchanged', () {
-      expect(formatLkr(0), 'Rs. 0');
-      expect(formatLkr(1955), 'Rs. 1,955');
-      expect(formatLkr(1214.5), 'Rs. 1,214.50');
-      expect(formatLkr(999.999), 'Rs. 1,000');
+      expect(formatLkr(0), 'LKR 0');
+      expect(formatLkr(1955), 'LKR 1,955');
+      expect(formatLkr(1214.5), 'LKR 1,214.50');
+      expect(formatLkr(999.999), 'LKR 1,000');
     });
 
     test('alwaysShowCents keeps the same digits and adds .00 only to whole amounts', () {
-      expect(formatLkr(0, alwaysShowCents: true), 'Rs. 0.00');
-      expect(formatLkr(1955, alwaysShowCents: true), 'Rs. 1,955.00');
-      expect(formatLkr(1214.5, alwaysShowCents: true), 'Rs. 1,214.50');
-      expect(formatLkr(999.999, alwaysShowCents: true), 'Rs. 1,000.00');
+      expect(formatLkr(0, alwaysShowCents: true), 'LKR 0.00');
+      expect(formatLkr(1955, alwaysShowCents: true), 'LKR 1,955.00');
+      expect(formatLkr(1214.5, alwaysShowCents: true), 'LKR 1,214.50');
+      expect(formatLkr(999.999, alwaysShowCents: true), 'LKR 1,000.00');
     });
   });
 }

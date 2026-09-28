@@ -19,7 +19,7 @@ import 'product_hero.dart';
 /// ├─────────────────────┤
 /// │ Product Name        │  BlynkCardProduct.name, 2 lines, ellipsis
 /// │ Unit                │  BlynkType.productUnit
-/// │ Rs. 605             │  MoneyText -> BlynkCardProduct.price
+/// │ LKR 605             │  MoneyText -> BlynkCardProduct.price
 /// │              [ + ]  │  AddToCartButton (ADD -> stepper)
 /// └─────────────────────┘
 /// ```
@@ -36,7 +36,7 @@ import 'product_hero.dart';
 /// fabricated commerce data is the highest-priority defect in review.
 ///
 /// The price sits on its own line above a full-width control slot rather than
-/// sharing the mock's `Rs. 605  [+]` row: the in-cart quantity stepper is
+/// sharing the mock's `LKR 605  [+]` row: the in-cart quantity stepper is
 /// 124 dp wide at minimum (48 + 28 + 48) and a compact card's inner width is
 /// 128 dp, so a shared row would leave the price ~4 dp and make it vanish the
 /// moment a product entered the cart. See `task-W1-report.md`.

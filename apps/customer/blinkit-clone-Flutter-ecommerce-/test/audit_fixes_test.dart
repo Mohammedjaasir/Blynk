@@ -4,7 +4,6 @@ import 'dart:ui' show SemanticsAction, Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ecom/Models/address_model.dart';
@@ -524,31 +523,38 @@ void main() {
       }
     });
 
-    testWidgets('the Lottie loop repeats normally, and stops repeating under reduced motion', (tester) async {
+    Image animation(WidgetTester tester) =>
+        tester.widget<Image>(find.byKey(const Key('onboarding-animation')));
+    String assetOf(Image image) => (image.image as AssetImage).assetName;
+
+    // 2026-09-28: the Lottie stuttered on phones; the slide now plays the
+    // same animation pre-rendered as an animated WebP, and shows a still
+    // frame under reduced motion.
+    testWidgets('the animated slide plays the pre-rendered WebP, and a still under reduced motion', (tester) async {
       await pumpOnboarding(tester);
       await next(tester);
-      expect(tester.widget<Lottie>(find.byType(Lottie)).repeat, isTrue);
+      expect(assetOf(animation(tester)), 'Assets/Images/cart_packing.webp');
       await tester.pumpWidget(const SizedBox());
 
       await pumpOnboarding(tester, reduced: true);
       await next(tester);
-      expect(tester.widget<Lottie>(find.byType(Lottie)).repeat, isFalse);
+      expect(assetOf(animation(tester)), 'Assets/Images/cart_packing_still.png');
     });
 
-    // 2026-09-28: the cart animation "lagged" on a phone. The file is
-    // authored at 24 fps and Lottie plays at that rate unless told
-    // otherwise; it must interpolate every display frame, on its own layer.
-    testWidgets('the Lottie plays at the display rate, isolated in its own layer', (tester) async {
+    testWidgets('the animation sits in its own layer, so its frames repaint nothing else', (tester) async {
       await pumpOnboarding(tester);
       await next(tester);
-      final lottie = find.byType(Lottie);
-      expect(tester.widget<Lottie>(lottie).frameRate, FrameRate.max);
       Element? parent;
-      tester.element(find.byType(LottieBuilder)).visitAncestorElements((e) {
+      tester.element(find.byKey(const Key('onboarding-animation'))).visitAncestorElements((e) {
         parent = e;
         return false; // the direct parent only
       });
       expect(parent!.widget, isA<RepaintBoundary>());
+    });
+
+    test('both animation assets are declared and exist', () {
+      expect(File('Assets/Images/cart_packing.webp').existsSync(), isTrue);
+      expect(File('Assets/Images/cart_packing_still.png').existsSync(), isTrue);
     });
   });
 

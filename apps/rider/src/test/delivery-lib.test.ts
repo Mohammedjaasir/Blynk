@@ -34,7 +34,7 @@ describe('nextAction', () => {
     const action = nextAction(
       summary({ assignment_status: 'ARRIVED_AT_CUSTOMER', order_status: 'OUT_FOR_DELIVERY', total_amount: 1690 })
     );
-    expect(action).toEqual({ kind: 'collect', label: 'Collect Rs. 1,690', amount: 1690 });
+    expect(action).toEqual({ kind: 'collect', label: 'Collect LKR 1,690', amount: 1690 });
   });
 
   it('refuses to offer cash collection on an order that is not COD or already paid', () => {

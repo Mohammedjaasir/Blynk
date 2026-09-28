@@ -35,7 +35,7 @@ import 'package:ecom/UI/Widgets/Atoms/blynk_crossfade.dart';
 /// Category                          <- real category_name
 /// Product name                      <- display, the type hierarchy's anchor
 /// Unit . Pack size
-/// Rs. 540        [ Available ]      <- real selling_price, real is_available
+/// LKR 540        [ Available ]      <- real selling_price, real is_available
 /// Product details (expandable)      <- only sections with real content
 /// ------------------------------------
 /// STICKY:   [      Add to cart      ]   flat signal, ink label

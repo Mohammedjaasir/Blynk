@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Blynk Admin</string>
+    <string name="title_activity_main">Blynk Admin</string>
+    <string name="package_name">lk.blynk.admin</string>
+    <string name="custom_url_scheme">lk.blynk.admin</string>
+</resources>

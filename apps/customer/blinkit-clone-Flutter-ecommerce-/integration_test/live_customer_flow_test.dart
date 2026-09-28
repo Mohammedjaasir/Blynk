@@ -174,7 +174,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: detailsScreen, matching: find.text('Rs. 540')),
+        find.descendant(of: detailsScreen, matching: find.text('LKR 540')),
         findsWidgets,
         reason: 'price must match the backend selling_price',
       );
@@ -261,10 +261,10 @@ void main() {
       expect(find.text('1 item'), findsWidgets);
       expect(find.text('Kotmale Fresh Milk 1L'), findsOneWidget);
       expect(find.text('Order Summary'), findsOneWidget);
-      // Real line price + the Rs. 70 delivery fee business rule.
-      expect(find.text('Rs. 540'), findsWidgets);
-      expect(find.text('Rs. 70'), findsOneWidget);
-      expect(find.text('Rs. 610'), findsWidgets);
+      // Real line price + the LKR 70 delivery fee business rule.
+      expect(find.text('LKR 540'), findsWidgets);
+      expect(find.text('LKR 70'), findsOneWidget);
+      expect(find.text('LKR 610'), findsWidgets);
 
       // Cart hands off to the existing checkout (address + COD + Place Order).
       await _tap(tester, find.text('Proceed to Checkout'));
@@ -370,7 +370,7 @@ void main() {
       final placed = orderProvider.lastPlacedOrder;
       expect(placed, isNotNull);
       expect(placed!.deliveryFee, 70.0,
-          reason: 'backend-authoritative delivery fee must be Rs. 70 per the Phase 1 business rule');
+          reason: 'backend-authoritative delivery fee must be LKR 70 per the Phase 1 business rule');
       expect(placed.totalAmount,
           closeTo(placed.subtotalAmount + placed.deliveryFee, 0.01));
       expect(placed.paymentMethod.toUpperCase(), contains('COD'));

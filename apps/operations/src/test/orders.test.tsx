@@ -296,7 +296,7 @@ describe('Order detail (a standalone route, /orders/:id)', () => {
     }).api;
     await user.click(await screen.findByRole('button', { name: 'Mark delivered' }));
     const dialog = await screen.findByRole('dialog', { name: /Mark delivered/ });
-    expect(dialog).toHaveTextContent('Records Rs. 1,690 cash as collected');
+    expect(dialog).toHaveTextContent('Records LKR 1,690 cash as collected');
     const confirm = within(dialog).getByRole('button', { name: 'Mark delivered' });
     expect(confirm).toBeDisabled();
     await user.type(within(dialog).getByLabelText(/Note/), 'Rider phone died; cash counted at the store');

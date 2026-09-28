@@ -96,9 +96,9 @@ void main() {
       expect(find.text('2 items'), findsOneWidget);
       expect(find.text('Kotmale Fresh Milk 1L'), findsOneWidget);
       expect(find.text('1 L'), findsOneWidget);
-      expect(find.text('Rs. 540'), findsOneWidget);
+      expect(find.text('LKR 540'), findsOneWidget);
       expect(find.text('Pelwatte Salted Butter 200g'), findsOneWidget);
-      expect(find.text('Rs. 805'), findsOneWidget);
+      expect(find.text('LKR 805'), findsOneWidget);
       expect(find.byType(CartProductCard), findsNWidgets(2));
       // Images come from the shared component. W4: that component is now
       // ProductImageWell (W1's image well) rather than the bare ProductImage,
@@ -108,7 +108,7 @@ void main() {
       expect(find.byType(ProductImageWell), findsNWidgets(2));
     });
 
-    testWidgets('summary shows subtotal, the Rs. 70 fee and the total',
+    testWidgets('summary shows subtotal, the LKR 70 fee and the total',
         (tester) async {
       cart.add(_product(_realMilk));
       await pumpCart(tester);
@@ -116,9 +116,9 @@ void main() {
       expect(find.text('Order Summary'), findsOneWidget);
       expect(find.text('Subtotal (1 item)'), findsOneWidget);
       expect(find.text('Delivery fee'), findsOneWidget);
-      expect(find.text('Rs. 70'), findsOneWidget);
+      expect(find.text('LKR 70'), findsOneWidget);
       // 540 + 70, in the summary and on the pinned bar.
-      expect(find.text('Rs. 610'), findsNWidgets(2));
+      expect(find.text('LKR 610'), findsNWidgets(2));
       // No invented fees.
       for (final fake in ['Handling', 'Convenience', 'Platform', 'Late Night',
         'Saved', 'MRP', 'OFF']) {
@@ -134,17 +134,17 @@ void main() {
       await tester.tap(plus('Kotmale Fresh Milk 1L'));
       await settle(tester);
       expect(cart.quantityOf('b0000001-0000-0000-0000-000000000001'), 2);
-      expect(find.text('2 × Rs. 540'), findsOneWidget);
+      expect(find.text('2 × LKR 540'), findsOneWidget);
       // Line total and the summary's subtotal.
-      expect(find.text('Rs. 1,080'), findsNWidgets(2));
+      expect(find.text('LKR 1,080'), findsNWidgets(2));
       expect(find.text('Subtotal (2 items)'), findsOneWidget);
-      expect(find.text('Rs. 1,150'), findsNWidgets(2)); // 1080 + 70
+      expect(find.text('LKR 1,150'), findsNWidgets(2)); // 1080 + 70
 
       await tester.tap(minus('Kotmale Fresh Milk 1L'));
       await settle(tester);
       expect(cart.quantityOf('b0000001-0000-0000-0000-000000000001'), 1);
       expect(find.text('Subtotal (1 item)'), findsOneWidget);
-      expect(find.text('Rs. 610'), findsNWidgets(2));
+      expect(find.text('LKR 610'), findsNWidgets(2));
     });
 
     testWidgets('- at one removes the line and never goes negative',
@@ -163,7 +163,7 @@ void main() {
       // The other line stays and the summary follows.
       expect(find.text('Pelwatte Salted Butter 200g'), findsOneWidget);
       expect(find.text('Subtotal (1 item)'), findsOneWidget);
-      expect(find.text('Rs. 875'), findsNWidgets(2)); // 805 + 70
+      expect(find.text('LKR 875'), findsNWidgets(2)); // 805 + 70
     });
 
     testWidgets('the trash button removes a line', (tester) async {
@@ -251,7 +251,7 @@ void main() {
       await settle(tester);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Rs. 540'), findsWidgets);
+      expect(find.text('LKR 540'), findsWidgets);
       expect(plus('Kotmale Full Cream Fresh Pasteurised Dairy Milk Tetra Pack '
           '1 Litre Family Size Value Pack'), findsOneWidget);
       expect(find.text('Proceed to checkout'), findsOneWidget);
@@ -347,7 +347,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(CheckoutScreen),
-          matching: find.text('Rs. 610'),
+          matching: find.text('LKR 610'),
         ),
         findsOneWidget,
       );
@@ -400,7 +400,7 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.text('Proceed to checkout'), findsOneWidget);
         // 540 + 1610 + 70
-        expect(find.textContaining('Rs. 2,220'), findsWidgets);
+        expect(find.textContaining('LKR 2,220'), findsWidgets);
 
         await tester.tap(plus('Kotmale Fresh Milk 1L'));
         await settle(tester);

@@ -151,7 +151,7 @@ void main() {
       expect(find.text('DAIRY & EGGS'), findsNothing, reason: 'no all-caps eyebrow');
       // W3: the price is stated ONCE, at hero size in the summary. The sticky
       // bar is the full-width "Add to cart" action and nothing else.
-      expect(find.text('Rs. 540'), findsOneWidget);
+      expect(find.text('LKR 540'), findsOneWidget);
       expect(find.text('Add to cart'), findsOneWidget);
     });
 
@@ -174,8 +174,8 @@ void main() {
       // The fresh backend copy wins (here: a changed selling price).
       pending.complete(_milkDetailWith({'selling_price': 560}));
       await settle(tester);
-      expect(find.text('Rs. 560'), findsOneWidget);
-      expect(find.text('Rs. 540'), findsNothing);
+      expect(find.text('LKR 560'), findsOneWidget);
+      expect(find.text('LKR 540'), findsNothing);
     });
 
     testWidgets('omits the description block when the backend has none',
@@ -467,7 +467,7 @@ void main() {
       expect(title.left, greaterThan(image.right),
           reason: 'info column sits beside the image');
       // Price shown once (no pinned phone bar on desktop).
-      expect(find.text('Rs. 540'), findsOneWidget);
+      expect(find.text('LKR 540'), findsOneWidget);
       expect(find.text('Add to cart'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

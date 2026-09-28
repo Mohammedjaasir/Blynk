@@ -93,11 +93,11 @@ describe('sourcing queue', () => {
       'POST /admin/orders/:id/items/:itemId/source': () => ok({ item: {} }),
     }));
     const dialog = await openSource();
-    expect(within(dialog).getByText('Rs. 450.00 / unit')).toBeInTheDocument();
+    expect(within(dialog).getByText('LKR 450.00 / unit')).toBeInTheDocument();
     expect(within(dialog).getByText(/does not change the customer’s price, the markup or the catalog cost/)).toBeInTheDocument();
 
     await userEvent.type(within(dialog).getByLabelText(/Actual unit cost/), '455.50');
-    expect(within(dialog).getByText(/vs estimate/)).toHaveTextContent('+Rs. 5.50');
+    expect(within(dialog).getByText(/vs estimate/)).toHaveTextContent('+LKR 5.50');
     await userEvent.selectOptions(within(dialog).getByLabelText(/Supplier/), 'sup-1');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Record sourcing' }));
 
@@ -154,7 +154,7 @@ describe('sourcing queue', () => {
     const row = (await screen.findByText('Pelwatte Salted Butter 200g')).closest('tr')!;
     await userEvent.click(within(row).getByRole('button', { name: 'Mark unavailable' }));
     const dialog = await screen.findByRole('dialog', { name: 'Mark item unavailable' });
-    expect(within(dialog).getByText('The order total drops by Rs. 805.00.')).toBeInTheDocument();
+    expect(within(dialog).getByText('The order total drops by LKR 805.00.')).toBeInTheDocument();
     expect(within(dialog).getByText('The customer is notified that the item is unavailable.')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark unavailable' }));
 

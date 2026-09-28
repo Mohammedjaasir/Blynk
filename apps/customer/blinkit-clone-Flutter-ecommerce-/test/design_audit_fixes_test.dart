@@ -13,7 +13,7 @@ import 'package:ecom/Services/Providers/address.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/UI/Widgets/Organisms/map_provider.dart';
 import 'package:ecom/UI/Widgets/Organisms/map_provider_config.dart';
-import 'package:ecom/UI/Widgets/Organisms/map_tile_config.dart' show kMapStyleAsset;
+import 'package:ecom/UI/Widgets/Organisms/map_tile_config.dart' show kMapStyleAsset, debugMapStyleSource;
 import 'package:ecom/app_colors.dart';
 import 'package:ecom/app_design.dart';
 import 'package:ecom/app_theme.dart';
@@ -100,11 +100,16 @@ Future<void> _awaitReal(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
-/// Google is the default map provider now; these tests assert the MapLibre
-/// adapter's "Map unavailable" state (no tile config in tests), so they pin it.
+/// These tests assert the MapLibre adapter's "Map unavailable" state, so they
+/// pin MapLibre and force the style to be unavailable (the default is now a
+/// real worldwide style URL).
 void _useMapLibreAdapter() {
   MapProviderConfig.debugOverride = MapProviderKind.maplibre;
-  addTearDown(() => MapProviderConfig.debugOverride = null);
+  debugMapStyleSource = () => null;
+  addTearDown(() {
+    MapProviderConfig.debugOverride = null;
+    debugMapStyleSource = null;
+  });
 }
 
 void _phone(WidgetTester tester, {double width = 360, double height = 800}) {

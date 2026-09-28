@@ -108,7 +108,7 @@ describe('Delivery queue', () => {
   it('shows a Done today summary from delivered rows', async () => {
     const delivered = summary({ assignment_status: 'DELIVERED', order_status: 'DELIVERED', total_amount: 900 });
     renderAs(ADMIN_WITH_RIDER, '/delivery', { 'GET /riders/deliveries': () => ok({ deliveries: [delivered] }) });
-    expect(await screen.findByText('1 delivered · Rs. 900 collected')).toBeInTheDocument();
+    expect(await screen.findByText('1 delivered · LKR 900 collected')).toBeInTheDocument();
   });
 });
 
@@ -147,13 +147,13 @@ describe('Delivery detail - happy path (pickup -> arrive -> collect cash)', () =
     await waitFor(() => expect(api.find('PATCH', `/riders/deliveries/${s.delivery_id}/status`)).toHaveLength(2));
     expect(api.find('PATCH', `/riders/deliveries/${s.delivery_id}/status`)[1].body).toEqual({ status: 'ARRIVED_AT_CUSTOMER' });
 
-    await user.click(await screen.findByRole('button', { name: /^Collect Rs\. 610/ }));
-    const dialog = await screen.findByRole('dialog', { name: /Collect Rs\. 610/ });
+    await user.click(await screen.findByRole('button', { name: /^Collect LKR 610/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Collect LKR 610/ });
     await user.click(within(dialog).getByRole('button', { name: 'Cash collected — complete' }));
     await waitFor(() => expect(api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)).toHaveLength(1));
     expect(api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)[0].body).toEqual({ amount: 610 });
 
-    expect(await screen.findByText('Rs. 610 collected')).toBeInTheDocument();
+    expect(await screen.findByText('LKR 610 collected')).toBeInTheDocument();
 
     // Never once, across the whole flow, did the client send a rider id.
     for (const call of [...api.find('PATCH', `/riders/deliveries/${s.delivery_id}/status`), ...api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)]) {
@@ -174,13 +174,13 @@ describe('COD collection - the amount cannot be freely edited', () => {
         ok({ settlement: { delivery_id: s.delivery_id, order_id: s.order_id, order_status: 'DELIVERED', payment_status: 'PAID', cod_collected_amount: 1690, delivered_at: '2026-09-22T10:00:00Z' } }),
     }).api;
 
-    await user.click(await screen.findByRole('button', { name: /^Collect Rs\. 1,690/ }));
-    const dialog = await screen.findByRole('dialog', { name: /Collect Rs\. 1,690/ });
+    await user.click(await screen.findByRole('button', { name: /^Collect LKR 1,690/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Collect LKR 1,690/ });
     // No input/textbox/spinbutton of any kind for the amount - a static
     // confirmation, not something to fat-finger a different value into.
     expect(within(dialog).queryAllByRole('textbox')).toHaveLength(0);
     expect(within(dialog).queryAllByRole('spinbutton')).toHaveLength(0);
-    expect(dialog).toHaveTextContent('Collect Rs. 1,690 in cash');
+    expect(dialog).toHaveTextContent('Collect LKR 1,690 in cash');
 
     await user.click(within(dialog).getByRole('button', { name: 'Cash collected — complete' }));
     await waitFor(() => expect(api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)[0]?.body).toEqual({ amount: 1690 }));

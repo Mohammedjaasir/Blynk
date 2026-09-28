@@ -8,6 +8,8 @@ import { Header } from '../components/Header';
 import { Sheet } from '../components/Sheet';
 import { StatusRail } from '../components/StatusRail';
 import { TrackingStatus } from '../components/TrackingStatus';
+import { DeliveryMap } from '../components/DeliveryMap';
+import { toLatLng } from '../lib/route';
 import { canReportFailure, isTrackable, nextAction, stage, statusLabel, statusTone } from '../lib/delivery';
 import { MESSAGES, errorCode, errorMessage } from '../lib/errors';
 import { formatMoney, formatPhone, formatTime, shortOrderNumber } from '../lib/format';
@@ -178,6 +180,7 @@ export function Delivery() {
 function Slip({ delivery: d, trackingState }: { delivery: DeliveryDetail; trackingState: TrackingState }) {
   const action = nextAction(d);
   const done = action.kind === 'none' && action.reason === 'done';
+  const destination = toLatLng(d.delivery_latitude, d.delivery_longitude);
   const closed = action.kind === 'none' && (action.reason === 'cancelled' || action.reason === 'failed');
 
   return (
@@ -210,6 +213,9 @@ function Slip({ delivery: d, trackingState }: { delivery: DeliveryDetail; tracki
       {action.kind === 'none' && action.reason === 'failed' && d.failure_reason ? (
         <p className="slip__note slip__note--stop">You reported: {d.failure_reason}</p>
       ) : null}
+
+      {/* The route to the customer while the rider still has to get there. */}
+      {destination && !done && !closed ? <DeliveryMap destination={destination} /> : null}
 
       <section className="dest" aria-label="Destination">
         <p className="dest__line1">{d.delivery_address_line1}</p>

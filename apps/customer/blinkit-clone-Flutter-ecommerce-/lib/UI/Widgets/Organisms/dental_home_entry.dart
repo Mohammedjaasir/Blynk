@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../Services/store_info.dart';
 import '../../../design/tokens.dart';
 
 /// Home's always-visible entry point into the dental clinics feature
@@ -28,7 +29,7 @@ class DentalHomeEntry extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(BlynkSpace.s16, 0, BlynkSpace.s16, BlynkSpace.s8),
       child: Semantics(
         button: true,
-        label: 'Dental clinics. Book an appointment with a dentist near you.',
+        label: 'Channel doctors in ${StoreInfo.hubName}. Book an appointment with a doctor near you.',
         excludeSemantics: true,
         child: InkWell(
           key: const Key('dental-clinics-entry'),
@@ -50,10 +51,10 @@ class DentalHomeEntry extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('Dental clinics', style: BlynkText.heading),
+                      const Text('Channel doctors', style: BlynkText.heading),
                       const SizedBox(height: BlynkSpace.s4),
                       Text(
-                        'Book an appointment with a dentist near you',
+                        'Book a doctor in ${StoreInfo.hubName}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: BlynkText.caption.copyWith(color: BlynkColors.ink2),

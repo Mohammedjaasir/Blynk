@@ -2238,3 +2238,42 @@ a.cat-row__main {
     box-shadow: 0 0 0 1px var(--line);
   }
 }
+/* Delivery map (2026-09-28) */
+.delivery-map { margin: 12px 0; }
+.delivery-map__canvas {
+  height: 260px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #eef1f4;
+}
+.delivery-map__summary {
+  margin: 8px 0 0;
+  font-weight: 700;
+}
+.map-me {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1a73e8;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.35);
+}
+.map-note { margin: 12px 0; color: #4b5364; }
+
+/* Location picker (2026-09-28): set a hospital's exact spot on the map. */
+.location-picker { margin: 4px 0 12px; }
+.location-picker__canvas {
+  height: 280px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #eef1f4;
+}
+.location-picker__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}

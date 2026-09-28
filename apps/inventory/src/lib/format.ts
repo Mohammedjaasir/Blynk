@@ -2,7 +2,7 @@ import type { AdjustmentType, ItemStatus, OrderStatus } from '../api/types';
 
 const money = new Intl.NumberFormat('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export const formatMoney = (value: number) => `Rs. ${money.format(value)}`;
+export const formatMoney = (value: number) => `LKR ${money.format(value)}`;
 
 /** Signed quantity for ledger deltas: "+24", "−3" (true minus sign). */
 export const formatDelta = (delta: number) => (delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`);

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
 
 import 'package:ecom/Services/store_info.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
@@ -10,7 +9,11 @@ import 'package:ecom/design/tokens.dart';
 
 class OnboardingSlideData {
   final String assetPath;
-  final bool isLottie;
+
+  /// True for the animated slide: [assetPath] is an animated WebP and
+  /// [stillAssetPath] is shown instead under reduced motion.
+  final bool isAnimated;
+  final String? stillAssetPath;
   // The asset's own width/height ratio, so the hero card is sized to hug the
   // artwork exactly (BoxFit.contain inside a mismatched box is what causes
   // visible letterboxing/dead space around the image).
@@ -21,7 +24,8 @@ class OnboardingSlideData {
 
   const OnboardingSlideData({
     required this.assetPath,
-    this.isLottie = false,
+    this.isAnimated = false,
+    this.stillAssetPath,
     required this.aspectRatio,
     required this.titleLine1,
     required this.titleLine2,
@@ -44,15 +48,20 @@ class _LoginScreenState extends State<LoginScreen> {
   static const List<OnboardingSlideData> _slides = [
     OnboardingSlideData(
       assetPath: 'Assets/Images/onboarding_groceries.png',
-      isLottie: false,
       aspectRatio: 452 / 516,
       titleLine1: 'Your groceries,',
       titleLine2: 'delivered.',
       description: 'Order groceries from our local store\nin ${StoreInfo.hubName}.',
     ),
     OnboardingSlideData(
-      assetPath: 'Assets/cart_packing.json',
-      isLottie: true,
+      // 2026-09-28: was a Lottie (cart_packing.json), which stuttered and hung
+      // on phones - 36 vector layers drawn from scratch every frame (measured
+      // ~15-18 fps even with a drawing cache). The same animation, rendered
+      // once by lottie-web into an animated WebP (30 fps, 720 px), is played
+      // by the platform image decoder off the UI thread: no per-frame drawing.
+      assetPath: 'Assets/Images/cart_packing.webp',
+      isAnimated: true,
+      stillAssetPath: 'Assets/Images/cart_packing_still.png',
       aspectRatio: 1.0,
       titleLine1: 'Order any time,',
       titleLine2: 'pay on delivery.',
@@ -278,34 +287,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ),
                                       );
                                     },
-                                    child: slide.isLottie
-                                        // Lottie assets here have a
-                                        // transparent composition (no
-                                        // background layer) with real
-                                        // per-element motion - wrapping them
-                                        // in a white card + shadow is what
-                                        // reads as "content trapped in a
-                                        // box". Render directly so it blends
-                                        // into the page instead.
+                                    child: slide.isAnimated
+                                        // The animation has a transparent
+                                        // background with real per-element
+                                        // motion - wrapping it in a white card
+                                        // + shadow is what reads as "content
+                                        // trapped in a box". Render directly so
+                                        // it blends into the page instead.
                                         ? SizedBox(
                                             width: cardWidth,
                                             height: cardHeight,
                                             // Its own layer: each animation
-                                            // frame repaints only the
-                                            // animation, not the slide.
+                                            // frame repaints only the image.
                                             child: RepaintBoundary(
-                                              child: Lottie.asset(
-                                                slide.assetPath,
+                                              child: Image.asset(
+                                                // Reduced motion: a still frame,
+                                                // no endless loop.
+                                                MediaQuery.disableAnimationsOf(context)
+                                                    ? slide.stillAssetPath!
+                                                    : slide.assetPath,
+                                                key: const Key('onboarding-animation'),
                                                 fit: BoxFit.contain,
-                                                // The file is authored at 24 fps
-                                                // and Lottie plays at that rate by
-                                                // default, which on a 60-120 Hz
-                                                // phone read as lag (2026-09-28).
-                                                // max = interpolate every display
-                                                // frame.
-                                                frameRate: FrameRate.max,
-                                                // Reduced motion: no endless loop.
-                                                repeat: !MediaQuery.disableAnimationsOf(context),
+                                                gaplessPlayback: true,
+                                                filterQuality: FilterQuality.medium,
                                               ),
                                             ),
                                           )

@@ -720,7 +720,7 @@ describe('End-to-end: standing up a bookable clinic', () => {
 
       expect(await screen.findByText('Dr. Nadia Farook')).toBeInTheDocument();
       expect(screen.getByText('Orthodontist')).toBeInTheDocument();
-      expect(screen.getByText('Rs. 4,200')).toBeInTheDocument();
+      expect(screen.getByText('LKR 4,200')).toBeInTheDocument();
       expect(screen.getByText('Active')).toBeInTheDocument();
     }
   });

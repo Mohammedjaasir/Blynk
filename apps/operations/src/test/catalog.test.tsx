@@ -130,9 +130,9 @@ describe('Products', () => {
     });
 
     expect(await screen.findByText('Fresh Milk')).toBeInTheDocument();
-    expect(screen.getByText('Rs. 360.00')).toBeInTheDocument();
+    expect(screen.getByText('LKR 360.00')).toBeInTheDocument();
     expect(screen.getByText('Old Stock Yoghurt')).toBeInTheDocument();
-    expect(screen.getByText('Rs. 210.00')).toBeInTheDocument();
+    expect(screen.getByText('LKR 210.00')).toBeInTheDocument();
     expect(screen.getByText('Inactive')).toBeInTheDocument();
   });
 
@@ -202,7 +202,7 @@ describe('Product form', () => {
     await user.type(screen.getByLabelText('Product name'), 'Coconut Water');
     await user.type(screen.getByLabelText('SKU'), 'CW-500');
     await user.type(screen.getByLabelText(/^Unit/), '500 ml');
-    await user.type(screen.getByLabelText('Purchase cost (Rs.)'), '150');
+    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '150');
     await user.click(screen.getByRole('button', { name: 'Create product' }));
 
     await waitFor(() => {
@@ -232,7 +232,7 @@ describe('Product form', () => {
     await user.type(screen.getByLabelText('Product name'), 'X');
     await user.type(screen.getByLabelText('SKU'), 'ab');
     await user.type(screen.getByLabelText(/^Unit/), 'ea');
-    await user.type(screen.getByLabelText('Purchase cost (Rs.)'), '10');
+    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '10');
     await user.click(screen.getByRole('button', { name: 'Create product' }));
 
     expect(await screen.findByText('SKU must be at least 3 characters')).toBeInTheDocument();
@@ -249,7 +249,7 @@ describe('Product form', () => {
     await user.type(screen.getByLabelText('Product name'), 'Coconut Water');
     await user.type(screen.getByLabelText('SKU'), 'CW-500');
     await user.type(screen.getByLabelText(/^Unit/), '500 ml');
-    await user.type(screen.getByLabelText('Purchase cost (Rs.)'), '150');
+    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '150');
     await user.click(screen.getByRole('button', { name: 'Create product' }));
 
     expect(await screen.findByText("Product with SKU 'CW-500' already exists.")).toBeInTheDocument();

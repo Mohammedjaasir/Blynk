@@ -1,9 +1,9 @@
 const money = new Intl.NumberFormat('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const wholeMoney = new Intl.NumberFormat('en-LK', { maximumFractionDigits: 0 });
 
-/** "Rs. 1,690" for whole rupees, "Rs. 1,690.50" otherwise - the cash a rider counts. */
+/** "LKR 1,690" for whole rupees, "LKR 1,690.50" otherwise - the cash a rider counts. */
 export const formatMoney = (value: number) =>
-  `Rs. ${Number.isInteger(value) ? wholeMoney.format(value) : money.format(value)}`;
+  `LKR ${Number.isInteger(value) ? wholeMoney.format(value) : money.format(value)}`;
 
 const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Colombo' });
 

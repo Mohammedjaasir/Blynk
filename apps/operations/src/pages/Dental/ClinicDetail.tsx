@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Link, useParams } from 'react-router-dom';
 import { dental } from '../../api/resources';
 import { DENTAL_SPECIALTY_LABEL, type ClinicDoctorRosterRow, type DentalClinic, type DentalDoctor } from '../../api/types';
-import { ClinicLocationMap } from '../../components/ClinicLocationMap';
+import { LocationPreviewMap } from '../../components/LocationPickerMap';
 import { PageHeader } from '../../components/Layout';
 import { Badge, EmptyState, Field, Spinner } from '../../components/ui';
 import { dentalErrorMessage } from '../../lib/dental';
@@ -99,7 +99,7 @@ export function ClinicDetail() {
       ) : null}
       {error ? <p className="field__error">{error}</p> : null}
 
-      {clinic ? <ClinicLocationMap latitude={clinic.latitude} longitude={clinic.longitude} label={clinic.name} /> : null}
+      {clinic ? <LocationPreviewMap latitude={clinic.latitude} longitude={clinic.longitude} label={clinic.name} /> : null}
 
       {roster === null ? (
         <Spinner label="Loading roster" />
@@ -244,7 +244,7 @@ function AttachDoctorDialog({
                 ))}
               </select>
             </Field>
-            <Field label="Consultation fee (Rs.)" hint="Optional, indicative - payable at the clinic">
+            <Field label="Consultation fee (LKR)" hint="Optional, indicative - payable at the clinic">
               <input className="input" inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} />
             </Field>
           </>
@@ -304,7 +304,7 @@ function EditFeeDialog({
     <div className="modal" role="dialog" aria-modal="true" aria-label="Edit consultation fee">
       <form className="modal__panel" onSubmit={submit}>
         <h2 className="modal__title">Edit fee — {row.full_name}</h2>
-        <Field label="Consultation fee (Rs.)" hint="Optional, indicative - payable at the clinic">
+        <Field label="Consultation fee (LKR)" hint="Optional, indicative - payable at the clinic">
           <input className="input" inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} />
         </Field>
         {error ? (

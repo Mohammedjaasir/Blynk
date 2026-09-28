@@ -10,57 +10,40 @@ import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
 import '../../../Services/Providers/product.provider.dart';
 
-/// Home's category carousel: a "Categories / See all" header over one
-/// horizontally scrolling row of circular tiles, in the backend's own
-/// display order, with an "All" tile first.
+/// Home's categories: a "Categories / See all" header over a 4-across grid
+/// of soft rounded-square tiles, in the backend's own display order
+/// (2026-09-28, owner's reference - it replaced a scrolling row of circles).
 ///
-/// 2026-09-24: the tiles are **links**, not a filter. Tapping one opens
-/// `/products` for that category — the screen that already exists for
-/// browsing one category, and which titles itself after it, carries its own
-/// category sidebar and lists everything in it. They used to re-query the
-/// section underneath and leave you on Home, which meant Home slowly turned
-/// into a category screen instead of sending you to one.
-///
-/// "All" opens the same screen with no slug — every product — so it behaves
-/// exactly like the real categories beside it rather than being a control
-/// dressed up as one. Nothing here is ever drawn selected: Home holds no
-/// filter to be selected for.
-///
-/// "See all" goes to `/categories`, the full grid of every category.
-///
-/// The tile itself is the shared [CategoryWidget], so Home and the Categories
-/// screen can never drift apart. Rail height is **measured** from the circle
-/// plus the reserved label at the current text scale, never a fixed ratio, so
-/// a large system font grows the rail instead of clipping it.
+/// - At most two rows. With more than 8 categories, the first 7 show and the
+///   8th tile is **More**, which opens `/categories` - the full grid.
+/// - Tiles are **links**, not a filter: each opens `/products` for that
+///   category, the screen that exists for browsing one.
+/// - The tile is the shared [CategoryWidget] (in its rounded form), so its
+///   photo, fallback glyph, press and focus states match the Categories
+///   screen exactly.
+/// - Row height is **measured** from the tile plus the reserved label at the
+///   current text scale, never a fixed ratio, so a large system font grows the
+///   grid instead of clipping the labels.
 class HomeScreenCateogoryWidget extends StatefulWidget {
   const HomeScreenCateogoryWidget({super.key});
 
-  /// The "All" tile. Its slug is the empty string the provider already uses
-  /// as its "every product" cache key, so nothing about it is invented or
-  /// hidden from the backend.
-  static const CategoryModel allChip =
-      CategoryModel(id: '', name: 'All', slug: '');
+  /// Columns in the grid.
+  static const int columns = 4;
 
-  /// "All" has no name for `fallbackGlyphFor` to map, so its grocery-basket
-  /// glyph is named here. It is the same size and surface as every real
-  /// category — it reads as one of them, not as a control bolted on front.
-  static const IconData allGlyph = BlynkIcons.product;
+  /// Tiles shown before "More" takes the last slot: two full rows.
+  static const int maxTiles = 8;
 
-  /// One tile's width: the circle, plus a little room either side so a
-  /// two-word name has somewhere to wrap without touching its neighbour.
-  /// Read off [CategoryWidget] so the rail and the Categories grid cannot
-  /// drift apart.
-  static double tileWidthFor(double width) =>
-      CategoryWidget.diameterFor(width) + BlynkSpace.s16;
+  /// The "More" tile: opens the full Categories screen. Not a category, so it
+  /// has no slug and never reaches the products screen.
+  static const CategoryModel moreTile = CategoryModel(id: 'more', name: 'More', slug: '');
+  static const IconData moreGlyph = Icons.more_horiz_rounded;
 
-  /// The rail's height: the circle plus the gap and the reserved label at
-  /// the live text scale.
-  static double heightFor(BuildContext context, double width) =>
-      CategoryWidget.heightFor(context, CategoryWidget.diameterFor(width));
+  /// The tile's square size in a cell [cellWidth] wide: a little inset from
+  /// the cell, capped so a tablet shows the same tile, not a giant one.
+  static double tileSizeFor(double cellWidth) => (cellWidth - BlynkSpace.s8).clamp(48.0, 84.0);
 
-  /// How many skeleton tiles the loading rail shows. Enough to fill a phone
-  /// and read as a row, not so many that the lazy list builds off-screen work.
-  static const int skeletonCount = 5;
+  /// Loading placeholders: one full row.
+  static const int skeletonCount = columns;
 
   @override
   State<HomeScreenCateogoryWidget> createState() => _HomeScreenCateogoryWidgetState();
@@ -79,35 +62,34 @@ class _HomeScreenCateogoryWidgetState extends State<HomeScreenCateogoryWidget> {
   Widget build(BuildContext context) {
     final width = Responsive.of(context).width;
     final gutter = BlynkSpace.gutterFor(width);
-    final tileWidth = HomeScreenCateogoryWidget.tileWidthFor(width);
-    final railHeight = HomeScreenCateogoryWidget.heightFor(context, width);
+    const spacing = BlynkSpace.s12;
+    final cellWidth =
+        (width - gutter * 2 - spacing * (HomeScreenCateogoryWidget.columns - 1)) / HomeScreenCateogoryWidget.columns;
+    final tile = HomeScreenCateogoryWidget.tileSizeFor(cellWidth);
+    final cellHeight = CategoryWidget.heightFor(context, tile);
 
-    Widget rail({required int count, required IndexedWidgetBuilder builder}) {
-      return SizedBox(
-        height: railHeight,
-        // No visible scrollbar: on web and desktop Flutter draws one over a
-        // horizontal list by default, which cuts across the labels and makes
-        // a premium rail look like a scroll area.
-        child: ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            // Gutter-aligned on both edges, so the first tile lines up with
-            // the section header above it.
-            padding: EdgeInsets.symmetric(horizontal: gutter),
-            itemCount: count,
-            separatorBuilder: (_, __) => const SizedBox(width: BlynkSpace.s12),
-            itemBuilder: (context, index) =>
-                SizedBox(width: tileWidth, child: builder(context, index)),
+    Widget grid({required int count, required IndexedWidgetBuilder builder}) {
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: gutter),
+        child: GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: HomeScreenCateogoryWidget.columns,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: BlynkSpace.s16,
+            mainAxisExtent: cellHeight,
           ),
+          itemCount: count,
+          itemBuilder: builder,
         ),
       );
     }
 
-    // Shown over the rail itself and over the loading rail, so the section
-    // does not pop into place once categories arrive. Not shown over the
-    // failure state, which states its own title.
+    // Shown over the grid and over the loading grid, so the section does not
+    // pop into place once categories arrive. Not shown over the failure
+    // state, which states its own title.
     Widget titled(Widget child) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -127,7 +109,7 @@ class _HomeScreenCateogoryWidgetState extends State<HomeScreenCateogoryWidget> {
         if (productProvider.isLoadingCategories) {
           return SliverToBoxAdapter(
             child: titled(
-              rail(
+              grid(
                 count: HomeScreenCateogoryWidget.skeletonCount,
                 builder: (_, __) => const CategoryTileSkeleton(),
               ),
@@ -153,33 +135,33 @@ class _HomeScreenCateogoryWidgetState extends State<HomeScreenCateogoryWidget> {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
 
-        // "All" first, then every real category the backend returned.
+        final overflow = categories.length > HomeScreenCateogoryWidget.maxTiles;
+        final shown = overflow ? categories.take(HomeScreenCateogoryWidget.maxTiles - 1).toList() : categories;
+
         return SliverToBoxAdapter(
           child: titled(
-            rail(
-            count: categories.length + 1,
-            builder: (context, index) {
-              final isAll = index == 0;
-              final category =
-                  isAll ? HomeScreenCateogoryWidget.allChip : categories[index - 1];
-              // `null` is the products screen's own "every product" argument.
-              final slug = isAll ? null : category.slug;
-
-              // Merged so the tile is announced once, as a link, rather than
-              // as a label and a target side by side.
-              return MergeSemantics(
-                child: Semantics(
-                  button: true,
-                  child: CategoryWidget(
-                    category: category,
-                    glyph: isAll ? HomeScreenCateogoryWidget.allGlyph : null,
-                    onTap: () => Navigator.of(context).pushNamed(
-                      '/products',
-                      arguments: slug,
+            grid(
+              count: shown.length + (overflow ? 1 : 0),
+              builder: (context, index) {
+                final isMore = overflow && index == shown.length;
+                final category = isMore ? HomeScreenCateogoryWidget.moreTile : shown[index];
+                // Merged so the tile is announced once, as a link, rather than
+                // as a label and a target side by side.
+                return MergeSemantics(
+                  child: Semantics(
+                    button: true,
+                    child: CategoryWidget(
+                      key: isMore ? const Key('categories-more') : null,
+                      category: category,
+                      rounded: true,
+                      diameter: tile,
+                      glyph: isMore ? HomeScreenCateogoryWidget.moreGlyph : null,
+                      onTap: () => isMore
+                          ? Navigator.of(context).pushNamed('/categories')
+                          : Navigator.of(context).pushNamed('/products', arguments: category.slug),
                     ),
                   ),
-                ),
-              );
+                );
               },
             ),
           ),

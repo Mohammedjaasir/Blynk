@@ -1070,3 +1070,149 @@ a {
     padding-top: 28px;
   }
 }
+
+/* Delivery map (2026-09-28) */
+.delivery-map { margin: 12px 0; }
+.delivery-map__canvas {
+  height: 260px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #eef1f4;
+}
+.delivery-map__summary {
+  margin: 8px 0 0;
+  font-weight: 700;
+}
+.map-me {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1a73e8;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.35);
+}
+.map-note { margin: 12px 0; color: #4b5364; }
+
+/* ==========================================================================
+   Rider welcome (2026-09-28) - after the owner's reference. One screen, no
+   scroll: brand, headline, scene, three feature cards, the actions.
+   ========================================================================== */
+.rwelcome {
+  height: 100dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 12px var(--gutter) 20px;
+  background: var(--paper);
+  overflow-x: hidden;
+}
+.rwelcome__top {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+}
+.rwelcome__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1;
+}
+.rwelcome__brand img { width: 44px; height: 44px; object-fit: contain; margin-bottom: 2px; }
+.rwelcome__skip {
+  position: absolute;
+  right: 0;
+  top: 6px;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.rwelcome__title {
+  margin: 12px 0 0;
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.rwelcome__title em { font-style: normal; font-size: 38px; color: var(--green); }
+.rwelcome__lead { margin: 8px 8px 0; max-width: 360px; font-size: 15px; line-height: 1.4; color: var(--ink-2); }
+.rwelcome__art { width: calc(100% + 2 * var(--gutter)); max-width: 560px; margin-top: 8px; }
+.rwelcome__art img {
+  display: block;
+  width: 100%;
+  /* Sized to the screen so both buttons always fit without scrolling. */
+  height: clamp(150px, 28dvh, 320px);
+  object-fit: cover;
+  object-position: 45% 55%;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 85%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 85%, transparent 100%);
+}
+.rwelcome__features {
+  list-style: none;
+  margin: -12px 0 0;
+  padding: 0;
+  width: 100%;
+  max-width: 520px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  position: relative;
+}
+.rwelcome__features li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 6px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(18, 21, 31, 0.07);
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.25;
+}
+.rwelcome__features strong { font-size: 13px; font-weight: 800; color: var(--ink); }
+.rwelcome__icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 2px; }
+.rwelcome__icon--yellow { background: #fff3b8; color: #8a6400; }
+.rwelcome__icon--green { background: var(--green-wash); color: var(--green); }
+.rwelcome__icon--blue { background: #e3efff; color: #1f6fd6; }
+.rwelcome__actions { width: 100%; max-width: 520px; margin-top: auto; padding-top: 12px; display: grid; gap: 10px; }
+.rwelcome__cta {
+  min-height: 56px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--ink);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.rwelcome__cta span { margin-left: 8px; }
+.rwelcome__secondary {
+  min-height: 52px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rwelcome__cta:focus-visible,
+.rwelcome__secondary:focus-visible,
+.rwelcome__skip:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }

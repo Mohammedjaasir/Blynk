@@ -36,6 +36,7 @@ class CategoryWidget extends StatefulWidget {
     this.onTap,
     this.glyph,
     this.diameter,
+    this.rounded = false,
   });
 
   final CategoryModel category;
@@ -51,6 +52,10 @@ class CategoryWidget extends StatefulWidget {
   /// which is what every caller should use; a grid passes its own only when
   /// a narrow cell cannot hold the standard size.
   final double? diameter;
+
+  /// A soft rounded square instead of a circle - Home's 4-across category
+  /// grid (2026-09-28, owner's reference). The Categories screen keeps circles.
+  final bool rounded;
 
   /// The circle's diameter for a screen [width]. Capped per class, so the
   /// tile has one intentional size rather than a stretched one.
@@ -120,6 +125,7 @@ class _CategoryWidgetState extends State<CategoryWidget> {
               isActive: widget.isActive,
               glyph: widget.glyph,
               size: size,
+              rounded: widget.rounded,
               // Hover and press land on the same step: on a tile this small a
               // second, fainter step is not perceptible, and two near-identical
               // greys read as a flicker when a finger becomes a cursor.
@@ -154,6 +160,7 @@ class _Disc extends StatelessWidget {
     required this.isActive,
     required this.glyph,
     required this.size,
+    this.rounded = false,
     this.active = false,
     this.focused = false,
   });
@@ -162,6 +169,9 @@ class _Disc extends StatelessWidget {
   final bool isActive;
   final IconData? glyph;
   final double size;
+
+  /// Rounded square instead of a circle; see [CategoryWidget.rounded].
+  final bool rounded;
 
   /// Pressed or hovered — the surface steps down one notch.
   final bool active;
@@ -208,13 +218,16 @@ class _Disc extends StatelessWidget {
         curve: BlynkMotion.easeOut,
         decoration: BoxDecoration(
           color: _surface,
-          shape: BoxShape.circle,
+          shape: rounded ? BoxShape.rectangle : BoxShape.circle,
+          borderRadius: rounded ? BorderRadius.circular(size * 0.28) : null,
           // Drawn only when selected or focused, but the inset below is
           // unconditional, so no dimension changes when it appears.
           border: _border,
         ),
         padding: const EdgeInsets.all(BlynkCategory.photoInset),
-        child: ClipOval(
+        child: ClipRRect(
+          // A circle is a rounded rect with half-size corners.
+          borderRadius: BorderRadius.circular(rounded ? size * 0.2 : size),
           child: hasPhoto
               ? Image.network(
                   url,

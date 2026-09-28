@@ -159,7 +159,7 @@ export function Products() {
                 </td>
                 <td>{product.category_name ?? categoryName(product.category_id)}</td>
                 <td className="num">
-                  Rs. {Number(product.calculated_selling_price ?? 0).toFixed(2)}
+                  LKR {Number(product.calculated_selling_price ?? 0).toFixed(2)}
                 </td>
                 <td>
                   <Badge tone={product.is_active ? 'active' : 'inactive'}>

@@ -57,3 +57,66 @@ import { markIntroSeen } from '../pages/Welcome';
 beforeEach(() => {
   markIntroSeen();
 });
+/**
+ * maplibre-gl needs WebGL and Blob URLs, which jsdom has neither of. Every
+ * test gets this stand-in; DeliveryMap's own test inspects what was asked of
+ * it (centre, markers, route data) through `mapInstances`.
+ */
+import { vi } from 'vitest';
+vi.mock('maplibre-gl', () => {
+  class FakeMarker {
+    lngLat: [number, number] | null = null;
+    options: unknown;
+    constructor(options?: unknown) {
+      this.options = options;
+    }
+    markerHandlers: Record<string, () => void> = {};
+    setLngLat(ll: [number, number]) {
+      this.lngLat = ll;
+      return this;
+    }
+    getLngLat() {
+      return { lng: this.lngLat![0], lat: this.lngLat![1] };
+    }
+    addTo(map?: FakeMap) {
+      map?.markers.push(this);
+      return this;
+    }
+    on(event: string, handler: () => void) {
+      this.markerHandlers[event] = handler;
+      return this;
+    }
+  }
+  const mapInstances: FakeMap[] = [];
+  class FakeMap {
+    options: { center: [number, number] };
+    sources: Record<string, { data: unknown; setData(d: unknown): void }> = {};
+    handlers: Record<string, (e?: unknown) => void> = {};
+    markers: FakeMarker[] = [];
+    fitted: unknown = null;
+    centre: unknown = null;
+    constructor(options: { center: [number, number] }) {
+      this.options = options;
+      mapInstances.push(this);
+    }
+    on(event: string, handler: (e?: unknown) => void) {
+      this.handlers[event] = handler;
+    }
+    easeTo(options: { center: unknown }) {
+      this.centre = options.center;
+    }
+    addSource(id: string, spec: { data: unknown }) {
+      const source = { data: spec.data, setData(d: unknown) { source.data = d; } };
+      this.sources[id] = source;
+    }
+    addLayer() {}
+    getSource(id: string) {
+      return this.sources[id];
+    }
+    fitBounds(bounds: unknown) {
+      this.fitted = bounds;
+    }
+    remove() {}
+  }
+  return { default: { Map: FakeMap, Marker: FakeMarker }, mapInstances };
+});

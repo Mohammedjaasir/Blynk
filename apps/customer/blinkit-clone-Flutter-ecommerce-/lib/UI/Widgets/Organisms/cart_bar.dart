@@ -94,7 +94,7 @@ class _BarState extends State<_Bar> {
     // this bar exists to show, so it carries the price ramp in full-contrast
     // paper; the count is the supporting line, one step down the size ramp
     // and one step down the contrast ramp (`onInkMuted`, still 9.09:1). A
-    // single line gave "1 item" and "Rs. 624" identical weight, which is
+    // single line gave "1 item" and "LKR 624" identical weight, which is
     // what made the bar read flat.
     final left = Column(
       mainAxisSize: MainAxisSize.min,

@@ -25,7 +25,7 @@ describe('Rider deliveries', () => {
   const RIDER_A = 'f0000001-0000-0000-0000-000000000001';
   const RIDER_B = 'f0000009-0000-0000-0000-00000000000b';
   const DARK_STORE = '018dc3f0-4a82-789a-8b1b-947f61ad8821';
-  const MILK = 'b0000001-0000-0000-0000-000000000001'; // Kotmale 1L, Rs. 540, UNTRACKED
+  const MILK = 'b0000001-0000-0000-0000-000000000001'; // Kotmale 1L, LKR 540, UNTRACKED
   const tokens = {
     customer: generateAccessToken(customer),
     admin: generateAccessToken(admin),

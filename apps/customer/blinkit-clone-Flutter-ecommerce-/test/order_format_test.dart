@@ -13,20 +13,20 @@ import 'fixtures/order_fixtures.dart';
 
 void main() {
   test('money shows cents only when there are any', () {
-    expect(formatLkr(1955), 'Rs. 1,955');
-    expect(formatLkr(1214.5), 'Rs. 1,214.50');
-    expect(formatLkr(70), 'Rs. 70');
+    expect(formatLkr(1955), 'LKR 1,955');
+    expect(formatLkr(1214.5), 'LKR 1,214.50');
+    expect(formatLkr(70), 'LKR 70');
   });
 
   test('money decides whole-vs-cents from the rounded value, not the raw double', () {
     // 999.999 rounds to 1000.00 for display; it must not show spurious cents.
-    expect(formatLkr(999.999), 'Rs. 1,000');
+    expect(formatLkr(999.999), 'LKR 1,000');
     // 1955.004 rounds to 1955.00 for display; same rule.
-    expect(formatLkr(1955.004), 'Rs. 1,955');
-    expect(formatLkr(0), 'Rs. 0');
-    expect(formatLkr(1000000), 'Rs. 1,000,000');
-    expect(formatLkr(1214.5), 'Rs. 1,214.50');
-    expect(formatLkr(70.1), 'Rs. 70.10');
+    expect(formatLkr(1955.004), 'LKR 1,955');
+    expect(formatLkr(0), 'LKR 0');
+    expect(formatLkr(1000000), 'LKR 1,000,000');
+    expect(formatLkr(1214.5), 'LKR 1,214.50');
+    expect(formatLkr(70.1), 'LKR 70.10');
   });
 
   test('times are local and human', () {
@@ -42,7 +42,7 @@ void main() {
       orderJson(status: 'OUT_FOR_DELIVERY', delivery: {'assignment_status': 'ARRIVED_AT_CUSTOMER'}),
     );
     expect(orderStatusSentence(arrived), 'Your rider has arrived.');
-    expect(paymentLine(OrderModel.fromJson(orderJson())), 'Cash on delivery — pay Rs. 1,955 to the rider');
+    expect(paymentLine(OrderModel.fromJson(orderJson())), 'Cash on delivery — pay LKR 1,955 to the rider');
     expect(paymentLine(OrderModel.fromJson(restagedDeliveredJson())), 'Paid in cash');
     expect(paymentLine(OrderModel.fromJson(orderJson(status: 'CANCELLED'))), 'Nothing to pay');
     expect(paymentLine(OrderModel.fromJson(orderJson(status: 'FAILED'))), 'Not paid');

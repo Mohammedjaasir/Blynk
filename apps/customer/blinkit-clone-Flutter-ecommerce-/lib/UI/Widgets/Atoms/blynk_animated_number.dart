@@ -7,7 +7,7 @@ import 'money_text.dart';
 /// A money amount that counts to its new value instead of jumping to it.
 ///
 /// The cart bar's total is the one number a customer watches change as they
-/// tap. Cutting from `Rs. 936` to `Rs. 1,541` reads as a replacement; counting
+/// tap. Cutting from `LKR 936` to `LKR 1,541` reads as a replacement; counting
 /// up reads as the thing they just did having an effect. That is the whole
 /// job of this widget.
 ///
@@ -42,8 +42,8 @@ class BlynkAnimatedNumber extends StatelessWidget {
       curve: BlynkMotion.easeOut,
       builder: (context, value, _) => MoneyText(
         // In-between values are almost never whole, and compact money shows
-        // cents whenever there are any - so a count from Rs. 258 to Rs. 516
-        // flickered through "Rs. 300.60". Count in whole rupees unless the
+        // cents whenever there are any - so a count from LKR 258 to LKR 516
+        // flickered through "LKR 300.60". Count in whole rupees unless the
         // amount it lands on has cents itself.
         amount == amount.roundToDouble() ? value.roundToDouble() : value,
         style: style,

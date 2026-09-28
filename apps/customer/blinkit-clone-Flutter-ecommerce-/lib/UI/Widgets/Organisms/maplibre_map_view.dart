@@ -41,11 +41,14 @@ import '../../../design/tokens.dart';
 const double _fitPadding = 48;
 const Duration _fitDuration = BlynkMotion.camera;
 
-/// The bundled style with the tile URL substituted (map_tile_config.dart), or
-/// null when it cannot be prepared safely - the caller then shows "Map
-/// unavailable" rather than a map built from a guessed URL. Shared by every map
-/// widget in this file.
+/// The style every map widget in this file loads: by default the worldwide
+/// OpenFreeMap style URL (see [resolveMapStyleSource]); for `self-hosted`, the
+/// bundled style with the API's tile URL substituted (map_tile_config.dart).
+/// Null when neither can be prepared safely - the caller then shows "Map
+/// unavailable" rather than a map built from a guessed URL.
 Future<String?> _prepareMapStyle() async {
+  final source = currentMapStyleSource();
+  if (source != kSelfHostedStyle) return source;
   try {
     final raw = await rootBundle.loadString(kMapStyleAsset);
     final tilesUrl = resolveMapTilesUrlFromEnvironment();

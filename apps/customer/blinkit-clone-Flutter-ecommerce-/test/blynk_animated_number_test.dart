@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_animated_number.dart';
 import 'package:ecom/design/motion.dart';
 
-/// Seen on the emulator (2026-09-26): the cart total counting from Rs. 258 to
-/// Rs. 516 flickered through "Rs. 300.60", "Rs. 431.76" - in-between values
+/// Seen on the emulator (2026-09-26): the cart total counting from LKR 258 to
+/// LKR 516 flickered through "LKR 300.60", "LKR 431.76" - in-between values
 /// are rarely whole and compact money shows cents whenever there are any.
 Widget _host(double amount) => MaterialApp(
       home: Scaffold(body: Center(child: BlynkAnimatedNumber(amount))),
