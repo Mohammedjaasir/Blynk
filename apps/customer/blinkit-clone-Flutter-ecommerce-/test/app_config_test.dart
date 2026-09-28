@@ -10,12 +10,14 @@ AppConfig config({
   String defineTiles = '',
   Map<String, String> dotenvValues = const {},
   bool release = false,
+  bool allowLanHttp = false,
 }) =>
     AppConfig(
       defineApiBaseUrl: define,
       defineMapTilesUrl: defineTiles,
       dotenvLookup: (key) => dotenvValues[key],
       isRelease: release,
+      allowLanHttp: allowLanHttp,
     );
 
 // Every spelling of "this machine / this network segment" that release must
@@ -140,6 +142,150 @@ void main() {
     test('nothing set is null (there is no fallback for tiles)', () {
       expect(config().mapTilesUrl, isNull);
       expect(config(dotenvValues: {'MAP_TILES_URL': '   '}).mapTilesUrl, isNull);
+    });
+  });
+
+  // 2026-09-27: the LAN test switch (--dart-define=ALLOW_LAN_HTTP=true) for a
+  // release APK on a phone against a backend on the same Wi-Fi. Default
+  // builds must behave exactly as before; the switch opens http to private
+  // LAN IPv4 literals and nothing else.
+  group('ALLOW_LAN_HTTP', () {
+    ConfigProblem? defaultBuild(String api) => config(define: api, release: true).validate();
+    ConfigProblem? lanBuild(String api) =>
+        config(define: api, release: true, allowLanHttp: true).validate();
+    const lan = 'http://192.168.1.50:4000/api/v1';
+
+    group('A. default build (switch off)', () {
+      test('the LAN http address is still refused', () {
+        expect(defaultBuild(lan)?.code, ConfigProblem.apiUrlNotHttps.code);
+      });
+      test('http localhost and 127.0.0.1 are refused', () {
+        expect(defaultBuild('http://localhost:4000/api/v1')?.code, ConfigProblem.apiUrlLocal.code);
+        expect(defaultBuild('http://127.0.0.1:4000/api/v1')?.code, ConfigProblem.apiUrlLocal.code);
+      });
+      test('arbitrary http is refused', () {
+        expect(defaultBuild('http://example.com/api/v1')?.code, ConfigProblem.apiUrlNotHttps.code);
+        expect(defaultBuild('http://192.168.1.20/api/v1')?.code, ConfigProblem.apiUrlNotHttps.code);
+      });
+      test('an https production address is accepted', () {
+        expect(defaultBuild('https://api.blynk.lk/api/v1'), isNull);
+      });
+      test('the switch is off unless a build defines it', () {
+        // No allowLanHttp argument: the real compile-time value, which is
+        // false in every test run and every normal build.
+        final c = AppConfig(defineApiBaseUrl: lan, dotenvLookup: (_) => null, isRelease: true);
+        expect(c.validate()?.code, ConfigProblem.apiUrlNotHttps.code);
+      });
+      test('dotenv cannot turn it on', () {
+        final c = config(
+          dotenvValues: const {'API_BASE_URL': lan, 'ALLOW_LAN_HTTP': 'true'},
+          release: true,
+        );
+        expect(c.validate()?.code, ConfigProblem.apiUrlNotHttps.code);
+      });
+    });
+
+    group('B. LAN test build (switch on)', () {
+      test('http to a private LAN IPv4 is accepted, all three ranges', () {
+        for (final url in [
+          lan,
+          'http://10.0.0.5/api/v1',
+          'http://172.16.0.9:4000/api/v1',
+          'http://172.31.255.254:4000/api/v1',
+          'http://192.168.1.10:4000/api/v1',
+        ]) {
+          expect(lanBuild(url), isNull, reason: url);
+        }
+      });
+      test('localhost, loopback and ::1 are still refused', () {
+        for (final url in [
+          'http://localhost:4000/api/v1',
+          'http://127.0.0.1:4000/api/v1',
+          'http://[::1]:4000/api/v1',
+          'http://0.0.0.0:4000/api/v1',
+        ]) {
+          expect(lanBuild(url)?.code, ConfigProblem.apiUrlLocal.code, reason: url);
+        }
+      });
+      test('the whole local-host table is still refused', () {
+        for (final url in localHostUrls.values) {
+          expect(lanBuild(url)?.code, ConfigProblem.apiUrlLocal.code, reason: url);
+        }
+      });
+      test('emulator aliases and link-local are still refused', () {
+        expect(lanBuild('http://10.0.2.2:4000/api/v1')?.code, ConfigProblem.apiUrlLocal.code);
+        expect(lanBuild('http://169.254.1.1/api/v1')?.code, ConfigProblem.apiUrlLocal.code);
+      });
+      test('public http is refused', () {
+        for (final url in [
+          'http://8.8.8.8/api/v1',
+          'http://example.com/api/v1',
+          'http://api.blynk.lk/api/v1',
+          'http://172.32.0.1/api/v1', // just outside 172.16/12
+          'http://172.15.0.1/api/v1',
+          'http://192.169.0.1/api/v1',
+          'http://11.0.0.1/api/v1',
+        ]) {
+          expect(lanBuild(url)?.code, ConfigProblem.apiUrlNotHttps.code, reason: url);
+        }
+      });
+      test('names and exotic IPv4 spellings are refused, even if they mean a LAN address', () {
+        for (final url in [
+          'http://printer.local/api/v1', // refused as local
+          'http://my-pc/api/v1',
+          'http://10.1/api/v1',
+          'http://0xa.0.0.1/api/v1',
+          'http://010.0.0.1/api/v1',
+          'http://167772161/api/v1',
+        ]) {
+          expect(lanBuild(url), isNotNull, reason: url);
+        }
+      });
+      test('https still works exactly as before', () {
+        expect(lanBuild('https://api.blynk.lk/api/v1'), isNull);
+        expect(lanBuild('https://localhost/api/v1')?.code, ConfigProblem.apiUrlLocal.code);
+      });
+    });
+
+    group('C. parsing', () {
+      test('a trailing slash or longer path is fine', () {
+        expect(lanBuild('http://192.168.1.50:4000/api/v1/'), isNull);
+        expect(lanBuild('http://192.168.1.50:4000/'), isNull);
+        expect(lanBuild('http://192.168.1.50:4000'), isNull);
+        expect(defaultBuild('https://api.blynk.lk/api/v1/'), isNull);
+      });
+      test('a malformed address is refused', () {
+        for (final url in ['not a url', 'http://', 'http:///api/v1', '://10.0.0.5']) {
+          expect(lanBuild(url), isNotNull, reason: url);
+        }
+      });
+      test('other schemes are refused, switch or not', () {
+        for (final url in [
+          'ftp://192.168.1.50/api/v1',
+          'ws://192.168.1.50:4000/api/v1',
+          'file://192.168.1.50/api/v1',
+        ]) {
+          expect(lanBuild(url)?.code, ConfigProblem.apiUrlNotHttps.code, reason: url);
+          expect(defaultBuild(url)?.code, ConfigProblem.apiUrlNotHttps.code, reason: url);
+        }
+      });
+      test('debug builds are unaffected by the switch', () {
+        expect(config(define: 'http://example.com', allowLanHttp: true).validate(), isNull);
+        expect(config(define: 'http://example.com').validate(), isNull);
+      });
+    });
+
+    test('isPrivateLanIpv4 is exact about the ranges', () {
+      expect(AppConfig.isPrivateLanIpv4('192.168.1.50'), isTrue);
+      expect(AppConfig.isPrivateLanIpv4('172.16.0.0'), isTrue);
+      expect(AppConfig.isPrivateLanIpv4('172.31.255.255'), isTrue);
+      expect(AppConfig.isPrivateLanIpv4('192.168.0.1'), isTrue);
+      expect(AppConfig.isPrivateLanIpv4('127.0.0.1'), isFalse);
+      expect(AppConfig.isPrivateLanIpv4('256.1.1.1'), isFalse);
+      expect(AppConfig.isPrivateLanIpv4('10.0.0'), isFalse);
+      expect(AppConfig.isPrivateLanIpv4('10.0.0.1.5'), isFalse);
+      expect(AppConfig.isPrivateLanIpv4('10.00.0.1'), isFalse);
+      expect(AppConfig.isPrivateLanIpv4('example.com'), isFalse);
     });
   });
 

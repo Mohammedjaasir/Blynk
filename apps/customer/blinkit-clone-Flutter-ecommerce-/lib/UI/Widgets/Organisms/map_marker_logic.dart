@@ -1,4 +1,5 @@
 import 'map_provider.dart';
+import 'dart:math' as math;
 
 /// Pure marker logic for the map adapter. No SDK, no widgets, no platform
 /// calls: everything here is unit-tested without a map.
@@ -121,3 +122,97 @@ GeoBounds? boundsFor(GeoPoint a, GeoPoint b) {
   }
   return GeoBounds(south: south, west: west, north: north, east: east);
 }
+
+/// A rider fix further than this from the last shown position is a jump,
+/// not a move, and the marker cuts to it instead of gliding. A rider at
+/// 40 km/h covers ~11 m a second; fixes arrive every few seconds, so a real
+/// move between two fixes is tens of metres. 250 m is a lost fix, a GPS
+/// glitch or a long gap - gliding across it would draw a path the rider
+/// never took, which is exactly the fake movement the brief forbids.
+const double kMarkerSnapMeters = 250;
+
+const double _earthRadiusMeters = 6371000;
+
+/// Great-circle distance in metres between two points (haversine).
+double distanceMeters(GeoPoint a, GeoPoint b) {
+  const toRad = 3.141592653589793 / 180;
+  final dLat = (b.latitude - a.latitude) * toRad;
+  final dLng = (b.longitude - a.longitude) * toRad;
+  final la1 = a.latitude * toRad;
+  final la2 = b.latitude * toRad;
+  final h = _sq(_sin(dLat / 2)) + _cos(la1) * _cos(la2) * _sq(_sin(dLng / 2));
+  return 2 * _earthRadiusMeters * _asin(_sqrt(h));
+}
+
+/// The point [t] of the way from [a] to [b]. Linear in lat/lng, which over
+/// tens of metres is indistinguishable from the great circle.
+GeoPoint lerpGeo(GeoPoint a, GeoPoint b, double t) => GeoPoint(
+      a.latitude + (b.latitude - a.latitude) * t,
+      a.longitude + (b.longitude - a.longitude) * t,
+    );
+
+/// Where each marker is currently *shown*, as distinct from where the
+/// backend last *put* it. Both map adapters drive one of these from their
+/// own ticker: [retarget] when the wanted set changes, [tick] every frame of
+/// the glide, [shownSpecs] to render.
+///
+/// It only ever moves a marker along the straight line between two real
+/// fixes. It never extrapolates, never predicts, and cuts on a jump larger
+/// than [kMarkerSnapMeters]. Fit-to-bounds keeps using the real specs.
+class MarkerMotion {
+  final Map<String, GeoPoint> _shown = {};
+  final Map<String, GeoPoint> _from = {};
+  final Map<String, GeoPoint> _to = {};
+
+  /// The ids currently gliding.
+  Iterable<String> get moving => _to.keys;
+
+  /// Takes the new wanted set. Returns true when at least one marker needs
+  /// to glide (the caller then runs its ticker from 0); false when every
+  /// change was a cut and nothing needs animating. [snapAll] cuts every
+  /// change - reduced motion.
+  bool retarget(Set<MapMarkerSpec> wanted, {bool snapAll = false}) {
+    _from.clear();
+    _to.clear();
+    final ids = <String>{};
+    for (final spec in wanted) {
+      ids.add(spec.id);
+      final prev = _shown[spec.id];
+      if (prev == null || prev == spec.position) {
+        _shown[spec.id] = spec.position;
+        continue;
+      }
+      if (snapAll || distanceMeters(prev, spec.position) > kMarkerSnapMeters) {
+        _shown[spec.id] = spec.position;
+        continue;
+      }
+      _from[spec.id] = prev;
+      _to[spec.id] = spec.position;
+    }
+    _shown.removeWhere((id, _) => !ids.contains(id));
+    return _to.isNotEmpty;
+  }
+
+  /// Advances every gliding marker to [t] (0..1, already curved).
+  void tick(double t) {
+    for (final id in _to.keys) {
+      _shown[id] = lerpGeo(_from[id]!, _to[id]!, t);
+    }
+    if (t >= 1) {
+      _from.clear();
+      _to.clear();
+    }
+  }
+
+  /// [wanted], with every position replaced by where it is shown right now.
+  Set<MapMarkerSpec> shownSpecs(Set<MapMarkerSpec> wanted) => {
+        for (final spec in wanted)
+          MapMarkerSpec(id: spec.id, position: _shown[spec.id] ?? spec.position, tone: spec.tone),
+      };
+}
+
+double _sin(double x) => math.sin(x);
+double _cos(double x) => math.cos(x);
+double _asin(double x) => math.asin(x);
+double _sqrt(double x) => math.sqrt(x);
+double _sq(double x) => x * x;

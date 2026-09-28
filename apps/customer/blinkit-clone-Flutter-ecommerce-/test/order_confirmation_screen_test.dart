@@ -27,17 +27,20 @@ void main() {
   group('Order confirmation screen', () {
     late List<RouteSettings> pushed;
 
-    Future<void> pumpScreen(WidgetTester tester, OrderModel? order) async {
+    Future<void> pumpScreen(WidgetTester tester, OrderModel? order, {bool reduceMotion = false}) async {
       pushed = [];
       await tester.pumpWidget(
         ChangeNotifierProvider<OrderProvider>.value(
           value: _FixedLastOrder(order),
-          child: MaterialApp(
+          child: MediaQuery(
+            data: MediaQueryData(disableAnimations: reduceMotion),
+            child: MaterialApp(
             home: const OrderConfirmationScreen(),
             onGenerateRoute: (settings) {
               pushed.add(settings);
               return MaterialPageRoute(builder: (_) => const SizedBox.shrink(), settings: settings);
             },
+            ),
           ),
         ),
       );
@@ -142,15 +145,25 @@ void main() {
       );
     });
 
-    testWidgets('the hero is a static check mark: no Lottie, no looping animation', (tester) async {
+    testWidgets('the hero is a check mark that settles once: no Lottie, nothing loops', (tester) async {
       final order = OrderModel.fromJson(orderJson(id: 'o1', number: 'BL-20260919-0001', detail: false));
       await pumpScreen(tester, order);
       expect(find.byType(Lottie), findsNothing);
       final check = tester.widget<Icon>(find.byIcon(BlynkIcons.check));
       expect(check.color, BlynkColors.positive);
-      expect(tester.hasRunningAnimations, isFalse);
-      // Now it settles, because nothing loops.
+      // Motion M10: the medallion settles in once (scale + fade, emphasized).
+      // What this pin guards is that it ENDS: pumpAndSettle throws on a loop.
+      expect(find.byType(TweenAnimationBuilder<double>), findsWidgets);
       await tester.pumpAndSettle();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('reduced motion: the check mark is simply there', (tester) async {
+      final order = OrderModel.fromJson(orderJson(id: 'o1', number: 'BL-20260919-0001', detail: false));
+      await pumpScreen(tester, order, reduceMotion: true);
+      expect(find.byIcon(BlynkIcons.check), findsOneWidget);
+      expect(find.byType(TweenAnimationBuilder<double>), findsNothing);
+      expect(tester.hasRunningAnimations, isFalse);
     });
 
     testWidgets('the scheduled pill outline is lineStrong, not the 1.2:1 hairline', (tester) async {

@@ -36,6 +36,13 @@ class ProductProvider extends ChangeNotifier {
   /// skipped, so a window regaining focus twice in a row doesn't refetch.
   static const Duration refreshMinInterval = Duration(seconds: 10);
 
+  /// While the app is in the foreground the catalog is re-read this often,
+  /// so a change made in Blynk Ops (a price, a photo, a product switched
+  /// off, a new category) reaches a customer who simply keeps the app open.
+  /// The fast path is the pushed event (`CatalogLiveUpdates`, about a
+  /// second); this is the safety net for when that stream cannot be held.
+  static const Duration liveRefreshEvery = Duration(seconds: 30);
+
   static const int searchPageSize = 40;
 
   List<CategoryModel> _categories = [];
@@ -192,17 +199,27 @@ class ProductProvider extends ChangeNotifier {
     }
 
     try {
-      final response = await _request('/catalog/products', {
-        if (categorySlug != null && categorySlug.isNotEmpty)
-          'category_slug': categorySlug,
-        'limit': 100,
-      });
-
-      final data = (response is Map ? response['data'] : null) as Map?;
-      final page = ProductPage.fromJson(
-        (data ?? const {}).cast<String, dynamic>(),
-      );
-      _productsByCategory[key] = page.products;
+      // Every page, not just the first: Home lists the whole catalogue, so
+      // a 101st product must not silently fall off the end.
+      final all = <ProductModel>[];
+      var pageNo = 1;
+      var totalPages = 1;
+      do {
+        final response = await _request('/catalog/products', {
+          if (categorySlug != null && categorySlug.isNotEmpty)
+            'category_slug': categorySlug,
+          'limit': 100,
+          'page': pageNo,
+        });
+        final data = (response is Map ? response['data'] : null) as Map?;
+        final page = ProductPage.fromJson(
+          (data ?? const {}).cast<String, dynamic>(),
+        );
+        all.addAll(page.products);
+        totalPages = page.totalPages;
+        pageNo++;
+      } while (pageNo <= totalPages && pageNo <= 20);
+      _productsByCategory[key] = all;
       _productsFailures.remove(key);
     } catch (e) {
       if (!hasData) _productsFailures[key] = AppErrors.from(e);

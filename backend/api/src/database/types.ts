@@ -158,6 +158,9 @@ export interface CategoriesTable {
   is_active: Generated<boolean>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
+  /** Migration 010: which point of the category image must stay visible. */
+  image_focal_x: Generated<number>;
+  image_focal_y: Generated<number>;
 }
 
 export interface ProductsTable {

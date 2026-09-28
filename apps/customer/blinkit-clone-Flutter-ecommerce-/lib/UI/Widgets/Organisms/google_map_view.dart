@@ -36,7 +36,7 @@ import 'map_unavailable_card.dart';
 
 /// Padding (logical px) around the two markers when the camera fits them.
 const double _fitPadding = 48;
-const Duration _fitDuration = Duration(milliseconds: 500);
+const Duration _fitDuration = BlynkMotion.camera;
 
 /// Fit is retried a couple of times because the native map may not have been
 /// laid out on the first post-frame (newLatLngBounds throws before layout).
@@ -251,7 +251,31 @@ class _TrackingBody extends StatefulWidget {
 /// present, after the map is created and laid out; it never re-centres after
 /// that. A failed camera call is logged and swallowed (retried a few times
 /// when it may just be too early); it must never crash the order screen.
-class _TrackingBodyState extends State<_TrackingBody> {
+class _TrackingBodyState extends State<_TrackingBody>
+    with SingleTickerProviderStateMixin {
+  // Motion M11: the rider glides between real fixes. See MarkerMotion for
+  // what it will and will not do.
+  final MarkerMotion _motion = MarkerMotion();
+  late final AnimationController _move = AnimationController(
+    vsync: this,
+    duration: BlynkMotion.slow,
+  )..addListener(_onMoveTick);
+  bool _reducedMotion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Record where every marker starts, so the FIRST fix after this is a
+    // glide from here rather than a "first sighting" cut.
+    _motion.retarget(widget.markers, snapAll: true);
+  }
+
+  void _onMoveTick() {
+    if (!mounted) return;
+    _motion.tick(BlynkMotion.standard.transform(_move.value));
+    setState(() {});
+  }
+
   GoogleMapController? _controller;
   bool _disposed = false;
   bool _fitted = false;
@@ -266,6 +290,7 @@ class _TrackingBodyState extends State<_TrackingBody> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _reducedMotion = BlynkMotion.reduced(context);
     final ratio = MediaQuery.devicePixelRatioOf(context);
     if (_ratio != ratio) {
       _ratio = ratio;
@@ -279,7 +304,12 @@ class _TrackingBodyState extends State<_TrackingBody> {
   void didUpdateWidget(covariant _TrackingBody oldWidget) {
     super.didUpdateWidget(oldWidget);
     _requestIcons();
-    if (!setEquals(oldWidget.markers, widget.markers)) _scheduleFit();
+    if (!setEquals(oldWidget.markers, widget.markers)) {
+      _scheduleFit();
+      if (_motion.retarget(widget.markers, snapAll: _reducedMotion)) {
+        _move.forward(from: 0);
+      }
+    }
   }
 
   @override
@@ -287,6 +317,7 @@ class _TrackingBodyState extends State<_TrackingBody> {
     _disposed = true;
     _retryTimer?.cancel();
     _controller = null;
+    _move.dispose();
     super.dispose();
   }
 
@@ -321,7 +352,8 @@ class _TrackingBodyState extends State<_TrackingBody> {
 
   Set<Marker> _markers() {
     final markers = <Marker>{};
-    for (final spec in widget.markers) {
+    // Rendered where each marker is SHOWN; the fit below uses the real specs.
+    for (final spec in _motion.shownSpecs(widget.markers)) {
       final icon = _icons[spec.tone] ?? _shownIcon[spec.id];
       if (icon == null || !_validCoordinate(spec.position)) continue;
       _shownIcon[spec.id] = icon;

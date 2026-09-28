@@ -79,7 +79,11 @@ Widget _app(AuthProvider auth, {List<String>? routes}) {
 }
 
 /// Bounded pumps: the login screen has a looping animation, so never settle.
-Future<void> _pumpFrames(WidgetTester tester, {int frames = 12, void Function()? each}) async {
+///
+/// There is no launch animation to wait out any more - Android's native
+/// splash is the whole opening and the gate holds for nothing - so this is
+/// back to covering just the session read and the route change.
+Future<void> _pumpFrames(WidgetTester tester, {int frames = 40, void Function()? each}) async {
   for (var i = 0; i < frames; i++) {
     await tester.pump(const Duration(milliseconds: 50));
     each?.call();
@@ -104,8 +108,11 @@ void main() {
       addTearDown(auth.dispose);
 
       await tester.pumpWidget(_app(auth));
-      // The splash first: paper, the mark and a progress indicator, no login UI.
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      // Android's native splash is the opening. What Flutter puts up while it
+      // reads the session is deliberately blank - no second logo, no spinner,
+      // nothing to read - so the splash's white simply continues.
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(Text), findsNothing);
       expect(find.byType(LoginScreen), findsNothing);
 
       var loginSeen = false;
@@ -119,16 +126,6 @@ void main() {
       expect(pendingMe.isCompleted, isFalse);
       expect(auth.isAuthenticated, isTrue);
       expect(auth.currentUser?.fullName, 'Nimal Perera');
-    });
-
-    testWidgets('the splash makes no text claims', (tester) async {
-      FlutterSecureStorage.setMockInitialValues(_signedInStorage());
-      final auth = AuthProvider(request: _requests({'/auth/me': () => Completer<dynamic>().future}));
-      addTearDown(auth.dispose);
-
-      await tester.pumpWidget(_app(auth));
-      expect(find.byType(Text), findsNothing);
-      expect(find.bySemanticsLabel('Blynk'), findsOneWidget);
     });
 
     testWidgets('signed out: shows the login screen with its Skip', (tester) async {

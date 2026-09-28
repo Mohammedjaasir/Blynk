@@ -7,6 +7,7 @@ import '../Atoms/card_product.dart';
 import '../Atoms/entrance_fade.dart';
 import '../Atoms/section_header.dart';
 import 'products_screen_grid.dart';
+import '../../../Models/product_model.dart';
 import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
 import '../../../Services/product_ranking.dart';
@@ -14,8 +15,10 @@ import '../../../Services/Providers/auth.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
 import '../../../Services/Providers/product.provider.dart';
 
-/// Home's product section: one honest section header and a responsive grid of
-/// the **real** products behind the chip the customer has selected.
+/// Home's products, **shelf by shelf**: one section per real backend
+/// category, each titled with the category's name, holding every available
+/// product in it, with "See all" into the category page (see `_byCategory`).
+/// Given a [categorySlug] it is instead one grid of that category.
 ///
 /// **The title is what the query is, and what was actually done to it.**
 /// There is still no recommendations endpoint in this backend, no popularity
@@ -40,7 +43,13 @@ class HomeProductSections extends StatefulWidget {
     super.key,
     required this.categorySlug,
     required this.categoryName,
+    this.entranceDelay = Duration.zero,
   });
+
+  /// Added to every card's own stagger. Home passes the moment this section
+  /// fades in on its entrance timeline, so the first card starts rising as
+  /// the section becomes visible instead of having finished behind it.
+  final Duration entranceDelay;
 
   /// The selected category's slug, or `null` for the whole catalogue.
   final String? categorySlug;
@@ -56,15 +65,13 @@ class HomeProductSections extends StatefulWidget {
   /// order history. It names its source rather than implying an engine.
   static const String personalisedTitle = 'Based on your orders';
 
-  /// How many rows Home previews before handing over to the full listing.
-  /// Home is the way in, not the catalogue; "See all" renders only when there
-  /// really is more behind it.
-  ///
-  /// 6 rows is 12 products on a phone (2 columns) and 24 on a desktop (4).
-  /// Raised from 3 on 2026-09-25: three rows showed only 6 of the 41 products
-  /// in the catalogue, so Home ran out of shop front long before the customer
-  /// ran out of scroll. "See all" still appears, because 41 is still more.
-  static const int previewRows = 6;
+  /// Home lists **every available product** (2026-09-26, asked for by the
+  /// owner): the catalogue is small enough that the shop front can be the
+  /// whole shop. It was a 6-row preview (18 of 41 on a phone) behind a
+  /// "See all"; that link is gone because nothing is behind it any more. The
+  /// grid is a lazy [SliverGrid], so a longer list costs only what is on
+  /// screen. Unavailable products are left out here - they still open from
+  /// search and category listings, which say so on the card.
 
   static const Key retryKey = Key('home-products-retry');
 
@@ -164,50 +171,60 @@ class _HomeProductSectionsState extends State<HomeProductSections> {
           builder: (context, constraints) {
             final width = constraints.crossAxisExtent;
             final columns = BlynkProductGrid.columnsFor(width);
-            final preview = columns * HomeProductSections.previewRows;
-            final hasMore = products.length > preview;
-            final visible =
-                hasMore ? products.sublist(0, preview) : products;
 
+            if (isLoading && products.isEmpty) {
+              return SliverMainAxisGroup(slivers: [
+                SliverToBoxAdapter(child: BlynkSectionHeader(title: title)),
+                _grid(context, width, itemCount: columns * 2,
+                    item: (_) => const ProductCardSkeleton()),
+              ]);
+            }
+
+            final sections = widget.categorySlug == null
+                ? _byCategory(products, productProvider, signal, ranked, columns)
+                : [_Section(title: title, products: [
+                    for (final p in products)
+                      if (p.isAvailable) p,
+                  ])];
+
+            // One running index across sections, so the entrance wave keeps
+            // flowing down the page instead of restarting at every header.
+            var offset = 0;
             return SliverMainAxisGroup(
               slivers: [
-                SliverToBoxAdapter(
-                  child: BlynkSectionHeader(
-                    title: title,
-                    // Only rendered when there really is more to see.
-                    actionLabel: hasMore ? 'See all' : null,
-                    onAction: hasMore
-                        ? () => Navigator.of(context).pushNamed(
-                              '/products',
-                              arguments: widget.categorySlug ?? '',
-                            )
-                        : null,
-                  ),
-                ),
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: BlynkProductGrid.gutterFor(width),
-                  ),
-                  sliver: SliverGrid.builder(
-                    gridDelegate: productGridDelegate(context, width),
-                    itemCount: isLoading && products.isEmpty
-                        ? columns * 2
-                        : visible.length,
-                    itemBuilder: (context, index) =>
-                        isLoading && products.isEmpty
-                            ? const ProductCardSkeleton()
-                            // Tiles arrive as a wave rather than all at once.
-                            // Keyed by product id so the arrival belongs to
-                            // the product, not to the slot: without the key a
-                            // reorder (see rankByPurchaseHistory) would replay
-                            // the animation on whichever card took the slot.
-                            : EntranceFade(
-                                key: ValueKey(visible[index].id),
-                                delay: EntranceFade.delayFor(index),
-                                child: ProductCard(product: visible[index]),
-                              ),
-                  ),
-                ),
+                for (final section in sections) ...() {
+                  final start = offset;
+                  offset += section.products.length;
+                  return [
+                    SliverToBoxAdapter(
+                      child: BlynkSectionHeader(
+                        title: section.title,
+                        actionLabel: section.slug == null ? null : 'See all',
+                        onAction: section.slug == null
+                            ? null
+                            : () => Navigator.of(context).pushNamed(
+                                  '/products',
+                                  arguments: section.slug,
+                                ),
+                      ),
+                    ),
+                    _grid(
+                      context,
+                      width,
+                      itemCount: section.products.length,
+                      // Tiles arrive as a wave rather than all at once.
+                      // Keyed by product id so the arrival belongs to the
+                      // product, not to the slot: without the key a reorder
+                      // (see rankByPurchaseHistory) would replay the
+                      // animation on whichever card took the slot.
+                      item: (index) => EntranceFade(
+                        key: ValueKey('${section.title}/${section.products[index].id}'),
+                        delay: widget.entranceDelay + EntranceFade.delayFor(start + index),
+                        child: ProductCard(product: section.products[index]),
+                      ),
+                    ),
+                  ];
+                }(),
               ],
             );
           },
@@ -215,6 +232,90 @@ class _HomeProductSectionsState extends State<HomeProductSections> {
       },
     );
   }
+
+  Widget _grid(
+    BuildContext context,
+    double width, {
+    required int itemCount,
+    required Widget Function(int index) item,
+  }) =>
+      SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: BlynkProductGrid.gutterFor(width)),
+        sliver: SliverGrid.builder(
+          gridDelegate: productGridDelegate(context, width),
+          itemCount: itemCount,
+          itemBuilder: (context, index) => item(index),
+        ),
+      );
+
+  /// Home's shop front, shelf by shelf (2026-09-26, asked for from the
+  /// reference app): one section per real backend category, in the store's
+  /// own category order, each with every available product on that shelf and
+  /// a "See all" into the category's page.
+  ///
+  /// - A signed-in customer with order history first gets
+  ///   [HomeProductSections.personalisedTitle]: the products they have
+  ///   actually bought, most relevant first (two rows at most).
+  /// - Products keep the ranked order inside their shelf.
+  /// - If the categories have not loaded (or a product's category is not in
+  ///   the list), nothing is hidden: those products go under
+  ///   [HomeProductSections.allTitle] at the end.
+  List<_Section> _byCategory(
+    List<ProductModel> ranked,
+    ProductProvider provider,
+    PurchaseHistorySignal signal,
+    bool personalised,
+    int columns,
+  ) {
+    final available = [
+      for (final p in ranked)
+        if (p.isAvailable) p,
+    ];
+    final sections = <_Section>[];
+
+    if (personalised) {
+      final bought = [
+        for (final p in available)
+          if (signal.ordersContaining.containsKey(p.id)) p,
+      ];
+      if (bought.isNotEmpty) {
+        sections.add(_Section(
+          title: HomeProductSections.personalisedTitle,
+          products: bought.take(columns * 2).toList(),
+        ));
+      }
+    }
+
+    final placed = <String>{};
+    for (final c in provider.categories) {
+      final shelf = [
+        for (final p in available)
+          if (p.categoryId == c.id) p,
+      ];
+      if (shelf.isEmpty) continue;
+      placed.addAll(shelf.map((p) => p.id));
+      sections.add(_Section(title: c.name, slug: c.slug, products: shelf));
+    }
+
+    final rest = [
+      for (final p in available)
+        if (!placed.contains(p.id)) p,
+    ];
+    if (rest.isNotEmpty) {
+      sections.add(_Section(title: HomeProductSections.allTitle, products: rest));
+    }
+    return sections;
+  }
+}
+
+/// One shelf on Home: a real title, where "See all" goes (null: no link),
+/// and the products on it.
+class _Section {
+  const _Section({required this.title, this.slug, required this.products});
+
+  final String title;
+  final String? slug;
+  final List<ProductModel> products;
 }
 
 /// The compact per-section failure: one sentence and a "Try again" that asks

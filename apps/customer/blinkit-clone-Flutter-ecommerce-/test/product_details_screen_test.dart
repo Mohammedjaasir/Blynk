@@ -16,6 +16,7 @@ import 'package:ecom/Services/Providers/product.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/add_to_cart_button.dart';
 import 'package:ecom/UI/Widgets/Atoms/app_skeleton.dart';
 import 'package:ecom/UI/Widgets/Atoms/image_well.dart';
+import 'package:ecom/UI/Widgets/Atoms/product_hero.dart';
 import 'package:ecom/UI/Widgets/Organisms/cart_bar.dart';
 import 'package:ecom/app_theme.dart';
 import 'package:ecom/design/tokens.dart';
@@ -437,6 +438,22 @@ void main() {
   });
 
   group('layout', () {
+    testWidgets('the hero image is the other end of the card flight: same tag, image only', (tester) async {
+      await pumpApp(tester, home: const ProductDetailsScreen(productId: _milkId));
+      await settle(tester);
+
+      final heroes = tester.widgetList<Hero>(find.byType(Hero)).toList();
+      expect(heroes, hasLength(1), reason: 'exactly one flight lands here');
+      expect(heroes.single.tag, ProductHero.tagFor(_milkId),
+          reason: 'must equal the tag ProductCard gives the same product');
+      expect(
+        find.descendant(of: find.byType(Hero), matching: find.byType(ProductImageWell)),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: find.byType(Hero), matching: find.text('Kotmale Fresh Milk 1L')),
+          findsNothing, reason: 'the name does not fly; only the image does');
+    });
+
     testWidgets('desktop uses two columns with an inline CTA', (tester) async {
       await pumpApp(
         tester,

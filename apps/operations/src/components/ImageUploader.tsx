@@ -16,11 +16,12 @@ export interface FocalPoint {
 export const CENTRE_FOCAL: FocalPoint = { x: 50, y: 50 };
 
 /** The real shape the image is cropped to on the customer surface. */
-export type FocalShape = 'square' | 'wide';
+export type FocalShape = 'square' | 'wide' | 'circle';
 
 const SHAPE_CAPTION: Record<FocalShape, string> = {
   square: 'Product tile',
   wide: 'Home carousel card',
+  circle: 'Category tile',
 };
 
 /** Keeps a percentage whole and inside the range the backend accepts. */

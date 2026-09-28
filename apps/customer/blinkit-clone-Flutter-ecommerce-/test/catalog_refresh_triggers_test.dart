@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,6 +121,59 @@ void main() {
     testWidgets('does not refetch just by being built', (tester) async {
       await pumpShell(tester);
       expect(backend.productCalls(), 1);
+    });
+
+    // 2026-09-26: the fast path. The backend pushes `event: catalog` the
+    // moment Ops saves; the app re-reads at once, not on the next tick.
+    testWidgets('a pushed catalog event refreshes immediately, even right after a refresh',
+        (tester) async {
+      final line = StreamController<String>();
+      await products.loadProducts(categorySlug: 'dairy-eggs');
+      await tester.pumpWidget(withProviders(
+        CustomerShell(
+          catalogEvents: () => line.stream,
+          tabs: const [Text('shop tab'), Text('orders tab'), Text('help tab'), Text('profile tab')],
+        ),
+      ));
+      await tester.pump();
+      backend.price = 750; // saved in Blynk Ops
+
+      line.add('event: catalog\ndata: {"tables":["products"]}\n\n');
+      await tester.pump();
+      await tester.pump();
+
+      expect(backend.productCalls(), 2);
+      expect(products.productsFor('dairy-eggs').single.sellingPrice, 750);
+      await line.close();
+    });
+
+    // 2026-09-26: an app simply left open never saw an Ops change.
+    testWidgets('an app left open picks up an Ops change on its own', (tester) async {
+      await pumpShell(tester);
+      backend.price = 750; // changed in Blynk Ops; the customer does nothing
+
+      now = now.add(ProductProvider.liveRefreshEvery);
+      await tester.pump(ProductProvider.liveRefreshEvery);
+      await tester.pump();
+
+      expect(backend.productCalls(), 2);
+      expect(products.productsFor('dairy-eggs').single.sellingPrice, 750);
+    });
+
+    testWidgets('no live refresh while the app is in the background', (tester) async {
+      await pumpShell(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+
+      now = now.add(ProductProvider.liveRefreshEvery * 3);
+      await tester.pump(ProductProvider.liveRefreshEvery * 3);
+
+      expect(backend.productCalls(), 1);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
     });
 
     testWidgets('refreshes when the app returns to the foreground', (tester) async {

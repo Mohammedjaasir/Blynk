@@ -534,6 +534,22 @@ void main() {
       await next(tester);
       expect(tester.widget<Lottie>(find.byType(Lottie)).repeat, isFalse);
     });
+
+    // 2026-09-28: the cart animation "lagged" on a phone. The file is
+    // authored at 24 fps and Lottie plays at that rate unless told
+    // otherwise; it must interpolate every display frame, on its own layer.
+    testWidgets('the Lottie plays at the display rate, isolated in its own layer', (tester) async {
+      await pumpOnboarding(tester);
+      await next(tester);
+      final lottie = find.byType(Lottie);
+      expect(tester.widget<Lottie>(lottie).frameRate, FrameRate.max);
+      Element? parent;
+      tester.element(find.byType(LottieBuilder)).visitAncestorElements((e) {
+        parent = e;
+        return false; // the direct parent only
+      });
+      expect(parent!.widget, isA<RepaintBoundary>());
+    });
   });
 
   group('flat cards', () {

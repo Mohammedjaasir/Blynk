@@ -39,7 +39,7 @@ import '../../../design/tokens.dart';
 
 /// Padding (logical px) around the two markers when the camera fits them.
 const double _fitPadding = 48;
-const Duration _fitDuration = Duration(milliseconds: 500);
+const Duration _fitDuration = BlynkMotion.camera;
 
 /// The bundled style with the tile URL substituted (map_tile_config.dart), or
 /// null when it cannot be prepared safely - the caller then shows "Map
@@ -100,7 +100,22 @@ class _TrackingMapBody extends StatefulWidget {
 ///  - after dispose nothing is called;
 ///  - a failed platform call is logged and swallowed: the order screen must
 ///    not crash because a map call failed. The next marker change retries.
-class _TrackingMapBodyState extends State<_TrackingMapBody> {
+class _TrackingMapBodyState extends State<_TrackingMapBody>
+    with SingleTickerProviderStateMixin {
+  // Motion M11: the rider glides between real fixes (see MarkerMotion).
+  final MarkerMotion _motion = MarkerMotion();
+  late final AnimationController _move = AnimationController(
+    vsync: this,
+    duration: BlynkMotion.slow,
+  )..addListener(_onMoveTick);
+  bool _reducedMotion = false;
+
+  void _onMoveTick() {
+    if (!mounted) return;
+    _motion.tick(BlynkMotion.standard.transform(_move.value));
+    _scheduleApply();
+  }
+
   /// The style with the tile URL substituted, or null while loading / failed.
   String? _style;
   bool _styleFailed = false;
@@ -118,6 +133,7 @@ class _TrackingMapBodyState extends State<_TrackingMapBody> {
   @override
   void initState() {
     super.initState();
+    _motion.retarget(widget.markers, snapAll: true); // seed: see google adapter
     unawaited(_loadStyle());
   }
 
@@ -131,14 +147,26 @@ class _TrackingMapBodyState extends State<_TrackingMapBody> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reducedMotion = BlynkMotion.reduced(context);
+  }
+
+  @override
   void didUpdateWidget(covariant _TrackingMapBody oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!setEquals(oldWidget.markers, widget.markers)) _scheduleApply();
+    if (!setEquals(oldWidget.markers, widget.markers)) {
+      _scheduleApply();
+      if (_motion.retarget(widget.markers, snapAll: _reducedMotion)) {
+        _move.forward(from: 0);
+      }
+    }
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _move.dispose();
     _controller = null;
     _circles.clear();
     _applied.clear();
@@ -201,7 +229,7 @@ class _TrackingMapBodyState extends State<_TrackingMapBody> {
   Future<void> _applyOnce() async {
     final controller = _controller;
     if (!_canApply || controller == null) return;
-    final diff = diffMarkers(_applied, widget.markers);
+    final diff = diffMarkers(_applied, _motion.shownSpecs(widget.markers));
     try {
       for (final id in diff.removedIds) {
         final circle = _circles.remove(id);

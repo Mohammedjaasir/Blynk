@@ -188,7 +188,7 @@ void main() {
 
   group('ZERO LAYOUT SHIFT - the fallback occupies identical geometry', () {
     for (final side in <double>[72, 160, 320]) {
-      testWidgets('$side dp: the well is exactly the same box with and without a photo',
+      testWidgets('$side dp: the well is the same box with and without a photo, and the photo fills it',
           (tester) async {
         // One URL per test: a cached or still-in-flight load from a
         // neighbouring test must not be able to decide this one's outcome.
@@ -212,8 +212,15 @@ void main() {
           expect(find.byType(RawImage), findsOneWidget);
           expect(tester.widget<RawImage>(find.byType(RawImage)).image, isNotNull);
 
+          // The well itself is the same box either way: nothing AROUND it
+          // moves when a photo arrives, which is the shift this guards.
           expect(tester.getRect(find.byType(BlynkImageWell)), withoutWell);
-          expect(tester.getRect(find.byType(BlynkImageContent)), withoutContent);
+          // 2026-09-26: a photo fills its well edge to edge - the tinted
+          // inset that framed it read as a grey border and was removed. So
+          // the picture's box is the well's box, while the fallback keeps
+          // its inset medallion.
+          expect(tester.getRect(find.byType(BlynkImageContent)), withoutWell);
+          expect(withoutContent, withoutWell.deflate(BlynkWell.inset));
         });
       });
     }

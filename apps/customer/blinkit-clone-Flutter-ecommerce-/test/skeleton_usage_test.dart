@@ -157,6 +157,11 @@ void main() {
     testWidgets('category tiles, then rails: one ticker while anything loads, none once loaded', (tester) async {
       final gate = _Gate();
       await _pump(tester, gate, const HomeScreen(), size: tallPhone);
+      // Home's entrance (motion M3) is a one-shot ticker that is over in
+      // 810 ms. Let it finish before taking the baseline, otherwise it is
+      // counted as "everything else that ticks" and the final assertion
+      // sees one fewer than it expects once it has stopped.
+      await tester.pump(const Duration(milliseconds: 900));
       final idle = _tickers(tester) - 1; // everything else on Home that ticks
 
       // Categories loading: a row of tile skeletons.

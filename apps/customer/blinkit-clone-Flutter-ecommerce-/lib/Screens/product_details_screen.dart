@@ -18,6 +18,9 @@ import '../UI/Widgets/Atoms/image_well.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
 import '../UI/Widgets/Atoms/status_badge.dart';
 import '../design/tokens.dart';
+import 'package:ecom/UI/Widgets/Atoms/product_hero.dart';
+import 'package:ecom/UI/Widgets/Atoms/card_product.dart';
+import 'package:ecom/UI/Widgets/Atoms/blynk_crossfade.dart';
 
 /// Full product page, opened from any ProductCard (Home, Categories,
 /// Search). The tapped product renders immediately, then the page asks
@@ -135,7 +138,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           const SizedBox(width: BlynkSpace.s4),
         ],
       ),
-      body: body,
+      // Skeleton, failure and the loaded body are distinct widget types, so
+      // keying on the type crossfades exactly the state changes.
+      body: BlynkCrossfade(
+        child: KeyedSubtree(key: ValueKey<Type>(body.runtimeType), child: body),
+      ),
       bottomNavigationBar: bottomBar,
     );
   }
@@ -238,8 +245,9 @@ class _DetailsBody extends StatelessWidget {
 
   Widget _narrowLayout(BuildContext context, BoxConstraints constraints) {
     final gutter = BlynkSpace.gutterFor(constraints.maxWidth);
-    // Square, but never so tall that the name and price fall below the fold.
-    final heroSide = math.min(
+    // The card's shape, never so tall that the name and price fall below
+    // the fold.
+    final hero = ProductHero.detailSizeFor(
       constraints.maxWidth - gutter * 2,
       constraints.maxHeight * _heroHeightShare,
     );
@@ -252,14 +260,12 @@ class _DetailsBody extends StatelessWidget {
         _floatingCartClearance,
       ),
       children: [
-        _Entrance(
-          scaleFrom: 0.96,
-          child: Center(
-            child: SizedBox(
-              width: heroSide,
-              height: heroSide,
-              child: _Hero(product: product),
-            ),
+        // No entrance on the image: it arrives by the Hero flight, and an
+        // extra scale/fade here kept moving it after the Hero landed.
+        Center(
+          child: SizedBox.fromSize(
+            size: hero,
+            child: _Hero(product: product),
           ),
         ),
         const SizedBox(height: BlynkSpace.s24),
@@ -277,10 +283,10 @@ class _DetailsBody extends StatelessWidget {
         math.min(constraints.maxWidth, _wideContentCap) - hPad * 2;
     // Image column takes ~45%, capped so it never outgrows the viewport
     // height on a landscape laptop (1280 x 720).
-    final heroSide = math.max(
-      _heroMinSide,
-      math.min(
-        (contentWidth - gap) * _heroColumnShare,
+    final hero = ProductHero.detailSizeFor(
+      math.max(_heroMinSide, (contentWidth - gap) * _heroColumnShare),
+      math.max(
+        _heroMinSide * ProductCard.imageRatio,
         constraints.maxHeight - vPad * 2 - BlynkSpace.s16,
       ),
     );
@@ -298,13 +304,9 @@ class _DetailsBody extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Entrance(
-                scaleFrom: 0.96,
-                child: SizedBox(
-                  width: heroSide,
-                  height: heroSide,
-                  child: _Hero(product: product),
-                ),
+              SizedBox.fromSize(
+                size: hero,
+                child: _Hero(product: product),
               ),
               const SizedBox(width: gap),
               Expanded(
@@ -350,11 +352,15 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ProductImageWell(
-      product: product,
-      radius: BlynkRadius.lgAll,
-      inset: BlynkSpace.s24,
-      overlay: product.isAvailable ? null : const _UnavailableWash(),
+    // The other end of the card's flight: same tag, the detail's own look.
+    return ProductHero(
+      productId: product.id,
+      child: ProductImageWell(
+        product: product,
+        radius: BlynkRadius.lgAll,
+        inset: BlynkSpace.s24,
+        overlay: product.isAvailable ? null : const _UnavailableWash(),
+      ),
     );
   }
 }
@@ -766,20 +772,18 @@ class _Entrance extends StatelessWidget {
     required this.child,
     this.delay = 0,
     this.slideFrom = 12,
-    this.scaleFrom = 1,
   });
 
   final Widget child;
   final int delay;
   final double slideFrom;
-  final double scaleFrom;
 
   @override
   Widget build(BuildContext context) {
     if (BlynkMotion.resolve(context, BlynkMotion.base) == Duration.zero) {
       return child;
     }
-    final total = 280 + delay;
+    final total = BlynkMotion.slow.inMilliseconds + delay;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: total),
@@ -789,10 +793,7 @@ class _Entrance extends StatelessWidget {
         opacity: t,
         child: Transform.translate(
           offset: Offset(0, (1 - t) * slideFrom),
-          child: Transform.scale(
-            scale: scaleFrom + (1 - scaleFrom) * t,
-            child: child,
-          ),
+          child: child,
         ),
       ),
     );
@@ -833,7 +834,7 @@ class _DetailsSkeleton extends StatelessWidget {
           builder: (context, constraints) {
             if (!wide) {
               final gutter = BlynkSpace.gutterFor(constraints.maxWidth);
-              final side = math.min(
+              final hero = ProductHero.detailSizeFor(
                 constraints.maxWidth - gutter * 2,
                 constraints.maxHeight * _DetailsBody._heroHeightShare,
               );
@@ -848,8 +849,8 @@ class _DetailsSkeleton extends StatelessWidget {
                 children: [
                   Center(
                     child: AppSkeleton(
-                      width: side,
-                      height: side,
+                      width: hero.width,
+                      height: hero.height,
                       radius: BlynkRadius.lg,
                     ),
                   ),
@@ -863,10 +864,13 @@ class _DetailsSkeleton extends StatelessWidget {
                   _DetailsBody._wideContentCap,
                 ) -
                 BlynkSpace.s32 * 2;
-            final side = math.max(
-              _DetailsBody._heroMinSide,
-              math.min(
+            final hero = ProductHero.detailSizeFor(
+              math.max(
+                _DetailsBody._heroMinSide,
                 (width - BlynkSpace.s48) * _DetailsBody._heroColumnShare,
+              ),
+              math.max(
+                _DetailsBody._heroMinSide * ProductCard.imageRatio,
                 constraints.maxHeight - BlynkSpace.s24 * 2 - BlynkSpace.s16,
               ),
             );
@@ -883,8 +887,8 @@ class _DetailsSkeleton extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       AppSkeleton(
-                        width: side,
-                        height: side,
+                        width: hero.width,
+                        height: hero.height,
                         radius: BlynkRadius.lg,
                       ),
                       const SizedBox(width: BlynkSpace.s48),

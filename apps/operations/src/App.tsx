@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
 import { Catalog } from './pages/Catalog';
@@ -22,6 +22,7 @@ import { Stock as InventoryStock } from './pages/Inventory/Stock';
 import { StockDetail as InventoryStockDetail } from './pages/Inventory/StockDetail';
 import { Suppliers as InventorySuppliers } from './pages/Inventory/Suppliers';
 import { Login } from './pages/Login';
+import { Welcome, hasSeenIntro } from './pages/Welcome';
 import { More } from './pages/More';
 import { OrderDetail } from './pages/OrderDetail';
 import { Orders } from './pages/Orders';
@@ -69,10 +70,25 @@ function RequireOperations({ children }: { children: JSX.Element }) {
  * `RequireOperations` gate then sends an unauthenticated visitor on to
  * `/login`, so there is exactly one redirect rule to reason about, not two.
  */
+/**
+ * The welcome screen opens every launch of the app (owner's request,
+ * 2026-09-27): the first navigation of a launch goes to /welcome, carrying
+ * where it was headed, and Welcome continues there.
+ */
+function IntroGate({ children }: { children: JSX.Element }) {
+  const location = useLocation();
+  if (!hasSeenIntro() && location.pathname !== '/welcome') {
+    return <Navigate to="/welcome" replace state={{ from: location }} />;
+  }
+  return children;
+}
+
 export function AppRoutes() {
   return (
+    <IntroGate>
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/welcome" element={<Welcome />} />
       <Route
         element={
           <RequireOperations>
@@ -108,6 +124,7 @@ export function AppRoutes() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </IntroGate>
   );
 }
 

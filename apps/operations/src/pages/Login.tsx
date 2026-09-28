@@ -66,8 +66,12 @@ export function Login() {
       <header className="login__head">
         <span className="login__brand">Blynk</span>
         <span className="login__app">Operations</span>
-        {/* Checked inline so production builds drop DevSkip entirely. */}
-        {import.meta.env.DEV ? <DevSkip busy={busy} setBusy={setBusy} setError={setError} /> : null}
+        {/* Checked inline so store builds drop DevSkip entirely. A LAN test
+            build may opt in with VITE_ENABLE_DEV_SKIP=true; it still only
+            works against a development API, which alone returns dev_otp. */}
+        {import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_SKIP === 'true' ? (
+          <DevSkip busy={busy} setBusy={setBusy} setError={setError} />
+        ) : null}
       </header>
 
       <div className="login__body">

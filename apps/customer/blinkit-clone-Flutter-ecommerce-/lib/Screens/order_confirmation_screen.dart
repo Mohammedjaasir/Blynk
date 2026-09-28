@@ -49,21 +49,28 @@ class OrderConfirmationScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // The one premium moment checkout is allowed (brief 15):
+                  // the medallion settles in once - scale 0.9 to 1 with a
+                  // fade, over the emphasized beat - and then is still. No
+                  // loop, no confetti; the order details below are what the
+                  // customer came to read.
                   const ExcludeSemantics(
                     child: Center(
-                      child: SizedBox(
-                        width: _medallion,
-                        height: _medallion,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: BlynkColors.positiveTint,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Icon(
-                              BlynkIcons.check,
-                              size: _medallion / 2,
-                              color: BlynkColors.positive,
+                      child: _MedallionSettle(
+                        child: SizedBox(
+                          width: _medallion,
+                          height: _medallion,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: BlynkColors.positiveTint,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Icon(
+                                BlynkIcons.check,
+                                size: _medallion / 2,
+                                color: BlynkColors.positive,
+                              ),
                             ),
                           ),
                         ),
@@ -206,6 +213,31 @@ class _FactLabel extends StatelessWidget {
       child: Text(
         text,
         style: BlynkText.caption.copyWith(color: BlynkColors.ink2),
+      ),
+    );
+  }
+}
+
+/// Scales and fades [child] into place once. Deliberately begins at 0.9, not
+/// 0: the medallion is already recognisable on its first frame and simply
+/// finishes arriving, which reads as confirmation rather than as an effect.
+/// Under reduced motion it is shown at rest.
+class _MedallionSettle extends StatelessWidget {
+  const _MedallionSettle({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (BlynkMotion.reduced(context)) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: BlynkMotion.entrance,
+      curve: BlynkMotion.easeOut,
+      child: child,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.scale(scale: 0.75 + 0.25 * t, child: child),
       ),
     );
   }

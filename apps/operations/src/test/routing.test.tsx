@@ -1,6 +1,8 @@
 import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
+import userEvent from '@testing-library/user-event';
+import { resetIntroForTests } from '../pages/Welcome';
 import { ADMIN_WITH_RIDER, ok, renderAs } from './helpers';
 
 afterEach(() => {
@@ -16,6 +18,20 @@ describe('routing', () => {
       expect(await screen.findByLabelText('Mobile number')).toBeInTheDocument();
     }
   );
+
+  it('every launch opens on the welcome screen, signed out', async () => {
+    resetIntroForTests();
+    renderAs(null, '/orders');
+    expect(await screen.findByRole('button', { name: /get started/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Mobile number')).not.toBeInTheDocument();
+  });
+
+  it('every launch opens on the welcome screen, signed in too, then continues', async () => {
+    resetIntroForTests();
+    renderAs(ADMIN_WITH_RIDER, '/orders', { 'GET /riders/deliveries': () => ok({ deliveries: [] }) });
+    await userEvent.click(await screen.findByRole('button', { name: /get started/i }));
+    expect(await screen.findByText('No live orders.')).toBeInTheDocument();
+  });
 
   it('an authenticated operator can reach every tab route directly by URL', async () => {
     // F3 replaced Orders' F1 placeholder with the real board; `renderAs`'s

@@ -8,6 +8,8 @@ import '../UI/Widgets/Organisms/products_screen_grid.dart';
 import '../UI/Widgets/Organisms/products_screen_sub_category_list.dart';
 import '../Services/Providers/product.provider.dart';
 import '../design/tokens.dart';
+import 'package:ecom/UI/Widgets/Atoms/entrance_fade.dart';
+import 'package:ecom/UI/Widgets/Atoms/blynk_crossfade.dart';
 
 /// Category listing: a sticky category rail on the left, the responsive
 /// product grid on the right.
@@ -81,7 +83,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
         // Per category: only this category's own failed first load shows here.
         final failure = productProvider.productsFailureFor(_activeSlug);
 
-        return Scaffold(
+        // One EntranceScope per screen: a card that scrolls off and back is rebuilt at rest, not replayed.
+        return EntranceScope(
+          child: Scaffold(
           backgroundColor: BlynkColors.well,
           appBar: AppBar(
             automaticallyImplyLeading: true,
@@ -120,7 +124,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         ),
                       ),
                       Expanded(
-                        child: isLoading
+                        // The skeleton gives way to the grid on a crossfade,
+                        // top-aligned so the first row lands where its
+                        // placeholder was. Keyed by state, so only a change
+                        // fades; the first frame is never faded in.
+                        child: BlynkCrossfade(
+                          child: KeyedSubtree(
+                            key: ValueKey<String>(isLoading
+                                ? 'loading'
+                                : (failure != null && products.isEmpty) ? 'failure' : 'grid'),
+                            child: isLoading
                             ? buildProductsSkeletonGrid(context)
                             : (failure != null && products.isEmpty)
                                 ? FailureState(
@@ -136,6 +149,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                     ),
                                   )
                                 : buildProductsGrid(context, products),
+                          ),
+                        ),
                       ),
                     ],
                   );
@@ -143,6 +158,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ),
               const BottomStickyContainer(),
             ],
+          ),
           ),
         );
       },

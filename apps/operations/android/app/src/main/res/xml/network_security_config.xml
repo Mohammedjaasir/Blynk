@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Production network policy for Blynk Ops: HTTPS only. No cleartext
+  exceptions - no localhost, no LAN address, no developer PC.
+
+  A Wi-Fi test APK against a development backend over plain http is a
+  separate `lanTest` build type. Its policy is generated into the
+  git-ignored app/src/lanTest/ by `npm run android:lan-config`, which
+  requires CAP_LAN_HTTP=1 and a private LAN IPv4 in LAN_API_HOST. Nothing
+  about this file or a release build changes for it.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

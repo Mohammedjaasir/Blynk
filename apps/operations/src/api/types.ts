@@ -428,6 +428,9 @@ export interface Category {
   image_url: string | null;
   display_order: number;
   is_active: boolean;
+  /** Migration 010. Absent on an API from before it - read as the centre. */
+  image_focal_x?: number;
+  image_focal_y?: number;
 }
 
 /**

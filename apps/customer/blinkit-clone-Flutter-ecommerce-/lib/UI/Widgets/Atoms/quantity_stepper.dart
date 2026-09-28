@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../design/tokens.dart';
+import 'blynk_crossfade.dart';
+import 'blynk_press.dart';
 
 /// "- n +" for a cart line. The pill is 40 dp tall but each button's hit area
 /// is [BlynkStepper.minTapSize] (48 x 48), and pressing changes colour only,
@@ -103,10 +105,18 @@ class QuantityStepper extends StatelessWidget {
                     excludeSemantics: true,
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(
-                        '$quantity',
-                        textAlign: TextAlign.center,
-                        style: BlynkStepper.count.copyWith(color: BlynkStepper.countColor),
+                      // The count ticks over on a fast crossfade, keyed by
+                      // value, so a tap is seen to change the number rather
+                      // than the number simply being different.
+                      child: BlynkCrossfade(
+                        duration: BlynkMotion.base,
+                        alignment: Alignment.center,
+                        child: Text(
+                          '$quantity',
+                          key: ValueKey<int>(quantity),
+                          textAlign: TextAlign.center,
+                          style: BlynkStepper.count.copyWith(color: BlynkStepper.countColor),
+                        ),
                       ),
                     ),
                   ),
@@ -155,7 +165,11 @@ class _StepButtonState extends State<_StepButton> {
       excludeSemantics: true,
       child: Material(
         type: MaterialType.transparency,
-        child: InkResponse(
+        // Press response on each half of the stepper: the control settles
+        // under the thumb the instant it is touched, before the count moves.
+        child: BlynkPress(
+          enabled: enabled,
+          child: InkResponse(
           onTap: widget.onTap,
           onFocusChange: (focused) => setState(() => _focused = focused),
           radius: QuantityStepper._visual / 2,
@@ -181,6 +195,7 @@ class _StepButtonState extends State<_StepButton> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

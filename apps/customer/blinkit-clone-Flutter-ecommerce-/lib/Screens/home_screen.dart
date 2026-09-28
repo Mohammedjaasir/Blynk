@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../Services/Providers/product.provider.dart';
 
+import '../UI/Widgets/Atoms/sliver_entrance.dart';
 import '../UI/Widgets/Atoms/app_skeleton.dart';
 import '../UI/Widgets/Atoms/connectivity_banner.dart';
 import '../UI/Widgets/Organisms/dental_home_entry.dart';
@@ -14,6 +15,7 @@ import '../UI/Widgets/Organisms/home_screen_carousel.dart';
 import '../UI/Widgets/Organisms/home_screen_search_bar.dart';
 import '../app_responsive.dart';
 import '../design/tokens.dart';
+import '../UI/Widgets/Atoms/entrance_fade.dart';
 
 /// The Shop tab.
 ///
@@ -42,7 +44,48 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  /// Home's entrance: one timeline, five beats. Header, then search, then
+  /// the hero, then categories (with the dental entry), then the products.
+  /// The tagline rides the search beat and the dental entry rides the
+  /// category beat - fewer beats reads as one composition arriving, and the
+  /// whole thing is over in 810 ms. It runs once; a pull to refresh or a
+  /// section scrolling back into view never replays it.
+  ///
+  /// It starts after Home's first frame, not during it (2026-09-26). That
+  /// frame is the expensive one (the whole tree, first image decodes), and on
+  /// the emulator it stalled the UI thread ~700 ms arriving from onboarding.
+  /// A controller started before the stall is already most of the way
+  /// through when the next frame paints, so the cascade was simply skipped.
+  static const int _beats = 5;
+  late final AnimationController _entrance = AnimationController(vsync: this);
+  late final EntranceTimeline _timeline =
+      EntranceTimeline(controller: _entrance, beats: _beats);
+  bool _entranceStarted = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reduced motion is a MediaQuery value, so this cannot live in initState.
+    if (_entranceStarted) return;
+    _entranceStarted = true;
+    _entrance.duration = _timeline.total;
+    if (BlynkMotion.reduced(context)) {
+      _entrance.value = 1;
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _entrance.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
+  }
+
   /// 2026-09-24: the category tiles used to **filter this screen in place** —
   /// tapping "Dairy & Eggs" swapped the "Browse all" section underneath for a
   /// "Dairy & Eggs" one and you stayed on Home. They now **open the category**
@@ -67,7 +110,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final hasSavedContent =
         context.select<ProductProvider, bool>((p) => p.categories.isNotEmpty);
 
-    return Scaffold(
+    // One EntranceScope per screen: a card that scrolls off and back is rebuilt at rest, not replayed.
+    return EntranceScope(
+      child: Scaffold(
       primary: true,
       backgroundColor: BlynkColors.paper,
       // The cart bar belongs to the shell, so Home never draws its own.
@@ -91,12 +136,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   parent: AlwaysScrollableScrollPhysics(),
                 ),
                 slivers: [
-                  const HomeScreenAppBar(),
+                  SliverEntrance(animation: _timeline.section(0), sliver: const HomeScreenAppBar()),
                   // The search field sits directly under the address block,
                   // where the reference puts it. It is the screen's only way
                   // into Search — the brand row's circular search button was
                   // removed with this restoration.
-                  const HomeScreenSearchBar(),
+                  SliverEntrance(animation: _timeline.section(1), sliver: const HomeScreenSearchBar()),
                   // Saved items are showing while the connection is down.
                   SliverToBoxAdapter(
                     child: ConnectivityBanner(
@@ -106,27 +151,36 @@ class _HomeScreenState extends State<HomeScreen> {
                           .refreshCatalog(force: true),
                     ),
                   ),
-                  const HomeBrandTagline(),
+                  SliverEntrance(animation: _timeline.section(1), sliver: const HomeBrandTagline()),
                   // Renders only when GET /promotions returns a live
                   // promotion; otherwise it is absent, not placeheld.
-                  const HomeScreenCarousel(),
+                  SliverEntrance(animation: _timeline.section(2), sliver: const HomeScreenCarousel()),
                   const SliverToBoxAdapter(
                     child: SizedBox(height: BlynkSpace.s16),
                   ),
-                  const HomeScreenCateogoryWidget(),
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.only(top: BlynkSpace.s16),
-                      child: DentalHomeEntry(),
+                  SliverEntrance(animation: _timeline.section(3), sliver: const HomeScreenCateogoryWidget()),
+                  SliverEntrance(
+                    animation: _timeline.section(3),
+                    sliver: const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: BlynkSpace.s16),
+                        child: DentalHomeEntry(),
+                      ),
                     ),
                   ),
                   // The real products behind the selected chip, titled for
                   // the query that actually runs.
                   // Always the catalogue-wide query: the tiles above open a
                   // category rather than filtering this section.
-                  const HomeProductSections(
-                    categorySlug: null,
-                    categoryName: null,
+                  SliverEntrance(
+                    animation: _timeline.section(4),
+                    sliver: HomeProductSections(
+                      categorySlug: null,
+                      categoryName: null,
+                      // The cards stagger from the moment their section
+                      // appears, not from frame 0 behind an invisible section.
+                      entranceDelay: _timeline.delayOf(4),
+                    ),
                   ),
                   const SliverToBoxAdapter(
                     child: SizedBox(height: HomeScreen.bottomClearance),
@@ -136,6 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

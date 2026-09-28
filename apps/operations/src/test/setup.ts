@@ -45,3 +45,15 @@ if (typeof URL !== 'undefined' && typeof URL.createObjectURL !== 'function') {
   URL.createObjectURL = () => 'blob:mock';
   URL.revokeObjectURL = () => {};
 }
+
+/**
+ * The welcome screen (pages/Welcome.tsx) opens on every launch. Every
+ * existing test is about what happens after it, so each test starts as a
+ * launch that has already passed it; welcome.test and routing.test reset it
+ * to test the welcome screen itself.
+ */
+import { beforeEach } from 'vitest';
+import { markIntroSeen } from '../pages/Welcome';
+beforeEach(() => {
+  markIntroSeen();
+});

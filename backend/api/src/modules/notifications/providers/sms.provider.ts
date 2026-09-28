@@ -89,18 +89,21 @@ export class SmsProvider implements NotificationProvider {
     try {
       // Format number for NotifyLK (947XXXXXXXX without leading +)
       const toPhone = normalizedPhone.replace(/^\+/, '');
-      const response = await fetch('https://app.notifylk.com/api/v1/send', {
+      // Notify.lk's documented endpoint is app.notify.lk (the old
+      // app.notifylk.com host does not exist), and it takes form/query
+      // fields, not a JSON body.
+      const response = await fetch('https://app.notify.lk/api/v1/send', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: JSON.stringify({
-          user_id: env.SMS_USER_ID,
-          api_key: env.SMS_API_KEY,
-          sender_id: env.SMS_SENDER_ID || 'Blynk',
+        body: new URLSearchParams({
+          user_id: env.SMS_USER_ID ?? '',
+          api_key: env.SMS_API_KEY ?? '',
+          sender_id: env.SMS_SENDER_ID || 'NotifyDEMO',
           to: toPhone,
           message: params.message,
-        }),
+        }).toString(),
         signal: AbortSignal.timeout(10000), // 10-second timeout
       });
 
@@ -124,6 +127,18 @@ export class SmsProvider implements NotificationProvider {
           providerName: this.name,
           errorType: 'PERMANENT',
           errorMessage: `NotifyLK rejected request with HTTP ${response.status}: ${JSON.stringify(responseBody)}`,
+          rawResponse: responseBody,
+        };
+      }
+
+      // Notify.lk answers HTTP 200 with {"status":"error", ...} for bad
+      // credentials or an unapproved sender ID - that is not a delivery.
+      if (responseBody && responseBody.status && responseBody.status !== 'success') {
+        return {
+          success: false,
+          providerName: this.name,
+          errorType: 'PERMANENT',
+          errorMessage: `NotifyLK rejected the message: ${JSON.stringify(responseBody)}`,
           rawResponse: responseBody,
         };
       }

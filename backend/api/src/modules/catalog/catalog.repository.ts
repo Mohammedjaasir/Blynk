@@ -21,7 +21,7 @@ export class CatalogRepository {
   async findActiveCategories() {
     return await db
       .selectFrom('categories')
-      .select(['id', 'name', 'slug', 'description', 'image_url', 'display_order', 'is_active'])
+      .select(['id', 'name', 'slug', 'description', 'image_url', 'display_order', 'is_active', 'image_focal_x', 'image_focal_y'])
       .where('is_active', '=', true)
       .orderBy('display_order', 'asc')
       .orderBy('name', 'asc')
@@ -77,6 +77,8 @@ export class CatalogRepository {
     image_url?: string | null;
     display_order?: number;
     is_active?: boolean;
+    image_focal_x?: number;
+    image_focal_y?: number;
   }) {
     const [record] = await db
       .insertInto('categories')
@@ -87,6 +89,8 @@ export class CatalogRepository {
         image_url: data.image_url ?? null,
         display_order: data.display_order ?? 0,
         is_active: data.is_active ?? true,
+        image_focal_x: data.image_focal_x ?? 50,
+        image_focal_y: data.image_focal_y ?? 50,
       })
       .returningAll()
       .execute();
@@ -106,6 +110,8 @@ export class CatalogRepository {
       image_url?: string | null;
       display_order?: number;
       is_active?: boolean;
+      image_focal_x?: number;
+      image_focal_y?: number;
     }
   ) {
     const [record] = await db

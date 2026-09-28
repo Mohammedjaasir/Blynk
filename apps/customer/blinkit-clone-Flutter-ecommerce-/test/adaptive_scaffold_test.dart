@@ -160,7 +160,7 @@ void main() {
       expect(iconOf('Shop').color, BlynkColors.ink2);
 
       BoxDecoration indicator(String label) {
-        final c = tester.widget<Container>(find.byKey(ValueKey('nav-indicator-$label')));
+        final c = tester.widget<AnimatedContainer>(find.byKey(ValueKey('nav-indicator-$label')));
         return c.decoration! as BoxDecoration;
       }
 
@@ -177,7 +177,14 @@ void main() {
       const tileSize = BlynkIcons.md + 2 * (BlynkSpace.s4 + 2);
       expect(tester.getSize(find.byKey(const ValueKey('nav-indicator-Orders'))), const Size(tileSize, tileSize));
       expect(tester.getSize(find.byKey(const ValueKey('nav-indicator-Shop'))), const Size(tileSize, tileSize));
-      expect(find.byType(AnimatedContainer), findsNothing);
+      // Motion M8 reversed the old "nothing implicitly animates in the nav"
+      // rule on purpose: each tile IS an AnimatedContainer, one per
+      // destination, on the shared fast beat - never a longer or ad-hoc one.
+      final tiles = tester.widgetList<AnimatedContainer>(find.byType(AnimatedContainer)).toList();
+      expect(tiles, hasLength(4));
+      for (final t in tiles) {
+        expect(t.duration, BlynkMotion.base);
+      }
     });
 
     testWidgets('labels are 12 px w700', (tester) async {
@@ -187,15 +194,30 @@ void main() {
       expect(text.style!.fontWeight, FontWeight.w700);
     });
 
-    testWidgets('the indicator moves in the same frame (nothing tweens, reduced motion or not)',
+    // Motion M8 (brief section 14): the tile's fill and the icon and label
+    // colours move over one fast beat when the tab changes. What this test
+    // used to pin - "nothing tweens" - is deliberately reversed for motion
+    // on, and kept for reduced motion, where the change still lands in the
+    // same frame.
+    testWidgets('the indicator tweens over one base beat, and not at all under reduced motion',
         (tester) async {
-      for (final reduced in [false, true]) {
-        await pump(tester, selected: 0, disableAnimations: reduced);
-        await pump(tester, selected: 2, disableAnimations: reduced);
-        final c = tester.widget<Container>(find.byKey(const ValueKey('nav-indicator-Help')));
-        expect((c.decoration! as BoxDecoration).color, BlynkColors.signal);
-        expect(tester.hasRunningAnimations, isFalse, reason: 'reduced: $reduced');
-      }
+      await pump(tester, selected: 0);
+      await pump(tester, selected: 2);
+      final c = tester.widget<AnimatedContainer>(find.byKey(const ValueKey('nav-indicator-Help')));
+      expect((c.decoration! as BoxDecoration).color, BlynkColors.signal, reason: 'the target is set at once');
+      expect(c.duration, BlynkMotion.base);
+      expect(tester.hasRunningAnimations, isTrue, reason: 'the fill is on its way');
+      // Implicit animations finish a frame after their duration; settling is
+      // the honest check, and nothing in the bar loops.
+      await tester.pumpAndSettle();
+      expect(tester.hasRunningAnimations, isFalse, reason: 'and over once settled');
+
+      await pump(tester, selected: 0, disableAnimations: true);
+      await pump(tester, selected: 2, disableAnimations: true);
+      final r = tester.widget<AnimatedContainer>(find.byKey(const ValueKey('nav-indicator-Help')));
+      expect((r.decoration! as BoxDecoration).color, BlynkColors.signal);
+      expect(r.duration, Duration.zero);
+      expect(tester.hasRunningAnimations, isFalse, reason: 'reduced motion: same frame');
     });
 
     testWidgets('each item is one selectable button with its label', (tester) async {
@@ -323,7 +345,7 @@ void main() {
     testWidgets('compact and rail agree: one selected treatment, not two', (tester) async {
       await pump(tester, width: 400, selected: 1);
       final compactTile =
-          tester.widget<Container>(find.byKey(const ValueKey('nav-indicator-Orders'))).decoration!
+          tester.widget<AnimatedContainer>(find.byKey(const ValueKey('nav-indicator-Orders'))).decoration!
               as BoxDecoration;
       await pump(tester, width: 800, selected: 1);
       final r = tester.widget<NavigationRail>(rail);

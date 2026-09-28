@@ -61,6 +61,16 @@ class BlynkImageWell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 2026-09-26: a real photo fills the well edge to edge. The inset only
+    // ever existed to frame the fallback medallion; on a photo it showed the
+    // well tint as a grey border around the picture, which is what the
+    // customer saw and asked to have removed. The tint itself stays: it is
+    // the placeholder a photo fades in over (brief 11, never a blank white
+    // box) and the surface the fallback glyph sits on when there is no
+    // photo or the load fails.
+    final hasPhoto = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    final photoInset = hasPhoto ? 0.0 : inset;
+
     final well = DecoratedBox(
       decoration: BoxDecoration(color: tint, borderRadius: radius),
       child: ClipRRect(
@@ -80,15 +90,16 @@ class BlynkImageWell extends StatelessWidget {
             // the curves stay parallel instead of the inner corner looking
             // tighter or squarer than the frame around it.
             Padding(
-              padding: EdgeInsets.all(inset),
+              padding: EdgeInsets.all(photoInset),
               child: ClipRRect(
                 borderRadius: BorderRadius.all(
                   Radius.circular(
-                    ((radius.topLeft.x - inset) < 0 ? 0 : radius.topLeft.x - inset).toDouble(),
+                    ((radius.topLeft.x - photoInset) < 0 ? 0 : radius.topLeft.x - photoInset).toDouble(),
                   ),
                 ),
                 child: BlynkImageContent(
                   imageUrl: imageUrl,
+                  blend: tint,
                   glyph: glyph,
                   alignment: alignment,
                 ),
@@ -165,29 +176,120 @@ class ProductImageWell extends StatelessWidget {
 /// * **Load-in does not flash**: the fallback holds the box while the photo
 ///   decodes and the photo fades in over it, in the same rect.
 /// * **Load failure falls back** — it does not throw and does not resize.
-class BlynkImageContent extends StatelessWidget {
+class BlynkImageContent extends StatefulWidget {
   const BlynkImageContent({
     super.key,
     this.imageUrl,
     this.glyph = BlynkIcons.product,
     this.alignment = Alignment.center,
+    this.blend,
   });
 
   final String? imageUrl;
   final IconData glyph;
+
+  /// The surface the photo sits on. When set, the photo is multiplied onto
+  /// it, so the white studio background most product shots come with takes
+  /// on the surface colour and the photo's edge disappears - no white square
+  /// on a tinted well. The product itself is unchanged in practice: the well
+  /// tint is within a few percent of white, so multiplying by it only shifts
+  /// the white areas.
+  final Color? blend;
 
   /// Where the `cover` crop anchors. [Alignment.center] - the 50/50 focal
   /// default - is exactly the crop this widget performed before focal points
   /// existed, so an unset image is pixel-for-pixel unchanged.
   final Alignment alignment;
 
+  /// How far a photo's shape may differ from its box before it is fitted
+  /// whole instead of filling the box. See [BlynkImageContent.fitFor].
+  static const double maxCropRatio = 1.35;
+
+  /// `cover` when the photo is roughly the box's shape (a little crop off
+  /// the edges, the box filled), `contain` when it is far off it.
+  ///
+  /// 2026-09-26: `cover` alone cropped a 151 x 400 bottle shot into a wide
+  /// card box down to a strip of its label - the whole product gone, which
+  /// on the emulator read as the image being bent. Such a photo is now shown
+  /// whole on the well (its white studio background multiplies into the
+  /// tint, so there is no visible band). A photo near the box's shape still
+  /// fills it, exactly as before. Unknown size (still loading) -> `cover`.
+  static BoxFit fitFor(Size? image, Size box) {
+    if (image == null || image.isEmpty || box.isEmpty) return BoxFit.cover;
+    final r = (image.width / image.height) / (box.width / box.height);
+    return (r > maxCropRatio || r < 1 / maxCropRatio) ? BoxFit.contain : BoxFit.cover;
+  }
+
+  @override
+  State<BlynkImageContent> createState() => _BlynkImageContentState();
+}
+
+class _BlynkImageContentState extends State<BlynkImageContent> {
+  ImageStream? _stream;
+  ImageStreamListener? _listener;
+  Size? _imageSize;
+
+  String? get _url {
+    final url = widget.imageUrl?.trim();
+    return (url == null || url.isEmpty) ? null : url;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(BlynkImageContent old) {
+    super.didUpdateWidget(old);
+    if (old.imageUrl != widget.imageUrl) {
+      _imageSize = null;
+      _resolve();
+    }
+  }
+
+  /// Reads the photo's pixel size from the same (cached) stream the
+  /// [Image.network] below uses - no second download.
+  void _resolve() {
+    final url = _url;
+    final stream = url == null
+        ? null
+        : NetworkImage(url).resolve(createLocalImageConfiguration(context));
+    if (stream?.key == _stream?.key && stream != null) return;
+    _stop();
+    _stream = stream;
+    if (stream == null) return;
+    _listener = ImageStreamListener(
+      (info, _) {
+        final size = Size(info.image.width.toDouble(), info.image.height.toDouble());
+        info.dispose();
+        if (mounted && size != _imageSize) setState(() => _imageSize = size);
+      },
+      onError: (_, __) {},
+    );
+    stream.addListener(_listener!);
+  }
+
+  void _stop() {
+    if (_stream != null && _listener != null) _stream!.removeListener(_listener!);
+    _stream = null;
+    _listener = null;
+  }
+
+  @override
+  void dispose() {
+    _stop();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final url = imageUrl?.trim();
-    final fallback = _WellFallback(glyph: glyph);
-    if (url == null || url.isEmpty) return fallback;
+    final url = _url;
+    final fallback = _WellFallback(glyph: widget.glyph);
+    if (url == null) return fallback;
 
-    return Image.network(
+    return LayoutBuilder(builder: (context, box) => Image.network(
       url,
       // 2026-09-24: was `contain`, which fitted the WHOLE photo inside the
       // well — so a landscape product shot in a square well letterboxed, with
@@ -202,14 +304,16 @@ class BlynkImageContent extends StatelessWidget {
       // the grid needs. Product shots are centre-weighted, so cropping the
       // edges is safe; a photo with detail at the extreme edge is the rare
       // case, and the fix for that one is a better source image.
-      fit: BoxFit.cover,
+      fit: BlynkImageContent.fitFor(_imageSize, box.biggest),
       // 2026-09-24 (migration 009): `cover` crops whatever does not fit, and
       // it used to crop from the centre unconditionally - so a photo whose
       // subject sits off-centre lost the subject. The operator now picks the
       // point that must survive, in Blynk Ops, and it arrives here as an
       // Alignment. The 50/50 default IS Alignment.center, so nothing about an
       // untouched photo changes.
-      alignment: alignment,
+      alignment: widget.alignment,
+      color: widget.blend,
+      colorBlendMode: widget.blend == null ? null : BlendMode.multiply,
       width: double.infinity,
       height: double.infinity,
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -227,7 +331,7 @@ class BlynkImageContent extends StatelessWidget {
         );
       },
       errorBuilder: (_, __, ___) => fallback,
-    );
+    ));
   }
 }
 

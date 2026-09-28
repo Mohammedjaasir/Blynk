@@ -132,6 +132,32 @@ describe('Stage 3 Catalog & Authoritative Pricing Module', () => {
       expect(res.body.data.category.display_order).toBe(15);
     });
 
+    // Migration 010 (2026-09-26): operators set which part of a category
+    // image must stay visible, and customers receive it.
+    it('saves a category image focal point and serves it to customers', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/admin/categories/${testCatId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ image_focal_x: 20, image_focal_y: 80 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.category.image_focal_x).toBe(20);
+      expect(res.body.data.category.image_focal_y).toBe(80);
+
+      const pub = await request(app).get('/api/v1/catalog/categories');
+      const mine = pub.body.data.categories.find((c: { id: string }) => c.id === testCatId);
+      expect(mine.image_focal_x).toBe(20);
+      expect(mine.image_focal_y).toBe(80);
+    });
+
+    it('rejects a category focal point outside 0-100', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/admin/categories/${testCatId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ image_focal_x: 140 });
+      expect(res.status).toBe(400);
+    });
+
     it('allows ADMIN to deactivate a category', async () => {
       const res = await request(app)
         .patch(`/api/v1/admin/categories/${testCatId}`)
