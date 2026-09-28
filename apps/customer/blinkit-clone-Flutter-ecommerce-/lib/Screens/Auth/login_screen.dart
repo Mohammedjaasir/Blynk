@@ -290,11 +290,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ? SizedBox(
                                             width: cardWidth,
                                             height: cardHeight,
-                                            child: Lottie.asset(
-                                              slide.assetPath,
-                                              fit: BoxFit.contain,
-                                              // Reduced motion: no endless loop.
-                                              repeat: !MediaQuery.disableAnimationsOf(context),
+                                            // Its own layer: each animation
+                                            // frame repaints only the
+                                            // animation, not the slide.
+                                            child: RepaintBoundary(
+                                              child: Lottie.asset(
+                                                slide.assetPath,
+                                                fit: BoxFit.contain,
+                                                // The file is authored at 24 fps
+                                                // and Lottie plays at that rate by
+                                                // default, which on a 60-120 Hz
+                                                // phone read as lag (2026-09-28).
+                                                // max = interpolate every display
+                                                // frame.
+                                                frameRate: FrameRate.max,
+                                                // Reduced motion: no endless loop.
+                                                repeat: !MediaQuery.disableAnimationsOf(context),
+                                              ),
                                             ),
                                           )
                                         // A soft tinted well, rounded, with no

@@ -8,6 +8,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 const String _kDefineApiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const String _kDefineMapTilesUrl = String.fromEnvironment('MAP_TILES_URL');
 
+/// LAN test switch (2026-09-27). Off unless a build passes
+/// `--dart-define=ALLOW_LAN_HTTP=true`. It is deliberately NOT read from
+/// `.env`, so no bundled file can turn it on. See [AppConfig.validate].
+const bool _kAllowLanHttp = bool.fromEnvironment('ALLOW_LAN_HTTP');
+
 /// Why a build is not usable. Only [code] is ever shown to a customer.
 class ConfigProblem {
   const ConfigProblem._(this.code);
@@ -40,7 +45,9 @@ class AppConfig {
     String defineMapTilesUrl = _kDefineMapTilesUrl,
     String? Function(String key)? dotenvLookup,
     bool isRelease = kReleaseMode,
+    bool allowLanHttp = _kAllowLanHttp,
   })  : _defineApi = defineApiBaseUrl.trim(),
+        _allowLanHttp = allowLanHttp,
         _defineTiles = defineMapTilesUrl.trim(),
         _dotenvLookup = dotenvLookup ?? _readDotenv,
         _isRelease = isRelease;
@@ -55,6 +62,11 @@ class AppConfig {
   final String _defineTiles;
   final String? Function(String key) _dotenvLookup;
   final bool _isRelease;
+
+  /// True only in a build made with `--dart-define=ALLOW_LAN_HTTP=true`: a
+  /// temporary way to test a release APK on a phone against a backend on the
+  /// same Wi-Fi. Store builds never pass it.
+  final bool _allowLanHttp;
 
   static String? _readDotenv(String key) {
     try {
@@ -95,9 +107,39 @@ class AppConfig {
     final apiUri = Uri.tryParse(api);
     if (apiUri == null || apiUri.host.isEmpty) return ConfigProblem.apiUrlInvalid;
     if (isLocalHost(apiUri.host)) return ConfigProblem.apiUrlLocal;
-    if (apiUri.scheme != 'https') return ConfigProblem.apiUrlNotHttps;
-    return null;
+    if (apiUri.scheme == 'https') return null;
+    // The LAN test switch: plain http, but only to a private LAN IPv4
+    // literal, and only in a build that explicitly asked for it. Loopback,
+    // link-local and emulator aliases were already refused above; names
+    // (example.com, *.local) and public addresses are refused here.
+    if (_allowLanHttp && apiUri.scheme == 'http' && isPrivateLanIpv4(apiUri.host)) {
+      return null;
+    }
+    return ConfigProblem.apiUrlNotHttps;
   }
+
+  /// True only for a canonical dotted-decimal IPv4 address (four plain
+  /// decimal numbers, no leading zeros) in a private LAN range: 10.0.0.0/8,
+  /// 172.16.0.0/12 or 192.168.0.0/16. Never a name, never an exotic spelling
+  /// (`10.1`, `0x0a...`, `012...`), never loopback or public.
+  @visibleForTesting
+  static bool isPrivateLanIpv4(String host) {
+    final parts = host.split('.');
+    if (parts.length != 4) return false;
+    final bytes = <int>[];
+    for (final part in parts) {
+      if (!_canonicalOctet.hasMatch(part)) return false;
+      final v = int.parse(part);
+      if (v > 255) return false;
+      bytes.add(v);
+    }
+    if (bytes[0] == 10) return true;
+    if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+    if (bytes[0] == 192 && bytes[1] == 168) return true;
+    return false;
+  }
+
+  static final _canonicalOctet = RegExp(r'^(0|[1-9][0-9]{0,2})$');
 
   /// Release only: a set MAP_TILES_URL that is not a public https address. The
   /// app still starts (the map just reports itself unavailable).

@@ -60,6 +60,12 @@ ENV APP_NAME=blynk-backend-api
 # Self-hosted PMTiles archive directory (served publicly at /map-tiles/*.pmtiles)
 ENV MAP_TILES_DIR=/app/map-tiles
 
+# Uploaded product/category/promotion images (MEDIA_ROOT defaults to
+# ./uploads). Created here, as root, and handed to the node user: after
+# `USER node` the process cannot create it in root-owned /app, and a volume
+# mounted at /app/uploads inherits this ownership on first use.
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
+
 # Security: Run as unprivileged standard non-root user (node:node, uid/gid 1000)
 USER node
 
