@@ -158,3 +158,25 @@ export interface RiderOption {
   vehicle_registration_number: string;
   open_deliveries: number;
 }
+
+// ------------------------------------------------------------ feedback
+export type FeedbackCategory = 'APP' | 'DELIVERY' | 'PRODUCTS' | 'OTHER';
+export type FeedbackStatus = 'NEW' | 'READ';
+
+/** A row of GET /admin/feedback (backend migration 013). */
+export interface FeedbackItem {
+  id: string;
+  rating: number | null;
+  category: FeedbackCategory;
+  message: string;
+  status: FeedbackStatus;
+  created_at: string;
+  user_id: string;
+  full_name: string | null;
+  phone: string;
+}
+
+export interface FeedbackPage {
+  feedback: FeedbackItem[];
+  pagination: { page: number; limit: number; total: number; total_pages: number };
+}

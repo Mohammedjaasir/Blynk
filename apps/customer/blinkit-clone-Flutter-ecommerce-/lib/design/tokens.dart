@@ -193,6 +193,7 @@ abstract final class BlynkIcons {
   static const IconData share = Icons.share_outlined;
   static const IconData logout = Icons.logout;
   static const IconData dental = Icons.medical_services_outlined;
+  static const IconData feedback = Icons.rate_review_outlined;
 
   /// The icons that must read as different things from each other.
   static const List<IconData> distinct = <IconData>[

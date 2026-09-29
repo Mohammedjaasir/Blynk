@@ -25,6 +25,17 @@ if (mapsApiKey.isEmpty()) {
     logger.warn("MAPS_API_KEY is not set: Google Maps will show an unavailable/blank map")
 }
 
+// The website that shared product links point at (https://<host>/p/<id>),
+// e.g. APP_LINK_HOST=blynk.example.com: the environment variable, else the
+// Gradle property -PAPP_LINK_HOST. Android opens those links in this app once
+// the site serves /.well-known/assetlinks.json for this app's signing key.
+// Pass the same site to Flutter: --dart-define=SHARE_BASE_URL=https://<host>.
+def appLinkHost = (System.getenv("APP_LINK_HOST") ?: (project.findProperty("APP_LINK_HOST") ?: "")).toString().trim()
+if (appLinkHost.isEmpty()) {
+    appLinkHost = "links.invalid"
+    logger.warn("APP_LINK_HOST is not set: shared product links will open in the browser, not the app")
+}
+
 android {
     namespace = "lk.blynk.customer"
     compileSdk = flutter.compileSdkVersion
@@ -48,7 +59,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders += [MAPS_API_KEY: mapsApiKey]
+        manifestPlaceholders += [MAPS_API_KEY: mapsApiKey, APP_LINK_HOST: appLinkHost]
     }
 
     buildTypes {

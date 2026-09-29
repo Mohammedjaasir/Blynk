@@ -8,6 +8,7 @@ import '../UI/Widgets/Atoms/list_tile.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Organisms/logout_dialog.dart';
 import 'customer_shell.dart';
+import 'feedback_screen.dart';
 import '../app_responsive.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -68,6 +69,13 @@ class ProfileScreen extends StatelessWidget {
                   Navigator.of(context).pushNamed('/dental/appointments');
                 },
               ),
+            // Offered to guests too: FeedbackScreen.open sends them to log
+            // in first, like the app's other signed-in-only actions.
+            customListTile(
+              icon: BlynkIcons.feedback,
+              title: 'Send feedback',
+              callback: () => FeedbackScreen.open(context),
+            ),
             customListTile(
               icon: BlynkIcons.share,
               title: 'Share the app',

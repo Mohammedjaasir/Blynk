@@ -28,6 +28,7 @@ import { configurationRouter } from './modules/configuration/index.js';
 import { mapTilesRouter } from './modules/map-tiles/index.js';
 import { routingRouter } from './modules/routing/index.js';
 import { dentalRouter } from './modules/dental/index.js';
+import { feedbackRouter } from './modules/feedback/index.js';
 
 export function createApp(): Express {
   const app = express();
@@ -140,6 +141,7 @@ export function createApp(): Express {
   apiRouter.use('/configuration', configurationRouter);
   apiRouter.use('/dental', dentalRouter);
   apiRouter.use('/routing', routingRouter);
+  apiRouter.use('/feedback', feedbackRouter);
 
   // Admin-uploaded media (product photos, promotion visuals). Served from
   // the same origin as the API so the customer app and admin UI need no

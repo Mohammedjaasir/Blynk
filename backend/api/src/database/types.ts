@@ -104,6 +104,10 @@ export interface UsersTable {
   last_login_at: Date | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
+  /** Migration 012: staff password (bcrypt via pgcrypto) and its lockout. */
+  staff_password_hash: string | null;
+  login_failed_attempts: Generated<number>;
+  login_locked_until: Date | null;
 }
 
 export interface OtpVerificationsTable {
@@ -524,6 +528,20 @@ export interface AppointmentStatusHistoryTable {
   created_at: Generated<Date>;
 }
 
+/** Migration 013: what a customer sends from Profile / Help -> Send feedback. */
+export type FeedbackCategory = 'APP' | 'DELIVERY' | 'PRODUCTS' | 'OTHER';
+export type FeedbackStatus = 'NEW' | 'READ';
+
+export interface CustomerFeedbackTable {
+  id: Generated<string>;
+  user_id: string;
+  rating: number | null;
+  category: FeedbackCategory;
+  message: string;
+  status: Generated<FeedbackStatus>;
+  created_at: Generated<Date>;
+}
+
 export interface Database {
   system_configurations: SystemConfigurationsTable;
   dark_stores: DarkStoresTable;
@@ -554,5 +572,6 @@ export interface Database {
   doctor_blocked_dates: DoctorBlockedDatesTable;
   appointments: AppointmentsTable;
   appointment_status_history: AppointmentStatusHistoryTable;
+  customer_feedback: CustomerFeedbackTable;
   v_product_catalog: ProductCatalogView;
 }

@@ -1,0 +1,25 @@
+# Blynk admin (web) - production image for Coolify or any Docker host.
+#
+# Build:  docker build --build-arg VITE_API_BASE_URL=https://api.example.com/api/v1 .
+# The API address is baked in at build time (Vite), so it is a build
+# argument, not a runtime variable. Store builds never set
+# VITE_ENABLE_DEV_SKIP, so "Skip sign-in" is compiled out.
+
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# The Inventory website's address, for the "Source items in Inventory" link.
+# Leave empty to show a plain note instead of a link.
+ARG VITE_INVENTORY_URL=
+ENV VITE_INVENTORY_URL=$VITE_INVENTORY_URL
+RUN test -n "$VITE_API_BASE_URL" || (echo "VITE_API_BASE_URL build argument is required" && exit 1)
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80

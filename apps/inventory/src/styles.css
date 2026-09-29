@@ -1257,6 +1257,44 @@ td.cell__secondary {
   gap: 12px;
 }
 
+/* Password field with an inline show/hide toggle (staff email + password
+   sign-in, backend migration 012). */
+.password-input {
+  position: relative;
+  display: flex;
+}
+
+.password-input .input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 64px;
+}
+
+.password-input__toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.password-input__toggle:hover {
+  color: var(--ink);
+}
+
+.password-input__toggle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
 .login__dev {
   margin: 0;
   padding: 8px 10px;

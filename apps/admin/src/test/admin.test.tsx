@@ -76,6 +76,7 @@ describe('admin sign-in', () => {
 
     renderWithProviders(<Login />);
 
+    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
     await userEvent.type(screen.getByLabelText(/Mobile number/), '0775551122');
     await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
 
@@ -105,6 +106,7 @@ describe('admin sign-in', () => {
 
     renderWithProviders(<Login />);
 
+    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
     await userEvent.type(screen.getByLabelText(/Mobile number/), '0771234567');
     await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
     await userEvent.type(await screen.findByLabelText(/6-digit code/), '654321');
@@ -125,6 +127,7 @@ describe('admin sign-in', () => {
     );
 
     renderWithProviders(<Login />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
     await userEvent.type(screen.getByLabelText(/Mobile number/), '0775551122');
     await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
 
@@ -134,70 +137,102 @@ describe('admin sign-in', () => {
   });
 });
 
-describe('dev skip sign-in', () => {
+describe('admin email + password sign-in (backend migration 012)', () => {
   beforeEach(() => {
     tokenStore.clear();
     vi.restoreAllMocks();
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    tokenStore.clear();
-  });
+  afterEach(() => tokenStore.clear());
 
-  it('is not offered unless a dev admin phone is configured', () => {
-    vi.stubEnv('VITE_DEV_ADMIN_PHONE', '');
-    vi.stubGlobal('fetch', vi.fn(() => jsonResponse({})));
-    renderWithProviders(<Login />);
-    expect(screen.queryByRole('button', { name: 'Skip sign-in' })).toBeNull();
-  });
+  async function signIn(email: string, password: string) {
+    await userEvent.type(await screen.findByLabelText('Email'), email);
+    await userEvent.type(screen.getByLabelText('Password'), password);
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  }
 
-  it('signs in through the normal OTP flow with the dev code', async () => {
-    vi.stubEnv('VITE_DEV_ADMIN_PHONE', '0775551122');
-    const calls: { url: string; body: unknown }[] = [];
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
-      if (url.endsWith('/auth/otp/request')) return jsonResponse({ dev_otp: '424242' });
-      if (url.endsWith('/auth/otp/verify')) {
-        return jsonResponse({
-          access_token: 'admin-access',
-          refresh_token: 'admin-refresh',
-          user: ADMIN_USER,
-        });
-      }
-      return jsonResponse({});
-    });
+  it('is the default method and signs an ADMIN in with exactly the email and password', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) =>
+      String(input).endsWith('/auth/staff/login')
+        ? jsonResponse({ access_token: 'admin-access', refresh_token: 'admin-refresh', user: ADMIN_USER })
+        : jsonResponse({})
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     renderWithProviders(<Login />);
-    await userEvent.click(screen.getByRole('button', { name: 'Skip sign-in' }));
+    expect(await screen.findByLabelText('Email')).toHaveAttribute('autocomplete', 'username');
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    await signIn('owner@blynk.test', 'Blynk@1960');
 
     await waitFor(() => expect(tokenStore.access).toBe('admin-access'));
-    expect(calls.map((c) => c.body)).toEqual([
-      { phone: '0775551122' },
-      { phone: '0775551122', otp: '424242' },
-    ]);
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/staff/login'));
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ email: 'owner@blynk.test', password: 'Blynk@1960' });
   });
 
-  it('refuses to skip when the API gives no dev code', async () => {
-    vi.stubEnv('VITE_DEV_ADMIN_PHONE', '0775551122');
+  it('the show/hide toggle reveals and hides the password', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => jsonResponse({})));
+    renderWithProviders(<Login />);
+    const password = await screen.findByLabelText('Password');
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
+  it('refuses a customer account and keeps no session', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn((input: RequestInfo | URL) =>
-        String(input).endsWith('/auth/otp/request')
-          ? jsonResponse({ expires_in_seconds: 300 })
-          : jsonResponse({})
+      vi.fn(() => jsonResponse({ access_token: 'c-access', refresh_token: 'c-refresh', user: CUSTOMER_USER }))
+    );
+    renderWithProviders(<Login />);
+    await signIn('customer@blynk.test', 'Blynk@1960');
+    expect(await screen.findByText(NOT_ADMIN_MESSAGE)).toBeInTheDocument();
+    expect(tokenStore.access).toBeNull();
+  });
+
+  it('a wrong password says so and clears the field', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => jsonResponse({ code: 'INVALID_CREDENTIALS', message: 'Wrong email or password.' }, 401))
+    );
+    renderWithProviders(<Login />);
+    await signIn('owner@blynk.test', 'not-the-password');
+    expect(await screen.findByText('Wrong email or password.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toHaveValue('');
+  });
+
+  it('a locked account is told how long to wait', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        jsonResponse(
+          { code: 'LOGIN_LOCKED', message: 'Too many wrong passwords.', details: { retry_after_minutes: 15 } },
+          429
+        )
       )
     );
-
     renderWithProviders(<Login />);
-    await userEvent.click(screen.getByRole('button', { name: 'Skip sign-in' }));
+    await signIn('owner@blynk.test', 'not-the-password');
+    expect(await screen.findByText('Too many attempts. Try again in 15 minutes.')).toBeInTheDocument();
+  });
 
-    expect(
-      await screen.findByText('Skip only works against a development API.')
-    ).toBeInTheDocument();
-    expect(tokenStore.access).toBeNull();
+  it('can switch to an SMS code and back', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => jsonResponse({})));
+    renderWithProviders(<Login />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
+    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Use email and password instead' }));
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+  });
+});
+
+describe('no development shortcut', () => {
+  // 2026-09-29, owner's request: the "Skip sign-in" dev button is gone.
+  it('never offers "Skip sign-in"', async () => {
+    renderWithProviders(<Login />);
+    await screen.findByLabelText('Email');
+    expect(screen.queryByRole('button', { name: 'Skip sign-in' })).toBeNull();
+    expect(screen.queryByText('Dev')).toBeNull();
   });
 });
 
@@ -417,7 +452,7 @@ describe('admin scope', () => {
   });
   afterEach(() => tokenStore.clear());
 
-  it('navigates to store orders, catalog and home only', async () => {
+  it('navigates to store orders, catalog, home and customer feedback only', async () => {
     render(
       <MemoryRouter>
         <ToastProvider>
@@ -435,7 +470,8 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Products' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Categories' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Promotions' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(5);
+    expect(screen.getByRole('link', { name: 'Feedback' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(6);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

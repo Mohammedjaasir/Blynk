@@ -21,7 +21,11 @@ const String kSessionEndedMessage = "You've been logged out. Log in again to see
 /// screen; the session is re-checked in the background by [AuthProvider]. A
 /// guest sees the login screen (with its Skip).
 class SessionGate extends StatefulWidget {
-  const SessionGate({super.key});
+  const SessionGate({super.key, this.pendingProductId});
+
+  /// Set when the app was opened from a shared product link: once the gate
+  /// has decided, the product opens on top of the shop (or the login screen).
+  final String? pendingProductId;
 
   @override
   State<SessionGate> createState() => _SessionGateState();
@@ -72,11 +76,22 @@ class _SessionGateState extends State<SessionGate> {
     final signedIn = _signedIn;
     if (!mounted || !_introDone || signedIn == null) return;
     _cap?.cancel();
+    final navigator = Navigator.of(context);
     if (signedIn) {
-      unawaited(Navigator.of(context).pushReplacementNamed('/home'));
+      unawaited(navigator.pushReplacementNamed('/home'));
     } else {
       setState(() => _showLogin = true);
     }
+    _openPendingProduct(navigator);
+  }
+
+  bool _pendingOpened = false;
+
+  void _openPendingProduct(NavigatorState navigator) {
+    final id = widget.pendingProductId;
+    if (id == null || _pendingOpened) return;
+    _pendingOpened = true;
+    unawaited(navigator.pushNamed('/product', arguments: id));
   }
 
   @override

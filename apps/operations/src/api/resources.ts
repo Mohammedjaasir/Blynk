@@ -91,6 +91,14 @@ export const auth = {
       auth: false,
     }),
 
+  /** Staff email + password sign-in (backend migration 012). */
+  staffLogin: (email: string, password: string) =>
+    apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/staff/login', {
+      method: 'POST',
+      body: { email, password },
+      auth: false,
+    }),
+
   verifyOtp: (phone: string, otp: string) =>
     apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/otp/verify', {
       method: 'POST',

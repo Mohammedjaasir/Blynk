@@ -149,6 +149,7 @@ class MainApp extends StatelessWidget {
         child: child ?? const SizedBox.shrink(),
       ),
       onGenerateRoute: AppRouter.generateRoute,
+      onGenerateInitialRoutes: AppRouter.generateInitialRoutes,
       initialRoute: '/',
       theme: AppTheme.appTHeme,
     );

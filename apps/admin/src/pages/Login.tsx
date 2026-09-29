@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ApiError } from '../api/client';
 import { NOT_ADMIN_MESSAGE, useAuth } from '../auth/AuthContext';
 import { Field, Spinner } from '../components/ui';
 import blynkLogo from '../assets/blynk-logo-light.png';
@@ -11,14 +12,40 @@ import blynkLogo from '../assets/blynk-logo-light.png';
  */
 export function Login() {
   const { requestOtp, verifyOtp } = useAuth();
+  const { signInWithPassword } = useAuth();
   const navigate = useNavigate();
 
+  // Staff sign in with their email and password by default (backend
+  // migration 012); an SMS code stays available for anyone without a
+  // password, or locked out.
+  const emailId = useId();
+  const passwordId = useId();
+  const [method, setMethod] = useState<'password' | 'sms'>('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function submitPassword(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      // The password is sent exactly as typed; only the email is tidied.
+      await signInWithPassword(email.trim(), password);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setPassword('');
+      setError(passwordSignInError(err) ?? (err instanceof Error ? err.message : 'Could not sign in.'));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submitPhone(event: FormEvent) {
     event.preventDefault();
@@ -58,8 +85,6 @@ export function Login() {
 
   return (
     <div className="login">
-      {/* Checked inline so production builds drop DevSkip entirely. */}
-      {import.meta.env.DEV ? <DevSkip busy={busy} setBusy={setBusy} setError={setError} /> : null}
       {/* Split composition: brand on the left, the form on the right. A
           centered card on a dark field is the one layout every admin tool
           already uses. */}
@@ -74,10 +99,90 @@ export function Login() {
       <div className="login__panel">
         <h1 className="login__title">Sign in</h1>
         <p className="login__subtitle">
-          Use the phone number registered to your Blynk operations account.
+          {method === 'password'
+            ? 'Use the email and password of your Blynk operations account.'
+            : 'Use the phone number registered to your Blynk operations account.'}
         </p>
 
-        {step === 'phone' ? (
+        {method === 'password' ? (
+          <form onSubmit={submitPassword} className="login__form">
+            <div className="field">
+              <label className="field__label" htmlFor={emailId}>
+                Email
+              </label>
+              <input
+                id={emailId}
+                className="input"
+                type="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                required
+              />
+            </div>
+            <div className="field">
+              <label className="field__label" htmlFor={passwordId}>
+                Password
+              </label>
+              <div className="password-input">
+                <input
+                  id={passwordId}
+                  className="input"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  maxLength={128}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-input__toggle"
+                  aria-controls={passwordId}
+                  aria-pressed={showPassword}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((shown) => !shown)}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+            <button type="submit" className="button" disabled={busy} aria-busy={busy}>
+              {busy ? <Spinner label="Signing in" /> : 'Sign in'}
+            </button>
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => {
+                setMethod('sms');
+                setPassword('');
+                setShowPassword(false);
+                setError(null);
+              }}
+            >
+              Use an SMS code instead
+            </button>
+          </form>
+        ) : null}
+
+        {method === 'sms' ? (
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => {
+              setMethod('password');
+              setStep('phone');
+              setError(null);
+            }}
+          >
+            Use email and password instead
+          </button>
+        ) : null}
+
+        {method === 'password' ? null : step === 'phone' ? (
           <form onSubmit={submitPhone} className="login__form">
             <Field label="Mobile number" hint="10 digits, starting with 07">
               <input
@@ -137,52 +242,16 @@ export function Login() {
 }
 
 /**
- * Development shortcut, pinned top right of the login page. It is not an
- * auth bypass: it runs the normal OTP flow for VITE_DEV_ADMIN_PHONE with the
- * dev code the API only returns outside production, and the session it gets
- * is checked by the API like any other. Renders nothing unless that
- * variable is set.
+ * The staff's words for the two refusals of an email + password sign-in
+ * (backend migration 012). null means "not one of these" - use the caller's
+ * usual message.
  */
-function DevSkip({
-  busy,
-  setBusy,
-  setError,
-}: {
-  busy: boolean;
-  setBusy(value: boolean): void;
-  setError(value: string | null): void;
-}) {
-  const { requestOtp, verifyOtp } = useAuth();
-  const navigate = useNavigate();
-  const phone = import.meta.env.VITE_DEV_ADMIN_PHONE?.trim();
-  if (!phone) return null;
-
-  async function skip(devPhone: string) {
-    setError(null);
-    setBusy(true);
-    try {
-      const { devOtp: code } = await requestOtp(devPhone);
-      if (!code) throw new Error('Skip only works against a development API.');
-      await verifyOtp(devPhone, code);
-      navigate('/', { replace: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not skip sign-in.');
-    } finally {
-      setBusy(false);
-    }
+function passwordSignInError(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.code === 'INVALID_CREDENTIALS') return 'Wrong email or password.';
+  if (err.code === 'LOGIN_LOCKED') {
+    const minutes = (err.details as { retry_after_minutes?: number } | null)?.retry_after_minutes ?? 15;
+    return `Too many attempts. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
   }
-
-  return (
-    <div className="login__skip">
-      <span className="login__skip-tag">Dev</span>
-      <button
-        type="button"
-        className="button button--sm login__skip-button"
-        onClick={() => void skip(phone)}
-        disabled={busy}
-      >
-        Skip sign-in
-      </button>
-    </div>
-  );
+  return null;
 }

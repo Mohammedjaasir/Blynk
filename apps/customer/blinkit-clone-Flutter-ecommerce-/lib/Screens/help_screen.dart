@@ -4,6 +4,8 @@ import '../design/tokens.dart';
 import '../app_responsive.dart';
 import '../Models/order_format.dart';
 import '../Services/store_info.dart';
+import '../UI/Widgets/Atoms/list_tile.dart';
+import 'feedback_screen.dart';
 
 /// Customer help. Everything here is static, factual Blynk service
 /// information (delivery area, hours, fee, payment method, cancellation
@@ -11,7 +13,9 @@ import '../Services/store_info.dart';
 ///
 /// There is no support-ticket or chat module in the backend, so this screen
 /// does not pretend to offer one - it answers what it can and points to the
-/// order screens for anything order-specific.
+/// order screens for anything order-specific. Below the answers, "Send
+/// feedback" opens the one-way feedback form (read by the store in Blynk
+/// Admin, not a conversation).
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
@@ -105,6 +109,12 @@ class HelpScreen extends StatelessWidget {
               ),
               const SizedBox(height: BlynkSpace.s24),
               ..._faqs.map((faq) => _FaqTile(faq: faq)),
+              const SizedBox(height: BlynkSpace.s8),
+              customListTile(
+                icon: BlynkIcons.feedback,
+                title: 'Send feedback',
+                callback: () => FeedbackScreen.open(context),
+              ),
               const SizedBox(height: BlynkSpace.s24),
               Semantics(
                 header: true,

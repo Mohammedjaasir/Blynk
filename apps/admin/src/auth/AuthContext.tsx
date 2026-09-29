@@ -25,6 +25,8 @@ interface AuthState {
   status: 'loading' | 'authenticated' | 'anonymous';
   requestOtp(phone: string): Promise<{ devOtp?: string }>;
   verifyOtp(phone: string, otp: string): Promise<void>;
+  /** Staff email + password sign-in - the same role gate as an SMS code. */
+  signInWithPassword(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -81,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { devOtp: data.dev_otp };
   }, []);
 
-  const verifyOtp = useCallback(async (phone: string, otp: string) => {
-    const data = await authApi.verifyOtp(phone, otp);
+  // Both sign-in methods end here: the same role gate, the same session.
+  const completeSignIn = useCallback(async (data: { access_token: string; refresh_token: string; user: AuthUser }) => {
     if (!isOperations(data.user)) {
       tokenStore.clear();
       throw new ApiError(NOT_ADMIN_MESSAGE, 403, 'FORBIDDEN');
@@ -91,6 +93,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setStatus('authenticated');
   }, []);
+
+  const verifyOtp = useCallback(
+    async (phone: string, otp: string) => completeSignIn(await authApi.verifyOtp(phone, otp)),
+    [completeSignIn]
+  );
+
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => completeSignIn(await authApi.staffLogin(email, password)),
+    [completeSignIn]
+  );
 
   const signOut = useCallback(async () => {
     try {
@@ -104,8 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, status, requestOtp, verifyOtp, signOut }),
-    [user, status, requestOtp, verifyOtp, signOut]
+    () => ({ user, status, requestOtp, verifyOtp, signInWithPassword, signOut }),
+    [user, status, requestOtp, verifyOtp, signInWithPassword, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

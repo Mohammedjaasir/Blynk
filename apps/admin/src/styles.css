@@ -960,6 +960,44 @@ body {
   gap: 12px;
 }
 
+/* Password field with an inline show/hide toggle (staff email + password
+   sign-in, backend migration 012). */
+.password-input {
+  position: relative;
+  display: flex;
+}
+
+.password-input .input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 64px;
+}
+
+.password-input__toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.password-input__toggle:hover {
+  color: var(--ink);
+}
+
+.password-input__toggle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
 .login__dev {
   margin: 0;
   font-size: 12px;
@@ -1646,4 +1684,68 @@ body {
   .ticket__age {
     display: none;
   }
+}
+
+/* -------------------------------------------------------------- feedback */
+/* One card per message: a table would clip long customer messages. */
+.feedback-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.feedback-item {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+/* A new message carries the brand yellow down its edge. */
+.feedback-item.is-new {
+  border-left: 4px solid var(--yellow);
+}
+
+.feedback-item__meta,
+.feedback-item__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+
+.feedback-item__meta .cell__primary {
+  display: inline;
+}
+
+.feedback-item__category {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+
+.feedback-item__stars {
+  color: var(--ink);
+  letter-spacing: 1px;
+}
+
+.feedback-item__stars-empty {
+  color: var(--line-strong);
+}
+
+.feedback-item__message {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.feedback-item .row-actions {
+  justify-content: flex-start;
 }

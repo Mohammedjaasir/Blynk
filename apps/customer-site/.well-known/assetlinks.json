@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "lk.blynk.customer",
+      "sha256_cert_fingerprints": ["8F:A2:0E:E8:71:52:1C:77:69:BD:0F:F4:B4:71:FD:72:5E:08:B4:69:F2:40:7B:03:A5:94:40:5F:AD:63:07:7A"]
+    }
+  }
+]

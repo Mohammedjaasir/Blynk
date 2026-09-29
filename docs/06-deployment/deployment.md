@@ -156,3 +156,37 @@ docker compose down
 docker compose down -v
 docker compose up --build -d
 ```
+
+### Staff email + password sign-in (migration 012)
+
+Blynk Admin, Inventory and Operations sign staff in with an email and a
+password (an SMS code remains as a fallback). Only `ADMIN` and
+`PACKING_STAFF` accounts with a password set can use it. The API redeploy
+applies migration 012 (`staff_password_hash`, `login_failed_attempts`,
+`login_locked_until`, and a unique index on `lower(email)`); if two users
+already share an email in different case, the migration stops and names it -
+fix those rows by hand, then redeploy.
+
+Nobody has a password until one is set. In the Coolify Postgres console:
+
+```sql
+-- Set (or change) a staff member's email and password. bcrypt via pgcrypto;
+-- only the hash is stored. Password: 8-128 characters.
+UPDATE users
+   SET email = lower('you@example.com'),
+       staff_password_hash = crypt('YourPassword', gen_salt('bf', 10)),
+       login_failed_attempts = 0,
+       login_locked_until = NULL
+ WHERE phone = '+94762227770'
+   AND role IN ('ADMIN', 'PACKING_STAFF')
+RETURNING id, phone, role, email;   -- expect exactly one row
+
+-- Unlock early after five wrong passwords (otherwise it lifts after 15 minutes):
+UPDATE users SET login_failed_attempts = 0, login_locked_until = NULL WHERE phone = '+94762227770';
+
+-- Remove a password (that person is back to SMS codes only):
+UPDATE users SET staff_password_hash = NULL WHERE phone = '+94762227770';
+```
+
+Keep real passwords out of shared history: type the statement in the console
+rather than committing or pasting it into chat.

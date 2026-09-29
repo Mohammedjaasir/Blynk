@@ -5,6 +5,7 @@ import { adminCatalogRouter } from '../catalog/index.js';
 import { adminPromotionsRouter } from '../promotions/index.js';
 import { adminMediaRouter } from '../media/index.js';
 import { adminDentalRouter } from '../dental/index.js';
+import { adminFeedbackRouter } from '../feedback/index.js';
 import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
 import { listRidersForAssignment } from '../riders/rider.controller.js';
@@ -31,6 +32,10 @@ adminRouter.use(adminMediaRouter);
 // Dental clinic operations (task B3): clinic-initiated cancellation.
 // Guarded by ADMIN inside adminDentalRouter.
 adminRouter.use('/dental', adminDentalRouter);
+
+// Customer feedback inbox (migration 013). Guarded by ADMIN inside
+// adminFeedbackRouter.
+adminRouter.use(adminFeedbackRouter);
 
 // Store Operations & Fulfillment Queue (Guarded by ADMIN and PACKING_STAFF)
 adminRouter.get(

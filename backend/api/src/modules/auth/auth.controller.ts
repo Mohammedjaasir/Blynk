@@ -86,3 +86,17 @@ export async function getCurrentUserController(req: Request, res: Response, next
     next(err);
   }
 }
+
+export async function staffLoginController(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const clientIp = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || undefined;
+    const deviceInfo = req.headers['user-agent'] || undefined;
+    const result = await authService.loginWithPassword(req.body.email, req.body.password, {
+      ipAddress: clientIp,
+      deviceInfo,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}

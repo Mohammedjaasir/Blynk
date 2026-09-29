@@ -17,6 +17,7 @@ import 'package:ecom/Screens/search_screen.dart';
 import 'package:ecom/Screens/session_gate.dart';
 import 'package:ecom/Screens/product_details_screen.dart';
 import 'package:ecom/Models/product_model.dart';
+import 'package:ecom/Services/share_links.dart';
 import 'package:ecom/Screens/order_confirmation_screen.dart';
 import 'package:ecom/Screens/order_summary_screen.dart';
 import 'package:ecom/Screens/products_screen.dart';
@@ -190,8 +191,29 @@ class AppRouter {
           builder: (_) => DentalAppointmentDetailScreen(appointmentId: appointmentId),
         );
       default:
+        // A shared product link, `/p/<id>` (see ShareLinks).
+        final sharedId = ShareLinks.productIdFromRoute(settings.name);
+        if (sharedId != null) {
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => ProductDetailsScreen(productId: sharedId),
+          );
+        }
         return _notFound(settings);
     }
+  }
+
+  /// The first screen of a launch. A launch from a shared product link still
+  /// starts at the start route (intro, then shop or login) and opens the
+  /// product on top of it; every other launch is the start route as before.
+  static List<Route<dynamic>> generateInitialRoutes(String initialRoute) {
+    final sharedId = ShareLinks.productIdFromRoute(initialRoute);
+    return [
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/'),
+        builder: (_) => SessionGate(pendingProductId: sharedId),
+      ),
+    ];
   }
 
   /// Shared {doctorId, clinicId} argument shape for '/dental/doctor' and

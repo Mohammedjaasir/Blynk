@@ -16,6 +16,7 @@ afterEach(() => {
 });
 
 async function signIn(phone: string) {
+  await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
   await userEvent.type(await screen.findByLabelText(/Mobile number/), phone);
   await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
   await userEvent.type(await screen.findByLabelText(/6-digit code/), '123456');
@@ -82,28 +83,75 @@ describe('sign-in over the existing Blynk OTP flow', () => {
   });
 });
 
-describe('development skip sign-in', () => {
-  it('is not offered without VITE_DEV_INVENTORY_PHONE', async () => {
-    vi.stubEnv('VITE_DEV_INVENTORY_PHONE', '');
-    renderAs(null, '/login');
-    await screen.findByRole('heading', { name: 'Sign in' });
-    expect(screen.queryByRole('button', { name: 'Skip sign-in' })).toBeNull();
-  });
+describe('email + password sign-in (backend migration 012)', () => {
+  const tokens = (user: unknown) => ok({ access_token: 'acc', refresh_token: 'ref', user });
 
-  it('runs the normal OTP flow with the dev code', async () => {
-    vi.stubEnv('VITE_DEV_INVENTORY_PHONE', '0774443322');
-    const { api } = renderAs(null, '/login', otpHandlers(STAFF));
-    await userEvent.click(await screen.findByRole('button', { name: 'Skip sign-in' }));
+  async function signInWithPassword(email: string, password: string) {
+    await userEvent.type(await screen.findByLabelText('Email'), email);
+    await userEvent.type(screen.getByLabelText('Password'), password);
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  }
+
+  it('is the default method and signs PACKING_STAFF in with exactly the email and password', async () => {
+    const { api } = renderAs(null, '/login', { 'POST /auth/staff/login': () => tokens(STAFF) });
+    expect(await screen.findByLabelText('Email')).toHaveAttribute('type', 'email');
+    expect(screen.getByLabelText('Password')).toHaveAttribute('autocomplete', 'current-password');
+    await signInWithPassword('packer@blynk.test', 'Packing-2026');
     expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument();
-    expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({ phone: '0774443322', otp: '123456' });
+    expect(tokenStore.access).toBe('acc');
+    expect(api.find('POST', '/auth/staff/login')[0].body).toEqual({
+      email: 'packer@blynk.test',
+      password: 'Packing-2026',
+    });
   });
 
-  it('refuses when the API gives no dev code (production API)', async () => {
-    vi.stubEnv('VITE_DEV_INVENTORY_PHONE', '0774443322');
-    renderAs(null, '/login', { 'POST /auth/otp/request': () => ok({}) });
-    await userEvent.click(await screen.findByRole('button', { name: 'Skip sign-in' }));
-    expect(await screen.findByText('Skip only works against a development API.')).toBeInTheDocument();
+  it('the show/hide toggle reveals and hides the password', async () => {
+    renderAs(null, '/login');
+    const password = await screen.findByLabelText('Password');
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
+  it('refuses a RIDER account and keeps no session', async () => {
+    renderAs(null, '/login', { 'POST /auth/staff/login': () => tokens({ ...ADMIN, id: 'r1', role: 'RIDER' }) });
+    await signInWithPassword('rider@blynk.test', 'Blynk@1960');
+    expect(await screen.findByText(WRONG_ROLE_MESSAGE)).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
+  });
+
+  it('a wrong password says so and clears the field', async () => {
+    renderAs(null, '/login', {
+      'POST /auth/staff/login': () => fail(401, 'INVALID_CREDENTIALS', 'Wrong email or password.'),
+    });
+    await signInWithPassword('owner@blynk.test', 'not-the-password');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Wrong email or password.');
+    expect(screen.getByLabelText('Password')).toHaveValue('');
+  });
+
+  it('a locked account is told to wait', async () => {
+    renderAs(null, '/login', { 'POST /auth/staff/login': () => fail(429, 'LOGIN_LOCKED', 'Too many wrong passwords.') });
+    await signInWithPassword('owner@blynk.test', 'not-the-password');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts. Try again in 15 minutes.');
+  });
+
+  it('can switch to an SMS code and back', async () => {
+    renderAs(null, '/login');
+    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
+    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Use email and password instead' }));
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+  });
+});
+
+describe('no development shortcut', () => {
+  // 2026-09-29, owner's request: the "Skip sign-in" dev button is gone.
+  it('never offers "Skip sign-in"', async () => {
+    renderAs(null, '/login');
+    await screen.findByLabelText('Email');
+    expect(screen.queryByRole('button', { name: 'Skip sign-in' })).toBeNull();
+    expect(screen.queryByText('Dev')).toBeNull();
   });
 });
 

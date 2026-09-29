@@ -15,7 +15,7 @@ describe('routing', () => {
     'unauthenticated access to %s redirects to /login',
     async (route) => {
       renderAs(null, route);
-      expect(await screen.findByLabelText('Mobile number')).toBeInTheDocument();
+      expect(await screen.findByLabelText('Email')).toBeInTheDocument();
     }
   );
 
@@ -23,7 +23,7 @@ describe('routing', () => {
     resetIntroForTests();
     renderAs(null, '/orders');
     expect(await screen.findByRole('button', { name: /get started/i })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Mobile number')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
   });
 
   it('every launch opens on the welcome screen, signed in too, then continues', async () => {

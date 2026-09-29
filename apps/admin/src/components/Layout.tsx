@@ -8,8 +8,8 @@ import blynkWordmark from '../assets/blynk-wordmark-light.png';
  * styled like the customer app - this is an internal tool.
  *
  * Scope: the store's order operations (packing, rider assignment - the
- * documented admin/staff dashboard) and, for admins, catalog and
- * customer-facing content. Inventory and the Rider app are separate
+ * documented admin/staff dashboard) and, for admins, catalog,
+ * customer-facing content and the customer feedback inbox. Inventory and the Rider app are separate
  * applications against the same backend and do not appear here.
  */
 export function Layout() {
@@ -59,6 +59,11 @@ export function Layout() {
               <p className="nav__group">Home</p>
               <NavLink to="/promotions" className="nav__item">
                 Promotions
+              </NavLink>
+
+              <p className="nav__group">Customers</p>
+              <NavLink to="/feedback" className="nav__item">
+                Feedback
               </NavLink>
             </>
           ) : null}

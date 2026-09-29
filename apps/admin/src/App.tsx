@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Spinner, ToastProvider } from './components/ui';
 import { Categories } from './pages/Categories';
 import { Dashboard } from './pages/Dashboard';
+import { Feedback } from './pages/Feedback';
 import { Login } from './pages/Login';
 import { Orders } from './pages/Orders';
 import { ProductForm } from './pages/ProductForm';
@@ -54,6 +55,7 @@ export function AppRoutes() {
         <Route path="products/:id" element={<AdminOnly><ProductForm /></AdminOnly>} />
         <Route path="categories" element={<AdminOnly><Categories /></AdminOnly>} />
         <Route path="promotions" element={<AdminOnly><Promotions /></AdminOnly>} />
+        <Route path="feedback" element={<AdminOnly><Feedback /></AdminOnly>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

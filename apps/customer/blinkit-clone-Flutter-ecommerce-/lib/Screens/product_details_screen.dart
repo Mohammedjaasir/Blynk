@@ -8,6 +8,7 @@ import '../Models/product_model.dart';
 import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/product.provider.dart';
 import '../Services/app_errors.dart';
+import '../Services/share_links.dart';
 import '../UI/Widgets/Atoms/add_to_cart_button.dart';
 import '../UI/Widgets/Atoms/app_skeleton.dart';
 import '../UI/Widgets/Atoms/app_state_views.dart';
@@ -176,9 +177,9 @@ class _CircularBack extends StatelessWidget {
 }
 
 /// The mock's circular share control. It uses the `share_plus` capability the
-/// app already ships (Profile's "Share the app"), and it shares the product's
-/// **real name** and nothing else — there is no public product URL, no price
-/// claim and no invented deep link in the shared text.
+/// app already ships (Profile's "Share the app"). It shares the product's real
+/// name and, when the build knows the website's address, the product's link
+/// (`/p/<id>`, see [ShareLinks]) - which opens this product in the app.
 class _ShareAction extends StatelessWidget {
   const _ShareAction({required this.product});
 
@@ -192,7 +193,7 @@ class _ShareAction extends StatelessWidget {
         size: _CircularBack._size,
         semanticLabel: 'Share this product',
         onPressed: () => Share.share(
-          '${product.name} on Blynk',
+          ShareLinks.productShareText(product.name, product.id),
           subject: product.name,
         ),
       ),

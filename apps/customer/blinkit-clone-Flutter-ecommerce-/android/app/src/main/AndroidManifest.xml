@@ -28,6 +28,17 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Shared product links, https://<APP_LINK_HOST>/p/<productId>,
+                 open in the app (verified against the site's assetlinks.json;
+                 see lib/Services/share_links.dart). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${APP_LINK_HOST}" android:pathPrefix="/p/" />
+            </intent-filter>
+            <!-- Flutter receives the link's path as a route (/p/<id>). -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="true" />
         </activity>
         <!-- Google Maps Android API key; injected at build time from MAPS_API_KEY
              (see docs/06-deployment/google-maps-platform-setup.md). -->

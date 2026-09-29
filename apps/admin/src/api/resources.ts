@@ -7,6 +7,8 @@ import type {
   AuthUser,
   Category,
   CustomerProduct,
+  FeedbackPage,
+  FeedbackStatus,
   Paginated,
   Promotion,
 } from './types';
@@ -24,6 +26,14 @@ export const auth = {
       '/auth/otp/request',
       { method: 'POST', body: { phone }, auth: false }
     ),
+
+  /** Staff email + password sign-in (backend migration 012). */
+  staffLogin: (email: string, password: string) =>
+    apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/staff/login', {
+      method: 'POST',
+      body: { email, password },
+      auth: false,
+    }),
 
   verifyOtp: (phone: string, otp: string) =>
     apiRequest<{
@@ -171,4 +181,23 @@ export const orders = {
 export const riders = {
   /** Active riders only (the API filters); no availability flag exists. */
   listActive: () => apiRequest<{ riders: RiderOption[] }>('/admin/riders').then((d) => d.riders),
+};
+
+// -------------------------------------------------------------- feedback
+/** Customer feedback sent from the app (backend migration 013). ADMIN only. */
+export const feedback = {
+  /** Newest first; `status` omitted means every message. */
+  list: (params: { status?: FeedbackStatus; page?: number; limit?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    query.set('page', String(params.page ?? 1));
+    query.set('limit', String(params.limit ?? 50));
+    return apiRequest<FeedbackPage>(`/admin/feedback?${query.toString()}`);
+  },
+
+  setStatus: (id: string, status: FeedbackStatus) =>
+    apiRequest<{ feedback: { id: string; status: FeedbackStatus } }>(`/admin/feedback/${id}`, {
+      method: 'PATCH',
+      body: { status },
+    }).then((d) => d.feedback),
 };

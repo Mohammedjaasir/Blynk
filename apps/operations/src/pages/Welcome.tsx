@@ -1,17 +1,17 @@
-import { Bike, Boxes, ClipboardList, Tags } from 'lucide-react';
+import { Bike, Package, ShoppingCart, Stethoscope } from 'lucide-react';
 import { useLocation, useNavigate, type Location } from 'react-router-dom';
 
 /**
- * The Ops welcome screen, after the owner's reference design.
+ * The welcome screen (2026-09-28), after the owner's reference design: the
+ * Blynk mark, a two-line headline (second line in Blynk green), the scene
+ * (public/intro-art.jpg - replace that file to change the picture), the
+ * feature cards and the actions.
  *
- * - Shown on EVERY launch (2026-09-27, owner's request), signed in or not:
- *   the flag lives in memory, so each cold start of the app shows it once.
- *   `IntroGate` in App.tsx sends every first navigation here.
- * - Layout: the delivery scene fills the top; a white panel rises over it
- *   with the headline, the four areas of the app and the button pinned to
- *   the bottom - no dead space on a phone, no scrolling.
- * - "Get Started" and "Skip" both continue to where the operator was going
- *   (sign-in when signed out, Home when signed in).
+ * - Shown on EVERY launch: the flag lives in memory, so each cold start shows
+ *   it once (`IntroGate` in App.tsx).
+ * - Every action continues to where the launch was headed: sign-in when signed
+ *   out, the app when signed in. Staff accounts are created by an admin, so
+ *   "Get Started" and "I Already Have an Account" both lead to sign-in.
  */
 let seenThisLaunch = false;
 
@@ -28,14 +28,12 @@ export function resetIntroForTests() {
   seenThisLaunch = false;
 }
 
-// Lucide icons (2026-09-27): the hand-drawn set read as improvised. One
-// stroke weight, one colour - four areas of one tool, not four toys.
-const ICON = { size: 20, strokeWidth: 1.9, 'aria-hidden': true } as const;
+const ICON = { size: 24, strokeWidth: 2, 'aria-hidden': true } as const;
 const FEATURES = [
-  { title: 'Orders', text: 'Accept, pack and hand over', icon: <ClipboardList {...ICON} /> },
-  { title: 'Deliveries', text: 'Assign riders, track trips', icon: <Bike {...ICON} /> },
-  { title: 'Catalog', text: 'Products, prices, banners', icon: <Tags {...ICON} /> },
-  { title: 'Stock', text: 'Levels, suppliers, sourcing', icon: <Boxes {...ICON} /> },
+  { title: 'Manage Orders', text: 'Track and process all orders in real time.', tone: 'yellow', icon: <ShoppingCart {...ICON} /> },
+  { title: 'Handle Deliveries', text: 'Follow riders and delivery progress on the map.', tone: 'green', icon: <Bike {...ICON} /> },
+  { title: 'Control Inventory', text: 'Keep stock updated and never run out.', tone: 'purple', icon: <Package {...ICON} /> },
+  { title: 'Channel Doctors', text: 'Handle clinics, doctors and appointments.', tone: 'blue', icon: <Stethoscope {...ICON} /> },
 ] as const;
 
 export function Welcome() {
@@ -50,50 +48,46 @@ export function Welcome() {
   }
 
   return (
-    <main className="welcome">
-      <div className="welcome__hero">
-        <img className="welcome__scene" src="/intro-scooter.jpg" alt="" />
-        <div className="welcome__bar">
-          <span className="welcome__badge">
-            <img src="/blynk-mark.png" alt="" />
-            <span>
-              Blynk <b>Operations</b>
-            </span>
-          </span>
-          <button type="button" className="welcome__skip" onClick={go}>
-            Skip
-          </button>
-        </div>
+    <main className="intro">
+      <header className="intro__top">
+        <span className="intro__brand">
+          <img src="/blynk-mark.png" alt="" />
+          <span>blynk</span>
+        </span>
+        <button type="button" className="intro__skip" onClick={go}>
+          Skip
+        </button>
+      </header>
+
+      <h1 className="intro__title">
+        Run Blynk.{' '}
+        <br />
+        <em>From One Place.</em>
+      </h1>
+      <p className="intro__lead">Manage orders, deliveries, inventory, riders and channel doctors from a single workspace.</p>
+
+      <div className="intro__art" aria-hidden="true">
+        <img src="/intro-art.jpg" alt="" />
       </div>
 
-      <section className="welcome__sheet">
-        <p className="welcome__eyebrow">For Blynk store teams</p>
-        <h1 className="welcome__title">
-          Run your store,{' '}
-          <br />
-          deliver <em>faster</em>
-        </h1>
-        <p className="welcome__lead">Everything the store runs on, in one app.</p>
+      <ul className="intro__features intro__features--4">
+        {FEATURES.map((f) => (
+          <li key={f.title}>
+            <span className={`intro__icon intro__icon--${f.tone}`}>{f.icon}</span>
+            <strong>{f.title}</strong>
+            <span>{f.text}</span>
+          </li>
+        ))}
+      </ul>
 
-        <ul className="welcome__features">
-          {FEATURES.map((f) => (
-            <li key={f.title}>
-              <span className="welcome__icon">{f.icon}</span>
-              <span className="welcome__feature-text">
-                <strong>{f.title}</strong>
-                <span>{f.text}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="welcome__actions">
-          <button type="button" className="welcome__cta" onClick={go}>
-            Get Started <span aria-hidden="true">→</span>
-          </button>
-          <p className="welcome__note">Operator accounts are created by an admin.</p>
-        </div>
-      </section>
+      <div className="intro__actions">
+        <button type="button" className="intro__cta" onClick={go}>
+          Get Started <span aria-hidden="true">→</span>
+        </button>
+        <button type="button" className="intro__secondary" onClick={go}>
+          I Already Have an Account
+        </button>
+      </div>
     </main>
   );
 }

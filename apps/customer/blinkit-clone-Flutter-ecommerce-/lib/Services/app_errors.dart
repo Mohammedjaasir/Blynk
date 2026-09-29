@@ -172,6 +172,13 @@ class AppErrors {
     ),
     'TOO_MANY_REQUESTS': tooManyTries,
     'RATE_LIMITED': tooManyTries,
+    // POST /feedback allows 5 messages an hour per customer (migration 013).
+    'FEEDBACK_RATE_LIMITED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Feedback limit reached',
+      message: "You've sent 5 messages in the last hour. Please try again later.",
+      retryable: false,
+    ),
   };
 
   /// Maps a caught error (an [ApiException], a [DioException], a timeout, a

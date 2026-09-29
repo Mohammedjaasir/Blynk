@@ -1,0 +1,16 @@
+# Used instead of the repo-root .dockerignore (which excludes apps/) for
+# apps/customer-site/Dockerfile. Only what the build needs goes in.
+*
+!apps/customer-site/
+!apps/customer/blinkit-clone-Flutter-ecommerce-/
+apps/customer/blinkit-clone-Flutter-ecommerce-/build/
+apps/customer/blinkit-clone-Flutter-ecommerce-/.dart_tool/
+apps/customer/blinkit-clone-Flutter-ecommerce-/android/
+apps/customer/blinkit-clone-Flutter-ecommerce-/ios/
+apps/customer/blinkit-clone-Flutter-ecommerce-/windows/
+apps/customer/blinkit-clone-Flutter-ecommerce-/linux/
+apps/customer/blinkit-clone-Flutter-ecommerce-/macos/
+apps/customer/blinkit-clone-Flutter-ecommerce-/lib/graphify-out/
+apps/customer/blinkit-clone-Flutter-ecommerce-/.env
+**/.env.*
+**/node_modules/

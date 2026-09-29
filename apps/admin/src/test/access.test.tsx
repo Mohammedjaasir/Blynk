@@ -37,6 +37,7 @@ function renderAs(user: typeof ADMIN, route: string) {
       if (url.includes('/admin/products')) return respond({ products: [] });
       if (url.includes('/admin/categories')) return respond({ categories: [] });
       if (url.includes('/admin/promotions')) return respond({ promotions: [] });
+      if (url.includes('/admin/feedback')) return respond({ feedback: [], pagination: { page: 1, limit: 50, total: 0, total_pages: 1 } });
       return respond({});
     })
   );
@@ -67,7 +68,7 @@ describe('Admin app access', () => {
 
   it('an admin sees Orders alongside the catalog', async () => {
     renderAs(ADMIN, '/');
-    expect(await navLinks()).toEqual(['Dashboard', 'Orders', 'Products', 'Categories', 'Promotions']);
+    expect(await navLinks()).toEqual(['Dashboard', 'Orders', 'Products', 'Categories', 'Promotions', 'Feedback']);
   });
 
   it('packing staff land on Orders and see nothing else', async () => {
@@ -76,7 +77,7 @@ describe('Admin app access', () => {
     expect(await navLinks()).toEqual(['Orders']);
   });
 
-  it.each(['/products', '/categories', '/promotions', '/products/new'])(
+  it.each(['/products', '/categories', '/promotions', '/products/new', '/feedback'])(
     'packing staff sent to %s are brought back to Orders',
     async (route) => {
       renderAs(STAFF, route);

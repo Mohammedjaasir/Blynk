@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { ApiError } from '../api/client';
 import { WRONG_ROLE_MESSAGE, useAuth } from '../auth/AuthContext';
 import { errorMessage } from '../lib/errors';
 
@@ -10,10 +11,20 @@ import { errorMessage } from '../lib/errors';
  */
 export function Login() {
   const { status, notice, requestOtp, verifyOtp } = useAuth();
+  const { signInWithPassword } = useAuth();
   const navigate = useNavigate();
   const phoneId = useId();
   const otpId = useId();
 
+  // Staff sign in with their email and password by default (backend
+  // migration 012); an SMS code stays available for anyone without a
+  // password, or locked out.
+  const emailId = useId();
+  const passwordId = useId();
+  const [method, setMethod] = useState<'password' | 'sms'>('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -22,6 +33,26 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
 
   if (status === 'authenticated') return <Navigate to="/" replace />;
+
+  async function submitPassword(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      // The password is sent exactly as typed; only the email is tidied.
+      await signInWithPassword(email.trim(), password);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setPassword('');
+      setError(
+        err instanceof Error && err.message === WRONG_ROLE_MESSAGE
+          ? WRONG_ROLE_MESSAGE
+          : (passwordSignInError(err) ?? errorMessage(err, 'Could not sign in.'))
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submitPhone(event: FormEvent) {
     event.preventDefault();
@@ -83,7 +114,85 @@ export function Login() {
           </p>
         ) : null}
 
-        {step === 'phone' ? (
+        {method === 'password' ? (
+          <form onSubmit={submitPassword} className="login__form">
+            <div className="field">
+              <label className="field__label" htmlFor={emailId}>
+                Email
+              </label>
+              <input
+                id={emailId}
+                className="input"
+                type="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                required
+              />
+            </div>
+            <div className="field">
+              <label className="field__label" htmlFor={passwordId}>
+                Password
+              </label>
+              <div className="password-input">
+                <input
+                  id={passwordId}
+                  className="input"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  maxLength={128}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-input__toggle"
+                  aria-controls={passwordId}
+                  aria-pressed={showPassword}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((shown) => !shown)}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+            <button type="submit" className="primary" disabled={busy} aria-busy={busy}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                setMethod('sms');
+                setPassword('');
+                setShowPassword(false);
+                setError(null);
+              }}
+            >
+              Use an SMS code instead
+            </button>
+          </form>
+        ) : null}
+
+        {method === 'sms' ? (
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              setMethod('password');
+              setStep('phone');
+              setError(null);
+            }}
+          >
+            Use email and password instead
+          </button>
+        ) : null}
+
+        {method === 'password' ? null : step === 'phone' ? (
           <form onSubmit={submitPhone} className="login__form">
             <label className="field" htmlFor={phoneId}>
               <span className="field__label">Mobile number</span>
@@ -190,4 +299,19 @@ function DevSkip({
       </button>
     </span>
   );
+}
+
+/**
+ * The staff's words for the two refusals of an email + password sign-in
+ * (backend migration 012). null means "not one of these" - use the caller's
+ * usual message.
+ */
+function passwordSignInError(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.code === 'INVALID_CREDENTIALS') return 'Wrong email or password.';
+  if (err.code === 'LOGIN_LOCKED') {
+    const minutes = (err.details as { retry_after_minutes?: number } | null)?.retry_after_minutes ?? 15;
+    return `Too many attempts. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+  }
+  return null;
 }

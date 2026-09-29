@@ -1,4 +1,6 @@
+import { sql, type Transaction } from 'kysely';
 import { db } from '../../database/connection.js';
+import type { Database } from '../../database/types.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { AppError } from '../../middleware/error.middleware.js';
@@ -37,6 +39,11 @@ export interface RefreshTokensResult {
   token_type: string;
   expires_in: number;
 }
+
+/** Roles that may sign in with email + password (migration 012). */
+export const STAFF_PASSWORD_ROLES: string[] = ['ADMIN', 'PACKING_STAFF'];
+export const LOGIN_MAX_ATTEMPTS = 5;
+export const LOGIN_LOCK_MINUTES = 15;
 
 export class AuthService {
   /**
@@ -207,40 +214,148 @@ export class AuthService {
         user = await authRepository.createOrGetCustomer(trx, phone);
       }
 
-      // Issue tokens
-      const accessToken = generateAccessToken({
-        id: user.id,
-        phone: user.phone,
-        role: user.role,
-      });
-
-      const { rawToken, tokenHash } = generateRefreshToken();
-      const refreshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-
-      await authRepository.saveRefreshToken(trx, {
-        user_id: user.id,
-        token_hash: tokenHash,
-        expires_at: refreshExpiresAt,
-        device_info: meta.deviceInfo,
-        ip_address: meta.ipAddress,
-      });
-
-      return {
-        access_token: accessToken,
-        refresh_token: rawToken,
-        token_type: 'Bearer',
-        expires_in: 900, // 15 minutes in seconds
-        user: {
-          id: user.id,
-          phone: user.phone,
-          role: user.role,
-          full_name: user.full_name,
-          email: user.email,
-        },
-      };
+      return this.issueTokens(trx, user, meta);
     });
 
     return result;
+  }
+
+  /**
+   * The session every sign-in method ends in: an access token and a
+   * single-use refresh token saved for rotation. Shared by SMS codes and
+   * staff passwords so both produce exactly the same kind of session.
+   */
+  private async issueTokens(
+    trx: Transaction<Database>,
+    user: { id: string; phone: string; role: string; full_name: string | null; email: string | null },
+    meta: { ipAddress?: string; deviceInfo?: string }
+  ): Promise<AuthTokensResult> {
+    const accessToken = generateAccessToken({
+      id: user.id,
+      phone: user.phone,
+      role: user.role as never,
+    });
+
+    const { rawToken, tokenHash } = generateRefreshToken();
+    const refreshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+    await authRepository.saveRefreshToken(trx, {
+      user_id: user.id,
+      token_hash: tokenHash,
+      expires_at: refreshExpiresAt,
+      device_info: meta.deviceInfo,
+      ip_address: meta.ipAddress,
+    });
+
+    return {
+      access_token: accessToken,
+      refresh_token: rawToken,
+      token_type: 'Bearer',
+      expires_in: 900, // 15 minutes in seconds
+      user: {
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        full_name: user.full_name,
+        email: user.email,
+      },
+    } as AuthTokensResult;
+  }
+
+  /**
+   * Staff email + password sign-in (migration 012). Only ADMIN and
+   * PACKING_STAFF accounts with a password set may use it; everyone else
+   * keeps SMS codes.
+   *
+   * - Every refusal before the password check reads the same ("Wrong email or
+   *   password"), so it never reveals which emails are staff.
+   * - LOGIN_MAX_ATTEMPTS wrong passwords lock the account for
+   *   LOGIN_LOCK_MINUTES; a per-IP limit stops one device spraying many emails.
+   * - The email is matched on lower(email) (unique index, migration 012).
+   * - The password is compared inside Postgres with pgcrypto's crypt(), so the
+   *   plain password never leaves the request and only a bcrypt hash is stored.
+   */
+  async loginWithPassword(
+    email: string,
+    password: string,
+    meta: { ipAddress?: string; deviceInfo?: string }
+  ): Promise<AuthTokensResult> {
+    authRateLimiter.checkLimit(
+      `staff_login_ip:${meta.ipAddress ?? 'unknown'}`,
+      30,
+      15 * 60 * 1000,
+      'Too many sign-in attempts from this device. Please wait before retrying.'
+    );
+
+    const wrong = () => new AppError('Wrong email or password.', 401, 'INVALID_CREDENTIALS');
+    const lockedFor = (minutes: number) =>
+      new AppError(
+        `Too many wrong passwords. Try again in ${minutes} minute(s), or sign in with an SMS code.`,
+        429,
+        'LOGIN_LOCKED',
+        { retry_after_minutes: minutes }
+      );
+
+    // A wrong password must be *counted*, so the transaction commits and
+    // reports it; the error is raised after the commit. (Throwing inside it
+    // would roll the counter back and the lockout would never trigger.)
+    const outcome = await db.transaction().execute(async (trx) => {
+      const row = await trx
+        .selectFrom('users')
+        .select([
+          'id',
+          'phone',
+          'role',
+          'full_name',
+          'email',
+          'is_active',
+          'login_failed_attempts',
+          'login_locked_until',
+          sql<boolean>`staff_password_hash IS NOT NULL AND staff_password_hash = crypt(${password}, staff_password_hash)`.as(
+            'password_ok'
+          ),
+          sql<boolean>`staff_password_hash IS NOT NULL`.as('has_password'),
+        ])
+        .where(sql`lower(email)`, '=', email.toLowerCase())
+        .forUpdate()
+        .executeTakeFirst();
+
+      if (!row || !row.has_password || !STAFF_PASSWORD_ROLES.includes(row.role as string)) throw wrong();
+      if (!row.is_active) {
+        throw new AppError('Your account has been deactivated. Please contact support.', 403, 'ACCOUNT_DEACTIVATED');
+      }
+      if (row.login_locked_until && row.login_locked_until > new Date()) {
+        const minutes = Math.max(1, Math.ceil((row.login_locked_until.getTime() - Date.now()) / 60000));
+        throw lockedFor(minutes);
+      }
+
+      if (!row.password_ok) {
+        const attempts = (row.login_failed_attempts ?? 0) + 1;
+        const lock = attempts >= LOGIN_MAX_ATTEMPTS;
+        await trx
+          .updateTable('users')
+          .set({
+            login_failed_attempts: lock ? 0 : attempts,
+            login_locked_until: lock ? new Date(Date.now() + LOGIN_LOCK_MINUTES * 60000) : null,
+          })
+          .where('id', '=', row.id)
+          .execute();
+        logger.warn({ userId: row.id, attempts, locked: lock }, 'Wrong staff password');
+        return { failed: true as const, locked: lock };
+      }
+
+      await trx
+        .updateTable('users')
+        .set({ login_failed_attempts: 0, login_locked_until: null })
+        .where('id', '=', row.id)
+        .execute();
+      const user = await authRepository.updateLastLogin(trx, row.id);
+      logger.info({ userId: row.id }, 'Staff signed in with email and password');
+      return { failed: false as const, tokens: await this.issueTokens(trx, user, meta) };
+    });
+
+    if (outcome.failed) throw outcome.locked ? lockedFor(LOGIN_LOCK_MINUTES) : wrong();
+    return outcome.tokens;
   }
 
   /**
