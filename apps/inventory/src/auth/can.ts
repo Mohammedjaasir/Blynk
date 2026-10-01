@@ -14,6 +14,7 @@ export type Action =
   | 'markUnavailable' // POST /admin/orders/:id/resolve-item
   | 'adjustStock' // POST /admin/inventory/:productId/adjust
   | 'changeTrackingMode' // PATCH /admin/inventory/:productId/mode
+  | 'editThreshold' // PATCH /admin/inventory/:productId/threshold (backend also allows OPERATIONS, who can't sign in here)
   | 'manageSuppliers'; // POST/PATCH /admin/suppliers
 
 const RULES: Record<Action, Role[]> = {
@@ -25,10 +26,14 @@ const RULES: Record<Action, Role[]> = {
   markUnavailable: ['ADMIN', 'PACKING_STAFF'],
   adjustStock: ['ADMIN'],
   changeTrackingMode: ['ADMIN'],
+  editThreshold: ['ADMIN'],
   manageSuppliers: ['ADMIN'],
 };
 
-/** Roles that may sign in to Inventory at all. */
+/**
+ * Roles that may sign in to Inventory at all. OPERATIONS (backend migration
+ * 014) is deliberately absent: those accounts open only the Operations app.
+ */
 export const INVENTORY_ROLES: Role[] = ['ADMIN', 'PACKING_STAFF'];
 
 export function can(role: Role | undefined | null, action: Action): boolean {
@@ -40,4 +45,5 @@ export const ROLE_LABEL: Record<Role, string> = {
   PACKING_STAFF: 'Packing staff',
   RIDER: 'Rider',
   CUSTOMER: 'Customer',
+  OPERATIONS: 'Operations',
 };

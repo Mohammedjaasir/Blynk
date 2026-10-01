@@ -20,7 +20,7 @@
   $$\text{Selling Price} = \text{Purchase Cost} \times \left(1 + \frac{\text{Effective Markup \%}}{100}\right)$$
 - **Price Immutability**: Line items stamp selling price, estimated catalog cost, and applied markup into `order_items` at placement.
 - **Dual Procurement Cost**: Actual market sourcing costs are recorded into `order_items.actual_unit_cost` at packing time without altering customer selling price.
-- **Delivery Fee**: Flat 70.00 LKR delivery fee (`system_configurations.delivery_fee`), snapshotted into `orders.delivery_fee`.
+- **Delivery Fee**: Flat 100.00 LKR delivery fee (`system_configurations.delivery_fee`), snapshotted into `orders.delivery_fee`.
 - **Minimum Order Requirement**: None. Orders of any amount are accepted.
 
 ---

@@ -210,12 +210,15 @@ class ApiService {
 
       String message = _genericMessage;
       String? code;
+      Map<String, dynamic>? details;
 
       if (responseData is Map) {
         if (responseData['error'] is Map) {
           final errObj = responseData['error'] as Map;
           message = (errObj['message'] ?? errObj['msg'] ?? message).toString();
           code = errObj['code']?.toString();
+          final rawDetails = errObj['details'];
+          if (rawDetails is Map) details = rawDetails.cast<String, dynamic>();
         } else if (responseData['message'] != null) {
           message = responseData['message'].toString();
         } else if (responseData['error'] is String) {
@@ -270,7 +273,7 @@ class ApiService {
               code: code ?? 'RATE_LIMITED',
             );
           }
-          return ApiException(statusCode, _safeMessage(statusCode, message), code: code);
+          return ApiException(statusCode, _safeMessage(statusCode, message), code: code, details: details);
         case DioExceptionType.cancel:
           return ApiException(499, 'The request was cancelled.', code: 'CANCELLED');
         default:

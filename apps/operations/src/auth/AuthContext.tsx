@@ -52,17 +52,17 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-export const WRONG_ROLE_MESSAGE = 'This app is for Blynk operators. Sign in with an admin account.';
+export const WRONG_ROLE_MESSAGE =
+  'This app is for Blynk operators. Sign in with an Operations or admin account; Inventory staff use the Blynk Inventory site.';
 export const SESSION_ENDED_MESSAGE = 'Your session has ended. Please sign in again.';
 
 /**
  * Courtesy check only; the API guards every route by role regardless.
- * Deliberately just `['ADMIN']` - unlike Admin's own `OPERATIONS_ROLES`
- * (which also allows `PACKING_STAFF`), the Operations operator is always
- * the single ADMIN identity described in the plan (§6 Option B); there is
- * no Operations-equivalent of a packing-staff-only session.
+ * ADMIN, plus OPERATIONS (backend migration 014): Operations staff accounts
+ * an admin creates in Blynk Admin -> Staff accounts, which open only this
+ * app. PACKING_STAFF use the Inventory site and are refused here.
  */
-export const OPERATIONS_ROLES: ReadonlyArray<AuthUser['role']> = ['ADMIN'];
+export const OPERATIONS_ROLES: ReadonlyArray<AuthUser['role']> = ['ADMIN', 'OPERATIONS'];
 const isOperator = (user: AuthUser) => OPERATIONS_ROLES.includes(user.role);
 
 export function AuthProvider({ children }: { children: ReactNode }) {

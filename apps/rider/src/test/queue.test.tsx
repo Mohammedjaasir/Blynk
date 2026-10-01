@@ -152,7 +152,8 @@ describe('Deliveries (home) and location tracking', () => {
 
   it('resumes tracking on a cold start that lands here, with no Delivery screen open', async () => {
     renderAs(RIDER, '/', { 'GET /riders/deliveries': list(waiting, onRoad) });
-    await screen.findByRole('region', { name: 'Now' });
+    // Two orders to act on are one trip (2026-09-30), shown as its stops.
+    await screen.findByRole('region', { name: /Your trip/ });
     await waitFor(() => expect(capacitorTrackingPlugin.start).toHaveBeenCalledTimes(1));
     expect(getTracker().getDeliveryId()).toBe('d-road');
   });

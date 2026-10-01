@@ -37,9 +37,16 @@ export type RiderDeliveryStatus = z.infer<typeof updateDeliveryStatusSchema>['st
 
 export type UpdateDeliveryStatusInput = z.infer<typeof updateDeliveryStatusSchema>;
 
+/** The 4-digit code the customer shows at the door (proof of delivery, migration 016). */
+export const deliveryCodeSchema = z
+  .string({ required_error: 'delivery_code is required', invalid_type_error: 'delivery_code must be a string' })
+  .trim()
+  .regex(/^[0-9]{4}$/, 'delivery_code must be 4 digits');
+
 /**
  * Validates COD cash collection input.
- * Amount must be a non-negative finite number (max 1,000,000 LKR).
+ * Amount must be a non-negative finite number (max 1,000,000 LKR); the
+ * customer's delivery code is required.
  */
 export const collectCodSchema = z.object({
   amount: z
@@ -50,6 +57,7 @@ export const collectCodSchema = z.object({
     .nonnegative('amount cannot be negative')
     .finite('amount must be a finite number')
     .max(1_000_000, 'amount exceeds maximum allowed value'),
+  delivery_code: deliveryCodeSchema,
 });
 
 export type CollectCodInput = z.infer<typeof collectCodSchema>;

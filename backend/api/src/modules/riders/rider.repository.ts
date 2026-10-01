@@ -2,12 +2,15 @@ import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { DBConnection } from '../orders/order.repository.js';
 import { ACTIVE_DELIVERY_STATUSES, CLOSED_ORDER_STATUSES } from '../orders/lifecycle/catalogue.js';
+import { isOpenDelivery } from './batching.js';
 
 /** Assignments the rider still holds. */
 const ACTIVE_ASSIGNMENT_STATUSES = ACTIVE_DELIVERY_STATUSES;
 
 /** Midnight today in the store's timezone (business rules §4: Asia/Colombo). */
 const startOfTodayColombo = sql<Date>`(date_trunc('day', now() AT TIME ZONE 'Asia/Colombo') AT TIME ZONE 'Asia/Colombo')`;
+/** Monday 00:00 of this week in Asia/Colombo (ISO weeks run Monday to Sunday). */
+const startOfWeekColombo = sql<Date>`(date_trunc('week', now() AT TIME ZONE 'Asia/Colombo') AT TIME ZONE 'Asia/Colombo')`;
 
 export class RiderRepository {
   /**
@@ -36,11 +39,14 @@ export class RiderRepository {
         'users.phone',
         'riders.vehicle_type',
         'riders.vehicle_registration_number',
+        // Open = what the trip cap counts (riders/batching.ts isOpenDelivery):
+        // an ASSIGNED row left behind by a cancelled order holds nothing.
         eb
           .selectFrom('deliveries')
+          .innerJoin('orders', 'orders.id', 'deliveries.order_id')
           .select(sql<number>`count(*)::int`.as('n'))
           .whereRef('deliveries.rider_id', '=', 'riders.id')
-          .where('deliveries.assignment_status', 'in', ACTIVE_ASSIGNMENT_STATUSES)
+          .where((inner) => isOpenDelivery(inner))
           .as('open_deliveries'),
       ])
       .where('riders.is_active', '=', true)
@@ -197,6 +203,19 @@ export class RiderRepository {
       .executeTakeFirst();
   }
 
+  /** The rider's other deliveries inside the trackable window (a trip's other stops). */
+  async findOtherTrackableDeliveries(riderId: string, exceptDeliveryId: string, executor: DBConnection = db) {
+    return await executor
+      .selectFrom('deliveries')
+      .innerJoin('orders', 'orders.id', 'deliveries.order_id')
+      .select(['deliveries.id'])
+      .where('deliveries.rider_id', '=', riderId)
+      .where('deliveries.id', '!=', exceptDeliveryId)
+      .where('deliveries.assignment_status', '=', 'PICKED_UP')
+      .where('orders.order_status', '=', 'OUT_FOR_DELIVERY')
+      .execute();
+  }
+
   /**
    * A single-row, conditional overwrite of the latest-location columns
    * (plan §6). The "is this point newer" decision is made here, inside the
@@ -249,6 +268,98 @@ export class RiderRepository {
       .executeTakeFirst();
   }
 
+  /**
+   * Each rider's most recent GPS point (the latest location any of their
+   * deliveries stored). Staff never see the coordinates themselves - the
+   * suggestions service turns them into a distance (plan: privacy unchanged).
+   */
+  async findLastKnownPoints(riderIds: string[], executor: DBConnection = db) {
+    if (riderIds.length === 0) return [];
+    return await executor
+      .selectFrom('deliveries')
+      .select(['rider_id', 'current_latitude', 'current_longitude', 'location_captured_at'])
+      .distinctOn('rider_id')
+      .where('rider_id', 'in', riderIds)
+      .where('location_captured_at', 'is not', null)
+      .where('current_latitude', 'is not', null)
+      .where('current_longitude', 'is not', null)
+      .orderBy('rider_id')
+      .orderBy('location_captured_at', 'desc')
+      .execute();
+  }
+
+  /** Where an order goes and which store it leaves from (suggestions). */
+  async findOrderDispatchPoints(orderId: string, executor: DBConnection = db) {
+    return await executor
+      .selectFrom('orders')
+      .innerJoin('dark_stores', 'dark_stores.id', 'orders.dark_store_id')
+      .select([
+        'orders.id',
+        'orders.order_number',
+        'orders.delivery_latitude',
+        'orders.delivery_longitude',
+        'dark_stores.latitude as store_latitude',
+        'dark_stores.longitude as store_longitude',
+      ])
+      .where('orders.id', '=', orderId)
+      .executeTakeFirst();
+  }
+
+  /**
+   * The calling rider's finished deliveries this week (Monday 00:00 to now,
+   * Asia/Colombo): delivered, or closed as failed. A failed attempt that
+   * staff recorded as "customer unavailable" is told apart by the order's own
+   * history - the first OUT_FOR_DELIVERY exit after this delivery's pickup is
+   * the one that closed it. Order number, time and cash only; no customer
+   * details and no pay.
+   */
+  async findFinishedThisWeek(riderId: string, executor: DBConnection = db) {
+    return await executor
+      .selectFrom('deliveries')
+      .innerJoin('orders', 'orders.id', 'deliveries.order_id')
+      .select((eb) => [
+        'deliveries.id as delivery_id',
+        'deliveries.assignment_status',
+        'deliveries.delivered_at',
+        'deliveries.failed_at',
+        'deliveries.cod_collected_amount',
+        'orders.order_number',
+        eb
+          .selectFrom('order_status_history as h')
+          .select('h.new_status')
+          .whereRef('h.order_id', '=', 'deliveries.order_id')
+          .where('h.old_status', '=', 'OUT_FOR_DELIVERY')
+          .whereRef('h.created_at', '>=', 'deliveries.picked_up_at')
+          .orderBy('h.created_at', 'asc')
+          .limit(1)
+          .as('closed_as'),
+        sql<boolean>`coalesce(deliveries.delivered_at, deliveries.failed_at) >= ${startOfTodayColombo}`.as('is_today'),
+      ])
+      .where('deliveries.rider_id', '=', riderId)
+      .where((eb) =>
+        eb.or([
+          eb.and([
+            eb('deliveries.assignment_status', '=', 'DELIVERED'),
+            eb('deliveries.delivered_at', '>=', startOfWeekColombo),
+          ]),
+          eb.and([
+            eb('deliveries.assignment_status', '=', 'FAILED'),
+            eb('deliveries.failed_at', '>=', startOfWeekColombo),
+          ]),
+        ])
+      )
+      .orderBy(sql`coalesce(deliveries.delivered_at, deliveries.failed_at)`, 'desc')
+      .orderBy('deliveries.id', 'desc')
+      .execute();
+  }
+
+  /** Today's date and this week's Monday in Asia/Colombo. */
+  async colomboCalendar(executor: DBConnection = db) {
+    const { rows } = await sql<{ today: string; week_starts_on: string }>`
+      SELECT to_char(now() AT TIME ZONE 'Asia/Colombo', 'YYYY-MM-DD') AS today,
+             to_char(${startOfWeekColombo} AT TIME ZONE 'Asia/Colombo', 'YYYY-MM-DD') AS week_starts_on`.execute(executor);
+    return rows[0];
+  }
 }
 
 export const riderRepository = new RiderRepository();

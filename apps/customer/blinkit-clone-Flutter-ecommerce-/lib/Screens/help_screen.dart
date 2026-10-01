@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../design/tokens.dart';
 import '../app_responsive.dart';
 import '../Models/order_format.dart';
+import '../Services/Providers/store_info.provider.dart';
 import '../Services/store_info.dart';
 import '../UI/Widgets/Atoms/list_tile.dart';
 import 'feedback_screen.dart';
@@ -19,7 +20,8 @@ import 'feedback_screen.dart';
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
-  static final List<_Faq> _faqs = [
+  /// The answers, with the live [deliveryFee] quoted.
+  static List<_Faq> _faqs(double deliveryFee) => [
     const _Faq(
       question: 'Where do you deliver?',
       answer:
@@ -35,7 +37,7 @@ class HelpScreen extends StatelessWidget {
     ),
     _Faq(
       question: 'How much is delivery?',
-      answer: 'Delivery is a flat ${formatLkr(StoreInfo.flatDeliveryFee)} per order.',
+      answer: 'Delivery is a flat ${formatLkr(deliveryFee)} per order.',
     ),
     const _Faq(
       question: 'How can I pay?',
@@ -108,7 +110,7 @@ class HelpScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: BlynkSpace.s24),
-              ..._faqs.map((faq) => _FaqTile(faq: faq)),
+              ..._faqs(watchDeliveryFee(context)).map((faq) => _FaqTile(faq: faq)),
               const SizedBox(height: BlynkSpace.s8),
               customListTile(
                 icon: BlynkIcons.feedback,

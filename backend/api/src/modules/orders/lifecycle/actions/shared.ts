@@ -2,6 +2,8 @@ import type { OrderStatus } from '../../../../database/types.js';
 import { restoreOrderStock } from '../../../inventory/stock-ledger.js';
 import { AppError } from '../../../../middleware/error.middleware.js';
 import { CLOSED_ORDER_STATUSES } from '../catalogue.js';
+import { issueDeliveryCode } from '../delivery-code.js';
+import { releaseRedemption } from '../../../coupons/coupon.service.js';
 import { enqueueCustomerSms } from '../notify.js';
 import { setOrderStatus } from '../status-writer.js';
 import type { Actor, DeliveryRow, OrderRow, Trx } from '../types.js';
@@ -25,7 +27,8 @@ export function assertOrderActiveForRider(order: OrderRow): void {
 
 /**
  * PACKED -> OUT_FOR_DELIVERY with the delivery PICKED_UP, used by the rider's
- * pickup and by staff handing the bag over (D3). One OUT_FOR_DELIVERY message
+ * pickup and by staff handing the bag over (D3). Issues the customer's
+ * delivery code. One OUT_FOR_DELIVERY message
  * per delivery, so a re-dispatch after a re-stage is announced again.
  */
 export async function dispatch(trx: Trx, order: OrderRow, delivery: DeliveryRow, actor: Actor, note: string) {
@@ -36,6 +39,8 @@ export async function dispatch(trx: Trx, order: OrderRow, delivery: DeliveryRow,
     .where('id', '=', delivery.id)
     .execute();
   const updated = await setOrderStatus(trx, order, 'OUT_FOR_DELIVERY', actor, note, { dispatched_at: now });
+  // Proof of delivery (migration 016): a new code for every dispatch, shown to the customer only.
+  await issueDeliveryCode(trx, order.id);
   await enqueueCustomerSms(trx, order, 'OUT_FOR_DELIVERY', `order_${order.id}_${delivery.id}_OUT_FOR_DELIVERY_SMS`, {
     order_number: order.order_number,
     total_amount: Number(order.total_amount),
@@ -58,9 +63,10 @@ export async function closeDeliveryAsFailed(trx: Trx, delivery: DeliveryRow, rea
  * An ASSIGNED delivery is left as it is: the Rider app already shows a
  * cancelled order as "Cancelled - don't pick up".
  *
- * Tracked stock the order took at sourcing goes back on the shelf in the same
+ * Tracked stock the order took (at sourcing or packing) goes back on the shelf in the same
  * transaction (catalogue stock: RESTORE_ORDER_STOCK; inventory plan I2), after
- * the order lock: order -> inventory rows.
+ * the order lock: order -> inventory rows. A coupon the order used is
+ * released so the customer can use it again.
  */
 export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reason: string) {
   const updated = await setOrderStatus(trx, order, 'CANCELLED', actor, reason, {
@@ -69,6 +75,8 @@ export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reaso
     cancelled_at: new Date(),
   });
   await restoreOrderStock(trx, order, actor, actor.role === 'CUSTOMER' ? 'customer' : 'store');
+  // Coupon (migration 018): the customer gets the use back.
+  await releaseRedemption(trx, order.id);
   await enqueueCustomerSms(trx, order, 'ORDER_CANCELLED', `order_${order.id}_CANCELLED_SMS`, {
     order_number: order.order_number,
     reason,

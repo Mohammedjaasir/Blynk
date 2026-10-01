@@ -27,7 +27,7 @@ ridersRouter.get('/orders', requireAuth, requireRoles('RIDER'), (_req, res) => {
  * same 404 DELIVERY_NOT_FOUND it has always been. No rider id is ever read
  * from the request.
  */
-const RIDER_OR_OPS = requireRoles(['RIDER', 'ADMIN']);
+const RIDER_OR_OPS = requireRoles(['RIDER', 'ADMIN', 'OPERATIONS']);
 
 ridersRouter.get(
   '/deliveries',
@@ -35,6 +35,9 @@ ridersRouter.get(
   RIDER_OR_OPS,
   riderController.getActiveDeliveries.bind(riderController)
 );
+
+// "My day": the calling rider's own counts and cash (never another rider's).
+ridersRouter.get('/me/day', requireAuth, RIDER_OR_OPS, riderController.getMyDay.bind(riderController));
 
 ridersRouter.get(
   '/deliveries/:id',

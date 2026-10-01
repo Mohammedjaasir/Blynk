@@ -179,12 +179,12 @@ describe('Stage 6 — Inventory & Sourcing Subsystem', () => {
       expect(Number(row.unit_selling_price)).toBe(540.0);
       expect(row.item_status).toBe('SOURCED');
 
-      // Verify order totals remain unchanged (2 * 540 + 1 * 805 + 70 = 1955 LKR)
+      // Verify order totals remain unchanged (2 * 540 + 1 * 805 + 100 = 1985 LKR; delivery fee 100 since migration 015)
       const dbOrderRes = await pool.query(
         `SELECT subtotal_amount, total_amount FROM orders WHERE id = $1`,
         [testOrderId]
       );
-      expect(Number(dbOrderRes.rows[0].total_amount)).toBe(1955.0);
+      expect(Number(dbOrderRes.rows[0].total_amount)).toBe(1985.0);
     });
 
     it('allows providing supplier_name on-the-fly when supplier_id is omitted', async () => {
@@ -350,9 +350,9 @@ describe('Stage 6 — Inventory & Sourcing Subsystem', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.order.order_status).toBe('ITEM_UNAVAILABLE');
 
-      // Verify subtotal updated to exclude unavailable item: 540 + 70 delivery = 610 LKR
+      // Verify subtotal updated to exclude unavailable item: 540 + 100 delivery = 640 LKR
       expect(res.body.data.order.subtotal_amount).toBe(540.0);
-      expect(res.body.data.order.total_amount).toBe(610.0);
+      expect(res.body.data.order.total_amount).toBe(640.0);
 
       // Verify actual_unit_cost remains strictly NULL for unavailable item
       const dbItemRes = await pool.query(

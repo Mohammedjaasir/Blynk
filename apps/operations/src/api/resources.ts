@@ -7,11 +7,13 @@ import type {
   AuthUser,
   BoardOrder,
   Category,
+  CategoryDeleteResult,
   ClinicDoctor,
   ClinicDoctorRosterRow,
   CodSettlement,
   CustomerProduct,
   DeliveryDetail,
+  DeliveryFeeSetting,
   DeliverySummary,
   DentalAppointmentStatus,
   DentalClinic,
@@ -19,21 +21,27 @@ import type {
   DoctorAvailability,
   DoctorBlockedDate,
   HomeOrder,
+  ImportResult,
+  ImportRow,
   LedgerEntry,
+  LowStockResult,
   ManualAdjustmentType,
   MyDelivery,
   OrderDetail,
-  OrderSourcing,
   Paginated,
   Pagination,
+  ProductDeleteResult,
   Promotion,
   QueueOrder,
   RiderOption,
+  RiderSuggestions,
   StockDetail,
   StockRow,
   Supplier,
   SupplierInput,
   TrackingMode,
+  CashHandin,
+  CashReconciliation,
 } from './types';
 
 /**
@@ -194,13 +202,35 @@ export const orders = {
       body: notes === undefined ? { status } : { status, notes },
     }),
 
+  /** "Mark delivered" with proof of delivery (backend migration 016): the
+   * customer's 4-digit code, or - when they cannot show it - a written
+   * override note. The API records which one was used. */
+  markDelivered: (id: string, proof: { deliveryCode: string } | { overrideNote: string }) =>
+    apiRequest<{ order: unknown }>(`/admin/orders/${id}/status`, {
+      method: 'PATCH',
+      body:
+        'deliveryCode' in proof
+          ? { status: 'DELIVERED', delivery_code: proof.deliveryCode }
+          : { status: 'DELIVERED', notes: proof.overrideNote },
+    }),
+
+  /** An item that is not on the shelf (lifecycle RESOLVE_ITEM): the API
+   * removes it from the bill, recalculates the total and tells the customer. */
+  markItemUnavailable: (orderId: string, itemId: string) =>
+    apiRequest(`/admin/orders/${orderId}/resolve-item`, {
+      method: 'POST',
+      body: { item_id: itemId, item_status: 'UNAVAILABLE' },
+    }),
+
   /** Manual dispatch - the rider's identity comes from the operator's own
    * choice in the AssignRiderDialog (an active rider `GET /admin/riders`
    * listed), never inferred or trusted from anywhere else. */
-  assignRider: (id: string, riderId: string) =>
+  assignRider: (id: string, riderId: string, confirmFarBatch = false) =>
     apiRequest<{ delivery: unknown }>(`/admin/orders/${id}/assign-rider`, {
       method: 'POST',
-      body: { rider_id: riderId },
+      // confirm_far_batch: the operator saw that this drop-off is far from the
+      // rider's other one and adds it to the trip anyway.
+      body: confirmFarBatch ? { rider_id: riderId, confirm_far_batch: true } : { rider_id: riderId },
     }),
 };
 
@@ -213,6 +243,11 @@ export const riders = {
    * Home (F2) only ever read `.length`, so this is a compatible superset,
    * not a breaking change. */
   listActive: () => apiRequest<{ riders: RiderOption[] }>('/admin/riders').then((d) => d.riders),
+
+  /** `GET /admin/riders/suggestions?order_id=` - the same riders, best first
+   * for this order (load, distance to the store, the trip they are on). */
+  suggestions: (orderId: string) =>
+    apiRequest<RiderSuggestions>(`/admin/riders/suggestions?order_id=${encodeURIComponent(orderId)}`),
 
   /**
    * `GET /riders/deliveries` - the signed-in operator's own linked rider
@@ -260,10 +295,11 @@ export const delivery = {
    * regardless of what is sent (rider.schema.ts's `collectCodSchema`); this
    * call never decides whether the amount is right, only restates it
    * (common.md rule 8). */
-  collectCod: (id: string, amount: number) =>
+  collectCod: (id: string, amount: number, deliveryCode: string) =>
     apiRequest<{ settlement: CodSettlement }>(`/riders/deliveries/${id}/collect-cod`, {
       method: 'POST',
-      body: { amount },
+      // The customer's 4-digit proof-of-delivery code (backend migration 016).
+      body: { amount, delivery_code: deliveryCode },
     }).then((d) => d.settlement),
 
   /** Foreground-only browser Geolocation (common.md rule 10; this task's
@@ -537,6 +573,15 @@ export const catalog = {
       apiRequest<{ category: Category }>(`/admin/categories/${id}`, { method: 'PATCH', body: input }).then(
         (d) => d.category
       ),
+
+    /** `DELETE /admin/categories/:id` - a category with products needs a
+     * `move_to_category_id` target (sent as a query param, per the contract)
+     * or the server answers 409 `CATEGORY_NOT_EMPTY` with `product_count`. */
+    remove: (id: string, moveToCategoryId?: string) =>
+      apiRequest<CategoryDeleteResult>(`/admin/categories/${id}`, {
+        method: 'DELETE',
+        query: { move_to_category_id: moveToCategoryId },
+      }),
   },
 
   products: {
@@ -556,6 +601,14 @@ export const catalog = {
       apiRequest<{ product: AdminProduct }>(`/admin/products/${id}`, { method: 'PATCH', body: input }).then(
         (d) => d.product
       ),
+
+    /** `DELETE /admin/products/:id` - HARD or SOFT, decided by the server. */
+    remove: (id: string) => apiRequest<ProductDeleteResult>(`/admin/products/${id}`, { method: 'DELETE' }),
+
+    /** `POST /admin/products/import` - rows parsed in the browser
+     * (lib/productImport.ts). `dry_run` validates without writing. */
+    import: (rows: ImportRow[], dryRun: boolean) =>
+      apiRequest<ImportResult>('/admin/products/import', { method: 'POST', body: { rows, dry_run: dryRun } }),
 
     /** `GET /catalog/products` (customer-facing, paginated) - the endpoint
      * named in the brief. Defined for completeness (mirrors Admin's own
@@ -659,34 +712,21 @@ export const inventory = {
         `/admin/inventory/${productId}/adjust`,
         { method: 'POST', body }
       ),
+
+    /** `PATCH /admin/inventory/:productId/threshold` - TRACKED products only
+     * (409 `PRODUCT_NOT_TRACKED` otherwise). */
+    setThreshold: (productId: string, low_stock_threshold: number) =>
+      apiRequest(`/admin/inventory/${productId}/threshold`, { method: 'PATCH', body: { low_stock_threshold } }),
+
+    /** `GET /admin/inventory/low-stock` - tracked products at or under their
+     * threshold, OUT first. */
+    lowStock: () => apiRequest<LowStockResult>('/admin/inventory/low-stock'),
   },
 
   ledger: {
     list: (query: LedgerQuery = {}) =>
       apiRequest<{ adjustments: LedgerEntry[]; pagination: Pagination }>('/admin/inventory/adjustments', {
         query: { ...query },
-      }),
-  },
-
-  sourcing: {
-    /** `GET /admin/orders/:id/sourcing` - one order's sourcing detail. */
-    detail: (orderId: string) => apiRequest<OrderSourcing>(`/admin/orders/${orderId}/sourcing`),
-
-    /** Records what an item actually cost to source; never touches the
-     * customer's price, the markup or the catalog cost (backend invariant -
-     * this call only ever restates what the operator paid). */
-    source: (
-      orderId: string,
-      itemId: string,
-      body: { actual_unit_cost: number; quantity: number; supplier_id?: string; notes?: string }
-    ) => apiRequest(`/admin/orders/${orderId}/items/${itemId}/source`, { method: 'POST', body }),
-
-    /** The existing order-item-resolution flow: removes the item, recalculates
-     * the order total, notifies the customer (all server-side). */
-    markUnavailable: (orderId: string, itemId: string) =>
-      apiRequest(`/admin/orders/${orderId}/resolve-item`, {
-        method: 'POST',
-        body: { item_id: itemId, item_status: 'UNAVAILABLE' },
       }),
   },
 
@@ -706,4 +746,33 @@ export const inventory = {
         (d) => d.supplier
       ),
   },
+};
+
+// --------------------------------------------------------------- settings
+/** Store-wide settings Operations can change (ADMIN, OPERATIONS). */
+export const settings = {
+  deliveryFee: {
+    get: () => apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee'),
+    update: (fee_lkr: number) =>
+      apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee', { method: 'PATCH', body: { fee_lkr } }),
+  },
+};
+
+// -------------------------------------------------------------------- cash
+/**
+ * Rider cash hand-ins and the daily reconciliation (backend migration 019).
+ * ADMIN and OPERATIONS; deleting a hand-in is ADMIN only.
+ */
+export const cash = {
+  reconciliation: (date: string) => apiRequest<CashReconciliation>(`/admin/cash/reconciliation?date=${date}`),
+
+  handins: (date: string) =>
+    apiRequest<{ handins: CashHandin[] }>(`/admin/cash/handins?date=${date}`).then((d) => d.handins),
+
+  record: (input: { rider_id: string; amount: number; handin_date: string; note?: string }) =>
+    apiRequest<{ handin: CashHandin }>('/admin/cash/handins', { method: 'POST', body: { ...input } }).then(
+      (d) => d.handin
+    ),
+
+  remove: (id: string) => apiRequest(`/admin/cash/handins/${id}`, { method: 'DELETE' }),
 };

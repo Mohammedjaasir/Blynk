@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
+import 'package:ecom/Models/coupon_model.dart';
 import 'package:ecom/Models/order_model.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
@@ -89,6 +90,14 @@ class OrderProvider extends ChangeNotifier {
   CustomerError? _placeOrderFailure;
   OrderModel? _lastPlacedOrder;
 
+  // Coupon at checkout (backend migration 018). The preview is tied to the
+  // cart it was checked against: change the cart and it no longer applies
+  // (see [couponFor]) - the server re-checks the code at placeOrder anyway.
+  CouponPreview? _coupon;
+  String? _couponCartKey;
+  bool _isApplyingCoupon = false;
+  String? _couponError;
+
   List<OrderModel> get orders => _orders;
   bool get isLoadingOrders => _isLoadingOrders;
 
@@ -109,6 +118,73 @@ class OrderProvider extends ChangeNotifier {
   CustomerError? get placeOrderFailure => _placeOrderFailure;
   OrderModel? get lastPlacedOrder => _lastPlacedOrder;
 
+  bool get isApplyingCoupon => _isApplyingCoupon;
+
+  /// The last coupon refusal, in plain words (null when there is none).
+  String? get couponError => _couponError;
+
+  /// The code last applied, even if the cart has since changed.
+  String? get appliedCouponCode => _coupon?.code;
+
+  /// Product ids and quantities: what a coupon preview was checked against.
+  static String cartKey(CartProvider cart) =>
+      (cart.lines.map((l) => '${l.product.id}x${l.quantity}').toList()..sort()).join(',');
+
+  /// The applied coupon, if it was checked against this exact cart.
+  CouponPreview? couponFor(CartProvider cart) =>
+      _coupon != null && _couponCartKey == cartKey(cart) ? _coupon : null;
+
+  /// A code was applied, but to a different cart than this one.
+  bool couponIsStale(CartProvider cart) => _coupon != null && _couponCartKey != cartKey(cart);
+
+  /// POST /orders/validate-coupon with the cart's lines. True when the code
+  /// applies; otherwise [couponError] says why in plain words.
+  Future<bool> applyCoupon(String rawCode, CartProvider cart) async {
+    final code = normaliseCouponCode(rawCode);
+    if (!couponCodePattern.hasMatch(code)) {
+      _couponError = code.isEmpty ? 'Enter a code.' : 'Codes are 4 to 20 letters or numbers.';
+      notifyListeners();
+      return false;
+    }
+    if (cart.isEmpty) return false;
+    _isApplyingCoupon = true;
+    _couponError = null;
+    notifyListeners();
+    try {
+      final response = await _request(
+        'POST',
+        '/orders/validate-coupon',
+        body: {
+          'code': code,
+          'items': cart.lines.map((l) => {'product_id': l.product.id, 'quantity': l.quantity}).toList(),
+        },
+      );
+      final data = (response is Map ? response['data'] : null) as Map?;
+      final preview = CouponPreview.tryParse(data?['coupon']);
+      if (preview == null) throw ApiException(500, 'Coupon was not returned by the server.');
+      _coupon = preview;
+      _couponCartKey = cartKey(cart);
+      return true;
+    } catch (e) {
+      final apiError = _toApiException(e);
+      _coupon = null;
+      _couponCartKey = null;
+      _couponError = couponRefusalMessage(apiError) ?? AppErrors.from(apiError).message;
+      return false;
+    } finally {
+      _isApplyingCoupon = false;
+      notifyListeners();
+    }
+  }
+
+  void removeCoupon() {
+    if (_coupon == null && _couponError == null) return;
+    _coupon = null;
+    _couponCartKey = null;
+    _couponError = null;
+    notifyListeners();
+  }
+
   /// Forgets the signed-in customer's orders (logout / session end). Bumping
   /// the generation makes any in-flight list request discard its response
   /// instead of repopulating the list for the next person.
@@ -126,6 +202,10 @@ class OrderProvider extends ChangeNotifier {
     _placeOrderFailure = null;
     _lastPlacedOrder = null;
     _lastLoadStartedAt = null;
+    _coupon = null;
+    _couponCartKey = null;
+    _couponError = null;
+    _isApplyingCoupon = false;
     notifyListeners();
   }
 
@@ -265,6 +345,7 @@ class OrderProvider extends ChangeNotifier {
     _isPlacingOrder = true;
     _placeOrderFailure = null;
     notifyListeners();
+    final coupon = couponFor(cart);
 
     try {
       final response = await _request(
@@ -280,6 +361,8 @@ class OrderProvider extends ChangeNotifier {
               .toList(),
           if (customerNotes != null && customerNotes.trim().isNotEmpty)
             'customer_notes': customerNotes.trim(),
+          // Re-validated by the server inside the order transaction.
+          if (coupon != null) 'coupon_code': coupon.code,
         },
       );
 
@@ -294,11 +377,22 @@ class OrderProvider extends ChangeNotifier {
       // the Orders tab must fetch, not be throttled.
       _lastLoadStartedAt = null;
       cart.clear();
+      _coupon = null;
+      _couponCartKey = null;
+      _couponError = null;
       _isPlacingOrder = false;
       notifyListeners();
       return placed;
     } catch (e) {
       final apiError = _toApiException(e);
+      // The code stopped applying between the preview and the order (used up,
+      // expired...): drop it and say why next to the field.
+      final couponRefusal = (apiError.code ?? '').startsWith('COUPON_') ? couponRefusalMessage(apiError) : null;
+      if (couponRefusal != null) {
+        _coupon = null;
+        _couponCartKey = null;
+        _couponError = couponRefusal;
+      }
       _placeOrderFailure = AppErrors.from(apiError);
       _isPlacingOrder = false;
       notifyListeners();

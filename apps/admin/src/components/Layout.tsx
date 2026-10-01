@@ -48,6 +48,13 @@ export function Layout() {
 
           {isAdmin ? (
             <>
+              <NavLink to="/sales" className="nav__item">
+                Sales
+              </NavLink>
+              <NavLink to="/cash" className="nav__item">
+                Rider cash
+              </NavLink>
+
               <p className="nav__group">Catalog</p>
               <NavLink to="/products" className="nav__item">
                 Products
@@ -60,10 +67,26 @@ export function Layout() {
               <NavLink to="/promotions" className="nav__item">
                 Promotions
               </NavLink>
+              <NavLink to="/coupons" className="nav__item">
+                Coupons
+              </NavLink>
 
               <p className="nav__group">Customers</p>
+              <NavLink to="/customers" className="nav__item">
+                Customers
+              </NavLink>
               <NavLink to="/feedback" className="nav__item">
                 Feedback
+              </NavLink>
+
+              <p className="nav__group">Team</p>
+              <NavLink to="/staff" className="nav__item">
+                Staff accounts
+              </NavLink>
+
+              <p className="nav__group">Store settings</p>
+              <NavLink to="/settings" className="nav__item">
+                Settings
               </NavLink>
             </>
           ) : null}

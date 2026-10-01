@@ -190,3 +190,22 @@ UPDATE users SET staff_password_hash = NULL WHERE phone = '+94762227770';
 
 Keep real passwords out of shared history: type the statement in the console
 rather than committing or pasting it into chat.
+
+### Staff accounts and the OPERATIONS role (migration 014)
+
+The API redeploy applies migration 014: it adds the `OPERATIONS` role and
+`users.staff_disabled_at`. After that, staff accounts are created in
+**Blynk Admin -> Staff accounts** (no SQL needed), and each opens one app:
+
+| Role shown in Admin | Role in the database | Opens |
+|---|---|---|
+| Inventory | `PACKING_STAFF` | the Inventory site only |
+| Operations | `OPERATIONS` | the Operations app only |
+| Admin | `ADMIN` | everything; the only role that can create accounts |
+
+The same page resets passwords (which also lifts a lockout), changes an
+account's role, and disables or re-enables it. A disabled account cannot sign
+in by password or SMS code, and its sessions end. The Admin site itself now
+admits `ADMIN` accounts only; packing staff who used it for Orders must use
+the Inventory site (or be given an Operations account). Existing `ADMIN`
+sign-ins for the Operations app keep working.

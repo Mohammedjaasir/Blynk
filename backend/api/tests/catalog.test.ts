@@ -197,6 +197,18 @@ describe('Stage 3 Catalog & Authoritative Pricing Module', () => {
   // 3. CUSTOMER PRODUCTS & PRICING
   // ==========================================================================
   describe('Customer Products & Authoritative Pricing API (GET /api/v1/products)', () => {
+    // The customer list is paged (20 by default, by name) and shares the
+    // development database with the store's real catalogue - 40+ products
+    // since 2026-09-23, so a seeded product need not be on page 1, and the
+    // operator may deactivate one (the seeded eggs were, on 2026-09-27).
+    // Each check therefore looks its product up by SKU (the list's search
+    // matches SKUs), and the markup checks use their own fixtures.
+    const listedBySku = async (sku: string, extraQuery = '') => {
+      const res = await request(app).get(`/api/v1/products?search=${encodeURIComponent(sku)}${extraQuery}`);
+      expect(res.status).toBe(200);
+      return res.body.data.products.find((p: any) => p.sku === sku);
+    };
+
     it('lists active products with pagination and authoritative selling prices', async () => {
       const res = await request(app).get('/api/v1/products?limit=10&page=1');
 
@@ -213,7 +225,7 @@ describe('Stage 3 Catalog & Authoritative Pricing Module', () => {
       expect(pagination.total_pages).toBeGreaterThanOrEqual(1);
 
       // Verify authoritative selling price calculation and sensitive data omission
-      const milk = res.body.data.products.find((p: any) => p.sku === 'SKU-DAI-001');
+      const milk = await listedBySku('SKU-DAI-001');
       expect(milk).toBeDefined();
       expect(milk.name).toBe('Kotmale Fresh Milk 1L');
       // Purchase cost is 450.00 LKR with global 20% default markup -> 540.00 LKR
@@ -226,16 +238,26 @@ describe('Stage 3 Catalog & Authoritative Pricing Module', () => {
     });
 
     it('respects per-product custom markup override (e.g. 15% on Butter, 10% on Eggs)', async () => {
-      const res = await request(app).get('/api/v1/products');
-      expect(res.status).toBe(200);
+      // Fixtures with the seeded butter's and eggs' cost and markup, so the
+      // check does not depend on the operator keeping those products active.
+      for (const fixture of [
+        { name: 'Markup Test Butter 200g', sku: 'TEST-SKU-MARKUP-BUTTER', purchase_cost: 700.0, custom_markup_percent: 15.0 },
+        { name: 'Markup Test Eggs (10 Pack)', sku: 'TEST-SKU-MARKUP-EGGS', purchase_cost: 550.0, custom_markup_percent: 10.0 },
+      ]) {
+        const created = await request(app)
+          .post('/api/v1/admin/products')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ category_id: 'c0000001-0000-0000-0000-000000000001', unit: '1 pc', ...fixture });
+        expect(created.status).toBe(201);
+      }
 
       // Butter: Cost 700.00, custom 15% -> 805.00 LKR
-      const butter = res.body.data.products.find((p: any) => p.sku === 'SKU-DAI-002');
+      const butter = await listedBySku('TEST-SKU-MARKUP-BUTTER');
       expect(butter).toBeDefined();
       expect(butter.selling_price).toBe(805.0);
 
       // Eggs: Cost 550.00, custom 10% -> 605.00 LKR
-      const eggs = res.body.data.products.find((p: any) => p.sku === 'SKU-EGG-003');
+      const eggs = await listedBySku('TEST-SKU-MARKUP-EGGS');
       expect(eggs).toBeDefined();
       expect(eggs.selling_price).toBe(605.0);
     });
@@ -481,7 +503,7 @@ describe('Stage 3 Catalog & Authoritative Pricing Module', () => {
     it('does not allow customer requests to inject or override selling price, markup, or cost', async () => {
       // If customer requests product listing or detail with bogus query parameters trying to override price
       const res = await request(app)
-        .get('/api/v1/products?selling_price=1.00&purchase_cost=0.50&custom_markup_percent=1')
+        .get('/api/v1/products?search=SKU-DAI-001&selling_price=1.00&purchase_cost=0.50&custom_markup_percent=1')
         .set('Authorization', `Bearer ${customerToken}`);
 
       expect(res.status).toBe(200);

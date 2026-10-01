@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { inventory as inventoryApi } from '../../api/resources';
 import type { StockDetail as StockDetailType, TrackingMode } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
+import { useLowStock } from '../../components/LowStock';
 import { Spinner } from '../../components/ui';
-import { ADJUSTMENT_LABEL, formatDateTime, formatDelta, inventoryErrorMessage, stockState, unitsLabel } from '../../lib/inventory';
+import {
+  ADJUSTMENT_LABEL,
+  formatDateTime,
+  formatDelta,
+  inventoryErrorMessage,
+  isInventoryError,
+  stockState,
+  unitsLabel,
+} from '../../lib/inventory';
 import { AdjustDialog } from './AdjustDialog';
 
 /**
@@ -30,6 +39,10 @@ export function StockDetail() {
   const [modeTarget, setModeTarget] = useState<TrackingMode | null>(null);
   const [modeBusy, setModeBusy] = useState(false);
   const [modeError, setModeError] = useState<string | null>(null);
+  const [thresholdDraft, setThresholdDraft] = useState<string | null>(null);
+  const [thresholdBusy, setThresholdBusy] = useState(false);
+  const [thresholdError, setThresholdError] = useState<string | null>(null);
+  const { refresh: refreshLowStock } = useLowStock();
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +57,34 @@ export function StockDetail() {
     void load();
   }, [load]);
 
+  async function saveThreshold(event: FormEvent) {
+    event.preventDefault();
+    if (thresholdDraft === null || !detail) return;
+    const value = thresholdDraft.trim();
+    if (!/^\d+$/.test(value) || Number(value) > 100000) {
+      setThresholdError('Enter a whole number from 0 to 100000.');
+      return;
+    }
+    setThresholdBusy(true);
+    setThresholdError(null);
+    try {
+      await inventoryApi.stock.setThreshold(productId, Number(value));
+      setNotice(`${detail.product_name} now counts as low at ${value} or fewer.`);
+      setThresholdDraft(null);
+      await load();
+      void refreshLowStock();
+    } catch (err) {
+      if (isInventoryError(err, 'PRODUCT_NOT_TRACKED')) {
+        setThresholdError('This product is not tracked, so it has no low-stock level. Start tracking it first.');
+        await load();
+      } else {
+        setThresholdError(inventoryErrorMessage(err));
+      }
+    } finally {
+      setThresholdBusy(false);
+    }
+  }
+
   async function changeMode() {
     if (!modeTarget || !detail) return;
     setModeBusy(true);
@@ -53,6 +94,7 @@ export function StockDetail() {
       setNotice(`${detail.product_name} is now ${modeTarget}.`);
       setModeTarget(null);
       await load();
+      void refreshLowStock();
     } catch (err) {
       setModeError(inventoryErrorMessage(err));
     } finally {
@@ -115,15 +157,56 @@ export function StockDetail() {
             </p>
             <p className="card__row">
               <span className="card__label">Low at</span>
-              <span className="card__value mono">≤ {detail.low_stock_threshold}</span>
+              <span className="card__value mono">
+                ≤ {detail.low_stock_threshold}
+                {thresholdDraft === null ? (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setThresholdDraft(String(detail.low_stock_threshold));
+                      setThresholdError(null);
+                    }}
+                  >
+                    Change
+                  </button>
+                ) : null}
+              </span>
             </p>
+            {thresholdDraft !== null ? (
+              <form className="fee-form" onSubmit={(e) => void saveThreshold(e)} noValidate>
+                <label className="field">
+                  <span className="field__label">Low-stock level</span>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    value={thresholdDraft}
+                    onChange={(e) => setThresholdDraft(e.target.value)}
+                  />
+                </label>
+                <button type="submit" className="button" disabled={thresholdBusy}>
+                  {thresholdBusy ? <Spinner label="Saving" /> : 'Save level'}
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={() => {
+                    setThresholdDraft(null);
+                    setThresholdError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : null}
           </>
         ) : (
           <p className="card__note">
-            Not counted. This product is <strong>sourced on order</strong>: nothing is held in stock and sourcing
+            Not counted. This product is <strong>sourced on order</strong>: nothing is held in stock and packing
             never takes from a count.
           </p>
         )}
+        {thresholdError ? <p className="field__error" role="alert">{thresholdError}</p> : null}
         <span className={`stock stock--${state.kind.toLowerCase()}`}>
           <span className="stock__word">{state.label}</span>
           {state.units !== null ? <span className="stock__units">{unitsLabel(state.units)}</span> : null}
@@ -183,6 +266,7 @@ export function StockDetail() {
           onDone={async () => {
             setAdjusting(false);
             await load();
+            void refreshLowStock();
           }}
         />
       ) : null}
@@ -195,14 +279,14 @@ export function StockDetail() {
               {modeTarget === 'TRACKED' ? (
                 <p>
                   <strong>{detail.product_name}</strong> will be counted from its last recorded quantity (
-                  {unitsLabel(detail.quantity_on_hand)}). Sourcing an order for a tracked product takes from this
+                  {unitsLabel(detail.quantity_on_hand)}). Packing an order for a tracked product takes from this
                   count, and cancelling that order puts it back. The count stops at zero - record a restock before
                   orders need it.
                 </p>
               ) : (
                 <p>
                   <strong>{detail.product_name}</strong> will go back to being sourced on order. The last count (
-                  {unitsLabel(detail.quantity_on_hand)}) is kept but no longer used, and sourcing stops taking stock.
+                  {unitsLabel(detail.quantity_on_hand)}) is kept but no longer used, and packing stops taking stock.
                   Units already taken for an order still come back to this count if that order is cancelled.
                 </p>
               )}

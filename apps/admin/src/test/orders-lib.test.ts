@@ -35,10 +35,12 @@ describe('laneOf', () => {
   });
 });
 
-describe('isPackable (D7)', () => {
-  it('needs nothing pending, no unsourced substitution, and something in the bag', () => {
+describe('isPackable (D7, revised: no separate sourcing step)', () => {
+  it('packs straight from Placed: no unsourced substitution and something in the bag', () => {
     expect(isPackable(order())).toBe(true);
-    expect(isPackable(order({ items_summary: { total: 2, pending: 1, sourced: 1, packed: 0, unavailable: 0, substituted: 0 } }))).toBe(false);
+    expect(isPackable(order({ items_summary: { total: 2, pending: 1, sourced: 1, packed: 0, unavailable: 0, substituted: 0 } }))).toBe(true);
+    expect(isPackable(order({ items_summary: { total: 2, pending: 2, sourced: 0, packed: 0, unavailable: 0, substituted: 0 } }))).toBe(true);
+    expect(isPackable(order({ items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 1 } }))).toBe(false);
     expect(isPackable(order({ items_summary: { total: 1, pending: 0, sourced: 0, packed: 0, unavailable: 0, substituted: 1 } }))).toBe(false);
     expect(isPackable(order({ items_summary: { total: 1, pending: 0, sourced: 0, packed: 0, unavailable: 1, substituted: 0 } }))).toBe(false);
     expect(isPackable(order({ items_summary: { total: 2, pending: 0, sourced: 1, packed: 0, unavailable: 1, substituted: 0 } }))).toBe(true);
@@ -70,7 +72,8 @@ describe('allowedActions', () => {
 describe('primaryAction', () => {
   it('is the one next step for the lane, when this role may take it', () => {
     expect(primaryAction(order(), 'PACKING_STAFF')).toBe('pack');
-    expect(primaryAction(order({ items_summary: { total: 1, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 0 } }), 'ADMIN')).toBeNull();
+    expect(primaryAction(order({ items_summary: { total: 1, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 0 } }), 'ADMIN')).toBe('pack');
+    expect(primaryAction(order({ items_summary: { total: 1, pending: 0, sourced: 0, packed: 0, unavailable: 0, substituted: 1 } }), 'ADMIN')).toBeNull();
     expect(primaryAction(order({ order_status: 'PACKED' }), 'ADMIN')).toBe('assign');
     expect(primaryAction(order({ order_status: 'PACKED' }), 'PACKING_STAFF')).toBeNull();
     expect(primaryAction(order({ order_status: 'PACKED', active_delivery: withRider('ASSIGNED') }), 'PACKING_STAFF')).toBe('handOver');

@@ -43,6 +43,19 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Adds [quantity] units at once ("Order again"), within the per-item cap.
+  /// Returns how many units were actually added.
+  int addQuantity(ProductModel product, int quantity) {
+    if (quantity <= 0) return 0;
+    final current = _quantities[product.id] ?? 0;
+    final next = (current + quantity).clamp(0, AppValidators.quantityMax);
+    final added = next - current;
+    _products[product.id] = product;
+    if (added > 0) _quantities[product.id] = next;
+    notifyListeners();
+    return added;
+  }
+
   void decrement(ProductModel product) {
     final current = _quantities[product.id] ?? 0;
     if (current <= 1) {

@@ -162,6 +162,49 @@ export function statusTone(d: DeliverySummary): 'go' | 'wait' | 'stop' | 'done' 
   return 'stop';
 }
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * A refused proof-of-delivery code (backend migration 016) in the operator's
+ * words, or null when the error is about something else. Shown under the
+ * code field, not as a page notice: the dialog stays open for another try.
+ * `locked` is true while no code can be tried (5 wrong codes, 15 minutes).
+ */
+export function deliveryCodeError(err: unknown): { message: string; locked: boolean } | null {
+  if (!(err instanceof ApiError)) return null;
+  const details = (err.details ?? {}) as { attempts_remaining?: number; retry_after_seconds?: number; locked_until?: string };
+  const minutesUntil = () => {
+    const seconds =
+      typeof details.retry_after_seconds === 'number'
+        ? details.retry_after_seconds
+        : details.locked_until
+          ? (new Date(details.locked_until).getTime() - Date.now()) / 1000
+          : 15 * 60;
+    return Math.max(1, Math.ceil(seconds / 60));
+  };
+  switch (err.code) {
+    case 'WRONG_DELIVERY_CODE': {
+      const left = details.attempts_remaining;
+      if (typeof left === 'number' && left <= 0) {
+        return {
+          message: `That code doesn't match. Too many wrong codes. Try again in ${plural(minutesUntil(), 'minute', 'minutes')}.`,
+          locked: true,
+        };
+      }
+      return {
+        message: typeof left === 'number' ? `That code doesn't match. ${plural(left, 'try', 'tries')} left.` : "That code doesn't match.",
+        locked: false,
+      };
+    }
+    case 'DELIVERY_CODE_LOCKED':
+      return { message: `Too many wrong codes. Try again in ${plural(minutesUntil(), 'minute', 'minutes')}.`, locked: true };
+    case 'DELIVERY_CODE_NOT_ISSUED':
+      return { message: 'This order has no delivery code. Ask the store to mark it delivered.', locked: true };
+    default:
+      return null;
+  }
+}
+
 /**
  * The API's refusals in the operator's words, for the Delivery screens
  * (mirrors apps/rider/src/lib/errors.ts's `MESSAGES` map plus `lib/orders.ts`'s

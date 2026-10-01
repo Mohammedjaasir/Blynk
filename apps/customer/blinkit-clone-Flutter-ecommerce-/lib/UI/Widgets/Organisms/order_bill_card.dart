@@ -5,7 +5,7 @@ import '../../../Models/order_model.dart';
 import '../../../app_design.dart' show appCardDecoration;
 import '../../../design/tokens.dart';
 
-/// The bill card: subtotal / delivery fee / total, then the one payment
+/// The bill card: subtotal / delivery fee / any coupon discount / total, then the one payment
 /// line (`paymentLine`). Pure - it renders exactly what `OrderModel` holds.
 class OrderBillCard extends StatelessWidget {
   const OrderBillCard({super.key, required this.order});
@@ -31,6 +31,27 @@ class OrderBillCard extends StatelessWidget {
           _row('Subtotal', formatLkr(order.subtotalAmount)),
           const SizedBox(height: BlynkSpace.s8),
           _row('Delivery fee', formatLkr(order.deliveryFee)),
+          // Coupon (backend migration 018): the total already has it taken off.
+          if (order.discountAmount > 0) ...[
+            const SizedBox(height: BlynkSpace.s8),
+            Row(
+              key: const Key('order-bill-discount'),
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    order.couponCode != null ? 'Discount (${order.couponCode})' : 'Discount',
+                    overflow: TextOverflow.ellipsis,
+                    style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
+                  ),
+                ),
+                Text(
+                  '−${formatLkr(order.discountAmount)}',
+                  style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: BlynkSpace.s16),
           // The one rule on the page: it separates the itemisation from the
           // answer, which is a different job from decorating a section break.

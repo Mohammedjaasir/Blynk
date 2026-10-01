@@ -217,7 +217,7 @@ export function Orders() {
           order={dialog.order}
           busy={busyId === dialog.order.id}
           onClose={() => setDialog(null)}
-          onAssign={(riderId) => void run(dialog.order, () => ordersApi.assignRider(dialog.order.id, riderId))}
+          onAssign={(riderId, confirmFar) => void run(dialog.order, () => ordersApi.assignRider(dialog.order.id, riderId, confirmFar))}
         />
       ) : null}
       {dialog && needsNote(dialog.action) ? (
@@ -238,9 +238,9 @@ export function Orders() {
 function progress(o: BoardOrder): string {
   const s = o.items_summary;
   const toBag = s.total - s.unavailable;
-  const done = s.sourced + s.packed;
   if (o.order_status === 'PLACED' || o.order_status === 'ITEM_UNAVAILABLE') {
-    const parts = [`${done} of ${toBag} sourced`];
+    // No separate sourcing step: the pack takes every item off the shelf.
+    const parts = [`${toBag} ${toBag === 1 ? 'item' : 'items'} to pack`];
     if (s.unavailable) parts.push(`${s.unavailable} unavailable`);
     return parts.join(' · ');
   }
@@ -264,8 +264,10 @@ function OrderRow({
 }) {
   const number = shortNumber(order.order_number);
   const exception = laneOf(order) === 'attention';
-  const waitingOnSourcing =
-    (order.order_status === 'PLACED' || order.order_status === 'ITEM_UNAVAILABLE') && primary === null;
+  const blocked =
+    (order.order_status === 'PLACED' || order.order_status === 'ITEM_UNAVAILABLE') &&
+    primary === null &&
+    order.items_summary.substituted > 0;
   return (
     <li className={`ticket${selected ? ' ticket--selected' : ''}${exception ? ' ticket--exception' : ''}`}>
       <button type="button" className="ticket__open" onClick={onOpen} aria-label={`Open order #${number}`}>
@@ -294,8 +296,8 @@ function OrderRow({
           >
             {busy ? 'Saving…' : ACTION_LABEL[primary]}
           </button>
-        ) : waitingOnSourcing ? (
-          <span className="ticket__hint">Source in Inventory</span>
+        ) : blocked ? (
+          <span className="ticket__hint">Substitution needs a cost</span>
         ) : null}
       </span>
     </li>

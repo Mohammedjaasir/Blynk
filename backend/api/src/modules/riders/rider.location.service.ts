@@ -105,14 +105,32 @@ export class RiderLocationService {
     metrics.locationUpdatesReceived();
 
     const isStale = nowMs - capturedAt.getTime() > STALE_BROADCAST_THRESHOLD_MS;
-    if (!isStale) {
-      broadcastLocation(updated.order_id, {
-        latitude: Number(updated.current_latitude),
-        longitude: Number(updated.current_longitude),
-        accuracy: Number(updated.location_accuracy_m),
-        captured_at: updated.location_captured_at!.toISOString(),
-        received_at: updated.location_received_at!.toISOString(),
+    const broadcast = (row: NonNullable<typeof updated>) => {
+      if (isStale) return;
+      broadcastLocation(row.order_id, {
+        latitude: Number(row.current_latitude),
+        longitude: Number(row.current_longitude),
+        accuracy: Number(row.location_accuracy_m),
+        captured_at: row.location_captured_at!.toISOString(),
+        received_at: row.location_received_at!.toISOString(),
       });
+    };
+    broadcast(updated);
+
+    // Rider trips (batching): the device shares one delivery at a time, but
+    // the rider is carrying every order they have on the road. The same
+    // point goes to this rider's other trackable deliveries (PICKED_UP, order
+    // OUT_FOR_DELIVERY - the same window as above), through the same
+    // conditional write, so each customer's map follows the rider.
+    const siblings = await riderRepository.findOtherTrackableDeliveries(rider.id, deliveryId);
+    for (const sibling of siblings) {
+      const row = await riderRepository.writeLocation(sibling.id, {
+        latitude: input.latitude,
+        longitude: input.longitude,
+        accuracy: input.accuracy,
+        capturedAt,
+      });
+      if (row) broadcast(row);
     }
 
     return { accepted: true };

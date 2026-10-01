@@ -1,5 +1,6 @@
 import { AppError } from '../../../../middleware/error.middleware.js';
 import type { DeliveryAssignmentStatus } from '../../../../database/types.js';
+import { confirmWithCode } from '../delivery-code.js';
 import { settleCod, type CodSettlement } from '../settlement.js';
 import { setOrderStatus } from '../status-writer.js';
 import type { ActionImpl, DeliveryRow, OrderRow } from '../types.js';
@@ -82,7 +83,8 @@ export const riderFail: ActionImpl<OrderRow> = {
 
 /**
  * #9 RIDER_COLLECT_COD - only at the door, only for an unpaid COD order, and
- * only for exactly the order total read under the lock (architecture §I).
+ * only for exactly the order total read under the lock (architecture §I),
+ * and only with the customer's delivery code (proof of delivery, migration 016).
  */
 export const riderCollectCod: ActionImpl<CodSettlement> = {
   checkState({ order, delivery }) {
@@ -115,12 +117,13 @@ export const riderCollectCod: ActionImpl<CodSettlement> = {
   },
   async apply(trx, { order, delivery }, req) {
     const amount = req.input!.amount!;
+    await confirmWithCode(trx, order.id, req.input!.delivery_code!, req.actor);
     return await settleCod(trx, {
       delivery: delivery!,
       order,
       amount,
       actor: req.actor,
-      note: `Delivered and collected ${amount.toFixed(2)} LKR in cash`,
+      note: `Delivered and collected ${amount.toFixed(2)} LKR in cash (customer code confirmed)`,
     });
   },
 };

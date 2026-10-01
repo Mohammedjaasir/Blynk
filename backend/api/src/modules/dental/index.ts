@@ -45,7 +45,7 @@ export const adminDentalRouter = Router();
 adminDentalRouter.post(
   '/appointments/:id/cancel',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   appointmentController.adminCancel.bind(appointmentController)
 );
 
@@ -58,72 +58,74 @@ adminDentalRouter.post(
 //     addition from changing how the already-reviewed B3 route is wired).
 // ----------------------------------------------------------------------------
 const ADMIN = [requireAuth, requireRoles('ADMIN')] as const;
+// Routes the Operations app also calls (migration 014's OPERATIONS role).
+const ADMIN_OR_OPS = [requireAuth, requireRoles(['ADMIN', 'OPERATIONS'])] as const;
 
 // Clinics
-adminDentalRouter.post('/clinics', ...ADMIN, dentalAdminController.createClinic.bind(dentalAdminController));
-adminDentalRouter.get('/clinics', ...ADMIN, dentalAdminController.listClinics.bind(dentalAdminController));
-adminDentalRouter.get('/clinics/:id', ...ADMIN, dentalAdminController.getClinicById.bind(dentalAdminController));
-adminDentalRouter.patch('/clinics/:id', ...ADMIN, dentalAdminController.updateClinic.bind(dentalAdminController));
+adminDentalRouter.post('/clinics', ...ADMIN_OR_OPS, dentalAdminController.createClinic.bind(dentalAdminController));
+adminDentalRouter.get('/clinics', ...ADMIN_OR_OPS, dentalAdminController.listClinics.bind(dentalAdminController));
+adminDentalRouter.get('/clinics/:id', ...ADMIN_OR_OPS, dentalAdminController.getClinicById.bind(dentalAdminController));
+adminDentalRouter.patch('/clinics/:id', ...ADMIN_OR_OPS, dentalAdminController.updateClinic.bind(dentalAdminController));
 
 // Doctors
-adminDentalRouter.post('/doctors', ...ADMIN, dentalAdminController.createDoctor.bind(dentalAdminController));
-adminDentalRouter.get('/doctors', ...ADMIN, dentalAdminController.listDoctors.bind(dentalAdminController));
+adminDentalRouter.post('/doctors', ...ADMIN_OR_OPS, dentalAdminController.createDoctor.bind(dentalAdminController));
+adminDentalRouter.get('/doctors', ...ADMIN_OR_OPS, dentalAdminController.listDoctors.bind(dentalAdminController));
 adminDentalRouter.get('/doctors/:id', ...ADMIN, dentalAdminController.getDoctorById.bind(dentalAdminController));
-adminDentalRouter.patch('/doctors/:id', ...ADMIN, dentalAdminController.updateDoctor.bind(dentalAdminController));
+adminDentalRouter.patch('/doctors/:id', ...ADMIN_OR_OPS, dentalAdminController.updateDoctor.bind(dentalAdminController));
 
 // Clinic-doctor relationship (the join table)
 adminDentalRouter.post(
   '/clinics/:clinic_id/doctors',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.attachDoctorToClinic.bind(dentalAdminController)
 );
 adminDentalRouter.get(
   '/clinics/:clinic_id/doctors',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.listClinicDoctorRoster.bind(dentalAdminController)
 );
 adminDentalRouter.patch(
   '/clinic-doctors/:id',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.updateClinicDoctor.bind(dentalAdminController)
 );
 
 // Availability template
 adminDentalRouter.post(
   '/clinic-doctors/:clinic_doctor_id/availability',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.createAvailability.bind(dentalAdminController)
 );
 adminDentalRouter.get(
   '/clinic-doctors/:clinic_doctor_id/availability',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.listAvailability.bind(dentalAdminController)
 );
 adminDentalRouter.patch(
   '/availability/:id',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.updateAvailability.bind(dentalAdminController)
 );
 adminDentalRouter.delete(
   '/availability/:id',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.deleteAvailability.bind(dentalAdminController)
 );
 
 // Blocked dates
 adminDentalRouter.post(
   '/clinic-doctors/:clinic_doctor_id/blocked-dates',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.createBlockedDate.bind(dentalAdminController)
 );
 adminDentalRouter.get(
   '/clinic-doctors/:clinic_doctor_id/blocked-dates',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.listBlockedDates.bind(dentalAdminController)
 );
 adminDentalRouter.delete(
   '/blocked-dates/:id',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.deleteBlockedDate.bind(dentalAdminController)
 );
 
@@ -131,7 +133,7 @@ adminDentalRouter.delete(
 // above (B3); not duplicated here.
 adminDentalRouter.get(
   '/appointments',
-  ...ADMIN,
+  ...ADMIN_OR_OPS,
   dentalAdminController.listAppointments.bind(dentalAdminController)
 );
 

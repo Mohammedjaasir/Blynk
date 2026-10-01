@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { deliveriesApi } from '../api/resources';
-import type { DeliveryDetail } from '../api/types';
+import { DELIVERY_CODE_LENGTH, type DeliveryDetail } from '../api/types';
 import { Banner } from '../components/Banner';
 import { Header } from '../components/Header';
 import { Sheet } from '../components/Sheet';
@@ -11,7 +11,7 @@ import { TrackingStatus } from '../components/TrackingStatus';
 import { DeliveryMap } from '../components/DeliveryMap';
 import { toLatLng } from '../lib/route';
 import { canReportFailure, isTrackable, nextAction, stage, statusLabel, statusTone } from '../lib/delivery';
-import { MESSAGES, errorCode, errorMessage } from '../lib/errors';
+import { MESSAGES, deliveryCodeLockedUntil, errorCode, errorMessage } from '../lib/errors';
 import { formatMoney, formatPhone, formatTime, shortOrderNumber } from '../lib/format';
 import { getTracker, stopTrackingFor, syncTracking } from '../lib/tracker-session';
 import type { TrackingState } from '../lib/tracking';
@@ -20,6 +20,10 @@ import { useRevalidate } from '../lib/useRevalidate';
 import { owesCash } from './Queue';
 
 const FAILURE_REASON_MAX = 500;
+/** The backend's lock length, used only if a lock reply carries no timing. */
+const DEFAULT_CODE_LOCK_MS = 15 * 60_000;
+
+type CodeProblem = { kind: 'wrong' | 'locked'; message: string };
 
 /**
  * One delivery, laid out like the slip on the bag: where it goes, who to
@@ -39,6 +43,25 @@ export function Delivery() {
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<'collect' | 'fail' | null>(null);
   const inFlight = useRef(false);
+  // A refused delivery code is answered inside the collect sheet, not behind it.
+  const [codeProblem, setCodeProblem] = useState<CodeProblem | null>(null);
+  const [codeLockedUntil, setCodeLockedUntil] = useState<number | null>(null);
+
+  // The backend's lock lifts on its own; so does the disabled button.
+  useEffect(() => {
+    if (codeLockedUntil === null) return;
+    const timer = setTimeout(() => {
+      setCodeLockedUntil(null);
+      setCodeProblem(null);
+    }, Math.max(0, codeLockedUntil - Date.now()));
+    return () => clearTimeout(timer);
+  }, [codeLockedUntil]);
+
+  const closeSheet = () => {
+    setSheet(null);
+    // A lock outlives the sheet: reopening it must still say why it's disabled.
+    setCodeProblem((problem) => (problem?.kind === 'locked' ? problem : null));
+  };
 
   // The tracker is app-level (lib/tracker-session), not owned by this screen:
   // leaving mid-delivery must not stop it, and reopening must find it running.
@@ -88,6 +111,22 @@ export function Delivery() {
       if (code === 'DELIVERY_NOT_FOUND') {
         stopTrackingFor(id).catch(() => undefined);
         leaveWith(MESSAGES.DELIVERY_NOT_FOUND);
+        return;
+      }
+      if (code === 'WRONG_DELIVERY_CODE') {
+        // The 5th wrong code is the one that locks the handover (no tries left).
+        const lockedUntil = deliveryCodeLockedUntil(err);
+        if (lockedUntil !== null) {
+          setCodeProblem({ kind: 'locked', message: errorMessage(err) });
+          setCodeLockedUntil(lockedUntil);
+          return;
+        }
+        setCodeProblem({ kind: 'wrong', message: errorMessage(err) });
+        return;
+      }
+      if (code === 'DELIVERY_CODE_LOCKED') {
+        setCodeProblem({ kind: 'locked', message: errorMessage(err) });
+        setCodeLockedUntil(deliveryCodeLockedUntil(err) ?? Date.now() + DEFAULT_CODE_LOCK_MS);
         return;
       }
       setNotice(errorMessage(err));
@@ -144,26 +183,18 @@ export function Delivery() {
       ) : null}
 
       {data && sheet === 'collect' && nextAction(data).kind === 'collect' ? (
-        <Sheet title={`Collect ${formatMoney(data.total_amount)} in cash`} onClose={() => setSheet(null)}>
-          <p className="sheet__body">
-            from {data.delivery_recipient_name}. Count it before you confirm — this completes the delivery.
-          </p>
-          <div className="sheet__actions">
-            <button
-              type="button"
-              className="primary"
-              data-autofocus
-              disabled={busy}
-              // The amount is the total the API reported; the API rejects any other.
-              onClick={() => void run(async () => void (await deliveriesApi.collectCod(data.delivery_id, data.total_amount)))}
-            >
-              {busy ? 'Recording…' : 'Cash collected — complete'}
-            </button>
-            <button type="button" className="text-button" onClick={() => setSheet(null)}>
-              Not yet
-            </button>
-          </div>
-        </Sheet>
+        <CollectSheet
+          delivery={data}
+          busy={busy}
+          problem={codeProblem}
+          locked={codeLockedUntil !== null}
+          onClose={closeSheet}
+          onSubmit={(deliveryCode) => {
+            setCodeProblem(null);
+            // The amount is the total the API reported; the API rejects any other.
+            void run(async () => void (await deliveriesApi.collectCod(data.delivery_id, data.total_amount, deliveryCode)));
+          }}
+        />
       ) : null}
 
       {data && sheet === 'fail' && canReportFailure(data) ? (
@@ -309,6 +340,90 @@ function ActionBar({
         </button>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Proof of delivery: the rider types the customer's 4-digit code from their
+ * Blynk app. Only the backend checks it; this sheet only collects digits.
+ */
+function CollectSheet({
+  delivery,
+  busy,
+  problem,
+  locked,
+  onClose,
+  onSubmit,
+}: {
+  delivery: DeliveryDetail;
+  busy: boolean;
+  problem: CodeProblem | null;
+  locked: boolean;
+  onClose(): void;
+  onSubmit(deliveryCode: string): void;
+}) {
+  const [code, setCode] = useState('');
+  const fieldId = useId();
+  const hintId = useId();
+  const input = useRef<HTMLInputElement>(null);
+  const complete = code.length === DELIVERY_CODE_LENGTH;
+
+  // A wrong code is cleared so the next attempt starts clean.
+  useEffect(() => {
+    if (problem?.kind === 'wrong') {
+      setCode('');
+      input.current?.focus();
+    }
+  }, [problem]);
+
+  return (
+    <Sheet title={`Collect ${formatMoney(delivery.total_amount)} in cash`} onClose={onClose}>
+      <form
+        className="sheet__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (complete && !busy && !locked) onSubmit(code);
+        }}
+      >
+        <p className="sheet__body">
+          from {delivery.delivery_recipient_name}. Count it before you confirm — this completes the delivery.
+        </p>
+        <label className="field" htmlFor={fieldId}>
+          <span className="field__label">Customer's delivery code</span>
+          <input
+            ref={input}
+            id={fieldId}
+            className="input input--code"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="one-time-code"
+            maxLength={DELIVERY_CODE_LENGTH}
+            value={code}
+            onChange={(event) => setCode(event.target.value.replace(/[^0-9]/g, '').slice(0, DELIVERY_CODE_LENGTH))}
+            aria-describedby={hintId}
+            aria-invalid={problem?.kind === 'wrong' || undefined}
+            disabled={locked}
+            data-autofocus
+          />
+        </label>
+        <p className="sheet__hint" id={hintId}>
+          Ask the customer for the 4-digit code in their Blynk app.
+        </p>
+        {problem ? (
+          <p className="sheet__error" role="alert">
+            {problem.message}
+          </p>
+        ) : null}
+        <div className="sheet__actions">
+          <button type="submit" className="primary" disabled={!complete || busy || locked}>
+            {busy ? 'Recording…' : 'Cash collected — complete'}
+          </button>
+          <button type="button" className="text-button" onClick={onClose}>
+            Not yet
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 

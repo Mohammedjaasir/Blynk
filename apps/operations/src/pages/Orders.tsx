@@ -228,7 +228,7 @@ export function Orders() {
           order={dialog.order}
           busy={busyId === dialog.order.id}
           onClose={() => setDialog(null)}
-          onAssign={(riderId) => void run(dialog.order, () => ordersApi.assignRider(dialog.order.id, riderId))}
+          onAssign={(riderId, confirmFar) => void run(dialog.order, () => ordersApi.assignRider(dialog.order.id, riderId, confirmFar))}
         />
       ) : null}
       {dialog && needsNote(dialog.action) ? (
@@ -247,9 +247,9 @@ export function Orders() {
 function progress(o: BoardOrder): string {
   const s = o.items_summary;
   const toBag = s.total - s.unavailable;
-  const done = s.sourced + s.packed;
   if (o.order_status === 'PLACED' || o.order_status === 'ITEM_UNAVAILABLE') {
-    const parts = [`${done} of ${toBag} sourced`];
+    // No separate sourcing step: the pack takes every item off the shelf.
+    const parts = [`${toBag} ${toBag === 1 ? 'item' : 'items'} to pack`];
     if (s.unavailable) parts.push(`${s.unavailable} unavailable`);
     return parts.join(' · ');
   }
@@ -269,7 +269,6 @@ function OrderRow({
 }) {
   const number = shortNumber(order.order_number);
   const exception = laneOf(order) === 'attention';
-  const waitingOnSourcing = (order.order_status === 'PLACED' || order.order_status === 'ITEM_UNAVAILABLE') && primary === null;
   return (
     <li className={`ticket${exception ? ' ticket--exception' : ''}`}>
       <Link to={`/orders/${order.id}`} className="ticket__open" aria-label={`Open order #${number}`}>
@@ -289,23 +288,17 @@ function OrderRow({
           <span className="ticket__total">{formatMoney(order.total_amount)}</span>
         </span>
       </Link>
-      {primary || waitingOnSourcing ? (
+      {primary ? (
         <div className="ticket__action">
-          {primary ? (
-            <button
-              type="button"
-              className="button"
-              disabled={busy}
-              onClick={() => onAct(primary)}
-              aria-label={`${ACTION_LABEL[primary]} #${number}`}
-            >
-              {busy ? 'Saving…' : ACTION_LABEL[primary]}
-            </button>
-          ) : (
-            <Link className="ticket__hint" to="/catalog/inventory/sourcing">
-              Source in Inventory →
-            </Link>
-          )}
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            onClick={() => onAct(primary)}
+            aria-label={`${ACTION_LABEL[primary]} #${number}`}
+          >
+            {busy ? 'Saving…' : ACTION_LABEL[primary]}
+          </button>
         </div>
       ) : null}
     </li>

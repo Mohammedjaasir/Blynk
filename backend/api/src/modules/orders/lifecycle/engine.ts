@@ -2,6 +2,7 @@ import { db } from '../../../database/connection.js';
 import { AppError } from '../../../middleware/error.middleware.js';
 import { ACTIVE_DELIVERY_STATUSES, CATALOGUE, type ActionName, type LockKind } from './catalogue.js';
 import { ACTIONS } from './actions/index.js';
+import { recordWrongDeliveryCode, WrongDeliveryCodeError } from './delivery-code.js';
 import type { ActionImpl, LockedState, OrderRow, TransitionRequest, Trx } from './types.js';
 
 /**
@@ -13,29 +14,46 @@ import type { ActionImpl, LockedState, OrderRow, TransitionRequest, Trx } from '
  *   4. role check                      -> 403 TRANSITION_NOT_PERMITTED_FOR_ROLE
  *   5. remaining preconditions
  *   6. effects, including the status write and history, in the same transaction
+ *   7. after a rollback for a wrong delivery code, that attempt is counted
  */
 export async function runTransition<R = unknown>(name: ActionName, req: TransitionRequest): Promise<R> {
   const entry = CATALOGUE[name];
   const impl = ACTIONS[name] as ActionImpl<R>;
 
   if (entry.notesRequired && !req.input?.notes?.trim()) {
-    throw new AppError('A note is required for this change.', 400, 'VALIDATION_ERROR', [
-      { path: ['notes'], message: 'notes is required' },
-    ]);
+    // Proof of delivery: the customer's code stands in for the override note.
+    if (entry.codeReplacesNotes) {
+      if (!req.input?.delivery_code) {
+        throw new AppError("Enter the customer's delivery code, or write an override note.", 400, 'VALIDATION_ERROR', [
+          { path: ['delivery_code'], message: 'delivery_code or an override note (notes) is required' },
+        ]);
+      }
+    } else {
+      throw new AppError('A note is required for this change.', 400, 'VALIDATION_ERROR', [
+        { path: ['notes'], message: 'notes is required' },
+      ]);
+    }
   }
 
-  return await db.transaction().execute(async (trx) => {
-    const state = await lockFor(trx, entry.lock, req);
-    impl.checkState(state, req);
-    if (!entry.roles.includes(req.actor.role)) {
-      throw new AppError('Your role cannot make this change.', 403, 'TRANSITION_NOT_PERMITTED_FOR_ROLE', {
-        action: name,
-        role: req.actor.role,
-      });
-    }
-    impl.checkPreconditions?.(state, req);
-    return await impl.apply(trx, state, req);
-  });
+  try {
+    return await db.transaction().execute(async (trx) => {
+      const state = await lockFor(trx, entry.lock, req);
+      impl.checkState(state, req);
+      if (!entry.roles.includes(req.actor.role)) {
+        throw new AppError('Your role cannot make this change.', 403, 'TRANSITION_NOT_PERMITTED_FOR_ROLE', {
+          action: name,
+          role: req.actor.role,
+        });
+      }
+      impl.checkPreconditions?.(state, req);
+      return await impl.apply(trx, state, req);
+    });
+  } catch (err) {
+    // A wrong delivery code rolls the action back, but the attempt must still
+    // count towards the lock: it is recorded after the rollback.
+    if (err instanceof WrongDeliveryCodeError) throw await recordWrongDeliveryCode(err.orderId);
+    throw err;
+  }
 }
 
 async function lockOrder(trx: Trx, orderId: string): Promise<OrderRow> {

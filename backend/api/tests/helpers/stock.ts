@@ -3,6 +3,8 @@ import request from 'supertest';
 import type { Express } from 'express';
 import { pool } from '../../src/database/connection.js';
 import { generateAccessToken } from '../../src/modules/auth/token.service.js';
+import { deliveryCodeForDelivery } from './delivery-code.js';
+import { liftRiderTripCap } from './rider-trips.js';
 
 /**
  * Test-owned tracked stock (inventory plan §8). Products are created through
@@ -51,6 +53,8 @@ export interface LedgerRow {
 }
 
 export function stockFixtures(app: Express, skuPrefix: string) {
+  // One seeded rider takes many orders here; the trip cap has its own tests.
+  liftRiderTripCap();
   const created = { products: [] as string[], orders: [] as string[], suppliers: [] as string[], users: [] as string[] };
   let addressId = '';
   let categoryId = '';
@@ -205,8 +209,12 @@ export function stockFixtures(app: Express, skuPrefix: string) {
     request(app).post(`/api/v1/admin/orders/${orderId}/assign-rider`).set(auth(tokens.admin)).send({ rider_id: riderId });
   const riderStep = (deliveryId: string, body: object, token = tokens.rider) =>
     request(app).patch(`/api/v1/riders/deliveries/${deliveryId}/status`).set(auth(token)).send(body);
-  const collect = (deliveryId: string, amount: number, token = tokens.rider) =>
-    request(app).post(`/api/v1/riders/deliveries/${deliveryId}/collect-cod`).set(auth(token)).send({ amount });
+  // With the customer's proof-of-delivery code (migration 016).
+  const collect = async (deliveryId: string, amount: number, token = tokens.rider) =>
+    request(app)
+      .post(`/api/v1/riders/deliveries/${deliveryId}/collect-cod`)
+      .set(auth(token))
+      .send({ amount, delivery_code: await deliveryCodeForDelivery(deliveryId) });
 
   const orderRow = async (orderId: string) =>
     (

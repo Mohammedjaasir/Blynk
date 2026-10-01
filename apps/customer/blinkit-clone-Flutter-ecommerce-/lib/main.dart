@@ -18,6 +18,7 @@ import 'package:ecom/Screens/config_problem_screen.dart';
 import 'package:ecom/Services/Providers/location.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
+import 'package:ecom/Services/Providers/store_info.provider.dart';
 import 'package:ecom/app_theme.dart';
 import 'package:ecom/route_generator.dart';
 import 'package:ecom/Screens/session_gate.dart';
@@ -108,6 +109,13 @@ List<SingleChildWidget> buildAppProviders() => [
       ),
       ChangeNotifierProvider<ProductProvider>(
         create: (_) => ProductProvider(),
+      ),
+      // The live delivery fee (GET /store, cached on the device). Not lazy, so
+      // the fetch starts at launch; it never blocks the first frame and its
+      // failures are silent (the fee falls back to the cached or default one).
+      ChangeNotifierProvider<StoreInfoProvider>(
+        create: (_) => StoreInfoProvider()..load(),
+        lazy: false,
       ),
       ChangeNotifierProvider<CartProvider>(
         create: (_) => CartProvider(),

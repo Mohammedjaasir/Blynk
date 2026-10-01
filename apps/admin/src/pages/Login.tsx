@@ -1,7 +1,7 @@
 import { useState, type FormEvent, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { NOT_ADMIN_MESSAGE, useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import { Field, Spinner } from '../components/ui';
 import blynkLogo from '../assets/blynk-logo-light.png';
 
@@ -72,7 +72,7 @@ export function Login() {
     } catch (err) {
       // The API has already used up the code by the time a non-admin account
       // is refused, so the only useful next step is another number.
-      if (err instanceof Error && err.message === NOT_ADMIN_MESSAGE) {
+      if (err instanceof ApiError && err.status === 403 && err.code === 'FORBIDDEN') {
         setStep('phone');
         setOtp('');
         setDevOtp(null);

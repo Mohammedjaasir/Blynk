@@ -42,7 +42,8 @@ function mockApi(handlers: Record<string, Handler>) {
 }
 
 const ADMIN = { id: 'a1', phone: '+94775551122', full_name: 'Nawaz Mansoor', email: null, role: 'ADMIN' };
-const STAFF = { id: 's1', phone: '+94774443322', full_name: 'Kasun Perera', email: null, role: 'PACKING_STAFF' };
+// Packing staff no longer sign in here (2026-09-30: Admin is ADMIN-only; they
+// use the Inventory site), so every board test runs as the admin.
 
 // Fixtures shaped like GET /admin/orders rows (test data only).
 let seq = 0;
@@ -123,7 +124,7 @@ describe('Orders board', () => {
   });
 
   it('with nothing live, says so and invents nothing', async () => {
-    renderBoard(STAFF, []);
+    renderBoard(ADMIN, []);
     expect(await screen.findByText('No live orders.')).toBeInTheDocument();
     expect(screen.queryAllByRole('region')).toHaveLength(0);
   });
@@ -138,9 +139,11 @@ describe('Orders board', () => {
 
     const toPack = await lane('To pack');
     expect(toPack).toHaveTextContent(`#${waiting.order_number.split('-').pop()}`);
-    expect(toPack).toHaveTextContent('2 of 3 sourced');
+    expect(toPack).toHaveTextContent('3 items to pack');
     expect(toPack).toHaveTextContent('23 min');
-    expect(within(toPack).queryByRole('button', { name: /^Pack/ })).not.toBeInTheDocument();
+    // No separate sourcing step (2026-09-30): an order with pending items packs straight away.
+    expect(within(toPack).getByRole('button', { name: /^Pack/ })).toBeInTheDocument();
+    expect(toPack).not.toHaveTextContent(/source/i);
     expect(await lane('Ready for a rider')).toHaveTextContent('Assign rider');
     expect(await lane('Waiting for pickup')).toHaveTextContent('Farhan Mohamed');
     expect(await lane('On the road')).toHaveTextContent('Farhan Mohamed');
@@ -151,7 +154,7 @@ describe('Orders board', () => {
     const user = userEvent.setup();
     const o = boardOrder();
     let status = 'PLACED';
-    const api = renderBoard(STAFF, [o], {
+    const api = renderBoard(ADMIN, [o], {
       'PATCH /admin/orders/:id/status': async () => {
         await new Promise((r) => setTimeout(r, 30));
         status = 'PACKED';
@@ -169,11 +172,11 @@ describe('Orders board', () => {
   it('when the API refuses a stale step, it says what changed and re-reads', async () => {
     const user = userEvent.setup();
     const o = boardOrder();
-    const api = renderBoard(STAFF, [o], {
-      'PATCH /admin/orders/:id/status': () => fail(422, 'ORDER_NOT_PACKABLE', { pending: 1, unsourced_substitutions: 0, packable_items: 1 }),
+    const api = renderBoard(ADMIN, [o], {
+      'PATCH /admin/orders/:id/status': () => fail(422, 'ORDER_NOT_PACKABLE', { pending: 1, unsourced_substitutions: 1, packable_items: 1 }),
     });
     await user.click(within(await lane('To pack')).getByRole('button', { name: /^Pack/ }));
-    expect(await screen.findByText('Something changed: 1 item still to source.')).toBeInTheDocument();
+    expect(await screen.findByText('Something changed: 1 substitution still to source.')).toBeInTheDocument();
     await waitFor(() => expect(api.find('GET', '/admin/orders').length).toBeGreaterThanOrEqual(2));
   });
 
@@ -201,23 +204,6 @@ describe('Orders board', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Assign' }));
     expect(await screen.findByText('Another rider was just assigned to this order.')).toBeInTheDocument();
     expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)).toHaveLength(1);
-  });
-
-  it('packing staff never see admin-only steps', async () => {
-    const user = userEvent.setup();
-    const orders = [
-      boardOrder({ order_status: 'PACKED' }),
-      boardOrder({ order_status: 'OUT_FOR_DELIVERY', active_delivery: { id: 'd2', assignment_status: 'PICKED_UP', rider_id: 'r1', rider_name: 'Farhan Mohamed' } }),
-      boardOrder({ order_status: 'FAILED' }),
-    ];
-    renderBoard(STAFF, orders, { 'GET /admin/orders/:id': (c) => ok({ order: orderDetail(orders.find((o) => c.path.endsWith(o.id))!) }) });
-    await lane('Ready for a rider');
-    for (const label of [/Assign rider/, /Cancel order/, /Mark delivered/, /Mark failed/, /Return to packed/]) {
-      expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
-    }
-    await user.click(screen.getByRole('button', { name: new RegExp(`Open order #${orders[1].order_number.split('-').pop()}`) }));
-    const panel = await screen.findByRole('complementary', { name: /Order #/ });
-    expect(within(panel).queryAllByRole('button', { name: /Mark|Cancel order|Return to packed/ })).toHaveLength(0);
   });
 
   it('cancelling needs a reason the customer will see, and a confirmation', async () => {
@@ -269,23 +255,23 @@ describe('Orders board', () => {
     );
   });
 
-  it('staff hand a waiting order to its rider in one click', async () => {
+  it('the admin hands a waiting order to its rider in one click', async () => {
     const user = userEvent.setup();
     const o = boardOrder({ order_status: 'PACKED', active_delivery: { id: 'd1', assignment_status: 'ASSIGNED', rider_id: 'r1', rider_name: 'Farhan Mohamed' } });
-    const api = renderBoard(STAFF, [o], { 'PATCH /admin/orders/:id/status': () => ok({ order: { ...o, order_status: 'OUT_FOR_DELIVERY' } }) });
+    const api = renderBoard(ADMIN, [o], { 'PATCH /admin/orders/:id/status': () => ok({ order: { ...o, order_status: 'OUT_FOR_DELIVERY' } }) });
     await user.click(within(await lane('Waiting for pickup')).getByRole('button', { name: /^Handed to rider/ }));
     await waitFor(() => expect(api.find('PATCH', `/admin/orders/${o.id}/status`)[0]?.body).toEqual({ status: 'OUT_FOR_DELIVERY' }));
   });
 
   it('shows the documented "Scheduled" label for an after-hours order', async () => {
-    renderBoard(STAFF, [boardOrder({ scheduled_for: '2026-09-20T02:30:00.000Z' })]);
+    renderBoard(ADMIN, [boardOrder({ scheduled_for: '2026-09-20T02:30:00.000Z' })]);
     expect(await lane('To pack')).toHaveTextContent('Scheduled 08:00');
   });
 
   it('the order panel shows items, the customer and history - but no costs or suppliers', async () => {
     const user = userEvent.setup();
     const o = boardOrder();
-    renderBoard(STAFF, [o], { 'GET /admin/orders/:id': () => ok({ order: orderDetail(o) }) });
+    renderBoard(ADMIN, [o], { 'GET /admin/orders/:id': () => ok({ order: orderDetail(o) }) });
     await user.click(await screen.findByRole('button', { name: /^Open order/ }));
     const panel = await screen.findByRole('complementary', { name: /Order #/ });
     expect(panel).toHaveTextContent('Kotmale Fresh Milk 1L');
@@ -293,12 +279,14 @@ describe('Orders board', () => {
     expect(within(panel).getByRole('link', { name: /Call Ahmed Rizvi/ })).toHaveAttribute('href', 'tel:+94771234567');
     expect(panel).toHaveTextContent('Order placed by customer');
     expect(panel.textContent).not.toMatch(/455|690|cost|supplier/i);
-    expect(within(panel).getByRole('link', { name: /Inventory/ })).toBeInTheDocument();
+    // No separate sourcing step any more, so no "Source items in Inventory" hand-off.
+    expect(within(panel).queryByRole('link', { name: /Inventory/ })).not.toBeInTheDocument();
+    expect(panel.textContent).not.toMatch(/source/i);
   });
 
   it('keeps itself current: every 20 seconds while visible, and when the tab comes back', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const api = renderBoard(STAFF, [boardOrder()]);
+    const api = renderBoard(ADMIN, [boardOrder()]);
     await lane('To pack');
     const reads = () => api.find('GET', '/admin/orders').filter((c) => !c.query.get('since')).length;
     const before = reads();
@@ -316,5 +304,52 @@ describe('Orders board', () => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     expect(reads()).toBe(before + 2);
+  });
+});
+
+describe('Assign dialog: suggested rider and trips', () => {
+  beforeEach(() => {
+    tokenStore.clear();
+    seq = 0;
+  });
+  afterEach(() => {
+    tokenStore.clear();
+    vi.unstubAllGlobals();
+  });
+  const base = {
+    phone: '+94770000000', vehicle_type: 'MOTORCYCLE', at_capacity: false, last_seen_at: null, location_known: false,
+    distance_km: null, trip: [], trip_within_distance: true, suggested: false,
+  };
+  const suggestions = {
+    rules: { max_active_deliveries: 2, max_dropoff_distance_km: 1.5, location_fresh_minutes: 15 },
+    riders: [
+      { ...base, id: 'r2', full_name: 'Nimal Perera', vehicle_registration_number: 'WP-AAA-1111', open_deliveries: 0, location_known: true, distance_km: 1.2, suggested: true },
+      {
+        ...base, id: 'r1', full_name: 'Farhan Mohamed', vehicle_registration_number: 'WP-BCX-8842', open_deliveries: 1, trip_within_distance: false,
+        trip: [{ order_id: 'x', order_number: 'BL-1', assignment_status: 'ASSIGNED', dropoff_distance_km: 2 }],
+      },
+      { ...base, id: 'r5', full_name: 'Full Trip', vehicle_registration_number: 'WP-DDD-4444', open_deliveries: 2, at_capacity: true },
+    ],
+  };
+
+  it('marks the suggested rider, shows distance and trips, and confirms a far trip', async () => {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'PACKED' });
+    const api = renderBoard(ADMIN, [o], {
+      'GET /admin/riders/suggestions': () => ok({ order_id: o.id, ...suggestions }),
+      'POST /admin/orders/:id/assign-rider': () => ok({ delivery: { id: 'd9' } }),
+    });
+    await user.click(within(await lane('Ready for a rider')).getByRole('button', { name: /^Assign rider/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Assign a rider/ });
+    expect(await within(dialog).findByRole('radio', { name: /Nimal Perera.*Suggested/ })).toBeInTheDocument();
+    expect(within(dialog).getAllByText('Suggested')).toHaveLength(1);
+    expect(dialog).toHaveTextContent('about 1.2 km away');
+    expect(dialog).toHaveTextContent("Add to Farhan's trip (2.0 km from their other drop-off, more than 1.5 km)");
+    expect(within(dialog).getByRole('radio', { name: /Full Trip/ })).toBeDisabled();
+    await user.click(within(dialog).getByRole('radio', { name: /Farhan Mohamed/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add to trip anyway' }));
+    await waitFor(() =>
+      expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)[0]?.body).toEqual({ rider_id: 'r1', confirm_far_batch: true })
+    );
   });
 });

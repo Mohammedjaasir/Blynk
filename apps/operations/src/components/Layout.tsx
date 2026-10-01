@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { LowStockProvider, useLowStock } from './LowStock';
 
 /**
  * Operations shell: a bottom tab bar, not a desktop sidebar - a deliberate
@@ -32,7 +33,18 @@ const TABS: ReadonlyArray<{ to: string; label: string; end?: boolean }> = [
 ];
 
 export function Layout() {
+  return (
+    <LowStockProvider>
+      <Shell />
+    </LowStockProvider>
+  );
+}
+
+/** The Catalog tab (which holds Inventory) carries a count of tracked
+ * products that are low or out of stock, from the shared low-stock fetch. */
+function Shell() {
   const { user, riderCapability } = useAuth();
+  const lowStockTotal = useLowStock().data?.counts.total ?? 0;
 
   return (
     <div className="shell">
@@ -67,6 +79,12 @@ export function Layout() {
             >
               {tab.label}
               {disabled ? <span className="tabbar__badge">No profile</span> : null}
+              {tab.to === '/catalog' && lowStockTotal > 0 ? (
+                <span className="tabbar__count" title={`${lowStockTotal} running low`}>
+                  {lowStockTotal > 99 ? '99+' : lowStockTotal}
+                  <span className="visually-hidden"> running low</span>
+                </span>
+              ) : null}
             </NavLink>
           );
         })}

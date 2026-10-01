@@ -29,8 +29,12 @@ export interface TransitionInput {
   item_status?: 'UNAVAILABLE' | 'SUBSTITUTED';
   /** ASSIGN_RIDER target. */
   rider_id?: string;
+  /** ASSIGN_RIDER: staff confirmed a trip whose drop-offs are further apart than the batching limit. */
+  confirm_far_batch?: boolean;
   /** CUSTOMER_CANCEL: the customer's own reason. */
   reason?: string;
+  /** RIDER_COLLECT_COD, ADMIN_MARK_DELIVERED: the 4-digit code the customer shows (migration 016). */
+  delivery_code?: string;
 }
 
 export interface TransitionRequest {

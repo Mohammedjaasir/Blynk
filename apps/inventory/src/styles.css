@@ -1544,3 +1544,64 @@ td.cell__secondary {
   padding-left: 10px;
   border-left: 3px solid var(--green);
 }
+
+/* ---------------------------------------------------------------- running low */
+
+.nav__badge {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--yellow);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  vertical-align: 1px;
+}
+
+/* Something is fully out: white on the danger red, not just a hue change. */
+.nav__badge--out {
+  background: var(--danger);
+  color: #fff;
+}
+
+.lowstock-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+}
+
+.lowstock-counts__label {
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.lowstock-counts .text-link {
+  margin-left: auto;
+}
+
+.lowstock-section {
+  margin-top: 24px;
+}
+
+.threshold-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.threshold-form .field {
+  flex: 1 1 180px;
+}
+
+.threshold-form__input {
+  max-width: 140px;
+}

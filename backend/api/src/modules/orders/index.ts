@@ -8,6 +8,8 @@ export const ordersRouter = Router();
 
 // Customer order routes (Guarded by requireAuth)
 ordersRouter.post('/', requireAuth, orderController.createOrder.bind(orderController));
+// Coupon preview at checkout (migration 018); order creation re-validates.
+ordersRouter.post('/validate-coupon', requireAuth, requireRoles('CUSTOMER'), orderController.validateCoupon.bind(orderController));
 ordersRouter.get('/', requireAuth, orderController.getCustomerOrders.bind(orderController));
 ordersRouter.get('/:id', requireAuth, orderController.getCustomerOrderById.bind(orderController));
 ordersRouter.post('/:id/cancel', requireAuth, orderController.cancelOrder.bind(orderController));

@@ -44,6 +44,11 @@ export interface CatalogueEntry {
   lock: LockKind;
   /** A staff note is mandatory (400 VALIDATION_ERROR without it). */
   notesRequired: boolean;
+  /**
+   * Proof of delivery (migration 016): the customer's delivery code may be
+   * given instead of the note, which is then the written override.
+   */
+  codeReplacesNotes?: boolean;
   /** Customer SMS outbox types this action enqueues. */
   notifications: readonly string[];
   /** What the action does to tracked stock (inventory plan §4). */
@@ -51,14 +56,18 @@ export interface CatalogueEntry {
 }
 
 /**
- * NONE: the action never touches inventory. RESTORE_ORDER_STOCK: the stock
- * this order took (its ledger net, inventory/stock-ledger.ts) goes back on
- * the shelf in the same transaction. Stock is taken only by sourcing.
+ * NONE: the action never touches inventory. TAKE_PENDING_STOCK: items not yet
+ * sourced take their TRACKED stock (ORDER_FULFILLMENT) in the same
+ * transaction. RESTORE_ORDER_STOCK: the stock this order took (its ledger
+ * net, inventory/stock-ledger.ts) goes back on the shelf in the same
+ * transaction. Stock is taken only by packing and by sourcing.
  */
-export type StockEffect = 'NONE' | 'RESTORE_ORDER_STOCK';
+export type StockEffect = 'NONE' | 'TAKE_PENDING_STOCK' | 'RESTORE_ORDER_STOCK';
 
-const STORE: readonly UserRole[] = ['ADMIN', 'PACKING_STAFF'];
-const ADMIN: readonly UserRole[] = ['ADMIN'];
+// OPERATIONS (migration 014) runs the Operations app, which makes every
+// store and admin step the ADMIN operator made there before.
+const STORE: readonly UserRole[] = ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'];
+const ADMIN: readonly UserRole[] = ['ADMIN', 'OPERATIONS'];
 /**
  * The four rider steps, which the Operations app's ADMIN operator also runs
  * (operations plan §2, §7). Reaching them still requires a delivery owned by
@@ -66,7 +75,7 @@ const ADMIN: readonly UserRole[] = ['ADMIN'];
  * them to req.riderId, which is resolved from the authenticated user, never
  * from the request body.
  */
-const RIDER_OR_OPS: readonly UserRole[] = ['RIDER', 'ADMIN'];
+const RIDER_OR_OPS: readonly UserRole[] = ['RIDER', 'ADMIN', 'OPERATIONS'];
 
 export const CATALOGUE: Record<ActionName, CatalogueEntry> = {
   CUSTOMER_CANCEL: {
@@ -79,7 +88,7 @@ export const CATALOGUE: Record<ActionName, CatalogueEntry> = {
   },
   PACK: {
     action: 'PACK', from: ['PLACED', 'ITEM_UNAVAILABLE'], to: 'PACKED', roles: STORE,
-    lock: 'allItems', notesRequired: false, stock: 'NONE', notifications: [],
+    lock: 'allItems', notesRequired: false, stock: 'TAKE_PENDING_STOCK', notifications: [],
   },
   ASSIGN_RIDER: {
     action: 'ASSIGN_RIDER', from: ['PACKED'], to: null, roles: ADMIN,
@@ -107,7 +116,7 @@ export const CATALOGUE: Record<ActionName, CatalogueEntry> = {
   },
   ADMIN_MARK_DELIVERED: {
     action: 'ADMIN_MARK_DELIVERED', from: ['OUT_FOR_DELIVERY'], to: 'DELIVERED', roles: ADMIN,
-    lock: 'activeDeliveries', notesRequired: true, stock: 'NONE', notifications: ['DELIVERED', 'COD_PAYMENT_CONFIRMED'],
+    lock: 'activeDeliveries', notesRequired: true, codeReplacesNotes: true, stock: 'NONE', notifications: ['DELIVERED', 'COD_PAYMENT_CONFIRMED'],
   },
   ADMIN_MARK_FAILED: {
     action: 'ADMIN_MARK_FAILED', from: ['OUT_FOR_DELIVERY'], to: 'FAILED', roles: ADMIN,
@@ -169,29 +178,30 @@ export function adminStatusAction(target: OrderStatus, current: OrderStatus): Ac
 }
 
 export interface PackingBlockers {
-  pending: number;
   unsourced_substitutions: number;
   packable_items: number;
 }
 
 /**
- * D7, from "items sourced & bagged; actual procurement cost recorded": no
- * item still to source, no substitution without a recorded cost, and at least
- * one item actually in the bag. Returns null when the order can be packed.
+ * D7, revised 2026-09-30 (owner: "we no need sourcing"): an order packs
+ * straight from PLACED. PENDING items are sourced by the pack itself at their
+ * estimated cost (lifecycle PACK, stock TAKE_PENDING_STOCK). Still refused: a
+ * substitution without a recorded cost, and a bag with nothing in it (every
+ * item unavailable). Returns null when the order can be packed.
  */
 export function packingBlockers(
   items: ReadonlyArray<{ item_status: ItemFulfillmentStatus; actual_unit_cost: unknown }>
 ): PackingBlockers | null {
-  const pending = items.filter((i) => i.item_status === 'PENDING').length;
   const unsourcedSubstitutions = items.filter(
     (i) => i.item_status === 'SUBSTITUTED' && (i.actual_unit_cost === null || i.actual_unit_cost === undefined)
   ).length;
   const packable = items.filter(
     (i) =>
+      i.item_status === 'PENDING' ||
       i.item_status === 'SOURCED' ||
       i.item_status === 'PACKED' ||
       (i.item_status === 'SUBSTITUTED' && i.actual_unit_cost !== null && i.actual_unit_cost !== undefined)
   ).length;
-  if (pending === 0 && unsourcedSubstitutions === 0 && packable > 0) return null;
-  return { pending, unsourced_substitutions: unsourcedSubstitutions, packable_items: packable };
+  if (unsourcedSubstitutions === 0 && packable > 0) return null;
+  return { unsourced_substitutions: unsourcedSubstitutions, packable_items: packable };
 }

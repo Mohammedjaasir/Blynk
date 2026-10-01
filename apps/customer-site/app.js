@@ -120,7 +120,10 @@
     frame();
   }
 
-  // Delivery figures count up the first time they are seen.
+  // Delivery figures count up the first time they are seen. The target is
+  // re-read every frame, so a live value (below) that lands mid-count is used;
+  // the last frame writes the exact figure (a fee may have decimals).
+  const formatCount = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
   const counters = document.querySelectorAll('[data-count]');
   if (!still && 'IntersectionObserver' in window) {
     const co = new IntersectionObserver((entries) => {
@@ -128,18 +131,49 @@
         if (!entry.isIntersecting) continue;
         co.unobserve(entry.target);
         const el = entry.target;
-        const to = Number(el.dataset.count);
         const start = performance.now();
+        el.dataset.counting = '1';
         const tick = (t) => {
+          const to = Number(el.dataset.count);
           const k = Math.min(1, (t - start) / 900);
-          el.textContent = String(Math.round(to * (1 - Math.pow(1 - k, 3))));
-          if (k < 1) requestAnimationFrame(tick);
+          if (k < 1) {
+            el.textContent = String(Math.round(to * (1 - Math.pow(1 - k, 3))));
+            requestAnimationFrame(tick);
+          } else {
+            el.textContent = formatCount(to);
+            delete el.dataset.counting;
+          }
         };
         el.textContent = '0';
         requestAnimationFrame(tick);
       }
     }, { threshold: 0.6 });
     counters.forEach((el) => co.observe(el));
+  }
+
+  // Live delivery fee from GET {API}/store. The <meta name="blynk-api"> holds
+  // the API base INCLUDING the version prefix - the same value as the
+  // Dockerfile's API_BASE_URL build argument, e.g. https://api.example.com/api/v1
+  // - so the request is `${API}/store`. Unset (placeholder/empty), a failed or
+  // slow request, or an odd value all keep the static figure in the HTML.
+  const feeEl = document.querySelector('[data-delivery-fee]');
+  const apiMeta = document.querySelector('meta[name="blynk-api"]');
+  const api = ((apiMeta && apiMeta.getAttribute('content')) || '').trim().replace(/\/+$/, '');
+  if (feeEl && api && api !== '__BLYNK_API__' && 'fetch' in window) {
+    const ctrl = 'AbortController' in window ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 5000) : null;
+    fetch(`${api}/store`, { signal: ctrl ? ctrl.signal : undefined, headers: { Accept: 'application/json' } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        const fee = body && body.success === true && body.data ? body.data.delivery_fee_lkr : undefined;
+        if (typeof fee !== 'number' || !Number.isFinite(fee) || fee < 0 || fee > 1000) return;
+        feeEl.dataset.count = String(fee);
+        // Not counting right now (not reached yet, already finished, or no
+        // animation at all): write the figure. A running count picks it up.
+        if (feeEl.dataset.counting !== '1') feeEl.textContent = formatCount(fee);
+      })
+      .catch(() => { /* keep the static fee */ })
+      .finally(() => { if (timer) clearTimeout(timer); });
   }
 
   // Footer year.

@@ -2,11 +2,13 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
+import { OPERATIONS_ROLES, WRONG_ROLE_MESSAGE } from '../auth/AuthContext';
 import {
   ADMIN_NO_RIDER,
   ADMIN_WITH_RIDER,
   CUSTOMER,
   NETWORK_DOWN,
+  OPERATIONS_STAFF,
   RIDER,
   STAFF,
   fail,
@@ -68,10 +70,45 @@ describe('Operations sign-in and session classification', () => {
   ])('a %s session is signed out immediately with a clear message, and never probes the rider endpoint', async (_label, user) => {
     const { api } = renderAs(user, '/');
     expect(
-      await screen.findByText('This app is for Blynk operators. Sign in with an admin account.')
+      await screen.findByText(WRONG_ROLE_MESSAGE)
     ).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
     expect(api.find('GET', '/riders/deliveries')).toHaveLength(0);
+  });
+
+  // Backend migration 014: an Operations staff account (created in Blynk
+  // Admin -> Staff accounts) opens this app; packing staff do not.
+  it('an OPERATIONS staff session is let in and classified like an admin one', async () => {
+    renderAs(OPERATIONS_STAFF, '/', { 'GET /riders/deliveries': () => fail(403, 'RIDER_PROFILE_NOT_FOUND') });
+    await expectAdminOnly();
+    expect(tokenStore.access).toBe('test-access');
+    expect(OPERATIONS_ROLES).toEqual(['ADMIN', 'OPERATIONS']);
+  });
+
+  it('password sign-in lets an OPERATIONS staff account in', async () => {
+    const user = userEvent.setup();
+    renderAs(null, '/login', {
+      'POST /auth/staff/login': () => ok({ access_token: 'a', refresh_token: 'r', user: OPERATIONS_STAFF }),
+      'GET /riders/deliveries': () => fail(403, 'RIDER_PROFILE_NOT_FOUND'),
+    });
+    await user.type(await screen.findByLabelText('Email'), 'ops@blynk.test');
+    await user.type(screen.getByLabelText('Password'), 'Correct-horse-1');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await expectAdminOnly();
+    expect(tokenStore.access).toBe('a');
+  });
+
+  it('password sign-in refuses packing staff and points them to the Inventory site', async () => {
+    const user = userEvent.setup();
+    renderAs(null, '/login', {
+      'POST /auth/staff/login': () => ok({ access_token: 'a', refresh_token: 'r', user: STAFF }),
+    });
+    await user.type(await screen.findByLabelText('Email'), 'packer@blynk.test');
+    await user.type(screen.getByLabelText('Password'), 'Correct-horse-1');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByText(WRONG_ROLE_MESSAGE)).toBeInTheDocument();
+    expect(WRONG_ROLE_MESSAGE).toMatch(/Inventory site/);
+    expect(tokenStore.access).toBeNull();
   });
 
   it('OTP sign-in refuses a non-admin account and keeps no token', async () => {
@@ -86,7 +123,7 @@ describe('Operations sign-in and session classification', () => {
     await user.type(await screen.findByLabelText('6-digit code'), '123456');
     await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
     expect(
-      await screen.findByText('This app is for Blynk operators. Sign in with an admin account.')
+      await screen.findByText(WRONG_ROLE_MESSAGE)
     ).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
   });
@@ -166,7 +203,7 @@ describe('Operations sign-in and session classification', () => {
     await user.type(screen.getByLabelText('Password'), 'Blynk@1960');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(
-      await screen.findByText('This app is for Blynk operators. Sign in with an admin account.')
+      await screen.findByText(WRONG_ROLE_MESSAGE)
     ).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
   });

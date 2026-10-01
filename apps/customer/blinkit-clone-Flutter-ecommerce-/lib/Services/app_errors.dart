@@ -170,6 +170,51 @@ class AppErrors {
       message: "An item in your cart isn't available anymore. Remove it and try again.",
       retryable: false,
     ),
+    // Coupons (backend migration 018): a code that stopped applying between
+    // the checkout preview and placing the order. The field itself words
+    // these with their details (coupon_model.dart couponRefusalMessage).
+    'COUPON_NOT_FOUND': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Coupon not found',
+      message: "That coupon code doesn't exist. Remove it and try again.",
+      retryable: false,
+    ),
+    'COUPON_INACTIVE': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Coupon unavailable',
+      message: 'That coupon is no longer available. Remove it and try again.',
+      retryable: false,
+    ),
+    'COUPON_NOT_STARTED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Coupon not active yet',
+      message: "That coupon isn't active yet. Remove it and try again.",
+      retryable: false,
+    ),
+    'COUPON_EXPIRED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Coupon expired',
+      message: 'That coupon has expired. Remove it and try again.',
+      retryable: false,
+    ),
+    'COUPON_LIMIT_REACHED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Coupon used up',
+      message: "That coupon can't be used again. Remove it and try again.",
+      retryable: false,
+    ),
+    'COUPON_FIRST_ORDER_ONLY': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'First order only',
+      message: 'That coupon is only for a first order. Remove it and try again.',
+      retryable: false,
+    ),
+    'COUPON_MIN_SUBTOTAL': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Add more items',
+      message: "Your cart is below that coupon's minimum. Add items or remove the code.",
+      retryable: false,
+    ),
     'TOO_MANY_REQUESTS': tooManyTries,
     'RATE_LIMITED': tooManyTries,
     // POST /feedback allows 5 messages an hour per customer (migration 013).

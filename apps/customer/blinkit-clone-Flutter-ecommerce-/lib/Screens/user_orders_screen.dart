@@ -1,3 +1,5 @@
+import 'package:ecom/Services/reorder.dart';
+import 'package:ecom/UI/Widgets/Organisms/order_again_button.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -293,19 +295,25 @@ class _OrderRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: BlynkSpace.s16, vertical: BlynkSpace.s8),
-      child: Semantics(
-        button: true,
-        label: '${order.orderNumber}, $statusLabel, $total',
-        excludeSemantics: true,
-        child: DecoratedBox(
-          // The app's one card recipe (paper, radius 16, soft elevation, an
-          // outside hairline that takes no layout space) rather than a second
-          // one invented here.
-          decoration: appCardDecoration(),
-          child: Material(
-            color: BlynkColors.clear,
-            borderRadius: AppRadius.cardBorder,
-            clipBehavior: Clip.antiAlias,
+      child: DecoratedBox(
+        // The app's one card recipe (paper, radius 16, soft elevation, an
+        // outside hairline that takes no layout space) rather than a second
+        // one invented here.
+        decoration: appCardDecoration(),
+        child: Material(
+          color: BlynkColors.clear,
+          borderRadius: AppRadius.cardBorder,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // The card reads as one button; "Order again" sits outside it
+              // so screen readers reach it as its own button.
+              Semantics(
+            button: true,
+            label: '${order.orderNumber}, $statusLabel, $total',
+            excludeSemantics: true,
             child: InkWell(
               onTap: () => Navigator.of(context).pushNamed('/order', arguments: order.id),
               child: Container(
@@ -409,6 +417,16 @@ class _OrderRow extends StatelessWidget {
                 ),
               ),
             ),
+              ),
+              if (canReorder(order))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(BlynkSpace.s16, 0, BlynkSpace.s16, BlynkSpace.s16),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: OrderAgainButton(order: order, compact: true),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

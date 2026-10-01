@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import mark from '../assets/blynk-mark.png';
 
@@ -48,9 +49,14 @@ export function Header({
         </button>
         {/* Home only: signing out mid-delivery is never the next step. */}
         {leading ? null : (
-          <button type="button" className="bar__signout" onClick={() => void signOut()}>
-            Sign out
-          </button>
+          <>
+            <Link to="/day" className="bar__link">
+              My day
+            </Link>
+            <button type="button" className="bar__signout" onClick={() => void signOut()}>
+              Sign out
+            </button>
+          </>
         )}
       </span>
     </header>

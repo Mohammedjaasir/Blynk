@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Spinner, ToastProvider } from './components/ui';
 import { Ledger } from './pages/Ledger';
 import { Login } from './pages/Login';
+import { LowStock } from './pages/LowStock';
 import { Overview } from './pages/Overview';
 import { SourcingQueue } from './pages/SourcingQueue';
 import { Stock } from './pages/Stock';
@@ -39,6 +40,7 @@ export function AppRoutes() {
       >
         <Route index element={<Overview />} />
         <Route path="stock" element={<Stock />} />
+        <Route path="low-stock" element={<LowStock />} />
         <Route path="ledger" element={<Ledger />} />
         <Route path="sourcing" element={<SourcingQueue />} />
         <Route path="suppliers" element={<Suppliers />} />

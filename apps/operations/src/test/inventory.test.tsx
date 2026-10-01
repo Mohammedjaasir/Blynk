@@ -2,19 +2,11 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
-import type {
-  LedgerEntry,
-  OrderSourcing,
-  QueueOrder,
-  SourcingItem,
-  StockDetail,
-  StockRow,
-  Supplier,
-} from '../api/types';
+import type { LedgerEntry, StockDetail, StockRow, Supplier } from '../api/types';
 import { ADMIN_WITH_RIDER, fail, ok, renderAs } from './helpers';
 
 /**
- * Stock/Ledger/Sourcing/Suppliers (task F6, plan §13) against a fake Blynk
+ * Stock/Ledger/Suppliers (task F6, plan §13) against a fake Blynk
  * API shaped exactly like the backend's responses (verified directly against
  * `apps/inventory`'s own working screens and the real route table -
  * `backend/api/src/modules/admin/index.ts` - before writing any type or
@@ -94,53 +86,6 @@ function ledgerEntry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
   };
 }
 
-function queueOrder(overrides: Partial<QueueOrder> = {}): QueueOrder {
-  seq += 1;
-  return {
-    id: `o${seq}`,
-    order_number: `BL-2026-000${seq}`,
-    order_status: 'PLACED',
-    placed_at: new Date().toISOString(),
-    ...overrides,
-  };
-}
-
-function sourcingItem(overrides: Partial<SourcingItem> = {}): SourcingItem {
-  seq += 1;
-  return {
-    id: `item${seq}`,
-    order_id: 'o1',
-    product_id: `prod${seq}`,
-    product_name_snapshot: `Product ${seq}`,
-    sku_snapshot: `SKU-${100 + seq}`,
-    unit_snapshot: '1 L',
-    quantity: 2,
-    subtotal: 700,
-    estimated_unit_cost: 350,
-    actual_unit_cost: null,
-    item_status: 'PENDING',
-    sourcing_records: [],
-    ...overrides,
-  };
-}
-
-function orderSourcing(order: QueueOrder, items: SourcingItem[]): OrderSourcing {
-  const pending = items.filter((i) => i.item_status === 'PENDING').length;
-  return {
-    order_id: order.id,
-    order_number: order.order_number,
-    order_status: order.order_status,
-    metrics: {
-      total_items: items.length,
-      sourced_items: items.filter((i) => i.item_status === 'SOURCED').length,
-      unavailable_items: items.filter((i) => i.item_status === 'UNAVAILABLE').length,
-      pending_items: pending,
-      is_sourcing_complete: pending === 0,
-    },
-    items,
-  };
-}
-
 function supplier(overrides: Partial<Supplier> = {}): Supplier {
   seq += 1;
   return {
@@ -159,22 +104,20 @@ function supplier(overrides: Partial<Supplier> = {}): Supplier {
 
 // -------------------------------------------------------------------- Overview
 describe('Overview', () => {
-  it('renders real "needs stock", "waiting to be sourced" and ledger sections - no fabricated figures', async () => {
+  it('renders real "needs stock" and ledger sections - no fabricated figures, and no sourcing queue', async () => {
     const low = stockRow({ product_name: 'Fresh Milk', quantity_on_hand: 3, quantity_available: 2, low_stock_threshold: 10 });
-    const order = queueOrder({ order_number: 'BL-2026-0055' });
-    const item = sourcingItem();
     const entry = ledgerEntry({ product_name: 'Butter' });
     renderAs(ADMIN_WITH_RIDER, '/catalog/inventory', {
       'GET /admin/inventory': (call) =>
         call.query.low_stock_only === 'true' ? ok({ inventory: [low], pagination: { page: 1, limit: 100, total: 1, total_pages: 1 } }) : ok({ inventory: [], pagination: { page: 1, limit: 200, total: 0, total_pages: 1 } }),
-      'GET /admin/orders': () => ok({ orders: [order] }),
-      'GET /admin/orders/:id/sourcing': () => ok(orderSourcing(order, [item])),
       'GET /admin/suppliers': () => ok({ suppliers: [] }),
       'GET /admin/inventory/adjustments': () => ok({ adjustments: [entry], pagination: { page: 1, limit: 8, total: 1, total_pages: 1 } }),
     });
     expect(await screen.findByText('Fresh Milk')).toBeInTheDocument();
-    expect(await screen.findByText('BL-2026-0055')).toBeInTheDocument();
     expect(await screen.findByText('Butter')).toBeInTheDocument();
+    // The lead fills orders straight from the shelf: no sourcing queue.
+    expect(screen.queryByText(/sourc/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Suppliers' })).toHaveAttribute('href', '/catalog/inventory/suppliers');
   });
 });
 
@@ -325,90 +268,6 @@ describe('Ledger', () => {
       'GET /admin/inventory': () => ok({ inventory: [], pagination: { page: 1, limit: 200, total: 0, total_pages: 1 } }),
     });
     expect(await screen.findByText('No stock movements yet')).toBeInTheDocument();
-  });
-});
-
-// -------------------------------------------------------------------- Sourcing
-describe('Sourcing queue', () => {
-  it('groups pending items by order, oldest first, with real quantities and estimates', async () => {
-    const order = queueOrder({ order_number: 'BL-2026-0099' });
-    const item = sourcingItem({ product_name_snapshot: 'Coconut Water', quantity: 3, estimated_unit_cost: 250 });
-    renderAs(ADMIN_WITH_RIDER, '/catalog/inventory/sourcing', {
-      'GET /admin/orders': () => ok({ orders: [order] }),
-      'GET /admin/orders/:id/sourcing': () => ok(orderSourcing(order, [item])),
-      'GET /admin/inventory': () => ok({ inventory: [], pagination: { page: 1, limit: 200, total: 0, total_pages: 1 } }),
-      'GET /admin/suppliers': () => ok({ suppliers: [] }),
-    });
-    await screen.findByText('BL-2026-0099');
-    expect(screen.getByText('3 × Coconut Water')).toBeInTheDocument();
-    expect(screen.getByText('To source')).toBeInTheDocument();
-  });
-
-  it('an order with nothing pending is left out of the queue', async () => {
-    const order = queueOrder();
-    const sourcedItem = sourcingItem({ item_status: 'SOURCED', actual_unit_cost: 300 });
-    renderAs(ADMIN_WITH_RIDER, '/catalog/inventory/sourcing', {
-      'GET /admin/orders': () => ok({ orders: [order] }),
-      'GET /admin/orders/:id/sourcing': () => ok(orderSourcing(order, [sourcedItem])),
-      'GET /admin/inventory': () => ok({ inventory: [], pagination: { page: 1, limit: 200, total: 0, total_pages: 1 } }),
-      'GET /admin/suppliers': () => ok({ suppliers: [] }),
-    });
-    expect(await screen.findByText('Nothing to source')).toBeInTheDocument();
-  });
-
-  it('sourcing an item submits exactly the actual cost, quantity, supplier and note the operator entered', async () => {
-    const user = userEvent.setup();
-    const order = queueOrder();
-    const item = sourcingItem({ product_name_snapshot: 'Coconut Water', quantity: 3 });
-    const sup = supplier({ name: 'Dharga Town Central Grocery' });
-    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/inventory/sourcing', {
-      'GET /admin/orders': () => ok({ orders: [order] }),
-      'GET /admin/orders/:id/sourcing': () => ok(orderSourcing(order, [item])),
-      'GET /admin/inventory': () => ok({ inventory: [], pagination: { page: 1, limit: 200, total: 0, total_pages: 1 } }),
-      'GET /admin/suppliers': () => ok({ suppliers: [sup] }),
-      'POST /admin/orders/:id/items/:itemId/source': () => ok({}),
-    });
-    await screen.findByText('3 × Coconut Water');
-    await user.click(screen.getByRole('button', { name: 'Source' }));
-    // These two Fields carry a hint inside the same <label> as the control,
-    // so an exact label match would miss - a leading-anchor regex matches on
-    // the label text alone (see the AdjustDialog test's own note).
-    await user.type(screen.getByLabelText(/^Actual unit cost/), '360');
-    await user.selectOptions(screen.getByLabelText(/^Supplier/), sup.id);
-    await user.type(screen.getByLabelText('Note (optional)'), 'Bought fresh');
-    await user.click(screen.getByRole('button', { name: 'Record sourcing' }));
-
-    await waitFor(() => {
-      const call = api.find('POST', `/admin/orders/${order.id}/items/${item.id}/source`)[0];
-      expect(call?.body).toEqual({
-        actual_unit_cost: 360,
-        quantity: 3,
-        supplier_id: sup.id,
-        notes: 'Bought fresh',
-      });
-    });
-  });
-
-  it('marking an item unavailable submits the exact resolve-item payload', async () => {
-    const user = userEvent.setup();
-    const order = queueOrder();
-    const item = sourcingItem({ product_name_snapshot: 'Coconut Water' });
-    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/inventory/sourcing', {
-      'GET /admin/orders': () => ok({ orders: [order] }),
-      'GET /admin/orders/:id/sourcing': () => ok(orderSourcing(order, [item])),
-      'GET /admin/inventory': () => ok({ inventory: [], pagination: { page: 1, limit: 200, total: 0, total_pages: 1 } }),
-      'GET /admin/suppliers': () => ok({ suppliers: [] }),
-      'POST /admin/orders/:id/resolve-item': () => ok({}),
-    });
-    await screen.findByText('Coconut Water', { exact: false });
-    await user.click(screen.getByRole('button', { name: 'Mark unavailable' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Mark item unavailable' }));
-    await user.click(dialog.getByRole('button', { name: 'Mark unavailable' }));
-
-    await waitFor(() => {
-      const call = api.find('POST', `/admin/orders/${order.id}/resolve-item`)[0];
-      expect(call?.body).toEqual({ item_id: item.id, item_status: 'UNAVAILABLE' });
-    });
   });
 });
 

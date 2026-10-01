@@ -5,7 +5,8 @@
  * /auth/me) - fields the app never uses are left out on purpose.
  */
 
-export type Role = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN';
+/** OPERATIONS: Operations-app-only staff (backend migration 014) - refused here. */
+export type Role = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN' | 'OPERATIONS';
 
 export interface AuthUser {
   id: string;
@@ -35,6 +36,26 @@ export interface StockRow {
   low_stock_threshold: number;
   is_low_stock: boolean;
   updated_at: string | null;
+}
+
+/** A row of GET /admin/inventory/low-stock (active, TRACKED products only). */
+export interface LowStockItem {
+  product_id: string;
+  product_name: string;
+  product_sku: string;
+  product_unit: string;
+  category_name: string;
+  quantity_on_hand: number;
+  quantity_reserved: number;
+  quantity_available: number;
+  low_stock_threshold: number;
+  /** OUT = nothing available; LOW = the rest. Server sorts OUT first. */
+  stock_state: 'OUT' | 'LOW';
+}
+
+export interface LowStockReport {
+  items: LowStockItem[];
+  counts: { low: number; out: number; total: number };
 }
 
 export interface Pagination {

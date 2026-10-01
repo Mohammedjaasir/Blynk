@@ -7,6 +7,10 @@ import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { orderRepository } from '../src/modules/orders/order.repository.js';
 import { streamOrderLocation } from '../src/modules/orders/order.location.controller.js';
 import { metrics } from '../src/utils/metrics.js';
+import { liftRiderTripCap } from './helpers/rider-trips.js';
+
+// Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
+liftRiderTripCap();
 
 function fakeRes() {
   return { write: vi.fn(), end: vi.fn() } as unknown as import('express').Response;

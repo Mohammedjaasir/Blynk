@@ -4,6 +4,8 @@ import { riderRepository } from './rider.repository.js';
 import { updateDeliveryStatusSchema, collectCodSchema, deliveryParamsSchema } from './rider.schema.js';
 import { updateLocationSchema } from './rider.location.schema.js';
 import { riderLocationService } from './rider.location.service.js';
+import { suggestRidersForOrder } from './rider.suggestions.service.js';
+import { z } from 'zod';
 
 export class RiderController {
   async getActiveDeliveries(req: Request, res: Response, next: NextFunction) {
@@ -58,12 +60,22 @@ export class RiderController {
       const settlement = await riderService.collectCod(
         id,
         { id: req.user!.id, role: req.user!.role },
-        input.amount
+        input.amount,
+        input.delivery_code
       );
       res.status(200).json({
         success: true,
         data: { settlement },
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getMyDay(req: Request, res: Response, next: NextFunction) {
+    try {
+      const day = await riderService.getMyDay(req.user!.id);
+      res.status(200).json({ success: true, data: day });
     } catch (err) {
       next(err);
     }
@@ -88,6 +100,18 @@ export async function listRidersForAssignment(_req: Request, res: Response, next
   try {
     const riders = await riderRepository.listActiveRidersForAssignment();
     res.status(200).json({ success: true, data: { riders } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const suggestionsQuerySchema = z.object({ order_id: z.string().uuid('order_id must be a valid UUID') });
+
+/** Staff-facing: GET /admin/riders/suggestions?order_id= (ADMIN, OPERATIONS), best rider first. */
+export async function listRiderSuggestions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { order_id } = suggestionsQuerySchema.parse(req.query);
+    res.status(200).json({ success: true, data: await suggestRidersForOrder(order_id) });
   } catch (err) {
     next(err);
   }

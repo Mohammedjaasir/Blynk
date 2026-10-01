@@ -2,14 +2,21 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
 import { Spinner, ToastProvider } from './components/ui';
+import { Cash } from './pages/Cash';
 import { Categories } from './pages/Categories';
+import { Coupons } from './pages/Coupons';
+import { CustomerDetail, Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
 import { Feedback } from './pages/Feedback';
 import { Login } from './pages/Login';
 import { Orders } from './pages/Orders';
 import { ProductForm } from './pages/ProductForm';
+import { ProductImport } from './pages/ProductImport';
 import { Products } from './pages/Products';
 import { Promotions } from './pages/Promotions';
+import { Sales } from './pages/Sales';
+import { Settings } from './pages/Settings';
+import { Staff } from './pages/Staff';
 
 /**
  * Route protection here is for the operator's benefit only. Every admin
@@ -52,10 +59,18 @@ export function AppRoutes() {
         <Route path="orders" element={<Orders />} />
         <Route path="products" element={<AdminOnly><Products /></AdminOnly>} />
         <Route path="products/new" element={<AdminOnly><ProductForm /></AdminOnly>} />
+        <Route path="products/import" element={<AdminOnly><ProductImport /></AdminOnly>} />
         <Route path="products/:id" element={<AdminOnly><ProductForm /></AdminOnly>} />
         <Route path="categories" element={<AdminOnly><Categories /></AdminOnly>} />
         <Route path="promotions" element={<AdminOnly><Promotions /></AdminOnly>} />
+        <Route path="sales" element={<AdminOnly><Sales /></AdminOnly>} />
+        <Route path="cash" element={<AdminOnly><Cash /></AdminOnly>} />
+        <Route path="coupons" element={<AdminOnly><Coupons /></AdminOnly>} />
+        <Route path="customers" element={<AdminOnly><Customers /></AdminOnly>} />
+        <Route path="customers/:id" element={<AdminOnly><CustomerDetail /></AdminOnly>} />
         <Route path="feedback" element={<AdminOnly><Feedback /></AdminOnly>} />
+        <Route path="staff" element={<AdminOnly><Staff /></AdminOnly>} />
+        <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

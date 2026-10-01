@@ -14,7 +14,7 @@ export const adminMediaRouter = Router();
 adminMediaRouter.post(
   '/media',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   imageUpload.single('file'),
   mediaController.upload.bind(mediaController)
 );
@@ -22,7 +22,7 @@ adminMediaRouter.post(
 adminMediaRouter.delete(
   '/media',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   mediaController.remove.bind(mediaController)
 );
 

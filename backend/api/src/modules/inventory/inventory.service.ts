@@ -3,6 +3,7 @@ import {
   SourceOrderItemInput,
   AdjustStockInput,
   UpdateInventoryModeInput,
+  UpdateThresholdInput,
   CreateSupplierInput,
   UpdateSupplierInput,
   InventoryQueryInput,
@@ -14,7 +15,7 @@ import { db } from '../../database/connection.js';
 import type { UserRole } from '../../database/types.js';
 
 // Default Central Dharga Town Hub fallback ID
-const DEFAULT_DARK_STORE_ID = '018dc3f0-4a82-789a-8b1b-947f61ad8821';
+export const DEFAULT_DARK_STORE_ID = '018dc3f0-4a82-789a-8b1b-947f61ad8821';
 
 export class InventoryService {
   /**
@@ -94,6 +95,7 @@ export class InventoryService {
       .selectFrom('products')
       .select(['id', 'name'])
       .where('id', '=', productId)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
 
     if (!product) {
@@ -128,6 +130,7 @@ export class InventoryService {
       .selectFrom('products')
       .select(['id', 'name'])
       .where('id', '=', productId)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
 
     if (!product) {
@@ -154,6 +157,7 @@ export class InventoryService {
       .selectFrom('products')
       .select(['id', 'name'])
       .where('id', '=', productId)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
 
     if (!product) {
@@ -183,6 +187,37 @@ export class InventoryService {
     );
 
     return result;
+  }
+
+  /**
+   * Tracked products at or under their low-stock threshold, out-of-stock
+   * first - the "Running low" alert in Ops and Inventory.
+   */
+  async listLowStock(darkStoreId?: string) {
+    return await inventoryRepository.listLowStock(darkStoreId ?? DEFAULT_DARK_STORE_ID);
+  }
+
+  /** Sets a TRACKED product's low-stock threshold (inventory.low_stock_threshold). */
+  async setLowStockThreshold(productId: string, input: UpdateThresholdInput, userId?: string) {
+    const product = await db
+      .selectFrom('products')
+      .select(['id', 'name'])
+      .where('id', '=', productId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+
+    if (!product) {
+      throw new AppError('Product not found.', 404, 'PRODUCT_NOT_FOUND', { product_id: productId });
+    }
+
+    const storeId = input.dark_store_id ?? DEFAULT_DARK_STORE_ID;
+    const updated = await inventoryRepository.setLowStockThreshold(productId, storeId, input.low_stock_threshold);
+
+    logger.info(
+      { productId, darkStoreId: storeId, threshold: input.low_stock_threshold, userId },
+      'Low-stock threshold updated'
+    );
+    return updated;
   }
 
   // ==========================================================================

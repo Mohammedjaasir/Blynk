@@ -81,3 +81,45 @@ export interface CodSettlement {
   cod_collected_amount: number;
   delivered_at: string;
 }
+
+/** Proof of delivery: the 4-digit code the customer shows in their Blynk app. */
+export const DELIVERY_CODE_LENGTH = 4;
+
+/** error.details on a 422 WRONG_DELIVERY_CODE from collect-cod. */
+export interface WrongDeliveryCodeDetails {
+  attempts_remaining: number;
+}
+
+/** error.details on a 429 DELIVERY_CODE_LOCKED from collect-cod. */
+export interface DeliveryCodeLockedDetails {
+  locked_until: string;
+  retry_after_seconds: number;
+}
+
+/** GET /riders/me/day - the signed-in rider's own counts and cash (no pay amounts). */
+export interface DayTotals {
+  completed: number;
+  /** Closed as failed ("can't deliver", or the store marked it failed). */
+  failed: number;
+  /** The store recorded that the customer could not be reached. */
+  customer_unavailable: number;
+  /** Cash taken at the door, LKR. */
+  cash_collected: number;
+}
+
+export interface RiderDayDelivery {
+  delivery_id: string;
+  order_number: string;
+  outcome: 'DELIVERED' | 'FAILED' | 'CUSTOMER_UNAVAILABLE';
+  at: string;
+  cash_collected: number;
+}
+
+export interface RiderDay {
+  timezone: 'Asia/Colombo';
+  today: DayTotals & { date: string };
+  /** Monday to Sunday. */
+  week: DayTotals & { starts_on: string };
+  /** Newest first. */
+  deliveries_today: RiderDayDelivery[];
+}

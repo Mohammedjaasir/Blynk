@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { stockApi } from '../api/resources';
 import type { StockDetail, StockRow, TrackingMode } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { can } from '../auth/can';
-import { ConfirmDialog, LoadError, Spinner, StockStatus, useToast } from '../components/ui';
-import { errorMessage } from '../lib/errors';
+import { ConfirmDialog, Field, LoadError, Spinner, StockStatus, useToast } from '../components/ui';
+import { errorMessage, isApiError } from '../lib/errors';
 import { ADJUSTMENT_LABEL, formatDateTime, formatDelta } from '../lib/format';
-import { unitsLabel } from '../lib/stock';
+import { notifyStockChanged, unitsLabel } from '../lib/stock';
 import { useLoad } from '../lib/useLoad';
 import { AdjustDialog } from './AdjustDialog';
 import { CustomerState } from './Stock';
@@ -49,6 +49,7 @@ export function StockPanel({
       setModeTarget(null);
       await reload();
       onChanged();
+      notifyStockChanged();
     } catch (err) {
       setModeError(errorMessage(err));
     } finally {
@@ -103,6 +104,20 @@ export function StockPanel({
             )}
             <StockStatus row={detail} />
           </section>
+
+          {tracked ? (
+            <ThresholdSection
+              key={detail.low_stock_threshold}
+              productId={productId}
+              detail={detail}
+              editable={can(user?.role, 'editThreshold')}
+              onSaved={async () => {
+                await reload();
+                onChanged();
+                notifyStockChanged();
+              }}
+            />
+          ) : null}
 
           {row ? (
             <section className="panel__section">
@@ -172,6 +187,7 @@ export function StockPanel({
             setAdjusting(false);
             await reload();
             onChanged();
+            notifyStockChanged();
           }}
         />
       ) : null}
@@ -204,5 +220,96 @@ export function StockPanel({
         </ConfirmDialog>
       ) : null}
     </aside>
+  );
+}
+
+const THRESHOLD_MAX = 100000;
+
+/**
+ * The per-product low-stock threshold (tracked products only). "Low" is
+ * computed server side as on hand <= threshold; an admin can change the
+ * number here, everyone else sees it.
+ */
+function ThresholdSection({
+  productId,
+  detail,
+  editable,
+  onSaved,
+}: {
+  productId: string;
+  detail: StockDetail;
+  editable: boolean;
+  onSaved(): Promise<void>;
+}) {
+  const toast = useToast();
+  const [value, setValue] = useState(String(detail.low_stock_threshold));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const trimmed = value.trim();
+  const parsed = /^\d+$/.test(trimmed) ? Number(trimmed) : null;
+  const unchanged = parsed === detail.low_stock_threshold;
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    if (parsed === null || parsed > THRESHOLD_MAX) {
+      setError(`Use a whole number from 0 to ${THRESHOLD_MAX}.`);
+      return;
+    }
+    if (unchanged) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await stockApi.setThreshold(productId, parsed);
+      toast.success(`${detail.product_name} now counts as low at ${parsed} or fewer on hand.`);
+      await onSaved();
+    } catch (err) {
+      if (isApiError(err, 'PRODUCT_NOT_TRACKED')) {
+        // Tracking was switched off meanwhile. Reloading removes this section,
+        // so the message goes in a toast rather than next to the field.
+        toast.error('This product is no longer tracked, so it has no low-stock threshold. The panel has been refreshed.');
+        await onSaved();
+      } else {
+        setError(errorMessage(err));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel__section" aria-labelledby="threshold-title">
+      <h3 id="threshold-title" className="panel__label">
+        Low-stock alert
+      </h3>
+      <p className="panel__line">
+        Shows as <strong>running low</strong> at <span className="mono">≤ {detail.low_stock_threshold}</span> on hand.
+      </p>
+      {editable ? (
+        <form className="threshold-form" onSubmit={(event) => void save(event)} noValidate>
+          <Field label="Low-stock threshold" hint="Units on hand at or below which this product counts as low." error={error}>
+            <input
+              className="input threshold-form__input"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={THRESHOLD_MAX}
+              step={1}
+              value={value}
+              onChange={(event) => {
+                setValue(event.target.value);
+                setError(null);
+              }}
+            />
+          </Field>
+          <button type="submit" className="button button--ghost" disabled={busy || unchanged}>
+            {busy ? 'Saving…' : 'Save threshold'}
+          </button>
+        </form>
+      ) : (
+        <p className="panel__note">The low-stock threshold is set by a Blynk admin.</p>
+      )}
+    </section>
   );
 }

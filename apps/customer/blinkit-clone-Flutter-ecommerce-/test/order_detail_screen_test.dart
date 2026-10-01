@@ -138,7 +138,14 @@ void main() {
 
     // Timeline (section 2).
     expect(find.byKey(const Key('order-timeline')), findsOneWidget);
-    expect(find.text(formatOrderTime(DateTime.parse('2026-09-19T10:00:00.000Z'))), findsOneWidget);
+    // Scoped to the timeline: the progress tracker shows the same time too.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('order-timeline')),
+        matching: find.text(formatOrderTime(DateTime.parse('2026-09-19T10:00:00.000Z'))),
+      ),
+      findsOneWidget,
+    );
 
     // Items (section 3): both lines, the quantity sum and the line subtotals.
     expect(find.text('Items'), findsOneWidget);
@@ -443,7 +450,10 @@ void main() {
     expect(find.text('Packed again for redelivery'), findsOneWidget);
     expect(find.text('Paid in cash'), findsOneWidget);
     expect(
-      find.text(formatOrderTime(DateTime.parse('2026-09-19T11:30:00.000Z'))),
+      find.descendant(
+        of: find.byKey(const Key('order-timeline')),
+        matching: find.text(formatOrderTime(DateTime.parse('2026-09-19T11:30:00.000Z'))),
+      ),
       findsOneWidget,
     );
   });
@@ -774,6 +784,54 @@ void main() {
 
       expect(find.byType(OrderTrackingMap), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  // Proof of delivery: the customer's code shows only while OUT_FOR_DELIVERY
+  // and only when the backend sent one. '7305' is used rather than '4821',
+  // which is already part of the fixture's order number.
+  group('the delivery code card', () {
+    const card = Key('order-delivery-code');
+
+    testWidgets('shows the code under the tracker while OUT_FOR_DELIVERY', (tester) async {
+      api.routes[_getKey] = () async =>
+          _envelope({...orderJson(status: 'OUT_FOR_DELIVERY'), 'delivery_code': '7305'});
+      await _pumpDetail(tester, api);
+
+      expect(find.byKey(card), findsOneWidget);
+      expect(find.descendant(of: find.byKey(card), matching: find.text('7305')), findsOneWidget);
+      expect(find.text('Your delivery code'), findsOneWidget);
+      expect(find.text('Show this to your rider.'), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Your delivery code: 7305')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(card)).dy,
+        greaterThan(tester.getTopLeft(find.byKey(const Key('order-progress'))).dy),
+      );
+      expect(
+        tester.getTopLeft(find.byKey(card)).dy,
+        lessThan(tester.getTopLeft(find.byKey(const Key('order-items'))).dy),
+      );
+    });
+
+    for (final status in ['PLACED', 'PACKED', 'DELIVERED', 'FAILED', 'CANCELLED']) {
+      testWidgets('hidden for $status even if a code were sent', (tester) async {
+        api.routes[_getKey] = () async =>
+            _envelope({...orderJson(status: status), 'delivery_code': '7305'});
+        await _pumpDetail(tester, api);
+
+        expect(find.byKey(card), findsNothing);
+        expect(find.text('7305'), findsNothing);
+        expect(find.text('Show this to your rider.'), findsNothing);
+      });
+    }
+
+    testWidgets('hidden while OUT_FOR_DELIVERY when the code is null', (tester) async {
+      api.routes[_getKey] = () async =>
+          _envelope({...orderJson(status: 'OUT_FOR_DELIVERY'), 'delivery_code': null});
+      await _pumpDetail(tester, api);
+
+      expect(find.byKey(card), findsNothing);
+      expect(find.text('Show this to your rider.'), findsNothing);
     });
   });
 }

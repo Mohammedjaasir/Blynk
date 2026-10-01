@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { inventory as inventoryApi } from '../../api/resources';
 import type { LedgerEntry, StockRow } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
+import { useLowStock } from '../../components/LowStock';
 import { Spinner } from '../../components/ui';
 import {
   ADJUSTMENT_LABEL,
@@ -13,7 +14,6 @@ import {
   stockState,
   unitsLabel,
 } from '../../lib/inventory';
-import { loadQueue, type QueueEntry } from './Sourcing';
 
 /** Worst first: orderable-but-empty, then out, then low. */
 function attentionRank(row: StockRow) {
@@ -31,10 +31,9 @@ function attentionRank(row: StockRow) {
 export function Overview() {
   const [attention, setAttention] = useState<StockRow[] | null>(null);
   const [attentionError, setAttentionError] = useState<string | null>(null);
-  const [queue, setQueue] = useState<QueueEntry[] | null>(null);
-  const [queueError, setQueueError] = useState<string | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[] | null>(null);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const lowStock = useLowStock().data;
 
   useEffect(() => {
     void inventoryApi.stock
@@ -43,12 +42,6 @@ export function Overview() {
       .catch((err) => {
         setAttentionError(inventoryErrorMessage(err, 'Could not load stock that needs attention.'));
         setAttention([]);
-      });
-    void loadQueue()
-      .then(setQueue)
-      .catch((err) => {
-        setQueueError(inventoryErrorMessage(err, 'Could not load the sourcing queue.'));
-        setQueue([]);
       });
     void inventoryApi.ledger
       .list({ limit: 8 })
@@ -63,12 +56,19 @@ export function Overview() {
     (a, b) => attentionRank(a) - attentionRank(b) || a.product_name.localeCompare(b.product_name)
   );
   const orderableEmpty = attentionRows.filter(isOrderableButOut).length;
-  const queueEntries = queue ?? [];
-  const pendingItems = queueEntries.reduce((sum, e) => sum + e.sourcing.metrics.pending_items, 0);
 
   return (
     <div className="page">
-      <PageHeader title="Inventory" description="Stock, sourcing and suppliers." />
+      <PageHeader title="Inventory" description="Stock and suppliers." />
+
+      <ul className="cat-hub">
+        <li>
+          <Link className="cat-hub__card" to="/catalog/inventory/low-stock">
+            <span className="cat-hub__title">Running low</span>
+            <span className="cat-hub__count">{lowStock ? lowStock.counts.total : '—'}</span>
+          </Link>
+        </li>
+      </ul>
 
       <section className="section" aria-labelledby="attention-title">
         <div className="page-header">
@@ -85,7 +85,7 @@ export function Overview() {
         {orderableEmpty > 0 ? (
           <p className="field__error" role="alert">
             {orderableEmpty} {orderableEmpty === 1 ? 'product is' : 'products are'} orderable but out of stock.
-            Customers can still order {orderableEmpty === 1 ? 'it' : 'them'}, and sourcing will fail.
+            Customers can still order {orderableEmpty === 1 ? 'it' : 'them'}, and packing will fail.
           </p>
         ) : null}
         {attentionRows.length > 0 ? (
@@ -110,38 +110,6 @@ export function Overview() {
           </ul>
         ) : null}
         {attentionRows.length > 6 ? <p className="quiet">and {attentionRows.length - 6} more.</p> : null}
-      </section>
-
-      <section className="section" aria-labelledby="queue-title">
-        <div className="page-header">
-          <h2 className="section-label" id="queue-title">
-            Waiting to be sourced
-          </h2>
-          <Link className="text-button" to="/catalog/inventory/sourcing">
-            Open the queue →
-          </Link>
-        </div>
-        {queueError ? <p className="field__error">{queueError}</p> : null}
-        {queue === null ? <Spinner label="Loading the sourcing queue" /> : null}
-        {queue && queueEntries.length === 0 ? <p className="quiet">Nothing waiting to be sourced.</p> : null}
-        {queueEntries.length > 0 ? (
-          <ul className="cat-list">
-            {queueEntries.slice(0, 6).map(({ order, sourcing }) => (
-              <li key={order.id} className="cat-row cat-row--flat">
-                <div className="cat-row__main">
-                  <p className="cat-row__title mono">{order.order_number}</p>
-                  <p className="cat-row__meta">{formatDateTime(order.placed_at)}</p>
-                </div>
-                <div className="cat-row__actions">
-                  <span className="mono">{sourcing.metrics.pending_items}</span>
-                  <span className="cat-row__order">to source</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {queueEntries.length > 6 ? <p className="quiet">and {queueEntries.length - 6} more in the queue.</p> : null}
-        {queue ? <p className="page__note">{pendingItems} {pendingItems === 1 ? 'item' : 'items'} to source in total.</p> : null}
       </section>
 
       <section className="section" aria-labelledby="ledger-title">

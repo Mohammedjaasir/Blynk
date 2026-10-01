@@ -1,6 +1,7 @@
 import { Generated, ColumnType } from 'kysely';
 
-export type UserRole = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN';
+/** OPERATIONS added by migration 014 (Operations-app-only staff). */
+export type UserRole = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN' | 'OPERATIONS';
 export type InventoryTrackingMode = 'UNTRACKED' | 'TRACKED';
 export type InventoryAdjustmentType =
   | 'PURCHASE_RESTOCK'
@@ -108,6 +109,8 @@ export interface UsersTable {
   staff_password_hash: string | null;
   login_failed_attempts: Generated<number>;
   login_locked_until: Date | null;
+  /** Migration 014: set when an admin disables a staff account (no sign-in, no refresh). */
+  staff_disabled_at: Date | null;
 }
 
 export interface OtpVerificationsTable {
@@ -165,6 +168,8 @@ export interface CategoriesTable {
   /** Migration 010: which point of the category image must stay visible. */
   image_focal_x: Generated<number>;
   image_focal_y: Generated<number>;
+  /** Migration 017: set when a category is deleted but must be kept (its products are in order history). */
+  deleted_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 export interface ProductsTable {
@@ -189,6 +194,12 @@ export interface ProductsTable {
   is_active: Generated<boolean>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
+  /**
+   * Migration 017: a product deleted after it was ordered. Hidden from every
+   * list (v_product_catalog skips it) and never orderable again; the row stays
+   * for order history.
+   */
+  deleted_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 export interface InventoryTable {
@@ -227,6 +238,9 @@ export interface OrdersTable {
   subtotal_amount: ColumnType<number, number | string, number | string>;
   delivery_fee: ColumnType<number, number | string, number | string>;
   total_amount: ColumnType<number, number | string, number | string>;
+  /** Migration 018: coupon discount snapshot; total = subtotal + delivery_fee - discount_amount. */
+  discount_amount: ColumnType<number, number | string | undefined, number | string>;
+  coupon_code: ColumnType<string | null, string | null | undefined, string | null>;
   scheduled_for: Date | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
@@ -542,6 +556,67 @@ export interface CustomerFeedbackTable {
   created_at: Generated<Date>;
 }
 
+/** Migration 016: proof of delivery. Private to the customer detail and the lifecycle. */
+export type DeliveryConfirmation = 'CODE' | 'OVERRIDE';
+
+export interface OrderDeliveryCodesTable {
+  order_id: string;
+  code: string;
+  failed_attempts: Generated<number>;
+  locked_until: Date | null;
+  confirmed_via: DeliveryConfirmation | null;
+  confirmed_at: Date | null;
+  confirmed_by_user_id: string | null;
+  override_note: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export type CouponDiscountType = 'FIXED' | 'PERCENT' | 'FREE_DELIVERY';
+
+/** Migration 018. */
+export interface CouponsTable {
+  id: Generated<string>;
+  code: string;
+  description: string | null;
+  discount_type: CouponDiscountType;
+  discount_value: ColumnType<number, number | string, number | string>;
+  max_discount: ColumnType<number | null, number | string | null, number | string | null>;
+  min_subtotal: ColumnType<number | null, number | string | null, number | string | null>;
+  first_order_only: Generated<boolean>;
+  starts_at: Date | null;
+  ends_at: Date | null;
+  usage_limit: number | null;
+  per_customer_limit: Generated<number>;
+  is_active: Generated<boolean>;
+  created_by_user_id: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+/** Migration 018. */
+export interface CouponRedemptionsTable {
+  id: Generated<string>;
+  coupon_id: string;
+  order_id: string;
+  customer_id: string;
+  discount_amount: ColumnType<number, number | string, number | string>;
+  released_at: Date | null;
+  created_at: Generated<Date>;
+}
+
+/** Migration 019. */
+export interface CashHandinsTable {
+  id: Generated<string>;
+  rider_id: string;
+  amount: ColumnType<number, number | string, number | string>;
+  /** Business day (Asia/Colombo), YYYY-MM-DD. */
+  handin_date: ColumnType<string, string, string>;
+  note: string | null;
+  recorded_by_user_id: string | null;
+  created_at: Generated<Date>;
+}
+
 export interface Database {
   system_configurations: SystemConfigurationsTable;
   dark_stores: DarkStoresTable;
@@ -573,5 +648,9 @@ export interface Database {
   appointments: AppointmentsTable;
   appointment_status_history: AppointmentStatusHistoryTable;
   customer_feedback: CustomerFeedbackTable;
+  order_delivery_codes: OrderDeliveryCodesTable;
+  coupons: CouponsTable;
+  coupon_redemptions: CouponRedemptionsTable;
+  cash_handins: CashHandinsTable;
   v_product_catalog: ProductCatalogView;
 }

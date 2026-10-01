@@ -7,6 +7,10 @@ import bcrypt from 'bcrypt';
 import { hashToken } from '../src/modules/auth/token.service.js';
 import jwt from 'jsonwebtoken';
 import { env } from '../src/config/env.js';
+import { liftRiderTripCap } from './helpers/rider-trips.js';
+
+// Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
+liftRiderTripCap();
 
 const app = createApp();
 

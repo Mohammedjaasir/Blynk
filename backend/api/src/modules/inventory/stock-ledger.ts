@@ -15,10 +15,11 @@ import { AppError } from '../../middleware/error.middleware.js';
  * has locked, so the ledger always explains the count.
  *
  * When stock moves (business rules §6):
- *   - sourcing an item of a TRACKED product takes it (ORDER_FULFILLMENT);
+ *   - packing takes it for every item not yet sourced, or sourcing an item
+ *     takes it, for a TRACKED product (ORDER_FULFILLMENT);
  *   - cancelling the order returns what the order took (ORDER_CANCELLATION_RESTORE);
  *   - an admin restocks, writes off or corrects a count (manual types).
- * Nothing else - packing, dispatch, delivery, failure, re-stage - moves stock.
+ * Nothing else - dispatch, delivery, failure, re-stage - moves stock.
  */
 type Trx = Transaction<Database>;
 export type InventoryRow = Selectable<InventoryTable>;
@@ -44,6 +45,22 @@ export async function lockInventoryRow(trx: Trx, darkStoreId: string, productId:
     .where('product_id', '=', productId)
     .forUpdate()
     .executeTakeFirst();
+}
+
+/**
+ * Locks several products' inventory rows in a store, in ascending id (the
+ * canonical order for inventory rows). Products without a row are absent.
+ */
+export async function lockInventoryRows(trx: Trx, darkStoreId: string, productIds: readonly string[]): Promise<InventoryRow[]> {
+  if (productIds.length === 0) return [];
+  return await trx
+    .selectFrom('inventory')
+    .selectAll()
+    .where('dark_store_id', '=', darkStoreId)
+    .where('product_id', 'in', [...productIds])
+    .orderBy('id')
+    .forUpdate()
+    .execute();
 }
 
 export async function recordStockMovement(trx: Trx, m: StockMovement): Promise<{ inventory: InventoryRow; adjustment: AdjustmentRow }> {

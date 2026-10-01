@@ -1,5 +1,5 @@
 import { apiRequest } from './client';
-import type { AuthUser, CodSettlement, DeliveryDetail, DeliverySummary } from './types';
+import type { AuthUser, CodSettlement, DeliveryDetail, DeliverySummary, RiderDay } from './types';
 
 /** Existing Blynk OTP auth - the same endpoints every Blynk app uses. */
 export const authApi = {
@@ -28,12 +28,15 @@ export const deliveriesApi = {
   pickUp: (id: string) => setStatus(id, { status: 'PICKED_UP' }),
   arrive: (id: string) => setStatus(id, { status: 'ARRIVED_AT_CUSTOMER' }),
   fail: (id: string, reason: string) => setStatus(id, { status: 'FAILED', failure_reason: reason }),
-  /** amount must be the total the API reported; the API rejects anything else. */
-  collectCod: async (id: string, amount: number) =>
+  /**
+   * amount must be the total the API reported; the API rejects anything else.
+   * deliveryCode is the customer's 4-digit proof-of-delivery code.
+   */
+  collectCod: async (id: string, amount: number, deliveryCode: string) =>
     (
       await apiRequest<{ settlement: CodSettlement }>(`/riders/deliveries/${id}/collect-cod`, {
         method: 'POST',
-        body: { amount },
+        body: { amount, delivery_code: deliveryCode },
       })
     ).settlement,
   sendLocation: (id: string, point: { latitude: number; longitude: number; accuracy: number; captured_at: string }) =>
@@ -41,6 +44,11 @@ export const deliveriesApi = {
       method: 'POST',
       body: point,
     }),
+};
+
+/** "My day": today's and this week's counts and cash, for the signed-in rider only. */
+export const dayApi = {
+  get: () => apiRequest<RiderDay>('/riders/me/day'),
 };
 
 async function setStatus(id: string, body: Record<string, unknown>) {

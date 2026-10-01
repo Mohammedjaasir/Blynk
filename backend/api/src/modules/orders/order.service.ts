@@ -7,9 +7,13 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { OrderStatus } from '../../database/types.js';
 import { logger } from '../../utils/logger.js';
 import { runTransition } from './lifecycle/engine.js';
+import { findDeliveryCodeForCustomer } from './lifecycle/delivery-code.js';
 import type { Actor, DeliveryRow } from './lifecycle/types.js';
 import { adminStatusAction, CATALOGUE } from './lifecycle/catalogue.js';
 import { toPublicDelivery } from './delivery.columns.js';
+import { db } from '../../database/connection.js';
+import { evaluateCoupon } from '../coupons/coupon.service.js';
+import type { ValidateCouponInput } from '../coupons/coupon.schema.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -85,6 +89,62 @@ export function sanitizeCustomerOrder(order: any) {
   };
 }
 
+/**
+ * Authoritative prices for a cart (order creation and the coupon preview):
+ * every product must exist and be on sale; line totals use the pricing rules.
+ */
+export async function priceCart(items: CreateOrderInput['items']) {
+  const productIds = items.map((it) => it.product_id);
+  const products = await orderRepository.findProductsByIds(productIds);
+
+  if (products.length !== productIds.length) {
+    throw new AppError('One or more requested products were not found.', 400, 'PRODUCT_NOT_FOUND');
+  }
+
+  const productMap = new Map(products.map((p) => [p.id, p]));
+  const defaultMarkup = await orderRepository.getDefaultMarkup();
+
+  let subtotalAmount = 0;
+  const orderItemsData = items.map((item) => {
+    const prod = productMap.get(item.product_id);
+    if (!prod) {
+      throw new AppError(`Product ${item.product_id} not found.`, 400, 'PRODUCT_NOT_FOUND');
+    }
+
+    if (!prod.is_active || !prod.is_available) {
+      throw new AppError(
+        `Product '${prod.name}' is currently unavailable.`,
+        400,
+        'PRODUCT_UNAVAILABLE',
+        { product_id: prod.id, name: prod.name }
+      );
+    }
+
+    const priceResult = calculateSellingPrice({
+      purchaseCost: Number(prod.purchase_cost),
+      customMarkupPercent: prod.custom_markup_percent !== null ? Number(prod.custom_markup_percent) : null,
+      defaultMarkupPercent: defaultMarkup,
+    });
+
+    const lineSubtotal = Number((priceResult.sellingPrice * item.quantity).toFixed(2));
+    subtotalAmount += lineSubtotal;
+
+    return {
+      product_id: prod.id,
+      product_name_snapshot: prod.name,
+      sku_snapshot: prod.sku,
+      unit_snapshot: prod.unit,
+      unit_selling_price: priceResult.sellingPrice,
+      estimated_unit_cost: Number(Number(prod.purchase_cost).toFixed(2)),
+      markup_percentage_applied: priceResult.effectiveMarkupPercent,
+      quantity: item.quantity,
+      subtotal: lineSubtotal,
+    };
+  });
+
+  return { items: orderItemsData, subtotal: Number(subtotalAmount.toFixed(2)) };
+}
+
 export class OrderService {
   /**
    * Atomic Checkout & Order Creation.
@@ -140,55 +200,7 @@ export class OrderService {
     const scheduledFor = calculateScheduledDeliveryTime(new Date());
 
     // 5. Products & Authoritative Pricing
-    const productIds = input.items.map((it) => it.product_id);
-    const products = await orderRepository.findProductsByIds(productIds);
-
-    if (products.length !== productIds.length) {
-      throw new AppError('One or more requested products were not found.', 400, 'PRODUCT_NOT_FOUND');
-    }
-
-    const productMap = new Map(products.map((p) => [p.id, p]));
-    const defaultMarkup = await orderRepository.getDefaultMarkup();
-
-    let subtotalAmount = 0;
-    const orderItemsData = input.items.map((item) => {
-      const prod = productMap.get(item.product_id);
-      if (!prod) {
-        throw new AppError(`Product ${item.product_id} not found.`, 400, 'PRODUCT_NOT_FOUND');
-      }
-
-      if (!prod.is_active || !prod.is_available) {
-        throw new AppError(
-          `Product '${prod.name}' is currently unavailable.`,
-          400,
-          'PRODUCT_UNAVAILABLE',
-          { product_id: prod.id, name: prod.name }
-        );
-      }
-
-      const priceResult = calculateSellingPrice({
-        purchaseCost: Number(prod.purchase_cost),
-        customMarkupPercent: prod.custom_markup_percent !== null ? Number(prod.custom_markup_percent) : null,
-        defaultMarkupPercent: defaultMarkup,
-      });
-
-      const lineSubtotal = Number((priceResult.sellingPrice * item.quantity).toFixed(2));
-      subtotalAmount += lineSubtotal;
-
-      return {
-        product_id: prod.id,
-        product_name_snapshot: prod.name,
-        sku_snapshot: prod.sku,
-        unit_snapshot: prod.unit,
-        unit_selling_price: priceResult.sellingPrice,
-        estimated_unit_cost: Number(Number(prod.purchase_cost).toFixed(2)),
-        markup_percentage_applied: priceResult.effectiveMarkupPercent,
-        quantity: item.quantity,
-        subtotal: lineSubtotal,
-      };
-    });
-
-    subtotalAmount = Number(subtotalAmount.toFixed(2));
+    const { items: orderItemsData, subtotal: subtotalAmount } = await priceCart(input.items);
     const deliveryFee = await orderRepository.getDeliveryFee();
     const totalAmount = Number((subtotalAmount + deliveryFee).toFixed(2));
     const orderNumber = generateOrderNumber();
@@ -201,6 +213,7 @@ export class OrderService {
       subtotal_amount: subtotalAmount,
       delivery_fee: deliveryFee,
       total_amount: totalAmount,
+      coupon_code: input.coupon_code ?? null,
       scheduled_for: scheduledFor,
       delivery_recipient_name: address.recipient_name,
       delivery_recipient_phone: address.recipient_phone,
@@ -219,6 +232,25 @@ export class OrderService {
     logger.info({ orderId: createdOrder.id, orderNumber: createdOrder.order_number }, 'Order placed successfully');
 
     return { order: sanitizeCustomerOrder(createdOrder), is_idempotent_replay: false };
+  }
+
+  /**
+   * POST /orders/validate-coupon: what the code would take off this cart,
+   * without using it. Order creation re-checks under the coupon lock.
+   */
+  async previewCoupon(customerId: string, input: ValidateCouponInput) {
+    const subtotal = input.items ? (await priceCart(input.items)).subtotal : Number(input.subtotal!.toFixed(2));
+    const deliveryFee = await orderRepository.getDeliveryFee();
+    const applied = await evaluateCoupon(db, { code: input.code, customerId, subtotal, deliveryFee });
+    return {
+      code: applied.code,
+      discount_type: applied.discount_type,
+      description: applied.description,
+      subtotal,
+      delivery_fee: deliveryFee,
+      discount_amount: applied.discount_amount,
+      total: Number((subtotal + deliveryFee - applied.discount_amount).toFixed(2)),
+    };
   }
 
   /**
@@ -252,7 +284,11 @@ export class OrderService {
     if (!order) {
       throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
     }
-    return sanitizeCustomerOrder(order);
+    // Proof of delivery (migration 016): the code the customer shows the
+    // rider, only while the order is on the road. Never in staff or rider
+    // responses - it lives in its own table, which only this reads.
+    const deliveryCode = order.order_status === 'OUT_FOR_DELIVERY' ? await findDeliveryCodeForCustomer(order.id) : null;
+    return { ...sanitizeCustomerOrder(order), delivery_code: deliveryCode };
   }
 
   /**
@@ -308,7 +344,13 @@ export class OrderService {
    * under its locks, so a status that changed since this read is a
    * deterministic 422/409, never a bypass.
    */
-  async updateOrderStatusAdmin(orderId: string, requested: OrderStatus, actor: Actor, notes?: string) {
+  async updateOrderStatusAdmin(
+    orderId: string,
+    requested: OrderStatus,
+    actor: Actor,
+    notes?: string,
+    deliveryCode?: string
+  ) {
     const current = await orderRepository.findOrderStatus(orderId);
     if (!current) {
       throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
@@ -320,7 +362,11 @@ export class OrderService {
         requested_status: requested,
       });
     }
-    await runTransition(action, { actor, orderId, input: { notes } });
+    await runTransition(action, {
+      actor,
+      orderId,
+      input: { notes, ...(action === 'ADMIN_MARK_DELIVERED' && deliveryCode ? { delivery_code: deliveryCode } : {}) },
+    });
     return await orderRepository.findOrderById(orderId);
   }
 
@@ -336,8 +382,12 @@ export class OrderService {
   }
 
   /** Lifecycle #4 ASSIGN_RIDER. */
-  async assignRiderAdmin(orderId: string, riderId: string, actor: Actor) {
-    const delivery = await runTransition<DeliveryRow>('ASSIGN_RIDER', { actor, orderId, input: { rider_id: riderId } });
+  async assignRiderAdmin(orderId: string, riderId: string, actor: Actor, confirmFarBatch = false) {
+    const delivery = await runTransition<DeliveryRow>('ASSIGN_RIDER', {
+      actor,
+      orderId,
+      input: { rider_id: riderId, confirm_far_batch: confirmFarBatch },
+    });
     // The lifecycle hands back the whole inserted row; staff get the public columns only.
     return toPublicDelivery(delivery);
   }

@@ -308,11 +308,107 @@ describe('Delivery', () => {
     const sheet = screen.getByRole('dialog', { name: 'Collect LKR 1,690 in cash' });
     expect(sheet).toHaveTextContent('from Rider Test');
     expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')).toHaveLength(0);
+    await user.type(within(sheet).getByLabelText("Customer's delivery code"), '4821');
     await user.click(within(sheet).getByRole('button', { name: 'Cash collected — complete' }));
     expect(await screen.findByText('Delivered')).toBeInTheDocument();
     expect(screen.getByText('LKR 1,690 collected')).toBeInTheDocument();
-    expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')[0].body).toEqual({ amount: 1690 });
+    expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')[0].body).toEqual({
+      amount: 1690,
+      delivery_code: '4821',
+    });
     expect(screen.queryByRole('group', { name: 'Delivery actions' })).not.toBeInTheDocument();
+  });
+
+  it('the delivery code field takes digits only, and confirm stays disabled until all 4 are in', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(RIDER, ROUTE, { 'GET /riders/deliveries/:id': () => ok({ delivery: detail(atDoor) }) });
+    await user.click(await screen.findByRole('button', { name: 'Collect LKR 610' }));
+    const sheet = screen.getByRole('dialog');
+    const field = within(sheet).getByLabelText("Customer's delivery code");
+    expect(field).toHaveAttribute('inputmode', 'numeric');
+    expect(field).toHaveAttribute('pattern', '[0-9]*');
+    expect(field).toHaveAttribute('maxlength', '4');
+    expect(field).toHaveAttribute('autocomplete', 'one-time-code');
+    expect(sheet).toHaveTextContent('Ask the customer for the 4-digit code in their Blynk app.');
+    const confirm = within(sheet).getByRole('button', { name: 'Cash collected — complete' });
+    expect(confirm).toBeDisabled();
+    await user.type(field, '4a8-2');
+    expect(field).toHaveValue('482');
+    expect(confirm).toBeDisabled();
+    await user.keyboard('{Enter}');
+    await user.type(field, '1');
+    expect(field).toHaveValue('4821');
+    expect(confirm).toBeEnabled();
+    expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')).toHaveLength(0);
+  });
+
+  it('a wrong code says how many tries are left and clears the field', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': () => ok({ delivery: detail(atDoor) }),
+      'POST /riders/deliveries/:id/collect-cod': () =>
+        fail(422, 'WRONG_DELIVERY_CODE', 'Wrong code', { attempts_remaining: 3 }),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Collect LKR 610' }));
+    const sheet = screen.getByRole('dialog');
+    const field = within(sheet).getByLabelText("Customer's delivery code");
+    await user.type(field, '1111');
+    await user.click(within(sheet).getByRole('button', { name: 'Cash collected — complete' }));
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent("That code doesn't match. 3 tries left.");
+    expect(field).toHaveValue('');
+    expect(within(sheet).getByRole('button', { name: 'Cash collected — complete' })).toBeDisabled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')).toHaveLength(1);
+  });
+
+  it('after too many wrong codes it says how long to wait and keeps confirm disabled', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': () => ok({ delivery: detail(atDoor) }),
+      'POST /riders/deliveries/:id/collect-cod': () =>
+        fail(429, 'DELIVERY_CODE_LOCKED', 'Locked', {
+          locked_until: new Date(Date.now() + 14 * 60_000).toISOString(),
+          retry_after_seconds: 14 * 60,
+        }),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Collect LKR 610' }));
+    const sheet = screen.getByRole('dialog');
+    await user.type(within(sheet).getByLabelText("Customer's delivery code"), '9999');
+    await user.click(within(sheet).getByRole('button', { name: 'Cash collected — complete' }));
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent(
+      'Too many wrong codes. Try again in 14 minutes.'
+    );
+    expect(within(sheet).getByRole('button', { name: 'Cash collected — complete' })).toBeDisabled();
+    expect(within(sheet).getByLabelText("Customer's delivery code")).toBeDisabled();
+
+    // Closing and reopening the sheet doesn't lift the lock or hide the reason.
+    await user.click(within(sheet).getByRole('button', { name: 'Not yet' }));
+    await user.click(screen.getByRole('button', { name: 'Collect LKR 610' }));
+    const reopened = screen.getByRole('dialog');
+    expect(within(reopened).getByRole('alert')).toHaveTextContent('Try again in 14 minutes.');
+    expect(within(reopened).getByRole('button', { name: 'Cash collected — complete' })).toBeDisabled();
+    expect(api.find('POST', '/riders/deliveries/d-1/collect-cod')).toHaveLength(1);
+  });
+
+  it('the 5th wrong code (no tries left) locks the handover straight away', async () => {
+    const user = userEvent.setup();
+    renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': () => ok({ delivery: detail(atDoor) }),
+      'POST /riders/deliveries/:id/collect-cod': () =>
+        fail(422, 'WRONG_DELIVERY_CODE', 'Wrong', {
+          attempts_remaining: 0,
+          locked_until: new Date(Date.now() + 15 * 60_000).toISOString(),
+        }),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Collect LKR 610' }));
+    const sheet = screen.getByRole('dialog');
+    await user.type(within(sheet).getByLabelText("Customer's delivery code"), '9999');
+    await user.click(within(sheet).getByRole('button', { name: 'Cash collected — complete' }));
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent(
+      "That code doesn't match. Too many wrong codes. Try again in 15 minutes."
+    );
+    expect(within(sheet).getByLabelText("Customer's delivery code")).toBeDisabled();
+    expect(within(sheet).getByRole('button', { name: 'Cash collected — complete' })).toBeDisabled();
   });
 
   it('the confirm sheet can be dismissed without sending anything', async () => {

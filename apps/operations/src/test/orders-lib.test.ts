@@ -46,11 +46,17 @@ describe('laneOf', () => {
 });
 
 describe('isPackable (D7)', () => {
-  it('needs nothing pending, no unsourced substitution, and something in the bag', () => {
+  it('packs straight from Placed: pending items are fine; no unsourced substitution, and something in the bag', () => {
     expect(isPackable(order())).toBe(true);
     expect(
       isPackable(order({ items_summary: { total: 2, pending: 1, sourced: 1, packed: 0, unavailable: 0, substituted: 0 } }))
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      isPackable(order({ items_summary: { total: 2, pending: 2, sourced: 0, packed: 0, unavailable: 0, substituted: 0 } }))
+    ).toBe(true);
+    expect(
+      isPackable(order({ items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 1, substituted: 0 } }))
+    ).toBe(true);
     expect(
       isPackable(order({ items_summary: { total: 1, pending: 0, sourced: 0, packed: 0, unavailable: 0, substituted: 1 } }))
     ).toBe(false);
@@ -85,8 +91,12 @@ describe('allowedActions (always ADMIN - no role dimension)', () => {
 describe('primaryAction', () => {
   it('is the one next step for the lane', () => {
     expect(primaryAction(order())).toBe('pack');
+    // Nothing to source first: a just-placed order's next step is Pack.
     expect(
       primaryAction(order({ items_summary: { total: 1, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 0 } }))
+    ).toBe('pack');
+    expect(
+      primaryAction(order({ items_summary: { total: 1, pending: 0, sourced: 0, packed: 0, unavailable: 1, substituted: 0 } }))
     ).toBeNull();
     expect(primaryAction(order({ order_status: 'PACKED' }))).toBe('assign');
     expect(primaryAction(order({ order_status: 'PACKED', active_delivery: withRider('ASSIGNED') }))).toBe('handOver');

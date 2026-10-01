@@ -9,7 +9,8 @@
 
 /** The real backend enum (`backend/api/src/database/types.ts:3`) - exactly
  * four values, nothing invented or copied from another app's stale list. */
-export type UserRole = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN';
+/** OPERATIONS: Operations-app-only staff (backend migration 014). */
+export type UserRole = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN' | 'OPERATIONS';
 
 export interface AuthUser {
   id: string;
@@ -83,6 +84,8 @@ export interface BoardOrder {
 export interface OrderItemRow {
   id: string;
   product_name_snapshot: string;
+  /** The product's unit at order time ("1 L", "500 g"); read by the packing slip. */
+  unit_snapshot?: string | null;
   quantity: number;
   item_status: 'PENDING' | 'SOURCED' | 'PACKED' | 'UNAVAILABLE' | 'SUBSTITUTED';
 }
@@ -112,6 +115,11 @@ export interface OrderDetail {
   order_status: OrderStatus;
   payment_method: 'COD' | 'ONLINE';
   payment_status: string;
+  /** Bill lines (backend migration 018): total = subtotal + delivery_fee - discount_amount. */
+  subtotal_amount?: number;
+  delivery_fee?: number;
+  discount_amount?: number;
+  coupon_code?: string | null;
   total_amount: number;
   placed_at: string;
   scheduled_for: string | null;
@@ -121,6 +129,9 @@ export interface OrderDetail {
   delivery_address_line2: string | null;
   delivery_city: string;
   delivery_instructions: string | null;
+  /** The customer's own note on the order (packing slip). */
+  customer_notes?: string | null;
+  delivery_postal_code?: string | null;
   cancellation_reason: string | null;
   items: OrderItemRow[];
   history: OrderHistoryRow[];
@@ -151,6 +162,38 @@ export interface RiderOption {
   vehicle_type: string;
   vehicle_registration_number: string;
   open_deliveries: number;
+}
+
+/** One order a rider already carries (`GET /admin/riders/suggestions`). */
+export interface TripStop {
+  order_id: string;
+  order_number: string;
+  assignment_status: AssignmentStatus;
+  /** Straight line between that drop-off and this order's; null when a pin is missing. */
+  dropoff_distance_km: number | null;
+}
+
+/**
+ * A row of `GET /admin/riders/suggestions?order_id=` (backend rider trips,
+ * 2026-09-30): the `RiderOption` fields plus how busy and how far the rider
+ * is. Best first; exactly one (or none) is `suggested`. Never coordinates.
+ */
+export interface RiderSuggestion extends RiderOption {
+  at_capacity: boolean;
+  last_seen_at: string | null;
+  /** The rider's last GPS point is under `location_fresh_minutes` old. */
+  location_known: boolean;
+  /** Straight line from that point to the store, when location_known. */
+  distance_km: number | null;
+  trip: TripStop[];
+  trip_within_distance: boolean;
+  suggested: boolean;
+}
+
+export interface RiderSuggestions {
+  order_id: string;
+  rules: { max_active_deliveries: number; max_dropoff_distance_km: number; location_fresh_minutes: number };
+  riders: RiderSuggestion[];
 }
 
 /** `deliveries.assignment_status` - the existing enum, nothing added
@@ -434,6 +477,9 @@ export interface Category {
   /** Migration 010. Absent on an API from before it - read as the centre. */
   image_focal_x?: number;
   image_focal_y?: number;
+  /** Live, non-deleted products in this category (added with category
+   * delete). Absent on an older API - treat as unknown, not zero. */
+  product_count?: number;
 }
 
 /**
@@ -646,49 +692,6 @@ export interface QueueOrder {
 
 export type ItemStatus = 'PENDING' | 'SOURCED' | 'PACKED' | 'UNAVAILABLE' | 'SUBSTITUTED';
 
-export interface SourcingRecord {
-  id: string;
-  quantity_sourced: number;
-  estimated_unit_cost: number;
-  actual_unit_cost: number;
-  supplier_id: string | null;
-  supplier: { id: string; name: string } | null;
-  notes: string | null;
-  created_at: string;
-}
-
-export interface SourcingItem {
-  id: string;
-  order_id: string;
-  product_id: string;
-  product_name_snapshot: string;
-  sku_snapshot: string;
-  unit_snapshot: string;
-  quantity: number;
-  subtotal: number;
-  /** Catalog cost snapshot at order time - the estimate. */
-  estimated_unit_cost: number;
-  /** Null until sourced. */
-  actual_unit_cost: number | null;
-  item_status: ItemStatus;
-  sourcing_records: SourcingRecord[];
-}
-
-/** `GET /admin/orders/:id/sourcing`. */
-export interface OrderSourcing {
-  order_id: string;
-  order_number: string;
-  order_status: OrderStatus;
-  metrics: {
-    total_items: number;
-    sourced_items: number;
-    unavailable_items: number;
-    pending_items: number;
-    is_sourcing_complete: boolean;
-  };
-  items: SourcingItem[];
-}
-
 export interface Supplier {
   id: string;
   name: string;
@@ -709,4 +712,112 @@ export interface SupplierInput {
   address?: string;
   notes?: string;
   is_active?: boolean;
+}
+
+// ------------------------------------------------ delete / fee / low stock / import
+/** `DELETE /admin/products/:id` - HARD when it was never ordered, SOFT when
+ * order history keeps the row (hidden everywhere, never orderable again). */
+export interface ProductDeleteResult {
+  product_id: string;
+  mode: 'HARD' | 'SOFT';
+}
+
+export interface CategoryDeleteResult {
+  category_id: string;
+  moved_product_count: number;
+  mode: 'HARD' | 'SOFT';
+}
+
+/** `GET|PATCH /admin/settings/delivery-fee`. */
+export interface DeliveryFeeSetting {
+  fee_lkr: number;
+  updated_at: string | null;
+}
+
+/** One row of `GET /admin/inventory/low-stock` (TRACKED, active products). */
+export interface LowStockItem {
+  product_id: string;
+  product_name: string;
+  product_sku: string;
+  product_unit: string;
+  category_name: string;
+  quantity_on_hand: number;
+  quantity_reserved: number;
+  quantity_available: number;
+  low_stock_threshold: number;
+  stock_state: 'OUT' | 'LOW';
+}
+
+export interface LowStockResult {
+  items: LowStockItem[];
+  counts: { low: number; out: number; total: number };
+}
+
+/** A spreadsheet row sent to `POST /admin/products/import`. */
+export interface ImportRow {
+  row?: number;
+  name: string;
+  category: string;
+  unit: string;
+  pack_size?: string | null;
+  cost_price: number;
+  selling_price?: number | null;
+  sku: string;
+  barcode?: string | null;
+  description?: string | null;
+  tracked?: 'yes' | 'no' | boolean | null;
+  opening_stock?: number | null;
+  image_url?: string | null;
+}
+
+export type ImportStatus = 'created' | 'updated' | 'skipped' | 'error';
+
+export interface ImportRowResult {
+  row: number;
+  sku: string | null;
+  status: ImportStatus;
+  product_id?: string;
+  message?: string;
+  errors?: Array<{ field: string; message: string }>;
+}
+
+export interface ImportResult {
+  dry_run: boolean;
+  summary: { created: number; updated: number; skipped: number; errors: number };
+  results: ImportRowResult[];
+}
+
+// -------------------------------------------------------------------- cash
+/** Rider cash hand-ins (backend migration 019). ADMIN and OPERATIONS. */
+export interface CashHandin {
+  id: string;
+  rider_id: string;
+  rider_name: string | null;
+  amount: number;
+  handin_date: string;
+  note: string | null;
+  recorded_by_name: string | null;
+  created_at: string;
+}
+
+export type ReconciliationStatus = 'SHORT' | 'OVER' | 'BALANCED';
+
+export interface RiderReconciliation {
+  rider_id: string;
+  rider_name: string | null;
+  rider_phone: string | null;
+  deliveries: number;
+  handins: number;
+  collected: number;
+  handed_in: number;
+  difference: number;
+  status: ReconciliationStatus;
+}
+
+/** GET /admin/cash/reconciliation - one Sri Lanka day. */
+export interface CashReconciliation {
+  date: string;
+  timezone: string;
+  riders: RiderReconciliation[];
+  totals: { collected: number; handed_in: number; difference: number; status: ReconciliationStatus };
 }

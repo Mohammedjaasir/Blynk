@@ -3,7 +3,12 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
+import { deliveryCodeForDelivery } from './helpers/delivery-code.js';
 import { runTransition } from '../src/modules/orders/lifecycle/engine.js';
+import { liftRiderTripCap } from './helpers/rider-trips.js';
+
+// Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
+liftRiderTripCap();
 
 /**
  * Operations app RBAC (feature plan §2, §6, §7, §26, §27; task B1).
@@ -144,8 +149,12 @@ describe('Operations RBAC: an ADMIN linked to a rider profile', () => {
     request(app).get(`/api/v1/riders/deliveries/${id}`).set('Authorization', `Bearer ${token}`);
   const setStatus = (id: string, body: object, token: string) =>
     request(app).patch(`/api/v1/riders/deliveries/${id}/status`).set('Authorization', `Bearer ${token}`).send(body);
-  const collect = (id: string, amount: number, token: string) =>
-    request(app).post(`/api/v1/riders/deliveries/${id}/collect-cod`).set('Authorization', `Bearer ${token}`).send({ amount });
+  // With the customer's proof-of-delivery code (migration 016).
+  const collect = async (id: string, amount: number, token: string) =>
+    request(app)
+      .post(`/api/v1/riders/deliveries/${id}/collect-cod`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount, delivery_code: await deliveryCodeForDelivery(id) });
   const point = (overrides: Record<string, unknown> = {}) => ({
     latitude: 6.436,
     longitude: 80.026,

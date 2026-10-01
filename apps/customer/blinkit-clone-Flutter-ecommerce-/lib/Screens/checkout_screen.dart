@@ -9,6 +9,7 @@ import '../UI/Widgets/Atoms/section_header.dart';
 import '../UI/Widgets/Organisms/card_cart_prices_detail.dart';
 import '../UI/Widgets/Organisms/cart_screen_address_container.dart';
 import '../UI/Widgets/Organisms/cart_screen_payment_container.dart';
+import '../UI/Widgets/Organisms/checkout_coupon_field.dart';
 import '../UI/Widgets/Organisms/empty_cart_view.dart';
 import '../app_design.dart';
 import '../design/tokens.dart';
@@ -73,7 +74,9 @@ class CheckoutScreen extends StatelessWidget {
                     ),
                     const _CheckoutItems(),
                     const SizedBox(height: BlynkSpace.s24),
-                    const CartPriceDetailWidget(),
+                    const CheckoutCouponField(),
+                    const SizedBox(height: BlynkSpace.s16),
+                    const CartPriceDetailWidget(showCoupon: true),
                     const CancellationPolicyCard(),
                   ],
                 ),

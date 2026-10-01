@@ -6,7 +6,18 @@ import {
   updateCategorySchema,
   createProductSchema,
   updateProductSchema,
+  deleteCategoryQuerySchema,
+  idParamSchema,
 } from './catalog.schema.js';
+import { deleteCategory, deleteProduct } from './catalog.delete.js';
+import { importProducts, importProductsSchema } from './catalog.import.js';
+import type { AuditActor } from '../audit/audit.writer.js';
+
+const actorOf = (req: Request): AuditActor => ({
+  actorId: req.user!.id,
+  ipAddress: req.ip ?? null,
+  userAgent: req.get('user-agent') ?? null,
+});
 
 export class CatalogController {
   // --------------------------------------------------------------------------
@@ -146,6 +157,45 @@ export class CatalogController {
         success: true,
         data: { product },
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** DELETE /admin/products/:id - hard delete if never ordered, else soft (migration 017). */
+  async deleteProductAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = idParamSchema.parse(req.params);
+      const result = await deleteProduct(id, actorOf(req));
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * DELETE /admin/categories/:id[?move_to_category_id=…]. The target may also
+   * come in a JSON body; the query string wins (some clients drop DELETE bodies).
+   */
+  async deleteCategoryAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = idParamSchema.parse(req.params);
+      const { move_to_category_id } = deleteCategoryQuerySchema.parse({
+        move_to_category_id: req.query.move_to_category_id ?? req.body?.move_to_category_id,
+      });
+      const result = await deleteCategory(id, move_to_category_id, actorOf(req));
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /admin/products/import - rows parsed from .xlsx/.csv in the browser. */
+  async importProductsAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = importProductsSchema.parse(req.body);
+      const result = await importProducts(input, req.user!.id);
+      res.status(200).json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

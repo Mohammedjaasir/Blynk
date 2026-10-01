@@ -1,9 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
+import { Cash } from './pages/Cash';
 import { Catalog } from './pages/Catalog';
 import { Categories } from './pages/Catalog/Categories';
 import { ProductForm } from './pages/Catalog/ProductForm';
+import { ProductImport } from './pages/Catalog/ProductImport';
 import { Products } from './pages/Catalog/Products';
 import { Promotions } from './pages/Catalog/Promotions';
 import { Detail as DeliveryDetail } from './pages/Delivery/Detail';
@@ -17,7 +19,7 @@ import { Overview as DentalOverview } from './pages/Dental/Overview';
 import { Home } from './pages/Home';
 import { Ledger as InventoryLedger } from './pages/Inventory/Ledger';
 import { Overview as InventoryOverview } from './pages/Inventory/Overview';
-import { Sourcing as InventorySourcing } from './pages/Inventory/Sourcing';
+import { RunningLow as InventoryRunningLow } from './pages/Inventory/RunningLow';
 import { Stock as InventoryStock } from './pages/Inventory/Stock';
 import { StockDetail as InventoryStockDetail } from './pages/Inventory/StockDetail';
 import { Suppliers as InventorySuppliers } from './pages/Inventory/Suppliers';
@@ -25,6 +27,7 @@ import { Login } from './pages/Login';
 import { Welcome, hasSeenIntro } from './pages/Welcome';
 import { More } from './pages/More';
 import { OrderDetail } from './pages/OrderDetail';
+import { PackingSlip } from './pages/PackingSlip';
 import { Orders } from './pages/Orders';
 import { Riders } from './pages/Riders';
 
@@ -99,19 +102,21 @@ export function AppRoutes() {
         <Route index element={<Home />} />
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
+        <Route path="orders/:id/slip" element={<PackingSlip />} />
         <Route path="delivery" element={<DeliveryQueue />} />
         <Route path="delivery/:id" element={<DeliveryDetail />} />
         <Route path="catalog" element={<Catalog />} />
         <Route path="catalog/products" element={<Products />} />
         <Route path="catalog/products/new" element={<ProductForm />} />
+        <Route path="catalog/products/import" element={<ProductImport />} />
         <Route path="catalog/products/:id" element={<ProductForm />} />
         <Route path="catalog/categories" element={<Categories />} />
         <Route path="catalog/promotions" element={<Promotions />} />
         <Route path="catalog/inventory" element={<InventoryOverview />} />
         <Route path="catalog/inventory/stock" element={<InventoryStock />} />
+        <Route path="catalog/inventory/low-stock" element={<InventoryRunningLow />} />
         <Route path="catalog/inventory/stock/:productId" element={<InventoryStockDetail />} />
         <Route path="catalog/inventory/ledger" element={<InventoryLedger />} />
-        <Route path="catalog/inventory/sourcing" element={<InventorySourcing />} />
         <Route path="catalog/inventory/suppliers" element={<InventorySuppliers />} />
         <Route path="catalog/dental" element={<DentalOverview />} />
         <Route path="catalog/dental/appointments" element={<DentalAppointments />} />
@@ -121,6 +126,7 @@ export function AppRoutes() {
         <Route path="catalog/dental/doctors" element={<DentalDoctors />} />
         <Route path="more" element={<More />} />
         <Route path="more/riders" element={<Riders />} />
+        <Route path="more/cash" element={<Cash />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

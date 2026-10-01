@@ -121,3 +121,19 @@ export type CreateProductInput = z.infer<typeof createProductSchema>;
 
 export const updateProductSchema = createProductSchema.partial();
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+
+// ----------------------------------------------------------------------------
+// 4. DELETE (migration 017)
+// ----------------------------------------------------------------------------
+export const idParamSchema = z.object({
+  id: z.string().uuid('Invalid id'),
+});
+
+export const deleteCategoryQuerySchema = z.object({
+  move_to_category_id: z
+    .preprocess(
+      (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      z.string().uuid('move_to_category_id must be a category id')
+    )
+    .optional(),
+});

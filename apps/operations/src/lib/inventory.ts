@@ -36,7 +36,7 @@ export function stockState(row: Counted): StockState {
 
 /** Stock does not drive customer availability: a tracked product with no
  * stock that Catalog still has active and available can still be ordered,
- * and its sourcing will then fail - the case worth flagging first. */
+ * and packing it will then fail - the case worth flagging first. */
 export function isOrderableButOut(row: Pick<StockRow, 'is_active' | 'is_available'> & Counted): boolean {
   return row.is_active && row.is_available && stockState(row).kind === 'OUT';
 }
@@ -77,13 +77,6 @@ export const ADJUSTMENT_LABEL: Record<AdjustmentType, string> = {
  * F3/F5). Ported from Inventory's own `lib/errors.ts:MESSAGES` map.
  */
 const MESSAGES: Record<string, string> = {
-  ITEM_ALREADY_SOURCED: 'Already sourced - someone recorded this item first. The queue has been refreshed.',
-  ITEM_ALREADY_RESOLVED: 'This item has already been resolved. Refresh the sourcing queue.',
-  ORDER_ITEM_NOT_FOUND: 'This item is no longer on this order. Refresh the sourcing queue.',
-  INSUFFICIENT_TRACKED_INVENTORY:
-    'Not enough counted stock to source this item. Restock it, or mark the item unavailable.',
-  CANNOT_SOURCE_UNAVAILABLE_ITEM: 'This item was marked unavailable and can no longer be sourced.',
-  ORDER_NOT_IN_SOURCING_STATE: 'This order is cancelled or delivered, so its items can no longer be sourced.',
   SUPPLIER_INACTIVE: 'That supplier has been deactivated. Choose an active supplier.',
   SUPPLIER_CODE_TAKEN: 'Another supplier already uses this code.',
   PRODUCT_NOT_TRACKED: 'Only tracked products can be adjusted. Switch the product to TRACKED first.',

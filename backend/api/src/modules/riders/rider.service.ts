@@ -20,6 +20,33 @@ const RIDER_STEP: Record<RiderDeliveryStatus, ActionName> = {
  * The rider *identity* is never taken from here - it is always looked up
  * from the authenticated user's own riders row below.
  */
+export interface DayTotals {
+  completed: number;
+  /** Closed as failed (the rider's "can't deliver", or staff marked it failed). */
+  failed: number;
+  /** Closed because the customer could not be reached (staff: customer unavailable). */
+  customer_unavailable: number;
+  /** COD cash taken at the door (deliveries.cod_collected_amount), LKR. */
+  cash_collected: number;
+}
+
+export interface RiderDayDelivery {
+  delivery_id: string;
+  order_number: string;
+  outcome: 'DELIVERED' | 'FAILED' | 'CUSTOMER_UNAVAILABLE';
+  /** Delivered or failed at. */
+  at: string;
+  cash_collected: number;
+}
+
+export interface RiderDay {
+  timezone: 'Asia/Colombo';
+  today: DayTotals & { date: string };
+  week: DayTotals & { starts_on: string };
+  /** Newest first. */
+  deliveries_today: RiderDayDelivery[];
+}
+
 export class RiderService {
   private async getRiderOrThrow(userId: string) {
     const rider = await riderRepository.findRiderByUserId(userId);
@@ -67,14 +94,64 @@ export class RiderService {
     return await riderRepository.findDeliveryById(deliveryId, rider.id);
   }
 
+  /**
+   * "My day" (Rider app): counts and cash for the calling rider only - today
+   * and this week (Monday to Sunday, Asia/Colombo) - plus today's finished
+   * deliveries. The rider is resolved from the token, never from the request.
+   * No pay amounts: the owner asked for counts only.
+   */
+  async getMyDay(userId: string): Promise<RiderDay> {
+    const rider = await this.getRiderOrThrow(userId);
+    const [rows, calendar] = await Promise.all([
+      riderRepository.findFinishedThisWeek(rider.id),
+      riderRepository.colomboCalendar(),
+    ]);
+    const empty = (): DayTotals => ({ completed: 0, failed: 0, customer_unavailable: 0, cash_collected: 0 });
+    const today = empty();
+    const week = empty();
+    const deliveriesToday: RiderDayDelivery[] = [];
+    for (const row of rows) {
+      const outcome: RiderDayDelivery['outcome'] =
+        row.assignment_status === 'DELIVERED'
+          ? 'DELIVERED'
+          : row.closed_as === 'CUSTOMER_UNAVAILABLE'
+            ? 'CUSTOMER_UNAVAILABLE'
+            : 'FAILED';
+      const cash = outcome === 'DELIVERED' ? Number(row.cod_collected_amount) : 0;
+      for (const totals of row.is_today ? [today, week] : [week]) {
+        if (outcome === 'DELIVERED') totals.completed += 1;
+        else if (outcome === 'CUSTOMER_UNAVAILABLE') totals.customer_unavailable += 1;
+        else totals.failed += 1;
+        totals.cash_collected += cash;
+      }
+      if (row.is_today) {
+        deliveriesToday.push({
+          delivery_id: row.delivery_id,
+          order_number: row.order_number,
+          outcome,
+          at: (row.delivered_at ?? row.failed_at)!.toISOString(),
+          cash_collected: Number(cash.toFixed(2)),
+        });
+      }
+    }
+    today.cash_collected = Number(today.cash_collected.toFixed(2));
+    week.cash_collected = Number(week.cash_collected.toFixed(2));
+    return {
+      timezone: 'Asia/Colombo',
+      today: { date: calendar.today, ...today },
+      week: { starts_on: calendar.week_starts_on, ...week },
+      deliveries_today: deliveriesToday,
+    };
+  }
+
   /** Lifecycle #9 RIDER_COLLECT_COD, settled by the shared COD settlement. */
-  async collectCod(deliveryId: string, actor: Actor, amount: number) {
+  async collectCod(deliveryId: string, actor: Actor, amount: number, deliveryCode: string) {
     const rider = await this.getRiderOrThrow(actor.id);
     return await runTransition<CodSettlement>('RIDER_COLLECT_COD', {
       actor,
       deliveryId,
       riderId: rider.id,
-      input: { amount },
+      input: { amount, delivery_code: deliveryCode },
     });
   }
 }

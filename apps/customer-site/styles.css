@@ -230,6 +230,7 @@ a { color: inherit; }
 .stats b { font-size: clamp(44px, 6vw, 76px); font-weight: 700; line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
 .stats small { font-size: 0.36em; font-weight: 700; letter-spacing: 0; margin: 0 4px; vertical-align: 0.9em; }
 .stats dd span { color: var(--ink-2); }
+.stats b.stats__words { font-size: clamp(30px, 4.2vw, 52px); letter-spacing: -0.03em; }
 
 /* About: the closing band. */
 .band { background-color: var(--yellow); background-image: var(--grain), radial-gradient(120% 90% at 85% 0%, #fff3a6 0%, transparent 60%); padding-block: var(--space); }

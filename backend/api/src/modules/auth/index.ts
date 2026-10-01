@@ -27,7 +27,7 @@ authRouter.get('/status', (_req, res) => {
 // Authentication endpoints
 authRouter.post('/otp/request', validate({ body: requestOtpSchema }), requestOtpController);
 authRouter.post('/otp/verify', validate({ body: verifyOtpSchema }), verifyOtpController);
-// Staff email + password sign-in (migration 012): ADMIN / PACKING_STAFF only.
+// Staff email + password sign-in (migration 012): ADMIN / PACKING_STAFF / OPERATIONS only.
 authRouter.post('/staff/login', validate({ body: staffLoginSchema }), staffLoginController);
 authRouter.post('/refresh', validate({ body: refreshTokenSchema }), refreshTokensController);
 authRouter.post('/logout', validate({ body: logoutSchema }), logoutController);

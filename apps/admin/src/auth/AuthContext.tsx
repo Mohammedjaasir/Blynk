@@ -34,13 +34,26 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export const NOT_ADMIN_MESSAGE =
   'This account is not a Blynk operations account.';
+/** Staff accounts each have one app (backend migration 014). */
+export const INVENTORY_STAFF_MESSAGE =
+  'Blynk Admin is for admins only. Inventory staff sign in to the Blynk Inventory site.';
+export const OPERATIONS_STAFF_MESSAGE =
+  'Blynk Admin is for admins only. Operations staff sign in to the Blynk Operations app.';
+
+/** Why `role` cannot use Blynk Admin, pointing staff to their own app. */
+export function wrongAppMessage(role: AuthUser['role']): string {
+  if (role === 'PACKING_STAFF') return INVENTORY_STAFF_MESSAGE;
+  if (role === 'OPERATIONS') return OPERATIONS_STAFF_MESSAGE;
+  return NOT_ADMIN_MESSAGE;
+}
 
 /**
- * Roles with an operations session: admins (everything here) and packing
- * staff (Orders only - the documented admin/staff dashboard, dispatch D12).
- * A courtesy check; the API guards every route by role.
+ * Only admins hold a session here (2026-09-30). Packing staff use the
+ * Inventory site and Operations staff the Operations app; both are sent
+ * there by wrongAppMessage(). A courtesy check; the API guards every route
+ * by role.
  */
-export const OPERATIONS_ROLES: ReadonlyArray<AuthUser['role']> = ['ADMIN', 'PACKING_STAFF'];
+export const OPERATIONS_ROLES: ReadonlyArray<AuthUser['role']> = ['ADMIN'];
 const isOperations = (user: AuthUser) => OPERATIONS_ROLES.includes(user.role);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -87,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeSignIn = useCallback(async (data: { access_token: string; refresh_token: string; user: AuthUser }) => {
     if (!isOperations(data.user)) {
       tokenStore.clear();
-      throw new ApiError(NOT_ADMIN_MESSAGE, 403, 'FORBIDDEN');
+      throw new ApiError(wrongAppMessage(data.user.role), 403, 'FORBIDDEN');
     }
     tokenStore.save(data.access_token, data.refresh_token);
     setUser(data.user);

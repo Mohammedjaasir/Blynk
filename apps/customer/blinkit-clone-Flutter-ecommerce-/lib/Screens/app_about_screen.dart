@@ -56,7 +56,7 @@ class _AppAboutScreenState extends State<AppAboutScreen> {
               ),
               const SizedBox(height: BlynkSpace.s24),
               const Text(
-                'Blynk delivers groceries from a local store in '
+                'Blynk delivers freshly sourced groceries and quality essentials in '
                 '${StoreInfo.hubName}. You place the order in the app and pay '
                 'in cash when it arrives. Deliveries go out '
                 '${StoreInfo.deliveryHoursLabel}.',

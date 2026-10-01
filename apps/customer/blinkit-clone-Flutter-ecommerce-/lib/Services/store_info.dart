@@ -1,8 +1,9 @@
 /// Blynk's single-hub business facts, in one place.
 ///
-/// The backend owns every value here but exposes none of them to the app, so
-/// each one mirrors its authority below. A future public `GET /store`
-/// (plan B1) replaces this file; nothing else should hard-code these facts.
+/// The backend owns every value here, so each one mirrors its authority below;
+/// nothing else should hard-code these facts. The delivery fee is live: the
+/// public `GET /store` feeds `StoreInfoProvider`, and [defaultDeliveryFee] is
+/// only its fallback. The other facts here are still constants.
 abstract final class StoreInfo {
   /// The one dark-store hub; also the default city of a new address.
   static const String hubName = 'Dharga Town';
@@ -15,9 +16,12 @@ abstract final class StoreInfo {
   /// Mirrors `dark_stores.radius_km` (default 4.00).
   static const int serviceRadiusKm = 4;
 
-  /// Mirrors `system_configurations.delivery_fee` (fee_lkr 70). The order's
-  /// own `deliveryFee` is authoritative once an order exists.
-  static const double flatDeliveryFee = 70.0;
+  /// The fallback delivery fee, used until `GET /store` (or its cached last
+  /// good answer) says otherwise. Mirrors `system_configurations.delivery_fee`
+  /// (fee_lkr 100). Screens read the live fee from `StoreInfoProvider`, never
+  /// this directly; the order's own `deliveryFee` is authoritative once an
+  /// order exists.
+  static const double defaultDeliveryFee = 100.0;
 
   /// The backend accepts cash on delivery only (`payment_method` is hard-coded COD).
   static const String paymentMethodLabel = 'Cash on delivery';

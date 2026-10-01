@@ -86,6 +86,14 @@ export const ADMIN_NO_RIDER: AuthUser = {
   email: null,
   role: 'ADMIN',
 };
+/** Backend migration 014: an Operations staff account, no rider profile. */
+export const OPERATIONS_STAFF: AuthUser = {
+  id: 'u-ops-1',
+  phone: '+94771112233',
+  full_name: 'Ops Person',
+  email: 'ops@blynk.test',
+  role: 'OPERATIONS',
+};
 export const CUSTOMER: AuthUser = {
   id: 'u-cust',
   phone: '+94771234567',
@@ -127,6 +135,8 @@ export function renderAs(user: AuthUser | null, route: string, handlers: Record<
     'GET /admin/riders': () => ok({ riders: [] }),
     'GET /admin/dental/appointments': () =>
       ok({ appointments: [], pagination: { page: 1, limit: 100, total: 0, total_pages: 1 } }),
+    // The signed-in shell reads low-stock alerts once (components/LowStock.tsx).
+    'GET /admin/inventory/low-stock': () => ok({ items: [], counts: { low: 0, out: 0, total: 0 } }),
     ...handlers,
   });
   const utils = render(

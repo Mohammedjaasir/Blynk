@@ -23,6 +23,7 @@ export class CatalogRepository {
       .selectFrom('categories')
       .select(['id', 'name', 'slug', 'description', 'image_url', 'display_order', 'is_active', 'image_focal_x', 'image_focal_y'])
       .where('is_active', '=', true)
+      .where('deleted_at', 'is', null)
       .orderBy('display_order', 'asc')
       .orderBy('name', 'asc')
       .execute();
@@ -34,15 +35,27 @@ export class CatalogRepository {
   async findAllCategories(isActive?: boolean) {
     let query = db
       .selectFrom('categories')
-      .selectAll()
+      .selectAll('categories')
+      // Live products in the category, so a delete can say up front how many
+      // must move (migration 017). Soft-deleted products are not counted.
+      .select((eb) =>
+        eb
+          .selectFrom('products')
+          .select(sql<number>`count(*)::int`.as('n'))
+          .whereRef('products.category_id', '=', 'categories.id')
+          .where('products.deleted_at', 'is', null)
+          .as('product_count')
+      )
+      .where('categories.deleted_at', 'is', null)
       .orderBy('display_order', 'asc')
       .orderBy('name', 'asc');
 
     if (isActive !== undefined) {
-      query = query.where('is_active', '=', isActive);
+      query = query.where('categories.is_active', '=', isActive);
     }
 
-    return await query.execute();
+    const rows = await query.execute();
+    return rows.map((row) => ({ ...row, product_count: Number(row.product_count ?? 0) }));
   }
 
   /**
@@ -53,6 +66,7 @@ export class CatalogRepository {
       .selectFrom('categories')
       .selectAll()
       .where('id', '=', id)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
   }
 
@@ -64,6 +78,7 @@ export class CatalogRepository {
       .selectFrom('categories')
       .selectAll()
       .where('slug', '=', slug)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
   }
 
@@ -166,7 +181,7 @@ export class CatalogRepository {
     if (params.category_slug) {
       query = query.where((eb) =>
         eb('category_id', 'in',
-          eb.selectFrom('categories').select('id').where('slug', '=', params.category_slug!)
+          eb.selectFrom('categories').select('id').where('slug', '=', params.category_slug!).where('deleted_at', 'is', null)
         )
       );
     }
@@ -210,7 +225,7 @@ export class CatalogRepository {
     if (params.category_slug) {
       query = query.where((eb) =>
         eb('category_id', 'in',
-          eb.selectFrom('categories').select('id').where('slug', '=', params.category_slug!)
+          eb.selectFrom('categories').select('id').where('slug', '=', params.category_slug!).where('deleted_at', 'is', null)
         )
       );
     }
@@ -340,6 +355,7 @@ export class CatalogRepository {
       .selectFrom('products')
       .selectAll()
       .where('sku', '=', sku)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
   }
 
@@ -351,6 +367,7 @@ export class CatalogRepository {
       .selectFrom('products')
       .selectAll()
       .where('slug', '=', slug)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
   }
 
@@ -431,6 +448,7 @@ export class CatalogRepository {
         updated_at: new Date(),
       })
       .where('id', '=', id)
+      .where('deleted_at', 'is', null)
       .returningAll()
       .execute();
 

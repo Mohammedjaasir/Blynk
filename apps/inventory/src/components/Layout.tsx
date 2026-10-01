@@ -1,9 +1,12 @@
-import type { ReactNode } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, type ReactNode } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { stockApi } from '../api/resources';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_LABEL } from '../auth/can';
 import blynkMark from '../assets/blynk-mark.png';
 import blynkWordmark from '../assets/blynk-wordmark-light.png';
+import { STOCK_CHANGED_EVENT } from '../lib/stock';
+import { useLoad } from '../lib/useLoad';
 
 /**
  * Inventory shell. Navigation is exactly the Inventory application's scope:
@@ -13,6 +16,17 @@ import blynkWordmark from '../assets/blynk-wordmark-light.png';
 export function Layout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // The "Running low" count refreshes on every page change and whenever
+  // stock is changed in this app. A failed load just hides the badge.
+  const lowStock = useLoad(() => stockApi.lowStock(), [pathname]);
+  const reloadLowStock = lowStock.reload;
+  useEffect(() => {
+    const onChange = () => void reloadLowStock();
+    window.addEventListener(STOCK_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(STOCK_CHANGED_EVENT, onChange);
+  }, [reloadLowStock]);
+  const counts = lowStock.data?.counts;
 
   async function handleSignOut() {
     await signOut();
@@ -41,6 +55,10 @@ export function Layout() {
           <NavLink to="/stock" className="nav__item">
             Inventory
           </NavLink>
+          <NavLink to="/low-stock" className="nav__item">
+            Running low
+            {counts && counts.total > 0 ? <LowStockBadge out={counts.out} low={counts.low} /> : null}
+          </NavLink>
           <NavLink to="/ledger" className="nav__item">
             Ledger
           </NavLink>
@@ -65,6 +83,21 @@ export function Layout() {
         <Outlet />
       </main>
     </div>
+  );
+}
+
+/**
+ * Count of products needing stock. Dark when anything is fully out, yellow
+ * when only low; the hidden text spells out the split so colour never
+ * carries it alone.
+ */
+function LowStockBadge({ out, low }: { out: number; low: number }) {
+  const parts = [out > 0 ? `${out} out of stock` : null, low > 0 ? `${low} low` : null].filter(Boolean).join(', ');
+  return (
+    <span className={`nav__badge${out > 0 ? ' nav__badge--out' : ''}`} title={parts}>
+      <span aria-hidden="true">{out + low}</span>
+      <span className="sr-only">: {parts}</span>
+    </span>
   );
 }
 

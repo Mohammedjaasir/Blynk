@@ -1,7 +1,7 @@
 import { useState, type FormEvent, useId } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { WRONG_ROLE_MESSAGE, useAuth } from '../auth/AuthContext';
+import { isRoleRefusal, useAuth } from '../auth/AuthContext';
 import { Field, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
 import blynkLogo from '../assets/blynk-logo-light.png';
@@ -45,8 +45,8 @@ export function Login() {
     } catch (err) {
       setPassword('');
       setError(
-        err instanceof Error && err.message === WRONG_ROLE_MESSAGE
-          ? WRONG_ROLE_MESSAGE
+        isRoleRefusal(err)
+          ? err.message
           : (passwordSignInError(err) ?? errorMessage(err, 'Could not sign in.'))
       );
     } finally {
@@ -79,11 +79,11 @@ export function Login() {
     } catch (err) {
       // A refused role has already used up the code, so go back to the
       // phone step rather than inviting a retry that can only fail.
-      if (err instanceof Error && err.message === WRONG_ROLE_MESSAGE) {
+      if (isRoleRefusal(err)) {
         setStep('phone');
         setOtp('');
         setDevOtp(null);
-        setError(WRONG_ROLE_MESSAGE);
+        setError(err.message);
       } else {
         setError(errorMessage(err, 'Could not verify the code.'));
       }

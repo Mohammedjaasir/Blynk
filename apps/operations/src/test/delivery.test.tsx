@@ -149,9 +149,10 @@ describe('Delivery detail - happy path (pickup -> arrive -> collect cash)', () =
 
     await user.click(await screen.findByRole('button', { name: /^Collect LKR 610/ }));
     const dialog = await screen.findByRole('dialog', { name: /Collect LKR 610/ });
+    await user.type(within(dialog).getByLabelText("Customer's delivery code"), '4821');
     await user.click(within(dialog).getByRole('button', { name: 'Cash collected — complete' }));
     await waitFor(() => expect(api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)).toHaveLength(1));
-    expect(api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)[0].body).toEqual({ amount: 610 });
+    expect(api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)[0].body).toEqual({ amount: 610, delivery_code: '4821' });
 
     expect(await screen.findByText('LKR 610 collected')).toBeInTheDocument();
 
@@ -176,14 +177,66 @@ describe('COD collection - the amount cannot be freely edited', () => {
 
     await user.click(await screen.findByRole('button', { name: /^Collect LKR 1,690/ }));
     const dialog = await screen.findByRole('dialog', { name: /Collect LKR 1,690/ });
-    // No input/textbox/spinbutton of any kind for the amount - a static
-    // confirmation, not something to fat-finger a different value into.
-    expect(within(dialog).queryAllByRole('textbox')).toHaveLength(0);
+    // No input of any kind for the amount - a static confirmation, not
+    // something to fat-finger a different value into. The one textbox is the
+    // customer's delivery code (proof of delivery).
+    expect(within(dialog).getAllByRole('textbox')).toEqual([within(dialog).getByLabelText("Customer's delivery code")]);
     expect(within(dialog).queryAllByRole('spinbutton')).toHaveLength(0);
     expect(dialog).toHaveTextContent('Collect LKR 1,690 in cash');
 
+    await user.type(within(dialog).getByLabelText("Customer's delivery code"), '0421');
     await user.click(within(dialog).getByRole('button', { name: 'Cash collected — complete' }));
-    await waitFor(() => expect(api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)[0]?.body).toEqual({ amount: 1690 }));
+    await waitFor(() =>
+      expect(api.find('POST', `/riders/deliveries/${s.delivery_id}/collect-cod`)[0]?.body).toEqual({ amount: 1690, delivery_code: '0421' })
+    );
+  });
+});
+
+describe('Proof of delivery - the customer\'s code', () => {
+  it('needs all 4 digits before the cash can be confirmed, and accepts digits only', async () => {
+    const user = userEvent.setup();
+    stubGeolocation();
+    const s = summary({ assignment_status: 'ARRIVED_AT_CUSTOMER', order_status: 'OUT_FOR_DELIVERY', total_amount: 610 });
+    renderAs(ADMIN_WITH_RIDER, `/delivery/${s.delivery_id}`, { 'GET /riders/deliveries/:id': () => ok({ delivery: detail(s) }) });
+    await user.click(await screen.findByRole('button', { name: /^Collect LKR 610/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Collect LKR 610/ });
+    const field = within(dialog).getByLabelText("Customer's delivery code");
+    expect(field).toHaveAttribute('inputmode', 'numeric');
+    expect(dialog).toHaveTextContent('Ask the customer for the 4-digit code in their Blynk app.');
+    const confirm = within(dialog).getByRole('button', { name: 'Cash collected — complete' });
+    expect(confirm).toBeDisabled();
+    await user.type(field, '12x3');
+    expect(field).toHaveValue('123');
+    expect(confirm).toBeDisabled();
+    await user.type(field, '45');
+    expect(field).toHaveValue('1234');
+    expect(confirm).toBeEnabled();
+  });
+
+  it('a wrong code clears the field and says how many tries are left; a lock disables the step', async () => {
+    const user = userEvent.setup();
+    stubGeolocation();
+    const s = summary({ assignment_status: 'ARRIVED_AT_CUSTOMER', order_status: 'OUT_FOR_DELIVERY', total_amount: 610 });
+    let reply = 0;
+    renderAs(ADMIN_WITH_RIDER, `/delivery/${s.delivery_id}`, {
+      'GET /riders/deliveries/:id': () => ok({ delivery: detail(s) }),
+      'POST /riders/deliveries/:id/collect-cod': () =>
+        reply++ === 0
+          ? { status: 422, error: { code: 'WRONG_DELIVERY_CODE', message: 'x', details: { attempts_remaining: 1 } } }
+          : { status: 429, error: { code: 'DELIVERY_CODE_LOCKED', message: 'x', details: { retry_after_seconds: 900 } } },
+    });
+    await user.click(await screen.findByRole('button', { name: /^Collect LKR 610/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Collect LKR 610/ });
+    const field = within(dialog).getByLabelText("Customer's delivery code");
+    await user.type(field, '1111');
+    await user.click(within(dialog).getByRole('button', { name: 'Cash collected — complete' }));
+    expect(await within(dialog).findByText("That code doesn't match. 1 try left.")).toBeInTheDocument();
+    expect(field).toHaveValue('');
+    await user.type(field, '2222');
+    await user.click(within(dialog).getByRole('button', { name: 'Cash collected — complete' }));
+    expect(await within(dialog).findByText('Too many wrong codes. Try again in 15 minutes.')).toBeInTheDocument();
+    expect(field).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cash collected — complete' })).toBeDisabled();
   });
 });
 

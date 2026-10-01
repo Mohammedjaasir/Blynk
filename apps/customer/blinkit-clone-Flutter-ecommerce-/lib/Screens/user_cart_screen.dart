@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../Services/Providers/cart.provider.dart';
+import '../Services/Providers/store_info.provider.dart';
 import '../UI/Widgets/Atoms/adaptive_sheet.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Atoms/card_product_cart_screen.dart';
@@ -287,7 +288,10 @@ class _CheckoutBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = context.select<CartProvider, double>(cartEstimateTotal);
+    final deliveryFee = watchDeliveryFee(context);
+    final total = context.select<CartProvider, double>(
+      (cart) => cartEstimateTotal(cart, deliveryFee),
+    );
 
     return DecoratedBox(
       decoration: const BoxDecoration(

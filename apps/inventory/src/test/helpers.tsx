@@ -63,6 +63,7 @@ export const STAFF: AuthUser = { id: 's1', phone: '+94774443322', full_name: 'Ka
  */
 export const EMPTY_API: Record<string, Handler> = {
   'GET /admin/inventory/adjustments': () => ok(pageOf('adjustments', [])),
+  'GET /admin/inventory/low-stock': () => ok({ items: [], counts: { low: 0, out: 0, total: 0 } }),
   'GET /admin/inventory': () => ok(pageOf('inventory', [])),
   'GET /admin/orders': () => ok(pageOf('orders', [])),
   'GET /admin/suppliers': () => ok({ suppliers: [] }),

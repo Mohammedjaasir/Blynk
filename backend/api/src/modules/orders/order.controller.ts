@@ -10,6 +10,7 @@ import {
   resolveItemSchema,
   orderItemParamsSchema,
 } from './order.schema.js';
+import { validateCouponSchema } from '../coupons/coupon.schema.js';
 
 export class OrderController {
   // --------------------------------------------------------------------------
@@ -30,6 +31,16 @@ export class OrderController {
         success: true,
         data: result,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async validateCoupon(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = validateCouponSchema.parse(req.body);
+      const preview = await orderService.previewCoupon(req.user!.id, input);
+      res.status(200).json({ success: true, data: { coupon: preview } });
     } catch (err) {
       next(err);
     }
@@ -129,7 +140,8 @@ export class OrderController {
         id,
         input.status,
         { id: req.user!.id, role: req.user!.role },
-        input.notes
+        input.notes,
+        input.delivery_code
       );
       res.status(200).json({
         success: true,
@@ -168,10 +180,12 @@ export class OrderController {
     try {
       const { id } = orderItemParamsSchema.parse(req.params);
       const input = adminAssignRiderSchema.parse(req.body);
-      const delivery = await orderService.assignRiderAdmin(id, input.rider_id, {
-        id: req.user!.id,
-        role: req.user!.role,
-      });
+      const delivery = await orderService.assignRiderAdmin(
+        id,
+        input.rider_id,
+        { id: req.user!.id, role: req.user!.role },
+        input.confirm_far_batch === true
+      );
       res.status(200).json({
         success: true,
         data: { delivery },

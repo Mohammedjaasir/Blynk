@@ -20,20 +20,20 @@ export const adminPromotionsRouter = Router();
 adminPromotionsRouter.get(
   '/promotions',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   promotionController.listAdmin.bind(promotionController)
 );
 adminPromotionsRouter.post(
   '/promotions',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   promotionController.create.bind(promotionController)
 );
 // Declared before /promotions/:id so "reorder" isn't read as an id.
 adminPromotionsRouter.patch(
   '/promotions/reorder',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   promotionController.reorder.bind(promotionController)
 );
 adminPromotionsRouter.get(
@@ -45,13 +45,13 @@ adminPromotionsRouter.get(
 adminPromotionsRouter.patch(
   '/promotions/:id',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   promotionController.update.bind(promotionController)
 );
 adminPromotionsRouter.delete(
   '/promotions/:id',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   promotionController.remove.bind(promotionController)
 );
 

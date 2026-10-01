@@ -1,8 +1,10 @@
+import { OrderBill } from '../components/OrderBill';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { orders as ordersApi } from '../api/resources';
 import type { OrderDetail as OrderDetailData } from '../api/types';
-import { AssignRiderDialog, NoteDialog, needsNote } from '../components/OrderDialogs';
+import { AssignRiderDialog, MarkDeliveredDialog, NoteDialog, needsNote } from '../components/OrderDialogs';
+import { deliveryCodeError } from '../lib/delivery';
 import {
   ACTION_LABEL,
   ITEM_STATUS_LABEL,
@@ -16,13 +18,6 @@ import {
   shortNumber,
   type OrderAction,
 } from '../lib/orders';
-
-/**
- * Why Pack is disabled. The backend enforces the same rule
- * (`packingBlockers`): an order cannot be packed while any item is still to
- * source, because you cannot bag what is not off the shelf yet.
- */
-const PACK_BLOCKED_REASON = 'Pack is available once every item has been sourced.';
 
 const STATUS_FOR: Partial<Record<OrderAction, string>> = {
   pack: 'PACKED',
@@ -53,6 +48,10 @@ export function OrderDetail() {
   // Orders.tsx's own per-order `busyId` pattern) - only the button actually
   // clicked relabels to "Saving…"; the others stay disabled but unchanged.
   const [busyAction, setBusyAction] = useState<OrderAction | null>(null);
+  // A refused delivery code in "Mark delivered" - shown in the dialog, which stays open.
+  const [codeError, setCodeError] = useState<{ message: string; locked: boolean } | null>(null);
+  const [busyItem, setBusyItem] = useState<string | null>(null);
+  const [confirmItem, setConfirmItem] = useState<OrderDetailData['items'][number] | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -77,6 +76,11 @@ export function OrderDetail() {
         await step();
         setDialog(null);
       } catch (err) {
+        const refusedCode = action === 'markDelivered' ? deliveryCodeError(err) : null;
+        if (refusedCode) {
+          setCodeError(refusedCode);
+          return;
+        }
         setNotice(orderErrorMessage(err));
         setDialog(null);
       } finally {
@@ -90,7 +94,8 @@ export function OrderDetail() {
   const act = useCallback(
     (action: OrderAction) => {
       if (!id) return;
-      if (action === 'assign' || needsNote(action)) {
+      if (action === 'assign' || action === 'markDelivered' || needsNote(action)) {
+        setCodeError(null);
         setDialog(action);
         return;
       }
@@ -98,6 +103,22 @@ export function OrderDetail() {
     },
     [id, run]
   );
+
+  /** An item that is not on the shelf comes off the bill (the customer is told). */
+  const markItemUnavailable = async (itemId: string) => {
+    if (!id) return;
+    setBusyItem(itemId);
+    setNotice(null);
+    try {
+      await ordersApi.markItemUnavailable(id, itemId);
+    } catch (err) {
+      setNotice(orderErrorMessage(err));
+    } finally {
+      setBusyItem(null);
+      setConfirmItem(null);
+      await load();
+    }
+  };
 
   if (error && !detail) {
     return (
@@ -129,7 +150,7 @@ export function OrderDetail() {
   const boardLike = boardOrderLikeFromDetail(detail);
   const actions = allowedActions(boardLike);
   const primary = primaryAction(boardLike);
-  const stillSourcing = boardLike.order_status === 'PLACED' || boardLike.order_status === 'ITEM_UNAVAILABLE';
+  const beingPacked = boardLike.order_status === 'PLACED' || boardLike.order_status === 'ITEM_UNAVAILABLE';
   const number = shortNumber(detail.order_number);
 
   return (
@@ -143,6 +164,9 @@ export function OrderDetail() {
           <p className="order-detail__number mono">#{number}</p>
           <p className="order-detail__status">{STATUS_LABEL[detail.order_status]}</p>
         </div>
+        <Link className="button button--ghost button--sm" to={`/orders/${detail.id}/slip`}>
+          Print packing slip
+        </Link>
       </header>
 
       {notice ? (
@@ -159,18 +183,22 @@ export function OrderDetail() {
               <span className="order-items__qty mono">{item.quantity} ×</span>
               <span className="order-items__name">{item.product_name_snapshot}</span>
               <span className="order-items__status">{ITEM_STATUS_LABEL[item.item_status] ?? item.item_status}</span>
+              {beingPacked && item.item_status === 'PENDING' ? (
+                // Not on the shelf: off the bill, and the customer is told.
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={busyItem !== null || busyAction !== null}
+                  onClick={() => setConfirmItem(item)}
+                  aria-label={`Mark ${item.product_name_snapshot} unavailable`}
+                >
+                  {busyItem === item.id ? 'Saving…' : 'Unavailable'}
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>
-        {stillSourcing ? (
-          // Inventory is built into Operations (F6) - navigate in-app, the
-          // same destination Orders.tsx's own sourcing hint uses, rather
-          // than opening the separate standalone Inventory app
-          // (design-audit I6).
-          <Link className="link" to="/catalog/inventory/sourcing">
-            Source items in Inventory →
-          </Link>
-        ) : null}
+        <OrderBill order={detail} />
       </section>
 
       <section className="order-detail__section" aria-label="Customer">
@@ -215,39 +243,22 @@ export function OrderDetail() {
 
       {actions.length > 0 ? (
         <footer className="order-detail__actions">
-          {actions.map((action) => {
-            // Pack is disabled until every item is off the shelf — the backend
-            // refuses it too (`packingBlockers`: no item may still be PENDING).
-            // Until now the button simply sat there doing nothing when
-            // clicked, which is indistinguishable from a broken button: the
-            // operator has no way to learn that sourcing is the blocker.
-            const packBlocked = action === 'pack' && primary !== 'pack';
-            return (
-              <button
-                key={action}
-                type="button"
-                className={action === primary ? 'button' : action === 'cancel' ? 'button button--ink-outline' : 'button button--ghost'}
-                disabled={busyAction !== null || packBlocked}
-                // Both a tooltip and a programmatic description, so the reason
-                // reaches a mouse user, a keyboard user and a screen reader.
-                title={packBlocked ? PACK_BLOCKED_REASON : undefined}
-                aria-describedby={packBlocked ? 'pack-blocked-reason' : undefined}
-                onClick={() => act(action)}
-              >
-                {busyAction === action ? 'Saving…' : ACTION_LABEL[action]}
-              </button>
-            );
-          })}
+          {actions.map((action) => (
+            // Pack works straight from Placed: the pack itself takes every
+            // item off the shelf (backend lifecycle PACK). The API still
+            // refuses an order with nothing left to pack, or a product short
+            // on stock, and the notice above says which.
+            <button
+              key={action}
+              type="button"
+              className={action === primary ? 'button' : action === 'cancel' ? 'button button--ink-outline' : 'button button--ghost'}
+              disabled={busyAction !== null || busyItem !== null}
+              onClick={() => act(action)}
+            >
+              {busyAction === action ? 'Saving…' : ACTION_LABEL[action]}
+            </button>
+          ))}
         </footer>
-      ) : null}
-
-      {actions.includes('pack') && primary !== 'pack' ? (
-        <p className="order-detail__hint" id="pack-blocked-reason" role="status">
-          {PACK_BLOCKED_REASON}{' '}
-          <Link className="link" to="/catalog/inventory/sourcing">
-            Source items in Inventory →
-          </Link>
-        </p>
       ) : null}
 
       {dialog === 'assign' ? (
@@ -255,7 +266,45 @@ export function OrderDetail() {
           order={detail}
           busy={busyAction === 'assign'}
           onClose={() => setDialog(null)}
-          onAssign={(riderId) => void run('assign', () => ordersApi.assignRider(detail.id, riderId))}
+          onAssign={(riderId, confirmFar) => void run('assign', () => ordersApi.assignRider(detail.id, riderId, confirmFar))}
+        />
+      ) : null}
+      {confirmItem ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="item-unavailable-title">
+          <div className="modal__panel">
+            <h2 className="modal__title" id="item-unavailable-title">
+              Mark item unavailable
+            </h2>
+            <p className="modal__message">
+              {confirmItem.quantity} × {confirmItem.product_name_snapshot} comes off this order and its bill, and the
+              customer is told. This cannot be undone.
+            </p>
+            <div className="modal__actions">
+              <button type="button" className="button button--ghost" onClick={() => setConfirmItem(null)}>
+                Back
+              </button>
+              <button
+                type="button"
+                className="button button--ink"
+                disabled={busyItem !== null}
+                onClick={() => void markItemUnavailable(confirmItem.id)}
+              >
+                {busyItem ? 'Saving…' : 'Mark unavailable'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {dialog === 'markDelivered' ? (
+        <MarkDeliveredDialog
+          order={detail}
+          busy={busyAction === 'markDelivered'}
+          error={codeError}
+          onClose={() => setDialog(null)}
+          onConfirm={(proof) => {
+            setCodeError(null);
+            void run('markDelivered', () => ordersApi.markDelivered(detail.id, proof));
+          }}
         />
       ) : null}
       {dialog && needsNote(dialog) ? (

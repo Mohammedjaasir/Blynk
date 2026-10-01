@@ -1,11 +1,12 @@
 {
+    "id": "/app/",
     "name": "Blynk",
     "short_name": "Blynk",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFE141",
     "theme_color": "#FFE141",
-    "description": "Groceries and essentials from local stores in Dharga Town, delivered to your door.",
+    "description": "Fresh groceries and quality essentials, delivered to your door in Dharga Town.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
@@ -31,5 +32,6 @@
             "type": "image/png",
             "purpose": "maskable"
         }
-    ]
+    ],
+    "scope": "./"
 }

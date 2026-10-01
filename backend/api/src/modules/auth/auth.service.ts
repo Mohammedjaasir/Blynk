@@ -40,8 +40,16 @@ export interface RefreshTokensResult {
   expires_in: number;
 }
 
-/** Roles that may sign in with email + password (migration 012). */
-export const STAFF_PASSWORD_ROLES: string[] = ['ADMIN', 'PACKING_STAFF'];
+/** Roles that may sign in with email + password (migration 012; OPERATIONS from 014). */
+export const STAFF_PASSWORD_ROLES: string[] = ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'];
+
+/**
+ * The one refusal for a staff account an admin has disabled (migration 014),
+ * identical on both sign-in paths (email + password and SMS code) and on
+ * refresh. It never says "disabled": it reads like any other failed sign-in.
+ */
+export const staffSignInRefused = () =>
+  new AppError('Sign-in failed. Check your details or ask your store admin.', 401, 'INVALID_CREDENTIALS');
 export const LOGIN_MAX_ATTEMPTS = 5;
 export const LOGIN_LOCK_MINUTES = 15;
 
@@ -208,6 +216,9 @@ export class AuthService {
             'ACCOUNT_DEACTIVATED'
           );
         }
+        // A disabled staff account (migration 014) cannot fall back to an SMS
+        // code either. Thrown inside the transaction, so nothing is consumed.
+        if (existingUser.staff_disabled_at) throw staffSignInRefused();
         user = await authRepository.updateLastLogin(trx, existingUser.id);
       } else {
         // First-time login: auto-register as CUSTOMER strictly
@@ -263,8 +274,8 @@ export class AuthService {
   }
 
   /**
-   * Staff email + password sign-in (migration 012). Only ADMIN and
-   * PACKING_STAFF accounts with a password set may use it; everyone else
+   * Staff email + password sign-in (migration 012). Only ADMIN,
+   * PACKING_STAFF and OPERATIONS (migration 014) accounts with a password set may use it; everyone else
    * keeps SMS codes.
    *
    * - Every refusal before the password check reads the same ("Wrong email or
@@ -311,6 +322,7 @@ export class AuthService {
           'is_active',
           'login_failed_attempts',
           'login_locked_until',
+          'staff_disabled_at',
           sql<boolean>`staff_password_hash IS NOT NULL AND staff_password_hash = crypt(${password}, staff_password_hash)`.as(
             'password_ok'
           ),
@@ -343,6 +355,10 @@ export class AuthService {
         logger.warn({ userId: row.id, attempts, locked: lock }, 'Wrong staff password');
         return { failed: true as const, locked: lock };
       }
+
+      // Disabled (migration 014): checked only once the password is right, so
+      // it never tells a stranger which emails belong to disabled staff.
+      if (row.staff_disabled_at) throw staffSignInRefused();
 
       await trx
         .updateTable('users')
@@ -399,6 +415,7 @@ export class AuthService {
       if (!user || !user.is_active) {
         throw new AppError('User account is inactive or does not exist.', 403, 'ACCOUNT_DEACTIVATED');
       }
+      if (user.staff_disabled_at) throw staffSignInRefused();
 
       // Rotate: revoke the current token
       await authRepository.revokeRefreshToken(trx, tokenRecord.id);

@@ -174,4 +174,35 @@ void main() {
       expect(o.deliveryLongitude, isNull);
     });
   });
+
+  group('OrderModel delivery_code (proof of delivery)', () {
+    OrderModel parse(Object? code, {bool present = true}) => OrderModel.fromJson({
+          ...orderJson(status: 'OUT_FOR_DELIVERY'),
+          if (present) 'delivery_code': code,
+        });
+
+    test('a 4-digit string is kept verbatim', () {
+      expect(parse('4821').deliveryCode, '4821');
+      expect(parse('0821').deliveryCode, '0821');
+      expect(parse(' 4821 ').deliveryCode, '4821');
+    });
+
+    test('a number is accepted and keeps four digits', () {
+      expect(parse(4821).deliveryCode, '4821');
+      expect(parse(821).deliveryCode, '0821');
+    });
+
+    test('null, empty and absent are null', () {
+      expect(parse(null).deliveryCode, isNull);
+      expect(parse('').deliveryCode, isNull);
+      expect(parse('   ').deliveryCode, isNull);
+      expect(parse(null, present: false).deliveryCode, isNull);
+    });
+
+    test('a list-shaped order without the field parses', () {
+      final o = OrderModel.tryParse(orderJson(detail: false));
+      expect(o, isNotNull);
+      expect(o!.deliveryCode, isNull);
+    });
+  });
 }

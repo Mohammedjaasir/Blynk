@@ -108,7 +108,7 @@ void main() {
       expect(find.byType(ProductImageWell), findsNWidgets(2));
     });
 
-    testWidgets('summary shows subtotal, the LKR 70 fee and the total',
+    testWidgets('summary shows subtotal, the LKR 100 fee and the total',
         (tester) async {
       cart.add(_product(_realMilk));
       await pumpCart(tester);
@@ -116,9 +116,9 @@ void main() {
       expect(find.text('Order Summary'), findsOneWidget);
       expect(find.text('Subtotal (1 item)'), findsOneWidget);
       expect(find.text('Delivery fee'), findsOneWidget);
-      expect(find.text('LKR 70'), findsOneWidget);
-      // 540 + 70, in the summary and on the pinned bar.
-      expect(find.text('LKR 610'), findsNWidgets(2));
+      expect(find.text('LKR 100'), findsOneWidget);
+      // 540 + 100, in the summary and on the pinned bar.
+      expect(find.text('LKR 640'), findsNWidgets(2));
       // No invented fees.
       for (final fake in ['Handling', 'Convenience', 'Platform', 'Late Night',
         'Saved', 'MRP', 'OFF']) {
@@ -138,13 +138,13 @@ void main() {
       // Line total and the summary's subtotal.
       expect(find.text('LKR 1,080'), findsNWidgets(2));
       expect(find.text('Subtotal (2 items)'), findsOneWidget);
-      expect(find.text('LKR 1,150'), findsNWidgets(2)); // 1080 + 70
+      expect(find.text('LKR 1,180'), findsNWidgets(2)); // 1080 + 100
 
       await tester.tap(minus('Kotmale Fresh Milk 1L'));
       await settle(tester);
       expect(cart.quantityOf('b0000001-0000-0000-0000-000000000001'), 1);
       expect(find.text('Subtotal (1 item)'), findsOneWidget);
-      expect(find.text('LKR 610'), findsNWidgets(2));
+      expect(find.text('LKR 640'), findsNWidgets(2));
     });
 
     testWidgets('- at one removes the line and never goes negative',
@@ -163,7 +163,7 @@ void main() {
       // The other line stays and the summary follows.
       expect(find.text('Pelwatte Salted Butter 200g'), findsOneWidget);
       expect(find.text('Subtotal (1 item)'), findsOneWidget);
-      expect(find.text('LKR 875'), findsNWidgets(2)); // 805 + 70
+      expect(find.text('LKR 905'), findsNWidgets(2)); // 805 + 100
     });
 
     testWidgets('the trash button removes a line', (tester) async {
@@ -347,7 +347,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(CheckoutScreen),
-          matching: find.text('LKR 610'),
+          matching: find.text('LKR 640'),
         ),
         findsOneWidget,
       );
@@ -399,8 +399,8 @@ void main() {
 
         expect(tester.takeException(), isNull);
         expect(find.text('Proceed to checkout'), findsOneWidget);
-        // 540 + 1610 + 70
-        expect(find.textContaining('LKR 2,220'), findsWidgets);
+        // 540 + 1610 + 100
+        expect(find.textContaining('LKR 2,250'), findsWidgets);
 
         await tester.tap(plus('Kotmale Fresh Milk 1L'));
         await settle(tester);
@@ -471,6 +471,9 @@ void main() {
           findsOneWidget);
     });
 
+    // Coupons are real since backend migration 018: checkout offers the code
+    // field, but no Discount / saving line exists until the server has
+    // previewed a code for this cart (coupon_checkout_test.dart).
     testWidgets('checkout invents no discount, saving or promo row',
         (tester) async {
       cart.add(_product(_realMilk));
@@ -481,12 +484,12 @@ void main() {
       );
       await settle(tester);
 
+      expect(find.text('Have a coupon code?'), findsOneWidget);
       for (final fake in [
         'Discount',
         'Saving',
         'You save',
         'Promo',
-        'Coupon',
         'OFF',
         'MRP',
       ]) {

@@ -2,6 +2,7 @@ import { apiRequest } from './client';
 import type {
   AuthUser,
   LedgerEntry,
+  LowStockReport,
   ManualAdjustmentType,
   OrderSourcing,
   OrderStatus,
@@ -56,6 +57,14 @@ export const stockApi = {
     apiRequest<{ inventory: { quantity_on_hand: number; quantity_available: number } }>(
       `/admin/inventory/${productId}/adjust`,
       { method: 'POST', body }
+    ),
+  /** Tracked products at or below their threshold, OUT first (all roles here). */
+  lowStock: () => apiRequest<LowStockReport>('/admin/inventory/low-stock'),
+  /** ADMIN only in this app; 409 PRODUCT_NOT_TRACKED for an untracked product. */
+  setThreshold: (productId: string, low_stock_threshold: number) =>
+    apiRequest<{ low_stock_threshold: number; is_low_stock: boolean }>(
+      `/admin/inventory/${productId}/threshold`,
+      { method: 'PATCH', body: { low_stock_threshold } }
     ),
 };
 

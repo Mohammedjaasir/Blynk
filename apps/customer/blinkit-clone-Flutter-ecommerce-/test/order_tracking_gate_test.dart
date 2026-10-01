@@ -80,7 +80,9 @@ Future<void> _pump(WidgetTester tester, _FakeOrdersApi api, SpyLocationProvider 
       ],
       child: MaterialApp(
         theme: AppTheme.appTHeme,
-        home: const OrderSummaryScreen(orderId: _id, mapBuilder: fakeMapBuilder),
+        // These tests count refetches around the live stream, so the 20 s
+        // auto-refresh (covered in order_progress_test.dart) is off here.
+        home: const OrderSummaryScreen(orderId: _id, mapBuilder: fakeMapBuilder, autoRefresh: false),
       ),
     ),
   );

@@ -3,7 +3,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { tokenStore } from '../api/client';
 import { can, type Action } from '../auth/can';
-import { SESSION_ENDED_MESSAGE, WRONG_ROLE_MESSAGE } from '../auth/AuthContext';
+import { OPERATIONS_STAFF_MESSAGE, SESSION_ENDED_MESSAGE, WRONG_ROLE_MESSAGE } from '../auth/AuthContext';
 import { ADMIN, STAFF, fail, ok, renderAs } from './helpers';
 
 beforeEach(() => {
@@ -53,6 +53,16 @@ describe('sign-in over the existing Blynk OTP flow', () => {
     expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
   });
 
+  // Backend migration 014: Operations staff open only the Operations app.
+  it('refuses an OPERATIONS account over SMS code and points it to the Operations app', async () => {
+    renderAs(null, '/login', otpHandlers({ ...ADMIN, id: 'o1', role: 'OPERATIONS' }));
+    await signIn('0771112233');
+    expect(await screen.findByText(OPERATIONS_STAFF_MESSAGE)).toBeInTheDocument();
+    expect(OPERATIONS_STAFF_MESSAGE).toMatch(/Operations app/);
+    expect(tokenStore.access).toBeNull();
+    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
+  });
+
   it('shows the API message for a wrong code instead of a technical error', async () => {
     renderAs(null, '/login', {
       'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
@@ -73,6 +83,12 @@ describe('sign-in over the existing Blynk OTP flow', () => {
       'POST /auth/refresh': () => fail(401, 'REFRESH_TOKEN_REVOKED', 'revoked'),
     });
     expect(await screen.findByText(SESSION_ENDED_MESSAGE)).toBeInTheDocument();
+    expect(tokenStore.access).toBeNull();
+  });
+
+  it('drops a stored OPERATIONS session with a pointer to the Operations app', async () => {
+    renderAs({ ...ADMIN, role: 'OPERATIONS' }, '/');
+    expect(await screen.findByText(OPERATIONS_STAFF_MESSAGE)).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
   });
 
@@ -121,6 +137,13 @@ describe('email + password sign-in (backend migration 012)', () => {
     expect(tokenStore.access).toBeNull();
   });
 
+  it('refuses an OPERATIONS account by password and points it to the Operations app', async () => {
+    renderAs(null, '/login', { 'POST /auth/staff/login': () => tokens({ ...ADMIN, id: 'o1', role: 'OPERATIONS' }) });
+    await signInWithPassword('ops@blynk.test', 'Correct-horse-1');
+    expect(await screen.findByText(OPERATIONS_STAFF_MESSAGE)).toBeInTheDocument();
+    expect(tokenStore.access).toBeNull();
+  });
+
   it('a wrong password says so and clears the field', async () => {
     renderAs(null, '/login', {
       'POST /auth/staff/login': () => fail(401, 'INVALID_CREDENTIALS', 'Wrong email or password.'),
@@ -160,7 +183,7 @@ describe('application scope', () => {
     renderAs(ADMIN, '/');
     const nav = await screen.findByRole('navigation', { name: 'Inventory' });
     const links = within(nav).getAllByRole('link').map((a) => a.textContent);
-    expect(links).toEqual(['Overview', 'Inventory', 'Ledger', 'Sourcing queue', 'Suppliers']);
+    expect(links).toEqual(['Overview', 'Inventory', 'Running low', 'Ledger', 'Sourcing queue', 'Suppliers']);
     const shell = document.body.textContent ?? '';
     for (const word of ['Products', 'Categories', 'Promotions', 'Riders', 'Customers', 'Deliver']) {
       expect(within(nav).queryByText(new RegExp(word, 'i'))).toBeNull();
@@ -170,7 +193,7 @@ describe('application scope', () => {
 });
 
 describe('role permissions mirror the backend guards', () => {
-  const adminOnly: Action[] = ['adjustStock', 'changeTrackingMode', 'manageSuppliers'];
+  const adminOnly: Action[] = ['adjustStock', 'changeTrackingMode', 'editThreshold', 'manageSuppliers'];
   const both: Action[] = ['viewStock', 'viewLedger', 'viewSourcing', 'viewSuppliers', 'source', 'markUnavailable'];
 
   it('ADMIN can do everything', () => {
@@ -180,10 +203,11 @@ describe('role permissions mirror the backend guards', () => {
     for (const action of both) expect(can('PACKING_STAFF', action)).toBe(true);
     for (const action of adminOnly) expect(can('PACKING_STAFF', action)).toBe(false);
   });
-  it('CUSTOMER and RIDER can do nothing', () => {
+  it('CUSTOMER, RIDER and OPERATIONS can do nothing', () => {
     for (const action of [...adminOnly, ...both]) {
       expect(can('CUSTOMER', action)).toBe(false);
       expect(can('RIDER', action)).toBe(false);
+      expect(can('OPERATIONS', action)).toBe(false);
     }
   });
 });

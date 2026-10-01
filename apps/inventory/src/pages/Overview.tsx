@@ -22,6 +22,8 @@ function attentionRank(row: StockRow) {
 export function Overview() {
   const { user } = useAuth();
   const attention = useLoad(() => stockApi.list({ low_stock_only: true, limit: 100 }), []);
+  const lowStock = useLoad(() => stockApi.lowStock(), []);
+  const lowCounts = lowStock.data?.counts;
   const queue = useLoad(loadQueue, []);
   const ledger = useLoad(() => ledgerApi.list({ limit: 8 }), []);
 
@@ -54,6 +56,24 @@ export function Overview() {
               Open in Inventory →
             </Link>
           </div>
+          {lowCounts && lowCounts.total > 0 ? (
+            <p className="lowstock-counts">
+              <span className="lowstock-counts__label">Running low</span>
+              {lowCounts.out > 0 ? (
+                <span className="stock stock--out">
+                  <span className="stock__word">{lowCounts.out} out of stock</span>
+                </span>
+              ) : null}
+              {lowCounts.low > 0 ? (
+                <span className="stock stock--low">
+                  <span className="stock__word">{lowCounts.low} low</span>
+                </span>
+              ) : null}
+              <Link className="text-link" to="/low-stock">
+                See the list →
+              </Link>
+            </p>
+          ) : null}
           {attention.error ? <LoadError error={attention.error} onRetry={() => void attention.reload()} /> : null}
           {attention.loading && !attention.data ? <Spinner label="Loading stock that needs attention" /> : null}
           {attention.data && attentionRows.length === 0 ? (

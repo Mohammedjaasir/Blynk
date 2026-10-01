@@ -3,6 +3,10 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
+import { liftRiderTripCap } from './helpers/rider-trips.js';
+
+// Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
+liftRiderTripCap();
 
 /**
  * Read APIs the staff Orders board uses (dispatch plan Task 6):

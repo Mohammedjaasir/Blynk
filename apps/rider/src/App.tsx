@@ -3,6 +3,7 @@ import { Welcome, hasSeenIntro } from './pages/Welcome';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Delivery } from './pages/Delivery';
 import { Login } from './pages/Login';
+import { MyDay } from './pages/MyDay';
 import { Queue } from './pages/Queue';
 
 /**
@@ -53,6 +54,14 @@ export function AppRoutes() {
         element={
           <RequireRider>
             <Delivery />
+          </RequireRider>
+        }
+      />
+      <Route
+        path="/day"
+        element={
+          <RequireRider>
+            <MyDay />
           </RequireRider>
         }
       />

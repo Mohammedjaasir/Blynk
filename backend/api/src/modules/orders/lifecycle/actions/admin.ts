@@ -1,11 +1,20 @@
 import type { OrderStatus } from '../../../../database/types.js';
 import { AppError } from '../../../../middleware/error.middleware.js';
 import { ACTIVE_DELIVERY_STATUSES, CATALOGUE, type ActionName } from '../catalogue.js';
+import { confirmWithCode, confirmWithOverride } from '../delivery-code.js';
 import { enqueueCustomerSms } from '../notify.js';
 import { settleCod, type CodSettlement } from '../settlement.js';
 import { setOrderStatus } from '../status-writer.js';
-import type { ActionImpl, DeliveryRow, LockedState, OrderRow } from '../types.js';
+import type { ActionImpl, DeliveryRow, LockedState, OrderRow, Trx } from '../types.js';
 import { cancelOrder, closeDeliveryAsFailed, invalidTransition } from './shared.js';
+import {
+  distanceKm,
+  findOpenDeliveriesForRiders,
+  getBatchingRules,
+  lockRider,
+  roundKm,
+  toPoint,
+} from '../../../riders/batching.js';
 
 function assertFrom(action: ActionName, order: OrderRow, requested: OrderStatus) {
   if (!CATALOGUE[action].from.includes(order.order_status)) throw invalidTransition(order, requested);
@@ -13,7 +22,8 @@ function assertFrom(action: ActionName, order: OrderRow, requested: OrderStatus)
 
 /**
  * #4 ASSIGN_RIDER - manual dispatch by the store manager (§H): a PACKED
- * order, an existing active rider, one active assignment per order. The
+ * order, an existing active rider, one active assignment per order, and the
+ * rider's trip within the batching rules (checkTripRules). The
  * order status does not change; the rider's pickup (or a hand-over) does that.
  */
 export const assignRider: ActionImpl<DeliveryRow> = {
@@ -26,7 +36,11 @@ export const assignRider: ActionImpl<DeliveryRow> = {
   },
   async apply(trx, { order }, req) {
     const riderId = req.input!.rider_id!;
-    const rider = await trx.selectFrom('riders').selectAll().where('id', '=', riderId).executeTakeFirst();
+    // Rider row lock, taken after the order lock (no action locks a rider
+    // before an order): two assignments to the same rider queue here, so the
+    // second one counts the first one's delivery - the trip cap cannot be
+    // raced past. Under READ COMMITTED each statement below reads afresh.
+    const rider = await lockRider(trx, riderId);
     if (!rider) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
     if (!rider.is_active) throw new AppError('This rider is inactive.', 409, 'RIDER_INACTIVE');
 
@@ -37,6 +51,8 @@ export const assignRider: ActionImpl<DeliveryRow> = {
       .where('assignment_status', 'in', ACTIVE_DELIVERY_STATUSES)
       .executeTakeFirst();
     if (active) throw new AppError('This order already has an active rider.', 409, 'ORDER_ALREADY_ASSIGNED');
+
+    await checkTripRules(trx, order, riderId, req.input?.confirm_far_batch === true);
 
     let delivery: DeliveryRow;
     try {
@@ -69,6 +85,46 @@ export const assignRider: ActionImpl<DeliveryRow> = {
   },
 };
 
+/**
+ * Rider trips (modules/riders/batching.ts): at most the configured number of
+ * open deliveries per rider (409 RIDER_AT_CAPACITY), and a new drop-off
+ * within the configured straight-line distance of every drop-off the rider
+ * already holds - unless staff confirmed the longer trip (409
+ * BATCH_DROPOFFS_TOO_FAR otherwise). Runs under the order and rider locks.
+ */
+async function checkTripRules(trx: Trx, order: OrderRow, riderId: string, confirmFar: boolean) {
+  const rules = await getBatchingRules(trx);
+  const open = await findOpenDeliveriesForRiders([riderId], trx);
+  if (open.length >= rules.max_active_deliveries) {
+    throw new AppError(
+      `This rider already has ${open.length} open ${open.length === 1 ? 'delivery' : 'deliveries'}, the most one trip can carry.`,
+      409,
+      'RIDER_AT_CAPACITY',
+      { open_deliveries: open.length, max_active_deliveries: rules.max_active_deliveries }
+    );
+  }
+  if (open.length === 0 || confirmFar) return;
+  const here = toPoint(order.delivery_latitude, order.delivery_longitude);
+  for (const other of open) {
+    // Without both pins the distance is unknown; staff must confirm it.
+    const km = here && other.dropoff ? distanceKm(here, other.dropoff) : null;
+    if (km === null || km > rules.max_dropoff_distance_km) {
+      throw new AppError(
+        km === null
+          ? `How far this drop-off is from order #${other.order_number} is unknown. Confirm to add it to the trip anyway.`
+          : `This drop-off is ${roundKm(km)} km from order #${other.order_number}, more than ${rules.max_dropoff_distance_km} km. Confirm to add it to the trip anyway.`,
+        409,
+        'BATCH_DROPOFFS_TOO_FAR',
+        {
+          distance_km: km === null ? null : roundKm(km),
+          max_dropoff_distance_km: rules.max_dropoff_distance_km,
+          other_order_number: other.order_number,
+        }
+      );
+    }
+  }
+}
+
 /** #13 ADMIN_CANCEL - operations cancellation before dispatch (D10); the note is the customer-visible reason. */
 export const adminCancel: ActionImpl<OrderRow> = {
   checkState({ order }) {
@@ -98,6 +154,10 @@ function requireDeliveryOnTheRoad(state: LockedState): DeliveryRow {
  * #10 ADMIN_MARK_DELIVERED - an admin records the handover and the cash
  * (§G: OUT_FOR_DELIVERY -> DELIVERED by RIDER, ADMIN; D4) through the same
  * settlement as the rider, for exactly the order total read under the lock.
+ *
+ * Proof of delivery (migration 016): the customer's code, or - when the
+ * customer cannot show it - a written override note. Which one was used is
+ * recorded on order_delivery_codes and in the history note.
  */
 export const adminMarkDelivered: ActionImpl<CodSettlement> = {
   checkState({ order }) {
@@ -113,12 +173,22 @@ export const adminMarkDelivered: ActionImpl<CodSettlement> = {
     }
   },
   async apply(trx, state, req) {
+    const code = req.input?.delivery_code;
+    const notes = req.input?.notes?.trim() ?? '';
+    let note: string;
+    if (code) {
+      await confirmWithCode(trx, state.order.id, code, req.actor);
+      note = notes ? `${notes} (customer code confirmed)` : 'Delivered (customer code confirmed)';
+    } else {
+      await confirmWithOverride(trx, state.order.id, req.actor, notes);
+      note = `Delivered without the customer code (override): ${notes}`;
+    }
     return await settleCod(trx, {
       delivery: deliveryOnTheRoad(state)!,
       order: state.order,
       amount: Number(state.order.total_amount),
       actor: req.actor,
-      note: req.input!.notes!.trim(),
+      note,
     });
   },
 };

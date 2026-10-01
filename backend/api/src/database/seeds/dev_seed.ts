@@ -12,7 +12,7 @@ export async function runDevSeed(): Promise<void> {
       INSERT INTO system_configurations (key, value, description)
       VALUES 
         ('default_markup', '{"markup_percent": 20.00}'::jsonb, 'Global default product markup percentage'),
-        ('delivery_fee', '{"fee_lkr": 70.00}'::jsonb, 'Standard flat delivery fee in LKR'),
+        ('delivery_fee', '{"fee_lkr": 100.00}'::jsonb, 'Standard flat delivery fee in LKR'),
         ('operating_hours', '{"start": "08:00", "end": "21:00", "timezone": "Asia/Colombo"}'::jsonb, 'Delivery dispatch operational window')
       ON CONFLICT (key) DO UPDATE 
         SET value = EXCLUDED.value, description = EXCLUDED.description, updated_at = CURRENT_TIMESTAMP;
@@ -57,7 +57,7 @@ export async function runDevSeed(): Promise<void> {
       VALUES 
         ('c0000001-0000-0000-0000-000000000001', 'Dairy & Eggs', 'dairy-eggs', 'Fresh milk, butter, cheese, and farm eggs', 1),
         ('c0000001-0000-0000-0000-000000000002', 'Biscuits & Snacks', 'biscuits-snacks', 'Crackers, cookies, and Sri Lankan tea snacks', 2)
-      ON CONFLICT (slug) DO UPDATE 
+      ON CONFLICT (slug) WHERE deleted_at IS NULL DO UPDATE 
         SET name = EXCLUDED.name, description = EXCLUDED.description, display_order = EXCLUDED.display_order;
     `);
 
@@ -126,7 +126,7 @@ export async function runDevSeed(): Promise<void> {
           250.00,
           NULL -- Global 20% applies -> 300 LKR
         )
-      ON CONFLICT (sku) DO UPDATE 
+      ON CONFLICT (sku) WHERE deleted_at IS NULL DO UPDATE 
         SET name = EXCLUDED.name, purchase_cost = EXCLUDED.purchase_cost, custom_markup_percent = EXCLUDED.custom_markup_percent;
     `);
 

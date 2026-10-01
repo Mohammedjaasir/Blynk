@@ -45,6 +45,24 @@ double? _optionalDouble(Object? v) {
   return d != null && d.isFinite ? d : null;
 }
 
+/// The proof-of-delivery code as text. The backend sends a string ("4821"),
+/// but a number is accepted too (left-padded to four digits, since 0821 as
+/// a JSON number arrives as 821); null, empty or whitespace-only is null.
+String? _optionalCode(Object? v) {
+  if (v == null) return null;
+  if (v is num) {
+    if (!v.isFinite || v < 0 || v != v.truncate()) return null;
+    return v.toInt().toString().padLeft(4, '0');
+  }
+  final s = v.toString().trim();
+  return s.isEmpty ? null : s;
+}
+
+String? _optionalText(Object? v) {
+  final s = v?.toString().trim();
+  return s == null || s.isEmpty ? null : s;
+}
+
 /// One row of `history[]`: a status transition as the backend recorded it.
 /// Includes re-stage transitions (e.g. FAILED -> PACKED) verbatim - nothing
 /// here is inferred or reordered by the client.
@@ -132,6 +150,13 @@ class OrderModel {
   final String paymentStatus;
   final double subtotalAmount;
   final double deliveryFee;
+
+  /// Coupon discount (backend migration 018), 0 when none:
+  /// totalAmount = subtotalAmount + deliveryFee - discountAmount.
+  final double discountAmount;
+
+  /// The coupon code the order used, as the backend snapshotted it.
+  final String? couponCode;
   final double totalAmount;
   final String deliveryRecipientName;
   final String deliveryRecipientPhone;
@@ -151,6 +176,11 @@ class OrderModel {
   final List<OrderStatusEvent> history;
   final OrderDeliveryInfo? delivery;
 
+  /// `delivery_code`: the code the customer reads to the rider at the door.
+  /// The backend sends it only while OUT_FOR_DELIVERY; null otherwise
+  /// (including in the order list, where it is absent).
+  final String? deliveryCode;
+
   const OrderModel({
     required this.id,
     required this.orderNumber,
@@ -160,6 +190,8 @@ class OrderModel {
     required this.paymentStatus,
     required this.subtotalAmount,
     required this.deliveryFee,
+    this.discountAmount = 0,
+    this.couponCode,
     required this.totalAmount,
     required this.deliveryRecipientName,
     required this.deliveryRecipientPhone,
@@ -178,6 +210,7 @@ class OrderModel {
     this.items = const [],
     this.history = const [],
     this.delivery,
+    this.deliveryCode,
   });
 
   // Pre-dispatch: the states an order sits in before a rider is on the way.
@@ -204,6 +237,9 @@ class OrderModel {
               0.0,
       deliveryFee:
           double.tryParse((json['delivery_fee'] ?? json['deliveryFee'] ?? 0).toString()) ?? 0.0,
+      discountAmount:
+          double.tryParse((json['discount_amount'] ?? json['discountAmount'] ?? 0).toString()) ?? 0.0,
+      couponCode: _optionalText(json['coupon_code'] ?? json['couponCode']),
       totalAmount:
           double.tryParse((json['total_amount'] ?? json['totalAmount'] ?? 0).toString()) ?? 0.0,
       deliveryRecipientName:
@@ -229,6 +265,7 @@ class OrderModel {
       items: rawItems.map(OrderItemModel.tryParse).whereType<OrderItemModel>().toList(),
       history: rawHistory.map(OrderStatusEvent.tryParse).whereType<OrderStatusEvent>().toList(),
       delivery: OrderDeliveryInfo.tryParse(json['delivery']),
+      deliveryCode: _optionalCode(json['delivery_code'] ?? json['deliveryCode']),
     );
   }
 

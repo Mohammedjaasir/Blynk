@@ -4,6 +4,7 @@ import {
   sourceOrderItemSchema,
   adjustStockSchema,
   updateInventoryModeSchema,
+  updateThresholdSchema,
   createSupplierSchema,
   updateSupplierSchema,
   inventoryQuerySchema,
@@ -104,6 +105,27 @@ export class InventoryController {
         success: true,
         data: result,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async listLowStock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { dark_store_id: darkStoreId } = productStockQuerySchema.parse(req.query);
+      const result = await inventoryService.listLowStock(darkStoreId);
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async setLowStockThreshold(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { productId } = productIdParamsSchema.parse(req.params);
+      const input = updateThresholdSchema.parse(req.body);
+      const result = await inventoryService.setLowStockThreshold(productId, input, req.user?.id);
+      res.status(200).json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

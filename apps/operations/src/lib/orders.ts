@@ -53,9 +53,14 @@ export function laneOf(order: BoardOrderLike): Lane {
   }
 }
 
-/** D7: nothing still to source, no unsourced substitution, something in the bag. */
+/**
+ * D7, revised 2026-09-30 (the owner: no separate sourcing step): the pack
+ * itself takes every pending item off the shelf, so an order packs straight
+ * from Placed - as long as there is no substitution without a cost and
+ * something is left in the bag (backend `packingBlockers`).
+ */
 export function isPackable({ items_summary: s }: BoardOrderLike): boolean {
-  return s.pending === 0 && s.substituted === 0 && s.sourced + s.packed > 0;
+  return s.substituted === 0 && s.pending + s.sourced + s.packed > 0;
 }
 
 export type OrderAction =
@@ -151,8 +156,8 @@ const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-dig
 export const formatClock = (iso: string | Date) => clock.format(typeof iso === 'string' ? new Date(iso) : iso);
 
 export const ITEM_STATUS_LABEL: Record<string, string> = {
-  PENDING: 'To source',
-  SOURCED: 'Sourced',
+  PENDING: 'To pack',
+  SOURCED: 'Ready to pack',
   PACKED: 'Packed',
   UNAVAILABLE: 'Unavailable',
   SUBSTITUTED: 'Substituted',
@@ -166,7 +171,6 @@ export function orderErrorMessage(err: unknown): string {
   const details = (err.details ?? {}) as Record<string, any>;
   switch (err.code) {
     case 'ORDER_NOT_PACKABLE':
-      if (details.pending > 0) return `Something changed: ${plural(details.pending, 'item')} still to source.`;
       if (details.unsourced_substitutions > 0) {
         return `Something changed: ${plural(details.unsourced_substitutions, 'substitution')} still to source.`;
       }
@@ -181,6 +185,12 @@ export function orderErrorMessage(err: unknown): string {
       return 'This order is no longer packed. Showing the latest.';
     case 'RIDER_INACTIVE':
       return 'That rider has been deactivated. Choose another rider.';
+    case 'RIDER_AT_CAPACITY':
+      return `That rider's trip is full (${details.max_active_deliveries ?? 2} orders). Choose another rider.`;
+    case 'BATCH_DROPOFFS_TOO_FAR':
+      return details.distance_km != null
+        ? `This drop-off is ${details.distance_km} km from that rider's other one. Confirm to add it to the trip anyway.`
+        : "How far this drop-off is from that rider's other one is unknown. Confirm to add it to the trip anyway.";
     case 'RIDER_NOT_FOUND':
       return 'That rider no longer exists. Choose another rider.';
     case 'NO_ACTIVE_DELIVERY':
@@ -191,11 +201,19 @@ export function orderErrorMessage(err: unknown): string {
       return 'This order changed while you were working. Showing the latest.';
     case 'COD_ALREADY_COLLECTED':
       return 'Cash for this order is already recorded.';
+    case 'ITEM_ALREADY_SOURCED':
+    case 'ITEM_ALREADY_RESOLVED':
+    case 'ORDER_NOT_IN_SOURCING_STATE':
+      return 'This item has already been packed or resolved. Showing the latest.';
+    case 'INSUFFICIENT_TRACKED_INVENTORY':
+      return details.product_name
+        ? `Not enough ${details.product_name} in stock to pack this order (${details.on_hand ?? 0} on hand, ${details.requested} needed). Restock it or mark it unavailable.`
+        : 'A product is short on stock. Restock it or mark it unavailable.';
     case 'TRANSITION_NOT_PERMITTED_FOR_ROLE':
     case 'FORBIDDEN':
       return 'Your account cannot make this change.';
     case 'VALIDATION_ERROR':
-      return 'Add a note and try again.';
+      return "Add a note (or the customer's delivery code) and try again.";
     case 'NETWORK':
       return 'Could not reach the Blynk API. Nothing was changed.';
     default:

@@ -84,6 +84,16 @@ export const updateInventoryModeSchema = z.object({
   dark_store_id: z.string().uuid('Invalid dark store ID').optional(),
 });
 
+/** PATCH /admin/inventory/:productId/threshold - stock at or below this reads "Running low". */
+export const updateThresholdSchema = z.object({
+  low_stock_threshold: z
+    .number({ required_error: 'Low-stock threshold is required', invalid_type_error: 'Low-stock threshold must be a number' })
+    .int('Low-stock threshold must be a whole number')
+    .min(0, 'Low-stock threshold cannot be negative')
+    .max(100000, 'Low-stock threshold is too large'),
+  dark_store_id: z.string().uuid('Invalid dark store ID').optional(),
+});
+
 export const createSupplierSchema = z.object({
   name: z.string().min(2, 'Supplier name must be at least 2 characters').max(128),
   code: z.string().max(64).optional(),
@@ -147,6 +157,7 @@ export const adjustmentsQuerySchema = z
 export type SourceOrderItemInput = z.infer<typeof sourceOrderItemSchema>;
 export type AdjustStockInput = z.infer<typeof adjustStockSchema>;
 export type UpdateInventoryModeInput = z.infer<typeof updateInventoryModeSchema>;
+export type UpdateThresholdInput = z.infer<typeof updateThresholdSchema>;
 export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
 export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
 export type InventoryQueryInput = z.infer<typeof inventoryQuerySchema>;

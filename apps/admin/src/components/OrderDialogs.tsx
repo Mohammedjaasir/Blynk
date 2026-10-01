@@ -1,10 +1,19 @@
 import { useEffect, useId, useState } from 'react';
 import { riders as ridersApi } from '../api/resources';
-import type { BoardOrder, RiderOption } from '../api/types';
+import type { BoardOrder, RiderSuggestions } from '../api/types';
 import { formatMoney, orderErrorMessage, shortNumber, type OrderAction } from '../lib/orders';
 import { Spinner } from './ui';
+import { distanceText, fromRoster, loadText, riderName, tripText } from '../lib/riderSuggestions';
 
-/** Picks one of the active riders the API lists (manual dispatch, §H). */
+/**
+ * Picks a rider for a packed order (manual dispatch, §H), best first
+ * (GET /admin/riders/suggestions, backend rider trips 2026-09-30): least busy,
+ * then nearest to the store by the rider's last GPS point ("about 1.2 km
+ * away", or "location unknown" past 15 minutes). The best is marked
+ * "Suggested" but never chosen for the operator. A rider already carrying an
+ * order shows the trip it would join; a far one needs "Add to trip anyway";
+ * a full trip cannot be picked. Without suggestions, the plain roster.
+ */
 export function AssignRiderDialog({
   order,
   busy,
@@ -13,24 +22,35 @@ export function AssignRiderDialog({
 }: {
   order: BoardOrder;
   busy: boolean;
-  onAssign(riderId: string): void;
+  onAssign(riderId: string, confirmFarBatch: boolean): void;
   onClose(): void;
 }) {
   const titleId = useId();
-  const [riders, setRiders] = useState<RiderOption[] | null>(null);
+  const [list, setList] = useState<{ data: RiderSuggestions; ranked: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     ridersApi
-      .listActive()
-      .then((list) => !cancelled && setRiders(list))
-      .catch((err) => !cancelled && setError(orderErrorMessage(err)));
+      .suggestions(order.id)
+      .then((data) => !cancelled && setList({ data, ranked: true }))
+      .catch(() =>
+        ridersApi
+          .listActive()
+          .then((roster) => !cancelled && setList({ data: fromRoster(roster), ranked: false }))
+          .catch((err) => !cancelled && setError(orderErrorMessage(err)))
+      );
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [order.id]);
+
+  const riders = list?.data.riders ?? null;
+  const maxKm = list?.data.rules?.max_dropoff_distance_km ?? 0;
+  const picked = riders?.find((r) => r.id === chosen) ?? null;
+  const pickedTrip = picked ? tripText(picked, maxKm) : null;
+  const label = busy ? 'Assigning…' : pickedTrip ? (pickedTrip.far ? 'Add to trip anyway' : 'Add to trip') : 'Assign';
 
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -49,27 +69,57 @@ export function AssignRiderDialog({
         {riders && riders.length > 0 ? (
           <fieldset className="rider-pick">
             <legend className="visually-hidden">Active riders</legend>
-            {riders.map((r) => (
-              <label key={r.id} className={`rider-pick__option${chosen === r.id ? ' rider-pick__option--on' : ''}`}>
-                <input type="radio" name="rider" value={r.id} checked={chosen === r.id} onChange={() => setChosen(r.id)} />
-                <span className="rider-pick__name">{r.full_name ?? r.phone}</span>
-                <span className="rider-pick__meta">
-                  <span className="mono">{r.vehicle_registration_number}</span> ·{' '}
-                  {r.open_deliveries === 0
-                    ? 'No open deliveries'
-                    : `${r.open_deliveries} open ${r.open_deliveries === 1 ? 'delivery' : 'deliveries'}`}
-                </span>
-              </label>
-            ))}
+            {riders.map((r) => {
+              const trip = tripText(r, maxKm);
+              return (
+                <label
+                  key={r.id}
+                  className={`rider-pick__option${chosen === r.id ? ' rider-pick__option--on' : ''}${r.at_capacity ? ' rider-pick__option--off' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="rider"
+                    value={r.id}
+                    checked={chosen === r.id}
+                    disabled={r.at_capacity}
+                    onChange={() => setChosen(r.id)}
+                  />
+                  <span className="rider-pick__name">
+                    {riderName(r)}
+                    {r.suggested ? <span className="rider-pick__badge">Suggested</span> : null}
+                  </span>
+                  <span className="rider-pick__meta">
+                    <span className="mono">{r.vehicle_registration_number}</span> · {loadText(r.open_deliveries)}
+                    {list?.ranked ? ` · ${distanceText(r)}` : null}
+                  </span>
+                  {r.at_capacity ? (
+                    <span className="rider-pick__trip">Trip full ({r.open_deliveries} orders)</span>
+                  ) : trip ? (
+                    <span className={`rider-pick__trip${trip.far ? ' rider-pick__trip--far' : ''}`}>{trip.text}</span>
+                  ) : null}
+                </label>
+              );
+            })}
           </fieldset>
+        ) : null}
+
+        {pickedTrip?.far ? (
+          <p className="ops-notice" role="status">
+            These drop-offs are far apart. The rider will take longer to reach both customers.
+          </p>
         ) : null}
 
         <div className="modal__actions">
           <button type="button" className="button button--ghost" onClick={onClose}>
             Back
           </button>
-          <button type="button" className="button" disabled={!chosen || busy} onClick={() => chosen && onAssign(chosen)}>
-            {busy ? 'Assigning…' : 'Assign'}
+          <button
+            type="button"
+            className="button"
+            disabled={!picked || picked.at_capacity || busy}
+            onClick={() => picked && onAssign(picked.id, pickedTrip?.far ?? false)}
+          >
+            {label}
           </button>
         </div>
       </div>

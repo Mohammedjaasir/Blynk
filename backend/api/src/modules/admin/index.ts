@@ -6,9 +6,14 @@ import { adminPromotionsRouter } from '../promotions/index.js';
 import { adminMediaRouter } from '../media/index.js';
 import { adminDentalRouter } from '../dental/index.js';
 import { adminFeedbackRouter } from '../feedback/index.js';
+import { adminStaffRouter } from '../staff/index.js';
+import { adminSettingsRouter } from '../configuration/index.js';
+import { adminCouponsRouter } from '../coupons/index.js';
+import { adminReportsRouter } from '../reports/index.js';
+import { adminCashRouter } from '../cash/index.js';
 import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
-import { listRidersForAssignment } from '../riders/rider.controller.js';
+import { listRiderSuggestions, listRidersForAssignment } from '../riders/rider.controller.js';
 import { metrics } from '../../utils/metrics.js';
 import { checkDatabaseConnection, pool } from '../../database/connection.js';
 
@@ -37,6 +42,22 @@ adminRouter.use('/dental', adminDentalRouter);
 // adminFeedbackRouter.
 adminRouter.use(adminFeedbackRouter);
 
+// Staff accounts (migration 014): Inventory / Operations sign-ins. ADMIN
+// only, guarded inside adminStaffRouter.
+adminRouter.use(adminStaffRouter);
+
+// Store settings (delivery fee). ADMIN and OPERATIONS, guarded inside.
+adminRouter.use(adminSettingsRouter);
+
+// Coupons (migration 018), the sales dashboard and customer list: ADMIN
+// only, guarded inside each router.
+adminRouter.use(adminCouponsRouter);
+adminRouter.use(adminReportsRouter);
+
+// Rider cash hand-ins and reconciliation (migration 019): ADMIN and
+// OPERATIONS, guarded inside.
+adminRouter.use(adminCashRouter);
+
 // Store Operations & Fulfillment Queue (Guarded by ADMIN and PACKING_STAFF)
 adminRouter.get(
   '/packing-queue',
@@ -48,21 +69,21 @@ adminRouter.get(
 adminRouter.get(
   '/orders',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   orderController.getAdminOrders.bind(orderController)
 );
 
 adminRouter.get(
   '/orders/:id',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   orderController.getAdminOrderById.bind(orderController)
 );
 
 adminRouter.patch(
   '/orders/:id/status',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   orderController.updateOrderStatusAdmin.bind(orderController)
 );
 
@@ -77,7 +98,7 @@ adminRouter.patch(
 adminRouter.post(
   '/orders/:id/resolve-item',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   orderController.resolveUnavailableItem.bind(orderController)
 );
 
@@ -85,25 +106,27 @@ adminRouter.post(
 adminRouter.post(
   '/orders/:id/items/:itemId/source',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   inventoryController.sourceOrderItem.bind(inventoryController)
 );
 
 adminRouter.get(
   '/orders/:id/sourcing',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   inventoryController.getOrderSourcing.bind(inventoryController)
 );
 
 // Riders the store manager can assign (Guarded by ADMIN)
-adminRouter.get('/riders', requireAuth, requireRoles('ADMIN'), listRidersForAssignment);
+adminRouter.get('/riders', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), listRidersForAssignment);
+// The same riders, best first for one order (assign dialog): load, distance to the store, trip.
+adminRouter.get('/riders/suggestions', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), listRiderSuggestions);
 
 // Manual Rider Assignment (Guarded by ADMIN)
 adminRouter.post(
   '/orders/:id/assign-rider',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   orderController.assignRiderAdmin.bind(orderController)
 );
 
@@ -111,7 +134,7 @@ adminRouter.post(
 adminRouter.get(
   '/inventory',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   inventoryController.listInventory.bind(inventoryController)
 );
 
@@ -120,28 +143,44 @@ adminRouter.get(
 adminRouter.get(
   '/inventory/adjustments',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   inventoryController.listAdjustments.bind(inventoryController)
+);
+
+// "Running low" alert (tracked products at or under their threshold). Before
+// /inventory/:productId for the same reason as /inventory/adjustments.
+adminRouter.get(
+  '/inventory/low-stock',
+  requireAuth,
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
+  inventoryController.listLowStock.bind(inventoryController)
 );
 
 adminRouter.get(
   '/inventory/:productId',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   inventoryController.getInventoryByProduct.bind(inventoryController)
 );
 
 adminRouter.patch(
   '/inventory/:productId/mode',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   inventoryController.setTrackingMode.bind(inventoryController)
+);
+
+adminRouter.patch(
+  '/inventory/:productId/threshold',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  inventoryController.setLowStockThreshold.bind(inventoryController)
 );
 
 adminRouter.post(
   '/inventory/:productId/adjust',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   inventoryController.adjustStock.bind(inventoryController)
 );
 
@@ -149,14 +188,14 @@ adminRouter.post(
 adminRouter.get(
   '/suppliers',
   requireAuth,
-  requireRoles(['ADMIN', 'PACKING_STAFF']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   inventoryController.listSuppliers.bind(inventoryController)
 );
 
 adminRouter.post(
   '/suppliers',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   inventoryController.createSupplier.bind(inventoryController)
 );
 
@@ -170,7 +209,7 @@ adminRouter.get(
 adminRouter.patch(
   '/suppliers/:id',
   requireAuth,
-  requireRoles('ADMIN'),
+  requireRoles(['ADMIN', 'OPERATIONS']),
   inventoryController.updateSupplier.bind(inventoryController)
 );
 

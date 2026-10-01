@@ -3,7 +3,12 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
+import { deliveryCodeForDelivery } from './helpers/delivery-code.js';
 import { runTransition } from '../src/modules/orders/lifecycle/engine.js';
+import { liftRiderTripCap } from './helpers/rider-trips.js';
+
+// Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
+liftRiderTripCap();
 
 /**
  * Rider delivery integrity: ownership, the documented delivery/order state
@@ -98,11 +103,12 @@ describe('Rider deliveries', () => {
       .send({ rider_id: riderId });
   const setStatus = (id: string, body: object, token = tokens.riderA) =>
     request(app).patch(`/api/v1/riders/deliveries/${id}/status`).set('Authorization', `Bearer ${token}`).send(body);
-  const collect = (id: string, amount: number, token = tokens.riderA) =>
+  // With the customer's proof-of-delivery code (migration 016).
+  const collect = async (id: string, amount: number, token = tokens.riderA) =>
     request(app)
       .post(`/api/v1/riders/deliveries/${id}/collect-cod`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ amount });
+      .send({ amount, delivery_code: await deliveryCodeForDelivery(id) });
   async function assignedDelivery() {
     const order = await placeOrder();
     expect((await pack(order.id)).status).toBe(200);

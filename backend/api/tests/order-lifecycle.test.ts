@@ -3,6 +3,11 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
+import { deliveryCodeForDelivery } from './helpers/delivery-code.js';
+import { liftRiderTripCap } from './helpers/rider-trips.js';
+
+// Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
+liftRiderTripCap();
 
 /**
  * The canonical order lifecycle (dispatch plan §O.2), end to end through the
@@ -91,8 +96,12 @@ describe('Order lifecycle', () => {
     request(app).post(`/api/v1/admin/orders/${orderId}/assign-rider`).set(auth(token)).send({ rider_id: riderId });
   const riderStep = (deliveryId: string, body: object, token = tokens.riderA) =>
     request(app).patch(`/api/v1/riders/deliveries/${deliveryId}/status`).set(auth(token)).send(body);
-  const collect = (deliveryId: string, amount: number, token = tokens.riderA) =>
-    request(app).post(`/api/v1/riders/deliveries/${deliveryId}/collect-cod`).set(auth(token)).send({ amount });
+  // With the customer's proof-of-delivery code (migration 016).
+  const collect = async (deliveryId: string, amount: number, token = tokens.riderA) =>
+    request(app)
+      .post(`/api/v1/riders/deliveries/${deliveryId}/collect-cod`)
+      .set(auth(token))
+      .send({ amount, delivery_code: await deliveryCodeForDelivery(deliveryId) });
   const customerCancel = (orderId: string, token = tokens.customer) =>
     request(app).post(`/api/v1/orders/${orderId}/cancel`).set(auth(token)).send({ reason: 'Changed my mind' });
 
@@ -184,7 +193,7 @@ describe('Order lifecycle', () => {
       const order = await placeOrder([MILK, BUTTER]);
       expect((await resolve(order.id, order.itemFor(MILK))).status).toBe(200);
       expect((await row(order.id)).order_status).toBe('ITEM_UNAVAILABLE');
-      expect((await row(order.id)).total).toBe(805 + 70);
+      expect((await row(order.id)).total).toBe(805 + 100);
       expect((await history(order.id)).map((h) => [h.old_status, h.new_status])).toEqual([
         [null, 'PLACED'],
         ['PLACED', 'ITEM_UNAVAILABLE'],
@@ -259,15 +268,33 @@ describe('Order lifecycle', () => {
   });
 
   describe('#3 PACK', () => {
-    it('refuses while an item is still to source, and changes nothing', async () => {
+    it('packs straight from PLACED: a pending item is sourced by the pack at its estimated cost, with a sourcing record', async () => {
       const order = await placeOrder([MILK, BUTTER]);
-      await source(order.id, order.itemFor(MILK));
-      const before = await snapshot(order.id);
+      await source(order.id, order.itemFor(MILK)); // an item already sourced keeps its recorded cost
       const res = await setStatus(order.id, 'PACKED', tokens.staff);
-      expect(res.status).toBe(422);
-      expect(res.body.error.code).toBe('ORDER_NOT_PACKABLE');
-      expect(res.body.error.details).toEqual({ pending: 1, unsourced_substitutions: 0, packable_items: 1 });
-      expect(await snapshot(order.id)).toEqual(before);
+      expect(res.status).toBe(200);
+      expect(await itemStatuses(order.id)).toEqual(['PACKED', 'PACKED']);
+      const items = (
+        await pool.query(
+          'SELECT id, estimated_unit_cost::float est, actual_unit_cost::float act FROM order_items WHERE order_id = $1',
+          [order.id]
+        )
+      ).rows;
+      for (const it of items) expect(it.act).toBe(it.est);
+      const records = (
+        await pool.query(
+          'SELECT order_item_id, quantity_sourced, actual_unit_cost::float act, supplier_id, sourced_by_user_id FROM sourcing_records WHERE order_id = $1',
+          [order.id]
+        )
+      ).rows;
+      // One record per item, never two: the milk from sourcing, the butter from the pack.
+      expect(records.map((r) => r.order_item_id).sort()).toEqual(order.itemIds.slice().sort());
+      expect(records.find((r) => r.order_item_id === order.itemFor(BUTTER))).toMatchObject({
+        quantity_sourced: 1,
+        supplier_id: null,
+        sourced_by_user_id: staff.id,
+      });
+      expect((await history(order.id)).at(-1)).toMatchObject({ old_status: 'PLACED', new_status: 'PACKED' });
     });
 
     it('packs a fully sourced order: items PACKED, packed_at, one history row by the packer, no SMS', async () => {
@@ -414,10 +441,12 @@ describe('Order lifecycle', () => {
   });
 
   describe('#10 ADMIN_MARK_DELIVERED (D4, shared settlement)', () => {
-    it('admin only, with a note', async () => {
+    it("admin only, with the customer's code or an override note", async () => {
       const { order } = await onTheRoad(true);
       expect((await setStatus(order.id, 'DELIVERED', tokens.staff, 'x')).status).toBe(403);
-      expect((await setStatus(order.id, 'DELIVERED', tokens.admin)).status).toBe(400);
+      const bare = await setStatus(order.id, 'DELIVERED', tokens.admin);
+      expect(bare.status).toBe(400);
+      expect(bare.body.error.code).toBe('VALIDATION_ERROR');
       expect((await row(order.id)).order_status).toBe('OUT_FOR_DELIVERY');
     });
 
@@ -433,6 +462,12 @@ describe('Order lifecycle', () => {
       expect((await history(order.id)).at(-1)).toMatchObject({ old_status: 'OUT_FOR_DELIVERY', new_status: 'DELIVERED', changed_by_user_id: admin.id });
       expect(await notifications(order.id, 'DELIVERED')).toBe(1);
       expect(await notifications(order.id, 'COD_PAYMENT_CONFIRMED')).toBe(1);
+      // No code: recorded as a written override (proof of delivery, migration 016).
+      expect((await history(order.id)).at(-1).reason_or_notes).toBe(
+        'Delivered without the customer code (override): Rider phone died; cash counted at the store'
+      );
+      const proof = (await pool.query('SELECT confirmed_via, override_note, confirmed_by_user_id FROM order_delivery_codes WHERE order_id = $1', [order.id])).rows[0];
+      expect(proof).toEqual({ confirmed_via: 'OVERRIDE', override_note: 'Rider phone died; cash counted at the store', confirmed_by_user_id: admin.id });
 
       const again = await setStatus(order.id, 'DELIVERED', tokens.admin, 'again');
       expect(again.status).toBe(422);
@@ -549,21 +584,17 @@ describe('Order lifecycle', () => {
       }
     });
 
-    it('pack ∥ sourcing the last item → never PACKED with an item still pending', async () => {
+    it('pack ∥ sourcing the last item → PACKED either way, the item sourced exactly once', async () => {
       for (let i = 0; i < REPEAT; i++) {
         const order = await placeOrder([MILK, BUTTER]);
         await source(order.id, order.itemFor(MILK));
         const [s, p] = await race(() => source(order.id, order.itemFor(BUTTER)), () => setStatus(order.id, 'PACKED', tokens.staff));
-        const status = (await row(order.id)).order_status;
-        const items = await itemStatuses(order.id);
-        if (p.status === 200) {
-          expect(s.status).toBe(200);
-          expect(items).toEqual(['PACKED', 'PACKED']);
-        } else {
-          expect(p.body.error.code).toBe('ORDER_NOT_PACKABLE');
-          expect(status).toBe('PLACED');
-        }
-        expect(status === 'PACKED' && items.includes('PENDING')).toBe(false);
+        expect(p.status).toBe(200); // the pack sources whatever is still pending
+        if (s.status !== 200) expect(['ITEM_ALREADY_SOURCED', 'ORDER_NOT_IN_SOURCING_STATE']).toContain(s.body.error.code);
+        expect((await row(order.id)).order_status).toBe('PACKED');
+        expect(await itemStatuses(order.id)).toEqual(['PACKED', 'PACKED']);
+        const butterRecords = await pool.query('SELECT 1 FROM sourcing_records WHERE order_item_id = $1', [order.itemFor(BUTTER)]);
+        expect(butterRecords.rowCount).toBe(1);
       }
     });
 
@@ -572,11 +603,20 @@ describe('Order lifecycle', () => {
         const order = await placeOrder([MILK, BUTTER]);
         await source(order.id, order.itemFor(MILK));
         const [p, rsv] = await race(() => setStatus(order.id, 'PACKED', tokens.staff), () => resolve(order.id, order.itemFor(BUTTER)));
-        expect(rsv.status).toBe(200); // the pending item can always be resolved; pack cannot pass it
+        // The pack no longer waits for sourcing, so it always succeeds; the
+        // resolve succeeds only if it ran first (then the pack packs the rest).
+        expect(p.status).toBe(200);
         const r = await row(order.id);
-        expect(r.total).toBe(540 + 70);
-        expect(r.pay_amount).toBe(540 + 70);
-        expect(r.order_status).toBe(p.status === 200 ? 'PACKED' : 'ITEM_UNAVAILABLE');
+        expect(r.order_status).toBe('PACKED');
+        if (rsv.status === 200) {
+          expect(await itemStatuses(order.id)).toEqual(expect.arrayContaining(['PACKED', 'UNAVAILABLE']));
+          expect(r.total).toBe(540 + 100);
+        } else {
+          expect(rsv.body.error.code).toBe('ORDER_NOT_IN_SOURCING_STATE');
+          expect(await itemStatuses(order.id)).toEqual(['PACKED', 'PACKED']);
+          expect(r.total).toBe(540 + 805 + 100);
+        }
+        expect(r.pay_amount).toBe(r.total);
       }
     });
 

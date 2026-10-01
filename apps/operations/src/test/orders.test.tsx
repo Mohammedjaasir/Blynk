@@ -105,9 +105,11 @@ describe('Orders board', () => {
 
     const toPack = await lane('To pack');
     expect(toPack).toHaveTextContent(`#${waiting.order_number.split('-').pop()}`);
-    expect(toPack).toHaveTextContent('2 of 3 sourced');
+    expect(toPack).toHaveTextContent('3 items to pack');
+    expect(toPack).not.toHaveTextContent(/sourc/i);
     expect(toPack).toHaveTextContent('23 min');
-    expect(within(toPack).queryByRole('button', { name: /^Pack/ })).not.toBeInTheDocument();
+    // No sourcing step: an order with items still pending packs straight away.
+    expect(within(toPack).getByRole('button', { name: /^Pack/ })).toBeInTheDocument();
     expect(await lane('Ready for a rider')).toHaveTextContent('Assign rider');
     expect(await lane('Waiting for pickup')).toHaveTextContent('Farhan Mohamed');
     expect(await lane('On the road')).toHaveTextContent('Farhan Mohamed');
@@ -141,14 +143,14 @@ describe('Orders board', () => {
     const api = renderAs(ADMIN_WITH_RIDER, '/orders', {
       ...ordersHandlers([o]),
       // `fail()` (helpers.tsx) has no `details` slot - build the reply
-      // directly so `orderErrorMessage`'s `details.pending` read is real.
+      // directly so `orderErrorMessage`'s `details` read is real.
       'PATCH /admin/orders/:id/status': () => ({
         status: 422,
-        error: { code: 'ORDER_NOT_PACKABLE', message: 'ORDER_NOT_PACKABLE', details: { pending: 1, unsourced_substitutions: 0 } },
+        error: { code: 'ORDER_NOT_PACKABLE', message: 'ORDER_NOT_PACKABLE', details: { unsourced_substitutions: 1, packable_items: 1 } },
       }),
     }).api;
     await user.click(within(await lane('To pack')).getByRole('button', { name: /^Pack/ }));
-    expect(await screen.findByText('Something changed: 1 item still to source.')).toBeInTheDocument();
+    expect(await screen.findByText('Something changed: 1 substitution still to source.')).toBeInTheDocument();
     await waitFor(() => expect(api.find('GET', '/admin/orders').filter((c) => !c.query.since).length).toBeGreaterThanOrEqual(2));
   });
 
@@ -222,14 +224,14 @@ describe('Orders board', () => {
     expect(await screen.findByText('Kotmale Fresh Milk 1L')).toBeInTheDocument();
   });
 
-  it('an order still waiting on sourcing links to the Inventory sourcing queue (task F6) instead of an inert hint', async () => {
+  it('a just-placed order offers Pack - no sourcing hint or link', async () => {
     const o = boardOrder({
       order_status: 'PLACED',
-      items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 0 },
+      items_summary: { total: 2, pending: 2, sourced: 0, packed: 0, unavailable: 0, substituted: 0 },
     });
     renderAs(ADMIN_WITH_RIDER, '/orders', ordersHandlers([o]));
-    const link = await screen.findByRole('link', { name: /Source in Inventory/ });
-    expect(link).toHaveAttribute('href', '/catalog/inventory/sourcing');
+    expect(await screen.findByRole('button', { name: `Pack #${o.order_number.split('-').pop()}` })).toBeEnabled();
+    expect(screen.queryByRole('link', { name: /Source/ })).not.toBeInTheDocument();
   });
 
   it('deep-links from Home (?focus=readyForRider) scroll the matching lane into view without hiding any other lane', async () => {
@@ -282,7 +284,7 @@ describe('Order detail (a standalone route, /orders/:id)', () => {
     );
   });
 
-  it('marking delivered from the detail page restates the cash it records, needs a note, and refetches on success', async () => {
+  it('marking delivered without the customer code needs a written override note, and refetches on success', async () => {
     const user = userEvent.setup();
     const o = boardOrder({ order_status: 'OUT_FOR_DELIVERY', total_amount: 1690, active_delivery: { id: 'd1', assignment_status: 'ARRIVED_AT_CUSTOMER', rider_id: 'r1', rider_name: 'Farhan Mohamed' } });
     let status = 'OUT_FOR_DELIVERY';
@@ -299,10 +301,118 @@ describe('Order detail (a standalone route, /orders/:id)', () => {
     expect(dialog).toHaveTextContent('Records LKR 1,690 cash as collected');
     const confirm = within(dialog).getByRole('button', { name: 'Mark delivered' });
     expect(confirm).toBeDisabled();
-    await user.type(within(dialog).getByLabelText(/Note/), 'Rider phone died; cash counted at the store');
+    await user.click(within(dialog).getByRole('button', { name: "The customer can't show the code" }));
+    expect(confirm).toBeDisabled();
+    await user.type(within(dialog).getByLabelText(/Override note/), 'Rider phone died; cash counted at the store');
     await user.click(confirm);
     await waitFor(() => expect(api.find('PATCH', `/admin/orders/${o.id}/status`)[0]?.body).toEqual({ status: 'DELIVERED', notes: 'Rider phone died; cash counted at the store' }));
     expect(await screen.findByText('Delivered')).toBeInTheDocument();
+  });
+
+  it("marking delivered with the customer's code sends only the code, digits only", async () => {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'OUT_FOR_DELIVERY', active_delivery: { id: 'd1', assignment_status: 'ARRIVED_AT_CUSTOMER', rider_id: 'r1', rider_name: 'Farhan Mohamed' } });
+    const api = renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, {
+      'GET /admin/orders/:id': () =>
+        ok({ order: orderDetail(o, { delivery: { id: 'd1', rider_id: 'r1', assignment_status: 'ARRIVED_AT_CUSTOMER', rider_name: 'Farhan Mohamed' } }) }),
+      'PATCH /admin/orders/:id/status': () => ok({ order: { ...o, order_status: 'DELIVERED' } }),
+    }).api;
+    await user.click(await screen.findByRole('button', { name: 'Mark delivered' }));
+    const dialog = await screen.findByRole('dialog', { name: /Mark delivered/ });
+    const field = within(dialog).getByLabelText("Customer's delivery code");
+    expect(field).toHaveAttribute('inputmode', 'numeric');
+    const confirm = within(dialog).getByRole('button', { name: 'Mark delivered' });
+    await user.type(field, '48a2');
+    expect(field).toHaveValue('482');
+    expect(confirm).toBeDisabled();
+    await user.type(field, '1');
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+    await waitFor(() => expect(api.find('PATCH', `/admin/orders/${o.id}/status`)[0]?.body).toEqual({ status: 'DELIVERED', delivery_code: '4821' }));
+  });
+
+  it('a wrong delivery code keeps the dialog open with the tries left; a lock says how long', async () => {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'OUT_FOR_DELIVERY', active_delivery: { id: 'd1', assignment_status: 'ARRIVED_AT_CUSTOMER', rider_id: 'r1', rider_name: 'Farhan Mohamed' } });
+    let reply = 0;
+    renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, {
+      'GET /admin/orders/:id': () =>
+        ok({ order: orderDetail(o, { delivery: { id: 'd1', rider_id: 'r1', assignment_status: 'ARRIVED_AT_CUSTOMER', rider_name: 'Farhan Mohamed' } }) }),
+      'PATCH /admin/orders/:id/status': () =>
+        reply++ === 0
+          ? { status: 422, error: { code: 'WRONG_DELIVERY_CODE', message: 'x', details: { attempts_remaining: 3 } } }
+          : { status: 429, error: { code: 'DELIVERY_CODE_LOCKED', message: 'x', details: { retry_after_seconds: 840 } } },
+    });
+    await user.click(await screen.findByRole('button', { name: 'Mark delivered' }));
+    const dialog = await screen.findByRole('dialog', { name: /Mark delivered/ });
+    const field = within(dialog).getByLabelText("Customer's delivery code");
+    await user.type(field, '1111');
+    await user.click(within(dialog).getByRole('button', { name: 'Mark delivered' }));
+    expect(await within(dialog).findByText("That code doesn't match. 3 tries left.")).toBeInTheDocument();
+    expect(field).toHaveValue('');
+    await user.type(field, '2222');
+    await user.click(within(dialog).getByRole('button', { name: 'Mark delivered' }));
+    expect(await within(dialog).findByText('Too many wrong codes. Try again in 14 minutes.')).toBeInTheDocument();
+    expect(field).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Mark delivered' })).toBeDisabled();
+  });
+
+  it('packs straight from Placed while items are still to pack - no sourcing hint or link', async () => {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'PLACED' });
+    const pending = orderDetail(o, {
+      items: [
+        { id: 'i1', product_name_snapshot: 'Kotmale Fresh Milk 1L', quantity: 2, item_status: 'PENDING' },
+        { id: 'i2', product_name_snapshot: 'Pelwatte Butter 200g', quantity: 1, item_status: 'PENDING' },
+      ],
+    });
+    const api = renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, {
+      'GET /admin/orders/:id': () => ok({ order: pending }),
+      'PATCH /admin/orders/:id/status': () => ok({ order: { ...o, order_status: 'PACKED' } }),
+    }).api;
+    const pack = await screen.findByRole('button', { name: 'Pack' });
+    expect(pack).toBeEnabled();
+    expect(screen.getAllByText('To pack')).toHaveLength(2);
+    expect(document.body.textContent).not.toMatch(/sourc/i);
+    await user.click(pack);
+    await waitFor(() => expect(api.find('PATCH', `/admin/orders/${o.id}/status`)[0]?.body).toEqual({ status: 'PACKED' }));
+  });
+
+  it('a product short on stock is named when packing is refused', async () => {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'PLACED' });
+    renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, {
+      'GET /admin/orders/:id': () => ok({ order: orderDetail(o) }),
+      'PATCH /admin/orders/:id/status': () => ({
+        status: 409,
+        error: {
+          code: 'INSUFFICIENT_TRACKED_INVENTORY',
+          message: 'x',
+          details: { product_id: 'p1', product_name: 'Kotmale Fresh Milk 1L', on_hand: 1, requested: 2 },
+        },
+      }),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Pack' }));
+    expect(
+      await screen.findByText('Not enough Kotmale Fresh Milk 1L in stock to pack this order (1 on hand, 2 needed). Restock it or mark it unavailable.')
+    ).toBeInTheDocument();
+  });
+
+  it('an item not on the shelf can be marked unavailable from the order', async () => {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'PLACED' });
+    const api = renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, {
+      'GET /admin/orders/:id': () =>
+        ok({ order: orderDetail(o, { items: [{ id: 'i1', product_name_snapshot: 'Kotmale Fresh Milk 1L', quantity: 2, item_status: 'PENDING' }] }) }),
+      'POST /admin/orders/:id/resolve-item': () => ok({ order: {} }),
+    }).api;
+    await user.click(await screen.findByRole('button', { name: 'Mark Kotmale Fresh Milk 1L unavailable' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mark item unavailable' });
+    expect(api.find('POST', `/admin/orders/${o.id}/resolve-item`)).toHaveLength(0);
+    await user.click(within(dialog).getByRole('button', { name: 'Mark unavailable' }));
+    await waitFor(() =>
+      expect(api.find('POST', `/admin/orders/${o.id}/resolve-item`)[0]?.body).toEqual({ item_id: 'i1', item_status: 'UNAVAILABLE' })
+    );
   });
 
   it('a rejection on the detail page (409) shows a real visible error, not a silent failure', async () => {
@@ -329,5 +439,113 @@ describe('Order detail (a standalone route, /orders/:id)', () => {
     shouldFail = false;
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Kotmale Fresh Milk 1L')).toBeInTheDocument();
+  });
+});
+
+describe('Assign dialog: suggested rider and trips (GET /admin/riders/suggestions)', () => {
+  const rules = { max_active_deliveries: 2, max_dropoff_distance_km: 1.5, location_fresh_minutes: 15 };
+  const base = {
+    phone: '+94770000000',
+    vehicle_type: 'MOTORCYCLE',
+    at_capacity: false,
+    last_seen_at: null,
+    location_known: false,
+    distance_km: null,
+    trip: [],
+    trip_within_distance: true,
+    suggested: false,
+  };
+  const SUGGESTIONS = [
+    { ...base, id: 'r2', full_name: 'Nimal Perera', vehicle_registration_number: 'WP-AAA-1111', open_deliveries: 0, location_known: true, distance_km: 0.8, last_seen_at: new Date().toISOString(), suggested: true },
+    { ...base, id: 'r3', full_name: 'Kasun Silva', vehicle_registration_number: 'WP-BBB-2222', open_deliveries: 0 },
+    {
+      ...base, id: 'r1', full_name: 'Farhan Mohamed', vehicle_registration_number: 'WP-BCX-8842', open_deliveries: 1,
+      trip: [{ order_id: 'x1', order_number: 'BL-20260919-0001', assignment_status: 'ASSIGNED', dropoff_distance_km: 0.7 }],
+    },
+    {
+      ...base, id: 'r4', full_name: 'Ruwan Jay', vehicle_registration_number: 'WP-CCC-3333', open_deliveries: 1,
+      trip: [{ order_id: 'x2', order_number: 'BL-20260919-0002', assignment_status: 'PICKED_UP', dropoff_distance_km: 3.4 }],
+      trip_within_distance: false,
+    },
+    { ...base, id: 'r5', full_name: 'Full Trip', vehicle_registration_number: 'WP-DDD-4444', open_deliveries: 2, at_capacity: true },
+  ];
+
+  async function openDialog(extra: Record<string, (call: Call) => unknown> = {}) {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'PACKED' });
+    const api = renderAs(ADMIN_WITH_RIDER, '/orders', {
+      ...ordersHandlers([o]),
+      'GET /admin/riders/suggestions': () => ok({ order_id: o.id, rules, riders: SUGGESTIONS }),
+      'POST /admin/orders/:id/assign-rider': () => ok({ delivery: { id: 'd9' } }),
+      ...extra,
+    }).api;
+    await user.click(within(await lane('Ready for a rider')).getByRole('button', { name: /^Assign rider/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Assign a rider/ });
+    await within(dialog).findByRole('radio', { name: /Nimal Perera/ });
+    return { user, o, api, dialog };
+  }
+
+  it('lists riders best first, marks exactly one Suggested, and says how far each is', async () => {
+    const { o, api, dialog } = await openDialog();
+    expect(api.find('GET', '/admin/riders/suggestions')[0]?.query).toEqual({ order_id: o.id });
+    const radios = within(dialog).getAllByRole('radio');
+    expect(radios.map((r) => r.getAttribute('value'))).toEqual(['r2', 'r3', 'r1', 'r4', 'r5']);
+    expect(within(dialog).getAllByText('Suggested')).toHaveLength(1);
+    expect(within(dialog).getByRole('radio', { name: /Nimal Perera/ })).toHaveAccessibleName(/Suggested/);
+    expect(dialog).toHaveTextContent('about 0.8 km away');
+    expect(within(dialog).getByRole('radio', { name: /Kasun Silva/ }).closest('label')).toHaveTextContent('location unknown');
+    // Nothing is chosen for the operator.
+    expect(within(dialog).getByRole('button', { name: 'Assign' })).toBeDisabled();
+  });
+
+  it("a rider with one order: \"Add to Farhan's trip (0.7 km from their other drop-off)\" and a plain assign", async () => {
+    const { user, o, api, dialog } = await openDialog();
+    expect(dialog).toHaveTextContent("Add to Farhan's trip (0.7 km from their other drop-off)");
+    await user.click(within(dialog).getByRole('radio', { name: /Farhan Mohamed/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add to trip' }));
+    await waitFor(() => expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)[0]?.body).toEqual({ rider_id: 'r1' }));
+  });
+
+  it('a far trip is flagged and needs "Add to trip anyway", which confirms it to the API', async () => {
+    const { user, o, api, dialog } = await openDialog();
+    expect(dialog).toHaveTextContent("Add to Ruwan's trip (3.4 km from their other drop-off, more than 1.5 km)");
+    await user.click(within(dialog).getByRole('radio', { name: /Ruwan Jay/ }));
+    expect(within(dialog).getByText(/These drop-offs are far apart/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Add to trip anyway' }));
+    await waitFor(() =>
+      expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)[0]?.body).toEqual({ rider_id: 'r4', confirm_far_batch: true })
+    );
+  });
+
+  it('a full trip cannot be picked', async () => {
+    const { dialog } = await openDialog();
+    const full = within(dialog).getByRole('radio', { name: /Full Trip/ });
+    expect(full).toBeDisabled();
+    expect(full.closest('label')).toHaveTextContent('Trip full (2 orders)');
+  });
+
+  it('a trip that filled up meanwhile (409 RIDER_AT_CAPACITY) is reported plainly', async () => {
+    const { user, dialog } = await openDialog({
+      'POST /admin/orders/:id/assign-rider': () => ({
+        status: 409,
+        error: { code: 'RIDER_AT_CAPACITY', message: 'x', details: { open_deliveries: 2, max_active_deliveries: 2 } },
+      }),
+    });
+    await user.click(within(dialog).getByRole('radio', { name: /Farhan Mohamed/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add to trip' }));
+    expect(await screen.findByText("That rider's trip is full (2 orders). Choose another rider.")).toBeInTheDocument();
+  });
+
+  it('falls back to the plain roster when suggestions cannot be loaded (no distances invented)', async () => {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'PACKED' });
+    renderAs(ADMIN_WITH_RIDER, '/orders', {
+      ...ordersHandlers([o]),
+      'GET /admin/riders/suggestions': () => fail(500, 'INTERNAL', 'boom'),
+    });
+    await user.click(within(await lane('Ready for a rider')).getByRole('button', { name: /^Assign rider/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Assign a rider/ });
+    expect(await within(dialog).findByRole('radio', { name: /Farhan Mohamed/ })).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent(/km|location unknown|Suggested/);
   });
 });

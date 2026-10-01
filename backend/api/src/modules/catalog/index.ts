@@ -21,13 +21,17 @@ productsRouter.get('/:id', catalogController.getProductById.bind(catalogControll
 // 3. ADMIN CATALOG ROUTER
 // ----------------------------------------------------------------------------
 export const adminCatalogRouter = Router();
-adminCatalogRouter.get('/categories', requireAuth, requireRoles('ADMIN'), catalogController.getCategoriesAdmin.bind(catalogController));
-adminCatalogRouter.post('/categories', requireAuth, requireRoles('ADMIN'), catalogController.createCategoryAdmin.bind(catalogController));
-adminCatalogRouter.patch('/categories/:id', requireAuth, requireRoles('ADMIN'), catalogController.updateCategoryAdmin.bind(catalogController));
-adminCatalogRouter.get('/products', requireAuth, requireRoles('ADMIN'), catalogController.listProductsAdmin.bind(catalogController));
-adminCatalogRouter.get('/products/:id', requireAuth, requireRoles('ADMIN'), catalogController.getProductByIdAdmin.bind(catalogController));
-adminCatalogRouter.post('/products', requireAuth, requireRoles('ADMIN'), catalogController.createProductAdmin.bind(catalogController));
-adminCatalogRouter.patch('/products/:id', requireAuth, requireRoles('ADMIN'), catalogController.updateProductAdmin.bind(catalogController));
+adminCatalogRouter.get('/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.getCategoriesAdmin.bind(catalogController));
+adminCatalogRouter.post('/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createCategoryAdmin.bind(catalogController));
+adminCatalogRouter.patch('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.updateCategoryAdmin.bind(catalogController));
+adminCatalogRouter.delete('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.deleteCategoryAdmin.bind(catalogController));
+// Bulk import (.xlsx/.csv parsed in the browser). Before /products/:id.
+adminCatalogRouter.post('/products/import', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.importProductsAdmin.bind(catalogController));
+adminCatalogRouter.get('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.listProductsAdmin.bind(catalogController));
+adminCatalogRouter.get('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.getProductByIdAdmin.bind(catalogController));
+adminCatalogRouter.post('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createProductAdmin.bind(catalogController));
+adminCatalogRouter.patch('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.updateProductAdmin.bind(catalogController));
+adminCatalogRouter.delete('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.deleteProductAdmin.bind(catalogController));
 
 // ----------------------------------------------------------------------------
 // 4. MAIN CATALOG ROUTER (/api/v1/catalog)

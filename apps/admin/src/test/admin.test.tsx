@@ -452,7 +452,7 @@ describe('admin scope', () => {
   });
   afterEach(() => tokenStore.clear());
 
-  it('navigates to store orders, catalog, home and customer feedback only', async () => {
+  it('navigates to store orders, sales, cash, catalog, home, coupons, customers, feedback, staff accounts and settings only', async () => {
     render(
       <MemoryRouter>
         <ToastProvider>
@@ -471,7 +471,14 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Categories' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Promotions' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Feedback' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(6);
+    expect(screen.getByRole('link', { name: 'Staff accounts' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    // Sales, rider cash, coupons and customers (ADMIN only).
+    expect(screen.getByRole('link', { name: 'Sales' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Rider cash' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Coupons' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Customers' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(12);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

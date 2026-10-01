@@ -20,7 +20,20 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export const WRONG_ROLE_MESSAGE =
   'This account does not have access to Blynk Inventory. Inventory is for Blynk admins and packing staff.';
+/** Operations staff (backend migration 014) have their own app. */
+export const OPERATIONS_STAFF_MESSAGE =
+  'Operations staff use the Blynk Operations app, not Blynk Inventory. Sign in there instead.';
 export const SESSION_ENDED_MESSAGE = 'Your session has ended. Please sign in again.';
+
+/** Why a role cannot use Inventory; Operations staff are sent to their app. */
+export function wrongRoleMessage(role: AuthUser['role']): string {
+  return role === 'OPERATIONS' ? OPERATIONS_STAFF_MESSAGE : WRONG_ROLE_MESSAGE;
+}
+
+/** True for the refusal completeSignIn throws for a role that cannot use Inventory. */
+export function isRoleRefusal(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.status === 403 && err.code === 'FORBIDDEN';
+}
 
 /**
  * Sign-in over the existing Blynk OTP flow. Only ADMIN and PACKING_STAFF get
@@ -44,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         if (!INVENTORY_ROLES.includes(me.role)) {
           tokenStore.clear();
-          setNotice(WRONG_ROLE_MESSAGE);
+          setNotice(wrongRoleMessage(me.role));
           setStatus('anonymous');
           return;
         }
@@ -83,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeSignIn = useCallback(async (data: { access_token: string; refresh_token: string; user: AuthUser }) => {
     if (!INVENTORY_ROLES.includes(data.user.role)) {
       tokenStore.clear();
-      throw new ApiError(WRONG_ROLE_MESSAGE, 403, 'FORBIDDEN');
+      throw new ApiError(wrongRoleMessage(data.user.role), 403, 'FORBIDDEN');
     }
     tokenStore.save(data.access_token, data.refresh_token);
     setNotice(null);

@@ -32,22 +32,24 @@ const CLOSED: OrderStatus[] = ['CANCELLED', 'DELIVERED', 'FAILED', 'CUSTOMER_UNA
 
 const EXPECTED: Record<ActionName, { from: OrderStatus[]; to: OrderStatus | null; roles: UserRole[] }> = {
   CUSTOMER_CANCEL: { from: ['PLACED', 'PACKED'], to: 'CANCELLED', roles: ['CUSTOMER'] },
-  RESOLVE_ITEM: { from: ['PLACED', 'ITEM_UNAVAILABLE'], to: 'ITEM_UNAVAILABLE', roles: ['ADMIN', 'PACKING_STAFF'] },
-  PACK: { from: ['PLACED', 'ITEM_UNAVAILABLE'], to: 'PACKED', roles: ['ADMIN', 'PACKING_STAFF'] },
-  ASSIGN_RIDER: { from: ['PACKED'], to: null, roles: ['ADMIN'] },
-  HAND_TO_RIDER: { from: ['PACKED'], to: 'OUT_FOR_DELIVERY', roles: ['ADMIN', 'PACKING_STAFF'] },
+  RESOLVE_ITEM: { from: ['PLACED', 'ITEM_UNAVAILABLE'], to: 'ITEM_UNAVAILABLE', roles: ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'] },
+  PACK: { from: ['PLACED', 'ITEM_UNAVAILABLE'], to: 'PACKED', roles: ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'] },
+  ASSIGN_RIDER: { from: ['PACKED'], to: null, roles: ['ADMIN', 'OPERATIONS'] },
+  HAND_TO_RIDER: { from: ['PACKED'], to: 'OUT_FOR_DELIVERY', roles: ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'] },
   // The Operations app's operator is an ADMIN linked to a riders row and runs
   // the same four rider steps (operations plan §2, §7). The `riderDelivery`
   // lock still scopes every one of them to the caller's own rider profile.
-  RIDER_PICKUP: { from: ['PACKED'], to: 'OUT_FOR_DELIVERY', roles: ['RIDER', 'ADMIN'] },
-  RIDER_ARRIVE: { from: ['OUT_FOR_DELIVERY'], to: null, roles: ['RIDER', 'ADMIN'] },
-  RIDER_FAIL: { from: ['OUT_FOR_DELIVERY'], to: 'FAILED', roles: ['RIDER', 'ADMIN'] },
-  RIDER_COLLECT_COD: { from: ['OUT_FOR_DELIVERY'], to: 'DELIVERED', roles: ['RIDER', 'ADMIN'] },
-  ADMIN_MARK_DELIVERED: { from: ['OUT_FOR_DELIVERY'], to: 'DELIVERED', roles: ['ADMIN'] },
-  ADMIN_MARK_FAILED: { from: ['OUT_FOR_DELIVERY'], to: 'FAILED', roles: ['ADMIN'] },
-  ADMIN_MARK_CUSTOMER_UNAVAILABLE: { from: ['OUT_FOR_DELIVERY'], to: 'CUSTOMER_UNAVAILABLE', roles: ['ADMIN'] },
-  ADMIN_CANCEL: { from: ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED'], to: 'CANCELLED', roles: ['ADMIN'] },
-  RESTAGE: { from: ['FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'PACKED', roles: ['ADMIN'] },
+  // OPERATIONS (migration 014) is the Operations app's own staff role and
+  // makes every step the ADMIN operator made there.
+  RIDER_PICKUP: { from: ['PACKED'], to: 'OUT_FOR_DELIVERY', roles: ['RIDER', 'ADMIN', 'OPERATIONS'] },
+  RIDER_ARRIVE: { from: ['OUT_FOR_DELIVERY'], to: null, roles: ['RIDER', 'ADMIN', 'OPERATIONS'] },
+  RIDER_FAIL: { from: ['OUT_FOR_DELIVERY'], to: 'FAILED', roles: ['RIDER', 'ADMIN', 'OPERATIONS'] },
+  RIDER_COLLECT_COD: { from: ['OUT_FOR_DELIVERY'], to: 'DELIVERED', roles: ['RIDER', 'ADMIN', 'OPERATIONS'] },
+  ADMIN_MARK_DELIVERED: { from: ['OUT_FOR_DELIVERY'], to: 'DELIVERED', roles: ['ADMIN', 'OPERATIONS'] },
+  ADMIN_MARK_FAILED: { from: ['OUT_FOR_DELIVERY'], to: 'FAILED', roles: ['ADMIN', 'OPERATIONS'] },
+  ADMIN_MARK_CUSTOMER_UNAVAILABLE: { from: ['OUT_FOR_DELIVERY'], to: 'CUSTOMER_UNAVAILABLE', roles: ['ADMIN', 'OPERATIONS'] },
+  ADMIN_CANCEL: { from: ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED'], to: 'CANCELLED', roles: ['ADMIN', 'OPERATIONS'] },
+  RESTAGE: { from: ['FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'PACKED', roles: ['ADMIN', 'OPERATIONS'] },
 };
 
 /** The documented error when the order is in `status`, which is not in the action's `from`. */
@@ -170,6 +172,8 @@ describe('order lifecycle catalogue', () => {
     expect(notes).toEqual(
       ['ADMIN_CANCEL', 'ADMIN_MARK_CUSTOMER_UNAVAILABLE', 'ADMIN_MARK_DELIVERED', 'ADMIN_MARK_FAILED', 'RESTAGE'].sort()
     );
+    // Proof of delivery: only "Mark delivered" takes the customer's code instead of the (override) note.
+    expect(ACTION_NAMES.filter((n) => CATALOGUE[n].codeReplacesNotes)).toEqual(['ADMIN_MARK_DELIVERED']);
   });
 
   describe.each(Object.keys(EXPECTED) as ActionName[])('%s', (action) => {
@@ -205,21 +209,21 @@ describe('admin status endpoint → action', () => {
   });
 });
 
-describe('packing rule (D7)', () => {
+describe('packing rule (D7, revised 2026-09-30: no separate sourcing)', () => {
   const it_ = (item_status: string, actual_unit_cost: string | null = null) => ({ item_status, actual_unit_cost }) as any;
-  it('packs when every item is sourced or unavailable and something is in the bag', () => {
+  it('packs when something is in the bag - sourced, packed or still pending', () => {
     expect(packingBlockers([it_('SOURCED', '1'), it_('UNAVAILABLE')])).toBeNull();
     expect(packingBlockers([it_('PACKED', '1')])).toBeNull();
     expect(packingBlockers([it_('SUBSTITUTED', '5.00'), it_('SOURCED', '1')])).toBeNull();
-  });
-  it('blocks on an item still to source', () => {
-    expect(packingBlockers([it_('SOURCED', '1'), it_('PENDING')])).toEqual({ pending: 1, unsourced_substitutions: 0, packable_items: 1 });
+    expect(packingBlockers([it_('SOURCED', '1'), it_('PENDING')])).toBeNull();
+    expect(packingBlockers([it_('PENDING'), it_('PENDING'), it_('UNAVAILABLE')])).toBeNull();
   });
   it('blocks on a substitution with no recorded cost', () => {
-    expect(packingBlockers([it_('SUBSTITUTED', null)])).toEqual({ pending: 0, unsourced_substitutions: 1, packable_items: 0 });
+    expect(packingBlockers([it_('SUBSTITUTED', null)])).toEqual({ unsourced_substitutions: 1, packable_items: 0 });
+    expect(packingBlockers([it_('SUBSTITUTED', null), it_('PENDING')])).toEqual({ unsourced_substitutions: 1, packable_items: 1 });
   });
   it('blocks an empty bag', () => {
-    expect(packingBlockers([it_('UNAVAILABLE'), it_('UNAVAILABLE')])).toEqual({ pending: 0, unsourced_substitutions: 0, packable_items: 0 });
+    expect(packingBlockers([it_('UNAVAILABLE'), it_('UNAVAILABLE')])).toEqual({ unsourced_substitutions: 0, packable_items: 0 });
   });
 });
 
@@ -228,7 +232,10 @@ describe('stock effect per action (inventory plan §4)', () => {
   it('only the two cancellations return stock', () => {
     expect(ACTION_NAMES.filter((a) => CATALOGUE[a].stock === 'RESTORE_ORDER_STOCK').sort()).toEqual(RESTORING);
   });
-  it.each(ACTION_NAMES.filter((a) => !RESTORING.includes(a)))('%s never moves stock', (a) => {
+  it('only packing takes stock (for the items not yet sourced)', () => {
+    expect(ACTION_NAMES.filter((a) => CATALOGUE[a].stock === 'TAKE_PENDING_STOCK')).toEqual(['PACK']);
+  });
+  it.each(ACTION_NAMES.filter((a) => !RESTORING.includes(a) && a !== 'PACK'))('%s never moves stock', (a) => {
     expect(CATALOGUE[a].stock).toBe('NONE');
   });
 });

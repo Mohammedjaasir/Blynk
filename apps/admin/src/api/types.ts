@@ -7,7 +7,39 @@ export type UserRole =
   | 'ADMIN'
   | 'PACKING_STAFF'
   | 'RIDER'
+  | 'OPERATIONS'
   | 'SUPPORT';
+
+/** Roles an admin can give a staff account (backend migration 014). */
+export type StaffRole = 'PACKING_STAFF' | 'OPERATIONS';
+
+/** GET /admin/staff row. ADMIN rows come back with read_only: true. */
+export interface StaffAccount {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string;
+  role: 'ADMIN' | StaffRole;
+  has_password: boolean;
+  disabled: boolean;
+  read_only: boolean;
+  created_at: string;
+}
+
+export interface CreateStaffInput {
+  full_name: string;
+  email: string;
+  password: string;
+  role: StaffRole;
+  phone: string;
+}
+
+export interface UpdateStaffInput {
+  full_name?: string;
+  role?: StaffRole;
+  password?: string;
+  disabled?: boolean;
+}
 
 export interface AuthUser {
   id: string;
@@ -25,6 +57,61 @@ export interface Category {
   image_url: string | null;
   display_order: number;
   is_active: boolean;
+  /** Live, non-deleted products in this category (GET /admin/categories). */
+  product_count?: number;
+}
+
+/** DELETE /admin/products/:id - HARD when never ordered, SOFT (hidden) otherwise. */
+export interface ProductDeleteResult {
+  product_id: string;
+  mode: 'HARD' | 'SOFT';
+}
+
+/** DELETE /admin/categories/:id */
+export interface CategoryDeleteResult {
+  category_id: string;
+  moved_product_count: number;
+  mode: 'HARD' | 'SOFT';
+}
+
+/** GET/PATCH /admin/settings/delivery-fee */
+export interface DeliveryFeeSetting {
+  fee_lkr: number;
+  updated_at: string | null;
+}
+
+/** One spreadsheet row sent to POST /admin/products/import. */
+export interface ImportRow {
+  row?: number;
+  name: string;
+  category: string;
+  unit: string;
+  pack_size?: string | null;
+  cost_price: number;
+  selling_price?: number | null;
+  sku: string;
+  barcode?: string | null;
+  description?: string | null;
+  tracked?: 'yes' | 'no' | boolean | null;
+  opening_stock?: number | null;
+  image_url?: string | null;
+}
+
+export type ImportStatus = 'created' | 'updated' | 'skipped' | 'error';
+
+export interface ImportResultRow {
+  row: number;
+  sku: string | null;
+  status: ImportStatus;
+  product_id?: string;
+  message?: string;
+  errors?: Array<{ field: string; message: string }>;
+}
+
+export interface ImportResponse {
+  dry_run: boolean;
+  summary: { created: number; updated: number; skipped: number; errors: number };
+  results: ImportResultRow[];
 }
 
 /**
@@ -134,6 +221,11 @@ export interface OrderDetail {
   order_status: OrderStatus;
   payment_method: 'COD' | 'ONLINE';
   payment_status: string;
+  subtotal_amount: number;
+  delivery_fee: number;
+  /** Coupon discount (backend migration 018); total = subtotal + delivery fee - discount. */
+  discount_amount?: number;
+  coupon_code?: string | null;
   total_amount: number;
   placed_at: string;
   scheduled_for: string | null;
@@ -159,6 +251,36 @@ export interface RiderOption {
   open_deliveries: number;
 }
 
+/** One order a rider already carries (GET /admin/riders/suggestions). */
+export interface TripStop {
+  order_id: string;
+  order_number: string;
+  assignment_status: string;
+  /** Straight line between that drop-off and this order's; null when a pin is missing. */
+  dropoff_distance_km: number | null;
+}
+
+/**
+ * GET /admin/riders/suggestions?order_id= (backend rider trips, 2026-09-30):
+ * the RiderOption fields plus load, distance to the store and trip. Best
+ * first; one (or none) is `suggested`. Never a rider's coordinates.
+ */
+export interface RiderSuggestion extends RiderOption {
+  at_capacity: boolean;
+  last_seen_at: string | null;
+  location_known: boolean;
+  distance_km: number | null;
+  trip: TripStop[];
+  trip_within_distance: boolean;
+  suggested: boolean;
+}
+
+export interface RiderSuggestions {
+  order_id: string;
+  rules: { max_active_deliveries: number; max_dropoff_distance_km: number; location_fresh_minutes: number };
+  riders: RiderSuggestion[];
+}
+
 // ------------------------------------------------------------ feedback
 export type FeedbackCategory = 'APP' | 'DELIVERY' | 'PRODUCTS' | 'OTHER';
 export type FeedbackStatus = 'NEW' | 'READ';
@@ -179,4 +301,138 @@ export interface FeedbackItem {
 export interface FeedbackPage {
   feedback: FeedbackItem[];
   pagination: { page: number; limit: number; total: number; total_pages: number };
+}
+
+// ------------------------------------------------------------- coupons
+/** Backend migration 018. ADMIN only. */
+export type CouponType = 'FIXED' | 'PERCENT' | 'FREE_DELIVERY';
+
+export interface Coupon {
+  id: string;
+  code: string;
+  description: string | null;
+  discount_type: CouponType;
+  discount_value: number;
+  max_discount: number | null;
+  min_subtotal: number | null;
+  first_order_only: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
+  usage_limit: number | null;
+  per_customer_limit: number;
+  is_active: boolean;
+  usage_count: number;
+  created_at: string;
+}
+
+export interface CouponInput {
+  code?: string;
+  description?: string | null;
+  discount_type: CouponType;
+  discount_value?: number;
+  max_discount?: number | null;
+  min_subtotal?: number | null;
+  first_order_only?: boolean;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  usage_limit?: number | null;
+  per_customer_limit?: number;
+  is_active?: boolean;
+}
+
+// --------------------------------------------------------------- sales
+export type SalesRange = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days';
+
+export interface SalesProduct {
+  product_id: string;
+  name: string;
+  quantity: number;
+  revenue: number;
+}
+
+/** GET /admin/reports/sales. */
+export interface SalesReport {
+  range: { from: string; to: string; timezone: string };
+  order_count: number;
+  delivered_count: number;
+  delivered_revenue: number;
+  average_basket: number;
+  cancelled_count: number;
+  discount_given: number;
+  delivery_fees: number;
+  top_by_quantity: SalesProduct[];
+  top_by_revenue: SalesProduct[];
+  orders_by_hour: { hour: number; orders: number }[];
+}
+
+// ----------------------------------------------------------- customers
+export type CustomerSort = 'recent' | 'spend' | 'orders' | 'name';
+
+export interface CustomerRow {
+  id: string;
+  full_name: string | null;
+  phone: string;
+  email: string | null;
+  is_active: boolean;
+  created_at: string;
+  orders_count: number;
+  delivered_count: number;
+  delivered_spend: number;
+  last_order_at: string | null;
+}
+
+export interface CustomerOrderRow {
+  id: string;
+  order_number: string;
+  order_status: OrderStatus;
+  payment_status: string;
+  subtotal_amount: number;
+  delivery_fee: number;
+  discount_amount: number;
+  total_amount: number;
+  coupon_code: string | null;
+  placed_at: string;
+  delivered_at: string | null;
+  cancelled_at: string | null;
+  item_count: number;
+}
+
+export interface CustomerDetail {
+  customer: CustomerRow & { last_login_at: string | null };
+  orders: CustomerOrderRow[];
+  pagination: Paginated<unknown>['pagination'];
+}
+
+// ---------------------------------------------------------------- cash
+/** Backend migration 019. ADMIN and OPERATIONS. */
+export interface CashHandin {
+  id: string;
+  rider_id: string;
+  rider_name: string | null;
+  amount: number;
+  handin_date: string;
+  note: string | null;
+  recorded_by_name: string | null;
+  created_at: string;
+}
+
+export type ReconciliationStatus = 'SHORT' | 'OVER' | 'BALANCED';
+
+export interface RiderReconciliation {
+  rider_id: string;
+  rider_name: string | null;
+  rider_phone: string | null;
+  deliveries: number;
+  handins: number;
+  collected: number;
+  handed_in: number;
+  difference: number;
+  status: ReconciliationStatus;
+}
+
+export interface CashReconciliation {
+  date: string;
+  timezone: string;
+  riders: RiderReconciliation[];
+  totals: { collected: number; handed_in: number; difference: number; status: ReconciliationStatus };
 }

@@ -21,7 +21,10 @@ type Reply = { status: number; data?: unknown; error?: { code?: string; message:
 type Handler = (call: Call) => Reply | unknown | Promise<Reply | unknown>;
 
 export const ok = (data: unknown): Reply => ({ status: 200, data });
-export const fail = (status: number, code: string, message = code): Reply => ({ status, error: { code, message } });
+export const fail = (status: number, code: string, message = code, details?: unknown): Reply => ({
+  status,
+  error: details === undefined ? { code, message } : { code, message, details },
+});
 /** Makes fetch itself throw, the way a dropped connection does. */
 export const NETWORK_DOWN = Symbol('network-down');
 /** Makes fetch abort, the way the client's 15s timeout does. */

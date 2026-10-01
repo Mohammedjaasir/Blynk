@@ -40,6 +40,15 @@ export function isOrderableButOut(row: Pick<StockRow, 'is_active' | 'is_availabl
   return row.is_active && row.is_available && stockState(row).kind === 'OUT';
 }
 
+/**
+ * Stock changed somewhere in the app (adjustment, tracking mode, threshold):
+ * the nav's "Running low" count listens for this and reloads.
+ */
+export const STOCK_CHANGED_EVENT = 'blynk-inventory:stock-changed';
+export function notifyStockChanged() {
+  window.dispatchEvent(new Event(STOCK_CHANGED_EVENT));
+}
+
 export function unitsLabel(units: number): string {
   return `${units} ${units === 1 ? 'unit' : 'units'}`;
 }

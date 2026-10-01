@@ -4,6 +4,7 @@ import { Database, OrderStatus, ItemFulfillmentStatus } from '../../database/typ
 import { ACTIVE_DELIVERY_STATUSES, INITIAL_ORDER_STATUS } from './lifecycle/catalogue.js';
 import { recordOrderPlaced } from './lifecycle/status-writer.js';
 import { DELIVERY_PUBLIC_SELECT } from './delivery.columns.js';
+import { evaluateCoupon, recordRedemption } from '../coupons/coupon.service.js';
 
 export type DBConnection = Transaction<Database> | typeof db;
 
@@ -14,7 +15,10 @@ export interface CreateOrderData {
   dark_store_id: string;
   subtotal_amount: number;
   delivery_fee: number;
+  /** Before any coupon; the discount and final total are settled in the transaction. */
   total_amount: number;
+  /** Migration 018: re-checked under the coupon row lock inside the order transaction. */
+  coupon_code?: string | null;
   scheduled_for: Date | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
@@ -53,7 +57,7 @@ export class OrderRepository {
   }
 
   /**
-   * Retrieves default delivery fee configuration (default: 70.00 LKR).
+   * Retrieves default delivery fee configuration (default: 100.00 LKR).
    */
   async getDeliveryFee(executor: DBConnection = db): Promise<number> {
     const config = await executor
@@ -66,7 +70,7 @@ export class OrderRepository {
       const val = (config.value as any).fee_lkr;
       if (typeof val === 'number') return val;
     }
-    return 70.0;
+    return 100.0;
   }
 
   /**
@@ -129,6 +133,20 @@ export class OrderRepository {
    */
   async createOrderAtomic(data: CreateOrderData) {
     return await db.transaction().execute(async (trx) => {
+      // 0. Coupon (migration 018): locked and re-validated here, so limits
+      //    hold when checkouts race; the preview the app showed is advisory.
+      const applied = data.coupon_code
+        ? await evaluateCoupon(trx, {
+            code: data.coupon_code,
+            customerId: data.customer_id,
+            subtotal: data.subtotal_amount,
+            deliveryFee: data.delivery_fee,
+            lock: true,
+          })
+        : null;
+      const discountAmount = applied?.discount_amount ?? 0;
+      const totalAmount = Number((data.subtotal_amount + data.delivery_fee - discountAmount).toFixed(2));
+
       // 1. Insert orders record
       const [order] = await trx
         .insertInto('orders')
@@ -142,7 +160,9 @@ export class OrderRepository {
           payment_status: 'PENDING',
           subtotal_amount: data.subtotal_amount,
           delivery_fee: data.delivery_fee,
-          total_amount: data.total_amount,
+          discount_amount: discountAmount,
+          coupon_code: applied?.code ?? null,
+          total_amount: totalAmount,
           scheduled_for: data.scheduled_for,
           delivery_recipient_name: data.delivery_recipient_name,
           delivery_recipient_phone: data.delivery_recipient_phone,
@@ -187,10 +207,12 @@ export class OrderRepository {
           order_id: order.id,
           payment_method: 'COD',
           payment_status: 'PENDING',
-          amount: data.total_amount,
+          amount: totalAmount,
         })
         .returningAll()
         .execute();
+
+      if (applied) await recordRedemption(trx, applied, order.id, data.customer_id);
 
       // 4. Record initial status in order_status_history (lifecycle PLACE_ORDER)
       await recordOrderPlaced(trx, order.id, data.customer_id);
@@ -218,6 +240,7 @@ export class OrderRepository {
         ...order,
         subtotal_amount: Number(Number(order.subtotal_amount).toFixed(2)),
         delivery_fee: Number(Number(order.delivery_fee).toFixed(2)),
+        discount_amount: Number(Number(order.discount_amount).toFixed(2)),
         total_amount: Number(Number(order.total_amount).toFixed(2)),
         delivery_latitude: Number(order.delivery_latitude),
         delivery_longitude: Number(order.delivery_longitude),
@@ -284,6 +307,7 @@ export class OrderRepository {
       ...order,
       subtotal_amount: Number(Number(order.subtotal_amount).toFixed(2)),
       delivery_fee: Number(Number(order.delivery_fee).toFixed(2)),
+      discount_amount: Number(Number(order.discount_amount).toFixed(2)),
       total_amount: Number(Number(order.total_amount).toFixed(2)),
       items: items.map((it) => ({
         ...it,
@@ -343,6 +367,7 @@ export class OrderRepository {
       ...o,
       subtotal_amount: Number(Number(o.subtotal_amount).toFixed(2)),
       delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
+      discount_amount: Number(Number(o.discount_amount).toFixed(2)),
       total_amount: Number(Number(o.total_amount).toFixed(2)),
       items: items
         .filter((it) => it.order_id === o.id)
@@ -426,6 +451,7 @@ export class OrderRepository {
         ...o,
         subtotal_amount: Number(Number(o.subtotal_amount).toFixed(2)),
         delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
+        discount_amount: Number(Number(o.discount_amount).toFixed(2)),
         total_amount: Number(Number(o.total_amount).toFixed(2)),
         items_summary: {
           total: summary?.total ?? 0,

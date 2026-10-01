@@ -11,7 +11,7 @@ void main() {
       expect(StoreInfo.country, 'Sri Lanka');
       expect(StoreInfo.deliveryHoursLabel, '8 AM – 9 PM');
       expect(StoreInfo.serviceRadiusKm, 4);
-      expect(StoreInfo.flatDeliveryFee, 70.0);
+      expect(StoreInfo.defaultDeliveryFee, 100.0);
       expect(StoreInfo.paymentMethodLabel, 'Cash on delivery');
     });
 
@@ -40,7 +40,7 @@ void main() {
         '8 AM': RegExp(r'8(:00)? AM'),
         '9 PM': RegExp(r'9(:00)? PM'),
         '4 km': RegExp(r'\b4 km\b'),
-        'LKR 70': RegExp(r'Rs\. 70\b'),
+        'LKR 100': RegExp(r'(Rs\.|LKR) (70|100)\b'),
         'Cash on Delivery': RegExp(r'[Cc]ash on [Dd]elivery'),
       };
       final offenders = <String>[];

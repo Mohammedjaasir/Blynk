@@ -2,18 +2,26 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AppRoutes } from '../App';
-import { AuthProvider, NOT_ADMIN_MESSAGE } from '../auth/AuthContext';
+import {
+  AuthProvider,
+  INVENTORY_STAFF_MESSAGE,
+  NOT_ADMIN_MESSAGE,
+  OPERATIONS_ROLES,
+  OPERATIONS_STAFF_MESSAGE,
+  wrongAppMessage,
+} from '../auth/AuthContext';
 import { ToastProvider } from '../components/ui';
 import { tokenStore } from '../api/client';
 
 /**
- * Who gets into the Admin app and what they see (dispatch plan D12). The
- * Orders workflow lives here - the documented "admin/staff dashboard" - so
- * packing staff sign in too, but only to Orders. Catalog and promotions stay
- * admin-only in the UI and, authoritatively, in the API.
+ * Who gets into the Admin app and what they see. Since 2026-09-30 (backend
+ * migration 014) only ADMIN accounts hold a session here: packing staff use
+ * the Inventory site and Operations staff the Operations app, and a stored
+ * session of either is dropped on load. The API remains the authority.
  */
 const ADMIN = { id: 'a1', phone: '+94775551122', full_name: 'Nawaz Mansoor', email: null, role: 'ADMIN' };
 const STAFF = { id: 's1', phone: '+94774443322', full_name: 'Kasun Perera', email: null, role: 'PACKING_STAFF' };
+const OPS = { id: 'o1', phone: '+94771112233', full_name: 'Ops Person', email: null, role: 'OPERATIONS' };
 const RIDER = { id: 'r1', phone: '+94779876543', full_name: 'Farhan Mohamed', email: null, role: 'RIDER' };
 
 function respond(data: unknown, status = 200) {
@@ -66,24 +74,41 @@ describe('Admin app access', () => {
     vi.unstubAllGlobals();
   });
 
-  it('an admin sees Orders alongside the catalog', async () => {
+  it('an admin sees Orders alongside the catalog and Staff accounts', async () => {
     renderAs(ADMIN, '/');
-    expect(await navLinks()).toEqual(['Dashboard', 'Orders', 'Products', 'Categories', 'Promotions', 'Feedback']);
+    expect(await navLinks()).toEqual([
+      'Dashboard',
+      'Orders',
+      'Sales',
+      'Rider cash',
+      'Products',
+      'Categories',
+      'Promotions',
+      'Coupons',
+      'Customers',
+      'Feedback',
+      'Staff accounts',
+      'Settings',
+    ]);
   });
 
-  it('packing staff land on Orders and see nothing else', async () => {
-    renderAs(STAFF, '/');
-    expect(await screen.findByRole('heading', { name: 'Orders' })).toBeInTheDocument();
-    expect(await navLinks()).toEqual(['Orders']);
+  it.each([
+    ['packing staff', STAFF],
+    ['operations staff', OPS],
+  ])('a stored %s session is dropped and sent to sign in', async (_name, user) => {
+    renderAs(user, '/orders');
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(tokenStore.access).toBeNull();
   });
 
-  it.each(['/products', '/categories', '/promotions', '/products/new', '/feedback'])(
-    'packing staff sent to %s are brought back to Orders',
-    async (route) => {
-      renderAs(STAFF, route);
-      expect(await screen.findByRole('heading', { name: 'Orders' })).toBeInTheDocument();
-    }
-  );
+  it('tells each kind of staff which app to use instead', () => {
+    expect(wrongAppMessage('PACKING_STAFF')).toBe(INVENTORY_STAFF_MESSAGE);
+    expect(INVENTORY_STAFF_MESSAGE).toMatch(/Inventory site/);
+    expect(wrongAppMessage('OPERATIONS')).toBe(OPERATIONS_STAFF_MESSAGE);
+    expect(OPERATIONS_STAFF_MESSAGE).toMatch(/Operations app/);
+    expect(wrongAppMessage('RIDER')).toBe(NOT_ADMIN_MESSAGE);
+    expect(OPERATIONS_ROLES).toEqual(['ADMIN']);
+  });
 
   it('a rider session is not an operations session', async () => {
     renderAs(RIDER, '/orders');

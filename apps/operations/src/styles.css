@@ -748,6 +748,35 @@ input {
   font-size: var(--text-meta);
 }
 
+/* Rider trips: the suggested rider, and the trip a second order would join. */
+.rider-pick__option--off {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.rider-pick__badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: var(--text-meta);
+  font-weight: 800;
+  vertical-align: 1px;
+}
+
+.rider-pick__trip {
+  grid-column: 2;
+  color: var(--ink);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.rider-pick__trip--far {
+  color: var(--danger);
+}
+
 /* --------------------------------------------------------------- delivery */
 /* Task F4 (Delivery Mode). Reuses existing primitives (.card, .ticket,
    .order-detail*, .modal, .field, .button) wherever they already fit;
@@ -2158,3 +2187,143 @@ a.cat-row__main {
 .intro__cta:focus-visible, .intro__secondary:focus-visible, .intro__skip:focus-visible {
   outline: 3px solid #12151f; outline-offset: 3px;
 }
+
+/* ------------------------------------------------------------ packing slip
+   /orders/:id/slip. On screen a plain card; printed, only the slip itself
+   (window.print() - the app chrome and the toolbar are hidden). */
+.slip-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.packing-slip {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+}
+
+.packing-slip p { margin: 0; }
+
+.packing-slip__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 12px;
+  text-align: right;
+}
+
+.packing-slip__brand { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.packing-slip__title { margin: 0; font-size: 18px; }
+.packing-slip__number { font-weight: 700; }
+.packing-slip__meta, .packing-slip__label { color: var(--ink-2); font-size: var(--text-meta); }
+.packing-slip__label { margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.packing-slip__strong { font-weight: 700; }
+
+.packing-slip__items { width: 100%; border-collapse: collapse; }
+.packing-slip__items th,
+.packing-slip__items td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.packing-slip__items th:first-child,
+.packing-slip__items td:first-child { width: 3.5em; }
+.packing-slip__items th { font-size: var(--text-meta); color: var(--ink-2); }
+
+.packing-slip__totals { margin: 0; display: grid; gap: 6px; }
+.packing-slip__totals > div { display: flex; justify-content: space-between; gap: 12px; }
+.packing-slip__totals dt, .packing-slip__totals dd { margin: 0; }
+.packing-slip__cod { font-weight: 800; font-size: 18px; border-top: 2px solid var(--ink); padding-top: 6px; }
+.packing-slip__foot { color: var(--ink-2); font-size: var(--text-meta); text-align: center; }
+
+@media print {
+  @page { margin: 12mm; }
+  body { background: #fff !important; }
+  .topbar, .tabbar, .no-print { display: none !important; }
+  .content, .page, .slip-page { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  .packing-slip { border: 0; padding: 0; color: #000; }
+  .packing-slip__items tr { break-inside: avoid; }
+}
+
+/* ------------------------------------ low stock, delivery fee, product import */
+.tabbar__count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  letter-spacing: normal;
+}
+
+.fee-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.fee-form .field {
+  flex: 1 1 140px;
+}
+
+.import-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.import-table__wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-meta);
+}
+
+.import-table th,
+.import-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.import-table th {
+  color: var(--ink-3);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.import-table__row--bad td {
+  color: var(--danger);
+}
+
+/* ------------------------------------------ order bill, rider cash (018/019) */
+.order-bill { margin: 10px 0 0; display: grid; gap: 4px; }
+.order-bill__row { display: flex; justify-content: space-between; gap: 12px; }
+.order-bill__row dt, .order-bill__row dd { margin: 0; }
+.order-bill__row--discount { color: var(--green, #0c831f); font-weight: 700; }
+.order-bill__row--total { border-top: 1px solid var(--line); padding-top: 4px; font-weight: 800; }
+.packing-slip__discount { font-weight: 700; }
+.cash-toolbar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.cash-diff { font-weight: 800; margin: 2px 0 0; }
+.cash-diff--short { color: var(--danger); }
+.cash-diff--over { color: #8a5a00; }
+.cash-diff--balanced { color: var(--green, #0c831f); }
+.cash-row--short { box-shadow: inset 4px 0 0 var(--danger); }
+.cash-row--over { box-shadow: inset 4px 0 0 var(--yellow, #ffe141); }
+.cash-handins { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cash-handins__row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }

@@ -3,6 +3,11 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
+import { deliveryCodeForDelivery } from './helpers/delivery-code.js';
+import { liftRiderTripCap } from './helpers/rider-trips.js';
+
+// Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
+liftRiderTripCap();
 
 describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
   const app = createApp();
@@ -215,14 +220,14 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       expect(res.body.error.details.distance_km).toBeGreaterThan(4.0);
     });
 
-    it('successfully places an order within 4 km with authoritative pricing and 70 LKR fee', async () => {
+    it('successfully places an order within 4 km with authoritative pricing and 100 LKR fee', async () => {
       const idempotencyKey = `idemp_test_${Date.now()}`;
 
       // Kotmale Fresh Milk: 450 cost * 1.20 = 540 LKR * 2 = 1080 LKR
       // Pelwatte Salted Butter: 700 cost * 1.15 = 805 LKR * 1 = 805 LKR
       // Subtotal = 1885.00 LKR
-      // Delivery fee = 70.00 LKR
-      // Total = 1955.00 LKR
+      // Delivery fee = 100.00 LKR
+      // Total = 1985.00 LKR
       const res = await request(app)
         .post('/api/v1/orders')
         .set('Authorization', `Bearer ${tokenCustomerA}`)
@@ -254,8 +259,8 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
 
       // Amounts
       expect(order.subtotal_amount).toBe(1885.0);
-      expect(order.delivery_fee).toBe(70.0);
-      expect(order.total_amount).toBe(1955.0);
+      expect(order.delivery_fee).toBe(100.0);
+      expect(order.total_amount).toBe(1985.0);
 
       // Historical address snapshot verification
       expect(order.delivery_recipient_name).toBe('Ahmed Rizvi');
@@ -272,7 +277,7 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       expect(milkItem.item_status).toBe('PENDING');
 
       // COD payment record
-      expect(order.payment.amount).toBe(1955.0);
+      expect(order.payment.amount).toBe(1985.0);
       expect(order.payment.payment_status).toBe('PENDING');
 
       placedOrderId = order.id;
@@ -441,7 +446,7 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
 
     beforeAll(async () => {
       // Create multi-item order for store testing:
-      // Milk (2x @ 540 = 1080 LKR), Butter (1x @ 805 = 805 LKR), Fee (70) -> Total 1955 LKR
+      // Milk (2x @ 540 = 1080 LKR), Butter (1x @ 805 = 805 LKR), Fee (100) -> Total 1985 LKR
       const res = await request(app)
         .post('/api/v1/orders')
         .set('Authorization', `Bearer ${tokenCustomerA}`)
@@ -474,7 +479,7 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       // Store staff discovers Pelwatte Butter is unavailable at local Dharga Town merchant
       // Removes butter (805 LKR):
       // New Subtotal = 1080 LKR
-      // New Total = 1080 + 70 = 1150 LKR
+      // New Total = 1080 + 100 = 1180 LKR
       const res = await request(app)
         .patch(`/api/v1/admin/orders/${storeOrderId}/items/${butterItemId}`)
         .set('Authorization', `Bearer ${tokenAdmin}`)
@@ -483,8 +488,8 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       expect(res.status).toBe(200);
       const order = res.body.data.order;
       expect(order.subtotal_amount).toBe(1080.0);
-      expect(order.total_amount).toBe(1150.0);
-      expect(order.payment.amount).toBe(1150.0);
+      expect(order.total_amount).toBe(1180.0);
+      expect(order.payment.amount).toBe(1180.0);
       expect(order.order_status).toBe('ITEM_UNAVAILABLE');
     });
 
@@ -528,10 +533,10 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
   describe('Rider Fulfillment & Doorstep COD Cash Collection', () => {
     let deliveryId: string;
     let deliveryOrderId: string;
-    const expectedCash = 610.0; // 540 + 70
+    const expectedCash = 640.0; // 540 + 100
 
     beforeAll(async () => {
-      // Create fresh order: 1x Milk (540 LKR) + 70 fee = 610 LKR
+      // Create fresh order: 1x Milk (540 LKR) + 100 fee = 640 LKR
       const createRes = await request(app)
         .post('/api/v1/orders')
         .set('Authorization', `Bearer ${tokenCustomerA}`)
@@ -610,7 +615,7 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       const res = await request(app)
         .post(`/api/v1/riders/deliveries/${deliveryId}/collect-cod`)
         .set('Authorization', `Bearer ${tokenRider}`)
-        .send({ amount: 500.0 }); // Wrong amount (expected 610)
+        .send({ amount: 500.0, delivery_code: await deliveryCodeForDelivery(deliveryId) }); // Wrong amount (expected 640)
 
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('INVALID_COD_AMOUNT');
@@ -620,7 +625,7 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       const res = await request(app)
         .post(`/api/v1/riders/deliveries/${deliveryId}/collect-cod`)
         .set('Authorization', `Bearer ${tokenRider}`)
-        .send({ amount: expectedCash });
+        .send({ amount: expectedCash, delivery_code: await deliveryCodeForDelivery(deliveryId) });
 
       expect(res.status).toBe(200);
       const settlement = res.body.data.settlement;

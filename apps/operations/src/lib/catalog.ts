@@ -28,3 +28,17 @@ export function catalogErrorMessage(err: unknown): string {
   if (err.status >= 500) return 'The Blynk API had a problem. Try again in a moment.';
   return err.message;
 }
+
+/** The delivery fee the API accepts: LKR 0-1000, at most 2 decimals. */
+export const MAX_DELIVERY_FEE_LKR = 1000;
+
+/** Client-side check for the Delivery fee setting (the server checks again). */
+export function parseDeliveryFee(input: string): { value: number } | { error: string } {
+  const s = input.trim();
+  if (s === '') return { error: 'Enter a fee in LKR (0 for free delivery).' };
+  if (!/^\d+(\.\d+)?$/.test(s)) return { error: 'Enter a number, like 250 or 199.50.' };
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return { error: 'Use at most 2 decimals.' };
+  const value = Number(s);
+  if (value > MAX_DELIVERY_FEE_LKR) return { error: `The fee can be at most LKR ${MAX_DELIVERY_FEE_LKR}.` };
+  return { value };
+}

@@ -7,7 +7,8 @@ import { useAuth } from '../../auth/AuthContext';
 import { TrackingStatus } from '../../components/TrackingStatus';
 import { DeliveryMap } from '../../components/DeliveryMap';
 import { toLatLng } from '../../lib/route';
-import { canReportFailure, deliveryErrorMessage, isTrackable, nextAction, stage } from '../../lib/delivery';
+import { DeliveryCodeField, isCompleteDeliveryCode } from '../../components/DeliveryCodeField';
+import { canReportFailure, deliveryCodeError, deliveryErrorMessage, isTrackable, nextAction, stage } from '../../lib/delivery';
 import { errorCode } from '../../lib/errors';
 import { formatClock, formatMoney, shortNumber } from '../../lib/orders';
 import { formatPhone } from '../../lib/format';
@@ -44,6 +45,8 @@ export function Detail() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<'collect' | 'fail' | null>(null);
+  // A refused delivery code, shown under the code field (the dialog stays open).
+  const [codeError, setCodeError] = useState<{ message: string; locked: boolean } | null>(null);
   const inFlight = useRef(false);
 
   const load = useCallback(async () => {
@@ -120,6 +123,11 @@ export function Detail() {
       if (code === 'RIDER_PROFILE_NOT_FOUND' || code === 'RIDER_INACTIVE') {
         setNeedsRiderProfile(true);
         await refreshRiderCapability();
+        return;
+      }
+      const refusedCode = deliveryCodeError(err);
+      if (refusedCode) {
+        setCodeError(refusedCode);
         return;
       }
       setNotice(deliveryErrorMessage(err));
@@ -295,7 +303,16 @@ export function Detail() {
             </button>
           ) : null}
           {action.kind === 'collect' ? (
-            <button type="button" className="button" onClick={() => setDialog('collect')} disabled={busy}>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                // Start clean; a lock still in force is reported again by the API.
+                setCodeError(null);
+                setDialog('collect');
+              }}
+              disabled={busy}
+            >
               {action.label}
             </button>
           ) : null}
@@ -307,7 +324,13 @@ export function Detail() {
           amount={data.total_amount}
           recipient={data.delivery_recipient_name}
           busy={busy}
-          onConfirm={() => void run(async () => void (await deliveryApi.collectCod(data.delivery_id, data.total_amount)))}
+          error={codeError}
+          onCodeChange={() => {
+            if (codeError && !codeError.locked) setCodeError(null);
+          }}
+          onConfirm={(deliveryCode) =>
+            void run(async () => void (await deliveryApi.collectCod(data.delivery_id, data.total_amount, deliveryCode)))
+          }
           onClose={() => setDialog(null)}
         />
       ) : null}
@@ -326,37 +349,75 @@ export function Detail() {
  * amount under its own row lock regardless (rider.schema.ts's
  * `collectCodSchema`; common.md rule 8). This is the "confirmation step"
  * task-F4-brief.md's COD test requires.
+ *
+ * Proof of delivery (backend migration 016): the customer's 4-digit code is
+ * required; a wrong one clears the field for another try, and after five
+ * the handover is locked for 15 minutes.
  */
 function CollectCodDialog({
   amount,
   recipient,
   busy,
+  error,
+  onCodeChange,
   onConfirm,
   onClose,
 }: {
   amount: number;
   recipient: string;
   busy: boolean;
-  onConfirm(): void;
+  error: { message: string; locked: boolean } | null;
+  onCodeChange(): void;
+  onConfirm(deliveryCode: string): void;
   onClose(): void;
 }) {
   const titleId = useId();
+  const [code, setCode] = useState('');
+  const codeRef = useRef<HTMLInputElement>(null);
+  const locked = error?.locked ?? false;
+  const ready = isCompleteDeliveryCode(code) && !locked && !busy;
+
+  // A refused code is cleared so the next try starts empty.
+  useEffect(() => {
+    if (error) {
+      setCode('');
+      if (!error.locked) codeRef.current?.focus();
+    }
+  }, [error]);
+
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <div className="modal__panel">
+      <form
+        className="modal__panel"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (ready) onConfirm(code);
+        }}
+      >
         <h2 className="modal__title" id={titleId}>
           Collect {formatMoney(amount)} in cash
         </h2>
         <p className="modal__message">from {recipient}. Count it before you confirm — this completes the delivery.</p>
+        <DeliveryCodeField
+          ref={codeRef}
+          value={code}
+          onChange={(next) => {
+            setCode(next);
+            onCodeChange();
+          }}
+          error={error?.message}
+          disabled={locked}
+          autoFocus
+        />
         <div className="modal__actions">
           <button type="button" className="button button--ghost" onClick={onClose}>
             Not yet
           </button>
-          <button type="button" className="button" disabled={busy} onClick={onConfirm}>
+          <button type="submit" className="button" disabled={!ready}>
             {busy ? 'Recording…' : 'Cash collected — complete'}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

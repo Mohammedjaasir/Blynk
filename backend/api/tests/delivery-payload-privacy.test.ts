@@ -3,7 +3,12 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
+import { deliveryCodeForDelivery } from './helpers/delivery-code.js';
 import { DELIVERY_LOCATION_COLUMNS, DELIVERY_PUBLIC_COLUMNS } from '../src/modules/orders/delivery.columns.js';
+import { liftRiderTripCap } from './helpers/rider-trips.js';
+
+// Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
+liftRiderTripCap();
 
 /**
  * Final-review finding I1: the rider's live position (migration 006) is
@@ -161,7 +166,10 @@ describe('Delivery payloads never carry the rider location columns (I1)', () => 
     expectNoLocationKeys('PATCH /riders/deliveries/:id/status', arrive.body);
 
     const total = Number(detail.body.data.delivery.total_amount);
-    const cod = await request(app).post(`/api/v1/riders/deliveries/${deliveryId}/collect-cod`).set(auth(tokens.rider)).send({ amount: total });
+    const cod = await request(app)
+      .post(`/api/v1/riders/deliveries/${deliveryId}/collect-cod`)
+      .set(auth(tokens.rider))
+      .send({ amount: total, delivery_code: await deliveryCodeForDelivery(deliveryId) });
     expect(cod.status).toBe(200);
     expectNoLocationKeys('POST /riders/deliveries/:id/collect-cod', cod.body);
   });

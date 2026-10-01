@@ -13,6 +13,14 @@ export const createOrderSchema = z.object({
     .max(50, 'Cannot exceed 50 distinct items per order'),
   customer_notes: z.string().trim().max(500).nullable().optional(),
   idempotency_key: z.string().trim().max(128).optional(),
+  /** Migration 018: re-validated inside the order transaction; any case, stored upper-case. */
+  coupon_code: z
+    .string({ invalid_type_error: 'coupon_code must be a string' })
+    .trim()
+    .transform((v) => v.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{4,20}$/, 'Coupon codes are 4-20 letters or digits'))
+    .nullable()
+    .optional(),
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
@@ -60,6 +68,12 @@ export const adminUpdateOrderStatusSchema = z.object({
     { required_error: 'status is required', invalid_type_error: 'Invalid order status value' }
   ),
   notes: z.string().trim().max(1000, 'Notes cannot exceed 1000 characters').optional(),
+  /** DELIVERED only: the customer's 4-digit code; without it `notes` is the written override. */
+  delivery_code: z
+    .string({ invalid_type_error: 'delivery_code must be a string' })
+    .trim()
+    .regex(/^[0-9]{4}$/, 'delivery_code must be 4 digits')
+    .optional(),
 });
 
 export type AdminUpdateOrderStatusInput = z.infer<typeof adminUpdateOrderStatusSchema>;
@@ -69,6 +83,8 @@ export type AdminUpdateOrderStatusInput = z.infer<typeof adminUpdateOrderStatusS
  */
 export const adminAssignRiderSchema = z.object({
   rider_id: z.string().uuid('rider_id must be a valid UUID'),
+  /** Rider trips: add this order although its drop-off is far from the rider's other one. */
+  confirm_far_batch: z.boolean().optional(),
 });
 
 export type AdminAssignRiderInput = z.infer<typeof adminAssignRiderSchema>;

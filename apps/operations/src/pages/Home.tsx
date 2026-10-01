@@ -4,6 +4,7 @@ import { dental as dentalApi, orders as ordersApi, riders as ridersApi } from '.
 import type { AdminAppointment, HomeOrder, HomeRider, MyDelivery } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
+import { useLowStock } from '../components/LowStock';
 import { statusLabel } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
 
@@ -68,6 +69,8 @@ export function Home() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Shared with the tab bar's badge (one fetch per app load, see LowStock.tsx).
+  const lowStock = useLowStock();
 
   const load = useCallback(
     async (isRefresh: boolean) => {
@@ -135,7 +138,10 @@ export function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refresh = () => void load(true);
+  const refresh = () => {
+    void load(true);
+    void lowStock.refresh();
+  };
 
   if (error && !summary) {
     return (
@@ -176,6 +182,19 @@ export function Home() {
       text: `${plural(summary.readyForRider.length, 'order is', 'orders are')} packed, waiting for a rider.`,
       to: '/orders?focus=readyForRider',
       label: 'Assign a rider',
+    });
+  }
+
+  const lowCounts = lowStock.data?.counts;
+  if (lowCounts && lowCounts.total > 0) {
+    const parts = [
+      lowCounts.out > 0 ? `${plural(lowCounts.out, 'product is', 'products are')} out of stock` : null,
+      lowCounts.low > 0 ? `${plural(lowCounts.low, 'product is', 'products are')} running low` : null,
+    ].filter(Boolean);
+    attention.push({
+      text: `${parts.join(', ')}.`,
+      to: '/catalog/inventory/low-stock',
+      label: 'Restock',
     });
   }
 

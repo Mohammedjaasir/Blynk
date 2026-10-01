@@ -171,7 +171,7 @@ export class InventoryRepository {
             supplier_id: named.id,
           });
         }
-        if (!supplier && params.actorRole !== 'ADMIN') {
+        if (!supplier && params.actorRole !== 'ADMIN' && params.actorRole !== 'OPERATIONS') {
           throw new AppError('Only an admin can add a new supplier.', 403, 'FORBIDDEN');
         }
 
@@ -384,6 +384,8 @@ export class InventoryRepository {
         )
         .leftJoin('dark_stores as ds', 'ds.id', 'inv.dark_store_id');
 
+      // Deleted products (migration 017) never appear, inactive ones only on request.
+      query = query.where('p.deleted_at', 'is', null);
       if (!filters.include_inactive) {
         query = query.where('p.is_active', '=', true);
       }
@@ -564,6 +566,84 @@ export class InventoryRepository {
       is_low_stock: inv.tracking_mode === 'TRACKED' && inv.quantity_on_hand <= inv.low_stock_threshold,
       adjustments,
     };
+  }
+
+  /**
+   * The "Running low" list: active, non-deleted TRACKED products whose
+   * on-hand stock is at or below their threshold (the same rule as
+   * is_low_stock everywhere else). OUT when nothing is available to sell
+   * (on hand minus reserved <= 0), LOW otherwise; OUT first, then the least
+   * available first.
+   */
+  async listLowStock(darkStoreId: string, executor: DBConnection = db) {
+    const rows = await executor
+      .selectFrom('inventory as inv')
+      .innerJoin('products as p', 'p.id', 'inv.product_id')
+      .innerJoin('categories as c', 'c.id', 'p.category_id')
+      .select([
+        'p.id as product_id',
+        'p.name as product_name',
+        'p.sku as product_sku',
+        'p.unit as product_unit',
+        'c.name as category_name',
+        'inv.quantity_on_hand',
+        'inv.quantity_reserved',
+        'inv.low_stock_threshold',
+        'inv.updated_at',
+      ])
+      .where('inv.dark_store_id', '=', darkStoreId)
+      .where('inv.tracking_mode', '=', 'TRACKED')
+      .whereRef('inv.quantity_on_hand', '<=', 'inv.low_stock_threshold')
+      .where('p.is_active', '=', true)
+      .where('p.deleted_at', 'is', null)
+      .orderBy(sql`inv.quantity_on_hand - inv.quantity_reserved`, 'asc')
+      .orderBy('p.name', 'asc')
+      .orderBy('p.id', 'asc')
+      .execute();
+
+    const items = rows
+      .map((r) => {
+        const available = r.quantity_on_hand - r.quantity_reserved;
+        return {
+          ...r,
+          quantity_available: available,
+          stock_state: (available <= 0 ? 'OUT' : 'LOW') as 'OUT' | 'LOW',
+        };
+      })
+      // OUT first; within each group the SQL order (least available first) holds.
+      .sort((a, b) => (a.stock_state === b.stock_state ? 0 : a.stock_state === 'OUT' ? -1 : 1));
+
+    const out = items.filter((i) => i.stock_state === 'OUT').length;
+    return { items, counts: { low: items.length - out, out, total: items.length } };
+  }
+
+  /**
+   * Sets the low-stock threshold of a TRACKED product. Only the threshold
+   * changes - quantities move through the stock writer alone.
+   */
+  async setLowStockThreshold(productId: string, darkStoreId: string, threshold: number, executor: DBConnection = db) {
+    return await executor.transaction().execute(async (trx: Transaction<Database>) => {
+      const inv = await lockInventoryRow(trx, darkStoreId, productId);
+      if (!inv || inv.tracking_mode !== 'TRACKED') {
+        throw new AppError(
+          'A low-stock level only applies to a tracked product. Switch it to TRACKED first.',
+          409,
+          'PRODUCT_NOT_TRACKED',
+          { product_id: productId, tracking_mode: inv?.tracking_mode ?? 'UNTRACKED' }
+        );
+      }
+      const updated = await trx
+        .updateTable('inventory')
+        .set({ low_stock_threshold: threshold, updated_at: new Date() })
+        .where('id', '=', inv.id)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      return {
+        ...updated,
+        quantity_available: updated.quantity_on_hand - updated.quantity_reserved,
+        is_low_stock: updated.quantity_on_hand <= updated.low_stock_threshold,
+      };
+    });
   }
 
   /**

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../Services/Providers/cart.provider.dart';
+import '../../../Services/Providers/order.provider.dart';
+import '../../../Services/Providers/store_info.provider.dart';
 import '../../../app_design.dart';
 import '../../../Services/store_info.dart';
+import '../../../Models/order_format.dart';
 import '../Atoms/money_text.dart';
 import '../../../design/tokens.dart';
 
@@ -13,33 +16,41 @@ import '../../../design/tokens.dart';
 /// **This is the one place that combination is expressed.** It was written out
 /// at two call sites (this card and the cart's pinned checkout bar), which is
 /// how a summary and a bar end up disagreeing. Nothing else here is derived:
-/// the subtotal is the provider's, the fee is [StoreInfo.flatDeliveryFee]
-/// (mirroring `system_configurations.delivery_fee`), and once an order exists
-/// the backend's own `totalAmount` is authoritative — see
+/// the subtotal is the provider's, the fee is the live one from `GET /store`
+/// ([watchDeliveryFee], mirroring `system_configurations.delivery_fee`), and
+/// once an order exists the backend's own `totalAmount` is authoritative — see
 /// `OrderProvider.placeOrder`.
-double cartEstimateTotal(CartProvider cart) =>
-    cart.subtotal + StoreInfo.flatDeliveryFee;
+double cartEstimateTotal(CartProvider cart, double deliveryFee, {double discount = 0}) {
+  final total = cart.subtotal + deliveryFee - discount;
+  return total < 0 ? 0 : total;
+}
 
 /// Order Summary: subtotal from CartProvider plus the flat delivery fee.
 ///
 /// These are the prices the customer saw while shopping. The backend
 /// re-prices the order and computes the real total when it's placed (see
-/// OrderProvider.placeOrder), so no discount, handling or platform fee is
-/// ever invented here. There is no discount, savings or promo-code row
-/// because the backend returns no such field — an order carries only
-/// `subtotalAmount`, `deliveryFee` and `totalAmount`.
+/// OrderProvider.placeOrder), so no handling or platform fee is ever invented
+/// here. The one discount row is a coupon the server has previewed for this
+/// exact cart (backend migration 018, [OrderProvider.couponFor]), shown on
+/// checkout only ([showCoupon]); the server re-checks it at placeOrder.
 class CartPriceDetailWidget extends StatelessWidget {
-  const CartPriceDetailWidget({super.key, this.footer});
+  const CartPriceDetailWidget({super.key, this.footer, this.showCoupon = false});
 
   /// Optional content under the total (the desktop checkout CTA).
   final Widget? footer;
+
+  /// Checkout: include an applied coupon's Discount line in the estimate.
+  final bool showCoupon;
 
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
     final subtotal = cart.subtotal;
     final itemCount = cart.itemCount;
-    final total = cartEstimateTotal(cart);
+    final deliveryFee = watchDeliveryFee(context);
+    final coupon = showCoupon ? context.watch<OrderProvider>().couponFor(cart) : null;
+    final discount = coupon?.discountAmount ?? 0;
+    final total = cartEstimateTotal(cart, deliveryFee, discount: discount);
 
     return Container(
       decoration: appCardDecoration(),
@@ -57,10 +68,32 @@ class CartPriceDetailWidget extends StatelessWidget {
             amount: subtotal,
           ),
           const SizedBox(height: BlynkSpace.s8),
-          const _SummaryRow(
+          _SummaryRow(
             label: 'Delivery fee',
-            amount: StoreInfo.flatDeliveryFee,
+            amount: deliveryFee,
           ),
+          if (coupon != null && discount > 0) ...[
+            const SizedBox(height: BlynkSpace.s8),
+            Row(
+              key: const Key('summary-discount'),
+              children: [
+                Expanded(
+                  child: Text(
+                    'Discount (${coupon.code})',
+                    style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
+                  ),
+                ),
+                Semantics(
+                  label: 'minus ${formatLkr(discount)}',
+                  excludeSemantics: true,
+                  child: Text(
+                    '−${formatLkr(discount)}',
+                    style: BlynkType.price.copyWith(color: BlynkColors.positiveInk),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const Padding(
             padding: EdgeInsets.symmetric(vertical: BlynkSpace.s12),
             child: Divider(height: 1, color: BlynkColors.line),

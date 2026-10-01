@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { ApiError } from '../../api/client';
 import { catalog } from '../../api/resources';
 import type { Category } from '../../api/types';
 import { ImageUploader, type FocalPoint } from '../../components/ImageUploader';
@@ -11,15 +12,17 @@ import { catalogErrorMessage } from '../../lib/catalog';
  * `apps/admin/src/pages/Categories.tsx` (a fresh implementation, not an
  * import - common.md rule 2).
  *
- * The backend exposes POST and PATCH only - there is no delete endpoint, so
- * this screen doesn't offer one. Deactivating is the supported way to take
- * a category out of the customer app.
+ * Delete (`DELETE /admin/categories/:id`): an empty category is deleted
+ * after a plain confirm; one with products must first have them moved to
+ * another category, chosen in the dialog (the server refuses with 409
+ * `CATEGORY_NOT_EMPTY` otherwise, which the dialog also handles).
  */
 export function Categories() {
   const [rows, setRows] = useState<Category[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<Category | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<Category | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -100,13 +103,21 @@ export function Categories() {
                 <button type="button" className="button button--ghost button--sm" onClick={() => void toggleActive(category)}>
                   {category.is_active ? 'Deactivate' : 'Activate'}
                 </button>
+                <button
+                  type="button"
+                  className="button button--ghost button--sm"
+                  onClick={() => setDeleting(category)}
+                  aria-label={`Delete ${category.name}`}
+                >
+                  Delete
+                </button>
               </div>
             </li>
           ))}
         </ul>
       )}
 
-      <p className="page__note">The API supports creating and updating categories; it has no delete endpoint, so deactivation is the way to retire one.</p>
+      <p className="page__note">Deactivate a category to hide it for a while; delete it to retire it for good.</p>
 
       {editing ? (
         <CategoryDialog
@@ -118,6 +129,102 @@ export function Categories() {
           }}
         />
       ) : null}
+
+      {deleting ? (
+        <DeleteCategoryDialog
+          category={deleting}
+          others={(rows ?? []).filter((c) => c.id !== deleting.id)}
+          onClose={() => setDeleting(null)}
+          onDeleted={async (message) => {
+            setDeleting(null);
+            setNotice(message);
+            await load();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DeleteCategoryDialog({
+  category,
+  others,
+  onClose,
+  onDeleted,
+}: {
+  category: Category;
+  others: Category[];
+  onClose(): void;
+  onDeleted(message: string): void | Promise<void>;
+}) {
+  // `product_count` comes with the list; if the server finds products the
+  // list didn't know about, its 409 carries the real count instead.
+  const [productCount, setProductCount] = useState(category.product_count ?? 0);
+  const [moveTo, setMoveTo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const needsMove = productCount > 0;
+  const noun = productCount === 1 ? 'product' : 'products';
+
+  async function confirm() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await catalog.categories.remove(category.id, needsMove ? moveTo : undefined);
+      const target = others.find((c) => c.id === moveTo)?.name;
+      await onDeleted(
+        result.moved_product_count > 0 && target
+          ? `${category.name} was deleted. ${result.moved_product_count} ${result.moved_product_count === 1 ? 'product' : 'products'} moved to ${target}.`
+          : `${category.name} was deleted.`
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'CATEGORY_NOT_EMPTY') {
+        const count = Number((err.details as { product_count?: number } | undefined)?.product_count);
+        setProductCount(Number.isFinite(count) && count > 0 ? count : Math.max(productCount, 1));
+        setError('This category still has products. Choose where to move them first.');
+      } else {
+        setError(catalogErrorMessage(err));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label="Delete category">
+      <div className="modal__panel">
+        <h2 className="modal__title">Delete category</h2>
+        <p className="modal__message">Delete {category.name}? Customers will no longer see it.</p>
+        {needsMove ? (
+          <Field label={`Move its ${productCount} ${noun} to:`}>
+            <select className="input" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+              <option value="">Choose a category</option>
+              {others.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+        {needsMove && others.length === 0 ? (
+          <p className="field__error">There is no other category to move them to. Add one first.</p>
+        ) : null}
+        {error ? <p className="field__error">{error}</p> : null}
+        <div className="modal__actions">
+          <button type="button" className="button button--ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="button button--danger"
+            onClick={() => void confirm()}
+            disabled={busy || (needsMove && !moveTo)}
+          >
+            {busy ? <Spinner label="Deleting" /> : 'Delete'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

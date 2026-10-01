@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ecom/app_colors.dart';
+import '../app_design.dart' show appCardDecoration;
 import '../Models/order_model.dart';
 import '../Services/app_errors.dart';
 import '../Services/Providers/location.provider.dart';
@@ -11,7 +14,10 @@ import '../UI/Widgets/Atoms/card_order_details.dart';
 import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Organisms/map_provider.dart';
 import '../UI/Widgets/Organisms/order_bill_card.dart';
+import '../Services/reorder.dart';
+import '../UI/Widgets/Organisms/order_again_button.dart';
 import '../UI/Widgets/Organisms/order_cancel_section.dart';
+import '../UI/Widgets/Organisms/order_progress_tracker.dart';
 import '../UI/Widgets/Organisms/order_status_header.dart';
 import '../UI/Widgets/Organisms/order_summary_screen_product_details_card.dart';
 import '../UI/Widgets/Organisms/order_timeline.dart';
@@ -33,26 +39,40 @@ bool isLiveTrackable(OrderModel order) =>
     order.status == OrderStatus.outForDelivery &&
     order.delivery?.assignmentStatus == _pickedUpAssignmentStatus;
 
+/// True while the customer should see the proof-of-delivery code: the order
+/// is OUT_FOR_DELIVERY and the backend sent a `delivery_code`. Hidden in
+/// every other status, even if a stale code were present.
+bool showsDeliveryCode(OrderModel order) =>
+    order.status == OrderStatus.outForDelivery && order.deliveryCode != null;
+
 /// The order detail screen: everything the backend knows about one order,
 /// in the order the customer asks it in - where is it, what happened, what
 /// was in it, what it costs, where it's going, and (only if the backend says
 /// so) how to cancel it.
 ///
-/// Nothing here is inferred: no clock, no timers, no polling and no
-/// progress the backend hasn't recorded. It refetches on pull-to-refresh,
-/// when the app returns to the foreground, after every cancel attempt, and
-/// once when the live location stream reports that the server closed it.
+/// Nothing here is inferred: no progress the backend hasn't recorded. It
+/// refetches on pull-to-refresh, when the app returns to the foreground,
+/// after every cancel attempt, once when the live location stream reports
+/// that the server closed it, and (2026-09-30) every [refreshEvery] while an
+/// unfinished order is on screen in the foreground, so the tracker follows
+/// Blynk Operations moving it along without the customer pulling to refresh.
 ///
 /// While [isLiveTrackable] it shows the live map and keeps the
 /// [LocationProvider] watching this order; see [_OrderSummaryScreenState].
 class OrderSummaryScreen extends StatefulWidget {
-  const OrderSummaryScreen({super.key, required this.orderId, this.mapBuilder});
+  const OrderSummaryScreen({super.key, required this.orderId, this.mapBuilder, this.autoRefresh = true});
 
   final String orderId;
 
   /// Test seam, passed straight to [OrderTrackingMap]: lets widget tests swap
   /// the native map for a fake. Production callers leave it null.
   final TrackingMapBuilder? mapBuilder;
+
+  /// Test seam: false turns off the [refreshEvery] re-read.
+  final bool autoRefresh;
+
+  /// How often an unfinished order is re-read while visible.
+  static const Duration refreshEvery = Duration(seconds: 20);
 
   @override
   State<OrderSummaryScreen> createState() => _OrderSummaryScreenState();
@@ -97,15 +117,26 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> with WidgetsBin
   /// one close is one refetch and later notifications cause none.
   bool _closeRefetchDone = false;
 
+  /// Re-reads an unfinished order while it is on screen (see the class doc).
+  Timer? _autoRefresh;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
+    if (!widget.autoRefresh) return;
+    _autoRefresh = Timer.periodic(OrderSummaryScreen.refreshEvery, (_) {
+      final order = _order;
+      if (!mounted || _inBackground || order == null) return;
+      if (order.status == OrderStatus.delivered || order.status == OrderStatus.cancelled) return;
+      _load();
+    });
   }
 
   @override
   void dispose() {
+    _autoRefresh?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     final location = _location;
     if (location != null) {
@@ -299,6 +330,16 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> with WidgetsBin
       // 1. Status, directly on the page background rather than in a card.
       OrderStatusHeader(order: order),
       const SizedBox(height: _sectionGap),
+      // 1a. The four-step tracker: received, packed, on the way, delivered.
+      if (OrderProgressTracker.currentStep(order.status) != null) ...[
+        OrderProgressTracker(order: order),
+        const SizedBox(height: _sectionGap),
+      ],
+      // 1a'. Proof of delivery: the code the customer reads to the rider.
+      if (showsDeliveryCode(order)) ...[
+        DeliveryCodeCard(code: order.deliveryCode!),
+        const SizedBox(height: _sectionGap),
+      ],
       // 1b. The live map - only while the rider has the order and is on the
       // way (never before pickup, never after arrival/delivery/failure).
       if (isLiveTrackable(order)) ...[
@@ -317,6 +358,11 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> with WidgetsBin
       // 3. Items.
       OrderSummaryProductsDetails(order: order),
       const SizedBox(height: _sectionGap),
+      // 3b. Order again - a finished order's items back in the cart.
+      if (canReorder(order)) ...[
+        OrderAgainButton(order: order),
+        const SizedBox(height: _sectionGap),
+      ],
       // 4. Bill + the one payment line.
       OrderBillCard(order: order),
       const SizedBox(height: _sectionGap),
@@ -335,5 +381,50 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> with WidgetsBin
         ),
       ],
     ];
+  }
+}
+
+/// "Your delivery code: 4821 - Show this to your rider." The code is one
+/// plain [Text] (spaced out by letter spacing, not by inserted spaces) so it
+/// reads and copies as-is; the whole card is one semantics node.
+class DeliveryCodeCard extends StatelessWidget {
+  const DeliveryCodeCard({super.key, required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: 'Your delivery code: $code. Show this to your rider.',
+      excludeSemantics: true,
+      child: Container(
+        key: const Key('order-delivery-code'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(BlynkSpace.s16),
+        decoration: appCardDecoration(),
+        child: Column(
+          children: [
+            Text(
+              'Your delivery code',
+              textAlign: TextAlign.center,
+              style: BlynkText.label.copyWith(color: BlynkColors.ink3),
+            ),
+            const SizedBox(height: BlynkSpace.s8),
+            Text(
+              code,
+              textAlign: TextAlign.center,
+              style: BlynkText.display.copyWith(color: BlynkColors.positiveInk, letterSpacing: 8),
+            ),
+            const SizedBox(height: BlynkSpace.s8),
+            Text(
+              'Show this to your rider.',
+              textAlign: TextAlign.center,
+              style: BlynkText.body.copyWith(color: BlynkColors.ink),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

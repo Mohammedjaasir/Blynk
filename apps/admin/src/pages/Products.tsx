@@ -23,6 +23,7 @@ export function Products() {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [error, setError] = useState<string | null>(null);
   const [pendingToggle, setPendingToggle] = useState<AdminProduct | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminProduct | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -71,15 +72,35 @@ export function Products() {
     }
   }
 
+  async function deleteProduct(product: AdminProduct) {
+    setPendingDelete(null);
+    try {
+      const result = await productsApi.remove(product.id);
+      toast.success(
+        result.mode === 'SOFT'
+          ? `${product.name} is deleted. Its past orders keep their history.`
+          : `${product.name} is deleted.`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete the product.');
+    }
+    await load();
+  }
+
   return (
     <>
       <PageHeader
         title="Products"
         description="Everything in the catalog, including products hidden from customers."
         actions={
-          <button type="button" className="button" onClick={() => navigate('/products/new')}>
-            Add product
-          </button>
+          <>
+            <button type="button" className="button button--ghost" onClick={() => navigate('/products/import')}>
+              Import products
+            </button>
+            <button type="button" className="button" onClick={() => navigate('/products/new')}>
+              Add product
+            </button>
+          </>
         }
       />
 
@@ -190,6 +211,14 @@ export function Products() {
                     >
                       {product.is_active ? 'Disable' : 'Enable'}
                     </button>
+                    <button
+                      type="button"
+                      className="button button--ghost button--sm"
+                      onClick={() => setPendingDelete(product)}
+                      aria-label={`Delete ${product.name}`}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -211,6 +240,17 @@ export function Products() {
           destructive={pendingToggle.is_active}
           onConfirm={() => void toggleActive(pendingToggle)}
           onCancel={() => setPendingToggle(null)}
+        />
+      ) : null}
+
+      {pendingDelete ? (
+        <ConfirmDialog
+          title="Delete product"
+          message={`Delete ${pendingDelete.name}? Customers will no longer see it.`}
+          confirmLabel="Delete"
+          destructive
+          onConfirm={() => void deleteProduct(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
         />
       ) : null}
     </>

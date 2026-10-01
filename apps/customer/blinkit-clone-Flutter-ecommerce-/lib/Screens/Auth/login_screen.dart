@@ -51,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
       aspectRatio: 452 / 516,
       titleLine1: 'Your groceries,',
       titleLine2: 'delivered.',
-      description: 'Order groceries from our local store\nin ${StoreInfo.hubName}.',
+      description: 'Fresh groceries and quality essentials,\ndelivered in ${StoreInfo.hubName}.',
     ),
     OnboardingSlideData(
       // 2026-09-28: was a Lottie (cart_packing.json), which stuttered and hung
