@@ -51,6 +51,8 @@ export class RiderRepository {
       ])
       .where('riders.is_active', '=', true)
       .where('users.is_active', '=', true)
+      // A staff rider whose sign-in an admin disabled cannot act on a delivery.
+      .where('users.staff_disabled_at', 'is', null)
       .orderBy('users.full_name')
       .execute();
   }

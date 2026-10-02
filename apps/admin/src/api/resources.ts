@@ -20,6 +20,8 @@ import type {
   StaffAccount,
   CreateStaffInput,
   UpdateStaffInput,
+  StaffRider,
+  StaffRiderInput,
   CashHandin,
   CashReconciliation,
   Coupon,
@@ -258,7 +260,7 @@ export const feedback = {
 };
 
 // ------------------------------------------------------------------ staff
-/** Inventory / Operations sign-ins (backend migration 014). ADMIN only. */
+/** Admin / Operations / Inventory / Rider sign-ins (backend migration 014). */
 export const staff = {
   list: () => apiRequest<{ staff: StaffAccount[] }>('/admin/staff').then((d) => d.staff),
 
@@ -268,6 +270,12 @@ export const staff = {
   update: (id: string, input: UpdateStaffInput) =>
     apiRequest<{ staff: StaffAccount }>(`/admin/staff/${id}`, { method: 'PATCH', body: { ...input } }).then(
       (d) => d.staff
+    ),
+
+  /** "Can deliver": gives an Operations/Admin account a rider profile, or switches it off. */
+  setRider: (id: string, input: StaffRiderInput) =>
+    apiRequest<{ rider: StaffRider | null }>(`/admin/staff/${id}/rider`, { method: 'PUT', body: { ...input } }).then(
+      (d) => d.rider
     ),
 };
 

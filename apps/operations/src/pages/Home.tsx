@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { dental as dentalApi, orders as ordersApi, riders as ridersApi } from '../api/resources';
-import type { AdminAppointment, HomeOrder, HomeRider, MyDelivery } from '../api/types';
+import { delivery as deliveryApi, dental as dentalApi, orders as ordersApi, riders as ridersApi } from '../api/resources';
+import type { AdminAppointment, DeliverySummary, HomeOrder, HomeRider } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { useLowStock } from '../components/LowStock';
-import { statusLabel } from '../lib/delivery';
+import { splitQueue, statusLabel } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
+import { formatMoney } from '../lib/orders';
+import { syncTrackingFromList } from '../lib/tracker-session';
+import { isTripStop, owesCash, tripOf, useCurrentPosition } from '../lib/trip';
+import { TripCard } from './Delivery/Queue';
 
 /**
  * Operations Home (plan §9). Modelled on Admin's own `Dashboard.tsx` doc
@@ -54,7 +58,9 @@ function plural(count: number, singular: string, pluralForm: string): string {
 }
 
 interface Summary {
-  activeDelivery: MyDelivery | null;
+  activeDelivery: DeliverySummary | null;
+  /** The operator's own deliveries (staff riders): a trip is shown from these. */
+  myDeliveries: DeliverySummary[];
   needingPacking: HomeOrder[];
   readyForRider: HomeOrder[];
   onTheRoad: HomeOrder[];
@@ -71,6 +77,8 @@ export function Home() {
   const [refreshing, setRefreshing] = useState(false);
   // Shared with the tab bar's badge (one fetch per app load, see LowStock.tsx).
   const lowStock = useLowStock();
+  // Orders a trip's stops when the operator is on one (never sent anywhere).
+  const position = useCurrentPosition((summary?.myDeliveries ?? []).filter(isTripStop).length >= 2);
 
   const load = useCallback(
     async (isRefresh: boolean) => {
@@ -107,11 +115,22 @@ export function Home() {
           // ADMIN_ONLY sessions have no rider profile to ask about - this
           // isn't a failure, so it isn't even fetched (brief: "omit ...
           // rather than showing an empty/error state for it").
-          riderCapability === 'ADMIN_PLUS_RIDER' ? ridersApi.myDeliveries() : Promise.resolve<MyDelivery[]>([]),
+          riderCapability === 'ADMIN_PLUS_RIDER' ? deliveryApi.list() : Promise.resolve<DeliverySummary[]>([]),
         ]);
+        if (riderCapability === 'ADMIN_PLUS_RIDER') {
+          // Home sees the whole list, so it may resume (or end) location
+          // sharing too - e.g. a restart that lands here mid-delivery.
+          syncTrackingFromList(myDeliveries).catch(() => undefined);
+        }
 
         setSummary({
-          activeDelivery: myDeliveries.find((d) => !CLOSED_ASSIGNMENT_STATUSES.has(d.assignment_status)) ?? null,
+          // The one to act on now (at the door, on the road, ready to pick
+          // up), else the first still-open one (e.g. being packed).
+          activeDelivery:
+            splitQueue(myDeliveries).now ??
+            myDeliveries.find((d) => !CLOSED_ASSIGNMENT_STATUSES.has(d.assignment_status)) ??
+            null,
+          myDeliveries,
           needingPacking,
           readyForRider,
           onTheRoad,
@@ -166,6 +185,7 @@ export function Home() {
     );
   }
 
+  const trip = tripOf(summary.myDeliveries, position);
   const attention: { text: string; to: string; label: string }[] = [];
   if (summary.needingPacking.length > 0) {
     attention.push({
@@ -215,8 +235,10 @@ export function Home() {
       {riderCapability === 'ADMIN_PLUS_RIDER' ? (
         <section className="section">
           <h2 className="section-label">Active delivery</h2>
-          {summary.activeDelivery ? (
-            <div className="delivery-card">
+          {trip ? (
+            <TripCard stops={trip} />
+          ) : summary.activeDelivery ? (
+            <div className="delivery-card delivery-card--active">
               <span className="delivery-card__status">{statusLabel(summary.activeDelivery)}</span>
               <p className="delivery-card__dest">{summary.activeDelivery.delivery_address_line1}</p>
               <p className="delivery-card__meta">
@@ -224,6 +246,13 @@ export function Home() {
                 <span>{summary.activeDelivery.delivery_recipient_name}</span>
                 <span>{summary.activeDelivery.delivery_city}</span>
               </p>
+              {owesCash(summary.activeDelivery) ? (
+                <p className="delivery-card__meta">
+                  <span className="order-detail__strong">
+                    Cash to collect: {formatMoney(summary.activeDelivery.total_amount)}
+                  </span>
+                </p>
+              ) : null}
               {/* F4 registers this exact route (`/delivery/:id`) - see
                   task-F2-report.md for the coordination note. */}
               <Link className="primary" to={`/delivery/${summary.activeDelivery.delivery_id}`}>

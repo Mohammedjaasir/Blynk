@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { riderController } from './rider.controller.js';
+import { validate } from '../../middleware/validate.middleware.js';
+import { ownRiderProfileSchema, riderProfileService, type OwnRiderProfileInput } from './rider.profile.js';
 
 export const ridersRouter = Router();
 
@@ -34,6 +36,30 @@ ridersRouter.get(
   requireAuth,
   RIDER_OR_OPS,
   riderController.getActiveDeliveries.bind(riderController)
+);
+
+// The caller's own rider profile (staff riders, rider.profile.ts): read by
+// any rider-capable role, set up only by ADMIN/OPERATIONS for themselves.
+ridersRouter.get('/me/profile', requireAuth, RIDER_OR_OPS, async (req, res, next) => {
+  try {
+    res.status(200).json({ success: true, data: { profile: await riderProfileService.getOwn(req.user!.id) } });
+  } catch (err) {
+    next(err);
+  }
+});
+ridersRouter.post(
+  '/me/profile',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  validate({ body: ownRiderProfileSchema }),
+  async (req, res, next) => {
+    try {
+      const profile = await riderProfileService.setUpOwn(req.user!.id, req.user!.role, req.body as OwnRiderProfileInput);
+      res.status(200).json({ success: true, data: { profile } });
+    } catch (err) {
+      next(err);
+    }
+  }
 );
 
 // "My day": the calling rider's own counts and cash (never another rider's).
@@ -70,3 +96,4 @@ ridersRouter.post(
 export * from './rider.repository.js';
 export * from './rider.service.js';
 export * from './rider.controller.js';
+export * from './rider.profile.js';

@@ -11,6 +11,7 @@ import { ApiError, onSessionEnded, tokenStore } from '../api/client';
 import { auth as authApi } from '../api/resources';
 import type { AuthUser } from '../api/types';
 import { probeRiderCapability, type RiderCapability } from './riderProbe';
+import { stopTracking } from '../lib/tracker-session';
 
 /**
  * Operations session, built on the existing Blynk OTP authentication - there
@@ -164,6 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Signing out locally matters more than the server round trip.
     }
+    // Location sharing belongs to this signed-in rider profile: never past sign-out.
+    stopTracking().catch(() => undefined);
     tokenStore.clear();
     setUser(null);
     setRiderCapability(null);

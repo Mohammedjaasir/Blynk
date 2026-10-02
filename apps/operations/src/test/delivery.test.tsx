@@ -97,12 +97,39 @@ describe('Delivery queue', () => {
 
   it('shows the furthest-along delivery as Now, the rest as Next, and links to their detail pages', async () => {
     const ready = summary({ assignment_status: 'PICKED_UP', order_status: 'OUT_FOR_DELIVERY' });
-    const waiting = summary({ assignment_status: 'ASSIGNED', order_status: 'PACKED' });
-    renderAs(ADMIN_WITH_RIDER, '/delivery', { 'GET /riders/deliveries': () => ok({ deliveries: [waiting, ready] }) });
+    const packing = summary({ assignment_status: 'ASSIGNED', order_status: 'PLACED' });
+    renderAs(ADMIN_WITH_RIDER, '/delivery', { 'GET /riders/deliveries': () => ok({ deliveries: [packing, ready] }) });
 
     const openLinks = await screen.findAllByRole('link', { name: /^Open delivery/ });
-    expect(openLinks.map((l) => l.getAttribute('href'))).toContain(`/delivery/${ready.delivery_id}`);
-    expect(await screen.findByText(`#${waiting.order_number.split('-').pop()}`)).toBeInTheDocument();
+    expect(openLinks.map((l) => l.getAttribute('href'))).toEqual([`/delivery/${ready.delivery_id}`, `/delivery/${packing.delivery_id}`]);
+    expect(await screen.findByText(`#${packing.order_number.split('-').pop()}`)).toBeInTheDocument();
+    expect(screen.getByText('Being packed')).toBeInTheDocument();
+  });
+
+  it('two orders to act on are one trip: the stops in order, each opening its own delivery (Rider app parity)', async () => {
+    const onRoad = summary({ assignment_status: 'PICKED_UP', order_status: 'OUT_FOR_DELIVERY', total_amount: 500 });
+    const atStore = summary({ assignment_status: 'ASSIGNED', order_status: 'PACKED', total_amount: 700 });
+    renderAs(ADMIN_WITH_RIDER, '/delivery', { 'GET /riders/deliveries': () => ok({ deliveries: [atStore, onRoad] }) });
+
+    expect(await screen.findByRole('heading', { name: 'Your trip · 2 stops' })).toBeInTheDocument();
+    const stops = screen.getAllByRole('link', { name: /^Open stop/ });
+    expect(stops.map((l) => l.getAttribute('href'))).toEqual([`/delivery/${onRoad.delivery_id}`, `/delivery/${atStore.delivery_id}`]);
+    expect(screen.getByText('LKR 1,200 cash in all')).toBeInTheDocument();
+    expect(screen.getByText('One order is still at the store. Pick it up when you are there.')).toBeInTheDocument();
+    // Trip stops are not listed again under Next.
+    expect(screen.queryByRole('heading', { name: 'Next' })).not.toBeInTheDocument();
+  });
+
+  it('starts sharing location from the queue alone when a delivery is on the road (no need to open it)', async () => {
+    const { watchPosition } = stubGeolocation();
+    const onRoad = summary({ assignment_status: 'PICKED_UP', order_status: 'OUT_FOR_DELIVERY' });
+    renderAs(ADMIN_WITH_RIDER, '/delivery', { 'GET /riders/deliveries': () => ok({ deliveries: [onRoad] }) });
+    await waitFor(() => expect(watchPosition).toHaveBeenCalledTimes(1));
+  });
+
+  it('links to My day', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/delivery', { 'GET /riders/deliveries': () => ok({ deliveries: [] }) });
+    expect(await screen.findByRole('link', { name: 'My day' })).toHaveAttribute('href', '/delivery/day');
   });
 
   it('shows a Done today summary from delivered rows', async () => {
@@ -303,7 +330,7 @@ async function userEventClick(user: ReturnType<typeof userEvent.setup>, name: st
   await user.click(await screen.findByRole('button', { name }));
 }
 
-describe('Live location (foreground browser Geolocation only)', () => {
+describe('Live location (browser Geolocation, while the app is open)', () => {
   it('never calls watchPosition merely because the screen is open - only once the delivery is genuinely trackable', async () => {
     const { watchPosition } = stubGeolocation();
     const s = summary({ assignment_status: 'ASSIGNED', order_status: 'PACKED' }); // not yet trackable
@@ -335,12 +362,22 @@ describe('Live location (foreground browser Geolocation only)', () => {
     await waitFor(() => expect(clearWatch).toHaveBeenCalledTimes(1));
   });
 
-  it('stops tracking on navigating away from the Delivery Detail screen (unmount) - the foreground-only limitation', async () => {
+  it('keeps sharing after leaving the Delivery Detail screen (tracking belongs to the delivery), and signing out stops it', async () => {
+    const user = userEvent.setup();
     const { watchPosition, clearWatch } = stubGeolocation();
     const s = summary({ assignment_status: 'PICKED_UP', order_status: 'OUT_FOR_DELIVERY' });
-    const { unmount } = renderAs(ADMIN_WITH_RIDER, `/delivery/${s.delivery_id}`, { 'GET /riders/deliveries/:id': () => ok({ delivery: detail(s) }) });
+    renderAs(ADMIN_WITH_RIDER, `/delivery/${s.delivery_id}`, {
+      'GET /riders/deliveries/:id': () => ok({ delivery: detail(s) }),
+      'GET /riders/deliveries': () => ok({ deliveries: [s] }),
+    });
     await waitFor(() => expect(watchPosition).toHaveBeenCalledTimes(1));
-    unmount();
+    await user.click(screen.getByRole('link', { name: '← Back to Delivery' }));
+    expect(await screen.findByRole('link', { name: /^Open delivery/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'More' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(clearWatch).not.toHaveBeenCalled();
+    expect(watchPosition).toHaveBeenCalledTimes(1);
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(clearWatch).toHaveBeenCalledTimes(1));
   });
 

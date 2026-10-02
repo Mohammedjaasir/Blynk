@@ -8,7 +8,9 @@ import { ProductForm } from './pages/Catalog/ProductForm';
 import { ProductImport } from './pages/Catalog/ProductImport';
 import { Products } from './pages/Catalog/Products';
 import { Promotions } from './pages/Catalog/Promotions';
+import { DeliverMyself } from './pages/DeliverMyself';
 import { Detail as DeliveryDetail } from './pages/Delivery/Detail';
+import { MyDay as DeliveryMyDay } from './pages/Delivery/MyDay';
 import { Queue as DeliveryQueue } from './pages/Delivery/Queue';
 import { Appointments as DentalAppointments } from './pages/Dental/Appointments';
 import { Availability as DentalAvailability } from './pages/Dental/Availability';
@@ -30,6 +32,7 @@ import { OrderDetail } from './pages/OrderDetail';
 import { PackingSlip } from './pages/PackingSlip';
 import { Orders } from './pages/Orders';
 import { Riders } from './pages/Riders';
+import { StaffAccounts } from './pages/StaffAccounts';
 
 /**
  * Route protection here is for the operator's benefit only. Every
@@ -104,6 +107,7 @@ export function AppRoutes() {
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="orders/:id/slip" element={<PackingSlip />} />
         <Route path="delivery" element={<DeliveryQueue />} />
+        <Route path="delivery/day" element={<DeliveryMyDay />} />
         <Route path="delivery/:id" element={<DeliveryDetail />} />
         <Route path="catalog" element={<Catalog />} />
         <Route path="catalog/products" element={<Products />} />
@@ -127,6 +131,8 @@ export function AppRoutes() {
         <Route path="more" element={<More />} />
         <Route path="more/riders" element={<Riders />} />
         <Route path="more/cash" element={<Cash />} />
+        <Route path="more/deliver" element={<DeliverMyself />} />
+        <Route path="more/staff" element={<StaffAccounts />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

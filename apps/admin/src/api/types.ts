@@ -10,8 +10,11 @@ export type UserRole =
   | 'OPERATIONS'
   | 'SUPPORT';
 
-/** Roles an admin can give a staff account (backend migration 014). */
+/** Roles an existing account can be moved between (backend migration 014). */
 export type StaffRole = 'PACKING_STAFF' | 'OPERATIONS';
+
+/** Roles a new account can be created with (an ADMIN may create all four). */
+export type CreatableRole = 'ADMIN' | 'OPERATIONS' | 'PACKING_STAFF' | 'RIDER';
 
 /** GET /admin/staff row. ADMIN rows come back with read_only: true. */
 export interface StaffAccount {
@@ -19,19 +22,42 @@ export interface StaffAccount {
   full_name: string | null;
   email: string | null;
   phone: string;
-  role: 'ADMIN' | StaffRole;
+  role: CreatableRole;
   has_password: boolean;
   disabled: boolean;
   read_only: boolean;
   created_at: string;
+  /** "Can deliver" (staff riders): the account's rider profile, null when none. */
+  rider?: StaffRider | null;
+}
+
+/** An account's rider profile: a Rider's own, or an Operations/Admin "Can deliver" one. */
+export interface StaffRider {
+  id: string;
+  is_active: boolean;
+  vehicle_type: string;
+  vehicle_registration_number: string;
+  emergency_contact_phone?: string | null;
+}
+
+export type VehicleType = 'MOTORCYCLE' | 'SCOOTER' | 'BICYCLE' | 'THREE_WHEELER' | 'CAR';
+
+export interface StaffRiderInput {
+  can_deliver: boolean;
+  vehicle_type?: VehicleType;
+  vehicle_registration_number?: string;
 }
 
 export interface CreateStaffInput {
   full_name: string;
   email: string;
   password: string;
-  role: StaffRole;
+  role: CreatableRole;
   phone: string;
+  /** Rider accounts only. */
+  vehicle_type?: VehicleType;
+  vehicle_registration_number?: string;
+  emergency_contact_phone?: string | null;
 }
 
 export interface UpdateStaffInput {
@@ -39,6 +65,10 @@ export interface UpdateStaffInput {
   role?: StaffRole;
   password?: string;
   disabled?: boolean;
+  /** Rider accounts only. */
+  vehicle_type?: VehicleType;
+  vehicle_registration_number?: string;
+  emergency_contact_phone?: string | null;
 }
 
 export interface AuthUser {

@@ -11,6 +11,16 @@ export const authApi = {
       body: { phone, otp },
       auth: false,
     }),
+  /**
+   * Email + password sign-in (rider accounts made on Staff accounts, backend
+   * STAFF_PASSWORD_ROLES): the same lockout and disabled checks as staff.
+   */
+  passwordLogin: (email: string, password: string) =>
+    apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/staff/login', {
+      method: 'POST',
+      body: { email, password },
+      auth: false,
+    }),
   me: () => apiRequest<AuthUser>('/auth/me'),
   logout: () => apiRequest('/auth/logout', { method: 'POST' }),
 };

@@ -39,4 +39,10 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Delivery tab (staff riders, 2026-10-01): the WebView's navigator.geolocation
+         shares the operator's position while one of their deliveries is on the road.
+         Capacitor's WebChromeClient asks for these at runtime on first use. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>

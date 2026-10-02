@@ -40,8 +40,12 @@ export interface RefreshTokensResult {
   expires_in: number;
 }
 
-/** Roles that may sign in with email + password (migration 012; OPERATIONS from 014). */
-export const STAFF_PASSWORD_ROLES: string[] = ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'];
+/**
+ * Roles that may sign in with email + password (migration 012; OPERATIONS
+ * from 014; RIDER from 2026-10-01, for rider accounts created on the Staff
+ * accounts page - same lockout and disabled checks).
+ */
+export const STAFF_PASSWORD_ROLES: string[] = ['ADMIN', 'PACKING_STAFF', 'OPERATIONS', 'RIDER'];
 
 /**
  * The one refusal for a staff account an admin has disabled (migration 014),

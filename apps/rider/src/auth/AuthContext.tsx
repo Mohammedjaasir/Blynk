@@ -10,6 +10,8 @@ interface AuthState {
   notice: string | null;
   requestOtp(phone: string): Promise<{ devOtp?: string }>;
   verifyOtp(phone: string, otp: string): Promise<void>;
+  /** Email + password: the default sign-in; the same rider-only gate as an SMS code. */
+  signInWithPassword(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -80,8 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { devOtp: data.dev_otp };
   }, []);
 
-  const verifyOtp = useCallback(async (phone: string, otp: string) => {
-    const data = await authApi.verifyOtp(phone, otp);
+  // Both sign-in methods end here: the same role gate, the same session.
+  const startSession = useCallback((data: { access_token: string; refresh_token: string; user: AuthUser }) => {
     if (!isRider(data.user)) {
       tokenStore.clear();
       throw new ApiError(WRONG_ROLE_MESSAGE, 403, 'FORBIDDEN');
@@ -91,6 +93,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setStatus('authenticated');
   }, []);
+
+  const verifyOtp = useCallback(
+    async (phone: string, otp: string) => startSession(await authApi.verifyOtp(phone, otp)),
+    [startSession]
+  );
+
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => startSession(await authApi.passwordLogin(email, password)),
+    [startSession]
+  );
 
   const signOut = useCallback(async () => {
     try {
@@ -105,8 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, status, notice, requestOtp, verifyOtp, signOut }),
-    [user, status, notice, requestOtp, verifyOtp, signOut]
+    () => ({ user, status, notice, requestOtp, verifyOtp, signInWithPassword, signOut }),
+    [user, status, notice, requestOtp, verifyOtp, signInWithPassword, signOut]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

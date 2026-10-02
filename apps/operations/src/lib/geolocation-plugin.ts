@@ -14,9 +14,9 @@
  *     native background-location plugin of any kind - explicitly out of
  *     scope for this pass (common.md rule 10). That is a large, separate
  *     undertaking on the scale of the Rider app's own live-location phase.
- *   - It tracks ONLY while the browser tab that opened the Delivery Detail
- *     screen is open and (per most browsers' own power-saving behaviour)
- *     foregrounded - unlike the Rider app's native watcher, this has no
+ *   - It tracks ONLY while the app (any screen - see tracker-session.ts) is
+ *     open and (per most browsers' and Android WebView's power-saving
+ *     behaviour) foregrounded - unlike the Rider app's native watcher, this has no
  *     ability to keep reporting a position once the tab is backgrounded,
  *     closed, or the device is locked. This is a genuinely lesser
  *     capability than the Rider app's, not an equivalent one - documented

@@ -6,30 +6,19 @@ import { isTrackable } from './delivery';
 import { DeliveryTracker } from './tracking';
 
 /**
- * The one DeliveryTracker for the Operations app. Ported from
- * apps/rider/src/lib/tracker-session.ts's singleton+serialized-queue design
- * (common.md rule 2: the lifecycle logic, not the Capacitor plugin call -
- * see geolocation-plugin.ts for the actual browser adapter).
+ * The one DeliveryTracker for the Operations app, ported from
+ * apps/rider/src/lib/tracker-session.ts's singleton + serialized-queue design.
  *
- * ONE DELIBERATE DIFFERENCE FROM THE RIDER APP, driven by the foreground-only
- * constraint (common.md rule 10; task-F4-brief.md's Rules section):
+ * Staff riders (2026-10-01): the lead delivers from this app, so tracking
+ * belongs to the delivery, not to a screen - as in the Rider app. Once a
+ * delivery is on the road it keeps sharing while the operator moves around
+ * the app (Home, Orders, the queue); arrival, failure, a server refusal or
+ * signing out stops it. `syncTrackingFromList` lets the screens that load the
+ * whole list (Delivery queue, Home) start or stop it for the list as a whole.
  *
- * The Rider app's tracker is an APP-LEVEL session that survives navigating
- * away from its Delivery screen back to its Queue - it can do that because
- * the underlying watcher is a native background service that keeps running
- * whether or not any screen is showing it. Operations has no such native
- * component: a `navigator.geolocation.watchPosition()` call only ever runs
- * inside this one browser tab's JS, so nothing would ever stop it once
- * started if this module tried to keep it alive the same way. The brief is
- * explicit that Operations must stop tracking "on ... navigating away from
- * the Delivery Detail screen" - so, unlike Rider's Delivery.tsx (which
- * comments "Unmounting drops the listener, never the tracking"), Operations'
- * `pages/Delivery/Detail.tsx` calls `stopTrackingFor(id)` in its own
- * unmount cleanup. Only the Detail screen ever calls `syncTracking()` here;
- * there is no Queue-driven `syncTrackingFromList` equivalent, because no
- * other Operations screen is responsible for tracking (mirrors the brief's
- * explicit list of build targets - Queue lists deliveries, only Detail
- * tracks one).
+ * The one remaining difference from the Rider app: the watcher underneath is
+ * the WebView's navigator.geolocation (geolocation-plugin.ts), not a native
+ * background service, so it shares only while the app is open on screen.
  */
 /** A refusal after which this delivery can never be shared again by this operator. */
 function closesWindow(err: unknown): boolean {
@@ -95,13 +84,29 @@ export function syncTracking(delivery: DeliverySummary): Promise<void> {
   return enqueue(() => applyDelivery(delivery));
 }
 
+/**
+ * For screens that see the whole list (Delivery queue, Home) and so may say
+ * "nothing is trackable anywhere". Call it only after a SUCCESSFUL load.
+ * Keeps the delivery already tracked if it is still trackable, otherwise the
+ * first trackable one in list order; none trackable stops.
+ */
+export function syncTrackingFromList(deliveries: DeliverySummary[]): Promise<void> {
+  return enqueue(async () => {
+    const trackable = deliveries.filter(isTrackable);
+    const current = tracker.getDeliveryId();
+    const target = trackable.find((d) => d.delivery_id === current) ?? trackable[0];
+    if (target) await applyDelivery(target);
+    else await applyStopAny();
+  });
+}
+
 /** Stops whatever is being tracked (also retries a stop that failed natively). */
 export function stopTracking(): Promise<void> {
   return enqueue(applyStopAny);
 }
 
 /** Stops tracking only if it is bound to this delivery (e.g. the API says it
- * is no longer ours, or the Detail screen for it is being left). */
+ * is no longer ours). */
 export function stopTrackingFor(deliveryId: string): Promise<void> {
   return enqueue(async () => {
     if (tracker.getDeliveryId() === deliveryId) await tracker.stop();

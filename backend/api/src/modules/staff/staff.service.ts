@@ -4,10 +4,38 @@ import type { Database, UserRole } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import type { CreateStaffInput, UpdateStaffInput } from './staff.schema.js';
+import { findOpenDeliveriesForRiders } from '../riders/batching.js';
+import { storeId } from '../riders/rider.profile.js';
 
-/** Roles the Staff accounts page lists. ADMIN rows are shown read-only. */
-const LISTED_ROLES: UserRole[] = ['PACKING_STAFF', 'OPERATIONS', 'ADMIN'];
-const MANAGED_ROLES: UserRole[] = ['PACKING_STAFF', 'OPERATIONS'];
+/**
+ * The permission matrix (owner-approved default, 2026-10-01):
+ *
+ *   caller      | lists                    | creates                  | manages
+ *   ------------+--------------------------+--------------------------+-------------------------
+ *   ADMIN       | ADMIN, OPERATIONS,       | ADMIN, OPERATIONS,       | OPERATIONS,
+ *               | PACKING_STAFF, RIDER     | PACKING_STAFF, RIDER     | PACKING_STAFF, RIDER
+ *   OPERATIONS  | PACKING_STAFF, RIDER     | PACKING_STAFF, RIDER     | PACKING_STAFF, RIDER
+ *
+ * An existing ADMIN account is never changed here (CANNOT_EDIT_ADMIN), nobody
+ * changes their own account here (CANNOT_EDIT_SELF), and only an ADMIN moves
+ * an account between roles. Everything is written to audit_logs.
+ */
+const LISTED_ROLES: UserRole[] = ['PACKING_STAFF', 'OPERATIONS', 'ADMIN', 'RIDER'];
+
+export type StaffActorRole = 'ADMIN' | 'OPERATIONS';
+
+const CREATABLE_BY: Record<StaffActorRole, UserRole[]> = {
+  ADMIN: ['ADMIN', 'OPERATIONS', 'PACKING_STAFF', 'RIDER'],
+  OPERATIONS: ['PACKING_STAFF', 'RIDER'],
+};
+const MANAGEABLE_BY: Record<StaffActorRole, UserRole[]> = {
+  ADMIN: ['OPERATIONS', 'PACKING_STAFF', 'RIDER'],
+  OPERATIONS: ['PACKING_STAFF', 'RIDER'],
+};
+const LISTED_FOR: Record<StaffActorRole, UserRole[]> = {
+  ADMIN: LISTED_ROLES,
+  OPERATIONS: ['PACKING_STAFF', 'RIDER'],
+};
 
 export interface StaffAccount {
   id: string;
@@ -20,10 +48,24 @@ export interface StaffAccount {
   /** ADMIN accounts: shown, never changed from this page. */
   read_only: boolean;
   created_at: Date;
+  /**
+   * The account's rider profile ("Can deliver", staff riders): null when it
+   * has none. Only OPERATIONS and ADMIN accounts can have one.
+   */
+  rider: StaffRiderSummary | null;
+}
+
+export interface StaffRiderSummary {
+  id: string;
+  is_active: boolean;
+  vehicle_type: string;
+  vehicle_registration_number: string;
+  emergency_contact_phone: string | null;
 }
 
 export interface AuditMeta {
   actorId: string;
+  actorRole: StaffActorRole;
   ipAddress?: string | null;
   userAgent?: string | null;
 }
@@ -56,7 +98,13 @@ type StaffRow = {
   disabled: boolean;
 };
 
-const toAccount = (row: StaffRow): StaffAccount => ({
+type Actor = Pick<AuditMeta, 'actorId' | 'actorRole'>;
+
+/** Shown read-only: an ADMIN, the caller's own account, or a role the caller does not manage. */
+const readOnlyFor = (row: StaffRow, actor?: Actor) =>
+  row.role === 'ADMIN' || (actor ? row.id === actor.actorId || !MANAGEABLE_BY[actor.actorRole].includes(row.role) : false);
+
+const toAccount = (row: StaffRow, rider: StaffRiderSummary | null = null, actor?: Actor): StaffAccount => ({
   id: row.id,
   full_name: row.full_name,
   email: row.email,
@@ -64,9 +112,25 @@ const toAccount = (row: StaffRow): StaffAccount => ({
   role: row.role,
   has_password: row.has_password,
   disabled: row.disabled,
-  read_only: row.role === 'ADMIN',
+  read_only: readOnlyFor(row, actor),
   created_at: row.created_at,
+  rider,
 });
+
+/** Rider profiles for these users, keyed by user id. */
+async function ridersFor(executor: Executor, userIds: string[]): Promise<Map<string, StaffRiderSummary>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await executor
+    .selectFrom('riders')
+    .select(['id', 'user_id', 'is_active', 'vehicle_type', 'vehicle_registration_number', 'emergency_contact_phone'])
+    .where('user_id', 'in', userIds)
+    .execute();
+  return new Map(rows.map(({ user_id, ...r }) => [user_id, r]));
+}
+
+async function withRider(executor: Executor, row: StaffRow, actor?: Actor): Promise<StaffAccount> {
+  return toAccount(row, (await ridersFor(executor, [row.id])).get(row.id) ?? null, actor);
+}
 
 /** Only a plain IPv4/IPv6 address goes into audit_logs.ip_address (INET). */
 function inetOrNull(ip?: string | null): string | null {
@@ -103,24 +167,44 @@ const emailTaken = () =>
   new AppError('Another account already uses this email address.', 409, 'EMAIL_TAKEN', { field: 'email' });
 const phoneTaken = () =>
   new AppError('Another account already uses this phone number.', 409, 'PHONE_TAKEN', { field: 'phone' });
+const roleForbidden = (message: string) => new AppError(message, 403, 'STAFF_ROLE_FORBIDDEN');
+const roleLabel: Record<string, string> = {
+  ADMIN: 'Admin',
+  OPERATIONS: 'Operations',
+  PACKING_STAFF: 'Inventory',
+  RIDER: 'Rider',
+};
 
 export class StaffService {
-  /** PACKING_STAFF and OPERATIONS accounts plus read-only ADMINs, newest first. */
-  async list(): Promise<StaffAccount[]> {
+  /**
+   * The accounts this caller may see, newest first: every staff and rider
+   * account for an ADMIN (ADMINs read-only), only Inventory and Rider
+   * accounts for OPERATIONS.
+   */
+  async list(actor: Actor): Promise<StaffAccount[]> {
     const rows = await staffColumns(db)
-      .where('role', 'in', LISTED_ROLES)
+      .where('role', 'in', LISTED_FOR[actor.actorRole])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .execute();
-    return (rows as StaffRow[]).map(toAccount);
+    const riders = await ridersFor(
+      db,
+      rows.map((r) => r.id)
+    );
+    return (rows as StaffRow[]).map((r) => toAccount(r, riders.get(r.id) ?? null, actor));
   }
 
   /**
-   * Creates an Inventory (PACKING_STAFF) or Operations (OPERATIONS) account
-   * that signs in with its email + password. The password is stored only as
-   * a bcrypt hash made inside Postgres (pgcrypto), like migration 012's.
+   * Creates an Admin, Operations, Inventory (PACKING_STAFF) or Rider account
+   * that signs in with its email + password - only a role the caller may
+   * create. A Rider gets its riders row in the same transaction, active at
+   * once. The password is stored only as a bcrypt hash made inside Postgres
+   * (pgcrypto), like migration 012's.
    */
   async create(input: CreateStaffInput, meta: AuditMeta): Promise<StaffAccount> {
+    if (!CREATABLE_BY[meta.actorRole].includes(input.role)) {
+      throw roleForbidden(`${roleLabel[meta.actorRole]} accounts cannot create ${roleLabel[input.role]} accounts.`);
+    }
     try {
       return await db.transaction().execute(async (trx) => {
         const clash = await trx
@@ -144,15 +228,32 @@ export class StaffService {
           .returning('id')
           .executeTakeFirstOrThrow();
 
+        const vehicle: Record<string, unknown> = {};
+        if (input.role === 'RIDER') {
+          const values = {
+            vehicle_type: input.vehicle_type ?? 'MOTORCYCLE',
+            vehicle_registration_number: input.vehicle_registration_number!,
+            emergency_contact_phone: input.emergency_contact_phone ?? null,
+          };
+          const rider = await trx
+            .insertInto('riders')
+            .values({ user_id: id, dark_store_id: await storeId(trx), ...values, is_active: true, is_available: true })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          Object.assign(vehicle, values, { rider_id: rider.id });
+        }
+
         await audit(trx, meta, 'STAFF_CREATED', id, null, {
           full_name: input.full_name,
           email: input.email,
           phone: input.phone,
           role: input.role,
+          by_role: meta.actorRole,
+          ...vehicle,
         });
         const row = await staffColumns(trx).where('id', '=', id).executeTakeFirstOrThrow();
         logger.info({ staffId: id, role: input.role, by: meta.actorId }, 'Staff account created');
-        return toAccount(row as StaffRow);
+        return withRider(trx, row as StaffRow, meta);
       });
     } catch (err) {
       // Two creates at once can still meet at the unique indexes.
@@ -163,11 +264,16 @@ export class StaffService {
   }
 
   /**
-   * Renames, changes role, resets the password (which also clears the
-   * lockout) or disables/enables one Inventory or Operations account - never
-   * an ADMIN account and never the caller's own. A change of role, password
-   * or disabled state also ends the account's sessions (its refresh tokens),
-   * so the next sign-in carries the new state.
+   * Renames, changes role (ADMIN callers only, between Inventory and
+   * Operations), resets the password (which also clears the lockout),
+   * disables/enables, or edits a Rider's vehicle - on an account the caller
+   * may manage, never an ADMIN account and never the caller's own. A change
+   * of role, password or disabled state also ends the account's sessions
+   * (its refresh tokens), so the next sign-in carries the new state.
+   *
+   * Disabling an account that has a rider profile is refused while it still
+   * holds an open delivery (409 RIDER_HAS_OPEN_DELIVERIES); once disabled it
+   * is neither suggested nor assignable (staff_disabled_at).
    */
   async update(id: string, input: UpdateStaffInput, meta: AuditMeta): Promise<StaffAccount> {
     if (id === meta.actorId) {
@@ -180,8 +286,24 @@ export class StaffService {
       if (!current || !LISTED_ROLES.includes(current.role)) {
         throw new AppError('Staff account not found.', 404, 'STAFF_NOT_FOUND');
       }
-      if (!MANAGED_ROLES.includes(current.role)) {
+      if (current.role === 'ADMIN') {
         throw new AppError('Admin accounts cannot be changed here.', 403, 'CANNOT_EDIT_ADMIN');
+      }
+      if (!MANAGEABLE_BY[meta.actorRole].includes(current.role)) {
+        throw roleForbidden(`${roleLabel[meta.actorRole]} accounts cannot change ${roleLabel[current.role]} accounts.`);
+      }
+      if (input.role !== undefined && input.role !== current.role) {
+        if (meta.actorRole !== 'ADMIN') throw roleForbidden('Only an admin can change the role of an account.');
+        if (current.role === 'RIDER') {
+          throw new AppError('A Rider account cannot be moved to another role.', 422, 'ROLE_CHANGE_NOT_ALLOWED');
+        }
+      }
+      const vehicleChange =
+        input.vehicle_type !== undefined ||
+        input.vehicle_registration_number !== undefined ||
+        input.emergency_contact_phone !== undefined;
+      if (vehicleChange && current.role !== 'RIDER') {
+        throw new AppError('Vehicle details are edited here only for Rider accounts.', 422, 'NOT_A_RIDER_ACCOUNT');
       }
 
       const oldValues: Record<string, unknown> = {};
@@ -199,6 +321,31 @@ export class StaffService {
         oldValues.role = current.role;
         newValues.role = input.role;
         endSessions = true;
+        // Inventory accounts cannot deliver: a staff rider profile goes off
+        // with the move (refused while it still holds an open delivery).
+        if (input.role === 'PACKING_STAFF') {
+          const rider = await trx
+            .selectFrom('riders')
+            .select(['id', 'is_active'])
+            .where('user_id', '=', id)
+            .forUpdate()
+            .executeTakeFirst();
+          if (rider?.is_active) {
+            if ((await findOpenDeliveriesForRiders([rider.id], trx)).length > 0) {
+              throw new AppError(
+                'This account still has open deliveries. Finish or reassign them before moving it to Inventory.',
+                409,
+                'RIDER_HAS_OPEN_DELIVERIES'
+              );
+            }
+            await trx
+              .updateTable('riders')
+              .set({ is_active: false, is_available: false, updated_at: sql`now()` })
+              .where('id', '=', rider.id)
+              .execute();
+            newValues.can_deliver = false;
+          }
+        }
       }
       if (input.password !== undefined) {
         query = query.set({
@@ -210,10 +357,54 @@ export class StaffService {
         endSessions = true;
       }
       if (input.disabled !== undefined && input.disabled !== current.disabled) {
+        if (input.disabled) {
+          // A rider who still carries an order must hand it back first.
+          const rider = await trx
+            .selectFrom('riders')
+            .select('id')
+            .where('user_id', '=', id)
+            .forUpdate()
+            .executeTakeFirst();
+          const open = rider ? await findOpenDeliveriesForRiders([rider.id], trx) : [];
+          if (open.length > 0) {
+            throw new AppError(
+              `This account still has ${open.length} open ${open.length === 1 ? 'delivery' : 'deliveries'}. Finish or reassign ${open.length === 1 ? 'it' : 'them'} before disabling it.`,
+              409,
+              'RIDER_HAS_OPEN_DELIVERIES',
+              { open_deliveries: open.map((d) => d.order_number) }
+            );
+          }
+        }
         query = query.set({ staff_disabled_at: input.disabled ? sql<Date>`now()` : null });
         oldValues.disabled = current.disabled;
         newValues.disabled = input.disabled;
         endSessions = true;
+      }
+
+      if (vehicleChange) {
+        const rider = await trx
+          .selectFrom('riders')
+          .select(['id', 'vehicle_type', 'vehicle_registration_number', 'emergency_contact_phone'])
+          .where('user_id', '=', id)
+          .forUpdate()
+          .executeTakeFirst();
+        if (!rider) throw new AppError('This rider has no rider profile.', 404, 'RIDER_PROFILE_NOT_FOUND');
+        const set: Record<string, string | null> = {};
+        for (const key of ['vehicle_type', 'vehicle_registration_number', 'emergency_contact_phone'] as const) {
+          const next = input[key];
+          if (next !== undefined && next !== rider[key]) {
+            set[key] = next;
+            oldValues[key] = rider[key];
+            newValues[key] = next;
+          }
+        }
+        if (Object.keys(set).length > 0) {
+          await trx
+            .updateTable('riders')
+            .set({ ...set, updated_at: sql`now()` })
+            .where('id', '=', rider.id)
+            .execute();
+        }
       }
 
       if (Object.keys(newValues).length > 0) {
@@ -226,12 +417,12 @@ export class StaffService {
             .where('revoked_at', 'is', null)
             .execute();
         }
-        await audit(trx, meta, 'STAFF_UPDATED', id, oldValues, newValues);
+        await audit(trx, meta, 'STAFF_UPDATED', id, oldValues, { ...newValues, by_role: meta.actorRole });
         logger.info({ staffId: id, by: meta.actorId, changed: Object.keys(newValues) }, 'Staff account updated');
       }
 
       const row = await staffColumns(trx).where('id', '=', id).executeTakeFirstOrThrow();
-      return toAccount(row as StaffRow);
+      return withRider(trx, row as StaffRow, meta);
     });
   }
 }

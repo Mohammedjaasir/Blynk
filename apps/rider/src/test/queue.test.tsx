@@ -141,7 +141,7 @@ describe('Deliveries (home)', () => {
     renderAs(RIDER, '/');
     expect(await screen.findByText('Farhan')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(await screen.findByLabelText('Mobile number')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
   });
 });

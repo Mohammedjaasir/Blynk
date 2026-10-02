@@ -27,13 +27,10 @@ const STAGE_LABEL: Record<number, string> = { 0: 'Pick up', 1: 'On the way', 2: 
  * task-F2-report.md §9 - Home's "Open delivery" link already targets this
  * exact path/shape).
  *
- * Live-location tracking is entirely foreground-only browser Geolocation
- * (common.md rule 10) and is owned by THIS screen alone: it starts only when
- * the loaded delivery is genuinely in its trackable window
- * (`lib/delivery.ts`'s `isTrackable`, mirroring the backend's own check) and
- * is explicitly stopped when this screen unmounts - a deliberate difference
- * from the Rider app's ambient, screen-independent tracker session (see
- * `lib/tracker-session.ts`'s own doc comment for why).
+ * Live location: tracking starts only when the loaded delivery is genuinely
+ * in its trackable window (`lib/delivery.ts`'s `isTrackable`, mirroring the
+ * backend's own check) and, since staff riders (2026-10-01), keeps going
+ * while the operator uses the rest of the app - see lib/tracker-session.ts.
  */
 export function Detail() {
   const { id = '' } = useParams();
@@ -81,10 +78,11 @@ export function Detail() {
     void load();
   }, [load]);
 
-  // The tracker is owned by this screen (unlike Rider's app-level session -
-  // see lib/tracker-session.ts's doc comment): every load/action that
-  // changes `data` re-syncs it against the delivery's real trackable state,
-  // and unmounting always stops it, whatever that state is.
+  // The tracker is app-level (lib/tracker-session.ts), as in the Rider app:
+  // leaving this screen mid-delivery must not stop it, and reopening must
+  // find it running. This screen only reports what it knows - every load and
+  // step that changes `data` re-syncs it against the delivery's real
+  // trackable state. Unmounting drops the listener, never the tracking.
   const [trackingState, setTrackingState] = useState<TrackingState>(() => getTracker().getState());
   useEffect(() => {
     const tracker = getTracker();
@@ -95,12 +93,6 @@ export function Detail() {
     // A plugin start/stop that throws must never become an unhandled rejection.
     if (data) syncTracking(data).catch(() => undefined);
   }, [data]);
-  useEffect(
-    () => () => {
-      void stopTrackingFor(id);
-    },
-    [id]
-  );
 
   /** Runs one step. A single request at a time, whatever is tapped. */
   async function run(step: () => Promise<DeliveryDetail | void>) {
@@ -154,6 +146,9 @@ export function Detail() {
         <p className="banner banner--muted" role="status">
           No rider profile is linked to this account yet.
         </p>
+        <Link to="/delivery" className="link">
+          Set up delivering
+        </Link>
       </div>
     );
   }

@@ -862,6 +862,18 @@ input {
   color: var(--ink-2);
 }
 
+/* Staff accounts: the "account created" notice with its Dismiss button. */
+.staff-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.staff-notice p {
+  margin: 0;
+}
+
 /* ---------------------------------------------------------------- button */
 .button {
   border: 1px solid var(--line-strong);
@@ -2327,3 +2339,117 @@ a.cat-row__main {
 .cash-row--over { box-shadow: inset 4px 0 0 var(--yellow, #ffe141); }
 .cash-handins { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .cash-handins__row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
+/* ------------------------------------------------------------ staff riders */
+/* 2026-10-01: the lead delivers from this app. The two-order trip card
+   (Delivery queue and Home), the rider profile set-up form, and "My day" -
+   built from the existing .card/.figure/.attention primitives. */
+a.primary {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
+a.button {
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+}
+
+.delivery-card--active {
+  border-color: var(--ink);
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
+.trip {
+  border-color: var(--ink);
+}
+
+.trip__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trip__cash {
+  font-size: var(--text-meta);
+  font-weight: 800;
+}
+
+.trip__stops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.trip__stop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.trip__stop--first {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.trip__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-meta);
+}
+
+.trip__n {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  font-size: var(--text-label);
+}
+
+.trip__open {
+  width: 100%;
+}
+
+.rider-setup select.input {
+  width: 100%;
+}
+
+.deliver-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.day__note {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.day-figures {
+  margin: 0;
+}
+
+.day-figures dd {
+  margin: 0;
+}
+
+.day__cash {
+  font-size: var(--text-title);
+}
+
+.day-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 10px;
+}

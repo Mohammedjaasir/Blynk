@@ -46,6 +46,7 @@ describe('rider sign-in and session', () => {
       'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
       'POST /auth/otp/verify': () => ok({ access_token: 'a', refresh_token: 'r', user: CUSTOMER }),
     });
+    await user.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
     await user.type(await screen.findByLabelText('Mobile number'), '0771234567');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
     await user.type(await screen.findByLabelText('6-digit code'), '123456');
@@ -62,6 +63,7 @@ describe('rider sign-in and session', () => {
       'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
       'POST /auth/otp/verify': () => ok({ access_token: 'a', refresh_token: 'r', user: RIDER }),
     });
+    await user.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
     await user.type(await screen.findByLabelText('Mobile number'), '0779876543');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
     expect(await screen.findByText('Dev code: 123456')).toBeInTheDocument();
@@ -71,9 +73,61 @@ describe('rider sign-in and session', () => {
     expect(tokenStore.access).toBe('a');
   });
 
+  it('email + password is the default sign-in and lets a rider in', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(null, '/login', {
+      'POST /auth/staff/login': () => ok({ access_token: 'pw', refresh_token: 'r', user: RIDER }),
+    });
+    await user.type(await screen.findByLabelText('Email'), '  ravi@blynk.lk ');
+    const password = screen.getByLabelText('Password');
+    await user.type(password, 'Rider-pass-1');
+    expect(password).toHaveAttribute('type', 'password');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByText('No deliveries assigned to you right now.')).toBeInTheDocument();
+    expect(api.find('POST', '/auth/staff/login')[0].body).toEqual({ email: 'ravi@blynk.lk', password: 'Rider-pass-1' });
+    expect(tokenStore.access).toBe('pw');
+  });
+
+  it('a wrong password says so and clears the field', async () => {
+    const user = userEvent.setup();
+    renderAs(null, '/login', {
+      'POST /auth/staff/login': () => fail(401, 'INVALID_CREDENTIALS', 'Wrong email or password.'),
+    });
+    await user.type(await screen.findByLabelText('Email'), 'ravi@blynk.lk');
+    await user.type(screen.getByLabelText('Password'), 'nope-nope');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Wrong email or password.');
+    expect(screen.getByLabelText('Password')).toHaveValue('');
+    expect(tokenStore.access).toBeNull();
+  });
+
+  it('password sign-in refuses a non-rider account and keeps no token', async () => {
+    const user = userEvent.setup();
+    renderAs(null, '/login', {
+      'POST /auth/staff/login': () => ok({ access_token: 'a', refresh_token: 'r', user: STAFF }),
+    });
+    await user.type(await screen.findByLabelText('Email'), 'kasun@blynk.lk');
+    await user.type(screen.getByLabelText('Password'), 'Staff-pass-1');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This app is for Blynk riders. Sign in with a rider account.');
+    expect(tokenStore.access).toBeNull();
+  });
+
+  it('can switch to an SMS code and back', async () => {
+    const user = userEvent.setup();
+    renderAs(null, '/login');
+    await user.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
+    expect(screen.getByLabelText('Mobile number')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Email')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Use email and password instead' }));
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+  });
+
   it('shows the dev Skip button only when a dev rider phone is configured', async () => {
     renderAs(null, '/login');
-    await screen.findByLabelText('Mobile number');
+    await screen.findByLabelText('Email');
     expect(screen.queryByRole('button', { name: 'Skip sign-in' })).not.toBeInTheDocument();
   });
 

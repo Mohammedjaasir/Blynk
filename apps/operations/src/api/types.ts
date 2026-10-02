@@ -283,6 +283,97 @@ export interface DeliveryDetail extends DeliverySummary {
   items: DeliveryItem[];
 }
 
+/** Vehicle types a staff rider can pick (backend rider.profile.ts). */
+export type VehicleType = 'MOTORCYCLE' | 'SCOOTER' | 'BICYCLE' | 'THREE_WHEELER' | 'CAR';
+
+/** `GET|POST /riders/me/profile`: the signed-in user's own rider profile. */
+export interface RiderProfile {
+  id: string;
+  vehicle_type: VehicleType | string;
+  vehicle_registration_number: string;
+  emergency_contact_phone: string | null;
+  is_active: boolean;
+}
+
+/** Roles an existing account can be moved between (ADMIN callers only). */
+export type StaffRole = 'PACKING_STAFF' | 'OPERATIONS';
+
+/** Roles a new account can be created with (backend staff.service.ts permission matrix). */
+export type CreatableRole = 'ADMIN' | 'OPERATIONS' | 'PACKING_STAFF' | 'RIDER';
+
+/** `GET /admin/staff` row: accounts the caller may not change come back read_only. */
+export interface StaffAccount {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string;
+  role: CreatableRole;
+  has_password: boolean;
+  disabled: boolean;
+  read_only: boolean;
+  created_at: string;
+  /** A Rider's rider profile, or an Operations/Admin "Can deliver" one; null when none. */
+  rider?: {
+    id: string;
+    is_active: boolean;
+    vehicle_type: string;
+    vehicle_registration_number: string;
+    emergency_contact_phone?: string | null;
+  } | null;
+}
+
+export interface CreateStaffInput {
+  full_name: string;
+  email: string;
+  password: string;
+  role: CreatableRole;
+  phone: string;
+  /** Rider accounts only. */
+  vehicle_type?: VehicleType;
+  vehicle_registration_number?: string;
+  emergency_contact_phone?: string | null;
+}
+
+export interface UpdateStaffInput {
+  full_name?: string;
+  role?: StaffRole;
+  password?: string;
+  disabled?: boolean;
+  /** Rider accounts only. */
+  vehicle_type?: VehicleType;
+  vehicle_registration_number?: string;
+  emergency_contact_phone?: string | null;
+}
+
+export interface RiderProfileInput {
+  vehicle_type: VehicleType;
+  vehicle_registration_number: string;
+  emergency_contact_phone?: string | null;
+}
+
+/** "My day" (`GET /riders/me/day`): counts and cash, no pay. */
+export interface DayTotals {
+  completed: number;
+  failed: number;
+  customer_unavailable: number;
+  cash_collected: number;
+}
+
+export interface RiderDayDelivery {
+  delivery_id: string;
+  order_number: string;
+  outcome: 'DELIVERED' | 'FAILED' | 'CUSTOMER_UNAVAILABLE';
+  at: string;
+  cash_collected: number;
+}
+
+export interface RiderDay {
+  timezone: 'Asia/Colombo';
+  today: DayTotals & { date: string };
+  week: DayTotals & { starts_on: string };
+  deliveries_today: RiderDayDelivery[];
+}
+
 /** The response of `POST /riders/deliveries/:id/collect-cod`. */
 export interface CodSettlement {
   delivery_id: string;

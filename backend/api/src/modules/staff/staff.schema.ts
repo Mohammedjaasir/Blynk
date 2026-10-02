@@ -1,13 +1,23 @@
 import { z } from 'zod';
 import { normalizeSriLankanPhone } from '../../utils/phone.js';
+import { emergencyPhoneSchema, registrationSchema, vehicleTypeSchema } from '../riders/rider.profile.js';
 
 /**
  * Staff accounts (migration 014), created and managed from Blynk Admin ->
- * Staff accounts. Only two roles can be created here:
- *   PACKING_STAFF - "Inventory": may use only the Inventory site;
- *   OPERATIONS    - "Operations": may use only the Operations app.
- * ADMIN accounts are listed read-only and are never created or edited here.
+ * Staff accounts and from the Operations app -> More -> Staff accounts.
+ *   ADMIN         - "Admin": the Admin website;
+ *   OPERATIONS    - "Operations": the Operations app;
+ *   PACKING_STAFF - "Inventory": the Inventory website;
+ *   RIDER         - "Rider": the Rider app (with its riders row).
+ * Who may create and manage which role is enforced in staff.service.ts
+ * (owner, 2026-10-01): ADMIN creates any of the four; OPERATIONS creates and
+ * manages only RIDER and PACKING_STAFF. An existing ADMIN account is never
+ * changed here, and nobody changes their own account here.
  */
+export const creatableRoles = ['ADMIN', 'OPERATIONS', 'PACKING_STAFF', 'RIDER'] as const;
+export type CreatableRole = (typeof creatableRoles)[number];
+
+/** Roles an existing account can be moved between (role changes are ADMIN-only). */
 export const staffRoles = ['PACKING_STAFF', 'OPERATIONS'] as const;
 export type StaffRole = (typeof staffRoles)[number];
 
@@ -51,19 +61,37 @@ const phoneSchema = z
     }
   });
 
-export const createStaffSchema = z.object({
-  full_name: fullNameSchema,
-  email: z
-    .string({ required_error: 'Email is required' })
-    .trim()
-    .toLowerCase()
-    .min(1, 'Email is required')
-    .max(255, 'Email must be at most 255 characters')
-    .email('Email must be a valid email address'),
-  password: passwordSchema,
-  role: roleSchema,
-  phone: phoneSchema,
+const createRoleSchema = z.enum(creatableRoles, {
+  errorMap: () => ({ message: 'Role must be ADMIN, OPERATIONS, PACKING_STAFF (Inventory) or RIDER' }),
 });
+
+export const createStaffSchema = z
+  .object({
+    full_name: fullNameSchema,
+    email: z
+      .string({ required_error: 'Email is required' })
+      .trim()
+      .toLowerCase()
+      .min(1, 'Email is required')
+      .max(255, 'Email must be at most 255 characters')
+      .email('Email must be a valid email address'),
+    password: passwordSchema,
+    role: createRoleSchema,
+    phone: phoneSchema,
+    // Rider accounts only: the riders row made with the user.
+    vehicle_type: vehicleTypeSchema.optional(),
+    vehicle_registration_number: registrationSchema.optional(),
+    emergency_contact_phone: emergencyPhoneSchema,
+  })
+  .superRefine((d, ctx) => {
+    if (d.role === 'RIDER' && !d.vehicle_registration_number) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['vehicle_registration_number'],
+        message: 'Vehicle registration number is required',
+      });
+    }
+  });
 
 export type CreateStaffInput = z.infer<typeof createStaffSchema>;
 
@@ -73,6 +101,10 @@ export const updateStaffSchema = z
     role: roleSchema.optional(),
     password: passwordSchema.optional(),
     disabled: z.boolean({ invalid_type_error: 'disabled must be true or false' }).optional(),
+    // Rider accounts only: their riders row.
+    vehicle_type: vehicleTypeSchema.optional(),
+    vehicle_registration_number: registrationSchema.optional(),
+    emergency_contact_phone: emergencyPhoneSchema,
   })
   .strict()
   .refine((d) => Object.values(d).some((v) => v !== undefined), {

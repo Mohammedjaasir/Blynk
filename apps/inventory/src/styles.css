@@ -117,6 +117,10 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
+  /* A long menu scrolls inside the dark panel instead of spilling onto
+     the light page (white text on white). */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sidebar__brand {

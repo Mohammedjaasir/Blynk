@@ -1,18 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
-import { staffService, type AuditMeta } from './staff.service.js';
+import { staffService, type AuditMeta, type StaffActorRole } from './staff.service.js';
 import type { CreateStaffInput, UpdateStaffInput } from './staff.schema.js';
 
 const auditMeta = (req: Request): AuditMeta => ({
   actorId: req.user!.id,
+  // The routes admit only ADMIN and OPERATIONS (index.ts).
+  actorRole: req.user!.role as StaffActorRole,
   ipAddress: req.ip ?? null,
   userAgent: req.get('user-agent') ?? null,
 });
 
 // Bodies and params are parsed by validate() on each route (see index.ts).
 export class StaffController {
-  async list(_req: Request, res: Response, next: NextFunction) {
+  async list(req: Request, res: Response, next: NextFunction) {
     try {
-      const staff = await staffService.list();
+      const staff = await staffService.list(auditMeta(req));
       res.status(200).json({ success: true, data: { staff } });
     } catch (err) {
       next(err);

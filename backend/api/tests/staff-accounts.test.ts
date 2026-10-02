@@ -102,12 +102,12 @@ describe('Admin staff accounts', () => {
       const staff = res.body.data.staff as Array<{ phone: string; role: string; read_only: boolean; created_at: string }>;
       const mine = staff.filter((s) => s.phone.startsWith(PREFIX));
       expect(mine.map((s) => s.phone)).toEqual(expect.arrayContaining([`${PREFIX}1`, `${PREFIX}3`, `${PREFIX}4`, `${PREFIX}5`]));
-      expect(staff.every((s) => ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'].includes(s.role))).toBe(true);
+      expect(staff.every((s) => ['ADMIN', 'PACKING_STAFF', 'OPERATIONS', 'RIDER'].includes(s.role))).toBe(true);
       expect(mine.find((s) => s.phone === `${PREFIX}1`)!.read_only).toBe(true);
       const times = staff.map((s) => new Date(s.created_at).getTime());
       expect([...times].sort((a, b) => b - a)).toEqual(times);
       expect(Object.keys(staff[0]).sort()).toEqual(
-        ['created_at', 'disabled', 'email', 'full_name', 'has_password', 'id', 'phone', 'read_only', 'role'].sort()
+        ['created_at', 'disabled', 'email', 'full_name', 'has_password', 'id', 'phone', 'read_only', 'rider', 'role'].sort()
       );
     });
 
@@ -125,7 +125,7 @@ describe('Admin staff accounts', () => {
         [valid('6', { password: 'short' }), 'password'],
         [valid('6', { password: 'x'.repeat(129) }), 'password'],
         [valid('6', { email: 'not-an-email' }), 'email'],
-        [valid('6', { role: 'ADMIN' }), 'role'],
+        [valid('6', { role: 'RIDER' }), 'vehicle_registration_number'],
         [valid('6', { role: 'CUSTOMER' }), 'role'],
         [valid('6', { full_name: '   ' }), 'full_name'],
         [valid('6', { phone: '12345' }), 'phone'],
@@ -162,14 +162,14 @@ describe('Admin staff accounts', () => {
   });
 
   // ==========================================================================
-  // Only ADMIN manages staff
+  // ADMIN and OPERATIONS manage staff (the full matrix: staff-permissions.test.ts)
   // ==========================================================================
-  it('refuses PACKING_STAFF and OPERATIONS on every staff endpoint with 403', async () => {
-    for (const token of [packingToken, opsToken]) {
-      expect((await request(app).get('/api/v1/admin/staff').set(auth(token))).status).toBe(403);
-      expect((await create(token, valid('7'))).status).toBe(403);
-      expect((await patch(token, otherAdminId, { full_name: 'x' })).status).toBe(403);
-    }
+  it('refuses PACKING_STAFF on every staff endpoint, and OPERATIONS on Operations or Admin accounts', async () => {
+    expect((await request(app).get('/api/v1/admin/staff').set(auth(packingToken))).status).toBe(403);
+    expect((await create(packingToken, valid('7'))).status).toBe(403);
+    expect((await patch(packingToken, otherAdminId, { full_name: 'x' })).status).toBe(403);
+    expect((await create(opsToken, valid('7'))).status).toBe(403);
+    expect((await patch(opsToken, otherAdminId, { full_name: 'x' })).status).toBe(403);
     expect((await request(app).get('/api/v1/admin/staff')).status).toBe(401);
   });
 
@@ -191,11 +191,12 @@ describe('Admin staff accounts', () => {
 
       // Routes the Operations app calls.
       for (const path of ['/api/v1/admin/orders?limit=1', '/api/v1/admin/riders', '/api/v1/admin/inventory?limit=1',
-        '/api/v1/admin/products?limit=1', '/api/v1/admin/promotions', '/api/v1/admin/dental/clinics']) {
+        '/api/v1/admin/products?limit=1', '/api/v1/admin/promotions', '/api/v1/admin/dental/clinics',
+        '/api/v1/admin/staff']) {
         expect((await request(app).get(path).set(auth(token))).status, path).toBe(200);
       }
       // Admin-site-only routes.
-      for (const path of ['/api/v1/admin/feedback', '/api/v1/admin/staff', '/api/v1/admin/notifications',
+      for (const path of ['/api/v1/admin/feedback', '/api/v1/admin/notifications',
         '/api/v1/admin/packing-queue']) {
         expect((await request(app).get(path).set(auth(token))).status, path).toBe(403);
       }

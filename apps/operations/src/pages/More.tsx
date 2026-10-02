@@ -52,6 +52,16 @@ export function More() {
             <span className="cat-hub__title">Cash</span>
           </Link>
         </li>
+        <li>
+          <Link className="cat-hub__card" to="/more/deliver">
+            <span className="cat-hub__title">Deliver orders myself</span>
+          </Link>
+        </li>
+        <li>
+          <Link className="cat-hub__card" to="/more/staff">
+            <span className="cat-hub__title">Staff accounts</span>
+          </Link>
+        </li>
       </ul>
 
       <DeliveryFeeCard />

@@ -43,6 +43,15 @@ export const assignRider: ActionImpl<DeliveryRow> = {
     const rider = await lockRider(trx, riderId);
     if (!rider) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
     if (!rider.is_active) throw new AppError('This rider is inactive.', 409, 'RIDER_INACTIVE');
+    // A rider whose account is disabled (Staff accounts) cannot take an order.
+    const account = await trx
+      .selectFrom('users')
+      .select(['is_active', 'staff_disabled_at'])
+      .where('id', '=', rider.user_id)
+      .executeTakeFirst();
+    if (!account || !account.is_active || account.staff_disabled_at) {
+      throw new AppError('This rider is inactive.', 409, 'RIDER_INACTIVE');
+    }
 
     const active = await trx
       .selectFrom('deliveries')

@@ -15,6 +15,9 @@ import type {
   DeliveryDetail,
   DeliveryFeeSetting,
   DeliverySummary,
+  RiderDay,
+  RiderProfile,
+  RiderProfileInput,
   DentalAppointmentStatus,
   DentalClinic,
   DentalDoctor,
@@ -42,6 +45,9 @@ import type {
   TrackingMode,
   CashHandin,
   CashReconciliation,
+  CreateStaffInput,
+  StaffAccount,
+  UpdateStaffInput,
 } from './types';
 
 /**
@@ -283,6 +289,19 @@ export const riders = {
 export const delivery = {
   list: () => apiRequest<{ deliveries: DeliverySummary[] }>('/riders/deliveries').then((d) => d.deliveries),
 
+  /** "My day": the operator's own delivered / not delivered counts and cash. */
+  day: () => apiRequest<RiderDay>('/riders/me/day'),
+
+  /** The operator's own rider profile (staff riders): null when there is none. */
+  profile: () => apiRequest<{ profile: RiderProfile | null }>('/riders/me/profile').then((d) => d.profile),
+
+  /** Sets up (or changes the vehicle on) the operator's own rider profile -
+   * active at once. 403 RIDER_PROFILE_DISABLED when an admin switched it off. */
+  setUpProfile: (input: RiderProfileInput) =>
+    apiRequest<{ profile: RiderProfile }>('/riders/me/profile', { method: 'POST', body: { ...input } }).then(
+      (d) => d.profile
+    ),
+
   detail: (id: string) =>
     apiRequest<{ delivery: DeliveryDetail }>(`/riders/deliveries/${id}`).then((d) => d.delivery),
 
@@ -303,8 +322,8 @@ export const delivery = {
     }).then((d) => d.settlement),
 
   /** Foreground-only browser Geolocation (common.md rule 10; this task's
-   * brief) - no Capacitor, no background-location plugin; only sends while
-   * the Delivery Detail screen is open and the tab is foregrounded. Same
+   * brief) - no background-location plugin; sends while a delivery is on the
+   * road and the app is open on screen (lib/tracker-session.ts). Same
    * payload shape the Rider app's native tracker sends
    * (rider.location.schema.ts: latitude/longitude/accuracy/captured_at). */
   sendLocation: (id: string, point: { latitude: number; longitude: number; accuracy: number; captured_at: string }) =>
@@ -756,6 +775,23 @@ export const settings = {
     update: (fee_lkr: number) =>
       apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee', { method: 'PATCH', body: { fee_lkr } }),
   },
+};
+
+// ------------------------------------------------------------------ staff
+/**
+ * Staff accounts (More -> Staff accounts). ADMIN and OPERATIONS; which roles
+ * each may create or change is the backend's permission matrix.
+ */
+export const staff = {
+  list: () => apiRequest<{ staff: StaffAccount[] }>('/admin/staff').then((d) => d.staff),
+
+  create: (input: CreateStaffInput) =>
+    apiRequest<{ staff: StaffAccount }>('/admin/staff', { method: 'POST', body: { ...input } }).then((d) => d.staff),
+
+  update: (id: string, input: UpdateStaffInput) =>
+    apiRequest<{ staff: StaffAccount }>(`/admin/staff/${id}`, { method: 'PATCH', body: { ...input } }).then(
+      (d) => d.staff
+    ),
 };
 
 // -------------------------------------------------------------------- cash

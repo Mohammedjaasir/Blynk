@@ -4,28 +4,49 @@ import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { createStaffSchema, staffIdParamsSchema, updateStaffSchema } from './staff.schema.js';
+import { riderProfileService, staffRiderSchema, type StaffRiderInput } from '../riders/rider.profile.js';
 
 // ----------------------------------------------------------------------------
-// ADMIN STAFF ACCOUNTS ROUTER (mounted under /api/v1/admin, migration 014)
+// STAFF ACCOUNTS ROUTER (mounted under /api/v1/admin, migration 014)
 // ----------------------------------------------------------------------------
-// Only ADMIN creates or changes staff accounts - never PACKING_STAFF or
-// OPERATIONS, who each have their own single app.
+// ADMIN (Admin website) and OPERATIONS (Operations app) create and manage
+// accounts; which roles each may create or change is enforced in
+// staff.service.ts (the permission matrix). PACKING_STAFF never reaches it.
 export const adminStaffRouter = Router();
 
-adminStaffRouter.get('/staff', requireAuth, requireRoles('ADMIN'), staffController.list.bind(staffController));
+const STAFF_MANAGERS = requireRoles(['ADMIN', 'OPERATIONS']);
+
+adminStaffRouter.get('/staff', requireAuth, STAFF_MANAGERS, staffController.list.bind(staffController));
 adminStaffRouter.post(
   '/staff',
   requireAuth,
-  requireRoles('ADMIN'),
+  STAFF_MANAGERS,
   validate({ body: createStaffSchema }),
   staffController.create.bind(staffController)
 );
 adminStaffRouter.patch(
   '/staff/:id',
   requireAuth,
-  requireRoles('ADMIN'),
+  STAFF_MANAGERS,
   validate({ params: staffIdParamsSchema, body: updateStaffSchema }),
   staffController.update.bind(staffController)
+);
+// "Can deliver": gives an OPERATIONS or ADMIN account a rider profile (or
+// switches it off). The caller's own account is allowed - an admin who
+// delivers turns it on for themselves here too.
+adminStaffRouter.put(
+  '/staff/:id/rider',
+  requireAuth,
+  requireRoles('ADMIN'),
+  validate({ params: staffIdParamsSchema, body: staffRiderSchema }),
+  async (req, res, next) => {
+    try {
+      const rider = await riderProfileService.setForStaff(req.params.id as string, req.body as StaffRiderInput, req.user!.id);
+      res.status(200).json({ success: true, data: { rider } });
+    } catch (err) {
+      next(err);
+    }
+  }
 );
 
 export * from './staff.schema.js';
