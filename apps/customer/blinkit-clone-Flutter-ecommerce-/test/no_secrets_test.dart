@@ -26,6 +26,9 @@ List<File> _sourceFilesUnder(String dir) {
     final segments = path.substring(dir.length).split('/');
     if (segments.any(skipDirs.contains)) return false;
     if (path.endsWith('/secrets.properties')) return false;
+    // Firebase app config: git-ignored, lives only on the build machine
+    // (its API key is a public client identifier, but it stays untracked).
+    if (path.endsWith('/google-services.json')) return false;
     return !skipExtensions.any(path.toLowerCase().endsWith);
   }).toList();
 }
@@ -73,6 +76,15 @@ void main() {
       isTrue,
       reason: 'android/.gitignore must list secrets.properties',
     );
+  });
+
+  test('android/app/google-services.json is git-ignored', () {
+    final lines = File('.gitignore')
+        .readAsLinesSync()
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty && !l.startsWith('#'))
+        .toList();
+    expect(lines, contains('android/app/google-services.json'));
   });
 
   test('secrets.properties.example has an empty MAPS_API_KEY value', () {

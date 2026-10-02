@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { addressController } from './address.controller.js';
+import { devicesController } from '../notifications/push/devices.controller.js';
 
 // ----------------------------------------------------------------------------
 // 1. CUSTOMER ME & ADDRESS BOOK ROUTER (/api/v1/me)
@@ -18,6 +19,10 @@ meRouter.get('/addresses/:id', addressController.getAddressById.bind(addressCont
 meRouter.patch('/addresses/:id', addressController.updateAddress.bind(addressController));
 meRouter.delete('/addresses/:id', addressController.deleteAddress.bind(addressController));
 meRouter.post('/addresses/:id/default', addressController.setDefaultAddress.bind(addressController));
+
+// Push notification devices (FCM registration tokens), any signed-in user.
+meRouter.post('/devices', devicesController.register);
+meRouter.delete('/devices/:token', devicesController.unregister);
 
 // ----------------------------------------------------------------------------
 // 2. USERS MODULE ROUTER (/api/v1/users)

@@ -48,3 +48,6 @@ app.*.map.json
 
 # Production build configuration (owner-supplied values; the .example.json is committed)
 /env/production.json
+
+# Firebase app config (kept out of git; lives only on the build machine)
+android/app/google-services.json

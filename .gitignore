@@ -73,3 +73,6 @@ uploads/
 brag-output/
 brag-output-*/
 skills-lock.json
+
+# Firebase service-account keys (secrets: they go in Coolify, never in git)
+*firebase-adminsdk*.json

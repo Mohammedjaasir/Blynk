@@ -22,14 +22,24 @@ Future<dynamic> _apiGet(String url, Map<String, dynamic> queryParameters) {
   );
 }
 
+/// POST or DELETE against the catalog API ("Notify me when it's back").
+/// Injectable so tests never reach a server.
+typedef CatalogMutation = Future<dynamic> Function(String method, String url);
+
+Future<dynamic> _apiMutate(String method, String url) {
+  return ApiService.requestMethods(methodType: method, url: url);
+}
+
 enum ProductDetailFailure { notFound, network }
 
 class ProductProvider extends ChangeNotifier {
-  ProductProvider({CatalogRequest? request, DateTime Function()? clock})
+  ProductProvider({CatalogRequest? request, CatalogMutation? mutate, DateTime Function()? clock})
       : _request = request ?? _apiGet,
+        _mutate = mutate ?? _apiMutate,
         _clock = clock ?? DateTime.now;
 
   final CatalogRequest _request;
+  final CatalogMutation _mutate;
   final DateTime Function() _clock;
 
   /// An unforced [refreshCatalog] within this long of the previous one is
@@ -141,6 +151,38 @@ class ProductProvider extends ChangeNotifier {
   final Set<String> _loadingDetailIds = {};
   final Map<String, ProductDetailFailure> _detailFailures = {};
   final Map<String, CustomerError> _detailErrors = {};
+
+  // "Notify me when it's back" (phase 6): the signed-in customer's pending
+  // alert per product, as product detail last reported it.
+  final Map<String, bool> _notifyMe = {};
+  final Set<String> _notifyMeBusy = {};
+
+  bool isNotifyMeSubscribed(String id) => _notifyMe[id] ?? false;
+  bool isNotifyMeBusy(String id) => _notifyMeBusy.contains(id);
+
+  /// Turns the back-in-stock alert for product [id] on or off. Throws the
+  /// request's error (the caller says so); a product that is back already
+  /// (409 PRODUCT_AVAILABLE) is simply re-read, so the page shows it on sale.
+  Future<void> setNotifyMe(String id, bool on) async {
+    if (id.isEmpty || _notifyMeBusy.contains(id)) return;
+    _notifyMeBusy.add(id);
+    notifyListeners();
+    try {
+      await _mutate(on ? 'POST' : 'DELETE', '/catalog/products/$id/notify-me');
+      _notifyMe[id] = on;
+    } on ApiException catch (e) {
+      if (e.statusCode == 409) {
+        _notifyMe[id] = false;
+        _notifyMeBusy.remove(id);
+        await loadProductDetail(id);
+        return;
+      }
+      rethrow;
+    } finally {
+      _notifyMeBusy.remove(id);
+      notifyListeners();
+    }
+  }
 
   ProductModel? productDetail(String id) => _productDetails[id];
   bool isLoadingProductDetail(String id) => _loadingDetailIds.contains(id);
@@ -298,6 +340,7 @@ class ProductProvider extends ChangeNotifier {
       if (raw is! Map) throw ApiException(500, 'Malformed product response');
       final product = ProductModel.fromJson(raw.cast<String, dynamic>());
       _productDetails[id] = product;
+      _notifyMe[id] = raw['notify_me_subscribed'] == true;
       _syncListsWith(id, product);
     } catch (e) {
       // The backend answers 404 for deleted/deactivated products; that is a

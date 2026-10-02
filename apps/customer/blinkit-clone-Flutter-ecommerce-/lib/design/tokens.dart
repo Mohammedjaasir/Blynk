@@ -194,6 +194,9 @@ abstract final class BlynkIcons {
   static const IconData logout = Icons.logout;
   static const IconData dental = Icons.medical_services_outlined;
   static const IconData feedback = Icons.rate_review_outlined;
+  // "Notify me when it's back" on a sold-out product (phase 6).
+  static const IconData notifyMe = Icons.notifications_none;
+  static const IconData notifyMeOn = Icons.notifications_active_outlined;
 
   /// The icons that must read as different things from each other.
   static const List<IconData> distinct = <IconData>[

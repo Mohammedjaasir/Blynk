@@ -48,3 +48,23 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
     next(err);
   }
 }
+
+/**
+ * Optional authentication for public reads that add a per-user detail when
+ * signed in (e.g. product detail's notify_me_subscribed). A valid Bearer
+ * token populates req.user; a missing or bad one is ignored, never a 401.
+ */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (token) {
+      try {
+        req.user = verifyAccessToken(token);
+      } catch {
+        // Treated as signed out.
+      }
+    }
+  }
+  next();
+}

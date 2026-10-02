@@ -4,6 +4,17 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Firebase (push notifications). app/google-services.json is git-ignored and
+// lives only on the build machine (Firebase console -> Project settings ->
+// Your apps -> lk.blynk.customer). Without it the google-services plugin is
+// not applied: the APK still builds and runs, with push switched off (the
+// app's Firebase start-up fails quietly; see lib/Services/push/).
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+} else {
+    logger.warn("android/app/google-services.json is missing: this build has no push notifications")
+}
+
 // Google Maps API key, resolved in order: environment variable MAPS_API_KEY,
 // android/secrets.properties, android/local.properties, else empty. Never
 // printed and never committed; an empty key must not fail the build.
@@ -44,6 +55,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications (foreground push display) needs it.
+        coreLibraryDesugaringEnabled = true
     }
 
     sourceSets {
@@ -79,4 +92,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
 }

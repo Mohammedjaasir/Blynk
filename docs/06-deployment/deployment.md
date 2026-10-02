@@ -94,6 +94,7 @@ Runtime environment variables are validated at bootstrap using Zod schema refine
 | `CORS_ORIGINS` | `*` (wildcard) | Explicit comma-separated URLs; wildcard `*` prohibited |
 | `SMS_API_KEY` | Placeholder allowed (mock fallback) | Required live gateway credential; mock prohibited |
 | `SMS_USER_ID` | Placeholder allowed | Required live gateway credential |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Optional: unset means push is off (every push is a no-op) | Optional; set it to turn on app push notifications (see section 8) |
 
 ---
 
@@ -209,3 +210,75 @@ in by password or SMS code, and its sessions end. The Admin site itself now
 admits `ADMIN` accounts only; packing staff who used it for Orders must use
 the Inventory site (or be given an Operations account). Existing `ADMIN`
 sign-ins for the Operations app keep working.
+
+---
+
+## 8. Push notifications (Firebase Cloud Messaging, migration 022)
+
+The customer app gets order updates (packed, on the way, delivered, cancelled,
+couldn't deliver) and "back in stock" alerts as app push notifications, sent
+through Firebase Cloud Messaging (free). The Firebase project is `blynk-15cd4`.
+
+Two pieces of Firebase configuration exist, and they are different files:
+
+| File | Where it goes | Secret? |
+|---|---|---|
+| `google-services.json` (the Android app's config) | `apps/customer/blinkit-clone-Flutter-ecommerce-/android/app/` on the machine that builds the APK. Git-ignored on purpose. | No, but keep it out of git |
+| The **service-account key** (a private key) | The backend's environment, `FIREBASE_SERVICE_ACCOUNT_JSON` | **Yes** |
+
+Without the service-account key the API and worker start normally, log once
+`Push notifications disabled: FIREBASE_SERVICE_ACCOUNT_JSON is not set`, and
+every push is a no-op. Without `google-services.json` the APK still builds and
+runs, with push off.
+
+### 8.1 Get the service-account key
+
+1. Open the [Firebase console](https://console.firebase.google.com/) and pick
+   the project **blynk-15cd4**.
+2. Click the gear next to *Project Overview* -> **Project settings**.
+3. Open the **Service accounts** tab.
+4. Under *Firebase Admin SDK*, click **Generate new private key**, then
+   **Generate key**. A `.json` file downloads.
+
+That file is a password for sending pushes as Blynk. Do not commit it, email
+it or paste it into chat. If it leaks, delete that key in Google Cloud console
+-> IAM & Admin -> Service accounts -> the `firebase-adminsdk-...` account ->
+Keys, and generate a new one.
+
+### 8.2 Put it into Coolify
+
+1. In Coolify open the **backend API** application -> **Environment
+   Variables**.
+2. Add `FIREBASE_SERVICE_ACCOUNT_JSON`. The value can be either:
+   - the **whole JSON**, exactly as downloaded (open the file, select all,
+     copy, paste - the value starts with `{` and ends with `}`); or
+   - **base64 of the file** - the safest choice, because a one-line value
+     survives every layer (Coolify, `docker-compose.yml`'s
+     `${FIREBASE_SERVICE_ACCOUNT_JSON:-}` passthrough) unchanged. On Windows
+     PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("key.json"))`;
+     on macOS/Linux: `base64 -w0 key.json` (macOS: `base64 -i key.json`).
+3. Mark it as a **secret** (lock icon / "Is secret") so Coolify hides it in the
+   UI and logs.
+4. If the notification worker runs as its own service (`start:worker`), add
+   the same variable there too: the worker is what sends the pushes.
+5. **Redeploy** the backend (and the worker). The deploy runs migration 022
+   (`device_tokens`, `stock_alerts`, the `PUSH` outbox channel).
+6. Check the logs: `Push notifications enabled (Firebase Cloud Messaging)`
+   with `firebaseProject: "blynk-15cd4"`. A value that cannot be read logs
+   `FIREBASE_SERVICE_ACCOUNT_JSON could not be read` (the key's contents are
+   never logged) and push stays off.
+
+### 8.3 How it behaves
+
+- The app registers its FCM token after sign-in (`POST /me/devices`) and
+  removes it on logout (`DELETE /me/devices/:token`). Tokens FCM reports as
+  unregistered or invalid are deleted by the worker.
+- Pushes go through the notifications outbox: they are queued in the same
+  transaction as the order change and sent by the worker after commit, so a
+  push can never block or fail an order. The delivery code is never in a push.
+- "Notify me when it's back" (`POST`/`DELETE /catalog/products/:id/notify-me`)
+  fires once per customer when the product is available again (switched back
+  on in Ops/Admin, or tracked stock going from none to some while the product
+  is on sale). While push is off, alerts stay pending.
+- Android 13+ asks for notification permission after the customer places an
+  order or taps "Notify me", never at first launch.

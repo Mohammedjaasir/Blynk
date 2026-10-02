@@ -7,6 +7,7 @@ import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Screens/Auth/login_screen.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/app_session_cleaner.dart';
+import 'package:ecom/Services/push/push_notifications.dart';
 import 'package:ecom/UI/Widgets/Atoms/snackbar_helper.dart';
 import 'package:ecom/design/tokens.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_crossfade.dart';
@@ -83,6 +84,7 @@ class _SessionGateState extends State<SessionGate> {
       setState(() => _showLogin = true);
     }
     _openPendingProduct(navigator);
+    unawaited(_openPushLaunchTarget(navigator));
   }
 
   bool _pendingOpened = false;
@@ -92,6 +94,18 @@ class _SessionGateState extends State<SessionGate> {
     if (id == null || _pendingOpened) return;
     _pendingOpened = true;
     unawaited(navigator.pushNamed('/product', arguments: id));
+  }
+
+  bool _pushChecked = false;
+
+  /// The same pattern for a push notification that launched the app from
+  /// closed: its order or product opens on top, once the gate has decided.
+  Future<void> _openPushLaunchTarget(NavigatorState navigator) async {
+    if (_pushChecked) return;
+    _pushChecked = true;
+    final target = await PushNotifications.instance.takeLaunchTarget();
+    if (target == null || !navigator.mounted) return;
+    unawaited(navigator.pushNamed(target.route, arguments: target.id));
   }
 
   @override

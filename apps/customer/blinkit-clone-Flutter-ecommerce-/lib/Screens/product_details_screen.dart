@@ -17,6 +17,7 @@ import '../UI/Widgets/Atoms/circular_icon_button.dart';
 import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Atoms/image_well.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
+import '../UI/Widgets/Atoms/notify_me_button.dart';
 import '../UI/Widgets/Atoms/status_badge.dart';
 import '../design/tokens.dart';
 import 'package:ecom/UI/Widgets/Atoms/product_hero.dart';
@@ -426,6 +427,14 @@ class _ProductSummary extends StatelessWidget {
             _AvailabilityBadge(isAvailable: product.isAvailable),
           ],
         ),
+        // Sold out: the customer can ask for one push when it is back.
+        if (!product.isAvailable) ...[
+          const SizedBox(height: BlynkSpace.s16),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: NotifyMeButton(productId: product.id),
+          ),
+        ],
       ],
     );
   }

@@ -1,7 +1,7 @@
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { pool, checkDatabaseConnection } from './database/connection.js';
-import { notificationWorker } from './modules/notifications/index.js';
+import { notificationWorker, logPushStatus } from './modules/notifications/index.js';
 
 async function bootstrapWorker() {
   logger.info(
@@ -22,6 +22,9 @@ async function bootstrapWorker() {
   } else {
     logger.info({ latencyMs: dbHealth.latencyMs }, 'PostgreSQL database connected for worker');
   }
+
+  // Says once whether app push (FCM) is configured; without a key it is a no-op.
+  logPushStatus();
 
   // 2. Start Worker Daemon if enabled
   if (env.NOTIFICATION_WORKER_ENABLED) {

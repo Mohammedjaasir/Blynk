@@ -50,6 +50,11 @@ const envSchema = z.object({
   WHATSAPP_API_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
 
+  // App push notifications (Firebase Cloud Messaging). A Firebase
+  // service-account key, either the raw JSON or base64 of it. Optional:
+  // unset (or unreadable), push is disabled and every send is a no-op.
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+
   // Notification Outbox Worker Daemon
   NOTIFICATION_WORKER_ENABLED: z
     .preprocess((val) => (val === 'false' ? false : val === 'true' ? true : val), z.boolean())

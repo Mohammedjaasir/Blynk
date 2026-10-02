@@ -14,6 +14,7 @@ import 'package:ecom/Services/Providers/connectivity_hint.dart';
 import 'package:ecom/Services/Providers/dental.provider.dart';
 import 'package:ecom/Services/app_config.dart';
 import 'package:ecom/Services/global_error_handling.dart';
+import 'package:ecom/Services/push/push_notifications.dart';
 import 'package:ecom/Screens/config_problem_screen.dart';
 import 'package:ecom/Services/Providers/location.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
@@ -63,6 +64,13 @@ void main() async {
   // Android's splash fades away the moment Flutter draws; if that first frame
   // is drawn before the logo image is ready, the fade reveals an empty white
   // frame and the logo blinks. A screen recording caught exactly that.
+  // Push notifications (Firebase). Started, never awaited: a build without
+  // Firebase config, or a phone without Play services, just has no push. A
+  // no-op on the web.
+  if (config.validate() == null) {
+    unawaited(PushNotifications.instance.start(navigatorKey: rootNavigatorKey));
+  }
+
   WidgetsBinding.instance.deferFirstFrame();
   runApp(buildRootWidget(config));
   unawaited(_decodeLaunchLogo().whenComplete(WidgetsBinding.instance.allowFirstFrame));
@@ -154,7 +162,8 @@ class MainApp extends StatelessWidget {
       builder: (context, child) => SessionEndListener(
         navigatorKey: rootNavigatorKey,
         messengerKey: rootScaffoldMessengerKey,
-        child: child ?? const SizedBox.shrink(),
+        // Registers this device for push while someone is signed in.
+        child: PushSessionSync(child: child ?? const SizedBox.shrink()),
       ),
       onGenerateRoute: AppRouter.generateRoute,
       onGenerateInitialRoutes: AppRouter.generateInitialRoutes,

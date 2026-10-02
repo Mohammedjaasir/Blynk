@@ -39,7 +39,7 @@ export type DeliveryAssignmentStatus =
   | 'FAILED'
   | 'REJECTED';
 
-export type NotificationChannel = 'SMS' | 'WHATSAPP' | 'IN_APP' | 'EMAIL';
+export type NotificationChannel = 'SMS' | 'WHATSAPP' | 'IN_APP' | 'EMAIL' | 'PUSH';
 export type NotificationStatus = 'QUEUED' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'FAILED';
 
 export type DentalSpecialty =
@@ -556,6 +556,27 @@ export interface CustomerFeedbackTable {
   created_at: Generated<Date>;
 }
 
+/** Migration 022: FCM registration tokens, one row per device. */
+export type DevicePlatform = 'android' | 'ios' | 'web';
+
+export interface DeviceTokensTable {
+  id: Generated<string>;
+  user_id: string;
+  token: string;
+  platform: DevicePlatform;
+  created_at: Generated<Date>;
+  last_seen_at: Generated<Date>;
+}
+
+/** Migration 022: "Notify me when it's back". Pending while notified_at is null. */
+export interface StockAlertsTable {
+  id: Generated<string>;
+  user_id: string;
+  product_id: string;
+  created_at: Generated<Date>;
+  notified_at: Date | null;
+}
+
 /** Migration 016: proof of delivery. Private to the customer detail and the lifecycle. */
 export type DeliveryConfirmation = 'CODE' | 'OVERRIDE';
 
@@ -652,5 +673,7 @@ export interface Database {
   coupons: CouponsTable;
   coupon_redemptions: CouponRedemptionsTable;
   cash_handins: CashHandinsTable;
+  device_tokens: DeviceTokensTable;
+  stock_alerts: StockAlertsTable;
   v_product_catalog: ProductCatalogView;
 }

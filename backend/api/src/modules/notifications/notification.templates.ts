@@ -147,6 +147,12 @@ export class NotificationTemplates {
         return `Blynk Dental: your appointment with Dr. ${doctorName} at ${clinicName} on ${when} has been cancelled ${cancelledBy}.${reason}`;
       }
 
+      // Push rows carry their own title and body (push/push.events.ts).
+      case 'PUSH_ORDER_STATUS':
+      case 'PUSH_BACK_IN_STOCK': {
+        return typeof data.body === 'string' ? data.body : 'Blynk';
+      }
+
       default: {
         return `Blynk notification for order #${orderNumber}.`;
       }

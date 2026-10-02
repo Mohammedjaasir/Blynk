@@ -11,6 +11,7 @@ import 'package:ecom/Screens/categories_screen.dart';
 import 'package:ecom/Screens/product_details_screen.dart';
 import 'package:ecom/Screens/search_screen.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
+import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/add_to_cart_button.dart';
@@ -101,6 +102,8 @@ void main() {
         providers: [
           ChangeNotifierProvider.value(value: products),
           ChangeNotifierProvider.value(value: cart),
+          // A guest: a sold-out product's "Notify me" button reads it.
+          ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
         ],
         child: MaterialApp(
           theme: AppTheme.appTHeme,

@@ -9,6 +9,7 @@ import {
 } from './catalog.schema.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
+import { releaseStockAlertsNow } from '../notifications/push/push.events.js';
 
 export interface CustomerProductDto {
   id: string;
@@ -395,6 +396,12 @@ export class CatalogService {
     });
 
     logger.info({ productId: id }, 'Product updated by admin');
+
+    // Back in stock (phase 6): switched back on for customers -> tell the
+    // customers who asked. After the update commits; never fails the edit.
+    const wasAvailable = existing.is_active && existing.is_available;
+    const isAvailable = (input.is_active ?? existing.is_active) && (input.is_available ?? existing.is_available);
+    if (!wasAvailable && isAvailable) await releaseStockAlertsNow(id);
 
     // Return complete updated view with recalculated pricing
     return await this.getProductByIdAdmin(id);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:ecom/UI/Widgets/Atoms/app_toast.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +12,7 @@ import '../../../Services/Providers/cart.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
 import '../../../Services/app_errors.dart';
 import '../../../Services/store_info.dart';
+import '../../../Services/push/push_notifications.dart';
 
 /// The toast for a failed place-order. A timeout is worded as "we could not
 /// confirm" because the order may well have been placed: the customer is sent
@@ -44,6 +47,9 @@ class CartScreenPaymentContainer extends StatelessWidget {
       // client's estimate is what gets charged.
       final order = await orderProvider.placeOrder(cart: cart, addressId: address.id);
       if (order != null && context.mounted) {
+        // The moment order updates matter: ask to allow notifications
+        // (Android 13+; the system asks at most once or twice).
+        unawaited(PushNotifications.instance.requestPermission());
         Navigator.of(context).pushNamed('/order/confirm');
       }
     } catch (e) {

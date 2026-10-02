@@ -18,6 +18,9 @@ dependencies:
   maplibre_gl: ^0.25.0
   google_maps_flutter: ^2.18.1
   geolocator: ^14.0.2
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
+  flutter_local_notifications: ^22.3.1
 
 dev_dependencies:
   flutter_test:

@@ -128,7 +128,9 @@ void main() {
 
     test('no third-party crash SDK is used', () {
       final pubspec = File('pubspec.yaml').readAsStringSync().toLowerCase();
-      for (final sdk in ['sentry', 'crashlytics', 'firebase', 'bugsnag', 'datadog']) {
+      // Firebase is in the app for push only (firebase_core/firebase_messaging,
+      // phase 6); its crash SDK (firebase_crashlytics) stays out.
+      for (final sdk in ['sentry', 'crashlytics', 'bugsnag', 'datadog']) {
         expect(pubspec, isNot(contains(sdk)));
       }
     });

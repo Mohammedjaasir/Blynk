@@ -6,6 +6,7 @@ import type {
   InventoryTable,
 } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { releaseStockAlertsSafely } from '../notifications/push/push.events.js';
 
 /**
  * The canonical stock writer (inventory plan §5). The only code that changes
@@ -108,6 +109,15 @@ export async function recordStockMovement(trx: Trx, m: StockMovement): Promise<{
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+
+  // Back in stock (phase 6): a tracked product whose free stock goes from
+  // none to some releases its "notify me" alerts - if the product is also
+  // switched on for customers (releaseStockAlerts checks). Best effort, in a
+  // savepoint: it never fails the movement.
+  const reserved = m.inventory.quantity_reserved;
+  if (m.inventory.tracking_mode === 'TRACKED' && previous - reserved <= 0 && next - reserved > 0) {
+    await releaseStockAlertsSafely(trx, m.inventory.product_id);
+  }
 
   return { inventory, adjustment };
 }

@@ -33,7 +33,9 @@ async function bootstrap() {
   startCatalogEvents();
 
   // 3. Start Notification Outbox Worker daemon (if enabled)
-  const { notificationWorker } = await import('./modules/notifications/index.js');
+  const { notificationWorker, logPushStatus } = await import('./modules/notifications/index.js');
+  // Says once whether app push (FCM) is configured; without a key it is a no-op.
+  logPushStatus();
   if (env.NOTIFICATION_WORKER_ENABLED) {
     notificationWorker.start();
   } else {
