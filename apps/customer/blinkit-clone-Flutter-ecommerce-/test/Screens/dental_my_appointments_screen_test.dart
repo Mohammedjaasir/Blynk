@@ -256,4 +256,81 @@ void main() {
     await pumpScreen(tester);
     expect(find.byKey(const Key('appointment-row-a-bare')), findsOneWidget);
   });
+
+  group('rate your visit', () {
+    List<Map<String, dynamic>> ratingRows() => [
+          appointmentJson(
+            id: 'a-rateable',
+            status: 'CONFIRMED',
+            startAt: '2027-06-06T03:30:00.000Z',
+            canRate: true,
+            detail: false,
+          ),
+          appointmentJson(
+            id: 'a-rated',
+            status: 'CONFIRMED',
+            startAt: '2027-06-05T03:30:00.000Z',
+            rating: ratingJson(stars: 3, comment: 'Fine overall.'),
+            detail: false,
+          ),
+          appointmentJson(
+            id: 'a-not-rateable',
+            status: 'CANCELLED_BY_CLINIC',
+            startAt: '2027-06-04T03:30:00.000Z',
+            detail: false,
+          ),
+        ];
+
+    testWidgets('only a can_rate row gets the "Rate your visit" card; a rated row shows its rating', (tester) async {
+      api.routes[_listUrl] = (q, b) => _envelope({'appointments': ratingRows()});
+      await pumpScreen(tester);
+      await tester.tap(find.byKey(const Key('appt-tab-past')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('rate-visit-a-rateable')), findsOneWidget);
+      expect(find.byKey(const Key('appointment-rating-a-rateable')), findsOneWidget);
+      expect(find.byKey(const Key('appointment-rating-a-not-rateable')), findsNothing);
+      expect(find.byKey(const Key('rate-visit-a-rated')), findsNothing);
+      expect(find.text('Your rating'), findsOneWidget);
+      expect(find.text('Fine overall.'), findsOneWidget);
+    });
+
+    testWidgets('no rating card on a fixture with no can_rate rows', (tester) async {
+      api.routes[_listUrl] = (q, b) => _envelope({'appointments': _fixtureAppointments()});
+      await pumpScreen(tester);
+      await tester.tap(find.byKey(const Key('appt-tab-past')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('dental-rating-card')), findsNothing);
+      expect(find.text('Rate your visit'), findsNothing);
+    });
+
+    testWidgets('rating from the list opens the form in a sheet and the row then shows "Your rating"',
+        (tester) async {
+      api.routes[_listUrl] = (q, b) => _envelope({'appointments': ratingRows().take(1).toList()});
+      api.routes['POST /dental/appointments/a-rateable/rating'] = (q, b) => _envelope({
+            'rating': ratingJson(stars: 5, comment: null),
+            'appointment': appointmentJson(
+              id: 'a-rateable',
+              status: 'CONFIRMED',
+              startAt: '2027-06-06T03:30:00.000Z',
+              rating: ratingJson(stars: 5, comment: null),
+            ),
+          });
+      await pumpScreen(tester);
+      await tester.tap(find.byKey(const Key('appt-tab-past')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('rate-visit-a-rateable')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('rating-star-5')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('submit-rating')));
+      await tester.pumpAndSettle();
+
+      expect(api.calls.last['body'], {'stars': 5});
+      expect(find.byKey(const Key('submit-rating')), findsNothing);
+      expect(find.byKey(const Key('rate-visit-a-rateable')), findsNothing);
+      expect(find.text('Your rating'), findsOneWidget);
+    });
+  });
 }

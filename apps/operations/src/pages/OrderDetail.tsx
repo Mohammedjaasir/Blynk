@@ -207,6 +207,18 @@ export function OrderDetail() {
         <a className="link mono" href={`tel:${detail.delivery_recipient_phone}`} aria-label={`Call ${detail.delivery_recipient_name}`}>
           {detail.delivery_recipient_phone}
         </a>
+        {detail.delivery_alternate_phone ? (
+          <p>
+            <span className="order-detail__meta">Additional phone </span>
+            <a
+              className="link mono"
+              href={`tel:${detail.delivery_alternate_phone}`}
+              aria-label={`Call additional phone for ${detail.delivery_recipient_name}`}
+            >
+              {detail.delivery_alternate_phone}
+            </a>
+          </p>
+        ) : null}
         <p>
           {detail.delivery_address_line1}
           {detail.delivery_address_line2 ? `, ${detail.delivery_address_line2}` : ''}, {detail.delivery_city}

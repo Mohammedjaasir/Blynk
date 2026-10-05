@@ -679,7 +679,7 @@ void main() {
       const small = CategoryTileGridDelegate(crossAxisCount: 4, mainAxisSpacing: 8, crossAxisSpacing: 8, labelHeight: 32, diameter: 64);
       const large = CategoryTileGridDelegate(crossAxisCount: 4, mainAxisSpacing: 8, crossAxisSpacing: 8, labelHeight: 64, diameter: 64);
       expect(large.shouldRelayout(small), isTrue);
-      final source = File('lib/UI/Widgets/Organisms/home_screen_category_builder.dart').readAsStringSync();
+      final source = File('lib/UI/Widgets/Organisms/home_category_groups.dart').readAsStringSync();
       expect(source, isNot(contains('childAspectRatio')));
       expect(File('lib/Screens/categories_screen.dart').readAsStringSync(), isNot(contains('childAspectRatio')));
     });

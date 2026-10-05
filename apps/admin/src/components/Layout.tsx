@@ -62,6 +62,9 @@ export function Layout() {
               <NavLink to="/categories" className="nav__item">
                 Categories
               </NavLink>
+              <NavLink to="/category-groups" className="nav__item">
+                Category groups
+              </NavLink>
 
               <p className="nav__group">Home</p>
               <NavLink to="/promotions" className="nav__item">

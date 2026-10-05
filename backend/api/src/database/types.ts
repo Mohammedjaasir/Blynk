@@ -142,6 +142,8 @@ export interface CustomerAddressesTable {
   label: Generated<string>;
   recipient_name: string;
   recipient_phone: string;
+  /** Migration 024: optional second number for the rider; E.164, never equal to recipient_phone. */
+  alternate_phone: ColumnType<string | null, string | null | undefined, string | null>;
   address_line1: string;
   address_line2: string | null;
   city: string;
@@ -169,6 +171,23 @@ export interface CategoriesTable {
   image_focal_x: Generated<number>;
   image_focal_y: Generated<number>;
   /** Migration 017: set when a category is deleted but must be kept (its products are in order history). */
+  deleted_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  /** Migration 025: the home-screen group this category's tile sits in (null -> "More"). */
+  group_id: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Migration 025: position inside that group. */
+  group_sort_order: Generated<number>;
+  /** Migration 026: the category this one sits inside (one level only; null -> top level). */
+  parent_id: ColumnType<string | null, string | null | undefined, string | null>;
+}
+
+/** Migration 025: a heading on the customer home over a grid of category tiles. */
+export interface CategoryGroupsTable {
+  id: Generated<string>;
+  name: string;
+  sort_order: Generated<number>;
+  is_active: Generated<boolean>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
   deleted_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
@@ -244,6 +263,8 @@ export interface OrdersTable {
   scheduled_for: Date | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
+  /** Migration 024: snapshot of the address's alternate_phone at order creation. */
+  delivery_alternate_phone: ColumnType<string | null, string | null | undefined, string | null>;
   delivery_address_line1: string;
   delivery_address_line2: string | null;
   delivery_city: string;
@@ -531,6 +552,24 @@ export interface AppointmentsTable {
   idempotency_key: string;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
+  /** Migration 023: the day-before reminder was handled (sent or skipped). */
+  reminded_at: Generated<Date | null>;
+  /** Migration 023: the post-visit "How was your visit?" push was handled. */
+  rating_prompted_at: Generated<Date | null>;
+}
+
+/** Migration 023: one rating per visited appointment. */
+export interface DoctorRatingsTable {
+  id: Generated<string>;
+  appointment_id: string;
+  doctor_id: string;
+  clinic_id: string;
+  customer_id: string;
+  stars: number;
+  comment: string | null;
+  created_at: Generated<Date>;
+  hidden_at: Date | null;
+  hidden_by: string | null;
 }
 
 export interface AppointmentStatusHistoryTable {
@@ -647,6 +686,7 @@ export interface Database {
   refresh_tokens: RefreshTokensTable;
   customer_addresses: CustomerAddressesTable;
   categories: CategoriesTable;
+  category_groups: CategoryGroupsTable;
   products: ProductsTable;
   promotions: PromotionsTable;
   inventory: InventoryTable;
@@ -668,6 +708,7 @@ export interface Database {
   doctor_blocked_dates: DoctorBlockedDatesTable;
   appointments: AppointmentsTable;
   appointment_status_history: AppointmentStatusHistoryTable;
+  doctor_ratings: DoctorRatingsTable;
   customer_feedback: CustomerFeedbackTable;
   order_delivery_codes: OrderDeliveryCodesTable;
   coupons: CouponsTable;

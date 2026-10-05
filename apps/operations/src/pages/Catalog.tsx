@@ -43,6 +43,7 @@ import { isOrderableButOut, stockState } from '../lib/inventory';
 export function Catalog() {
   const [productCount, setProductCount] = useState<number | null>(null);
   const [categoryCount, setCategoryCount] = useState<number | null>(null);
+  const [groupCount, setGroupCount] = useState<number | null>(null);
   const [promotionCount, setPromotionCount] = useState<number | null>(null);
   const [inventoryAttentionCount, setInventoryAttentionCount] = useState<number | null>(null);
   const [dentalClinicCount, setDentalClinicCount] = useState<number | null>(null);
@@ -54,6 +55,7 @@ export function Catalog() {
     // Products screen itself loads and counts the rows - a real number, not
     // a guess, at the cost of one extra request per hub visit.
     void catalog.categories.list().then((rows) => setCategoryCount(rows.length)).catch(() => setCategoryCount(null));
+    void catalog.categoryGroups.list().then((r) => setGroupCount(r.groups.length)).catch(() => setGroupCount(null));
     void catalog.promotions.list().then((rows) => setPromotionCount(rows.length)).catch(() => setPromotionCount(null));
     void catalog.products
       .list({ limit: 200 })
@@ -80,6 +82,12 @@ export function Catalog() {
           <Link className="cat-hub__card" to="/catalog/categories">
             <span className="cat-hub__title">Categories</span>
             <span className="cat-hub__count">{categoryCount === null ? '—' : categoryCount}</span>
+          </Link>
+        </li>
+        <li>
+          <Link className="cat-hub__card" to="/catalog/category-groups">
+            <span className="cat-hub__title">Category groups</span>
+            <span className="cat-hub__count">{groupCount === null ? '—' : groupCount}</span>
           </Link>
         </li>
         <li>

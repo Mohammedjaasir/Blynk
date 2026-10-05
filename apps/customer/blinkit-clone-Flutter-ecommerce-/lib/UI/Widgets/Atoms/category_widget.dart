@@ -37,6 +37,7 @@ class CategoryWidget extends StatefulWidget {
     this.glyph,
     this.diameter,
     this.rounded = false,
+    this.fit = BoxFit.cover,
   });
 
   final CategoryModel category;
@@ -56,6 +57,11 @@ class CategoryWidget extends StatefulWidget {
   /// A soft rounded square instead of a circle - Home's 4-across category
   /// grid (2026-09-28, owner's reference). The Categories screen keeps circles.
   final bool rounded;
+
+  /// How the photo fills the tile. Home's category groups pass
+  /// [BoxFit.contain] (2026-10-05): a packshot sits whole on the tinted well,
+  /// still anchored at the operator's focal point.
+  final BoxFit fit;
 
   /// The circle's diameter for a screen [width]. Capped per class, so the
   /// tile has one intentional size rather than a stretched one.
@@ -126,6 +132,7 @@ class _CategoryWidgetState extends State<CategoryWidget> {
               glyph: widget.glyph,
               size: size,
               rounded: widget.rounded,
+              fit: widget.fit,
               // Hover and press land on the same step: on a tile this small a
               // second, fainter step is not perceptible, and two near-identical
               // greys read as a flicker when a finger becomes a cursor.
@@ -161,6 +168,7 @@ class _Disc extends StatelessWidget {
     required this.glyph,
     required this.size,
     this.rounded = false,
+    this.fit = BoxFit.cover,
     this.active = false,
     this.focused = false,
   });
@@ -172,6 +180,9 @@ class _Disc extends StatelessWidget {
 
   /// Rounded square instead of a circle; see [CategoryWidget.rounded].
   final bool rounded;
+
+  /// How the photo fills the tile; see [CategoryWidget.fit].
+  final BoxFit fit;
 
   /// Pressed or hovered — the surface steps down one notch.
   final bool active;
@@ -224,14 +235,18 @@ class _Disc extends StatelessWidget {
           // unconditional, so no dimension changes when it appears.
           border: _border,
         ),
-        padding: const EdgeInsets.all(BlynkCategory.photoInset),
+        // A contained packshot gets breathing room inside the well; a
+        // cover photo runs to the inset so it reads as the tile itself.
+        padding: EdgeInsets.all(
+          fit == BoxFit.contain ? BlynkSpace.s8 : BlynkCategory.photoInset,
+        ),
         child: ClipRRect(
           // A circle is a rounded rect with half-size corners.
           borderRadius: BorderRadius.circular(rounded ? size * 0.2 : size),
           child: hasPhoto
               ? Image.network(
                   url,
-                  fit: BoxFit.cover,
+                  fit: fit,
                   // The operator's chosen focal point (Blynk Ops), not always
                   // the centre.
                   alignment: category.imageAlignment,

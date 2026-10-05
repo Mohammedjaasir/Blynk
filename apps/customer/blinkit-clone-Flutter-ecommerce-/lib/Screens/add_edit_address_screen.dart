@@ -65,10 +65,12 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   late final TextEditingController _labelController;
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
+  /// Optional second number for the rider (backend migration 024).
+  late final TextEditingController _altPhoneController;
+  /// One "Address" box (2026-10-04, owner: fewer fields). Line 2, city and
+  /// postal code are no longer asked: the city is always the hub's, and an
+  /// old address's second line is folded into this box when it is edited.
   late final TextEditingController _line1Controller;
-  late final TextEditingController _line2Controller;
-  late final TextEditingController _cityController;
-  late final TextEditingController _postalController;
   late final TextEditingController _latController;
   late final TextEditingController _lngController;
   late final TextEditingController _instructionsController;
@@ -90,10 +92,14 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
     );
     _nameController = TextEditingController(text: e?.recipientName ?? '');
     _phoneController = TextEditingController(text: e?.recipientPhone ?? '');
-    _line1Controller = TextEditingController(text: e?.addressLine1 ?? '');
-    _line2Controller = TextEditingController(text: e?.addressLine2 ?? '');
-    _cityController = TextEditingController(text: e?.city ?? StoreInfo.hubName);
-    _postalController = TextEditingController(text: e?.postalCode ?? '');
+    _altPhoneController = TextEditingController(text: e?.alternatePhone ?? '');
+    _line1Controller = TextEditingController(
+      text: [e?.addressLine1, e?.addressLine2]
+          .whereType<String>()
+          .map((v) => v.trim())
+          .where((v) => v.isNotEmpty)
+          .join(', '),
+    );
     _latController =
         TextEditingController(text: (e?.latitude ?? 6.4382).toString());
     _lngController =
@@ -108,10 +114,8 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
     _labelController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
+    _altPhoneController.dispose();
     _line1Controller.dispose();
-    _line2Controller.dispose();
-    _cityController.dispose();
-    _postalController.dispose();
     _latController.dispose();
     _lngController.dispose();
     _instructionsController.dispose();
@@ -155,10 +159,14 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
       recipientName: AppValidators.normalizeText(_nameController.text),
       recipientPhone: AppValidators.normalizePhone(_phoneController.text) ??
           AppValidators.normalizeText(_phoneController.text),
+      // Optional: null (not '') when left empty, which also clears it on edit.
+      alternatePhone: AppValidators.normalizePhone(_altPhoneController.text),
       addressLine1: AppValidators.normalizeText(_line1Controller.text),
-      addressLine2: AppValidators.optionalText(_line2Controller.text),
-      city: AppValidators.normalizeText(_cityController.text),
-      postalCode: AppValidators.optionalText(_postalController.text),
+      addressLine2: null,
+      // Not asked any more: the city is the hub's; an edited address keeps
+      // its saved city and postal code.
+      city: widget.existing?.city ?? StoreInfo.hubName,
+      postalCode: widget.existing?.postalCode,
       latitude: double.tryParse(_latController.text.trim()) ?? 6.4382,
       longitude: double.tryParse(_lngController.text.trim()) ?? 80.0274,
       deliveryInstructions:
@@ -261,6 +269,18 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
                       inputFormatters: [_phoneFormatter],
                       validator: AppValidators.phone,
                     ),
+                    _AddressField(
+                      controller: _altPhoneController,
+                      label: 'Additional phone (optional)',
+                      hint: 'Another number we can call',
+                      keyboardType: TextInputType.phone,
+                      maxLength: 16,
+                      inputFormatters: [_phoneFormatter],
+                      validator: (value) => AppValidators.optionalPhone(
+                        value,
+                        differentFrom: _phoneController.text,
+                      ),
+                    ),
                   ],
                 ),
                 const _SectionLabel('Delivery address'),
@@ -268,35 +288,11 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
                   children: [
                     _AddressField(
                       controller: _line1Controller,
-                      label: 'Address line 1',
-                      hint: 'House / street',
+                      label: 'Address',
+                      hint: 'House no., street, landmark',
                       textCapitalization: TextCapitalization.words,
                       maxLength: AppValidators.addressLineMax,
                       validator: AppValidators.addressLine1,
-                    ),
-                    _AddressField(
-                      controller: _line2Controller,
-                      label: 'Address line 2',
-                      hint: 'Apartment, landmark (optional)',
-                      textCapitalization: TextCapitalization.words,
-                      maxLength: AppValidators.addressLineMax,
-                      validator: AppValidators.addressLine2,
-                    ),
-                    _AddressField(
-                      controller: _cityController,
-                      label: 'City',
-                      textCapitalization: TextCapitalization.words,
-                      maxLength: AppValidators.cityMax,
-                      validator: AppValidators.city,
-                    ),
-                    _AddressField(
-                      controller: _postalController,
-                      label: 'Postal code',
-                      hint: 'Optional',
-                      keyboardType: TextInputType.number,
-                      maxLength: AppValidators.postalCodeLength,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: AppValidators.postalCode,
                     ),
                   ],
                 ),

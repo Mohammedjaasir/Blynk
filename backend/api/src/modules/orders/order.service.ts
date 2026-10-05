@@ -217,6 +217,7 @@ export class OrderService {
       scheduled_for: scheduledFor,
       delivery_recipient_name: address.recipient_name,
       delivery_recipient_phone: address.recipient_phone,
+      delivery_alternate_phone: address.alternate_phone ?? null,
       delivery_address_line1: address.address_line1,
       delivery_address_line2: address.address_line2,
       delivery_city: address.city,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formatElapsed } from '../lib/format';
+import { getLocationMode, subscribeLocationMode, type LocationMode } from '../lib/location-mode';
 import type { TrackingState } from '../lib/tracking';
 
 /** How often the elapsed text is refreshed while it is on screen. */
@@ -37,13 +38,27 @@ function Elapsed({ since }: { since: Date }) {
  * live state, where a failed send is flagged as a retrying warning rather
  * than hidden behind an otherwise healthy-looking line.
  */
+function useLocationMode(): LocationMode {
+  const [mode, setMode] = useState<LocationMode>(() => getLocationMode());
+  useEffect(() => {
+    setMode(getLocationMode());
+    return subscribeLocationMode(setMode);
+  }, []);
+  return mode;
+}
+
 export function TrackingStatus({ state }: { state: TrackingState }) {
+  // 'web' = browser; 'background' = Android, keeps going when locked;
+  // 'foreground' = Android, the operator declined (lib/location-mode.ts).
+  const mode = useLocationMode();
   // Denied at pickup, or revoked mid-session. Either way nothing is being
   // shared, whatever `active` says, so this outranks every other state.
   if (state.permission === 'denied' || state.lastError === 'permission_denied') {
     return (
       <p className="tracking-status tracking-status--error">
-        Location permission is off — turn it on in your browser's settings so this customer's delivery can be tracked.
+        {mode === 'web'
+          ? "Location permission is off — turn it on in your browser's settings so this customer's delivery can be tracked."
+          : "Location permission is off — turn it on in your phone's settings so this customer's delivery can be tracked."}
       </p>
     );
   }
@@ -80,14 +95,21 @@ export function TrackingStatus({ state }: { state: TrackingState }) {
     );
   }
   return (
-    <p className="tracking-status tracking-status--active">
-      Sharing your location (this browser tab only)
-      {lastSentAt ? (
-        <>
-          {' — updated '}
-          <Elapsed since={lastSentAt} />
-        </>
-      ) : null}
-    </p>
+    <>
+      <p className="tracking-status tracking-status--active">
+        {mode === 'web'
+          ? 'Sharing your location (this browser tab only)'
+          : mode === 'background'
+            ? 'Sharing your location, also while your screen is off'
+            : 'Sharing your location'}
+        {lastSentAt ? (
+          <>
+            {' — updated '}
+            <Elapsed since={lastSentAt} />
+          </>
+        ) : null}
+      </p>
+      {mode === 'foreground' ? <p className="tracking-status">Location stops when your screen is off.</p> : null}
+    </>
   );
 }

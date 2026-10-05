@@ -133,6 +133,19 @@ class AppValidators {
   static String? phone(String? value) =>
       isValidPhone(value) ? null : 'Enter a valid Sri Lankan mobile number';
 
+  /// The address's additional phone (backend migration 024): empty is fine;
+  /// anything typed must be a valid number and not the recipient's own one
+  /// again (the backend refuses that with ALTERNATE_PHONE_SAME_AS_RECIPIENT).
+  static String? optionalPhone(String? value, {String? differentFrom}) {
+    if (normalizeText(value).isEmpty) return null;
+    final normalized = normalizePhone(value);
+    if (normalized == null) return 'Enter a valid Sri Lankan mobile number';
+    if (differentFrom != null && normalized == normalizePhone(differentFrom)) {
+      return 'Use a different number from the recipient phone';
+    }
+    return null;
+  }
+
   /// Who the appointment is for - may not be the account holder, so this is
   /// a plain name field, not tied to the signed-in customer's own name.
   static String? patientName(String? value) {

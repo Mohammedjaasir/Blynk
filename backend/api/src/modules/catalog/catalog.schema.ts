@@ -64,6 +64,12 @@ export const createCategorySchema = z.object({
   // Migration 010: the category image's focal point, whole percentages.
   image_focal_x: z.number().int().min(0).max(100).optional(),
   image_focal_y: z.number().int().min(0).max(100).optional(),
+  // Migration 025: the home-screen group (null = none, shown under "More")
+  // and the position inside it (omitted = appended at the end).
+  group_id: z.string().uuid('group_id must be a category group id').nullable().optional(),
+  group_sort_order: z.number().int().min(0).max(100000).optional(),
+  // Migration 026: the category this one sits inside (null = top level).
+  parent_id: z.string().uuid('parent_id must be a category id').nullable().optional(),
 });
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;

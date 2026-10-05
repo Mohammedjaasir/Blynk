@@ -175,6 +175,15 @@ export async function deleteCategory(categoryId: string, moveToCategoryId: strin
       );
     }
 
+    // Migration 026: its sub-categories move up to the top level. A hard
+    // delete would do this anyway (ON DELETE SET NULL); a soft one must not
+    // leave them pointing at a hidden parent.
+    await trx
+      .updateTable('categories')
+      .set({ parent_id: null, updated_at: new Date() })
+      .where('parent_id', '=', categoryId)
+      .execute();
+
     let mode: DeleteMode;
     if (moveToCategoryId !== undefined && total > 0) {
       await trx

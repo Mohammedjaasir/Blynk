@@ -197,6 +197,9 @@ abstract final class BlynkIcons {
   // "Notify me when it's back" on a sold-out product (phase 6).
   static const IconData notifyMe = Icons.notifications_none;
   static const IconData notifyMeOn = Icons.notifications_active_outlined;
+  // Rating a finished dental visit: filled vs outline carries the meaning.
+  static const IconData star = Icons.star_rounded;
+  static const IconData starOutline = Icons.star_outline_rounded;
 
   /// The icons that must read as different things from each other.
   static const List<IconData> distinct = <IconData>[

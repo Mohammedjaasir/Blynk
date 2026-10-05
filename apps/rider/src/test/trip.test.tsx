@@ -1,10 +1,10 @@
-import { screen, within } from '@testing-library/react';
+import { renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
 import { __resetTrackerSessionForTests } from '../lib/tracker-session';
-import { formatAway, isTripStop, orderTrip } from '../lib/trip';
-import { RIDER, fail, ok, renderAs, summary } from './helpers';
+import { formatAway, formatByRoad, isTripStop, orderTrip, useRoadOrder } from '../lib/trip';
+import { RIDER, fail, mockApi, ok, renderAs, summary } from './helpers';
 
 // The real plugin needs a native bridge that jsdom lacks (as in queue.test.tsx).
 vi.mock('../lib/tracking-plugin', () => ({
@@ -121,6 +121,110 @@ describe('Deliveries (home) with two orders: the trip view', () => {
     expect(await screen.findByRole('region', { name: 'Now' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: /Your trip/ })).not.toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Next' })).getByText('Being packed')).toBeInTheDocument();
+  });
+});
+
+describe('road order for the stops on the road', () => {
+  // The road says FAR first (NEAR is across a river), though NEAR is nearer in a straight line.
+  const ROAD = {
+    stops: [
+      { id: 'd-far', lat: 6.4382, lng: 80.0455, duration_s: 250, distance_m: 2100 },
+      { id: 'd-near', lat: 6.4382, lng: 80.031, duration_s: 61, distance_m: 1500 },
+    ],
+    fallback: false,
+  };
+  const withGps = () => {
+    const geolocation = {
+      getCurrentPosition: (success: PositionCallback) =>
+        success({ coords: { latitude: RIDER_AT.lat, longitude: RIDER_AT.lng } } as GeolocationPosition),
+    };
+    Object.defineProperty(navigator, 'geolocation', { value: geolocation, configurable: true });
+  };
+  afterEach(() => {
+    delete (navigator as { geolocation?: unknown }).geolocation;
+  });
+
+  it('orders only the on-road group by road, keeps door first and store last, and gives minutes by road', () => {
+    const list = [summary({ delivery_id: 'd-store' }), onRoad(near), onRoad(far), atDoor({ ...near, delivery_id: 'd-door' })];
+    const stops = orderTrip(list, RIDER_AT, ROAD);
+    expect(stops.map((s) => s.delivery.delivery_id)).toEqual(['d-door', 'd-far', 'd-near', 'd-store']);
+    expect(stops.map((s) => s.roadMin)).toEqual([null, 5, 2, null]);
+    expect(formatByRoad(5)).toBe('about 5 min by road');
+    // An answer for other stops (stale) is ignored: straight line, no road minutes.
+    const stale = { stops: [ROAD.stops[0]] };
+    const plain = orderTrip([onRoad(far), onRoad(near)], RIDER_AT, stale);
+    expect(plain.map((s) => s.delivery.delivery_id)).toEqual(['d-near', 'd-far']);
+    expect(plain.every((s) => s.roadMin === null)).toBe(true);
+  });
+
+  it('asks the API for the road order from the phone position and shows "about N min by road"', async () => {
+    withGps();
+    const { api } = renderAs(RIDER, '/', {
+      'GET /riders/deliveries': () => ok({ deliveries: [onRoad(near), onRoad(far)] }),
+      'POST /routing/stop-order': () => ok(ROAD),
+    });
+    const trip = await screen.findByRole('region', { name: 'Your trip · 2 stops' });
+    expect(await within(trip).findByText('about 5 min by road')).toBeInTheDocument();
+    const stops = within(trip).getAllByRole('listitem');
+    expect(within(stops[0]).getByText('1 Far Road')).toBeInTheDocument();
+    expect(within(stops[1]).getByText('2 Near Road')).toBeInTheDocument();
+    expect(within(stops[1]).getByText('about 2 min by road')).toBeInTheDocument();
+    const [call] = api.find('POST', '/routing/stop-order');
+    expect(call.body).toEqual({
+      from: RIDER_AT,
+      stops: [
+        { id: 'd-near', lat: 6.4382, lng: 80.031 },
+        { id: 'd-far', lat: 6.4382, lng: 80.0455 },
+      ],
+    });
+  });
+
+  it.each([
+    ['answers fallback: true', () => ok({ ...ROAD, stops: [...ROAD.stops].reverse(), fallback: true })],
+    ['fails', () => fail(503, 'ROUTING_UNAVAILABLE')],
+  ])('keeps the straight-line order and no road times when the API %s', async (_label, reply) => {
+    withGps();
+    const { api } = renderAs(RIDER, '/', {
+      'GET /riders/deliveries': () => ok({ deliveries: [onRoad(far), onRoad(near)] }),
+      'POST /routing/stop-order': reply,
+    });
+    const trip = await screen.findByRole('region', { name: 'Your trip · 2 stops' });
+    expect(await within(trip).findByText('400 m away')).toBeInTheDocument();
+    await waitFor(() => expect(api.find('POST', '/routing/stop-order')).toHaveLength(1));
+    const stops = within(trip).getAllByRole('listitem');
+    expect(within(stops[0]).getByText('2 Near Road')).toBeInTheDocument();
+    expect(within(stops[1]).getByText('1 Far Road')).toBeInTheDocument();
+    expect(within(trip).queryByText(/by road/)).not.toBeInTheDocument();
+  });
+
+  it('asks again only when the stops change or the rider moved more than 200 m', async () => {
+    const api = mockApi({ 'POST /routing/stop-order': () => ok(ROAD) });
+    tokenStore.save('test-access', 'test-refresh');
+    const list = [onRoad(near), onRoad(far)];
+    const { result, rerender } = renderHook(
+      ({ l, at }: { l: typeof list; at: { lat: number; lng: number } }) => useRoadOrder(l, at, true),
+      { initialProps: { l: list, at: RIDER_AT } }
+    );
+    await waitFor(() => expect(result.current?.stops.map((s) => s.id)).toEqual(['d-far', 'd-near']));
+    expect(api.find('POST', '/routing/stop-order')).toHaveLength(1);
+
+    // About 100 m on, and a new (equal) list from a reload: no new request.
+    rerender({ l: [...list], at: { lat: RIDER_AT.lat, lng: RIDER_AT.lng + 0.0009 } });
+    rerender({ l: [...list], at: { lat: RIDER_AT.lat, lng: RIDER_AT.lng + 0.0009 } });
+    expect(api.find('POST', '/routing/stop-order')).toHaveLength(1);
+    expect(result.current).not.toBeNull();
+
+    // About 330 m from where it last asked: ask again.
+    rerender({ l: list, at: { lat: RIDER_AT.lat, lng: RIDER_AT.lng + 0.003 } });
+    await waitFor(() => expect(api.find('POST', '/routing/stop-order')).toHaveLength(2));
+
+    // A third stop joins the road: the set changed, ask again.
+    const three = [...list, onRoad({ ...far, delivery_id: 'd-3', delivery_longitude: '80.06' })];
+    rerender({ l: three, at: { lat: RIDER_AT.lat, lng: RIDER_AT.lng + 0.003 } });
+    await waitFor(() => expect(api.find('POST', '/routing/stop-order')).toHaveLength(3));
+    expect(api.find('POST', '/routing/stop-order')[2].body.stops).toHaveLength(3);
+    // This fake answers for two stops, not three: the trip does not use it.
+    expect(orderTrip(three, RIDER_AT, result.current).every((s) => s.roadMin === null)).toBe(true);
   });
 });
 

@@ -48,6 +48,7 @@ void main() {
         'label',
         'recipient_name',
         'recipient_phone',
+        'alternate_phone',
         'address_line1',
         'address_line2',
         'city',
@@ -59,6 +60,33 @@ void main() {
       ]));
       expect(payload['latitude'], isA<double>());
       expect(payload['longitude'], isA<double>());
+      // No additional phone: sent as an explicit null (clears it on edit).
+      expect(payload.containsKey('alternate_phone'), isTrue);
+      expect(payload['alternate_phone'], isNull);
+    });
+
+    test('parses the optional alternate_phone (migration 024)', () {
+      final base = {
+        'id': 'a1',
+        'recipient_name': 'Jane Silva',
+        'recipient_phone': '+94771234567',
+        'address_line1': '12 Galle Road',
+        'city': 'Dharga Town',
+        'latitude': 6.4382,
+        'longitude': 80.0274,
+      };
+      expect(
+        AddressModel.fromJson({...base, 'alternate_phone': '+94712345678'}).alternatePhone,
+        '+94712345678',
+      );
+      expect(AddressModel.fromJson({...base, 'alternate_phone': null}).alternatePhone, isNull);
+      expect(AddressModel.fromJson({...base, 'alternate_phone': ''}).alternatePhone, isNull);
+      expect(AddressModel.fromJson(base).alternatePhone, isNull);
+      expect(
+        AddressModel.fromJson({...base, 'alternate_phone': '+94712345678'})
+            .toCreatePayload()['alternate_phone'],
+        '+94712345678',
+      );
     });
   });
 }

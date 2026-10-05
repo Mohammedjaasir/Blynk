@@ -10,6 +10,7 @@ import '../UI/Widgets/Atoms/app_skeleton.dart';
 import '../UI/Widgets/Atoms/app_state_views.dart';
 import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Atoms/status_badge.dart';
+import '../UI/Widgets/Organisms/dental_rating_section.dart';
 import '../UI/Widgets/Organisms/dental_widgets.dart';
 import '../app_responsive.dart';
 import '../design/tokens.dart';
@@ -76,6 +77,17 @@ class _DentalMyAppointmentsScreenState extends State<DentalMyAppointmentsScreen>
         _loading = false;
       });
     }
+  }
+
+  /// Swaps in the server's rated copy of one appointment, so its row shows
+  /// "Your rating" at once instead of the form.
+  void _replace(AppointmentModel updated) {
+    if (!mounted) return;
+    setState(() {
+      _appointments = [
+        for (final appointment in _appointments) appointment.id == updated.id ? updated : appointment,
+      ];
+    });
   }
 
   void _selectBucket(_Bucket bucket) {
@@ -175,7 +187,28 @@ class _DentalMyAppointmentsScreenState extends State<DentalMyAppointmentsScreen>
                     padding: const EdgeInsets.only(top: BlynkSpace.s16, bottom: BlynkSpace.s32),
                     itemCount: rows.length,
                     separatorBuilder: (_, __) => const SizedBox(height: BlynkSpace.s12),
-                    itemBuilder: (context, index) => _AppointmentRow(appointment: rows[index], now: now),
+                    itemBuilder: (context, index) {
+                      final appointment = rows[index];
+                      final row = _AppointmentRow(appointment: appointment, now: now);
+                      if (!appointment.canRate && appointment.rating == null) return row;
+                      // A finished visit: the row, then a compact "Rate your
+                      // visit" card (the form opens in a sheet) or the
+                      // rating already given.
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          row,
+                          const SizedBox(height: BlynkSpace.s8),
+                          DentalRatingCard(
+                            key: Key('appointment-rating-${appointment.id}'),
+                            appointment: appointment,
+                            onRated: _replace,
+                            compact: true,
+                          ),
+                        ],
+                      );
+                    },
                   ),
           ),
         ),

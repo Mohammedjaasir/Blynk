@@ -6,6 +6,8 @@ import { PageHeader } from '../components/Layout';
 import { OrderBill } from '../components/OrderBill';
 import { EmptyState, Spinner } from '../components/ui';
 import { formatDay } from '../lib/coupons';
+import { buildCustomersXlsx, customerExportFilename } from '../lib/customerExport';
+import { downloadBlob } from '../lib/productImport';
 import { ITEM_STATUS_LABEL, STATUS_LABEL, formatClock, formatMoney, orderErrorMessage, shortNumber } from '../lib/orders';
 
 /**
@@ -31,6 +33,22 @@ export function Customers() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  /** Every customer (not just this page or search) as an .xlsx. */
+  async function downloadExcel() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const { customers: all } = await customersApi.exportAll();
+      downloadBlob(await buildCustomersXlsx(all), customerExportFilename());
+    } catch (err) {
+      setExportError(errorText(err, 'Could not download the customer list.'));
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setRows(null);
@@ -62,24 +80,31 @@ export function Customers() {
         title="Customers"
         description="Search by name or phone. Spend counts delivered orders."
         actions={
-          <div className="segmented" role="group" aria-label="Sort">
-            {(Object.keys(SORT_LABEL) as Exclude<CustomerSort, 'name'>[]).map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={option === sort ? 'segmented__item is-selected' : 'segmented__item'}
-                aria-pressed={option === sort}
-                onClick={() => {
-                  setPage(1);
-                  setSort(option);
-                }}
-              >
-                {SORT_LABEL[option]}
-              </button>
-            ))}
-          </div>
+          <>
+            <button type="button" className="button button--ghost" disabled={exporting} onClick={() => void downloadExcel()}>
+              {exporting ? 'Preparing…' : 'Download Excel'}
+            </button>
+            <div className="segmented" role="group" aria-label="Sort">
+              {(Object.keys(SORT_LABEL) as Exclude<CustomerSort, 'name'>[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={option === sort ? 'segmented__item is-selected' : 'segmented__item'}
+                  aria-pressed={option === sort}
+                  onClick={() => {
+                    setPage(1);
+                    setSort(option);
+                  }}
+                >
+                  {SORT_LABEL[option]}
+                </button>
+              ))}
+            </div>
+          </>
         }
       />
+
+      {exportError ? <p className="field__error" role="alert">{exportError}</p> : null}
 
       <form className="search-bar" role="search" onSubmit={submit}>
         <input

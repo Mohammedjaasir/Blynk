@@ -31,6 +31,8 @@ Map<String, dynamic> clinicDoctorJson({
   String fullName = 'Dr. Nadeesha Perera',
   String specialty = 'ORTHODONTIST',
   num? consultationFee = 3500,
+  num? ratingAverage,
+  int ratingCount = 0,
 }) =>
     {
       'clinic_doctor_id': clinicDoctorId,
@@ -40,6 +42,8 @@ Map<String, dynamic> clinicDoctorJson({
       'photo_url': 'https://example.com/photo.jpg',
       'bio': '10 years of experience.',
       'consultation_fee': consultationFee,
+      'rating_average': ratingAverage,
+      'rating_count': ratingCount,
     };
 
 /// `DoctorDto` (doctor.service.ts `getDoctorById`) - `GET /dental/doctors/:id`.
@@ -48,6 +52,8 @@ Map<String, dynamic> doctorJson({
   String fullName = 'Dr. Nadeesha Perera',
   String specialty = 'ORTHODONTIST',
   List<Map<String, dynamic>>? clinics,
+  num? ratingAverage,
+  int ratingCount = 0,
 }) =>
     {
       'id': id,
@@ -55,6 +61,8 @@ Map<String, dynamic> doctorJson({
       'specialty': specialty,
       'photo_url': null,
       'bio': null,
+      'rating_average': ratingAverage,
+      'rating_count': ratingCount,
       'clinics': clinics ??
           [
             {
@@ -68,6 +76,14 @@ Map<String, dynamic> doctorJson({
               'consultation_fee': 3500,
             },
           ],
+    };
+
+/// The `rating` block on an appointment DTO, and the `rating` half of
+/// `POST /dental/appointments/:id/rating`'s response.
+Map<String, dynamic> ratingJson({int stars = 4, String? comment = 'Gentle and on time.'}) => {
+      'stars': stars,
+      'comment': comment,
+      'created_at': '2027-06-08T10:00:00.000Z',
     };
 
 /// `toHoldDto` (appointment.service.ts) - the `appointment` block of
@@ -111,6 +127,8 @@ Map<String, dynamic> appointmentJson({
   String? cancellationReason,
   bool isCompleted = false,
   bool canCancel = true,
+  bool canRate = false,
+  Map<String, dynamic>? rating,
   bool detail = true,
 }) =>
     {
@@ -126,6 +144,8 @@ Map<String, dynamic> appointmentJson({
       'cancellation_reason': cancellationReason,
       'is_completed': isCompleted,
       'can_cancel': canCancel,
+      'can_rate': canRate,
+      'rating': rating,
       'doctor': {
         'id': 'd0000001-0000-0000-0000-000000000001',
         'full_name': 'Dr. Nadeesha Perera',

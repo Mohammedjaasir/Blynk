@@ -12,6 +12,7 @@
     "android:lan-config": "node scripts/lan-android-config.mjs"
   },
   "dependencies": {
+    "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor/android": "^7.6.9",
     "@capacitor/core": "^7.6.9",
     "lucide-react": "^1.48.0",

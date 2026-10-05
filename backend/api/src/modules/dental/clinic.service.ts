@@ -1,6 +1,7 @@
 import { dentalRepository } from './dental.repository.js';
 import { ClinicListQueryInput } from './dental.schema.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { NO_RATINGS, ratingSummaries } from './doctor-rating.service.js';
 
 export interface ClinicDto {
   id: string;
@@ -22,6 +23,9 @@ export interface ClinicDoctorDto {
   photo_url: string | null;
   bio: string | null;
   consultation_fee: number | null;
+  /** Migration 023: visible ratings only; null average when there are none. */
+  rating_average: number | null;
+  rating_count: number;
 }
 
 function toClinicDto(row: {
@@ -98,7 +102,9 @@ export class ClinicService {
     }
 
     const rows = await dentalRepository.findActiveClinicDoctors(clinicId);
+    const ratings = await ratingSummaries(rows.map((r) => r.doctor_id));
     return rows.map((row) => ({
+      ...(ratings.get(row.doctor_id) ?? NO_RATINGS),
       clinic_doctor_id: row.clinic_doctor_id,
       doctor_id: row.doctor_id,
       full_name: row.full_name,

@@ -10,6 +10,7 @@ import '../UI/Widgets/Atoms/app_state_views.dart';
 import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
 import '../UI/Widgets/Organisms/clinic_location_map.dart';
+import '../UI/Widgets/Organisms/dental_rating_section.dart';
 import '../UI/Widgets/Organisms/dental_widgets.dart';
 import '../UI/Widgets/Organisms/map_provider.dart';
 import '../app_responsive.dart';
@@ -181,7 +182,13 @@ class _DoctorRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return DentalCard(
       key: Key('doctor-row-${doctor.clinicDoctorId}'),
-      semanticLabel: '${doctor.fullName}, ${dentalSpecialtyLabel(doctor.specialty)}',
+      semanticLabel: [
+        doctor.fullName,
+        dentalSpecialtyLabel(doctor.specialty),
+        if (doctor.ratingLabel != null)
+          'rated ${doctor.ratingAverage!.toStringAsFixed(1)} out of 5 from ${doctor.ratingCount} '
+              '${doctor.ratingCount == 1 ? 'rating' : 'ratings'}',
+      ].join(', '),
       onTap: () => Navigator.of(context).pushNamed(
         '/dental/doctor',
         arguments: {'doctorId': doctor.doctorId, 'clinicId': clinicId},
@@ -201,6 +208,15 @@ class _DoctorRow extends StatelessWidget {
                   dentalSpecialtyLabel(doctor.specialty),
                   style: BlynkText.body.copyWith(color: BlynkColors.ink2),
                 ),
+                // "★ 4.6 (12)", or nothing at all before the first rating.
+                if (doctor.ratingLabel != null) ...[
+                  const SizedBox(height: BlynkSpace.s4),
+                  DentalDoctorRating(
+                    key: Key('doctor-rating-${doctor.clinicDoctorId}'),
+                    average: doctor.ratingAverage,
+                    count: doctor.ratingCount,
+                  ),
+                ],
                 // Rendered only when the backend actually returns a fee for
                 // this clinic-doctor pairing - never a zero, never a guess,
                 // and never a price to pay here (there is no payment in this

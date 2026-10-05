@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { BackgroundLocationPrompt } from './BackgroundLocationPrompt';
 import { LowStockProvider, useLowStock } from './LowStock';
 
 /**
@@ -56,6 +57,7 @@ function Shell() {
       <main className="content">
         <Outlet />
       </main>
+      <BackgroundLocationPrompt />
 
       <nav className="tabbar" aria-label="Primary">
         {TABS.map((tab) => {

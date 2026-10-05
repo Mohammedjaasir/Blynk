@@ -36,8 +36,12 @@ async function bootstrap() {
   const { notificationWorker, logPushStatus } = await import('./modules/notifications/index.js');
   // Says once whether app push (FCM) is configured; without a key it is a no-op.
   logPushStatus();
+  const { appointmentReminderJob } = await import('./modules/dental/appointment-reminders.js');
   if (env.NOTIFICATION_WORKER_ENABLED) {
     notificationWorker.start();
+    // Sibling tick: appointment reminders and rating prompts (safe to run in
+    // several processes - each appointment is claimed once).
+    appointmentReminderJob.start();
   } else {
     logger.info('Notification Outbox Worker is disabled by configuration (NOTIFICATION_WORKER_ENABLED=false)');
   }
@@ -52,6 +56,7 @@ async function bootstrap() {
     // Stop worker loop first to prevent claiming new jobs
     if (env.NOTIFICATION_WORKER_ENABLED) {
       try {
+        await appointmentReminderJob.stop();
         await notificationWorker.stop();
       } catch (workerErr) {
         logger.error({ err: workerErr }, 'Error stopping notification worker');

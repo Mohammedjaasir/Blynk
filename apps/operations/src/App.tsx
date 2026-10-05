@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Cash } from './pages/Cash';
 import { Catalog } from './pages/Catalog';
 import { Categories } from './pages/Catalog/Categories';
+import { CategoryGroups } from './pages/Catalog/CategoryGroups';
 import { ProductForm } from './pages/Catalog/ProductForm';
 import { ProductImport } from './pages/Catalog/ProductImport';
 import { Products } from './pages/Catalog/Products';
@@ -17,6 +18,7 @@ import { Availability as DentalAvailability } from './pages/Dental/Availability'
 import { ClinicDetail as DentalClinicDetail } from './pages/Dental/ClinicDetail';
 import { Clinics as DentalClinics } from './pages/Dental/Clinics';
 import { Doctors as DentalDoctors } from './pages/Dental/Doctors';
+import { DoctorRatings as DentalDoctorRatings } from './pages/Dental/DoctorRatings';
 import { Overview as DentalOverview } from './pages/Dental/Overview';
 import { Home } from './pages/Home';
 import { Ledger as InventoryLedger } from './pages/Inventory/Ledger';
@@ -115,6 +117,7 @@ export function AppRoutes() {
         <Route path="catalog/products/import" element={<ProductImport />} />
         <Route path="catalog/products/:id" element={<ProductForm />} />
         <Route path="catalog/categories" element={<Categories />} />
+        <Route path="catalog/category-groups" element={<CategoryGroups />} />
         <Route path="catalog/promotions" element={<Promotions />} />
         <Route path="catalog/inventory" element={<InventoryOverview />} />
         <Route path="catalog/inventory/stock" element={<InventoryStock />} />
@@ -128,6 +131,7 @@ export function AppRoutes() {
         <Route path="catalog/dental/clinics/:clinicId" element={<DentalClinicDetail />} />
         <Route path="catalog/dental/clinics/:clinicId/doctors/:clinicDoctorId" element={<DentalAvailability />} />
         <Route path="catalog/dental/doctors" element={<DentalDoctors />} />
+        <Route path="catalog/dental/doctors/:doctorId/ratings" element={<DentalDoctorRatings />} />
         <Route path="more" element={<More />} />
         <Route path="more/riders" element={<Riders />} />
         <Route path="more/cash" element={<Cash />} />

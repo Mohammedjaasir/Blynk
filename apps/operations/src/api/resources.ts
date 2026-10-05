@@ -1,4 +1,5 @@
 import { apiRequest } from './client';
+import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
   AdjustmentType,
   AdminAppointment,
@@ -8,6 +9,9 @@ import type {
   BoardOrder,
   Category,
   CategoryDeleteResult,
+  CategoryGroup,
+  CategoryGroupDeleteResult,
+  CategoryGroupsOverview,
   ClinicDoctor,
   ClinicDoctorRosterRow,
   CodSettlement,
@@ -22,6 +26,7 @@ import type {
   DentalClinic,
   DentalDoctor,
   DoctorAvailability,
+  DoctorRatingsResult,
   DoctorBlockedDate,
   HomeOrder,
   ImportResult,
@@ -326,11 +331,18 @@ export const delivery = {
    * road and the app is open on screen (lib/tracker-session.ts). Same
    * payload shape the Rider app's native tracker sends
    * (rider.location.schema.ts: latitude/longitude/accuracy/captured_at). */
+  /** In the Android app this goes over native HTTP (api/native-client.ts) so
+   * it keeps working with the screen locked; on the web it is plain fetch. */
   sendLocation: (id: string, point: { latitude: number; longitude: number; accuracy: number; captured_at: string }) =>
-    apiRequest<{ accepted: boolean; reason?: string }>(`/riders/deliveries/${id}/location`, {
-      method: 'POST',
-      body: point,
-    }),
+    isNativeApp()
+      ? nativeApiRequest<{ accepted: boolean; reason?: string }>(`/riders/deliveries/${id}/location`, {
+          method: 'POST',
+          body: point,
+        })
+      : apiRequest<{ accepted: boolean; reason?: string }>(`/riders/deliveries/${id}/location`, {
+          method: 'POST',
+          body: point,
+        }),
 };
 
 function setDeliveryStatus(id: string, body: Record<string, unknown>) {
@@ -454,6 +466,19 @@ export const dental = {
       apiRequest<{ doctor: DentalDoctor }>(`/admin/dental/doctors/${id}`, { method: 'PATCH', body: input }).then(
         (d) => d.doctor
       ),
+  },
+
+  /** Doctor ratings (migration 023): a doctor's ratings, hidden ones
+   * included, and hiding/unhiding an abusive one. */
+  ratings: {
+    listForDoctor: (doctorId: string, page = 1) =>
+      apiRequest<DoctorRatingsResult>(`/admin/dental/doctors/${doctorId}/ratings`, { query: { page, limit: 50 } }),
+
+    setHidden: (ratingId: string, hidden: boolean) =>
+      apiRequest<{ rating: { id: string; is_hidden: boolean; hidden_at: string | null } }>(
+        `/admin/dental/ratings/${ratingId}/hidden`,
+        { method: 'PATCH', body: { hidden } }
+      ).then((d) => d.rating),
   },
 
   /** The `clinic_doctors` join table - one clinic's doctor roster. */
@@ -601,6 +626,38 @@ export const catalog = {
         method: 'DELETE',
         query: { move_to_category_id: moveToCategoryId },
       }),
+  },
+
+  /** Category groups: the titled rows of category tiles on the customer
+   * Home (`/admin/category-groups`, ADMIN and OPERATIONS). */
+  categoryGroups: {
+    list: () => apiRequest<CategoryGroupsOverview>('/admin/category-groups'),
+
+    create: (input: { name: string; is_active?: boolean }) =>
+      apiRequest<{ group: CategoryGroup }>('/admin/category-groups', { method: 'POST', body: input }).then((d) => d.group),
+
+    update: (id: string, input: { name?: string; is_active?: boolean }) =>
+      apiRequest<{ group: CategoryGroup }>(`/admin/category-groups/${id}`, { method: 'PATCH', body: input }).then(
+        (d) => d.group
+      ),
+
+    remove: (id: string) =>
+      apiRequest<CategoryGroupDeleteResult>(`/admin/category-groups/${id}`, { method: 'DELETE' }),
+
+    /** Must list every live group exactly once (400 otherwise). */
+    reorder: (groupIds: string[]) =>
+      apiRequest<{ groups: CategoryGroup[] }>('/admin/category-groups/order', {
+        method: 'PUT',
+        body: { group_ids: groupIds },
+      }).then((d) => d.groups),
+
+    /** Sets the group's exact membership AND order; members left out become
+     * unassigned, listed categories from another group move in. */
+    setCategories: (id: string, categoryIds: string[]) =>
+      apiRequest<{ group: CategoryGroup }>(`/admin/category-groups/${id}/categories`, {
+        method: 'PUT',
+        body: { category_ids: categoryIds },
+      }).then((d) => d.group),
   },
 
   products: {

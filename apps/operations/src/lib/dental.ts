@@ -31,3 +31,19 @@ export function dentalErrorMessage(err: unknown): string {
 }
 
 export const isDentalError = (err: unknown, code: string) => err instanceof ApiError && err.code === code;
+
+/** A doctor's rating as the customer app shows it: "★ 4.6 (12)", or null
+ * when there are no (visible) ratings (migration 023). */
+export function formatRating(average: number | null | undefined, count: number | null | undefined): string | null {
+  if (!count || average === null || average === undefined) return null;
+  return `★ ${average.toFixed(1)} (${count})`;
+}
+
+const visitDate = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'Asia/Colombo',
+});
+/** "05 Jan 2026" in clinic time. */
+export const formatVisitDate = (iso: string) => visitDate.format(new Date(iso));

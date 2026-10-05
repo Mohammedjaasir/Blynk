@@ -110,6 +110,14 @@ describe('Stage 7: Deployment, Docker & Environment Packaging', () => {
       }
     });
 
+    it('SBS Telecom in production needs its key and secret, not a Notify.lk user id', () => {
+      const sbs = { ...validProdBase, SMS_PROVIDER: 'sbs', SMS_API_KEY: 'live_sbs_key', SMS_API_SECRET: 'live_sbs_secret', SMS_USER_ID: undefined };
+      expect(envSchema.safeParse(sbs).success).toBe(true);
+      const noSecret = envSchema.safeParse({ ...sbs, SMS_API_SECRET: undefined });
+      expect(noSecret.success).toBe(false);
+      if (!noSecret.success) expect(noSecret.error.issues.some((i) => i.path.includes('SMS_API_KEY'))).toBe(true);
+    });
+
     it('throws descriptive error when validateEnv() is called with invalid production env', () => {
       expect(() =>
         validateEnv({

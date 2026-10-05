@@ -3,6 +3,9 @@ import { db } from '../../database/connection.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { DentalAppointmentStatus } from '../../database/types.js';
 import { notificationService } from '../notifications/notification.service.js';
+import { bestEffort } from '../notifications/push/push.repository.js';
+import { logger } from '../../utils/logger.js';
+import { remindIfDue } from './appointment-reminders.js';
 import { availabilityService } from './availability.service.js';
 import {
   appointmentRepository,
@@ -26,6 +29,12 @@ const CANCELLED_STATUSES: DentalAppointmentStatus[] = ['CANCELLED_BY_CUSTOMER', 
 // DENTAL-07 (open decision): no cancellation cutoff enforced yet; add a start_at-relative check here once the business decides the window.
 export function canCustomerCancel(appointment: { status: DentalAppointmentStatus; start_at: Date }): boolean {
   return appointment.status === 'CONFIRMED';
+}
+
+/** "Visited" (migration 023): confirmed, and the slot is over. There is no
+ * COMPLETED status. Rated or not is checked separately. */
+export function canRateVisit(appointment: { status: DentalAppointmentStatus; end_at: Date }, now: Date): boolean {
+  return appointment.status === 'CONFIRMED' && appointment.end_at.getTime() <= now.getTime();
 }
 
 // ----------------------------------------------------------------------------
@@ -55,6 +64,9 @@ interface AppointmentRowWithContext {
   clinic_name: string;
   clinic_city: string;
   clinic_address_line: string;
+  rating_stars: number | null;
+  rating_comment: string | null;
+  rating_created_at: Date | null;
 }
 
 function money(value: number | string | null): number | null {
@@ -84,6 +96,13 @@ function toListDto(row: AppointmentRowWithContext, now: Date) {
     // (order.service.ts's `can_cancel` precedent). Advisory: the cancel
     // endpoint re-checks it under the row lock.
     can_cancel: canCustomerCancel(row),
+    // Migration 023: a visit can be rated once its slot has ended (same rule
+    // the rating endpoint enforces - doctor-rating.service.ts).
+    can_rate: row.rating_stars === null && canRateVisit(row, now),
+    rating:
+      row.rating_stars === null
+        ? null
+        : { stars: row.rating_stars, comment: row.rating_comment, created_at: row.rating_created_at },
     doctor: {
       id: row.doctor_id,
       full_name: row.doctor_name,
@@ -346,7 +365,15 @@ export class AppointmentService {
         },
         trx
       );
-      // No reminder is enqueued here or anywhere else - blocked on DENTAL-11.
+      // A late booking (after 18:00 for tomorrow) gets its day-before
+      // reminder now, if more than two hours away (appointment-reminders.ts).
+      // Best effort: a failure never fails the confirm; the worker's next
+      // pass retries it.
+      await bestEffort(
+        trx,
+        () => remindIfDue(trx, appointmentId),
+        (err) => logger.error({ err, appointmentId }, 'Could not send the late-booking reminder; the worker will retry')
+      );
     });
 
     return await this.getOwnedAppointment(customerId, appointmentId);

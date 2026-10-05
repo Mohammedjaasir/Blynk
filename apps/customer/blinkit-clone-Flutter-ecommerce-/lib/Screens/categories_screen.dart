@@ -101,7 +101,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     );
                   }
 
-                  final categories = productProvider.categories;
+                  // Sub-categories are reached through their parent.
+                  final categories = productProvider.topLevelCategories;
 
                   if (categories.isEmpty) {
                     return const AppStateView(

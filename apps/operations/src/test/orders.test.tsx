@@ -253,9 +253,22 @@ describe('Order detail (a standalone route, /orders/:id)', () => {
     expect(await screen.findByText('Kotmale Fresh Milk 1L')).toBeInTheDocument();
     expect(screen.getByText('2 ×')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Call Ahmed Rizvi/ })).toHaveAttribute('href', 'tel:+94771234567');
+    // No additional number on this order.
+    expect(screen.queryByText(/Additional phone/)).not.toBeInTheDocument();
     expect(screen.getByText('Order placed by customer')).toBeInTheDocument();
     expect(screen.getByText('Farhan Mohamed')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/cost|supplier/i);
+  });
+
+  it('shows the additional phone with its own call link when the order has one', async () => {
+    const o = boardOrder({ order_status: 'PLACED' });
+    renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, {
+      'GET /admin/orders/:id': () => ok({ order: orderDetail(o, { delivery_alternate_phone: '+94712345678' }) }),
+    });
+    const alt = await screen.findByRole('link', { name: 'Call additional phone for Ahmed Rizvi' });
+    expect(alt).toHaveAttribute('href', 'tel:+94712345678');
+    expect(screen.getByText(/Additional phone/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Call Ahmed Rizvi/ })).toHaveAttribute('href', 'tel:+94771234567');
   });
 
   it('derives the same actions a board row with this data would offer - reachable by direct navigation, with no board data in memory', async () => {

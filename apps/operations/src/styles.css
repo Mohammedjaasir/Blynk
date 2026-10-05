@@ -1614,6 +1614,18 @@ input {
   align-items: flex-start;
 }
 
+/* A sub-category, indented under its parent with an "In Bakery" line. */
+.cat-row--child {
+  margin-left: 28px;
+}
+
+.cat-row__parent {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
 .cat-row--promo {
   align-items: center;
 }
@@ -1828,6 +1840,58 @@ input {
   font-weight: 800;
   color: var(--ink-2);
   font-size: var(--text-title);
+}
+
+/* --------------------------------------------------------- category groups */
+.cat-group {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.cat-group__head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.cat-group__members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.cat-group__member {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cat-group__member-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cat-group__add {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cat-group__add .field {
+  flex: 1;
+  min-width: 160px;
+}
+
+.cat-group__unassigned {
+  margin-top: 20px;
 }
 
 /* --------------------------------------------------------------- inventory */

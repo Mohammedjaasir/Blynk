@@ -94,6 +94,7 @@ services:
       SMS_SENDER_ID: ${SMS_SENDER_ID:-Blynk}
       WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-dev_whatsapp_token_placeholder}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-dev_whatsapp_phone_number_id_placeholder}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,6 +137,7 @@ services:
       SMS_SENDER_ID: ${SMS_SENDER_ID:-Blynk}
       WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-dev_whatsapp_token_placeholder}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-dev_whatsapp_phone_number_id_placeholder}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
     depends_on:
       postgres:
         condition: service_healthy

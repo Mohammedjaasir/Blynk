@@ -23,7 +23,7 @@ import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/UI/Widgets/Atoms/app_skeleton.dart';
 import 'package:ecom/UI/Widgets/Atoms/app_state_views.dart';
 import 'package:ecom/UI/Widgets/Organisms/cart_screen_payment_container.dart';
-import 'package:ecom/UI/Widgets/Organisms/home_product_sections.dart';
+import 'package:ecom/UI/Widgets/Organisms/home_category_groups.dart';
 import 'package:ecom/app_theme.dart';
 import 'package:ecom/main.dart' show rootScaffoldMessengerKey;
 
@@ -67,11 +67,28 @@ Map<String, dynamic> _categoriesResponse() => {
       },
     };
 
-/// A scriptable catalog backend: [failProducts] / [failCategories] make those
-/// endpoints throw; every call is counted.
+Map<String, dynamic> _groupsResponse() => {
+      'success': true,
+      'data': {
+        'groups': [
+          {
+            'id': 'g1',
+            'name': 'Grocery & Kitchen',
+            'sort_order': 0,
+            'categories': [
+              {'id': 'c1', 'name': 'Dairy & Eggs', 'slug': 'dairy-eggs', 'description': null, 'image_url': null, 'display_order': 1},
+            ],
+          },
+        ],
+      },
+    };
+
+/// A scriptable catalog backend: [failProducts] / [failCategories] /
+/// [failGroups] make those endpoints throw; every call is counted.
 class _Catalog {
   ApiException? failProducts;
   ApiException? failCategories;
+  ApiException? failGroups;
   Completer<void>? holdProducts;
   final Map<String, int> calls = {};
 
@@ -80,6 +97,10 @@ class _Catalog {
     if (url == '/catalog/categories') {
       if (failCategories != null) throw failCategories!;
       return _categoriesResponse();
+    }
+    if (url == '/catalog/home-groups') {
+      if (failGroups != null) throw failGroups!;
+      return _groupsResponse();
     }
     if (url == '/promotions') return {'success': true, 'data': {'promotions': []}};
     if (url == '/catalog/products') {
@@ -221,8 +242,8 @@ void main() {
 
   group('Home', () {
     for (final scale in _scales) {
-      testWidgets('the category preview shows an error with "Try again" that reloads (text scale $scale)', (tester) async {
-        final catalog = _Catalog()..failCategories = ApiException(500, 'boom');
+      testWidgets('the category groups show an error with "Try again" that reloads (text scale $scale)', (tester) async {
+        final catalog = _Catalog()..failGroups = ApiException(500, 'boom');
         final products = ProductProvider(request: catalog.call);
         await tester.pumpWidget(_app(
           tester,
@@ -232,85 +253,41 @@ void main() {
         ));
         await tester.pumpAndSettle();
 
-        expect(find.text("We couldn't load categories"), findsOneWidget);
+        final retry = find.byKey(HomeCategoryGroups.retryKey);
+        // Home's composition is tall enough at 2.0x that the state really is
+        // below the fold (past the sliver cache), so scroll it into view.
+        await tester.scrollUntilVisible(retry, 200, scrollable: find.byType(Scrollable).first);
+        await tester.pumpAndSettle();
+
+        expect(find.text(HomeCategoryGroups.failureTitle), findsOneWidget);
         expect(find.textContaining("Pull down to retry"), findsNothing, reason: 'the old grey sentence is gone');
         expect(tester.takeException(), isNull);
-
-        final retry = find.byKey(const Key('categories-retry'));
         expect(retry, findsOneWidget);
         expect(find.descendant(of: retry, matching: find.text('Try again')), findsOneWidget);
-        await tester.ensureVisible(retry);
-        // ensureVisible jumps the scroll position but does not pump; Home's
-        // composition is tall enough at 2.0x that the row really is below the
-        // fold, so the frame has to be built before tap() can locate it.
-        await tester.pump();
-        final before = catalog.calls['/catalog/categories']!;
-        catalog.failCategories = null;
+
+        final before = catalog.calls['/catalog/home-groups']!;
+        catalog.failGroups = null;
         await tester.tap(retry);
         await tester.pumpAndSettle();
 
-        expect(catalog.calls['/catalog/categories'], before + 1);
-        expect(find.text("We couldn't load categories"), findsNothing);
+        expect(catalog.calls['/catalog/home-groups'], before + 1);
+        expect(find.text(HomeCategoryGroups.failureTitle), findsNothing);
         expect(find.text('Dairy & Eggs'), findsWidgets);
       });
     }
 
-    for (final scale in _scales) {
-      testWidgets('a product section that fails to load shows a compact retry row instead of vanishing (text scale $scale)', (tester) async {
-        final catalog = _Catalog()..failProducts = ApiException(500, 'boom');
-        final products = ProductProvider(request: catalog.call);
-        await tester.pumpWidget(_app(
-          tester,
-          home: const HomeScreen(),
-          providers: _shopProviders(products),
-          scale: scale,
-        ));
-        await tester.pumpAndSettle();
-
-        // Home's product section is now one grid of the selected chip's
-        // products, and it opens on "All" - the catalogue-wide query - so the
-        // sentence names products rather than one category. Same rule, same
-        // strength: a section that failed says so and offers a retry.
-        //
-        // The section sits under the brand tagline, the hero slot, the chips
-        // and the dental entry, so at 2.0x text scale on an 860 dp viewport it
-        // is genuinely below the fold - scroll to it first. It is the same row
-        // and the same assertions; only its position on the page changed.
-        final retry = find.byKey(HomeProductSections.retryKey);
-        await tester.scrollUntilVisible(retry, 200, scrollable: find.byType(Scrollable).first);
-        await tester.pumpAndSettle();
-
-        expect(find.text("Couldn't load products."), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        expect(retry, findsOneWidget);
-
-        final before = catalog.calls['/catalog/products']!;
-        catalog.failProducts = null;
-        await tester.tap(retry);
-        await tester.pumpAndSettle();
-
-        expect(catalog.calls['/catalog/products'], before + 1);
-        expect(find.text("Couldn't load products."), findsNothing);
-        expect(find.text('Kotmale Fresh Milk 1L'), findsOneWidget);
-      });
-    }
-
-    testWidgets('an empty catalogue (a successful empty answer) still shows no section', (tester) async {
+    testWidgets('an empty answer (a successful empty list) shows no error and no section', (tester) async {
       final products = ProductProvider(request: (url, query) async {
         if (url == '/catalog/categories') return _categoriesResponse();
+        if (url == '/catalog/home-groups') return {'data': {'groups': []}};
         if (url == '/promotions') return {'data': {'promotions': []}};
-        return {
-          'data': {
-            'products': [],
-            'pagination': {'page': 1, 'limit': 100, 'total': 0, 'total_pages': 1},
-          },
-        };
+        throw StateError('unexpected $url');
       });
       await tester.pumpWidget(_app(tester, home: const HomeScreen(), providers: _shopProviders(products)));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(HomeProductSections.retryKey), findsNothing);
-      expect(find.text("Couldn't load products."), findsNothing);
+      expect(find.byKey(HomeCategoryGroups.retryKey), findsNothing);
+      expect(find.text(HomeCategoryGroups.failureTitle), findsNothing);
     });
   });
 

@@ -7,12 +7,36 @@ export const createAddressSchema = z.object({
   recipient_phone: z
     .string()
     .trim()
-    .transform((val) => {
-      const normalized = normalizeSriLankanPhone(val);
-      if (!normalized) {
-        throw new Error('Invalid Sri Lankan mobile phone number');
+    // normalizeSriLankanPhone throws a plain Error on a bad number; reported
+    // as a zod issue so the error handler answers 400 VALIDATION_ERROR (a
+    // thrown Error inside a transform escaped zod and became a 500).
+    .transform((val, ctx) => {
+      try {
+        return normalizeSriLankanPhone(val);
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid Sri Lankan mobile phone number' });
+        return z.NEVER;
       }
-      return normalized;
+    }),
+  /**
+   * Migration 024: an optional second number the rider can call. Same
+   * normaliser as recipient_phone; empty or null clears it. It must differ
+   * from recipient_phone - AddressService rejects a duplicate with 400.
+   */
+  alternate_phone: z
+    .string()
+    .trim()
+    .nullable()
+    .optional()
+    .transform((val, ctx) => {
+      if (val === undefined) return undefined;
+      if (val === null || val === '') return null;
+      try {
+        return normalizeSriLankanPhone(val);
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid Sri Lankan mobile phone number' });
+        return z.NEVER;
+      }
     }),
   address_line1: z.string().trim().min(3, 'Address line 1 is required').max(500),
   address_line2: z.string().trim().max(500).nullable().optional(),

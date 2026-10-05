@@ -295,6 +295,19 @@ body {
   font-size: 12px;
 }
 
+/* A sub-category row, indented under its parent ("in Bakery" below). */
+.row--child .cell__primary {
+  padding-left: 28px;
+  font-weight: 600;
+}
+
+.cell__note {
+  display: block;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .row-actions {
   display: flex;
   gap: 6px;
@@ -1977,4 +1990,48 @@ body {
   padding: 0;
   align-items: center;
   cursor: pointer;
+}
+
+/* ------------------------------------------------------- category groups */
+.group-list {
+  display: grid;
+  gap: 14px;
+}
+
+.group-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.group-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.group-panel__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.group-add {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 520px;
+}
+
+.group-add .field {
+  flex: 1;
+}
+
+.group-unassigned {
+  margin-top: 28px;
+}
+
+.group-select {
+  width: auto;
+  min-width: 160px;
 }

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { sql, type Transaction } from 'kysely';
 import { db } from '../../database/connection.js';
 import type { Database } from '../../database/types.js';
@@ -104,7 +105,9 @@ export class AuthService {
     // sent. With dev_ placeholder credentials the provider simulates the
     // send, so local development without a key still works.
     const sms = await otpSms.send({
-      notificationId: `otp_${Date.now()}`,
+      // Unique per send: it is also the gateway's Idempotency-Key, and two
+      // codes requested in the same millisecond must both go out.
+      notificationId: `otp_${crypto.randomUUID()}`,
       recipient: phone,
       message: `Your Blynk verification code is ${otp}. It expires in ${env.OTP_EXPIRY_MINUTES} minutes. Do not share this code with anyone.`,
     });

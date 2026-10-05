@@ -10,14 +10,14 @@ import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
-import 'package:ecom/UI/Widgets/Atoms/card_product.dart';
+import 'package:ecom/UI/Widgets/Atoms/category_widget.dart';
 import 'package:ecom/UI/Widgets/Atoms/entrance_fade.dart';
 import 'package:ecom/app_theme.dart';
 import 'package:ecom/design/motion.dart';
 
 /// Home's entrance is one timeline, not seven animations. These tests pin
 /// what that buys: the sections arrive in order and are done quickly, the
-/// cards start when their section appears (not invisibly before it), and
+/// category tiles start when their section appears (not invisibly before it), and
 /// nothing - not a scroll back, not a pull to refresh - ever replays it.
 const _categories = {
   'success': true,
@@ -41,8 +41,29 @@ Map<String, dynamic> _product(String id, String name, num price) => {
       'is_available': true,
     };
 
+/// Enough groups that Home is several screens tall, so tiles really leave
+/// the sliver cache when the page is scrolled away.
+final _groups = {
+  'success': true,
+  'data': {
+    'groups': [
+      for (var g = 1; g <= 6; g++)
+        {
+          'id': 'g$g',
+          'name': 'Group $g',
+          'sort_order': g,
+          'categories': [
+            for (var i = 1; i <= 8; i++)
+              {'id': 'c$g-$i', 'name': 'Category $g.$i', 'slug': 'category-$g-$i', 'image_url': null, 'display_order': i},
+          ],
+        },
+    ],
+  },
+};
+
 Future<dynamic> _backend(String url, Map<String, dynamic> query) async {
   if (url == '/catalog/categories') return _categories;
+  if (url == '/catalog/home-groups') return _groups;
   if (url == '/promotions') return jsonDecode('{"success":true,"data":{"promotions":[]}}');
   if (url == '/catalog/products') {
     final products = [
@@ -98,13 +119,13 @@ List<double> _sectionOpacities(WidgetTester tester) => tester
     .map((s) => s.opacity.value)
     .toList();
 
-/// The first card's OWN entrance opacity: the FadeTransition inside its
-/// EntranceFade. Not "the first FadeTransition above the card" - since M8
+/// The first category tile's OWN entrance opacity: the FadeTransition inside
+/// its EntranceFade. Not "the first FadeTransition above the tile" - since M8
 /// the route transition is one of those too, and it is always 1 once the
 /// route has settled. Under reduced motion EntranceFade builds no
 /// FadeTransition at all, which is the same as being at rest.
 double _firstCardOpacity(WidgetTester tester) {
-  final card = find.byType(ProductCard, skipOffstage: false).first;
+  final card = find.byType(CategoryWidget, skipOffstage: false).first;
   final entrance = find.ancestor(of: card, matching: find.byType(EntranceFade)).first;
   final fade = find.descendant(of: entrance, matching: find.byType(FadeTransition));
   if (fade.evaluate().isEmpty) return 1.0;
@@ -135,18 +156,18 @@ void main() {
         expect(mid[i], lessThanOrEqualTo(mid[i - 1]), reason: 'section $i ahead of $i-1 at 60 ms');
       }
       expect(mid.first, greaterThan(0), reason: 'the header has started');
-      expect(mid.last, 0, reason: 'the products section has not started yet');
+      expect(mid.last, 0, reason: 'the category groups have not started yet');
 
       // ...and all of it has landed by the end of the 810 ms timeline.
       await tester.pump(const Duration(milliseconds: 800));
       expect(_sectionOpacities(tester), everyElement(1.0));
     });
 
-    testWidgets('cards start rising as their section appears, not before it', (tester) async {
+    testWidgets('tiles start rising as their section appears, not before it', (tester) async {
       await _pumpHome(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      // The products beat starts at 360 ms; at 100 ms its first card is
+      // The groups beat starts at 360 ms; at 100 ms its first tile is
       // still fully transparent rather than already half-way in.
       expect(_firstCardOpacity(tester), 0);
 
@@ -171,7 +192,7 @@ void main() {
           reason: 'sections rebuilt after scrolling are at rest, never mid-entrance');
     });
 
-    testWidgets('a card scrolled off and back is rebuilt at rest, not replayed', (tester) async {
+    testWidgets('a tile scrolled off and back is rebuilt at rest, not replayed', (tester) async {
       await _pumpHome(tester);
       await tester.pumpAndSettle();
       expect(_firstCardOpacity(tester), 1.0);
@@ -187,11 +208,11 @@ void main() {
       // Without EntranceScope this frame would be the start of a second
       // entrance: every rebuilt card at opacity 0, rising again.
       final fades = find.ancestor(
-        of: find.byType(ProductCard, skipOffstage: false),
+        of: find.byType(CategoryWidget, skipOffstage: false),
         matching: find.byType(FadeTransition),
       );
       for (final f in tester.widgetList<FadeTransition>(fades)) {
-        expect(f.opacity.value, 1.0, reason: 'a rebuilt card must be at rest');
+        expect(f.opacity.value, 1.0, reason: 'a rebuilt tile must be at rest');
       }
     });
 
@@ -211,7 +232,7 @@ void main() {
       await _pumpHome(tester, reduceMotion: true);
       await tester.pump();
       expect(_sectionOpacities(tester), everyElement(1.0));
-      // The cards' own entrance is skipped too, so nothing on Home is mid-fade.
+      // The tiles' own entrance is skipped too, so nothing on Home is mid-fade.
       expect(find.byType(EntranceFade, skipOffstage: false), findsWidgets);
       await tester.pump();
       expect(_firstCardOpacity(tester), 1.0);

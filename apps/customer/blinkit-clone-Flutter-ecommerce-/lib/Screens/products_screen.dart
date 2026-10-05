@@ -27,6 +27,10 @@ import 'package:ecom/UI/Widgets/Atoms/blynk_crossfade.dart';
 /// Everything a customer can do here is unchanged: the rail re-filters from
 /// the real category list, the grid is the shared [buildProductsGrid], and the
 /// floating cart bar still stacks over the content.
+///
+/// Sub-categories (2026-10-05): opened on a category, the rail is that
+/// category's own - "All" and its sub-categories - and the title stays the
+/// opened category's name while a sub-category filters the grid.
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key, required this.categorySlug});
 
@@ -69,11 +73,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
   Widget build(BuildContext context) {
     return Consumer<ProductProvider>(
       builder: (context, productProvider, _) {
-        final title = _activeSlug.isEmpty
+        // Opened on a category: its name, whichever sub-category is picked.
+        // Opened on "All products": the picked top-level category's name.
+        final titleSlug =
+            widget.categorySlug.isEmpty ? _activeSlug : widget.categorySlug;
+        final title = titleSlug.isEmpty
             ? 'All Products'
             : productProvider.categories
                 .firstWhere(
-                  (c) => c.slug == _activeSlug,
+                  (c) => c.slug == titleSlug,
                   orElse: () => const CategoryModel(id: '', name: 'Products', slug: ''),
                 )
                 .name;
@@ -118,6 +126,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         child: ColoredBox(
                           color: BlynkColors.paper,
                           child: CategorySidebar(
+                            rootSlug: widget.categorySlug,
                             activeSlug: _activeSlug,
                             onSelect: _onCategorySelected,
                           ),

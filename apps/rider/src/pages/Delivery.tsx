@@ -266,17 +266,27 @@ function Slip({ delivery: d, trackingState }: { delivery: DeliveryDetail; tracki
               href={`tel:${d.delivery_recipient_phone}`}
               aria-label={`Call ${d.delivery_recipient_name}`}
             >
-              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                <path
-                  d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"
-                  fill="currentColor"
-                />
-              </svg>
+              <PhoneIcon />
               <span>Call</span>
               <span className="call__number">{formatPhone(d.delivery_recipient_phone)}</span>
             </a>
           )}
         </div>
+        {/* Migration 024: a second number from the address, only when given. */}
+        {d.delivery_alternate_phone && !done && !closed ? (
+          <div className="dest__who dest__who--alt">
+            <span className="dest__alt-label">Additional phone</span>
+            <a
+              className="call"
+              href={`tel:${d.delivery_alternate_phone}`}
+              aria-label={`Call additional phone for ${d.delivery_recipient_name}`}
+            >
+              <PhoneIcon />
+              <span>Call</span>
+              <span className="call__number">{formatPhone(d.delivery_alternate_phone)}</span>
+            </a>
+          </div>
+        ) : null}
       </section>
 
       {d.items.length > 0 ? (
@@ -302,6 +312,17 @@ function Slip({ delivery: d, trackingState }: { delivery: DeliveryDetail; tracki
         </section>
       ) : null}
     </article>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+      <path
+        d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
 

@@ -9,7 +9,16 @@ import { deliveryErrorMessage, nextAction, splitQueue, statusLabel, statusTone }
 import { errorCode } from '../../lib/errors';
 import { formatMoney, shortNumber } from '../../lib/orders';
 import { syncTrackingFromList } from '../../lib/tracker-session';
-import { formatAway, isTripStop, owesCash, tripOf, useCurrentPosition, type TripStop } from '../../lib/trip';
+import {
+  formatAway,
+  formatByRoad,
+  isTripStop,
+  owesCash,
+  tripOf,
+  useCurrentPosition,
+  useRoadOrder,
+  type TripStop,
+} from '../../lib/trip';
 
 /** How often the queue re-reads while it is on screen and visible (matches
  * Rider's own ~30s cadence, plan §9's "no polling faster than what
@@ -36,7 +45,10 @@ export function Queue() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   // The device's position orders a trip's stops; asked for only when there is a trip.
-  const position = useCurrentPosition((deliveries ?? []).filter(isTripStop).length >= 2);
+  const onTrip = (deliveries ?? []).filter(isTripStop).length >= 2;
+  const position = useCurrentPosition(onTrip);
+  // Stops on the road in road order (OSRM via the API) when it answers.
+  const road = useRoadOrder(deliveries, position, onTrip);
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -101,7 +113,7 @@ export function Queue() {
   const queue = deliveries ? splitQueue(deliveries) : null;
   // Two or more orders to act on are one trip, shown as its stops in order.
   // A single delivery keeps the ordinary "Now" card.
-  const trip = deliveries ? tripOf(deliveries, position) : null;
+  const trip = deliveries ? tripOf(deliveries, position, road) : null;
   const inTrip = new Set(trip?.map((t) => t.delivery.delivery_id) ?? []);
   const rest = queue ? queue.next.filter((d) => !inTrip.has(d.delivery_id)) : [];
 
@@ -217,8 +229,8 @@ function NowCard({ delivery: d }: { delivery: DeliverySummary }) {
 /**
  * One trip, two (or more) orders: each stop is its own delivery with its own
  * handover code and cash, opened on the ordinary delivery screen. Stops are
- * in order: at the door, then nearest first on the road, then still at the
- * store (lib/trip.ts). Ported from apps/rider/src/pages/Queue.tsx's TripView;
+ * in order: at the door, then on the road (road order when known, else
+ * nearest first), then still at the store (lib/trip.ts). Ported from apps/rider/src/pages/Queue.tsx's TripView;
  * Home shows the same card for an operator on a trip.
  */
 export function TripCard({ stops }: { stops: TripStop[] }) {
@@ -252,6 +264,7 @@ export function TripCard({ stops }: { stops: TripStop[] }) {
                 <span className="mono">#{number}</span>
                 <span>{d.delivery_recipient_name}</span>
                 {s.distanceM !== null ? <span>{formatAway(s.distanceM)}</span> : <span>{d.delivery_city}</span>}
+                {s.roadMin !== null ? <span>{formatByRoad(s.roadMin)}</span> : null}
               </p>
               {owesCash(d) ? (
                 <p className="delivery-card__meta">

@@ -165,7 +165,7 @@ void main() {
     await pumpScreen(tester);
     await tester.enterText(fieldWith('Recipient name'), 'QA Tester');
     await tester.enterText(fieldWith('Recipient phone'), '0771234567');
-    await tester.enterText(fieldWith('Address line 1'), 'No. 12, Test Lane');
+    await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
     await scrollToLocation(tester);
 
     await tester.tap(find.text('Use my current location'));

@@ -20,6 +20,9 @@ class _Backend {
     if (url == '/catalog/categories') {
       return {'success': true, 'data': {'categories': <Map<String, dynamic>>[]}};
     }
+    if (url == '/catalog/home-groups') {
+      return {'success': true, 'data': {'groups': <Map<String, dynamic>>[]}};
+    }
     if (url == '/promotions') {
       return {'success': true, 'data': {'promotions': <Map<String, dynamic>>[]}};
     }

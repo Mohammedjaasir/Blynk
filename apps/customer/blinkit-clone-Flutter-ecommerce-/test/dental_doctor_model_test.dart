@@ -104,4 +104,44 @@ void main() {
       expect(DoctorModel.tryParse({'full_name': 'No id'}), isNull);
     });
   });
+
+  group('ratings (rating_average / rating_count)', () {
+    test('a rated doctor profile parses the average and count, and labels them', () {
+      final doctor = DoctorModel.fromJson(doctorJson(ratingAverage: 4.6, ratingCount: 12));
+      expect(doctor.ratingAverage, 4.6);
+      expect(doctor.ratingCount, 12);
+      expect(doctor.ratingLabel, '★ 4.6 (12)');
+    });
+
+    test('a clinic roster row parses the same two fields', () {
+      final row = ClinicDoctorModel.fromJson(clinicDoctorJson(ratingAverage: 5, ratingCount: 1));
+      expect(row.ratingAverage, 5.0);
+      expect(row.ratingCount, 1);
+      expect(row.ratingLabel, '★ 5.0 (1)');
+    });
+
+    test('no ratings (null average, zero count) has no label', () {
+      final doctor = DoctorModel.fromJson(doctorJson());
+      expect(doctor.ratingAverage, isNull);
+      expect(doctor.ratingCount, 0);
+      expect(doctor.ratingLabel, isNull);
+      expect(ClinicDoctorModel.fromJson(clinicDoctorJson()).ratingLabel, isNull);
+    });
+
+    test('an older backend without the fields reads as no ratings', () {
+      final json = doctorJson()
+        ..remove('rating_average')
+        ..remove('rating_count');
+      final doctor = DoctorModel.fromJson(json);
+      expect(doctor.ratingAverage, isNull);
+      expect(doctor.ratingCount, 0);
+    });
+
+    test('dentalRatingLabel: exactly one decimal; nothing without both an average and a count', () {
+      expect(dentalRatingLabel(4.56, 3), '★ 4.6 (3)');
+      expect(dentalRatingLabel(4, 2), '★ 4.0 (2)');
+      expect(dentalRatingLabel(null, 5), isNull);
+      expect(dentalRatingLabel(4.5, 0), isNull);
+    });
+  });
 }

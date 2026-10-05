@@ -43,8 +43,8 @@ export interface CodPaymentConfirmedPayload {
   amount: number | string;
 }
 
-/** Dental (B5): confirmation/cancellation only - no reminder payload exists
- * anywhere in this file, by instruction (DENTAL-11 is blocked this pass). */
+/** Dental (B5): confirmation/cancellation. The day-before reminder
+ * (migration 023) carries its own title/body: DENTAL_APPOINTMENT_REMINDER. */
 export interface DentalAppointmentConfirmedPayload {
   clinic_name: string;
   doctor_name: string;
@@ -147,9 +147,20 @@ export class NotificationTemplates {
         return `Blynk Dental: your appointment with Dr. ${doctorName} at ${clinicName} on ${when} has been cancelled ${cancelledBy}.${reason}`;
       }
 
-      // Push rows carry their own title and body (push/push.events.ts).
+      // The day-before reminder sent by SMS when no app push is possible
+      // (dental/appointment-reminders.ts): the same title and body as the push.
+      case 'DENTAL_APPOINTMENT_REMINDER': {
+        const title = typeof data.title === 'string' ? data.title : 'Appointment tomorrow';
+        const body = typeof data.body === 'string' ? data.body : '';
+        return `Blynk: ${title} - ${body}`.trim();
+      }
+
+      // Push rows carry their own title and body (push/push.events.ts,
+      // dental/appointment-reminders.ts).
       case 'PUSH_ORDER_STATUS':
-      case 'PUSH_BACK_IN_STOCK': {
+      case 'PUSH_BACK_IN_STOCK':
+      case 'PUSH_APPOINTMENT_REMINDER':
+      case 'PUSH_RATING_PROMPT': {
         return typeof data.body === 'string' ? data.body : 'Blynk';
       }
 

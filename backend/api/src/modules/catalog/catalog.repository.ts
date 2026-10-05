@@ -10,6 +10,35 @@ export interface ProductQueryParams {
   offset: number;
 }
 
+/**
+ * Migration 026: a category and its live sub-categories, so a parent's
+ * listing includes its children's products. One level only, so one hop.
+ */
+function categoryIdsForSlug(slug: string) {
+  return db
+    .selectFrom('categories')
+    .select('id')
+    .where('deleted_at', 'is', null)
+    .where((eb) =>
+      eb.or([
+        eb('slug', '=', slug),
+        eb(
+          'parent_id',
+          'in',
+          eb.selectFrom('categories as p').select('p.id').where('p.slug', '=', slug).where('p.deleted_at', 'is', null)
+        ),
+      ])
+    );
+}
+
+function categoryIdsForId(id: string) {
+  return db
+    .selectFrom('categories')
+    .select('id')
+    .where('deleted_at', 'is', null)
+    .where((eb) => eb.or([eb('id', '=', id), eb('parent_id', '=', id)]));
+}
+
 export class CatalogRepository {
   // --------------------------------------------------------------------------
   // CATEGORIES
@@ -21,7 +50,7 @@ export class CatalogRepository {
   async findActiveCategories() {
     return await db
       .selectFrom('categories')
-      .select(['id', 'name', 'slug', 'description', 'image_url', 'display_order', 'is_active', 'image_focal_x', 'image_focal_y'])
+      .select(['id', 'name', 'slug', 'description', 'image_url', 'display_order', 'is_active', 'image_focal_x', 'image_focal_y', 'parent_id'])
       .where('is_active', '=', true)
       .where('deleted_at', 'is', null)
       .orderBy('display_order', 'asc')
@@ -82,6 +111,17 @@ export class CatalogRepository {
       .executeTakeFirst();
   }
 
+  /** Migration 026: how many live sub-categories sit inside this category. */
+  async countChildCategories(id: string): Promise<number> {
+    const row = await db
+      .selectFrom('categories')
+      .select(sql<number>`count(*)::int`.as('n'))
+      .where('parent_id', '=', id)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Number(row?.n ?? 0);
+  }
+
   /**
    * Admin: Creates a new category.
    */
@@ -94,6 +134,9 @@ export class CatalogRepository {
     is_active?: boolean;
     image_focal_x?: number;
     image_focal_y?: number;
+    group_id?: string | null;
+    group_sort_order?: number;
+    parent_id?: string | null;
   }) {
     const [record] = await db
       .insertInto('categories')
@@ -106,6 +149,9 @@ export class CatalogRepository {
         is_active: data.is_active ?? true,
         image_focal_x: data.image_focal_x ?? 50,
         image_focal_y: data.image_focal_y ?? 50,
+        group_id: data.group_id ?? null,
+        group_sort_order: data.group_sort_order ?? 0,
+        parent_id: data.parent_id ?? null,
       })
       .returningAll()
       .execute();
@@ -127,6 +173,9 @@ export class CatalogRepository {
       is_active?: boolean;
       image_focal_x?: number;
       image_focal_y?: number;
+      group_id?: string | null;
+      group_sort_order?: number;
+      parent_id?: string | null;
     }
   ) {
     const [record] = await db
@@ -175,15 +224,11 @@ export class CatalogRepository {
       .where('is_active', '=', true);
 
     if (params.category_id) {
-      query = query.where('category_id', '=', params.category_id);
+      query = query.where('category_id', 'in', categoryIdsForId(params.category_id));
     }
 
     if (params.category_slug) {
-      query = query.where((eb) =>
-        eb('category_id', 'in',
-          eb.selectFrom('categories').select('id').where('slug', '=', params.category_slug!).where('deleted_at', 'is', null)
-        )
-      );
+      query = query.where('category_id', 'in', categoryIdsForSlug(params.category_slug));
     }
 
     if (params.is_available !== undefined) {
@@ -219,15 +264,11 @@ export class CatalogRepository {
       .where('is_active', '=', true);
 
     if (params.category_id) {
-      query = query.where('category_id', '=', params.category_id);
+      query = query.where('category_id', 'in', categoryIdsForId(params.category_id));
     }
 
     if (params.category_slug) {
-      query = query.where((eb) =>
-        eb('category_id', 'in',
-          eb.selectFrom('categories').select('id').where('slug', '=', params.category_slug!).where('deleted_at', 'is', null)
-        )
-      );
+      query = query.where('category_id', 'in', categoryIdsForSlug(params.category_slug));
     }
 
     if (params.is_available !== undefined) {

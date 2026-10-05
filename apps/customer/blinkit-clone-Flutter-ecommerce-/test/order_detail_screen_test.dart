@@ -171,10 +171,22 @@ void main() {
     expect(find.text('12 Galle Road'), findsOneWidget);
     expect(find.text('Dharga Town'), findsOneWidget);
     expect(find.text('Instructions: Blue gate'), findsOneWidget);
+    // No additional phone on this order (migration 024).
+    expect(find.textContaining('Additional phone'), findsNothing);
 
     // AppBar carries the order number.
     expect(find.text('BL-20260919-4821'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('"Delivery to" lists the additional phone when the order has one', (tester) async {
+    api.routes[_getKey] = () async =>
+        _envelope({...orderJson(canCancel: true), 'delivery_alternate_phone': '+94712345678'});
+
+    await _pumpDetail(tester, api);
+
+    expect(find.text('+94771234567'), findsOneWidget);
+    expect(find.text('Additional phone: +94712345678'), findsOneWidget);
   });
 
   // 2

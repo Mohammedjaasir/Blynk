@@ -9,6 +9,7 @@ import '../UI/Widgets/Atoms/app_state_views.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
+import '../UI/Widgets/Organisms/dental_rating_section.dart';
 import '../UI/Widgets/Organisms/dental_widgets.dart';
 import '../app_responsive.dart';
 import '../design/tokens.dart';
@@ -152,6 +153,15 @@ class _DentalDoctorProfileScreenState extends State<DentalDoctorProfileScreen> {
                     dentalSpecialtyLabel(doctor.specialty),
                     style: BlynkText.body.copyWith(color: BlynkColors.ink2),
                   ),
+                  // "★ 4.6 (12)", or nothing at all before the first rating.
+                  if (doctor.ratingLabel != null) ...[
+                    const SizedBox(height: BlynkSpace.s4),
+                    DentalDoctorRating(
+                      key: const Key('doctor-rating'),
+                      average: doctor.ratingAverage,
+                      count: doctor.ratingCount,
+                    ),
+                  ],
                 ],
               ),
             ),

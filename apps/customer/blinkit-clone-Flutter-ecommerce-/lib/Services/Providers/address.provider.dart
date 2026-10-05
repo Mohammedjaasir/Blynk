@@ -142,6 +142,7 @@ class AddressProvider extends ChangeNotifier {
                 label: a.label,
                 recipientName: a.recipientName,
                 recipientPhone: a.recipientPhone,
+                alternatePhone: a.alternatePhone,
                 addressLine1: a.addressLine1,
                 addressLine2: a.addressLine2,
                 city: a.city,

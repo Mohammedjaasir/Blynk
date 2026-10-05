@@ -127,4 +127,48 @@ void main() {
       expect(a.isHoldExpiredAt(DateTime.parse('2030-01-01T00:00:00.000Z')), isFalse);
     });
   });
+
+  group('rating (can_rate + rating)', () {
+    test('a rateable visit: can_rate true, no rating yet', () {
+      final a = AppointmentModel.fromJson(appointmentJson(canRate: true));
+      expect(a.canRate, isTrue);
+      expect(a.rating, isNull);
+    });
+
+    test('a rated visit parses stars, comment and created_at', () {
+      final a = AppointmentModel.fromJson(appointmentJson(rating: ratingJson(stars: 5, comment: 'Great')));
+      expect(a.canRate, isFalse);
+      expect(a.rating!.stars, 5);
+      expect(a.rating!.comment, 'Great');
+      expect(a.rating!.createdAt, DateTime.parse('2027-06-08T10:00:00.000Z'));
+    });
+
+    test('an older backend without the fields reads as not rateable, unrated', () {
+      final json = appointmentJson()
+        ..remove('can_rate')
+        ..remove('rating');
+      final a = AppointmentModel.fromJson(json);
+      expect(a.canRate, isFalse);
+      expect(a.rating, isNull);
+    });
+
+    test('a null or blank comment is no comment; out-of-range stars is no rating', () {
+      expect(DentalAppointmentRating.tryParse(ratingJson(comment: null))!.comment, isNull);
+      expect(DentalAppointmentRating.tryParse(ratingJson(comment: '  '))!.comment, isNull);
+      expect(DentalAppointmentRating.tryParse({'stars': 0}), isNull);
+      expect(DentalAppointmentRating.tryParse({'stars': 6}), isNull);
+      expect(DentalAppointmentRating.tryParse({'comment': 'x'}), isNull);
+      expect(DentalAppointmentRating.tryParse('x'), isNull);
+    });
+
+    test('withRating keeps every other field and turns can_rate off', () {
+      final a = AppointmentModel.fromJson(appointmentJson(canRate: true));
+      final rated = a.withRating(const DentalAppointmentRating(stars: 3));
+      expect(rated.id, a.id);
+      expect(rated.status, a.status);
+      expect(rated.patientName, a.patientName);
+      expect(rated.canRate, isFalse);
+      expect(rated.rating!.stars, 3);
+    });
+  });
 }

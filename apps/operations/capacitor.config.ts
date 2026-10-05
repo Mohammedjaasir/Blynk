@@ -14,6 +14,14 @@ const config: CapacitorConfig = {
   appId: 'lk.blynk.ops',
   appName: 'Blynk Ops',
   webDir: 'dist',
+  // Required by @capacitor-community/background-geolocation (as in apps/rider):
+  // otherwise location updates halt ~5 min into the background (issue #89).
+  // Unlike Rider, plugins.CapacitorHttp stays OFF here - global native HTTP
+  // would also carry the multipart image uploads; only the location POSTs go
+  // native, explicitly (src/api/native-client.ts).
+  android: {
+    useLegacyBridge: true,
+  },
   ...(lanHttp ? { server: { androidScheme: 'http' } } : {}),
 };
 

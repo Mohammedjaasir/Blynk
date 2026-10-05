@@ -221,7 +221,13 @@ class ProductCardSkeleton extends StatelessWidget {
 
 /// Placeholder for a category tile.
 class CategoryTileSkeleton extends StatelessWidget {
-  const CategoryTileSkeleton({super.key});
+  const CategoryTileSkeleton({super.key, this.size, this.rounded = false});
+
+  /// The tile's size; defaults to [CategoryWidget.diameterFor] the screen.
+  final double? size;
+
+  /// A rounded square, matching a `CategoryWidget(rounded: true)` tile.
+  final bool rounded;
 
   @override
   Widget build(BuildContext context) {
@@ -231,11 +237,11 @@ class CategoryTileSkeleton extends StatelessWidget {
       // the row jump shape the moment categories arrive.
       child: Builder(
         builder: (context) {
-          final size = CategoryWidget.diameterFor(Responsive.of(context).width);
+          final size = this.size ?? CategoryWidget.diameterFor(Responsive.of(context).width);
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AppSkeleton(width: size, height: size, radius: size / 2),
+              AppSkeleton(width: size, height: size, radius: rounded ? size * 0.28 : size / 2),
               const SizedBox(height: BlynkCategory.gap),
               const AppSkeleton(width: 56, height: 10),
             ],

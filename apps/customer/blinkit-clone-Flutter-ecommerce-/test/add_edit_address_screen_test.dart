@@ -105,7 +105,7 @@ void main() {
   Future<void> fillRequired(WidgetTester tester) async {
     await tester.enterText(fieldWith('Recipient name'), 'QA Tester');
     await tester.enterText(fieldWith('Recipient phone'), '0771234567');
-    await tester.enterText(fieldWith('Address line 1'), 'No. 12, Test Lane');
+    await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
     await tester.pump();
   }
 
@@ -216,7 +216,9 @@ void main() {
       expect(find.text('QA Tester'), findsOneWidget);
       expect(find.text('+94771234567'), findsOneWidget);
       expect(find.text('No. 12, Test Lane'), findsOneWidget);
-      expect(find.text('Dharga Town'), findsOneWidget);
+      // City and postal code are no longer asked (the hub's city is used).
+      expect(fieldWith('City'), findsNothing);
+      expect(fieldWith('Postal code'), findsNothing);
       await scrollToBottom(tester);
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       // 'Work' matched a preset, so no custom name field is shown.
@@ -239,7 +241,7 @@ void main() {
         (tester) async {
       await pumpScreen(tester, existing: _existing);
 
-      await tester.enterText(fieldWith('Address line 1'), 'No. 99, New Lane');
+      await tester.enterText(fieldWith('Address'), 'No. 99, New Lane');
       await tester.tap(find.text('Save address'));
       await settle(tester);
 
@@ -338,13 +340,113 @@ void main() {
     });
   });
 
+  group('additional phone (migration 024)', () {
+    testWidgets('sits under Recipient phone, optional, with its hint',
+        (tester) async {
+      await pumpScreen(tester);
+
+      final alt = fieldWith('Additional phone (optional)');
+      expect(alt, findsOneWidget);
+      expect(find.text('Another number we can call'), findsOneWidget);
+      expect(
+        tester.getTopLeft(alt).dy,
+        greaterThan(tester.getTopLeft(fieldWith('Recipient phone')).dy),
+      );
+    });
+
+    testWidgets('left empty, it is sent as null', (tester) async {
+      await pumpScreen(tester);
+      await fillRequired(tester);
+
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      expect(addresses.created, isNotNull);
+      expect(addresses.created!.alternatePhone, isNull);
+      final payload = addresses.created!.toCreatePayload();
+      expect(payload.containsKey('alternate_phone'), isTrue);
+      expect(payload['alternate_phone'], isNull);
+    });
+
+    testWidgets('a real number is normalized to E.164', (tester) async {
+      await pumpScreen(tester);
+      await fillRequired(tester);
+      await tester.enterText(fieldWith('Additional phone (optional)'), '071 234 5678');
+
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      expect(addresses.created?.alternatePhone, '+94712345678');
+    });
+
+    testWidgets('refuses letters while typing, like the recipient phone',
+        (tester) async {
+      await pumpScreen(tester);
+
+      await tester.enterText(fieldWith('Additional phone (optional)'), 'abc071x234');
+      await tester.pump();
+
+      final field = tester.widget<TextField>(
+        find.descendant(
+          of: fieldWith('Additional phone (optional)'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(field.controller!.text, '071234');
+    });
+
+    testWidgets('an invalid number blocks saving', (tester) async {
+      await pumpScreen(tester);
+      await fillRequired(tester);
+      await tester.enterText(fieldWith('Additional phone (optional)'), '12345');
+
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      expect(find.text('Enter a valid Sri Lankan mobile number'), findsOneWidget);
+      expect(addresses.created, isNull);
+    });
+
+    testWidgets('the recipient phone again (any format) blocks saving',
+        (tester) async {
+      await pumpScreen(tester);
+      await fillRequired(tester);
+      await tester.enterText(fieldWith('Additional phone (optional)'), '+94 77 123 4567');
+
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      expect(find.text('Use a different number from the recipient phone'), findsOneWidget);
+      expect(addresses.created, isNull);
+    });
+
+    testWidgets('an edit prefills it, and clearing it sends null',
+        (tester) async {
+      final withAlt = AddressModel.fromJson({
+        ..._existing.toCreatePayload(),
+        'id': _existing.id,
+        'alternate_phone': '+94712345678',
+      });
+      await pumpScreen(tester, existing: withAlt);
+
+      expect(find.text('+94712345678'), findsOneWidget);
+      await tester.enterText(fieldWith('Additional phone (optional)'), '');
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      expect(addresses.updatedId, _existing.id);
+      expect(addresses.updatedPayload!.containsKey('alternate_phone'), isTrue);
+      expect(addresses.updatedPayload!['alternate_phone'], isNull);
+    });
+  });
+
   group('validation (reported bug)', () {
     testWidgets('rejects "bbA Tester" in the phone field', (tester) async {
       await pumpScreen(tester);
 
       await tester.enterText(fieldWith('Recipient name'), 'bbA Tester');
       await tester.enterText(fieldWith('Recipient phone'), 'bbA Tester');
-      await tester.enterText(fieldWith('Address line 1'), 'No. 12, Test Lane');
+      await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
       await tester.tap(find.text('Save address'));
       await settle(tester);
 
@@ -360,7 +462,7 @@ void main() {
 
       await tester.enterText(fieldWith('Recipient name'), '  Mohammed   Jaasir ');
       await tester.enterText(fieldWith('Recipient phone'), '077 123 4567');
-      await tester.enterText(fieldWith('Address line 1'), 'No. 12,  Test Lane');
+      await tester.enterText(fieldWith('Address'), 'No. 12,  Test Lane');
       await tester.tap(find.text('Save address'));
       await settle(tester);
 
@@ -399,19 +501,31 @@ void main() {
       expect(addresses.created, isNull);
     });
 
-    testWidgets('a bad postal code is rejected, empty is fine',
+    testWidgets('an old address keeps its second line, city and postal code',
         (tester) async {
-      await pumpScreen(tester);
-      await fillRequired(tester);
-      await tester.enterText(fieldWith('Postal code'), '123');
+      final legacy = AddressModel.fromJson(const {
+        'id': 'a0000001-0000-0000-0000-000000000002',
+        'label': 'Home',
+        'recipient_name': 'QA Tester',
+        'recipient_phone': '+94771234567',
+        'address_line1': 'No. 5, Main Street',
+        'address_line2': 'Near the mosque',
+        'city': 'Dharga Town',
+        'postal_code': '12090',
+        'latitude': 6.4382,
+        'longitude': 80.0274,
+        'delivery_instructions': null,
+        'is_default': false,
+      });
+      await pumpScreen(tester, existing: legacy);
+      // Both lines are folded into the one Address box.
+      expect(find.text('No. 5, Main Street, Near the mosque'), findsOneWidget);
       await tester.tap(find.text('Save address'));
       await settle(tester);
-      expect(find.text('Enter a valid 5-digit postal code'), findsOneWidget);
-
-      await tester.enterText(fieldWith('Postal code'), '12500');
-      await tester.tap(find.text('Save address'));
-      await settle(tester);
-      expect(addresses.created?.postalCode, '12500');
+      expect(addresses.updatedPayload?['address_line1'], 'No. 5, Main Street, Near the mosque');
+      expect(addresses.updatedPayload?['address_line2'], isNull);
+      expect(addresses.updatedPayload?['city'], 'Dharga Town');
+      expect(addresses.updatedPayload?['postal_code'], '12090');
     });
   });
 

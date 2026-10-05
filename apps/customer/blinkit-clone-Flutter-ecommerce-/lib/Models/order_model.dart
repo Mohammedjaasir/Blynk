@@ -160,6 +160,9 @@ class OrderModel {
   final double totalAmount;
   final String deliveryRecipientName;
   final String deliveryRecipientPhone;
+
+  /// The address's additional phone, snapshotted at order time (migration 024).
+  final String? deliveryAlternatePhone;
   final String deliveryAddressLine1;
   final String? deliveryAddressLine2;
   final String deliveryCity;
@@ -195,6 +198,7 @@ class OrderModel {
     required this.totalAmount,
     required this.deliveryRecipientName,
     required this.deliveryRecipientPhone,
+    this.deliveryAlternatePhone,
     required this.deliveryAddressLine1,
     this.deliveryAddressLine2,
     required this.deliveryCity,
@@ -246,6 +250,8 @@ class OrderModel {
           (json['delivery_recipient_name'] ?? json['deliveryRecipientName'] ?? '').toString(),
       deliveryRecipientPhone:
           (json['delivery_recipient_phone'] ?? json['deliveryRecipientPhone'] ?? '').toString(),
+      deliveryAlternatePhone:
+          _optionalText(json['delivery_alternate_phone'] ?? json['deliveryAlternatePhone']),
       deliveryAddressLine1:
           (json['delivery_address_line1'] ?? json['deliveryAddressLine1'] ?? '').toString(),
       deliveryAddressLine2:

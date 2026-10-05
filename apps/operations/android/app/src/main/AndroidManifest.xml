@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -44,5 +45,14 @@
          Capacitor's WebChromeClient asks for these at runtime on first use. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <!-- Screen-off sharing (2026-10-02): @capacitor-community/background-geolocation runs its
+         watcher in a foreground service of type "location" with a visible notification
+         (the plugin's own manifest also merges these in, plus its <service> and
+         POST_NOTIFICATIONS). Install-time only: no extra prompt. A location service started
+         while the app is open keeps while-in-use access when the screen locks, so
+         ACCESS_BACKGROUND_LOCATION ("Allow all the time") is deliberately NOT requested. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- The plugin's manifest declares the GPS feature as required; keep it optional. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" tools:replace="android:required" />
 </manifest>

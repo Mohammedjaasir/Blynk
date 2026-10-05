@@ -242,4 +242,79 @@ void main() {
 
     expect(find.text('Dr. Nadeesha Perera'), findsOneWidget);
   });
+
+  group('rate your visit', () {
+    const rateUrl = 'POST /dental/appointments/$_appointmentId/rating';
+
+    testWidgets('no rating card when the backend says can_rate is false and there is no rating', (tester) async {
+      api.routes[_detailUrl] = (q, b) => _envelope({'appointment': appointmentJson(status: 'CONFIRMED')});
+      await pumpScreen(tester);
+      expect(find.byKey(const Key('dental-rating-card')), findsNothing);
+      expect(find.text('Your rating'), findsNothing);
+    });
+
+    testWidgets('select stars, type a comment, submit: the body is right and "Your rating" replaces the form',
+        (tester) async {
+      api.routes[_detailUrl] =
+          (q, b) => _envelope({'appointment': appointmentJson(status: 'CONFIRMED', canRate: true)});
+      api.routes[rateUrl] = (q, b) => _envelope({
+            'rating': ratingJson(stars: 4, comment: 'Very gentle.'),
+            'appointment': appointmentJson(status: 'CONFIRMED', rating: ratingJson(stars: 4, comment: 'Very gentle.')),
+          });
+      await pumpScreen(tester);
+
+      expect(find.byKey(const Key('dental-rating-card')), findsOneWidget);
+      // Submit is disabled until a star is chosen.
+      await tester.tap(find.byKey(const Key('submit-rating')));
+      await tester.pump();
+      expect(api.calls.where((c) => c['key'] == rateUrl), isEmpty);
+
+      expect(find.bySemanticsLabel('1 star'), findsOneWidget);
+      expect(find.bySemanticsLabel('3 stars'), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('rating-star-1'))), const Size(48, 48));
+
+      await tester.tap(find.byKey(const Key('rating-star-4')));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('rating-comment-field')), '  Very gentle.  ');
+      await tester.pump();
+      expect(find.text('16 / 500'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('submit-rating')));
+      await tester.pumpAndSettle();
+
+      final sent = api.calls.singleWhere((c) => c['key'] == rateUrl)['body'];
+      expect(sent, {'stars': 4, 'comment': 'Very gentle.'});
+      expect(find.byKey(const Key('dental-rating-card')), findsNothing);
+      expect(find.byKey(const Key('your-rating')), findsOneWidget);
+      expect(find.text('Your rating'), findsOneWidget);
+      expect(find.text('Very gentle.'), findsOneWidget);
+      expect(find.bySemanticsLabel('Rated 4 out of 5 stars'), findsOneWidget);
+    });
+
+    testWidgets('a refusal shows the server message and keeps the form', (tester) async {
+      api.routes[_detailUrl] =
+          (q, b) => _envelope({'appointment': appointmentJson(status: 'CONFIRMED', canRate: true)});
+      api.routes[rateUrl] =
+          (q, b) => ApiException(422, 'You can rate this visit once it is over.', code: 'VISIT_NOT_FINISHED');
+      await pumpScreen(tester);
+
+      await tester.tap(find.byKey(const Key('rating-star-2')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('submit-rating')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('You can rate this visit once it is over.'), findsOneWidget);
+      expect(find.byKey(const Key('dental-rating-card')), findsOneWidget);
+      expect(find.text('Your rating'), findsNothing);
+    });
+
+    testWidgets('an already-rated appointment shows the rating, never the form', (tester) async {
+      api.routes[_detailUrl] = (q, b) => _envelope({
+            'appointment': appointmentJson(status: 'CONFIRMED', rating: ratingJson(stars: 5, comment: null)),
+          });
+      await pumpScreen(tester);
+      expect(find.byKey(const Key('your-rating')), findsOneWidget);
+      expect(find.byKey(const Key('submit-rating')), findsNothing);
+    });
+  });
 }

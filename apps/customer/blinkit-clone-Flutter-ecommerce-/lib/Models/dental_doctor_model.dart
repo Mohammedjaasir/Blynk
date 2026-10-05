@@ -59,6 +59,19 @@ String dentalSpecialtyLabel(DentalSpecialty specialty) {
   }
 }
 
+double? _ratingAverage(Object? v) => v == null ? null : double.tryParse(v.toString());
+
+int _ratingCount(Object? v) => v == null ? 0 : (num.tryParse(v.toString())?.toInt() ?? 0);
+
+/// The doctor's public rating as one compact label - `★ 4.6 (12)` - with
+/// the average always at exactly one decimal. Null when there is nothing
+/// real to show (no ratings yet, or no average from the server), so the
+/// caller renders nothing at all rather than a "0.0" or "(0)".
+String? dentalRatingLabel(double? average, int count) {
+  if (average == null || count <= 0) return null;
+  return '★ ${average.toStringAsFixed(1)} ($count)';
+}
+
 /// One clinic a doctor practices at, as embedded in `GET /dental/doctors/:id`
 /// (`doctor.service.ts getDoctorById` -> `DoctorClinicDto`). This is the
 /// doctor -> clinics direction; `ClinicDoctorModel` below is the clinic ->
@@ -112,6 +125,12 @@ class DoctorModel {
   final String? bio;
   final List<DoctorClinicModel> clinics;
 
+  /// `rating_average` (one decimal, null with no ratings) and
+  /// `rating_count` (0 with none). Missing on an older backend - read as
+  /// null/0, i.e. "no ratings".
+  final double? ratingAverage;
+  final int ratingCount;
+
   const DoctorModel({
     required this.id,
     required this.fullName,
@@ -120,7 +139,12 @@ class DoctorModel {
     this.photoUrl,
     this.bio,
     this.clinics = const [],
+    this.ratingAverage,
+    this.ratingCount = 0,
   });
+
+  /// See [dentalRatingLabel].
+  String? get ratingLabel => dentalRatingLabel(ratingAverage, ratingCount);
 
   factory DoctorModel.fromJson(Map<String, dynamic> json) {
     final rawClinics = (json['clinics'] as List?) ?? const [];
@@ -135,6 +159,8 @@ class DoctorModel {
           .whereType<Map>()
           .map((c) => DoctorClinicModel.fromJson(c.cast<String, dynamic>()))
           .toList(),
+      ratingAverage: _ratingAverage(json['rating_average']),
+      ratingCount: _ratingCount(json['rating_count']),
     );
   }
 
@@ -165,6 +191,10 @@ class ClinicDoctorModel {
   final String? bio;
   final double? consultationFee;
 
+  /// Same as [DoctorModel.ratingAverage] / [DoctorModel.ratingCount].
+  final double? ratingAverage;
+  final int ratingCount;
+
   const ClinicDoctorModel({
     required this.clinicDoctorId,
     required this.doctorId,
@@ -174,7 +204,12 @@ class ClinicDoctorModel {
     this.photoUrl,
     this.bio,
     this.consultationFee,
+    this.ratingAverage,
+    this.ratingCount = 0,
   });
+
+  /// See [dentalRatingLabel].
+  String? get ratingLabel => dentalRatingLabel(ratingAverage, ratingCount);
 
   factory ClinicDoctorModel.fromJson(Map<String, dynamic> json) {
     return ClinicDoctorModel(
@@ -187,6 +222,8 @@ class ClinicDoctorModel {
       bio: json['bio']?.toString(),
       consultationFee:
           json['consultation_fee'] == null ? null : double.tryParse(json['consultation_fee'].toString()),
+      ratingAverage: _ratingAverage(json['rating_average']),
+      ratingCount: _ratingCount(json['rating_count']),
     );
   }
 

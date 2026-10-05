@@ -181,6 +181,22 @@ describe('GET /admin/customers', () => {
     for (const t of [opsToken, tokens.staff, tokens.customer]) {
       expect((await request(app).get('/api/v1/admin/customers').set(auth(t))).status).toBe(403);
       expect((await request(app).get(`/api/v1/admin/customers/${alice.id}`).set(auth(t))).status).toBe(403);
+      expect((await request(app).get('/api/v1/admin/customers/export').set(auth(t))).status).toBe(403);
     }
+  });
+});
+
+describe('GET /admin/customers/export', () => {
+  it('returns every customer with name, phone and order figures, by name', async () => {
+    const res = await request(app).get('/api/v1/admin/customers/export').set(auth(tokens.admin));
+    expect(res.status).toBe(200);
+    const rows = res.body.data.customers as { full_name: string | null; phone: string }[];
+    const ours = rows.filter((c) => c.full_name?.startsWith('Zqxreport'));
+    expect(ours.map((c) => c.full_name)).toEqual(['Zqxreport Alice', 'Zqxreport Bob', 'Zqxreport Carol']);
+    expect(ours[0]).toMatchObject({ phone: alice.phone, orders_count: 2, delivered_spend: 760 });
+    // Customers only: no staff accounts in a promotions sheet.
+    expect(rows.every((c) => typeof c.phone === 'string')).toBe(true);
+    expect(rows).not.toContainEqual(expect.objectContaining({ phone: '+94775551122' }));
+    expect(res.body.data.pagination).toBeUndefined();
   });
 });

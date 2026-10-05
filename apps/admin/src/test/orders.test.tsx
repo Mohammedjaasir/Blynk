@@ -263,6 +263,16 @@ describe('Orders board', () => {
     await waitFor(() => expect(api.find('PATCH', `/admin/orders/${o.id}/status`)[0]?.body).toEqual({ status: 'OUT_FOR_DELIVERY' }));
   });
 
+  it('the order panel shows the additional phone with its own call link when there is one', async () => {
+    const user = userEvent.setup();
+    const o = boardOrder();
+    renderBoard(ADMIN, [o], { 'GET /admin/orders/:id': () => ok({ order: orderDetail(o, { delivery_alternate_phone: '+94712345678' }) }) });
+    await user.click(await screen.findByRole('button', { name: /^Open order/ }));
+    const panel = await screen.findByRole('complementary', { name: /Order #/ });
+    expect(within(panel).getByRole('link', { name: 'Call additional phone for Ahmed Rizvi' })).toHaveAttribute('href', 'tel:+94712345678');
+    expect(within(panel).getByRole('link', { name: /^Call Ahmed Rizvi/ })).toHaveAttribute('href', 'tel:+94771234567');
+  });
+
   it('shows the documented "Scheduled" label for an after-hours order', async () => {
     renderBoard(ADMIN, [boardOrder({ scheduled_for: '2026-09-20T02:30:00.000Z' })]);
     expect(await lane('To pack')).toHaveTextContent('Scheduled 08:00');

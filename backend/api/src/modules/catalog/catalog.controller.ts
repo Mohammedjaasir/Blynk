@@ -86,7 +86,7 @@ export class CatalogController {
   async createCategoryAdmin(req: Request, res: Response, next: NextFunction) {
     try {
       const input = createCategorySchema.parse(req.body);
-      const category = await catalogService.createCategoryAdmin(input);
+      const category = await catalogService.createCategoryAdmin(input, actorOf(req));
       res.status(201).json({
         success: true,
         data: { category },
@@ -99,7 +99,7 @@ export class CatalogController {
   async updateCategoryAdmin(req: Request, res: Response, next: NextFunction) {
     try {
       const input = updateCategorySchema.parse(req.body);
-      const category = await catalogService.updateCategoryAdmin(req.params.id as string, input);
+      const category = await catalogService.updateCategoryAdmin(req.params.id as string, input, actorOf(req));
       res.status(200).json({
         success: true,
         data: { category },

@@ -1,4 +1,4 @@
-import type { Updateable } from 'kysely';
+import { sql, type Updateable } from 'kysely';
 import type { OrderStatus, OrdersTable } from '../../../database/types.js';
 import { AppError } from '../../../middleware/error.middleware.js';
 import type { Actor, OrderRow, Trx } from './types.js';
@@ -46,6 +46,10 @@ export async function setOrderStatus(
       new_status: to,
       changed_by_user_id: actor.id,
       reason_or_notes: note,
+      // The moment this row is written, not when the transaction began
+      // (the column default, CURRENT_TIMESTAMP): a transition that waited on
+      // the order lock behind another must still sort after it in history.
+      created_at: sql<Date>`clock_timestamp()`,
     })
     .execute();
 

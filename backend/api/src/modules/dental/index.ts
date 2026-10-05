@@ -4,6 +4,7 @@ import { requireRoles } from '../../middleware/role.middleware.js';
 import { dentalController } from './dental.controller.js';
 import { appointmentController } from './appointment.controller.js';
 import { dentalAdminController } from './dental-admin.controller.js';
+import { doctorRatingController } from './doctor-rating.controller.js';
 
 // ----------------------------------------------------------------------------
 // 1. CLINICS ROUTER (/api/v1/dental/clinics) - all public, no auth needed
@@ -36,6 +37,8 @@ dentalAppointmentsRouter.get('/', appointmentController.list.bind(appointmentCon
 dentalAppointmentsRouter.get('/:id', appointmentController.getById.bind(appointmentController));
 dentalAppointmentsRouter.post('/:id/confirm', appointmentController.confirm.bind(appointmentController));
 dentalAppointmentsRouter.post('/:id/cancel', appointmentController.cancel.bind(appointmentController));
+// Migration 023: rate a visit (confirmed, slot over), once.
+dentalAppointmentsRouter.post('/:id/rating', doctorRatingController.rate.bind(doctorRatingController));
 
 // ----------------------------------------------------------------------------
 // 4. ADMIN DENTAL ROUTER - mounted by modules/admin/index.ts under /admin,
@@ -137,6 +140,19 @@ adminDentalRouter.get(
   dentalAdminController.listAppointments.bind(dentalAdminController)
 );
 
+// Doctor ratings (migration 023): the list per doctor, hidden ones included,
+// and hide/unhide of an abusive rating.
+adminDentalRouter.get(
+  '/doctors/:id/ratings',
+  ...ADMIN_OR_OPS,
+  doctorRatingController.listForDoctor.bind(doctorRatingController)
+);
+adminDentalRouter.patch(
+  '/ratings/:id/hidden',
+  ...ADMIN_OR_OPS,
+  doctorRatingController.setHidden.bind(doctorRatingController)
+);
+
 // ----------------------------------------------------------------------------
 // 5. MAIN DENTAL ROUTER (/api/v1/dental) - mounted in app.ts like every
 //    other module (`apiRouter.use('/dental', dentalRouter)`).
@@ -160,3 +176,6 @@ export * from './dental-admin.schema.js';
 export * from './dental-admin.repository.js';
 export * from './dental-admin.service.js';
 export * from './dental-admin.controller.js';
+export * from './appointment-reminders.js';
+export * from './doctor-rating.service.js';
+export * from './doctor-rating.controller.js';

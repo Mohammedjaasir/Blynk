@@ -125,6 +125,8 @@ export interface OrderDetail {
   scheduled_for: string | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
+  /** Migration 024: a second number from the address; null when none was given. */
+  delivery_alternate_phone?: string | null;
   delivery_address_line1: string;
   delivery_address_line2: string | null;
   delivery_city: string;
@@ -255,6 +257,8 @@ export interface DeliverySummary {
   payment_status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
+  /** Migration 024: a second number from the address; null when none was given. */
+  delivery_alternate_phone?: string | null;
   delivery_address_line1: string;
   delivery_address_line2: string | null;
   delivery_city: string;
@@ -498,6 +502,32 @@ export interface DentalDoctor {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  /** Migration 023: visible (not hidden) ratings; the list endpoint sends
+   * them, create/update responses do not. */
+  rating_average?: number | null;
+  rating_count?: number;
+}
+
+/** One rating, as GET /admin/dental/doctors/:id/ratings lists it (hidden
+ * ones included, for staff). */
+export interface DoctorRating {
+  id: string;
+  appointment_id: string;
+  stars: number;
+  comment: string | null;
+  created_at: string;
+  hidden_at: string | null;
+  is_hidden: boolean;
+  visit_at: string;
+  patient_name: string | null;
+  clinic: { id: string; name: string };
+}
+
+export interface DoctorRatingsResult {
+  doctor: { id: string; full_name: string; rating_average: number | null; rating_count: number };
+  hidden_count: number;
+  ratings: DoctorRating[];
+  pagination: { page: number; limit: number; total: number; total_pages: number };
 }
 
 /** The `clinic_doctors` join row itself, as attach/PATCH return it. */
@@ -571,6 +601,48 @@ export interface Category {
   /** Live, non-deleted products in this category (added with category
    * delete). Absent on an older API - treat as unknown, not zero. */
   product_count?: number;
+  /** The Home tile group this category sits in (null = unassigned).
+   * Absent on an API from before category groups. */
+  group_id?: string | null;
+  group_sort_order?: number;
+  /** The category this one sits inside (null = top level; one level only).
+   * Absent on an API from before sub-categories. */
+  parent_id?: string | null;
+}
+
+/** A category as listed inside a group (`GET /admin/category-groups`). */
+export interface GroupCategory {
+  id: string;
+  name: string;
+  slug: string;
+  image_url: string | null;
+  is_active: boolean;
+  group_id: string | null;
+  group_sort_order: number;
+}
+
+/** A titled row of category tiles on the customer Home, e.g. "Grocery & Kitchen". */
+export interface CategoryGroup {
+  id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  /** Ordered by `group_sort_order`. */
+  categories: GroupCategory[];
+}
+
+/** `GET /admin/category-groups`: groups in order, plus live categories in no group. */
+export interface CategoryGroupsOverview {
+  groups: CategoryGroup[];
+  unassigned: GroupCategory[];
+}
+
+/** `DELETE /admin/category-groups/:id` - its categories become unassigned. */
+export interface CategoryGroupDeleteResult {
+  group_id: string;
+  released_category_count: number;
 }
 
 /**

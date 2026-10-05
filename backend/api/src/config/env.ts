@@ -43,8 +43,11 @@ const envSchema = z.object({
   // Self-hosted OSRM for delivery route lines (modules/routing). Optional:
   // unset, routes are simply not drawn.
   OSRM_URL: z.string().url().optional(),
+  // 'notifylk' (default) or 'sbs' (SBS Telecom, portal.sbstelecom.net:
+  // SMS_API_KEY + SMS_API_SECRET, no user id).
   SMS_PROVIDER: z.string().optional().default('notifylk'),
   SMS_API_KEY: z.string().optional(),
+  SMS_API_SECRET: z.string().optional(),
   SMS_USER_ID: z.string().optional(),
   SMS_SENDER_ID: z.string().optional().default('Blynk'),
   WHATSAPP_API_TOKEN: z.string().optional(),
@@ -63,6 +66,8 @@ const envSchema = z.object({
   NOTIFICATION_WORKER_BATCH_SIZE: z.coerce.number().int().positive().default(20),
   NOTIFICATION_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
   NOTIFICATION_PROCESSING_TIMEOUT_MS: z.coerce.number().int().positive().default(300000), // 5 minutes lease
+  // Appointment reminders / rating prompts, run by the worker process.
+  APPOINTMENT_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(300000), // 5 minutes
 }).superRefine((data, ctx) => {
   if (data.NODE_ENV === 'production') {
     // 1. Insecure Secrets
@@ -109,7 +114,15 @@ const envSchema = z.object({
     }
 
     // 4. SMS credentials required in production
-    if (!data.SMS_API_KEY || data.SMS_API_KEY.startsWith('dev_') || !data.SMS_USER_ID || data.SMS_USER_ID.startsWith('dev_')) {
+    if (data.SMS_PROVIDER === 'sbs') {
+      if (!data.SMS_API_KEY || data.SMS_API_KEY.startsWith('dev_') || !data.SMS_API_SECRET || data.SMS_API_SECRET.startsWith('dev_')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['SMS_API_KEY'],
+          message: 'Production with SMS_PROVIDER=sbs requires valid SMS_API_KEY and SMS_API_SECRET credentials for live SMS delivery',
+        });
+      }
+    } else if (!data.SMS_API_KEY || data.SMS_API_KEY.startsWith('dev_') || !data.SMS_USER_ID || data.SMS_USER_ID.startsWith('dev_')) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['SMS_API_KEY'],

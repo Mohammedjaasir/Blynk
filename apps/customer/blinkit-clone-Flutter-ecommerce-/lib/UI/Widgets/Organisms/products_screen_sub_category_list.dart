@@ -6,11 +6,14 @@ import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
 import '../../../Services/Providers/product.provider.dart';
 import '../Atoms/category_widget.dart';
+import '../Atoms/image_well.dart';
 
-// The backend's catalog is flat (categories, no nested subcategories - see
-// backend/api/src/database/migrations/001_initial_schema.sql), so this is
-// repurposed as a "browse other categories" rail using the same real
-// category list shown on Home, rather than an invented subcategory taxonomy.
+// Sub-categories (backend migration 026, 2026-10-05):
+// opening "Bakery" shows Bakery's own rail - "All" (Bakery itself, whose
+// listing includes its children's products) and then Bread, Cakes, Buns.
+// A category with no children shows just its own "All" row; the other
+// top-level categories are no longer listed beside it. Opening "All
+// products" (an empty root) keeps the top-level categories as the rail.
 //
 // 2026-09 redesign (W3): the rail is a `paper` column that stays put while the
 // grid beside it scrolls. The selected row keeps its ink edge bar - that is
@@ -25,10 +28,52 @@ import '../Atoms/category_widget.dart';
 // transition, and the category's own glyph from `fallbackGlyphFor`, so a
 // category and the products inside it show the same symbol.
 class CategorySidebar extends StatelessWidget {
-  const CategorySidebar({super.key, required this.activeSlug, required this.onSelect});
+  const CategorySidebar({
+    super.key,
+    required this.activeSlug,
+    required this.onSelect,
+    this.rootSlug = '',
+  });
 
   final String activeSlug;
   final ValueChanged<CategoryModel> onSelect;
+
+  /// The category the screen was opened on; empty for "All products".
+  final String rootSlug;
+
+  /// The label of the row that stands for the opened category itself.
+  static const String allLabel = 'All';
+
+  /// The rail's rows for [rootSlug] over the full category list: the
+  /// top-level categories for an empty root, otherwise the root itself
+  /// (labelled [allLabel]) followed by its sub-categories. An unknown root
+  /// (the list has not loaded, or the category is gone) has no rows.
+  static List<CategoryModel> railFor(List<CategoryModel> categories, String rootSlug) {
+    if (rootSlug.isEmpty) return CategoryModel.topLevelOf(categories);
+    CategoryModel? root;
+    for (final c in categories) {
+      if (c.slug == rootSlug) {
+        root = c;
+        break;
+      }
+    }
+    if (root == null) return const [];
+    return [
+      CategoryModel(
+        id: root.id,
+        name: allLabel,
+        slug: root.slug,
+        description: root.description,
+        imageUrl: root.imageUrl,
+        displayOrder: root.displayOrder,
+        imageFocalX: root.imageFocalX,
+        imageFocalY: root.imageFocalY,
+        parentId: root.parentId,
+      ),
+      for (final c in categories)
+        if (c.parentId == root.id) c,
+    ];
+  }
 
   /// The rail's own measured width, not a design token and not a breakpoint:
   /// it is the [_tileSize] circle plus the row padding, wide enough for a
@@ -52,7 +97,8 @@ class CategorySidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final categories = context.watch<ProductProvider>().categories;
+    final all = context.watch<ProductProvider>().categories;
+    final categories = railFor(all, rootSlug);
 
     if (categories.isEmpty) {
       return const SizedBox.shrink();
@@ -65,11 +111,17 @@ class CategorySidebar extends StatelessWidget {
       itemBuilder: (BuildContext context, int index) {
         final category = categories[index];
         final isActive = category.slug == activeSlug;
+        // The "All" row is the opened category itself: it keeps that
+        // category's own glyph, and says whose "All" it is.
+        final isAllRow = rootSlug.isNotEmpty && index == 0;
+        final rootName = isAllRow
+            ? all.firstWhere((c) => c.slug == rootSlug, orElse: () => category).name
+            : category.name;
 
         return Semantics(
           button: true,
           selected: isActive,
-          label: category.name,
+          label: isAllRow ? '$allLabel $rootName' : category.name,
           excludeSemantics: true,
           onTap: () => onSelect(category),
           child: InkWell(
@@ -99,6 +151,7 @@ class CategorySidebar extends StatelessWidget {
                 category: category,
                 isActive: isActive,
                 diameter: tileSize,
+                glyph: isAllRow ? fallbackGlyphFor(rootName) : null,
                 onTap: () => onSelect(category),
               ),
             ),

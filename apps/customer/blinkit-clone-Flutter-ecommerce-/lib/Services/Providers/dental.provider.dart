@@ -128,6 +128,30 @@ class AppointmentCancelOutcome {
       error != null && error!.statusCode >= 400 && error!.statusCode < 500 && error!.statusCode != 408;
 }
 
+/// The result of a `rateAppointment` attempt - the same refusal-vs-error
+/// split as [AppointmentCancelOutcome]. On success [appointment] is the
+/// backend's updated detail DTO (`can_rate: false`, `rating` set), which the
+/// calling screen swaps in for the row it is showing.
+class RatingOutcome {
+  const RatingOutcome({this.rating, this.appointment, this.error});
+
+  final DentalAppointmentRating? rating;
+  final AppointmentModel? appointment;
+  final ApiException? error;
+
+  bool get ok => rating != null && error == null;
+
+  /// `409 ALREADY_RATED`: a rating already exists (e.g. sent from another
+  /// device) - the caller should refetch to show it.
+  bool get isAlreadyRated => error?.code == 'ALREADY_RATED';
+
+  /// A `4xx` the backend returned deliberately (`404 APPOINTMENT_NOT_FOUND`,
+  /// `422 APPOINTMENT_NOT_RATEABLE`, `422 VISIT_NOT_FINISHED`,
+  /// `409 ALREADY_RATED`, `400 VALIDATION_ERROR`) - not a timeout.
+  bool get isRefusal =>
+      error != null && error!.statusCode >= 400 && error!.statusCode < 500 && error!.statusCode != 408;
+}
+
 /// Covers B2's read-only discovery/availability endpoints and B3's booking
 /// lifecycle endpoints (task-B2-report.md, task-B3-report.md). Follows
 /// `order.provider.dart`'s exact shape: injectable request function,
@@ -426,6 +450,36 @@ class DentalProvider extends ChangeNotifier {
       return AppointmentCancelOutcome(appointment: appointment);
     } catch (e) {
       return AppointmentCancelOutcome(error: _toApiException(e));
+    }
+  }
+
+  /// Longest comment the backend accepts on a rating.
+  static const int ratingCommentMaxLength = 500;
+
+  /// `POST /dental/appointments/:id/rating` - `{stars: 1..5, comment?}`.
+  /// The comment is trimmed and a blank one is sent as no comment at all;
+  /// whether the visit can be rated at all is the backend's call
+  /// (`can_rate`), never re-checked here. Every refusal comes back as a
+  /// typed [RatingOutcome] carrying the server's own message, never thrown.
+  Future<RatingOutcome> rateAppointment({required String id, required int stars, String? comment}) async {
+    final trimmed = comment?.trim();
+    try {
+      final response = await _request(
+        'POST',
+        '/dental/appointments/$id/rating',
+        body: {
+          'stars': stars,
+          if (trimmed != null && trimmed.isNotEmpty) 'comment': trimmed,
+        },
+      );
+      final data = (response is Map ? response['data'] : null) as Map?;
+      final rating = DentalAppointmentRating.tryParse(data?['rating']);
+      if (rating == null) {
+        return RatingOutcome(error: ApiException(500, 'Rating was not returned by the server.'));
+      }
+      return RatingOutcome(rating: rating, appointment: AppointmentModel.tryParse(data?['appointment']));
+    } catch (e) {
+      return RatingOutcome(error: _toApiException(e));
     }
   }
 }

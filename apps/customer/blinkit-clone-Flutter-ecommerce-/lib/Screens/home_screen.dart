@@ -8,9 +8,8 @@ import '../UI/Widgets/Atoms/app_skeleton.dart';
 import '../UI/Widgets/Atoms/connectivity_banner.dart';
 import '../UI/Widgets/Organisms/dental_home_entry.dart';
 import '../UI/Widgets/Organisms/home_brand_tagline.dart';
-import '../UI/Widgets/Organisms/home_product_sections.dart';
+import '../UI/Widgets/Organisms/home_category_groups.dart';
 import '../UI/Widgets/Organisms/home_screen_app_bar.dart';
-import '../UI/Widgets/Organisms/home_screen_category_builder.dart';
 import '../UI/Widgets/Organisms/home_screen_carousel.dart';
 import '../UI/Widgets/Organisms/home_screen_search_bar.dart';
 import '../app_responsive.dart';
@@ -23,9 +22,11 @@ import '../UI/Widgets/Atoms/entrance_fade.dart';
 /// circular cart / account controls, and the real delivery address block
 /// under them) - the full-width search field - the two-tone tagline - the
 /// promotional hero **only
-/// when the backend returns a live promotion** - the category chips - the
-/// dental entry - one honest section header and a grid of the real products
-/// behind the selected chip.
+/// when the backend returns a live promotion** - the dental entry - then the
+/// shop front: named groups of category tiles ("Grocery & Kitchen", ...), each
+/// tile opening that category's products (2026-10-05, owner's reference
+/// app; it replaced the category preview grid and the per-category
+/// product shelves).
 ///
 /// Nothing here is hardcoded content except the tagline, which is brand copy
 /// rather than data. Every other section renders backend data or does not
@@ -47,9 +48,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   /// Home's entrance: one timeline, five beats. Header, then search, then
-  /// the hero, then categories (with the dental entry), then the products.
-  /// The tagline rides the search beat and the dental entry rides the
-  /// category beat - fewer beats reads as one composition arriving, and the
+  /// the hero, then the dental entry, then the category groups.
+  /// The tagline rides the search beat - fewer beats reads as one composition arriving, and the
   /// whole thing is over in 810 ms. It runs once; a pull to refresh or a
   /// section scrolling back into view never replays it.
   ///
@@ -93,22 +93,20 @@ class _HomeScreenState extends State<HomeScreen>
   /// (`/products`, which takes a slug, titles itself after the category and
   /// lists every product in it).
   ///
-  /// So Home no longer holds a selection at all, and the section below the
-  /// tiles is always the catalogue-wide "Browse all". Home is the shop front;
-  /// browsing one category is its own page.
+  /// So Home holds no selection at all. Since 2026-10-05 it lists no products
+  /// either: it is the shop front of category groups, and browsing one
+  /// category is its own page.
 
-  /// True while the category tiles or the product grid show a skeleton, so
-  /// the one shared pulse runs only then. The empty slug is the provider's
-  /// own cache key for the catalogue-wide query.
-  bool _isLoading(ProductProvider p) =>
-      p.isLoadingCategories || p.isLoadingProducts('');
+  /// True while the category groups show a skeleton, so the one shared
+  /// pulse runs only then.
+  bool _isLoading(ProductProvider p) => p.isLoadingHomeGroups;
 
   @override
   Widget build(BuildContext context) {
     final responsive = Responsive.of(context);
     final loading = context.select<ProductProvider, bool>(_isLoading);
-    final hasSavedContent =
-        context.select<ProductProvider, bool>((p) => p.categories.isNotEmpty);
+    final hasSavedContent = context.select<ProductProvider, bool>(
+        (p) => p.homeGroups.isNotEmpty || p.categories.isNotEmpty);
 
     // One EntranceScope per screen: a card that scrolls off and back is rebuilt at rest, not replayed.
     return EntranceScope(
@@ -158,26 +156,18 @@ class _HomeScreenState extends State<HomeScreen>
                   const SliverToBoxAdapter(
                     child: SizedBox(height: BlynkSpace.s16),
                   ),
-                  SliverEntrance(animation: _timeline.section(3), sliver: const HomeScreenCateogoryWidget()),
                   SliverEntrance(
                     animation: _timeline.section(3),
                     sliver: const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.only(top: BlynkSpace.s16),
-                        child: DentalHomeEntry(),
-                      ),
+                      child: DentalHomeEntry(),
                     ),
                   ),
-                  // The real products behind the selected chip, titled for
-                  // the query that actually runs.
-                  // Always the catalogue-wide query: the tiles above open a
-                  // category rather than filtering this section.
+                  // The shop front: groups of category tiles, each tile a
+                  // way into that category's products page.
                   SliverEntrance(
                     animation: _timeline.section(4),
-                    sliver: HomeProductSections(
-                      categorySlug: null,
-                      categoryName: null,
-                      // The cards stagger from the moment their section
+                    sliver: HomeCategoryGroups(
+                      // The tiles stagger from the moment their section
                       // appears, not from frame 0 behind an invisible section.
                       entranceDelay: _timeline.delayOf(4),
                     ),

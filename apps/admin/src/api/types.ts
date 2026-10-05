@@ -89,6 +89,46 @@ export interface Category {
   is_active: boolean;
   /** Live, non-deleted products in this category (GET /admin/categories). */
   product_count?: number;
+  /** The Home tile group it sits in (null = unassigned). */
+  group_id?: string | null;
+  group_sort_order?: number;
+  /** The category this one sits inside (null = top level). One level only. */
+  parent_id?: string | null;
+}
+
+/** A category as listed inside a group (GET /admin/category-groups). */
+export interface GroupCategory {
+  id: string;
+  name: string;
+  slug: string;
+  image_url: string | null;
+  is_active: boolean;
+  group_id: string | null;
+  group_sort_order: number;
+}
+
+/** A titled row of category tiles on the customer Home, e.g. "Grocery & Kitchen". */
+export interface CategoryGroup {
+  id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  /** Ordered by group_sort_order. */
+  categories: GroupCategory[];
+}
+
+/** GET /admin/category-groups: groups in order, plus live categories in no group. */
+export interface CategoryGroupsOverview {
+  groups: CategoryGroup[];
+  unassigned: GroupCategory[];
+}
+
+/** DELETE /admin/category-groups/:id - its categories become unassigned. */
+export interface CategoryGroupDeleteResult {
+  group_id: string;
+  released_category_count: number;
 }
 
 /** DELETE /admin/products/:id - HARD when never ordered, SOFT (hidden) otherwise. */
@@ -261,6 +301,8 @@ export interface OrderDetail {
   scheduled_for: string | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
+  /** Migration 024: a second number from the address; null when none was given. */
+  delivery_alternate_phone?: string | null;
   delivery_address_line1: string;
   delivery_address_line2: string | null;
   delivery_city: string;
@@ -407,6 +449,17 @@ export interface CustomerRow {
   created_at: string;
   orders_count: number;
   delivered_count: number;
+  delivered_spend: number;
+  last_order_at: string | null;
+}
+
+/** GET /admin/customers/export: every customer, by name (ADMIN only). */
+export interface CustomerExportRow {
+  full_name: string | null;
+  phone: string;
+  is_active: boolean;
+  created_at: string;
+  orders_count: number;
   delivered_spend: number;
   last_order_at: string | null;
 }

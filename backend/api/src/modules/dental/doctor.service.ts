@@ -1,6 +1,7 @@
 import { dentalRepository } from './dental.repository.js';
 import { availabilityService, DayAvailabilityResult, DaySlotsResult } from './availability.service.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { NO_RATINGS, ratingSummaries } from './doctor-rating.service.js';
 
 export interface DoctorClinicDto {
   clinic_doctor_id: string;
@@ -20,6 +21,9 @@ export interface DoctorDto {
   photo_url: string | null;
   bio: string | null;
   clinics: DoctorClinicDto[];
+  /** Migration 023: visible ratings only; null average when there are none. */
+  rating_average: number | null;
+  rating_count: number;
 }
 
 /**
@@ -35,8 +39,12 @@ export class DoctorService {
       throw new AppError('Doctor not found.', 404, 'DOCTOR_NOT_FOUND');
     }
 
-    const clinicRows = await dentalRepository.findActiveDoctorClinics(id);
+    const [clinicRows, ratings] = await Promise.all([
+      dentalRepository.findActiveDoctorClinics(id),
+      ratingSummaries([id]),
+    ]);
     return {
+      ...(ratings.get(id) ?? NO_RATINGS),
       id: doctor.id,
       full_name: doctor.full_name,
       specialty: doctor.specialty,

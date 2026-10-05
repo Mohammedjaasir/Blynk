@@ -87,6 +87,21 @@ describe('Packing slip', () => {
     expect(print).toHaveBeenCalledTimes(1);
   });
 
+  it('lists the additional phone under the recipient only when there is one', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/orders/o1/slip', {
+      'GET /admin/orders/:id': () => ok({ order: order({ delivery_alternate_phone: '+94712345678' }) }),
+    });
+    const slip = await screen.findByRole('article', { name: 'Packing slip' });
+    const to = within(slip).getByRole('region', { name: 'Deliver to' });
+    expect(to).toHaveTextContent('077 123 4567');
+    expect(to).toHaveTextContent('Additional phone: 071 234 5678');
+    cleanup();
+
+    renderAs(ADMIN_WITH_RIDER, '/orders/o1/slip', { 'GET /admin/orders/:id': () => ok({ order: order() }) });
+    const plain = await screen.findByRole('article', { name: 'Packing slip' });
+    expect(plain).not.toHaveTextContent('Additional phone');
+  });
+
   it('a paid order has nothing to collect', () => {
     expect(codToCollect({ payment_method: 'COD', payment_status: 'PAID', total_amount: 900 })).toBe(0);
     expect(codToCollect({ payment_method: 'ONLINE', payment_status: 'PENDING', total_amount: 900 })).toBe(0);

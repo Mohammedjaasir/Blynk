@@ -121,6 +121,11 @@ export function PackingSlip() {
           <h2 className="packing-slip__label">Deliver to</h2>
           <p className="packing-slip__strong">{order.delivery_recipient_name}</p>
           <p className="mono">{formatPhone(order.delivery_recipient_phone)}</p>
+          {order.delivery_alternate_phone ? (
+            <p>
+              Additional phone: <span className="mono">{formatPhone(order.delivery_alternate_phone)}</span>
+            </p>
+          ) : null}
           <p>{address}</p>
         </section>
 

@@ -294,4 +294,24 @@ void main() {
       handle.dispose();
     });
   });
+
+  testWidgets('a rated doctor row shows "★ 4.6 (12)"; an unrated one shows nothing', (tester) async {
+    stubClinicAndDoctors(doctors: [
+      clinicDoctorJson(clinicDoctorId: 'cd1', fullName: 'Dr. Rated', ratingAverage: 4.6, ratingCount: 12),
+      clinicDoctorJson(clinicDoctorId: 'cd2', doctorId: 'd2', fullName: 'Dr. New'),
+    ]);
+    await pumpScreen(tester);
+    await settle(tester);
+
+    expect(find.text('★ 4.6 (12)', skipOffstage: false), findsOneWidget);
+    expect(find.byKey(const Key('doctor-rating-cd1'), skipOffstage: false), findsOneWidget);
+    expect(find.byKey(const Key('doctor-rating-cd2'), skipOffstage: false), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('doctor-row-cd2'), skipOffstage: false),
+        matching: find.textContaining('★', skipOffstage: false),
+      ),
+      findsNothing,
+    );
+  });
 }

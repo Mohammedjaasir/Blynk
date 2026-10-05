@@ -9,6 +9,8 @@ import { Cash, differenceText } from '../pages/Cash';
 import { tokenStore } from '../api/client';
 import type { CashReconciliation, CustomerRow, SalesReport } from '../api/types';
 import { respond, stubFetch } from './fetchStub';
+import { customerExportFilename, customerSheetRows } from '../lib/customerExport';
+import * as productImport from '../lib/productImport';
 
 /**
  * Sales dashboard, customer list/detail and rider cash on the Admin site.
@@ -133,6 +135,51 @@ describe('Customers page', () => {
     expect(paths[0]).toBe('/admin/customers?sort=recent&page=1&limit=25');
     expect(paths).toContain('/admin/customers?search=0771234&sort=recent&page=1&limit=25');
     expect(paths).toContain('/admin/customers?search=0771234&sort=spend&page=1&limit=25');
+  });
+
+  it('downloads every customer as Excel, not just the page on screen', async () => {
+    const user = userEvent.setup();
+    const download = vi.spyOn(productImport, 'downloadBlob').mockImplementation(() => {});
+    const api = stubFetch((_m, path) =>
+      path.startsWith('/admin/customers/export')
+        ? respond({ customers: [{ full_name: 'Fathima Rizna', phone: '+94771234567', is_active: true, created_at: '2026-09-01T04:00:00.000Z', orders_count: 7, delivered_spend: 8450.5, last_order_at: null }] })
+        : respond({ customers: [customer()], pagination: { page: 1, limit: 25, total: 1, total_pages: 1 } })
+    );
+    wrap(<Customers />);
+    await screen.findByRole('table', { name: 'Customers' });
+    await user.click(screen.getByRole('button', { name: 'Download Excel' }));
+    await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+    expect(api.paths()).toContain('/admin/customers/export');
+    const [blob, name] = download.mock.calls[0]!;
+    expect((blob as Blob).type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(name).toMatch(/^blynk-customers-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    download.mockRestore();
+  });
+
+  it('says so when the download fails', async () => {
+    const user = userEvent.setup();
+    stubFetch((_m, path) =>
+      path.startsWith('/admin/customers/export')
+        ? respond({ code: 'FORBIDDEN', message: 'Admins only.' }, 403)
+        : respond({ customers: [customer()], pagination: { page: 1, limit: 25, total: 1, total_pages: 1 } })
+    );
+    wrap(<Customers />);
+    await screen.findByRole('table', { name: 'Customers' });
+    await user.click(screen.getByRole('button', { name: 'Download Excel' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download Excel' })).toBeEnabled();
+  });
+
+  it('the sheet has name, both phone forms, figures, and keeps phones as text', () => {
+    const rows = customerSheetRows([
+      { full_name: '  Fathima Rizna ', phone: '+94771234567', is_active: true, created_at: '2026-09-01T04:00:00.000Z', orders_count: 7, delivered_spend: 8450.5, last_order_at: '2026-09-29T10:00:00.000Z' },
+      { full_name: null, phone: '+94712223344', is_active: false, created_at: '2026-09-02T04:00:00.000Z', orders_count: 0, delivered_spend: 0, last_order_at: null },
+    ]);
+    expect(rows[0]).toEqual(['Name', 'Phone', 'Phone (SMS format)', 'Orders', 'Delivered spend (LKR)', 'Last order', 'Joined', 'Account']);
+    expect(rows[1]).toEqual(['Fathima Rizna', '+94771234567', '94771234567', 7, 8450.5, '29 Sept 2026', '1 Sept 2026', 'Active']);
+    expect(rows[2]).toEqual(['', '+94712223344', '94712223344', 0, 0, 'Never', '2 Sept 2026', 'Blocked']);
+    expect(typeof rows[1]![2]).toBe('string');
+    expect(customerExportFilename(new Date('2026-10-04T20:00:00.000Z'))).toBe('blynk-customers-2026-10-05.xlsx');
   });
 
   it('pages through results', async () => {

@@ -469,6 +469,7 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Orders' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Products' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Categories' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Category groups' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Promotions' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Feedback' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Staff accounts' })).toBeInTheDocument();
@@ -478,7 +479,7 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Rider cash' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Coupons' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Customers' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(12);
+    expect(screen.getAllByRole('link')).toHaveLength(13);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

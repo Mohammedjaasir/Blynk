@@ -288,6 +288,27 @@ describe('Failing a delivery', () => {
   });
 });
 
+describe('Delivery detail - customer phones', () => {
+  it('shows the additional phone with its own call link only when the address has one', async () => {
+    stubGeolocation();
+    const s = summary({ delivery_alternate_phone: '+94712345678' });
+    renderAs(ADMIN_WITH_RIDER, `/delivery/${s.delivery_id}`, { 'GET /riders/deliveries/:id': () => ok({ delivery: detail(s) }) });
+    expect(await screen.findByRole('link', { name: 'Call Priya Fernando' })).toHaveAttribute('href', 'tel:+94771234567');
+    const alt = screen.getByRole('link', { name: 'Call additional phone for Priya Fernando' });
+    expect(alt).toHaveAttribute('href', 'tel:+94712345678');
+    expect(alt).toHaveTextContent('071 234 5678');
+  });
+
+  it('without an additional phone there is one call link and no label', async () => {
+    stubGeolocation();
+    const s = summary({ delivery_alternate_phone: null });
+    renderAs(ADMIN_WITH_RIDER, `/delivery/${s.delivery_id}`, { 'GET /riders/deliveries/:id': () => ok({ delivery: detail(s) }) });
+    expect(await screen.findByRole('link', { name: 'Call Priya Fernando' })).toBeInTheDocument();
+    expect(screen.queryByText(/Additional phone/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /additional phone/ })).not.toBeInTheDocument();
+  });
+});
+
 describe('Wrong-rider / bad id - not-found, never a permissions error', () => {
   it('a 404 DELIVERY_NOT_FOUND on load renders a clean not-found state', async () => {
     renderAs(ADMIN_WITH_RIDER, '/delivery/not-mine', { 'GET /riders/deliveries/:id': () => fail(404, 'DELIVERY_NOT_FOUND') });

@@ -16,7 +16,6 @@ import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/app_skeleton.dart';
-import 'package:ecom/UI/Widgets/Atoms/card_product.dart';
 import 'package:ecom/app_theme.dart';
 
 /// A loading screen must run ONE skeleton ticker, however many placeholder
@@ -33,12 +32,14 @@ class _NoAddresses extends AddressProvider {
 /// Every catalog call waits on a completer the test controls.
 class _Gate {
   final categories = Completer<dynamic>();
+  final groups = Completer<dynamic>();
   final products = Completer<dynamic>();
   final search = Completer<dynamic>();
   final detail = Completer<dynamic>();
 
   Future<dynamic> call(String url, Map<String, dynamic> query) {
     if (url == '/catalog/categories') return categories.future;
+    if (url == '/catalog/home-groups') return groups.future;
     if (url == '/promotions') {
       return Future.value({
         'success': true,
@@ -57,6 +58,23 @@ Map<String, dynamic> _categories() => {
         'categories': [
           for (final i in [1, 2])
             {'id': 'c$i', 'name': 'Category $i', 'slug': 'cat-$i', 'description': null, 'image_url': null, 'display_order': i},
+        ],
+      },
+    };
+
+Map<String, dynamic> _groups() => {
+      'success': true,
+      'data': {
+        'groups': [
+          {
+            'id': 'g1',
+            'name': 'Grocery & Kitchen',
+            'sort_order': 0,
+            'categories': [
+              for (final i in [1, 2])
+                {'id': 'c$i', 'name': 'Category $i', 'slug': 'cat-$i', 'description': null, 'image_url': null, 'display_order': i},
+            ],
+          },
         ],
       },
     };
@@ -103,8 +121,6 @@ Future<void> _pump(
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider<AddressProvider>(create: (_) => _NoAddresses()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        // Home ranks "Browse all" against the customer's own order history,
-        // so the section reads OrderProvider the same way main.dart wires it.
         ChangeNotifierProvider(create: (_) => OrderProvider()),
       ],
       child: MaterialApp(
@@ -146,17 +162,9 @@ void main() {
   });
 
   group('Home', () {
-    // 2026-09-24: a taller viewport than the shared 400x900 default. Home's
-    // header grew by the restored search field and the address block's second
-    // line, which pushed the product grid's second row out of the sliver
-    // cache — so only two skeletons were built and the "more than two share
-    // one pulse" assertion had nothing left to prove. The assertion is
-    // unchanged; the viewport is what moved, to keep the same rows on screen.
-    const tallPhone = Size(400, 1100);
-
-    testWidgets('category tiles, then rails: one ticker while anything loads, none once loaded', (tester) async {
+    testWidgets('category group tiles: one ticker while they load, none once loaded', (tester) async {
       final gate = _Gate();
-      await _pump(tester, gate, const HomeScreen(), size: tallPhone);
+      await _pump(tester, gate, const HomeScreen());
       // Home's entrance (motion M3) is a one-shot ticker that is over in
       // 810 ms. Let it finish before taking the baseline, otherwise it is
       // counted as "everything else that ticks" and the final assertion
@@ -164,38 +172,34 @@ void main() {
       await tester.pump(const Duration(milliseconds: 900));
       final idle = _tickers(tester) - 1; // everything else on Home that ticks
 
-      // Categories loading: a row of tile skeletons.
-      expect(find.byType(CategoryTileSkeleton), findsWidgets);
-      expect(_tickers(tester), idle + 1);
+      // Groups loading: two rows of rounded tile skeletons, one shared pulse.
+      expect(find.byType(CategoryTileSkeleton).evaluate().length, greaterThan(2));
+      expect(_tickers(tester), idle + 1, reason: 'every visible tile skeleton must share one pulse');
 
-      // Categories arrive, each rail is now loading its own four placeholder cards.
+      // The flat category list (the search hint) arriving changes nothing.
       gate.categories.complete(_categories());
       await tester.pump();
       await tester.pump();
-      // Lazy rails only build what is on screen, so count what is there.
-      expect(find.byType(ProductCardSkeleton).evaluate().length, greaterThan(2));
-      expect(_tickers(tester), idle + 1, reason: 'every visible product skeleton must share one pulse');
+      expect(find.byType(CategoryTileSkeleton), findsWidgets);
 
       // Everything loaded: the pulse is parked, so the screen can settle.
-      gate.products.complete(_products());
+      gate.groups.complete(_groups());
       await tester.pump();
       await tester.pump();
       await tester.pumpAndSettle();
-      expect(find.byType(ProductCardSkeleton), findsNothing);
-      expect(find.byType(ProductCard), findsWidgets);
+      expect(find.byType(CategoryTileSkeleton), findsNothing);
+      expect(find.text('Category 1'), findsOneWidget);
       expect(_tickers(tester), idle);
     });
 
     testWidgets('reduced motion: a loading Home runs no skeleton ticker at all', (tester) async {
       final gate = _Gate();
-      await _pump(tester, gate, const HomeScreen(),
-          disableAnimations: true, size: tallPhone);
+      await _pump(tester, gate, const HomeScreen(), disableAnimations: true);
       final idle = _tickers(tester);
-      gate.categories.complete(_categories());
       for (var i = 0; i < 4; i++) {
         await tester.pump();
       }
-      expect(find.byType(ProductCardSkeleton).evaluate().length, greaterThan(2));
+      expect(find.byType(CategoryTileSkeleton).evaluate().length, greaterThan(2));
       expect(_tickers(tester), idle);
     });
 
@@ -208,7 +212,7 @@ void main() {
       gate.categories.complete(_categories());
       await tester.pump();
       await tester.pump();
-      gate.products.complete(_products());
+      gate.groups.complete(_groups());
       await tester.pump();
       await tester.pump();
       expect(tester.state(find.byType(SkeletonScope)), same(before));

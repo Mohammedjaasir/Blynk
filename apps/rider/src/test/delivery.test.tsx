@@ -66,6 +66,9 @@ describe('Delivery', () => {
     expect(screen.getByText('Near the clock tower')).toBeInTheDocument();
     expect(screen.getByText('Blue gate, ring twice')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Call Rider Test' })).toHaveAttribute('href', 'tel:+94771234567');
+    // No additional number on this address: no second call button.
+    expect(screen.queryByText('Additional phone')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /^Call / })).toHaveLength(1);
     const bag = screen.getByRole('region', { name: 'In the bag' });
     expect(within(bag).getByText('Kotmale Fresh Milk 1L')).toBeInTheDocument();
     expect(within(bag).getByText('2 ×')).toBeInTheDocument();
@@ -73,6 +76,16 @@ describe('Delivery', () => {
     expect(within(actionBar()).getAllByRole('button')).toHaveLength(1);
     expect(within(actionBar()).getByRole('button', { name: 'Picked up' })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Progress' })).toHaveTextContent('Pick up');
+  });
+
+  it('shows the additional phone with its own call button only when the address has one', async () => {
+    renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': () => ok({ delivery: detail({ delivery_alternate_phone: '+94712345678' }) }),
+    });
+    expect(await screen.findByText('Additional phone')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Call Rider Test' })).toHaveAttribute('href', 'tel:+94771234567');
+    const alt = screen.getByRole('link', { name: 'Call additional phone for Rider Test' });
+    expect(alt).toHaveAttribute('href', 'tel:+94712345678');
   });
 
   it('never renders coordinates, costs or supplier details even if the API sent them - including once tracking is actively sharing', async () => {

@@ -9,7 +9,7 @@ import { splitQueue, statusLabel } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
 import { formatMoney } from '../lib/orders';
 import { syncTrackingFromList } from '../lib/tracker-session';
-import { isTripStop, owesCash, tripOf, useCurrentPosition } from '../lib/trip';
+import { isTripStop, owesCash, tripOf, useCurrentPosition, useRoadOrder } from '../lib/trip';
 import { TripCard } from './Delivery/Queue';
 
 /**
@@ -77,8 +77,11 @@ export function Home() {
   const [refreshing, setRefreshing] = useState(false);
   // Shared with the tab bar's badge (one fetch per app load, see LowStock.tsx).
   const lowStock = useLowStock();
-  // Orders a trip's stops when the operator is on one (never sent anywhere).
-  const position = useCurrentPosition((summary?.myDeliveries ?? []).filter(isTripStop).length >= 2);
+  // Orders a trip's stops when the operator is on one (sent only to the API
+  // for the road order, never stored).
+  const onTrip = (summary?.myDeliveries ?? []).filter(isTripStop).length >= 2;
+  const position = useCurrentPosition(onTrip);
+  const road = useRoadOrder(summary?.myDeliveries ?? null, position, onTrip);
 
   const load = useCallback(
     async (isRefresh: boolean) => {
@@ -185,7 +188,7 @@ export function Home() {
     );
   }
 
-  const trip = tripOf(summary.myDeliveries, position);
+  const trip = tripOf(summary.myDeliveries, position, road);
   const attention: { text: string; to: string; label: string }[] = [];
   if (summary.needingPacking.length > 0) {
     attention.push({

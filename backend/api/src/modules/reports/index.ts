@@ -4,7 +4,7 @@ import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { resolveSalesRange, salesReport, type SalesRangePreset } from './sales.service.js';
-import { getCustomer, listCustomers, type CustomerSort } from './customers.service.js';
+import { exportCustomers, getCustomer, listCustomers, type CustomerSort } from './customers.service.js';
 
 type Handler = (req: Request, res: Response) => Promise<void>;
 const wrap = (fn: Handler) => (req: Request, res: Response, next: NextFunction) => {
@@ -69,6 +69,15 @@ adminReportsRouter.get(
   wrap(async (req, res) => {
     const q = req.query as unknown as z.infer<typeof customerListQuerySchema>;
     res.json({ success: true, data: await listCustomers({ ...q, sort: q.sort as CustomerSort }) });
+  })
+);
+
+// Before /customers/:id, which would read "export" as an id.
+adminReportsRouter.get(
+  '/customers/export',
+  ...ADMIN_ONLY,
+  wrap(async (_req, res) => {
+    res.json({ success: true, data: await exportCustomers() });
   })
 );
 

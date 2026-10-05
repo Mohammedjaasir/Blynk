@@ -2,6 +2,7 @@ import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { pool, checkDatabaseConnection } from './database/connection.js';
 import { notificationWorker, logPushStatus } from './modules/notifications/index.js';
+import { appointmentReminderJob } from './modules/dental/appointment-reminders.js';
 
 async function bootstrapWorker() {
   logger.info(
@@ -30,6 +31,9 @@ async function bootstrapWorker() {
   if (env.NOTIFICATION_WORKER_ENABLED) {
     notificationWorker.start();
     logger.info('Notification Outbox Worker daemon started successfully');
+    // Sibling tick: day-before appointment reminders and post-visit rating
+    // prompts, every APPOINTMENT_REMINDER_INTERVAL_MS (default 5 minutes).
+    appointmentReminderJob.start();
   } else {
     logger.warn('NOTIFICATION_WORKER_ENABLED is set to false. Worker process will remain idle.');
   }
@@ -42,6 +46,7 @@ async function bootstrapWorker() {
     logger.info({ signal }, 'Graceful worker shutdown initiated...');
 
     try {
+      await appointmentReminderJob.stop();
       await notificationWorker.stop();
       logger.info('Notification worker stopped cleanly.');
     } catch (workerErr) {

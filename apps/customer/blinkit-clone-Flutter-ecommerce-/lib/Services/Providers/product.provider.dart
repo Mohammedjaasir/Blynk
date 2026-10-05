@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
+import 'package:ecom/Models/category_group_model.dart';
 import 'package:ecom/Models/category_model.dart';
 import 'package:ecom/Models/product_model.dart';
 import 'package:ecom/Models/promotion_model.dart';
@@ -83,6 +84,10 @@ class ProductProvider extends ChangeNotifier {
   int _searchGeneration = 0;
 
   List<CategoryModel> get categories => _categories;
+
+  /// Migration 026: the categories that are not inside another one - what
+  /// Home's fallback and the Categories screen list.
+  List<CategoryModel> get topLevelCategories => CategoryModel.topLevelOf(_categories);
   bool get isLoadingCategories => _isLoadingCategories;
   String? get categoriesError => _categoriesFailure?.message;
   CustomerError? get categoriesFailure => _categoriesFailure;
@@ -226,6 +231,69 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
+  // Home's shop front (2026-10-05): named groups of category tiles, from
+  // GET /catalog/home-groups, in the backend's own order.
+  List<CategoryGroupModel> _homeGroups = [];
+  bool _isLoadingHomeGroups = false;
+  bool _homeGroupsRequested = false;
+  // Set when the backend has no /catalog/home-groups yet (404): Home then
+  // shows every category under one heading rather than nothing at all.
+  bool _homeGroupsFallback = false;
+  CustomerError? _homeGroupsFailure;
+
+  /// The heading used when the backend predates category groups.
+  static const String fallbackGroupName = 'Shop by category';
+
+  List<CategoryGroupModel> get homeGroups => _homeGroupsFallback
+      ? [
+          if (_categories.isNotEmpty)
+            CategoryGroupModel(id: null, name: fallbackGroupName, categories: topLevelCategories),
+        ]
+      : _homeGroups;
+  bool get isLoadingHomeGroups => _isLoadingHomeGroups;
+  CustomerError? get homeGroupsFailure => _homeGroupsFailure;
+
+  /// GET /catalog/home-groups. Same rules as [loadCategories]: only a first
+  /// load shows the skeleton, and a failed refresh keeps the groups already
+  /// on screen instead of replacing them with an error.
+  Future<void> loadHomeGroups({bool force = false}) async {
+    if (_homeGroupsRequested && !force) return;
+    if (_isLoadingHomeGroups) return;
+    _homeGroupsRequested = true;
+
+    final isFirstLoad = homeGroups.isEmpty;
+    if (isFirstLoad) {
+      _isLoadingHomeGroups = true;
+      _homeGroupsFailure = null;
+      notifyListeners();
+    }
+
+    try {
+      final response = await _request('/catalog/home-groups', const {});
+      final data = (response is Map ? response['data'] : null) as Map?;
+      final raw = (data?['groups'] as List?) ?? const [];
+      _homeGroups = [
+        for (final g in raw)
+          if (g is Map) CategoryGroupModel.fromJson(g.cast<String, dynamic>()),
+      ].where((g) => g.categories.isNotEmpty).toList();
+      _homeGroupsFallback = false;
+      _homeGroupsFailure = null;
+    } catch (e) {
+      if (e is ApiException && e.statusCode == 404) {
+        // An older backend: fall back to the flat category list.
+        _homeGroupsFallback = true;
+        _homeGroups = [];
+        await loadCategories(force: !isFirstLoad);
+        _homeGroupsFailure = isFirstLoad ? _categoriesFailure : null;
+      } else if (isFirstLoad) {
+        _homeGroupsFailure = AppErrors.from(e);
+      }
+    } finally {
+      _isLoadingHomeGroups = false;
+      notifyListeners();
+    }
+  }
+
   /// Loads products for a category (by slug) or all products when
   /// [categorySlug] is null/empty.
   Future<void> loadProducts({String? categorySlug, bool force = false}) async {
@@ -275,7 +343,8 @@ class ProductProvider extends ChangeNotifier {
   DateTime? _lastRefreshAt;
 
   /// Re-fetches everything the customer is currently looking at - categories,
-  /// promotions and every product list already loaded - from the backend.
+  /// Home's category groups, promotions and every product list already
+  /// loaded - from the backend.
   ///
   /// The catalog above is loaded once and kept, and Home lives in an
   /// IndexedStack that is never rebuilt, so without this an Admin change
@@ -300,6 +369,7 @@ class ProductProvider extends ChangeNotifier {
 
     final refresh = Future.wait([
       loadCategories(force: true),
+      if (_homeGroupsRequested) loadHomeGroups(force: true),
       loadPromotions(force: true),
       for (final key in _productsByCategory.keys.toList())
         loadProducts(categorySlug: key.isEmpty ? null : key, force: true),

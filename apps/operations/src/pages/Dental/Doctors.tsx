@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { dental } from '../../api/resources';
 import { DENTAL_SPECIALTIES, DENTAL_SPECIALTY_LABEL, type DentalDoctor, type DentalSpecialty } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
 import { Badge, EmptyState, Field, Spinner } from '../../components/ui';
-import { dentalErrorMessage } from '../../lib/dental';
+import { dentalErrorMessage, formatRating } from '../../lib/dental';
 
 /**
  * Dental doctors: create, edit and activate/deactivate (task F8, plan §16).
@@ -79,7 +80,12 @@ export function Doctors() {
             <li key={doctor.id} className={`cat-row cat-row--flat${!doctor.is_active ? ' is-muted' : ''}`}>
               <div className="cat-row__main">
                 <p className="cat-row__title">{doctor.full_name}</p>
-                <p className="cat-row__meta">{DENTAL_SPECIALTY_LABEL[doctor.specialty]}</p>
+                <p className="cat-row__meta">
+                  {DENTAL_SPECIALTY_LABEL[doctor.specialty]}
+                  {formatRating(doctor.rating_average, doctor.rating_count)
+                    ? ` · ${formatRating(doctor.rating_average, doctor.rating_count)}`
+                    : ''}
+                </p>
                 <div className="cat-row__badges">
                   <Badge tone={doctor.is_active ? 'active' : 'inactive'}>
                     {doctor.is_active ? 'Active' : 'Inactive'}
@@ -90,6 +96,13 @@ export function Doctors() {
                 <button type="button" className="button button--ghost button--sm" onClick={() => setEditing(doctor)}>
                   Edit
                 </button>
+                <Link
+                  className="button button--ghost button--sm"
+                  to={`/catalog/dental/doctors/${doctor.id}/ratings`}
+                  aria-label={`Ratings for ${doctor.full_name}`}
+                >
+                  Ratings
+                </Link>
                 <button
                   type="button"
                   className="button button--ghost button--sm"

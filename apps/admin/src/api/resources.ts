@@ -8,6 +8,9 @@ import type {
   AuthUser,
   Category,
   CategoryDeleteResult,
+  CategoryGroup,
+  CategoryGroupDeleteResult,
+  CategoryGroupsOverview,
   CustomerProduct,
   DeliveryFeeSetting,
   ImportResponse,
@@ -27,6 +30,7 @@ import type {
   Coupon,
   CouponInput,
   CustomerDetail,
+  CustomerExportRow,
   CustomerRow,
   CustomerSort,
   SalesRange,
@@ -97,6 +101,44 @@ export const categories = {
       }`,
       { method: 'DELETE' }
     ),
+};
+
+// ------------------------------------------------------- category groups
+/** The titled rows of category tiles on the customer Home. */
+export const categoryGroups = {
+  list: () => apiRequest<CategoryGroupsOverview>('/admin/category-groups'),
+
+  create: (input: { name: string; is_active?: boolean }) =>
+    apiRequest<{ group: CategoryGroup }>('/admin/category-groups', {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.group),
+
+  update: (id: string, input: { name?: string; is_active?: boolean }) =>
+    apiRequest<{ group: CategoryGroup }>(`/admin/category-groups/${id}`, {
+      method: 'PATCH',
+      body: input,
+    }).then((data) => data.group),
+
+  remove: (id: string) =>
+    apiRequest<CategoryGroupDeleteResult>(`/admin/category-groups/${id}`, { method: 'DELETE' }),
+
+  /** Must list every live group exactly once (400 otherwise). */
+  reorder: (groupIds: string[]) =>
+    apiRequest<{ groups: CategoryGroup[] }>('/admin/category-groups/order', {
+      method: 'PUT',
+      body: { group_ids: groupIds },
+    }).then((data) => data.groups),
+
+  /**
+   * Sets the group's exact membership AND order: members left out become
+   * unassigned; listed categories from another group move in.
+   */
+  setCategories: (id: string, categoryIds: string[]) =>
+    apiRequest<{ group: CategoryGroup }>(`/admin/category-groups/${id}/categories`, {
+      method: 'PUT',
+      body: { category_ids: categoryIds },
+    }).then((data) => data.group),
 };
 
 // -------------------------------------------------------------- products
@@ -313,6 +355,9 @@ export const customers = {
   },
 
   detail: (id: string, page = 1) => apiRequest<CustomerDetail>(`/admin/customers/${id}?page=${page}&limit=20`),
+
+  /** Every customer for the Excel download. */
+  exportAll: () => apiRequest<{ customers: CustomerExportRow[] }>('/admin/customers/export'),
 };
 
 // ------------------------------------------------------------------- cash

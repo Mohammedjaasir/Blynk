@@ -53,6 +53,13 @@ class OrderDetailsCard extends StatelessWidget {
               style: BlynkText.body.copyWith(color: BlynkColors.ink2),
             ),
           ],
+          if (order.deliveryAlternatePhone != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Additional phone: ${order.deliveryAlternatePhone}',
+              style: BlynkText.body.copyWith(color: BlynkColors.ink2),
+            ),
+          ],
           const SizedBox(height: BlynkSpace.s8),
           if (order.deliveryAddressLine1.isNotEmpty)
             Text(

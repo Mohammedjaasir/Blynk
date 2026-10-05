@@ -10,6 +10,9 @@ import {
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import { releaseStockAlertsNow } from '../notifications/push/push.events.js';
+import { db } from '../../database/connection.js';
+import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
+import { resolveGroupPlacement } from './catalog.groups.js';
 
 export interface CustomerProductDto {
   id: string;
@@ -65,7 +68,37 @@ export class CatalogService {
       display_order: c.display_order,
       image_focal_x: clampFocal(c.image_focal_x),
       image_focal_y: clampFocal(c.image_focal_y),
+      parent_id: c.parent_id ?? null,
     }));
+  }
+
+  /**
+   * Migration 026: checks a category's new parent. One level only - the
+   * parent must be a live top-level category, a category cannot be its own
+   * parent, and a category that has sub-categories cannot go inside another.
+   */
+  private async assertParentAllowed(parentId: string, categoryId?: string) {
+    if (categoryId && parentId === categoryId) {
+      throw new AppError('A category cannot be inside itself.', 400, 'INVALID_PARENT_CATEGORY');
+    }
+    const parent = await catalogRepository.findCategoryById(parentId);
+    if (!parent) {
+      throw new AppError('The chosen parent category does not exist.', 400, 'PARENT_CATEGORY_NOT_FOUND');
+    }
+    if (parent.parent_id) {
+      throw new AppError(
+        `'${parent.name}' is already inside another category. Sub-categories go one level deep only.`,
+        400,
+        'INVALID_PARENT_CATEGORY'
+      );
+    }
+    if (categoryId && (await catalogRepository.countChildCategories(categoryId)) > 0) {
+      throw new AppError(
+        'This category has its own sub-categories, so it cannot go inside another category.',
+        400,
+        'INVALID_PARENT_CATEGORY'
+      );
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -76,7 +109,7 @@ export class CatalogService {
     return await catalogRepository.findAllCategories(isActive);
   }
 
-  async createCategoryAdmin(input: CreateCategoryInput) {
+  async createCategoryAdmin(input: CreateCategoryInput, actor?: AuditActor) {
     const slug = input.slug ? input.slug.toLowerCase().trim() : slugify(input.name);
 
     const existing = await catalogRepository.findCategoryBySlug(slug);
@@ -88,7 +121,17 @@ export class CatalogService {
       );
     }
 
+    if (input.parent_id) await this.assertParentAllowed(input.parent_id);
+
+    // Migration 025: optional home-screen group, appended at its end unless a
+    // position is given.
+    const placement =
+      input.group_id !== undefined && input.group_id !== null
+        ? await resolveGroupPlacement(db, input.group_id, input.group_sort_order)
+        : null;
+
     const created = await catalogRepository.createCategory({
+      ...(placement ?? {}),
       name: input.name,
       slug,
       description: input.description,
@@ -97,13 +140,23 @@ export class CatalogService {
       is_active: input.is_active ?? true,
       image_focal_x: input.image_focal_x,
       image_focal_y: input.image_focal_y,
+      parent_id: input.parent_id ?? null,
     });
+
+    if (placement && actor) {
+      await writeAudit(db, actor, {
+        action: 'CATEGORY_GROUP_ASSIGNED',
+        entityType: 'CATEGORY',
+        entityId: created.id,
+        newValues: { group_id: placement.group_id, group_sort_order: placement.group_sort_order },
+      });
+    }
 
     logger.info({ categoryId: created.id, slug: created.slug }, 'Category created by admin');
     return created;
   }
 
-  async updateCategoryAdmin(id: string, input: UpdateCategoryInput) {
+  async updateCategoryAdmin(id: string, input: UpdateCategoryInput, actor?: AuditActor) {
     const existing = await catalogRepository.findCategoryById(id);
     if (!existing) {
       throw new AppError('Category not found.', 404, 'CATEGORY_NOT_FOUND');
@@ -120,7 +173,27 @@ export class CatalogService {
       }
     }
 
+    if (input.parent_id && input.parent_id !== existing.parent_id) {
+      await this.assertParentAllowed(input.parent_id, id);
+    }
+
+    // Migration 025: moving to another group (or out of one) appends at the
+    // end unless a position is given; a position alone reorders in place.
+    let placement: { group_id: string | null; group_sort_order: number } | null = null;
+    if (input.group_id !== undefined) {
+      const sameGroup = input.group_id === existing.group_id;
+      placement = await resolveGroupPlacement(
+        db,
+        input.group_id,
+        input.group_sort_order ?? (sameGroup && input.group_id !== null ? existing.group_sort_order : undefined),
+        id
+      );
+    } else if (input.group_sort_order !== undefined) {
+      placement = { group_id: existing.group_id, group_sort_order: input.group_sort_order };
+    }
+
     const updated = await catalogRepository.updateCategory(id, {
+      ...(placement ?? {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.slug !== undefined ? { slug: input.slug.toLowerCase().trim() } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
@@ -129,7 +202,22 @@ export class CatalogService {
       ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
       ...(input.image_focal_x !== undefined ? { image_focal_x: input.image_focal_x } : {}),
       ...(input.image_focal_y !== undefined ? { image_focal_y: input.image_focal_y } : {}),
+      ...(input.parent_id !== undefined ? { parent_id: input.parent_id } : {}),
     });
+
+    if (
+      placement &&
+      actor &&
+      (placement.group_id !== existing.group_id || placement.group_sort_order !== existing.group_sort_order)
+    ) {
+      await writeAudit(db, actor, {
+        action: 'CATEGORY_GROUP_ASSIGNED',
+        entityType: 'CATEGORY',
+        entityId: id,
+        oldValues: { group_id: existing.group_id, group_sort_order: existing.group_sort_order },
+        newValues: { group_id: placement.group_id, group_sort_order: placement.group_sort_order },
+      });
+    }
 
     logger.info({ categoryId: id }, 'Category updated by admin');
     return updated;

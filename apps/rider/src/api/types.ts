@@ -48,6 +48,8 @@ export interface DeliverySummary {
   payment_status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
+  /** Migration 024: a second number from the address; null when none was given. */
+  delivery_alternate_phone?: string | null;
   delivery_address_line1: string;
   delivery_address_line2: string | null;
   delivery_city: string;

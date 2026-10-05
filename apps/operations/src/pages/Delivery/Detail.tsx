@@ -257,6 +257,18 @@ export function Detail() {
             {formatPhone(data.delivery_recipient_phone)}
           </a>
         )}
+        {data.delivery_alternate_phone && !done && !closed ? (
+          <p>
+            <span className="order-detail__meta">Additional phone </span>
+            <a
+              className="link mono"
+              href={`tel:${data.delivery_alternate_phone}`}
+              aria-label={`Call additional phone for ${data.delivery_recipient_name}`}
+            >
+              {formatPhone(data.delivery_alternate_phone)}
+            </a>
+          </p>
+        ) : null}
       </section>
 
       {data.items.length > 0 ? (

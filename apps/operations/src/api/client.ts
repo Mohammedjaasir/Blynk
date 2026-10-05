@@ -12,7 +12,7 @@
  * side against the caller's own linked rider profile - this client cannot
  * and does not make that decision.
  */
-const BASE_URL: string =
+export const BASE_URL: string =
   (import.meta.env?.VITE_API_BASE_URL as string | undefined) ??
   'http://localhost:4000/api/v1';
 
@@ -75,7 +75,7 @@ type Json = Record<string, unknown>;
 export type Query = Record<string, string | number | boolean | undefined | null>;
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   /** A `FormData` body (task F5's `uploadImage`) skips JSON encoding and the
    * `Content-Type` header entirely, exactly like Admin's own client - the
    * browser sets its own multipart boundary. */
@@ -108,7 +108,7 @@ export function onSessionEnded(listener: (reason: SessionEndReason) => void): ()
     sessionEndedListeners.delete(listener);
   };
 }
-function endSession(reason: SessionEndReason) {
+export function endSession(reason: SessionEndReason) {
   tokenStore.clear();
   sessionEndedListeners.forEach((listener) => listener(reason));
 }
@@ -192,18 +192,36 @@ let refreshing: Promise<boolean> | null = null;
 /**
  * One refresh at a time. The backend rotates refresh tokens and treats a
  * reused one as a replay (revoking every session), so the several requests
- * a page fires at once must share a single refresh rather than race.
+ * a page fires at once must share a single refresh rather than race - and
+ * that includes the native location poster (api/native-client.ts): whichever
+ * transport starts a refresh, every other caller joins that same one.
+ *
+ * `transport` (native location posts only) sends the refresh over native
+ * HTTP so it still works while the WebView is backgrounded; everything else
+ * uses fetch, unchanged.
  */
-function refreshSession(): Promise<boolean> {
+export type RefreshTransport = (url: string, body: string) => Promise<{ ok: boolean; text: string }>;
+
+export function refreshSession(transport?: RefreshTransport): Promise<boolean> {
   refreshing ??= (async () => {
     try {
-      const response = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: tokenStore.refresh }),
-      });
-      if (!response.ok) throw new Error('refresh rejected');
-      const payload = JSON.parse(await response.text()) as {
+      const url = `${BASE_URL}/auth/refresh`;
+      const body = JSON.stringify({ refresh_token: tokenStore.refresh });
+      let text: string;
+      if (transport) {
+        const response = await transport(url, body);
+        if (!response.ok) throw new Error('refresh rejected');
+        text = response.text;
+      } else {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        });
+        if (!response.ok) throw new Error('refresh rejected');
+        text = await response.text();
+      }
+      const payload = JSON.parse(text) as {
         data: { access_token: string; refresh_token: string };
       };
       tokenStore.save(payload.data.access_token, payload.data.refresh_token);

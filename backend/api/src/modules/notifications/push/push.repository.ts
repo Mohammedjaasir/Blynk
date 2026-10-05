@@ -8,6 +8,8 @@ import { isPushEnabled } from './push.sender.js';
 export const PUSH_TYPES = {
   ORDER_STATUS: 'PUSH_ORDER_STATUS',
   BACK_IN_STOCK: 'PUSH_BACK_IN_STOCK',
+  APPOINTMENT_REMINDER: 'PUSH_APPOINTMENT_REMINDER',
+  RATING_PROMPT: 'PUSH_RATING_PROMPT',
 } as const;
 
 /** What a PUSH outbox row carries; the worker sends exactly this. */

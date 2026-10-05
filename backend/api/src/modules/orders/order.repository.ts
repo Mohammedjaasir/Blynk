@@ -22,6 +22,7 @@ export interface CreateOrderData {
   scheduled_for: Date | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
+  delivery_alternate_phone: string | null;
   delivery_address_line1: string;
   delivery_address_line2: string | null;
   delivery_city: string;
@@ -166,6 +167,7 @@ export class OrderRepository {
           scheduled_for: data.scheduled_for,
           delivery_recipient_name: data.delivery_recipient_name,
           delivery_recipient_phone: data.delivery_recipient_phone,
+          delivery_alternate_phone: data.delivery_alternate_phone,
           delivery_address_line1: data.delivery_address_line1,
           delivery_address_line2: data.delivery_address_line2,
           delivery_city: data.delivery_city,

@@ -191,4 +191,23 @@ void main() {
     expect(lastRoute?.name, '/dental/book');
     expect(lastRoute?.arguments, {'doctorId': 'd1', 'clinicId': 'c1'});
   });
+
+  testWidgets('shows the doctor rating "★ 4.6 (12)" under the name', (tester) async {
+    api.routes['GET /dental/doctors/d1'] =
+        (q, b) => _envelope({'doctor': doctorJson(id: 'd1', ratingAverage: 4.6, ratingCount: 12)});
+    await pumpScreen(tester);
+    await settle(tester);
+
+    expect(find.text('★ 4.6 (12)'), findsOneWidget);
+    expect(find.bySemanticsLabel('Rated 4.6 out of 5 from 12 ratings'), findsOneWidget);
+  });
+
+  testWidgets('a doctor with no ratings shows no rating at all', (tester) async {
+    api.routes['GET /dental/doctors/d1'] = (q, b) => _envelope({'doctor': doctorJson(id: 'd1')});
+    await pumpScreen(tester);
+    await settle(tester);
+
+    expect(find.byKey(const Key('doctor-rating')), findsNothing);
+    expect(find.textContaining('★'), findsNothing);
+  });
 }

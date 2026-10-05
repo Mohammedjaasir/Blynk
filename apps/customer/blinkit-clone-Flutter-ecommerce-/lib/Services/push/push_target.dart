@@ -1,11 +1,14 @@
 /// Where tapping a push notification takes the customer. The backend sends
 /// `{type: 'order', order_id}` for order updates and
-/// `{type: 'product', product_id}` for "back in stock"
+/// `{type: 'product', product_id}` for "back in stock", and
+/// `{type: 'appointment', appointment_id}` for the day-before dental
+/// reminder and the post-visit "How was your visit?" prompt
 /// (backend/api/src/modules/notifications/push/push.events.ts).
 class PushTarget {
   const PushTarget._(this.route, this.id);
 
-  /// An app route: '/order' or '/product', both taking a bare id argument.
+  /// An app route: '/order', '/product' or '/dental/appointments/detail',
+  /// each taking a bare id argument.
   final String route;
   final String id;
 
@@ -25,6 +28,9 @@ class PushTarget {
       case 'product':
         final productId = id('product_id');
         return productId == null ? null : PushTarget._('/product', productId);
+      case 'appointment':
+        final appointmentId = id('appointment_id');
+        return appointmentId == null ? null : PushTarget._('/dental/appointments/detail', appointmentId);
       default:
         return null;
     }

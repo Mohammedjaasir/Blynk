@@ -81,6 +81,18 @@ void main() {
       expect((product.route, product.id), ('/product', 'p-1'));
     });
 
+    test('an appointment reminder or post-visit prompt opens the appointment detail', () {
+      final appointment = PushTarget.fromData({'type': 'appointment', 'appointment_id': ' a-1 '})!;
+      expect((appointment.route, appointment.id), ('/dental/appointments/detail', 'a-1'));
+    });
+
+    test('an appointment push without an appointment id opens nothing', () {
+      expect(PushTarget.fromData({'type': 'appointment'}), isNull);
+      expect(PushTarget.fromData({'type': 'appointment', 'appointment_id': null}), isNull);
+      expect(PushTarget.fromData({'type': 'appointment', 'appointment_id': '   '}), isNull);
+      expect(PushTarget.fromData({'type': 'appointment', 'order_id': 'o-1'}), isNull);
+    });
+
     test('anything else opens nothing', () {
       expect(PushTarget.fromData(null), isNull);
       expect(PushTarget.fromData({}), isNull);

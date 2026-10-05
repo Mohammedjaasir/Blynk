@@ -57,6 +57,11 @@ void main() {
       expect(order.canCancel, isTrue);
       expect(order.totalAmount, equals(1215.0));
       expect(order.items, hasLength(1));
+      expect(order.deliveryAlternatePhone, isNull);
+      expect(
+        OrderModel.fromJson({...json, 'delivery_alternate_phone': '+94712345678'}).deliveryAlternatePhone,
+        '+94712345678',
+      );
       expect(order.items.first.productNameSnapshot, equals("Kotmale Fresh Milk 1L"));
 
       final itemJson = (json['items'] as List).first as Map;

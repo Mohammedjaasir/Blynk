@@ -77,6 +77,13 @@ const CONTEXT_COLUMNS = [
   'dental_clinics.address_line as clinic_address_line',
 ] as const;
 
+/** The appointment's rating (null columns when it has none). */
+const RATING_COLUMNS = [
+  'doctor_ratings.stars as rating_stars',
+  'doctor_ratings.comment as rating_comment',
+  'doctor_ratings.created_at as rating_created_at',
+] as const;
+
 export class AppointmentRepository {
   // --------------------------------------------------------------------------
   // BOOKING-TIME READS (inside the transaction)
@@ -290,8 +297,10 @@ export class AppointmentRepository {
       .innerJoin('clinic_doctors', 'clinic_doctors.id', 'appointments.clinic_doctor_id')
       .innerJoin('doctors', 'doctors.id', 'clinic_doctors.doctor_id')
       .innerJoin('dental_clinics', 'dental_clinics.id', 'clinic_doctors.clinic_id')
+      // Migration 023: the customer's own rating of this visit, if any.
+      .leftJoin('doctor_ratings', 'doctor_ratings.appointment_id', 'appointments.id')
       .selectAll('appointments')
-      .select([...CONTEXT_COLUMNS]);
+      .select([...CONTEXT_COLUMNS, ...RATING_COLUMNS]);
   }
 }
 

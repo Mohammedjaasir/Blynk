@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../../api/client';
 import { catalog } from '../../api/resources';
-import type { Category } from '../../api/types';
+import type { Category, CategoryGroup } from '../../api/types';
 import { ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { Badge, Field, Spinner } from '../../components/ui';
@@ -16,6 +16,10 @@ import { catalogErrorMessage } from '../../lib/catalog';
  * after a plain confirm; one with products must first have them moved to
  * another category, chosen in the dialog (the server refuses with 409
  * `CATEGORY_NOT_EMPTY` otherwise, which the dialog also handles).
+ *
+ * Sub-categories (one level): a category can sit inside a top-level one
+ * ("Bread" in "Bakery"), chosen with the form's "Inside category" select.
+ * The list shows each child indented right under its parent.
  */
 export function Categories() {
   const [rows, setRows] = useState<Category[] | null>(null);
@@ -23,6 +27,9 @@ export function Categories() {
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<Category | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Category | null>(null);
+  // For the edit form's Group select. An API without category groups just
+  // leaves this empty (the select then offers only "None").
+  const [groups, setGroups] = useState<CategoryGroup[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -36,6 +43,10 @@ export function Categories() {
 
   useEffect(() => {
     void load();
+    void catalog.categoryGroups
+      .list()
+      .then((r) => setGroups(r.groups))
+      .catch(() => setGroups([]));
   }, [load]);
 
   async function toggleActive(category: Category) {
@@ -74,8 +85,8 @@ export function Categories() {
         <Spinner label="Loading categories" />
       ) : (
         <ul className="cat-list">
-          {rows.map((category) => (
-            <li key={category.id} className="cat-row cat-row--flat">
+          {nestedRows(rows).map(({ category, parent }) => (
+            <li key={category.id} className={`cat-row cat-row--flat${parent ? ' cat-row--child' : ''}`}>
               {/* The customer app draws this in a CIRCLE, so the row shows it
                   as one too: a picture that looks right in a square preview
                   and loses its subject in a circle is the whole reason to
@@ -89,6 +100,7 @@ export function Categories() {
               </div>
               <div className="cat-row__main">
                 <p className="cat-row__title">{category.name}</p>
+                {parent ? <p className="cat-row__parent">{`In ${parent.name}`}</p> : null}
                 <p className="cat-row__meta">{category.slug}</p>
                 {category.description ? <p className="cat-row__meta">{category.description}</p> : null}
                 <div className="cat-row__badges">
@@ -122,6 +134,8 @@ export function Categories() {
       {editing ? (
         <CategoryDialog
           category={editing === 'new' ? null : editing}
+          groups={groups}
+          categories={rows ?? []}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -229,7 +243,37 @@ function DeleteCategoryDialog({
   );
 }
 
-function CategoryDialog({ category, onClose, onSaved }: { category: Category | null; onClose(): void; onSaved(): void | Promise<void> }) {
+/**
+ * Top-level categories in list order, each followed by its sub-categories.
+ * A child whose parent is not in the list shows as top level.
+ */
+export function nestedRows(rows: Category[]): Array<{ category: Category; parent: Category | null }> {
+  const byId = new Map(rows.map((c) => [c.id, c]));
+  const out: Array<{ category: Category; parent: Category | null }> = [];
+  for (const category of rows) {
+    if (category.parent_id && byId.has(category.parent_id)) continue;
+    out.push({ category, parent: null });
+    for (const child of rows) {
+      if (child.parent_id === category.id) out.push({ category: child, parent: category });
+    }
+  }
+  return out;
+}
+
+function CategoryDialog({
+  category,
+  groups,
+  categories,
+  onClose,
+  onSaved,
+}: {
+  category: Category | null;
+  groups: CategoryGroup[];
+  /** Every category, for the "Inside category" select. */
+  categories: Category[];
+  onClose(): void;
+  onSaved(): void | Promise<void>;
+}) {
   const [name, setName] = useState(category?.name ?? '');
   const [description, setDescription] = useState(category?.description ?? '');
   const [imageUrl, setImageUrl] = useState<string | null>(category?.image_url ?? null);
@@ -239,6 +283,14 @@ function CategoryDialog({ category, onClose, onSaved }: { category: Category | n
   });
   const [displayOrder, setDisplayOrder] = useState(String(category?.display_order ?? 0));
   const [isActive, setIsActive] = useState(category?.is_active ?? true);
+  const initialGroupId = category?.group_id ?? '';
+  const [groupId, setGroupId] = useState(initialGroupId);
+  const initialParentId = category?.parent_id ?? '';
+  const [parentId, setParentId] = useState(initialParentId);
+  // One level only: a parent must be top level and not this category, and a
+  // category that already has sub-categories stays top level.
+  const parentOptions = categories.filter((c) => !c.parent_id && c.id !== category?.id);
+  const hasChildren = category ? categories.some((c) => c.parent_id === category.id) : false;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -251,7 +303,7 @@ function CategoryDialog({ category, onClose, onSaved }: { category: Category | n
     setSaving(true);
     setError(null);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         name: name.trim(),
         description: description.trim() || null,
         image_url: imageUrl,
@@ -260,6 +312,10 @@ function CategoryDialog({ category, onClose, onSaved }: { category: Category | n
         display_order: Number(displayOrder) || 0,
         is_active: isActive,
       };
+      // Only sent when it changed: re-sending the same group would append
+      // the category at the end of that group again.
+      if (groupId !== initialGroupId) payload.group_id = groupId || null;
+      if (parentId !== initialParentId) payload.parent_id = parentId || null;
       if (category) {
         await catalog.categories.update(category.id, payload);
       } else {
@@ -297,6 +353,44 @@ function CategoryDialog({ category, onClose, onSaved }: { category: Category | n
           Click the part of the image that must stay visible. Without an image,
           the category falls back to its Blynk icon.
         </p>
+        <Field
+          label="Inside category"
+          hint={
+            hasChildren
+              ? 'This category has its own sub-categories, so it stays top level.'
+              : 'Makes this a sub-category, listed in that category on the customer app.'
+          }
+        >
+          <select
+            className="input"
+            value={parentId}
+            disabled={hasChildren}
+            onChange={(e) => setParentId(e.target.value)}
+          >
+            <option value="">None (top level)</option>
+            {parentOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+            {initialParentId && !parentOptions.some((c) => c.id === initialParentId) ? (
+              <option value={initialParentId}>Current category</option>
+            ) : null}
+          </select>
+        </Field>
+        <Field label="Group">
+          <select className="input" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+            <option value="">None</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+            {initialGroupId && !groups.some((g) => g.id === initialGroupId) ? (
+              <option value={initialGroupId}>Current group</option>
+            ) : null}
+          </select>
+        </Field>
         <Field label="Display order">
           <input className="input" inputMode="numeric" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />
         </Field>

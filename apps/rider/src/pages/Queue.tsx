@@ -8,7 +8,7 @@ import { nextAction, splitQueue, statusLabel, statusTone } from '../lib/delivery
 import { errorMessage } from '../lib/errors';
 import { formatMoney, shortOrderNumber } from '../lib/format';
 import { syncTrackingFromList } from '../lib/tracker-session';
-import { formatAway, isTripStop, orderTrip, useRiderPosition, type TripStop } from '../lib/trip';
+import { formatAway, formatByRoad, isTripStop, orderTrip, useRiderPosition, useRoadOrder, type TripStop } from '../lib/trip';
 import { useLoad } from '../lib/useLoad';
 import { useRevalidate } from '../lib/useRevalidate';
 
@@ -37,7 +37,9 @@ export function Queue() {
   // stops in order. A single delivery keeps the ordinary "Now" slip.
   const tripCount = data ? data.filter(isTripStop).length : 0;
   const position = useRiderPosition(tripCount >= 2);
-  const trip = data && tripCount >= 2 ? orderTrip(data, position) : null;
+  // Stops on the road in road order (OSRM via the API) when it answers.
+  const road = useRoadOrder(data ?? null, position, tripCount >= 2);
+  const trip = data && tripCount >= 2 ? orderTrip(data, position, road) : null;
   const inTrip = new Set(trip?.map((s) => s.delivery.delivery_id) ?? []);
   const rest = queue ? queue.next.filter((d) => !inTrip.has(d.delivery_id)) : [];
   // Set by the delivery screen when it had to send the rider back here.
@@ -152,8 +154,8 @@ function NowSlip({ delivery: d }: { delivery: DeliverySummary }) {
 /**
  * One trip, two (or more) orders: each stop is its own delivery with its own
  * handover code and cash, opened on the ordinary delivery screen. Stops are
- * in order: at the door, then nearest first on the road, then still at the
- * store (lib/trip.ts).
+ * in order: at the door, then on the road (road order when known, else
+ * nearest first), then still at the store (lib/trip.ts).
  */
 function TripView({ stops }: { stops: TripStop[] }) {
   const toPickUp = stops.filter((s) => nextAction(s.delivery).kind === 'pickUp').length;
@@ -186,6 +188,7 @@ function TripView({ stops }: { stops: TripStop[] }) {
                 <span className="mono">#{number}</span>
                 <span>{d.delivery_recipient_name}</span>
                 {s.distanceM !== null ? <span>{formatAway(s.distanceM)}</span> : <span>{d.delivery_city}</span>}
+                {s.roadMin !== null ? <span>{formatByRoad(s.roadMin)}</span> : null}
               </p>
               {owesCash(d) ? (
                 <p className="slip__cash">

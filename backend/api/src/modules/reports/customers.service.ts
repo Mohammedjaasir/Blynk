@@ -98,6 +98,38 @@ export async function listCustomers(params: { search?: string; sort: CustomerSor
   };
 }
 
+/** Most rows one export returns; far above today's customer count. */
+export const CUSTOMER_EXPORT_MAX = 50_000;
+
+/**
+ * GET /admin/customers/export (ADMIN only): every customer's name and phone
+ * with their order figures, by name, for the Admin "Download Excel" button.
+ * The owner sends promotional SMS from this sheet by hand.
+ */
+export async function exportCustomers() {
+  const rows = await baseQuery()
+    .select([
+      'u.full_name',
+      'u.phone',
+      'u.is_active',
+      'u.created_at',
+      sql<number>`coalesce(s.orders_count, 0)`.as('orders_count'),
+      sql<string>`coalesce(s.delivered_spend, 0)`.as('delivered_spend'),
+      sql<Date | null>`s.last_order_at`.as('last_order_at'),
+    ])
+    .orderBy(sql`u.full_name`, sql`asc nulls last`)
+    .orderBy('u.created_at', 'asc')
+    .limit(CUSTOMER_EXPORT_MAX)
+    .execute();
+  return {
+    customers: rows.map((r) => ({
+      ...r,
+      orders_count: Number(r.orders_count),
+      delivered_spend: money(r.delivered_spend),
+    })),
+  };
+}
+
 /** GET /admin/customers/:id: the profile, the same figures, and their order history (newest first). */
 export async function getCustomer(id: string, params: { page: number; limit: number }) {
   const customer = await baseQuery()

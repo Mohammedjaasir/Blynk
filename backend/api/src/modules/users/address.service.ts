@@ -2,6 +2,20 @@ import { addressRepository } from './address.repository.js';
 import { CreateAddressInput, UpdateAddressInput, UpdateProfileInput } from './address.schema.js';
 import { AppError } from '../../middleware/error.middleware.js';
 
+/**
+ * Migration 024: the additional number exists so the rider has someone else
+ * to call; the recipient's own number again adds nothing, so it is refused.
+ */
+function assertAlternateDiffers(recipientPhone: string | undefined, alternatePhone: string | null | undefined) {
+  if (recipientPhone && alternatePhone && recipientPhone === alternatePhone) {
+    throw new AppError(
+      'Additional phone number must be different from the recipient phone number.',
+      400,
+      'ALTERNATE_PHONE_SAME_AS_RECIPIENT'
+    );
+  }
+}
+
 export class AddressService {
   async listAddresses(userId: string) {
     return await addressRepository.findActiveAddressesByUserId(userId);
@@ -16,10 +30,22 @@ export class AddressService {
   }
 
   async createAddress(userId: string, input: CreateAddressInput) {
+    assertAlternateDiffers(input.recipient_phone, input.alternate_phone);
     return await addressRepository.createAddress(userId, input);
   }
 
   async updateAddress(id: string, userId: string, input: UpdateAddressInput) {
+    if (input.recipient_phone !== undefined || input.alternate_phone !== undefined) {
+      // A partial update is checked against what the address will hold afterwards.
+      const existing = await addressRepository.findAddressById(id, userId);
+      if (!existing) {
+        throw new AppError('Delivery address not found.', 404, 'ADDRESS_NOT_FOUND');
+      }
+      assertAlternateDiffers(
+        input.recipient_phone ?? existing.recipient_phone,
+        input.alternate_phone !== undefined ? input.alternate_phone : existing.alternate_phone
+      );
+    }
     const updated = await addressRepository.updateAddress(id, userId, input);
     if (!updated) {
       throw new AppError('Delivery address not found.', 404, 'ADDRESS_NOT_FOUND');

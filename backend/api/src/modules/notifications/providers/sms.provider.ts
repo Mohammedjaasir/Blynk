@@ -8,9 +8,22 @@ import {
   SendNotificationParams,
 } from '../notification.provider.js';
 
+/** SBS Telecom's API (portal.sbstelecom.net/api/v1, docs read 2026-10-05). */
+export const SBS_SMS_URL = 'https://portal.sbstelecom.net/api/v1/sms';
+
+const isSbs = () => env.SMS_PROVIDER === 'sbs';
+
+/**
+ * SMS through the gateway SMS_PROVIDER names: 'notifylk' (default) or 'sbs'
+ * (SBS Telecom, every Sri Lankan network). Both take the number as
+ * 947XXXXXXXX and the approved sender ID from SMS_SENDER_ID.
+ */
 export class SmsProvider implements NotificationProvider {
-  readonly name = 'notifylk';
   readonly channel = 'SMS' as const;
+
+  get name(): string {
+    return isSbs() ? 'sbstelecom' : 'notifylk';
+  }
 
   async send(params: SendNotificationParams): Promise<ProviderSendResult> {
     // 1. Recipient Phone Validation & Normalization
@@ -29,13 +42,15 @@ export class SmsProvider implements NotificationProvider {
     // 2. Determine Mock vs Real Gateway Dispatch
     if (
       (process.env.NODE_ENV === 'production' || env.NODE_ENV === 'production') &&
-      (!env.SMS_API_KEY || env.SMS_API_KEY.startsWith('dev_') || !env.SMS_USER_ID)
+      (!env.SMS_API_KEY || env.SMS_API_KEY.startsWith('dev_') || !(isSbs() ? env.SMS_API_SECRET : env.SMS_USER_ID))
     ) {
       return {
         success: false,
         providerName: this.name,
         errorType: 'PERMANENT',
-        errorMessage: 'Mock SMS is strictly prohibited in production: valid SMS_API_KEY and SMS_USER_ID required',
+        errorMessage: isSbs()
+          ? 'Mock SMS is strictly prohibited in production: valid SMS_API_KEY and SMS_API_SECRET required'
+          : 'Mock SMS is strictly prohibited in production: valid SMS_API_KEY and SMS_USER_ID required',
       };
     }
 
@@ -84,6 +99,8 @@ export class SmsProvider implements NotificationProvider {
         rawResponse: { status: 'success', mock: true, id: mockMessageId },
       };
     }
+
+    if (isSbs()) return this.sendViaSbs(normalizedPhone.replace(/^\+/, ''), params);
 
     // 3. Live NotifyLK API HTTP Integration
     try {
@@ -161,6 +178,56 @@ export class SmsProvider implements NotificationProvider {
         providerName: this.name,
         errorType: 'TRANSIENT',
         errorMessage: `Network error reaching NotifyLK gateway: ${errorMsg}`,
+      };
+    }
+  }
+  /**
+   * SBS Telecom: POST /sms with HTTP Basic key:secret and JSON
+   * {to, text, from}. 202 = accepted and charged (delivery is asynchronous);
+   * 200 with duplicate:true = this Idempotency-Key was already sent, so a
+   * retry of the same notification never texts the customer twice.
+   */
+  private async sendViaSbs(to: string, params: SendNotificationParams): Promise<ProviderSendResult> {
+    const name = this.name;
+    try {
+      const auth = Buffer.from(`${env.SMS_API_KEY ?? ''}:${env.SMS_API_SECRET ?? ''}`).toString('base64');
+      const response = await fetch(SBS_SMS_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'Idempotency-Key': `blynk-${params.idempotencyKey ?? params.notificationId}`.slice(0, 128),
+        },
+        body: JSON.stringify({ to, text: params.message, from: env.SMS_SENDER_ID || 'Blynk' }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+
+      if (response.status === 202 || (response.status === 200 && body?.duplicate === true)) {
+        return {
+          success: true,
+          providerName: name,
+          providerMessageId: typeof body?.message_id === 'string' ? body.message_id : `sbs_${Date.now()}`,
+          rawResponse: body,
+        };
+      }
+      // 429 and 5xx may pass on a retry; anything else (bad key, blocked IP,
+      // unapproved sender, no balance, bad number) will not.
+      const transient = response.status === 429 || response.status >= 500;
+      return {
+        success: false,
+        providerName: name,
+        errorType: transient ? 'TRANSIENT' : 'PERMANENT',
+        errorMessage: `SBS Telecom answered HTTP ${response.status}: ${JSON.stringify(body)}`,
+        rawResponse: body,
+      };
+    } catch (err: unknown) {
+      return {
+        success: false,
+        providerName: name,
+        errorType: 'TRANSIENT',
+        errorMessage: `Network error reaching SBS Telecom: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }

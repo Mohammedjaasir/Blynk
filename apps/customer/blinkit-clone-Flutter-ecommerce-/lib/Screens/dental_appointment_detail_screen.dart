@@ -15,6 +15,7 @@ import '../UI/Widgets/Atoms/money_text.dart';
 import '../UI/Widgets/Atoms/status_badge.dart';
 import '../UI/Widgets/Organisms/clinic_location_map.dart';
 import '../UI/Widgets/Organisms/dental_cancel_section.dart';
+import '../UI/Widgets/Organisms/dental_rating_section.dart';
 import '../UI/Widgets/Organisms/dental_widgets.dart';
 import '../UI/Widgets/Organisms/map_provider.dart';
 import '../app_responsive.dart';
@@ -288,6 +289,20 @@ class _DentalAppointmentDetailScreenState extends State<DentalAppointmentDetailS
           ),
         ),
       ),
+      // Rate your visit (backend `can_rate`), or the rating already given.
+      // The server's updated appointment replaces this screen's copy, so the
+      // form turns into "Your rating" without a refetch.
+      if (appointment.canRate || appointment.rating != null) ...[
+        const SizedBox(height: BlynkSpace.s16),
+        DentalRatingCard(
+          key: const ValueKey('dental-rating-section'),
+          appointment: appointment,
+          onRated: (updated) {
+            if (!mounted) return;
+            setState(() => _appointment = updated);
+          },
+        ),
+      ],
       // Cancel - shown ONLY when the backend's status is `CONFIRMED` (brief's
       // explicit, literal rule - not `can_cancel`, though the two agree in
       // this phase since DENTAL-07 enforces no cutoff yet). The stable key

@@ -100,6 +100,34 @@ class AppointmentClinicSummary {
   }
 }
 
+/// The customer's own rating of a finished visit - the `rating` block on
+/// the list/detail appointment DTOs and the `rating` half of
+/// `POST /dental/appointments/:id/rating`'s response:
+/// `{ stars: 1-5, comment: string | null, created_at }`.
+class DentalAppointmentRating {
+  final int stars;
+  final String? comment;
+  final DateTime? createdAt;
+
+  const DentalAppointmentRating({required this.stars, this.comment, this.createdAt});
+
+  /// Null for anything that is not a rating the backend could have stored:
+  /// not an object, or `stars` missing/outside 1-5. A blank comment reads as
+  /// no comment (the backend already turns an empty one into null).
+  static DentalAppointmentRating? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final map = json.cast<String, dynamic>();
+    final stars = num.tryParse((map['stars'] ?? '').toString())?.toInt();
+    if (stars == null || stars < 1 || stars > 5) return null;
+    final comment = map['comment']?.toString().trim();
+    return DentalAppointmentRating(
+      stars: stars,
+      comment: comment == null || comment.isEmpty ? null : comment,
+      createdAt: _date(map['created_at']),
+    );
+  }
+}
+
 class AppointmentModel {
   final String id;
   final String clinicDoctorId;
@@ -115,6 +143,14 @@ class AppointmentModel {
   final String? cancellationReason;
   final bool isCompleted;
   final bool canCancel;
+
+  /// The backend's own rule (`CONFIRMED`, the slot's `end_at` has passed,
+  /// and no rating exists yet) - the only thing that decides whether the
+  /// "Rate your visit" form is shown. Never re-derived client-side.
+  final bool canRate;
+
+  /// The customer's rating for this visit, once given.
+  final DentalAppointmentRating? rating;
   final AppointmentDoctorSummary? doctor;
   final AppointmentClinicSummary? clinic;
   final DateTime? createdAt;
@@ -134,6 +170,8 @@ class AppointmentModel {
     this.cancellationReason,
     this.isCompleted = false,
     this.canCancel = false,
+    this.canRate = false,
+    this.rating,
     this.doctor,
     this.clinic,
     this.createdAt,
@@ -159,6 +197,31 @@ class AppointmentModel {
   bool isHoldExpiredAt(DateTime now) =>
       status == AppointmentStatus.held && (heldUntil == null || !heldUntil!.isAfter(now));
 
+  /// This appointment with [value] as its rating and `canRate` off - for
+  /// the rare rating response that came back without the updated
+  /// appointment, so the screen still shows what the server just stored.
+  AppointmentModel withRating(DentalAppointmentRating value) => AppointmentModel(
+        id: id,
+        clinicDoctorId: clinicDoctorId,
+        status: status,
+        rawStatus: rawStatus,
+        startAt: startAt,
+        endAt: endAt,
+        heldUntil: heldUntil,
+        consultationFeeSnapshot: consultationFeeSnapshot,
+        patientName: patientName,
+        patientPhone: patientPhone,
+        patientNotes: patientNotes,
+        cancellationReason: cancellationReason,
+        isCompleted: isCompleted,
+        canCancel: canCancel,
+        canRate: false,
+        rating: value,
+        doctor: doctor,
+        clinic: clinic,
+        createdAt: createdAt,
+      );
+
   factory AppointmentModel.fromJson(Map<String, dynamic> json) {
     return AppointmentModel(
       id: (json['id'] ?? '').toString(),
@@ -175,6 +238,8 @@ class AppointmentModel {
       cancellationReason: json['cancellation_reason']?.toString(),
       isCompleted: json['is_completed'] == true,
       canCancel: json['can_cancel'] == true,
+      canRate: json['can_rate'] == true,
+      rating: DentalAppointmentRating.tryParse(json['rating']),
       doctor: AppointmentDoctorSummary.tryParse(json['doctor']),
       clinic: AppointmentClinicSummary.tryParse(json['clinic']),
       createdAt: _date(json['created_at']),

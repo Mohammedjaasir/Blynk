@@ -388,4 +388,64 @@ void main() {
       expect(outcome.isRefusal, isFalse);
     });
   });
+
+  group('rateAppointment', () {
+    test('posts stars + trimmed comment; success returns the rating and the rated appointment', () async {
+      api.routes['POST /dental/appointments/a1/rating'] = (query, body) => _envelope({
+            'rating': ratingJson(stars: 4, comment: 'Gentle and on time.'),
+            'appointment': appointmentJson(id: 'a1', rating: ratingJson(stars: 4, comment: 'Gentle and on time.')),
+          });
+
+      final outcome = await provider.rateAppointment(id: 'a1', stars: 4, comment: '  Gentle and on time.  ');
+
+      expect(api.calls.single['body'], {'stars': 4, 'comment': 'Gentle and on time.'});
+      expect(outcome.ok, isTrue);
+      expect(outcome.rating!.stars, 4);
+      expect(outcome.appointment!.id, 'a1');
+      expect(outcome.appointment!.canRate, isFalse);
+      expect(outcome.appointment!.rating!.comment, 'Gentle and on time.');
+    });
+
+    test('a blank comment is not sent at all', () async {
+      api.routes['POST /dental/appointments/a1/rating'] =
+          (query, body) => _envelope({'rating': ratingJson(stars: 2, comment: null)});
+      final outcome = await provider.rateAppointment(id: 'a1', stars: 2, comment: '   ');
+      expect(api.calls.single['body'], {'stars': 2});
+      expect(outcome.ok, isTrue);
+      expect(outcome.appointment, isNull);
+    });
+
+    test('409 ALREADY_RATED never throws: a typed refusal carrying the server message', () async {
+      api.routes['POST /dental/appointments/a1/rating'] =
+          (q, b) => ApiException(409, 'You have already rated this visit.', code: 'ALREADY_RATED');
+      final outcome = await provider.rateAppointment(id: 'a1', stars: 5);
+      expect(outcome.ok, isFalse);
+      expect(outcome.isRefusal, isTrue);
+      expect(outcome.isAlreadyRated, isTrue);
+      expect(outcome.error!.message, 'You have already rated this visit.');
+    });
+
+    test('422 VISIT_NOT_FINISHED is a refusal, not already-rated', () async {
+      api.routes['POST /dental/appointments/a1/rating'] =
+          (q, b) => ApiException(422, 'You can rate this visit once it is over.', code: 'VISIT_NOT_FINISHED');
+      final outcome = await provider.rateAppointment(id: 'a1', stars: 5);
+      expect(outcome.isRefusal, isTrue);
+      expect(outcome.isAlreadyRated, isFalse);
+    });
+
+    test('a timeout is not ok and not a refusal', () async {
+      api.routes['POST /dental/appointments/a1/rating'] =
+          (q, b) => ApiException(408, 'Connection timed out.', code: 'TIMEOUT');
+      final outcome = await provider.rateAppointment(id: 'a1', stars: 5);
+      expect(outcome.ok, isFalse);
+      expect(outcome.isRefusal, isFalse);
+    });
+
+    test('a success body without a rating is reported as an error, never a silent success', () async {
+      api.routes['POST /dental/appointments/a1/rating'] = (q, b) => _envelope({'rating': null});
+      final outcome = await provider.rateAppointment(id: 'a1', stars: 5);
+      expect(outcome.ok, isFalse);
+      expect(outcome.error!.statusCode, 500);
+    });
+  });
 }

@@ -21,6 +21,7 @@ import type {
   UpdateClinicInput,
   UpdateDoctorInput,
 } from './dental-admin.schema.js';
+import { NO_RATINGS, ratingSummaries } from './doctor-rating.service.js';
 
 function money(value: number | string | null): number | null {
   return value === null ? null : Number(value);
@@ -103,7 +104,9 @@ export class DentalAdminService {
 
   async listDoctorsAdmin(isActive?: boolean) {
     const rows = await dentalAdminRepository.findAllDoctorsAdmin(isActive);
-    return rows.map(toDoctorAdminDto);
+    // Migration 023: each doctor's visible rating average and count.
+    const ratings = await ratingSummaries(rows.map((r) => r.id));
+    return rows.map((row) => ({ ...toDoctorAdminDto(row), ...(ratings.get(row.id) ?? NO_RATINGS) }));
   }
 
   async getDoctorByIdAdmin(id: string) {

@@ -3,6 +3,10 @@ class AddressModel {
   final String label;
   final String recipientName;
   final String recipientPhone;
+
+  /// Optional second number the rider can call (backend migration 024).
+  /// Null when none was given; never the same as [recipientPhone].
+  final String? alternatePhone;
   final String addressLine1;
   final String? addressLine2;
   final String city;
@@ -17,6 +21,7 @@ class AddressModel {
     required this.label,
     required this.recipientName,
     required this.recipientPhone,
+    this.alternatePhone,
     required this.addressLine1,
     this.addressLine2,
     required this.city,
@@ -33,6 +38,7 @@ class AddressModel {
       label: (json['label'] ?? 'Home').toString(),
       recipientName: (json['recipient_name'] ?? json['recipientName'] ?? '').toString(),
       recipientPhone: (json['recipient_phone'] ?? json['recipientPhone'] ?? '').toString(),
+      alternatePhone: _optionalPhone(json['alternate_phone'] ?? json['alternatePhone']),
       addressLine1: (json['address_line1'] ?? json['addressLine1'] ?? '').toString(),
       addressLine2: (json['address_line2'] ?? json['addressLine2'])?.toString(),
       city: (json['city'] ?? '').toString(),
@@ -49,6 +55,8 @@ class AddressModel {
         'label': label,
         'recipient_name': recipientName,
         'recipient_phone': recipientPhone,
+        // Always sent, null when empty, so an edit can clear it.
+        'alternate_phone': alternatePhone,
         'address_line1': addressLine1,
         'address_line2': addressLine2,
         'city': city,
@@ -58,6 +66,11 @@ class AddressModel {
         'delivery_instructions': deliveryInstructions,
         'is_default': isDefault,
       };
+
+  static String? _optionalPhone(Object? value) {
+    final text = value?.toString().trim();
+    return (text == null || text.isEmpty) ? null : text;
+  }
 
   String get displaySummary =>
       [addressLine1, if (addressLine2 != null && addressLine2!.isNotEmpty) addressLine2, city]

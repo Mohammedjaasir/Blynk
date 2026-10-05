@@ -21,9 +21,11 @@ import 'package:ecom/app_theme.dart';
 
 class _Backend {
   double price = 540;
+  String groupName = 'Grocery & Kitchen';
   final Map<String, int> calls = {};
 
   int productCalls() => calls['/catalog/products'] ?? 0;
+  int groupCalls() => calls['/catalog/home-groups'] ?? 0;
 
   Future<dynamic> call(String url, Map<String, dynamic> query) async {
     calls[url] = (calls[url] ?? 0) + 1;
@@ -33,6 +35,23 @@ class _Backend {
         'data': {
           'categories': [
             {'id': 'c1', 'name': 'Dairy & Eggs', 'slug': 'dairy-eggs', 'description': null, 'image_url': null, 'display_order': 1},
+          ],
+        },
+      };
+    }
+    if (url == '/catalog/home-groups') {
+      return {
+        'success': true,
+        'data': {
+          'groups': [
+            {
+              'id': 'g1',
+              'name': groupName,
+              'sort_order': 0,
+              'categories': [
+                {'id': 'c1', 'name': 'Dairy & Eggs', 'slug': 'dairy-eggs', 'description': null, 'image_url': null, 'display_order': 1},
+              ],
+            },
           ],
         },
       };
@@ -94,14 +113,14 @@ void main() {
 
     await tester.pumpWidget(withProviders(const HomeScreen()));
     await tester.pumpAndSettle();
-    expect(find.textContaining('540'), findsWidgets);
+    expect(find.text('Grocery & Kitchen'), findsOneWidget);
 
-    backend.price = 750; // Admin saves a new price
+    backend.groupName = 'Fresh & Pantry'; // Ops renames the group
     await tester.fling(find.byType(CustomScrollView), const Offset(0, 400), 1200);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('750'), findsWidgets);
-    expect(find.textContaining('540'), findsNothing);
+    expect(find.text('Fresh & Pantry'), findsOneWidget);
+    expect(find.text('Grocery & Kitchen'), findsNothing);
   });
 
   group('CustomerShell', () {
@@ -144,6 +163,29 @@ void main() {
 
       expect(backend.productCalls(), 2);
       expect(products.productsFor('dairy-eggs').single.sellingPrice, 750);
+      await line.close();
+    });
+
+    // 2026-10-05: Home's category groups ride the same live event.
+    testWidgets('a pushed catalog event re-reads Home\'s category groups', (tester) async {
+      final line = StreamController<String>();
+      await products.loadHomeGroups();
+      expect(products.homeGroups.single.name, 'Grocery & Kitchen');
+      await tester.pumpWidget(withProviders(
+        CustomerShell(
+          catalogEvents: () => line.stream,
+          tabs: const [Text('shop tab'), Text('orders tab'), Text('help tab'), Text('profile tab')],
+        ),
+      ));
+      await tester.pump();
+      backend.groupName = 'Fresh & Pantry'; // saved in Blynk Ops
+
+      line.add('event: catalog\ndata: {"tables":["category_groups"]}\n\n');
+      await tester.pump();
+      await tester.pump();
+
+      expect(backend.groupCalls(), 2);
+      expect(products.homeGroups.single.name, 'Fresh & Pantry');
       await line.close();
     });
 

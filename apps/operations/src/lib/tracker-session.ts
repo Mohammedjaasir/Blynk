@@ -1,7 +1,7 @@
 import { ApiError } from '../api/client';
 import { delivery as deliveryApi } from '../api/resources';
 import type { DeliverySummary } from '../api/types';
-import { browserGeolocationPlugin } from './geolocation-plugin';
+import { deliveryLocationPlugin } from './location-mode';
 import { isTrackable } from './delivery';
 import { DeliveryTracker } from './tracking';
 
@@ -16,9 +16,12 @@ import { DeliveryTracker } from './tracking';
  * signing out stops it. `syncTrackingFromList` lets the screens that load the
  * whole list (Delivery queue, Home) start or stop it for the list as a whole.
  *
- * The one remaining difference from the Rider app: the watcher underneath is
- * the WebView's navigator.geolocation (geolocation-plugin.ts), not a native
- * background service, so it shares only while the app is open on screen.
+ * The watcher underneath (2026-10-02, location-mode.ts): in the Android app,
+ * once the operator agrees on the explanation screen, the same native
+ * foreground-service plugin as the Rider app, so sharing continues with the
+ * screen locked; posts go over native HTTP (api/native-client.ts). If they
+ * decline, or on the web, the WebView's navigator.geolocation
+ * (geolocation-plugin.ts), which shares only while the app is on screen.
  */
 /** A refusal after which this delivery can never be shared again by this operator. */
 function closesWindow(err: unknown): boolean {
@@ -26,7 +29,7 @@ function closesWindow(err: unknown): boolean {
 }
 
 function createTracker(): DeliveryTracker {
-  const tracker: DeliveryTracker = new DeliveryTracker(browserGeolocationPlugin, async (deliveryId, point) => {
+  const tracker: DeliveryTracker = new DeliveryTracker(deliveryLocationPlugin, async (deliveryId, point) => {
     try {
       await deliveryApi.sendLocation(deliveryId, {
         latitude: point.latitude,

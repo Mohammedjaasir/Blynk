@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Spinner, ToastProvider } from './components/ui';
 import { Cash } from './pages/Cash';
 import { Categories } from './pages/Categories';
+import { CategoryGroups } from './pages/CategoryGroups';
 import { Coupons } from './pages/Coupons';
 import { CustomerDetail, Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
@@ -62,6 +63,7 @@ export function AppRoutes() {
         <Route path="products/import" element={<AdminOnly><ProductImport /></AdminOnly>} />
         <Route path="products/:id" element={<AdminOnly><ProductForm /></AdminOnly>} />
         <Route path="categories" element={<AdminOnly><Categories /></AdminOnly>} />
+        <Route path="category-groups" element={<AdminOnly><CategoryGroups /></AdminOnly>} />
         <Route path="promotions" element={<AdminOnly><Promotions /></AdminOnly>} />
         <Route path="sales" element={<AdminOnly><Sales /></AdminOnly>} />
         <Route path="cash" element={<AdminOnly><Cash /></AdminOnly>} />
