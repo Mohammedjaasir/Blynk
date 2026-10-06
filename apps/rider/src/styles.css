@@ -658,6 +658,26 @@ a {
   white-space: nowrap;
 }
 
+.navigate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 16px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 17px;
+  text-decoration: none;
+}
+
+.navigate:active {
+  background: var(--paper-2);
+}
+
 .call__number {
   font-family: var(--mono);
   font-size: 14px;

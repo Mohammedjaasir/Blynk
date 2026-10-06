@@ -11,6 +11,7 @@ import 'package:ecom/Screens/live_location_picker_screen.dart';
 import 'package:ecom/Services/Location/device_location_source.dart';
 import 'package:ecom/Services/Providers/address.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
+import 'package:ecom/UI/Widgets/Atoms/blynk_text_field.dart';
 import 'package:ecom/UI/Widgets/Organisms/map_provider.dart';
 import 'package:ecom/UI/Widgets/Organisms/map_provider_config.dart';
 import 'package:ecom/UI/Widgets/Organisms/map_tile_config.dart' show kMapStyleAsset, debugMapStyleSource;
@@ -450,11 +451,11 @@ void main() {
       final button = find.ancestor(of: find.text('Use my current location'), matching: find.byType(OutlinedButton)).first;
       expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
 
-      // Same 12 dp breathing room above the button as below it (the note above
-      // ends, then AppSpacing.md, then the button).
-      final note = tester.getBottomLeft(find.text('Your delivery location helps us confirm service availability.'));
+      // Room above the button: the Address field ends, then at least 12 dp,
+      // then the button (the location note now sits BELOW the button).
+      final field = tester.getBottomLeft(find.widgetWithText(BlynkTextField, 'Address'));
       final top = tester.getTopLeft(button).dy;
-      expect(top - note.dy, greaterThanOrEqualTo(AppSpacing.md));
+      expect(top - field.dy, greaterThanOrEqualTo(AppSpacing.md));
     });
 
     testWidgets('at 1.6x the label is not clipped and the button stays reachable', (tester) async {

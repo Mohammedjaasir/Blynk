@@ -49,6 +49,17 @@ export function shouldReroute(lastFrom: LatLng | null, now: LatLng): boolean {
   return lastFrom === null || distanceM(lastFrom, now) >= REROUTE_AFTER_M;
 }
 
+/**
+ * Turn-by-turn directions in Google Maps (the app on Android, the site
+ * elsewhere): to the customer's pinned spot when there is one, otherwise to
+ * the typed address. The pin wins because a typed address in Dharga Town is
+ * often a landmark, not a door.
+ */
+export function googleMapsDirectionsUrl(destination: LatLng | null, address: string): string {
+  const target = destination ? `${destination.lat.toFixed(6)},${destination.lng.toFixed(6)}` : address;
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving&dir_action=navigate`;
+}
+
 /** "2.4 km · 9 min" (or "650 m · 3 min"). */
 export function formatRouteSummary(route: Pick<RoadRoute, 'distance_m' | 'duration_s'>): string {
   const d = route.distance_m < 1000 ? `${Math.round(route.distance_m)} m` : `${(route.distance_m / 1000).toFixed(1)} km`;

@@ -174,8 +174,9 @@ void main() {
       await tester.pumpWidget(bars(tester));
       expect(find.byIcon(Icons.payment), findsNothing);
       expect(tester.widget<Icon>(find.byIcon(Icons.payments_outlined)).color, BlynkColors.ink2);
-      expect(tester.widget<Icon>(find.byIcon(BlynkIcons.addressHome)).color, BlynkColors.ink2);
+      expect(tester.widget<Icon>(find.byIcon(BlynkIcons.addressOther)).color, BlynkColors.ink2);
       expect(find.byIcon(Icons.home_filled), findsNothing);
+      expect(find.byIcon(BlynkIcons.addressHome), findsNothing);
     });
 
     testWidgets('"Change" is ink, not a green link, and keeps its own name', (tester) async {

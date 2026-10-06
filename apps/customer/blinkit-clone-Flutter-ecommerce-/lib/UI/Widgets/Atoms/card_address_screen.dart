@@ -29,26 +29,12 @@ class AddressCard extends StatelessWidget {
   // list, where tapping does nothing but Edit/Delete/Default do.
   final VoidCallback? onSelect;
 
-  /// The glyph that matches the label the customer chose. `Other` and any
-  /// custom label fall back to the generic place pin — nothing is inferred
-  /// about the address itself.
-  IconData get _glyph {
-    switch (address.label.trim().toLowerCase()) {
-      case 'home':
-        return BlynkIcons.addressHome;
-      case 'work':
-        return BlynkIcons.addressWork;
-      default:
-        return BlynkIcons.addressOther;
-    }
-  }
-
   Future<void> _confirmDelete(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete address?'),
-        content: Text('Remove "${address.label}" from your saved addresses?'),
+        content: Text('Remove "${address.addressLine1}" from your saved addresses?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -100,8 +86,10 @@ class AddressCard extends StatelessWidget {
                     color: BlynkWell.tint,
                     borderRadius: BlynkWell.radius,
                   ),
-                  child: Icon(
-                    _glyph,
+                  // One pin for every address: customers no longer name them
+                  // Home/Work (2026-10-05), the address itself is the title.
+                  child: const Icon(
+                    BlynkIcons.addressOther,
                     color: BlynkWell.fallbackGlyph,
                     size: BlynkIcons.sm,
                   ),
@@ -116,8 +104,8 @@ class AddressCard extends StatelessWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              address.label,
-                              maxLines: 1,
+                              address.addressLine1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: BlynkText.heading,
                             ),
@@ -134,7 +122,7 @@ class AddressCard extends StatelessWidget {
                       ),
                       const SizedBox(height: BlynkSpace.s4),
                       Text(
-                        address.displaySummary,
+                        '${address.recipientName} · ${address.recipientPhone}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: BlynkText.caption.copyWith(color: BlynkColors.ink2),

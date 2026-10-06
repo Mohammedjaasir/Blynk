@@ -9,7 +9,8 @@ import { Sheet } from '../components/Sheet';
 import { StatusRail } from '../components/StatusRail';
 import { TrackingStatus } from '../components/TrackingStatus';
 import { DeliveryMap } from '../components/DeliveryMap';
-import { toLatLng } from '../lib/route';
+import { Navigation } from 'lucide-react';
+import { googleMapsDirectionsUrl, toLatLng } from '../lib/route';
 import { canReportFailure, isTrackable, nextAction, stage, statusLabel, statusTone } from '../lib/delivery';
 import { MESSAGES, deliveryCodeLockedUntil, errorCode, errorMessage } from '../lib/errors';
 import { formatMoney, formatPhone, formatTime, shortOrderNumber } from '../lib/format';
@@ -247,6 +248,20 @@ function Slip({ delivery: d, trackingState }: { delivery: DeliveryDetail; tracki
 
       {/* The route to the customer while the rider still has to get there. */}
       {destination && !done && !closed ? <DeliveryMap destination={destination} /> : null}
+      {done || closed ? null : (
+        <a
+          className="navigate"
+          href={googleMapsDirectionsUrl(
+            destination,
+            [d.delivery_address_line1, d.delivery_address_line2, d.delivery_city].filter(Boolean).join(', ')
+          )}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Navigation size={20} aria-hidden="true" />
+          <span>Navigate in Google Maps</span>
+        </a>
+      )}
 
       <section className="dest" aria-label="Destination">
         <p className="dest__line1">{d.delivery_address_line1}</p>

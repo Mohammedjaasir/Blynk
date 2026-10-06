@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
+import 'package:ecom/Infrastructure/LocalStorage/guest_choice_storage.dart';
 import 'package:ecom/Screens/Auth/login_screen.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/app_session_cleaner.dart';
@@ -20,9 +21,17 @@ const String kSessionEndedMessage = "You've been logged out. Log in again to see
 /// decided from what is stored on the device, so a returning customer goes
 /// straight to the shop with no network wait and no glimpse of the login
 /// screen; the session is re-checked in the background by [AuthProvider]. A
-/// guest sees the login screen (with its Skip).
+/// first-time guest sees the login screen (with its Skip); a guest who
+/// skipped before goes straight to the shop too (2026-10-05).
 class SessionGate extends StatefulWidget {
-  const SessionGate({super.key, this.pendingProductId});
+  const SessionGate({
+    super.key,
+    this.pendingProductId,
+    this.hasSkippedLogin = GuestChoiceStorage.hasSkippedLogin,
+  });
+
+  /// Whether this device chose "Skip for now" before. Injectable for tests.
+  final Future<bool> Function() hasSkippedLogin;
 
   /// Set when the app was opened from a shared product link: once the gate
   /// has decided, the product opens on top of the shop (or the login screen).
@@ -57,8 +66,10 @@ class _SessionGateState extends State<SessionGate> {
 
   Future<void> _decide() async {
     final signedIn = await context.read<AuthProvider>().restoreSession();
+    // Signed in, or a guest who already skipped: both open on the shop.
+    final toShop = signedIn || await widget.hasSkippedLogin();
     if (!mounted) return;
-    _signedIn = signedIn;
+    _signedIn = toShop;
     _leaveIfReady();
   }
 

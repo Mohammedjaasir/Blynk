@@ -28,8 +28,9 @@ export async function runDevSeed(): Promise<void> {
         'Dharga Town Central Dark Store',
         'Dharga Town',
         'No. 45, Main Street, Dharga Town',
-        6.438200,
-        80.027400,
+        -- Dharga Town Clock Tower (Plus Code C2R6+GH), the owner's chosen centre.
+        6.441313,
+        80.011437,
         4.00,
         '+94342270000',
         '08:00:00',
@@ -46,7 +47,7 @@ export async function runDevSeed(): Promise<void> {
       INSERT INTO service_areas (
         dark_store_id, area_name, center_latitude, center_longitude, radius_meters
       ) VALUES (
-        $1, 'Dharga Town 4km Zone', 6.438200, 80.027400, 4000
+        $1, 'Dharga Town 4km Zone', 6.441313, 80.011437, 4000
       )
       ON CONFLICT DO NOTHING;
     `, [storeId]);

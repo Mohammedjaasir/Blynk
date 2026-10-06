@@ -6,6 +6,7 @@ import 'package:ecom/Services/Validation/app_validators.dart';
 import 'package:ecom/UI/Widgets/Atoms/app_toast.dart';
 import 'package:provider/provider.dart';
 
+import 'package:ecom/Infrastructure/LocalStorage/guest_choice_storage.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/design/tokens.dart';
@@ -159,6 +160,12 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
     super.dispose();
   }
 
+  /// Both skips here: remembered, so the next launch opens on the shop.
+  void _skipToShop() {
+    unawaited(GuestChoiceStorage.rememberSkippedLogin());
+    Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final displayPhone = _phoneNumber.startsWith('+')
@@ -175,12 +182,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
         actions: [
           BlynkButton.tertiary(
             label: 'Skip',
-            onPressed: () {
-              Navigator.of(context).pushNamedAndRemoveUntil(
-                '/home',
-                (route) => false,
-              );
-            },
+            onPressed: _skipToShop,
           ),
           const SizedBox(width: BlynkSpace.s8),
         ],
@@ -282,12 +284,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                 Align(
                   child: BlynkButton.tertiary(
                     label: 'Skip & explore store',
-                    onPressed: () {
-                      Navigator.of(context).pushNamedAndRemoveUntil(
-                        '/home',
-                        (route) => false,
-                      );
-                    },
+                    onPressed: _skipToShop,
                   ),
                 ),
               ],

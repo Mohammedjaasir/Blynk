@@ -3,11 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ecom/Models/address_model.dart';
+import 'package:ecom/Models/user_model.dart';
 import 'package:ecom/Screens/add_edit_address_screen.dart';
+import 'package:ecom/Services/Location/device_location_source.dart';
+import 'package:ecom/UI/Widgets/Organisms/map_provider.dart';
 import 'package:ecom/Services/Providers/address.provider.dart';
+import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_text_field.dart';
-import 'package:ecom/app_colors.dart';
 import 'package:ecom/design/tokens.dart';
 import 'package:ecom/app_theme.dart';
 
@@ -19,6 +22,13 @@ class _RecordingAddressProvider extends AddressProvider {
   String? updatedId;
   Map<String, dynamic>? updatedPayload;
   bool shouldFail = false;
+
+  /// What the customer "already has" - decides whether a new address is the
+  /// first (and therefore the default).
+  List<AddressModel> existingList = [];
+
+  @override
+  List<AddressModel> get addresses => existingList;
 
   @override
   Future<AddressModel?> createAddress(AddressModel address) async {
@@ -38,6 +48,40 @@ class _RecordingAddressProvider extends AddressProvider {
     return null;
   }
 }
+
+/// A device that always grants and reports one fix, and a map that draws
+/// nothing: enough to share a location, which a new address now requires.
+class _FakeSource implements DeviceLocationSource {
+  @override
+  Future<bool> isLocationServiceEnabled() async => true;
+  @override
+  Future<LocationPermissionStatus> checkPermission() async => LocationPermissionStatus.granted;
+  @override
+  Future<LocationPermissionStatus> requestPermission() async => LocationPermissionStatus.granted;
+  @override
+  Future<DeviceFix> currentPosition() async => const DeviceFix(GeoPoint(6.5, 80.1));
+  @override
+  Future<bool> openAppSettings() async => true;
+  @override
+  Future<bool> openLocationSettings() async => true;
+}
+
+class _FakeMap extends LocationPickerMapView {
+  const _FakeMap() : super.constructor();
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+}
+
+class _FakeAuth extends AuthProvider {
+  _FakeAuth(this._user);
+  final UserModel? _user;
+
+  @override
+  UserModel? get currentUser => _user;
+}
+
+UserModel _user(String? name, String phone) =>
+    UserModel(id: 'u1', phone: phone, fullName: name, role: 'CUSTOMER');
 
 // Shaped exactly like a row from GET /api/v1/me/addresses.
 final _existing = AddressModel.fromJson(const {
@@ -64,20 +108,28 @@ void main() {
     WidgetTester tester, {
     AddressModel? existing,
     Size size = const Size(400, 900),
+    AuthProvider? auth,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AddressProvider>.value(
-        value: addresses,
-        child: MaterialApp(
-          theme: AppTheme.appTHeme,
-          home: AddEditAddressScreen(existing: existing),
-        ),
+    Widget app = MaterialApp(
+      theme: AppTheme.appTHeme,
+      home: AddEditAddressScreen(
+        existing: existing,
+        locationSource: _FakeSource(),
+        pickerMapBuilder: ({required initialPosition, required onPositionChanged}) => const _FakeMap(),
       ),
     );
+    app = MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AddressProvider>.value(value: addresses),
+        if (auth != null) ChangeNotifierProvider<AuthProvider>.value(value: auth),
+      ],
+      child: app,
+    );
+    await tester.pumpWidget(app);
     await tester.pump();
   }
 
@@ -87,10 +139,8 @@ void main() {
     }
   }
 
-  // The form is taller than a phone viewport, so anything below the fold
-  // needs scrolling into existence before it can be asserted on.
   Future<void> scrollToBottom(WidgetTester tester) async {
-    for (var i = 0; i < 6; i++) {
+    for (var i = 0; i < 3; i++) {
       await tester.drag(find.byType(ListView), const Offset(0, -260));
       await tester.pump();
     }
@@ -102,71 +152,114 @@ void main() {
   Finder fieldWith(String label) =>
       find.widgetWithText(BlynkTextField, label);
 
+  String textOf(WidgetTester tester, String label) => tester
+      .widget<TextField>(
+          find.descendant(of: fieldWith(label), matching: find.byType(TextField)))
+      .controller!
+      .text;
+
+  /// Required for a new address: tap the button, allow, confirm the pin.
+  Future<void> shareLocation(WidgetTester tester) async {
+    final button = find.byKey(const Key('address-use-location'));
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Allow location'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm location'));
+    await tester.pumpAndSettle();
+  }
+
   Future<void> fillRequired(WidgetTester tester) async {
-    await tester.enterText(fieldWith('Recipient name'), 'QA Tester');
-    await tester.enterText(fieldWith('Recipient phone'), '0771234567');
+    await tester.enterText(fieldWith('Name'), 'QA Tester');
+    await tester.enterText(fieldWith('Phone number'), '0771234567');
     await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
     await tester.pump();
+    await shareLocation(tester);
   }
 
   group('structure', () {
-    testWidgets('groups the form into labelled sections', (tester) async {
+    testWidgets('shows the four plain fields, the location button and the pinned bar',
+        (tester) async {
       await pumpScreen(tester);
 
       expect(find.text('Add Address'), findsOneWidget);
-      expect(find.text('Save address as'), findsOneWidget);
-      expect(find.text('Contact'), findsOneWidget);
-      expect(find.text('Delivery address'), findsOneWidget);
-
-      await scrollToBottom(tester);
-      expect(find.text('Location'), findsOneWidget);
-      expect(find.text('Delivery notes'), findsOneWidget);
+      expect(fieldWith('Name'), findsOneWidget);
+      expect(fieldWith('Phone number'), findsOneWidget);
+      expect(fieldWith('Another phone number (optional)'), findsOneWidget);
+      expect(fieldWith('Address'), findsOneWidget);
+      expect(find.text('Who will receive the order'), findsOneWidget);
+      expect(find.text('07XXXXXXXX'), findsOneWidget);
+      expect(find.text('Family or neighbour'), findsOneWidget);
+      expect(find.text('House number, street, near which place'), findsOneWidget);
+      expect(find.byKey(const Key('address-use-location')), findsOneWidget);
+      expect(find.text('Use my current location'), findsOneWidget);
       expect(find.text('Save address'), findsOneWidget);
       expect(find.text('Cancel'), findsOneWidget);
     });
 
-    testWidgets('explains the coordinates without implying a map',
+    testWidgets('no Home/Work/Other picker, headings, coordinates, notes or default switch',
         (tester) async {
       await pumpScreen(tester);
       await scrollToBottom(tester);
 
-      expect(find.text('Delivery location'), findsOneWidget);
-      expect(
-        find.text(
-          'Your delivery location helps us confirm service availability.',
-        ),
-        findsOneWidget,
-      );
-      // The old developer-facing note is gone, and no map is faked.
-      expect(find.textContaining('No map picker'), findsNothing);
-      expect(find.textContaining('map'), findsNothing);
-      // The real hub coordinates are still the defaults.
-      expect(find.text('6.4382'), findsOneWidget);
-      expect(find.text('80.0274'), findsOneWidget);
+      for (final gone in const [
+        'Save address as', 'Home', 'Work', 'Other', 'Address name',
+        'Contact', 'Delivery address', 'Location', 'Delivery notes',
+        'Latitude', 'Longitude', 'Delivery instructions',
+        'Default delivery address',
+      ]) {
+        expect(find.text(gone), findsNothing, reason: gone);
+      }
+      expect(fieldWith('Latitude'), findsNothing);
+      expect(fieldWith('Longitude'), findsNothing);
+      expect(find.byType(Switch), findsNothing);
     });
 
-    testWidgets('default-address setting reads as a setting, not a form row',
+    testWidgets('tells the customer to stand at home and tap the button',
         (tester) async {
       await pumpScreen(tester);
-      await scrollToBottom(tester);
 
-      expect(find.text('Default delivery address'), findsOneWidget);
+      expect(find.text('Share your location'), findsOneWidget);
       expect(
-        find.text('Use this address automatically at checkout'),
+        find.text('Stand at your home and tap the button, so the rider can find you.'),
         findsOneWidget,
       );
-      final toggle = tester.widget<Switch>(find.byType(Switch));
-      expect(toggle.value, isFalse);
-      expect(toggle.activeTrackColor, AppColors.primaryYellowColor);
+      expect(find.text('Location added'), findsNothing);
     });
   });
 
-  group('address name picker', () {
-    testWidgets('defaults to Home and saves it as the label', (tester) async {
+  group('new address prefill and defaults', () {
+    testWidgets('without an AuthProvider the name and phone start empty',
+        (tester) async {
       await pumpScreen(tester);
-      // No free-text name field while a preset is chosen.
-      expect(fieldWith('Address name'), findsNothing);
+      expect(textOf(tester, 'Name'), '');
+      expect(textOf(tester, 'Phone number'), '');
+    });
 
+    testWidgets('name and phone come from the account (+94 shown as 0)',
+        (tester) async {
+      await pumpScreen(tester, auth: _FakeAuth(_user('Nimal Perera', '+94771234567')));
+      expect(textOf(tester, 'Name'), 'Nimal Perera');
+      expect(textOf(tester, 'Phone number'), '0771234567');
+
+      await tester.enterText(fieldWith('Address'), 'No. 3, Temple Road');
+      await shareLocation(tester);
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+      expect(addresses.created?.recipientName, 'Nimal Perera');
+      expect(addresses.created?.recipientPhone, '+94771234567');
+    });
+
+    testWidgets('an account without a name leaves the name empty', (tester) async {
+      await pumpScreen(tester, auth: _FakeAuth(_user(null, '+94771234567')));
+      expect(textOf(tester, 'Name'), '');
+      expect(textOf(tester, 'Phone number'), '0771234567');
+    });
+
+    testWidgets('a new address is saved with the label Home', (tester) async {
+      await pumpScreen(tester);
       await fillRequired(tester);
       await tester.tap(find.text('Save address'));
       await settle(tester);
@@ -174,41 +267,28 @@ void main() {
       expect(addresses.created?.label, 'Home');
     });
 
-    testWidgets('Work preset writes into the same backend field',
-        (tester) async {
+    testWidgets('the first address becomes the default', (tester) async {
       await pumpScreen(tester);
-
-      await tester.tap(find.text('Work'));
-      await tester.pump();
       await fillRequired(tester);
       await tester.tap(find.text('Save address'));
       await settle(tester);
 
-      expect(addresses.created?.label, 'Work');
+      expect(addresses.created?.isDefault, isTrue);
     });
 
-    testWidgets('Other reveals a custom name and requires it', (tester) async {
+    testWidgets('a later address is not the default', (tester) async {
+      addresses.existingList = [_existing];
       await pumpScreen(tester);
-
-      await tester.tap(find.text('Other'));
-      await tester.pump();
-      expect(fieldWith('Address name'), findsOneWidget);
-
       await fillRequired(tester);
       await tester.tap(find.text('Save address'));
       await settle(tester);
-      expect(find.text('Enter a valid address name'), findsOneWidget);
-      expect(addresses.created, isNull);
 
-      await tester.enterText(fieldWith('Address name'), 'Parents');
-      await tester.tap(find.text('Save address'));
-      await settle(tester);
-      expect(addresses.created?.label, 'Parents');
+      expect(addresses.created?.isDefault, isFalse);
     });
   });
 
   group('editing', () {
-    testWidgets('prefills every real field and preselects the preset',
+    testWidgets('prefills every real field and offers Change my location',
         (tester) async {
       await pumpScreen(tester, existing: _existing);
 
@@ -216,25 +296,23 @@ void main() {
       expect(find.text('QA Tester'), findsOneWidget);
       expect(find.text('+94771234567'), findsOneWidget);
       expect(find.text('No. 12, Test Lane'), findsOneWidget);
-      // City and postal code are no longer asked (the hub's city is used).
+      // City and postal code are not asked (the hub's city is used).
       expect(fieldWith('City'), findsNothing);
       expect(fieldWith('Postal code'), findsNothing);
-      await scrollToBottom(tester);
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
-      // 'Work' matched a preset, so no custom name field is shown.
-      expect(fieldWith('Address name'), findsNothing);
+      // An existing address already has a location.
+      expect(find.text('Change my location'), findsOneWidget);
+      expect(find.text('Use my current location'), findsNothing);
+      expect(find.text('Location added'), findsOneWidget);
+      expect(find.text('The rider will come to this place.'), findsOneWidget);
     });
 
-    testWidgets('a custom label reopens under Other', (tester) async {
-      final custom = AddressModel.fromJson({
-        ..._existing.toCreatePayload(),
-        'id': _existing.id,
-        'label': 'Integration Test Home',
-      });
-      await pumpScreen(tester, existing: custom);
-
-      expect(fieldWith('Address name'), findsOneWidget);
-      expect(find.text('Integration Test Home'), findsOneWidget);
+    testWidgets('an edit ignores the signed-in account for name and phone',
+        (tester) async {
+      await pumpScreen(tester,
+          existing: _existing,
+          auth: _FakeAuth(_user('Someone Else', '+94700000000')));
+      expect(textOf(tester, 'Name'), 'QA Tester');
+      expect(textOf(tester, 'Phone number'), '+94771234567');
     });
 
     testWidgets('saving an edit sends the existing id and payload',
@@ -250,6 +328,41 @@ void main() {
       expect(addresses.updatedPayload?['label'], 'Work');
       expect(addresses.updatedPayload?['is_default'], true);
       expect(addresses.updatedPayload?['latitude'], 6.4382);
+    });
+
+    testWidgets('an edit keeps its label, instructions and default flag',
+        (tester) async {
+      final withNotes = AddressModel.fromJson({
+        ..._existing.toCreatePayload(),
+        'id': _existing.id,
+        'label': 'Integration Test Home',
+        'delivery_instructions': 'Leave at the gate',
+        'is_default': true,
+      });
+      await pumpScreen(tester, existing: withNotes);
+
+      await tester.enterText(fieldWith('Address'), 'No. 99, New Lane');
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      expect(addresses.updatedPayload?['label'], 'Integration Test Home');
+      expect(addresses.updatedPayload?['delivery_instructions'], 'Leave at the gate');
+      expect(addresses.updatedPayload?['is_default'], true);
+    });
+
+    testWidgets('a non-default edit stays non-default even with no other addresses',
+        (tester) async {
+      final notDefault = AddressModel.fromJson({
+        ..._existing.toCreatePayload(),
+        'id': _existing.id,
+        'is_default': false,
+      });
+      await pumpScreen(tester, existing: notDefault);
+
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      expect(addresses.updatedPayload?['is_default'], false);
     });
   });
 
@@ -280,19 +393,9 @@ void main() {
       expect(addresses.created!.postalCode, isNull);
       expect(addresses.created!.deliveryInstructions, isNull);
       expect(addresses.created!.city, 'Dharga Town');
-    });
-
-    testWidgets('the default toggle is carried through', (tester) async {
-      await pumpScreen(tester);
-      await fillRequired(tester);
-      await scrollToBottom(tester);
-
-      await tester.tap(find.byType(Switch));
-      await tester.pump();
-      await tester.tap(find.text('Save address'));
-      await settle(tester);
-
-      expect(addresses.created?.isDefault, isTrue);
+      // The location the customer shared (required for a new address).
+      expect(addresses.created!.latitude, 6.5);
+      expect(addresses.created!.longitude, 80.1);
     });
 
     testWidgets('a failed save keeps the form open', (tester) async {
@@ -341,16 +444,16 @@ void main() {
   });
 
   group('additional phone (migration 024)', () {
-    testWidgets('sits under Recipient phone, optional, with its hint',
+    testWidgets('sits under Phone number, optional, with its hint',
         (tester) async {
       await pumpScreen(tester);
 
-      final alt = fieldWith('Additional phone (optional)');
+      final alt = fieldWith('Another phone number (optional)');
       expect(alt, findsOneWidget);
-      expect(find.text('Another number we can call'), findsOneWidget);
+      expect(find.text('Family or neighbour'), findsOneWidget);
       expect(
         tester.getTopLeft(alt).dy,
-        greaterThan(tester.getTopLeft(fieldWith('Recipient phone')).dy),
+        greaterThan(tester.getTopLeft(fieldWith('Phone number')).dy),
       );
     });
 
@@ -371,7 +474,7 @@ void main() {
     testWidgets('a real number is normalized to E.164', (tester) async {
       await pumpScreen(tester);
       await fillRequired(tester);
-      await tester.enterText(fieldWith('Additional phone (optional)'), '071 234 5678');
+      await tester.enterText(fieldWith('Another phone number (optional)'), '071 234 5678');
 
       await tester.tap(find.text('Save address'));
       await settle(tester);
@@ -379,26 +482,20 @@ void main() {
       expect(addresses.created?.alternatePhone, '+94712345678');
     });
 
-    testWidgets('refuses letters while typing, like the recipient phone',
+    testWidgets('refuses letters while typing, like the phone number',
         (tester) async {
       await pumpScreen(tester);
 
-      await tester.enterText(fieldWith('Additional phone (optional)'), 'abc071x234');
+      await tester.enterText(fieldWith('Another phone number (optional)'), 'abc071x234');
       await tester.pump();
 
-      final field = tester.widget<TextField>(
-        find.descendant(
-          of: fieldWith('Additional phone (optional)'),
-          matching: find.byType(TextField),
-        ),
-      );
-      expect(field.controller!.text, '071234');
+      expect(textOf(tester, 'Another phone number (optional)'), '071234');
     });
 
     testWidgets('an invalid number blocks saving', (tester) async {
       await pumpScreen(tester);
       await fillRequired(tester);
-      await tester.enterText(fieldWith('Additional phone (optional)'), '12345');
+      await tester.enterText(fieldWith('Another phone number (optional)'), '12345');
 
       await tester.tap(find.text('Save address'));
       await settle(tester);
@@ -407,11 +504,11 @@ void main() {
       expect(addresses.created, isNull);
     });
 
-    testWidgets('the recipient phone again (any format) blocks saving',
+    testWidgets('the phone number again (any format) blocks saving',
         (tester) async {
       await pumpScreen(tester);
       await fillRequired(tester);
-      await tester.enterText(fieldWith('Additional phone (optional)'), '+94 77 123 4567');
+      await tester.enterText(fieldWith('Another phone number (optional)'), '+94 77 123 4567');
 
       await tester.tap(find.text('Save address'));
       await settle(tester);
@@ -430,7 +527,7 @@ void main() {
       await pumpScreen(tester, existing: withAlt);
 
       expect(find.text('+94712345678'), findsOneWidget);
-      await tester.enterText(fieldWith('Additional phone (optional)'), '');
+      await tester.enterText(fieldWith('Another phone number (optional)'), '');
       await tester.tap(find.text('Save address'));
       await settle(tester);
 
@@ -444,8 +541,8 @@ void main() {
     testWidgets('rejects "bbA Tester" in the phone field', (tester) async {
       await pumpScreen(tester);
 
-      await tester.enterText(fieldWith('Recipient name'), 'bbA Tester');
-      await tester.enterText(fieldWith('Recipient phone'), 'bbA Tester');
+      await tester.enterText(fieldWith('Name'), 'bbA Tester');
+      await tester.enterText(fieldWith('Phone number'), 'bbA Tester');
       await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
       await tester.tap(find.text('Save address'));
       await settle(tester);
@@ -460,9 +557,10 @@ void main() {
         (tester) async {
       await pumpScreen(tester);
 
-      await tester.enterText(fieldWith('Recipient name'), '  Mohammed   Jaasir ');
-      await tester.enterText(fieldWith('Recipient phone'), '077 123 4567');
+      await tester.enterText(fieldWith('Name'), '  Mohammed   Jaasir ');
+      await tester.enterText(fieldWith('Phone number'), '077 123 4567');
       await tester.enterText(fieldWith('Address'), 'No. 12,  Test Lane');
+      await shareLocation(tester);
       await tester.tap(find.text('Save address'));
       await settle(tester);
 
@@ -477,28 +575,10 @@ void main() {
         (tester) async {
       await pumpScreen(tester);
 
-      await tester.enterText(fieldWith('Recipient phone'), 'abc077x123');
+      await tester.enterText(fieldWith('Phone number'), 'abc077x123');
       await tester.pump();
 
-      final field = tester.widget<TextField>(
-        find.descendant(
-          of: fieldWith('Recipient phone'),
-          matching: find.byType(TextField),
-        ),
-      );
-      expect(field.controller!.text, '077123');
-    });
-
-    testWidgets('out-of-range coordinates are rejected', (tester) async {
-      await pumpScreen(tester);
-      await fillRequired(tester);
-      await scrollToBottom(tester);
-      await tester.enterText(fieldWith('Latitude'), '91');
-      await tester.tap(find.text('Save address'));
-      await settle(tester);
-
-      expect(find.text('Enter a valid latitude'), findsOneWidget);
-      expect(addresses.created, isNull);
+      expect(textOf(tester, 'Phone number'), '077123');
     });
 
     testWidgets('an old address keeps its second line, city and postal code',
@@ -536,14 +616,14 @@ void main() {
       await tester.tap(find.text('Save address'));
       await settle(tester);
 
-      final phone = tester.widget<BlynkTextField>(fieldWith('Recipient phone'));
+      final phone = tester.widget<BlynkTextField>(fieldWith('Phone number'));
       expect(phone.errorText, 'Enter a valid Sri Lankan mobile number');
 
       // The component's own error treatment: a 2 dp problem border and the
       // inline glyph, one per failing field. No rule was relaxed - all three
       // required fields still fail.
       final field = tester.widget<TextField>(
-        find.descendant(of: fieldWith('Recipient phone'), matching: find.byType(TextField)),
+        find.descendant(of: fieldWith('Phone number'), matching: find.byType(TextField)),
       );
       final border = field.decoration!.enabledBorder! as OutlineInputBorder;
       expect(border.borderSide.color, BlynkColors.problem);
@@ -568,9 +648,6 @@ void main() {
     testWidgets('exactly one yellow ACTION on the screen, and it is Save address', (tester) async {
       await pumpScreen(tester);
 
-      // Yellow actions only: the selected label chip and the default-address
-      // switch are selection chrome and are deliberately not counted (plan
-      // section 4.3 as settled in task-T2-report.md section 8 A).
       final yellowAction = find.descendant(
         of: find.byType(BlynkButton),
         matching: find.byWidgetPredicate(

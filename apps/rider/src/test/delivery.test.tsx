@@ -88,6 +88,36 @@ describe('Delivery', () => {
     expect(alt).toHaveAttribute('href', 'tel:+94712345678');
   });
 
+  it('opens Google Maps directions to the customer pin, falling back to the typed address', async () => {
+    const pinned = renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': () =>
+        ok({ delivery: detail({ ...onRoad, delivery_latitude: '6.4351', delivery_longitude: '80.0243' }) }),
+    });
+    const toPin = await screen.findByRole('link', { name: 'Navigate in Google Maps' });
+    expect(toPin.getAttribute('href')).toBe(
+      'https://www.google.com/maps/dir/?api=1&destination=6.435100%2C80.024300&travelmode=driving&dir_action=navigate'
+    );
+    pinned.unmount();
+
+    renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': () =>
+        ok({ delivery: detail({ delivery_address_line2: 'Near the clock tower' }) }),
+    });
+    const toAddress = await screen.findByRole('link', { name: 'Navigate in Google Maps' });
+    expect(toAddress.getAttribute('href')).toContain(
+      `destination=${encodeURIComponent('No. 1, Test Lane, Near the clock tower, Dharga Town')}`
+    );
+  });
+
+  it('offers no directions once the delivery is done', async () => {
+    renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': () =>
+        ok({ delivery: detail({ assignment_status: 'DELIVERED', order_status: 'DELIVERED', cod_collected_amount: 610 }) }),
+    });
+    expect(await screen.findByText('Delivered')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Navigate in Google Maps' })).not.toBeInTheDocument();
+  });
+
   it('never renders coordinates, costs or supplier details even if the API sent them - including once tracking is actively sharing', async () => {
     // The trackable window (plan §2.3) opens on pickup, and TrackingStatus
     // now legitimately renders passive sharing-state copy while it's open.

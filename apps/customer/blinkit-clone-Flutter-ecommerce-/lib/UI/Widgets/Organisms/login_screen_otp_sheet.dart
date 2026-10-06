@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:ecom/Infrastructure/LocalStorage/guest_choice_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:ecom/Services/Validation/app_validators.dart';
 import 'package:provider/provider.dart';
@@ -143,6 +146,8 @@ class _LoginwithMobileWidgetState extends State<LoginwithMobileWidget> {
                   child: BlynkButton.tertiary(
                     label: 'Skip for now',
                     onPressed: () {
+                      // Remembered: the next launch opens on the shop.
+                      unawaited(GuestChoiceStorage.rememberSkippedLogin());
                       Navigator.of(context).pushNamedAndRemoveUntil(
                         '/home',
                         (route) => false,

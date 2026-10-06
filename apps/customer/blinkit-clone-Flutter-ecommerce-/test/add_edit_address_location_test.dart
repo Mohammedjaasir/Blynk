@@ -112,66 +112,127 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  String textOf(WidgetTester tester, String label) => tester
-      .widget<TextField>(find.descendant(of: fieldWith(label), matching: find.byType(TextField)))
-      .controller!
-      .text;
-
-  testWidgets('offers "Use my current location" above the manual latitude/longitude fields', (tester) async {
-    await pumpScreen(tester);
-    await scrollToLocation(tester);
-
-    final button = tester.getTopLeft(find.text('Use my current location'));
-    expect(button.dy, lessThan(tester.getTopLeft(fieldWith('Latitude')).dy));
-    expect(fieldWith('Latitude'), findsOneWidget, reason: 'manual fields stay as fallback / correction');
-    expect(fieldWith('Longitude'), findsOneWidget);
-    expect(source.calls, 0, reason: 'nothing touches the device until the customer taps');
-  });
-
-  testWidgets('a confirmed location fills the latitude and longitude fields (6 decimals)', (tester) async {
-    await pumpScreen(tester);
-    await scrollToLocation(tester);
-
-    await tester.tap(find.text('Use my current location'));
+  Future<void> pickLocation(WidgetTester tester) async {
+    await tester.tap(find.byKey(const Key('address-use-location')));
     await tester.pumpAndSettle();
     expect(find.byType(LiveLocationPickerScreen), findsOneWidget);
     await tester.tap(find.text('Allow location'));
     await tester.pumpAndSettle();
+  }
+
+  testWidgets('offers a full-width "Use my current location" button and no manual coordinate fields', (tester) async {
+    await pumpScreen(tester);
+    await scrollToLocation(tester);
+
+    expect(find.byKey(const Key('address-use-location')), findsOneWidget);
+    final button = tester.getRect(find.byKey(const Key('address-use-location')));
+    final field = tester.getRect(fieldWith('Address'));
+    expect(button.width, field.width, reason: 'the button is full width');
+    expect(button.top, greaterThan(field.bottom));
+    expect(fieldWith('Latitude'), findsNothing);
+    expect(fieldWith('Longitude'), findsNothing);
+    expect(source.calls, 0, reason: 'nothing touches the device until the customer taps');
+  });
+
+  testWidgets('a confirmed location flips the button and the note', (tester) async {
+    await pumpScreen(tester);
+    await scrollToLocation(tester);
+    expect(find.text('Share your location'), findsOneWidget);
+    expect(find.text('Location added'), findsNothing);
+
+    await pickLocation(tester);
     movePin!(const GeoPoint(6.4411, 80.0333));
     await tester.pump();
     await tester.tap(find.text('Confirm location'));
     await tester.pumpAndSettle();
 
     expect(find.byType(LiveLocationPickerScreen), findsNothing);
-    expect(textOf(tester, 'Latitude'), '6.441100');
-    expect(textOf(tester, 'Longitude'), '80.033300');
+    expect(find.text('Location added'), findsOneWidget);
+    expect(find.text('The rider will come to this place.'), findsOneWidget);
+    expect(find.text('Share your location'), findsNothing);
+    expect(find.text('Change my location'), findsOneWidget);
+    expect(find.text('Use my current location'), findsNothing);
   });
 
-  testWidgets('cancelling / entering manually leaves the fields untouched', (tester) async {
+  testWidgets('a confirmed location is saved at 6 decimals precision', (tester) async {
     await pumpScreen(tester);
+    await tester.enterText(fieldWith('Name'), 'QA Tester');
+    await tester.enterText(fieldWith('Phone number'), '0771234567');
+    await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
     await scrollToLocation(tester);
 
-    await tester.tap(find.text('Use my current location'));
+    await pickLocation(tester);
+    movePin!(const GeoPoint(6.44111199, 80.03334999));
+    await tester.pump();
+    await tester.tap(find.text('Confirm location'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save address'));
+    await tester.pumpAndSettle();
+
+    expect(addresses.created!.latitude, 6.441112);
+    expect(addresses.created!.longitude, 80.03335);
+  });
+
+  testWidgets('backing out of the picker leaves the location unchanged', (tester) async {
+    await pumpScreen(tester);
+    await tester.enterText(fieldWith('Name'), 'QA Tester');
+    await tester.enterText(fieldWith('Phone number'), '0771234567');
+    await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
+    await scrollToLocation(tester);
+
+    await tester.tap(find.byKey(const Key('address-use-location')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Enter manually'));
     await tester.pumpAndSettle();
 
     expect(find.byType(LiveLocationPickerScreen), findsNothing);
-    expect(textOf(tester, 'Latitude'), '6.4382');
-    expect(textOf(tester, 'Longitude'), '80.0274');
+    expect(find.text('Share your location'), findsOneWidget);
+    expect(find.text('Location added'), findsNothing);
+    expect(find.text('Use my current location'), findsOneWidget);
+
+    // The location is required: without it nothing is saved and the note
+    // under the button turns into a plain request.
+    await tester.tap(find.text('Save address'));
+    await tester.pumpAndSettle();
+    expect(addresses.created, isNull);
+    expect(find.text('Please share your location'), findsOneWidget);
+  });
+
+  testWidgets('a new address cannot be saved until the location is shared', (tester) async {
+    await pumpScreen(tester);
+    await tester.enterText(fieldWith('Name'), 'QA Tester');
+    await tester.enterText(fieldWith('Phone number'), '0771234567');
+    await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
+    await tester.pump();
+
+    await tester.tap(find.text('Save address'));
+    await tester.pumpAndSettle();
+    expect(addresses.created, isNull);
+    expect(find.text('Please share your location'), findsOneWidget);
+    expect(source.calls, 0, reason: 'Save never opens the picker by itself');
+
+    await scrollToLocation(tester);
+    await pickLocation(tester);
+    await tester.tap(find.text('Confirm location'));
+    await tester.pumpAndSettle();
+    expect(find.text('Please share your location'), findsNothing);
+    expect(find.text('Location added'), findsOneWidget);
+
+    await tester.tap(find.text('Save address'));
+    await tester.pumpAndSettle();
+    expect(addresses.created, isNotNull);
+    expect(addresses.created!.latitude, 6.5);
   });
 
   testWidgets('the picked coordinate flows into the normal save', (tester) async {
     await pumpScreen(tester);
-    await tester.enterText(fieldWith('Recipient name'), 'QA Tester');
-    await tester.enterText(fieldWith('Recipient phone'), '0771234567');
+    await tester.enterText(fieldWith('Name'), 'QA Tester');
+    await tester.enterText(fieldWith('Phone number'), '0771234567');
     await tester.enterText(fieldWith('Address'), 'No. 12, Test Lane');
     await scrollToLocation(tester);
 
-    await tester.tap(find.text('Use my current location'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Allow location'));
-    await tester.pumpAndSettle();
+    await pickLocation(tester);
     await tester.tap(find.text('Confirm location'));
     await tester.pumpAndSettle();
 

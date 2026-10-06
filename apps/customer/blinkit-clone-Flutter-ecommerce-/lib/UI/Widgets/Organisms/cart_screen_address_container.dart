@@ -59,7 +59,7 @@ class _CartScreenAddressContainerState extends State<CartScreenAddressContainer>
               child: Row(
                 children: [
                   const Icon(
-                    BlynkIcons.addressHome,
+                    BlynkIcons.addressOther,
                     color: BlynkColors.ink2,
                     size: BlynkIcons.md,
                   ),
@@ -74,7 +74,7 @@ class _CartScreenAddressContainerState extends State<CartScreenAddressContainer>
                         // two type roles the payment row beside it uses.
                         Text(
                           address != null
-                              ? 'Delivering to ${address.label}'
+                              ? 'Deliver to'
                               : 'No delivery address yet',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

@@ -9,8 +9,8 @@
     "blynk:attribution-note": "The host app must render '© OpenStreetMap contributors' as a permanent overlay; the source attribution below is the fallback."
   },
   "center": [
-    80.0274,
-    6.4382
+    80.011437,
+    6.441313
   ],
   "zoom": 14,
   "sources": {

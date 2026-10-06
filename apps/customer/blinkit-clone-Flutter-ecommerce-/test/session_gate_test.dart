@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ecom/Infrastructure/LocalStorage/guest_choice_storage.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
@@ -139,6 +140,28 @@ void main() {
       expect(find.text('Skip'), findsOneWidget);
       expect(find.text('shop home'), findsNothing);
       expect(auth.isAuthenticated, isFalse);
+    });
+
+    testWidgets('a guest who skipped before goes straight to the shop', (tester) async {
+      FlutterSecureStorage.setMockInitialValues({'blynk_login_skipped': '1'});
+      final auth = AuthProvider(request: _requests({}));
+      addTearDown(auth.dispose);
+
+      await tester.pumpWidget(_app(auth));
+      var loginSeen = false;
+      await _pumpFrames(tester, each: () {
+        if (find.byType(LoginScreen).evaluate().isNotEmpty) loginSeen = true;
+      });
+
+      expect(loginSeen, isFalse);
+      expect(find.text('shop home'), findsOneWidget);
+      expect(auth.isAuthenticated, isFalse, reason: 'still a guest, just not asked again');
+    });
+
+    test('Skip for now is remembered on the device', () async {
+      expect(await GuestChoiceStorage.hasSkippedLogin(), isFalse);
+      await GuestChoiceStorage.rememberSkippedLogin();
+      expect(await GuestChoiceStorage.hasSkippedLogin(), isTrue);
     });
 
     testWidgets('a refresh token alone (no cached user) is still a session', (tester) async {

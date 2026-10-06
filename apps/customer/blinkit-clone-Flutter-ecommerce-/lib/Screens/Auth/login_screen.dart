@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:ecom/Infrastructure/LocalStorage/guest_choice_storage.dart';
 
 import 'package:ecom/Services/store_info.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
@@ -196,6 +199,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           // Opened over the shop by a guest choosing to log in:
                           // Skip goes back to it. As the first screen there is
                           // nothing underneath, so it opens the shop.
+                          // Remembered: the next launch opens on the shop.
+                          unawaited(GuestChoiceStorage.rememberSkippedLogin());
                           final navigator = Navigator.of(context);
                           if (navigator.canPop()) {
                             navigator.pop();
