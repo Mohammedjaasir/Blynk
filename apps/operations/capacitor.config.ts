@@ -10,6 +10,10 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // build leaves Capacitor's https default untouched.
 const lanHttp = process.env.CAP_LAN_HTTP === '1';
 
+// The app's pages are served inside the APK under this name (Capacitor's
+// default is https://localhost). It is only a label: no website is needed
+// there, but the API's CORS_ORIGINS must list it, because requests made from
+// the app's WebView carry it as their Origin.
 const config: CapacitorConfig = {
   appId: 'lk.blynk.ops',
   appName: 'Blynk Ops',
@@ -22,7 +26,8 @@ const config: CapacitorConfig = {
   android: {
     useLegacyBridge: true,
   },
-  ...(lanHttp ? { server: { androidScheme: 'http' } } : {}),
+  // Production origin of the app's WebView: https://ops.app.blynk.lk.
+  server: { hostname: 'ops.app.blynk.lk', androidScheme: lanHttp ? 'http' : 'https' },
 };
 
 export default config;
