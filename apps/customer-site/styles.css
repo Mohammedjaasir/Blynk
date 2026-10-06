@@ -123,9 +123,9 @@ a { color: inherit; }
   transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 .cta:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
-.cta--android { background: var(--yellow); color: var(--ink); border: 0; }
-.cta--android:hover { background: var(--yellow-press); }
-.cta--ios { background: var(--card); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(18, 21, 31, 0.05); }
+.cta--primary { background: var(--yellow); color: var(--ink); border: 0; }
+.cta--primary:hover { background: var(--yellow-press); }
+.cta--secondary { background: var(--card); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(18, 21, 31, 0.05); }
 .cta__icon { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .cta__text { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .cta__text strong { font-size: 19px; font-weight: 700; white-space: nowrap; }

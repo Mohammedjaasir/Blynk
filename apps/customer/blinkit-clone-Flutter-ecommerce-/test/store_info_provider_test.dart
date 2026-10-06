@@ -259,7 +259,7 @@ void main() {
       expect(find.text('LKR 100'), findsNothing);
     });
 
-    testWidgets('Help quotes the live fee', (tester) async {
+    testWidgets('Help never quotes a fee amount, even after the live fee changes', (tester) async {
       tester.view.physicalSize = const Size(400, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -273,12 +273,15 @@ void main() {
       );
       await tester.tap(find.text('How much is delivery?'));
       await tester.pumpAndSettle();
-      expect(find.text('Delivery is a flat LKR 100 per order.'), findsOneWidget);
+      const answer = 'The delivery fee is shown in your cart before you place your order.';
+      expect(find.text(answer), findsOneWidget);
+      expect(find.textContaining('LKR'), findsNothing);
 
       unawaited(store.load());
       server.complete(_store(fee: 200));
       await tester.pumpAndSettle();
-      expect(find.text('Delivery is a flat LKR 200 per order.'), findsOneWidget);
+      expect(find.text(answer), findsOneWidget);
+      expect(find.textContaining('LKR'), findsNothing);
     });
 
     testWidgets('without a StoreInfoProvider the default fee is shown', (tester) async {

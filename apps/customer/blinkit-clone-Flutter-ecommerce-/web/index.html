@@ -32,6 +32,12 @@
   <title>Blynk</title>
   <link rel="manifest" href="manifest.json">
 
+  <!-- MapLibre GL JS: the maplibre_gl plugin's web implementation draws the
+       tracking map and the location picker with it (maplibre_gl 0.25 README,
+       "Web"). Pinned to an exact 4.x so a release can't change the map. -->
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
   <script>
     // The value below is injected by flutter build, do not touch.
     var serviceWorkerVersion = null;

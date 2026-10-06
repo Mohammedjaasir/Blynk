@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../design/tokens.dart';
 import '../app_responsive.dart';
-import '../Models/order_format.dart';
-import '../Services/Providers/store_info.provider.dart';
 import '../Services/store_info.dart';
 import '../UI/Widgets/Atoms/list_tile.dart';
 import 'feedback_screen.dart';
@@ -20,16 +18,17 @@ import 'feedback_screen.dart';
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
-  /// The answers, with the live [deliveryFee] quoted.
-  static List<_Faq> _faqs(double deliveryFee) => [
-    const _Faq(
+  /// The answers. The delivery fee is not quoted: it can change, and the
+  /// cart always shows the one that applies (owner, 2026-10-06).
+  static const List<_Faq> _faqs = [
+    _Faq(
       question: 'Where do you deliver?',
       answer:
           'We deliver within ${StoreInfo.serviceRadiusKm} km of our '
           '${StoreInfo.hubName} hub. If your address falls outside that '
           'range, checkout will let you know before your order is placed.',
     ),
-    const _Faq(
+    _Faq(
       question: 'What are your delivery hours?',
       answer:
           'You can place an order any time, day or night. Deliveries go out '
@@ -37,22 +36,22 @@ class HelpScreen extends StatelessWidget {
     ),
     _Faq(
       question: 'How much is delivery?',
-      answer: 'Delivery is a flat ${formatLkr(deliveryFee)} per order.',
+      answer: 'The delivery fee is shown in your cart before you place your order.',
     ),
-    const _Faq(
+    _Faq(
       question: 'How can I pay?',
       answer:
           '${StoreInfo.paymentMethodLabel}. Pay the rider when your groceries '
           'arrive - no card or online payment needed.',
     ),
-    const _Faq(
+    _Faq(
       question: 'Can I cancel my order?',
       answer:
           'Yes, while your order is still Placed or Packed. Once it is out '
           'for delivery we can no longer cancel it. Open the order from '
           'Orders to cancel.',
     ),
-    const _Faq(
+    _Faq(
       question: 'Something was missing or wrong',
       answer:
           'Open the order from the Orders tab and check the item list first.',
@@ -110,7 +109,7 @@ class HelpScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: BlynkSpace.s24),
-              ..._faqs(watchDeliveryFee(context)).map((faq) => _FaqTile(faq: faq)),
+              ..._faqs.map((faq) => _FaqTile(faq: faq)),
               const SizedBox(height: BlynkSpace.s8),
               customListTile(
                 icon: BlynkIcons.feedback,

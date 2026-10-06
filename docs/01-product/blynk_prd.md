@@ -22,7 +22,7 @@ The following requirements represent confirmed business decisions harmonized acr
 | **Payment Method** | **Cash on Delivery (COD) ONLY**. No online card/wallet payments in Phase 1. | Online payment gateway (IPG, cards, wallets) deferred to Phase 3. |
 | **Inventory Model** | **On-demand sourcing/purchasing** from local partner merchants upon customer order placement (untracked dark-store inventory). | Stocked physical warehouse dark-store inventory with tracked stock levels (Phase 2). |
 | **Order Lifecycle** | **`PLACED → PACKED → OUT_FOR_DELIVERY → DELIVERED`**. No `CONFIRMED` intermediate state. | Algorithmic batch packing and dispatch (Phase 3). |
-| **Delivery Fee** | **Flat 100.00 LKR** per order, regardless of cart size or item count. | Dynamic or tiered delivery fees (Phase 3). |
+| **Delivery Fee** | One fee per order, regardless of cart size or item count, set by staff in Admin/Operations and liable to change. Customer-facing copy never quotes an amount; the cart shows it. | Dynamic or tiered delivery fees (Phase 3). |
 | **Pricing & Markup** | **Default 20.00% markup** over base purchase cost, with per-product override capability. | Promotional discounts, coupons, surge pricing (Phase 2+). |
 | **Delivery Radius** | **4.00 km** straight-line geodesic radius from the dark store hub. | Multi-store hub coverage expansion (Beruwala) (Phase 2). |
 | **Ordering Window** | **24/7 ordering** accepted. | Continuous 24/7 ordering maintained across all phases. |
@@ -56,7 +56,7 @@ The following requirements represent confirmed business decisions harmonized acr
 - **Customer Ordering Availability**: 24 hours a day, 7 days a week (24/7).
 - **Delivery Fulfillment Hours**: Daily from 8:00 AM to 9:00 PM (`Asia/Colombo` time).
 - **After-Hours Ordering**: Orders placed between 9:00 PM and 8:00 AM are successfully accepted, marked with `scheduled_for` set to 8:00 AM the following morning, and queued for early-morning packing and dispatch.
-- **Delivery Fee**: Flat 100.00 LKR applied to all orders.
+- **Delivery Fee**: one fee applied to all orders, set in Admin/Operations (it may change, so it is never quoted in marketing or help text; the cart shows it).
 - **Minimum Order Requirement**: No minimum order value. Customers can purchase single items.
 
 ### 3.4 Payment & Settlement

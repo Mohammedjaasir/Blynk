@@ -37,7 +37,7 @@ Blynk/
 
 ## Current Status
 
-- **Phase 1 Market**: Dharga Town, Sri Lanka (4 km radius, 1 dark store, 50 orders/day, 70 LKR flat delivery fee, COD only).
+- **Phase 1 Market**: Dharga Town, Sri Lanka (4 km radius, 1 dark store, 50 orders/day, delivery fee set in Admin, COD only).
 - **Backend Platform**: **Stage 1 (Backend Foundation) COMPLETED**. PostgreSQL 15+ schema migrated and seeded, 18/18 tests passing, `/health` endpoint live. Stage 2 (Authentication & Identity) is next.
 - **Customer Mobile Application**: Existing Flutter mobile client located in `apps/customer/blinkit-clone-Flutter-ecommerce-/`.
 

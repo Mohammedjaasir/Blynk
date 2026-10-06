@@ -1,6 +1,7 @@
 // Blynk landing - install behaviour (2026-09-29).
 //
-// "Add to Home Screen" installs the Blynk shop (the web app at /app/):
+// "Install Blynk" installs the Blynk shop (the web app at /app/) on Android
+// and iPhone alike - the launch is web-app first, Play Store later:
 // - Android Chrome/Edge fire `beforeinstallprompt`; we keep it and show the
 //   browser's own install prompt on click.
 // - iPhone/iPad have no install prompt: we show the Safari steps (Share ->
@@ -25,8 +26,7 @@
     else sheet.setAttribute('open', '');
   }
 
-  const installButton = document.querySelector('[data-install]');
-  installButton.addEventListener('click', async () => {
+  async function install() {
     if (standalone) {
       window.location.href = '/app/';
       return;
@@ -41,14 +41,14 @@
       return;
     }
     showGuide(isIOS ? 'ios' : isAndroid ? 'android' : 'desktop');
-  });
-
-  // On Android the full app is the APK; say so on the iOS card's subtitle
-  // only where it helps. Everywhere else the reference wording stays.
-  if (isAndroid) {
-    const small = installButton.querySelector('small');
-    if (small) small.textContent = 'Install the web app';
   }
+  for (const button of document.querySelectorAll('[data-install]')) button.addEventListener('click', install);
+
+  // Launch is web-app first on every phone (Play Store later), so the one
+  // install button names the reader's own phone where we can tell.
+  const installFor = document.querySelector('[data-install-for]');
+  if (installFor && isAndroid) installFor.textContent = 'For your Android phone';
+  else if (installFor && isIOS) installFor.textContent = 'For your iPhone';
 
   // Close the sheet by tapping the backdrop.
   sheet.addEventListener('click', (event) => {
@@ -120,9 +120,8 @@
     frame();
   }
 
-  // Delivery figures count up the first time they are seen. The target is
-  // re-read every frame, so a live value (below) that lands mid-count is used;
-  // the last frame writes the exact figure (a fee may have decimals).
+  // Delivery figures count up the first time they are seen; the last frame
+  // writes the exact figure.
   const formatCount = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
   const counters = document.querySelectorAll('[data-count]');
   if (!still && 'IntersectionObserver' in window) {
@@ -149,31 +148,6 @@
       }
     }, { threshold: 0.6 });
     counters.forEach((el) => co.observe(el));
-  }
-
-  // Live delivery fee from GET {API}/store. The <meta name="blynk-api"> holds
-  // the API base INCLUDING the version prefix - the same value as the
-  // Dockerfile's API_BASE_URL build argument, e.g. https://api.example.com/api/v1
-  // - so the request is `${API}/store`. Unset (placeholder/empty), a failed or
-  // slow request, or an odd value all keep the static figure in the HTML.
-  const feeEl = document.querySelector('[data-delivery-fee]');
-  const apiMeta = document.querySelector('meta[name="blynk-api"]');
-  const api = ((apiMeta && apiMeta.getAttribute('content')) || '').trim().replace(/\/+$/, '');
-  if (feeEl && api && api !== '__BLYNK_API__' && 'fetch' in window) {
-    const ctrl = 'AbortController' in window ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), 5000) : null;
-    fetch(`${api}/store`, { signal: ctrl ? ctrl.signal : undefined, headers: { Accept: 'application/json' } })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => {
-        const fee = body && body.success === true && body.data ? body.data.delivery_fee_lkr : undefined;
-        if (typeof fee !== 'number' || !Number.isFinite(fee) || fee < 0 || fee > 1000) return;
-        feeEl.dataset.count = String(fee);
-        // Not counting right now (not reached yet, already finished, or no
-        // animation at all): write the figure. A running count picks it up.
-        if (feeEl.dataset.counting !== '1') feeEl.textContent = formatCount(fee);
-      })
-      .catch(() => { /* keep the static fee */ })
-      .finally(() => { if (timer) clearTimeout(timer); });
   }
 
   // Footer year.

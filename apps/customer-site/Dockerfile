@@ -36,11 +36,4 @@ COPY --from=app /src/build/web /usr/share/nginx/html/app
 ARG ANDROID_APK_URL=/download/blynk.apk
 RUN sed -i "s#/download/blynk.apk#${ANDROID_APK_URL}#" /usr/share/nginx/html/index.html \
  && mkdir -p /usr/share/nginx/html/download
-# The landing page reads the live delivery fee from ${API_BASE_URL}/store, so
-# it needs the same API base (ending in /api/v1) as the shop. ARGs don't cross
-# build stages: re-declare it. Empty leaves the __BLYNK_API__ placeholder,
-# which app.js treats as unset (static fee). '#' is the sed delimiter, so the
-# value must not contain one (a URL never does).
-ARG API_BASE_URL
-RUN if [ -n "$API_BASE_URL" ]; then sed -i "s#__BLYNK_API__#${API_BASE_URL}#" /usr/share/nginx/html/index.html; fi
 EXPOSE 80
