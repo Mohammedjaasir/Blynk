@@ -4,6 +4,7 @@ import {
   ACTION_NAMES,
   adminStatusAction,
   packingBlockers,
+  isUncostedSubstitution,
   ITEM_WORK_STATES,
   type ActionName,
 } from '../src/modules/orders/lifecycle/catalogue.js';
@@ -224,6 +225,14 @@ describe('packing rule (D7, revised 2026-09-30: no separate sourcing)', () => {
   });
   it('blocks an empty bag', () => {
     expect(packingBlockers([it_('UNAVAILABLE'), it_('UNAVAILABLE')])).toEqual({ unsourced_substitutions: 0, packable_items: 0 });
+  });
+  it('an uncosted substitution is exactly what packing refuses (the board counts with the same rule)', () => {
+    expect(isUncostedSubstitution(it_('SUBSTITUTED', null))).toBe(true);
+    expect(isUncostedSubstitution({ item_status: 'SUBSTITUTED', actual_unit_cost: undefined } as any)).toBe(true);
+    expect(isUncostedSubstitution(it_('SUBSTITUTED', '5.00'))).toBe(false);
+    expect(isUncostedSubstitution(it_('SUBSTITUTED', 0 as any))).toBe(false);
+    expect(isUncostedSubstitution(it_('PENDING', null))).toBe(false);
+    expect(isUncostedSubstitution(it_('UNAVAILABLE', null))).toBe(false);
   });
 });
 

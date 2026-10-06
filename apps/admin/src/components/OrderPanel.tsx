@@ -65,11 +65,12 @@ export function OrderPanel({
 
   const actions = allowedActions(order, role);
   const primary = primaryAction(order, role);
-  // The board's summary cannot tell a substitution with a recorded cost from
-  // one without, so it blocks Pack on any substitution. The detail's items
-  // can: when they show every substitution has its cost, Pack is allowed.
+  // Pack follows the same rule as the board (a substitution without a cost
+  // blocks it), read from the detail's items when they are loaded - the
+  // fresher of the two - and from the board's summary until then.
   const packableFromItems = detail && detail.id === order.id ? isPackableFromItems(detail.items) : null;
-  const packEnabled = primary === 'pack' || (actions.includes('pack') && packableFromItems === true);
+  const packEnabled =
+    packableFromItems === null ? primary === 'pack' : actions.includes('pack') && packableFromItems;
 
   return (
     <aside className="order-panel" aria-label={`Order #${number}`}>

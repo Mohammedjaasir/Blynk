@@ -20,7 +20,7 @@ export interface QueueEntry {
 
 export interface QueueData {
   entries: QueueEntry[];
-  /** Open orders the backend has that this load did not read (beyond one page). */
+  /** Open orders the backend has that this load did not read (past the page bound). */
   notLoaded: number;
 }
 
@@ -42,13 +42,14 @@ export const isReadyToPack = (sourcing: OrderSourcing) =>
  * few at a time, never one request per order all at once.
  */
 export async function loadQueue(): Promise<QueueData> {
-  const { orders, total } = await sourcingApi.openOrders();
+  const { orders, total, truncated } = await sourcingApi.openOrders();
   const details = await mapLimit(orders, QUEUE_DETAIL_CONCURRENCY, (o) => sourcingApi.detail(o.id));
   const entries = orders
     .map((order, i) => ({ order, sourcing: details[i] }))
     .filter((entry) => entry.sourcing.metrics.pending_items > 0 || isReadyToPack(entry.sourcing))
     .sort((a, b) => a.order.placed_at.localeCompare(b.order.placed_at) || a.order.id.localeCompare(b.order.id));
-  return { entries, notLoaded: Math.max(0, total - orders.length) };
+  // Every page is read; only the page bound can leave orders unread.
+  return { entries, notLoaded: truncated ? Math.max(0, total - orders.length) : 0 };
 }
 
 const ITEM_TONE: Record<SourcingItem['item_status'], Tone> = {

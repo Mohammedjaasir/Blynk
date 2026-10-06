@@ -157,12 +157,26 @@ describe('overview', () => {
     expect(calls.every((c) => c.query.get('low_stock_only') === 'true' && c.query.get('limit') === '100')).toBe(true);
   });
 
-  it('says when more open orders exist than were loaded', async () => {
+  it('says when more open orders exist than the page bound let it load', async () => {
+    renderAs(STAFF, '/', {
+      'GET /admin/orders': (call) =>
+        ok({
+          orders: [],
+          pagination: call.query.get('status') === 'PLACED'
+            ? { page: 1, limit: 100, total: 2003, total_pages: 21 }
+            : { page: 1, limit: 100, total: 0, total_pages: 1 },
+        }),
+    });
+    expect(await screen.findByText(/2003 more open orders were not loaded/)).toBeInTheDocument();
+  });
+
+  it('says nothing about unloaded orders when every page fits within the bound', async () => {
     renderAs(STAFF, '/', {
       'GET /admin/orders': (call) =>
         ok({ orders: [], pagination: { page: 1, limit: 100, total: call.query.get('status') === 'PLACED' ? 3 : 0, total_pages: 1 } }),
     });
-    expect(await screen.findByText(/3 more open orders were not loaded/)).toBeInTheDocument();
+    expect(await screen.findByText('No tracked product is low or out of stock.')).toBeInTheDocument();
+    expect(screen.queryByText(/not loaded/)).not.toBeInTheDocument();
   });
 
   it('says what an empty overview means instead of showing blank space', async () => {

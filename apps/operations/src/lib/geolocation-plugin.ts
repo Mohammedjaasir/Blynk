@@ -53,6 +53,12 @@ export interface TrackingPlugin {
     onError: (code: 'permission_denied' | 'position_unavailable') => void
   ): Promise<void>;
   stop(): Promise<void>;
+  /**
+   * Optional: asked after location is granted and before start(). Resolves
+   * false when the watcher's notification will be hidden (Android 13+
+   * notifications refused). Never blocks sharing - only adds a status note.
+   */
+  ensureNotifications?(): Promise<boolean>;
 }
 
 /** Per the W3C Geolocation API spec: `GeolocationPositionError.code` is

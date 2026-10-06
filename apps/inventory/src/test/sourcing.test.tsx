@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { tokenStore } from '../api/client';
+import { MAX_ORDER_PAGES } from '../api/resources';
 import type { OrderSourcing, SourcingItem } from '../api/types';
 import { QUEUE_DETAIL_CONCURRENCY } from '../pages/SourcingQueue';
 import { STAFF, fail, ok, pageOf, renderAs, stockRow, supplier } from './helpers';
@@ -300,17 +301,42 @@ describe('sourcing queue: loading', () => {
     expect(QUEUE_DETAIL_CONCURRENCY).toBe(5);
   });
 
-  it('says when the backend has more open orders than were loaded (pagination.total)', async () => {
-    renderAs(STAFF, '/sourcing', queueHandlers({
+  it('reads every page of open orders in turn (pagination.total_pages), so none goes unloaded', async () => {
+    const { api } = renderAs(STAFF, '/sourcing', queueHandlers({
+      'GET /admin/orders': (call: any) =>
+        ok(
+          call.query.get('status') !== 'PLACED'
+            ? { orders: [], pagination: { page: 1, limit: 100, total: 0, total_pages: 1 } }
+            : call.query.get('page') === '2'
+              ? { orders: [DONE_ORDER], pagination: { page: 2, limit: 100, total: 130, total_pages: 2 } }
+              : { orders: [ORDER], pagination: { page: 1, limit: 100, total: 130, total_pages: 2 } }
+        ),
+    }));
+    expect(await screen.findByText('BL-20260918-1301')).toBeInTheDocument();
+    expect(screen.getByRole('rowgroup', { name: 'Order BL-20260918-1300' })).toBeInTheDocument();
+    expect(screen.queryByText(/not loaded/)).not.toBeInTheDocument();
+    expect(ordersLimitRequested()).toBe('100');
+    expect(
+      api.find('GET', '/admin/orders').map((c) => [c.query.get('status'), c.query.get('page'), c.query.get('limit')])
+    ).toEqual([
+      ['PLACED', '1', '100'],
+      ['PLACED', '2', '100'],
+      ['ITEM_UNAVAILABLE', '1', '100'],
+    ]);
+  });
+
+  it('stops at the page bound and says how many open orders were not loaded', async () => {
+    const { api } = renderAs(STAFF, '/sourcing', queueHandlers({
       'GET /admin/orders': (call: any) =>
         ok(
           call.query.get('status') === 'PLACED'
-            ? { orders: [ORDER], pagination: { page: 1, limit: 100, total: 130, total_pages: 2 } }
+            ? { orders: [ORDER], pagination: { page: Number(call.query.get('page')), limit: 100, total: 2600, total_pages: 26 } }
             : { orders: [], pagination: { page: 1, limit: 100, total: 0, total_pages: 1 } }
         ),
     }));
-    expect(await screen.findByText(/129 more orders were not loaded/)).toBeInTheDocument();
-    expect(ordersLimitRequested()).toBe('100');
+    // One order per page here, so the read stops early (a short page is the last); only the bound flags the rest.
+    expect(await screen.findByText(/2599 more orders were not loaded/)).toBeInTheDocument();
+    expect(api.find('GET', '/admin/orders').filter((c) => c.query.get('status') === 'PLACED').length).toBeLessThanOrEqual(MAX_ORDER_PAGES);
   });
 
   it('pages through every product for the stock column, not just the first 100', async () => {

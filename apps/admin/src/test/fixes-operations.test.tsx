@@ -329,9 +329,39 @@ describe('orders: item unavailable and proof of delivery', () => {
     );
   });
 
-  it('Pack is allowed from the panel when every substitution has its cost', async () => {
+  it('the row offers Pack when the substitution has its cost (uncosted_substitutions is 0)', async () => {
+    const o = boardOrder({
+      items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 1, uncosted_substitutions: 0 },
+    });
+    renderOrders([o]);
+    expect(await screen.findByRole('button', { name: /^Pack #/ })).toBeEnabled();
+    expect(screen.queryByText('Substitution needs a cost')).not.toBeInTheDocument();
+  });
+
+  it('a substitution without a cost blocks Pack on the row and in the panel', async () => {
     const user = userEvent.setup();
-    const o = boardOrder({ items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 1 } });
+    const o = boardOrder({
+      items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 1, uncosted_substitutions: 1 },
+    });
+    const items = [
+      { id: 'i1', product_name_snapshot: 'Milk', quantity: 1, item_status: 'PENDING', actual_unit_cost: null },
+      { id: 'i2', product_name_snapshot: 'Butter (substitute)', quantity: 1, item_status: 'SUBSTITUTED', actual_unit_cost: null },
+    ];
+    renderOrders([o], (c) => (c.method === 'GET' && c.path === `/admin/orders/${o.id}` ? ok({ order: detailOf(o, items) }) : undefined));
+    expect(await screen.findByText('Substitution needs a cost')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Pack #/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Open order/ }));
+    const panel = await screen.findByRole('complementary', { name: /Order #/ });
+    await screen.findByText('Butter (substitute)');
+    expect(within(panel).getByRole('button', { name: 'Pack' })).toBeDisabled();
+  });
+
+  it('Pack is allowed from the panel when the loaded items show every substitution has its cost', async () => {
+    const user = userEvent.setup();
+    // The board's read is older (the cost was recorded since); the panel's items are fresher.
+    const o = boardOrder({
+      items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 1, uncosted_substitutions: 1 },
+    });
     const items = [
       { id: 'i1', product_name_snapshot: 'Milk', quantity: 1, item_status: 'PENDING', actual_unit_cost: null },
       { id: 'i2', product_name_snapshot: 'Butter (substitute)', quantity: 1, item_status: 'SUBSTITUTED', actual_unit_cost: '690.00' },
@@ -341,7 +371,6 @@ describe('orders: item unavailable and proof of delivery', () => {
       if (c.method === 'PATCH') return ok({ order: o });
       return undefined;
     });
-    // The board's summary cannot tell, so the row still holds back.
     expect(await screen.findByText('Substitution needs a cost')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Open order/ }));
     const panel = await screen.findByRole('complementary', { name: /Order #/ });
@@ -369,18 +398,43 @@ describe('lists that used to cap silently', () => {
     seq = 0;
   });
 
-  it('live orders: says when more exist than the board shows; Done today uses the totals', async () => {
-    const live = [boardOrder(), boardOrder()];
-    renderApp('/orders', (c) => {
+  it('live orders: every page is read in turn, so nothing is hidden; Done today uses the totals', async () => {
+    const all = Array.from({ length: 150 }, () => boardOrder());
+    const api = renderApp('/orders', (c) => {
       if (c.path !== '/admin/orders') return undefined;
       const status = c.query.get('status');
       if (status === 'DELIVERED') return page([boardOrder({ order_status: 'DELIVERED' })], 137);
       if (status === 'CANCELLED') return page([], 4);
-      return page(live, 150);
+      const n = Number(c.query.get('page') ?? '1');
+      return ok({ orders: all.slice((n - 1) * 100, n * 100), pagination: { page: n, limit: 100, total: 150, total_pages: 2 } });
     });
-    expect(await screen.findByText(/Showing 2 of 150 live orders — refine the view/)).toBeInTheDocument();
     expect(await screen.findByText('137 delivered · 4 cancelled')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Open order/ })).toHaveLength(150));
+    expect(screen.queryByText(/Showing \d+ of/)).not.toBeInTheDocument();
+    const livePages = api.calls
+      .filter((c) => c.path === '/admin/orders' && c.query.get('status')?.includes('PLACED'))
+      .map((c) => [c.query.get('page'), c.query.get('limit')]);
+    expect(livePages).toEqual([
+      ['1', '100'],
+      ['2', '100'],
+    ]);
   });
+
+  it('live orders: stops at the page bound and says how many were not loaded', async () => {
+    const api = renderApp('/orders', (c) => {
+      if (c.path !== '/admin/orders') return undefined;
+      const status = c.query.get('status');
+      if (status === 'DELIVERED' || status === 'CANCELLED') return page([], 0);
+      const n = Number(c.query.get('page') ?? '1');
+      const orders = Array.from({ length: 100 }, (_, i) => boardOrder({ id: `o-${n}-${i}` }));
+      return ok({ orders, pagination: { page: n, limit: 100, total: 2500, total_pages: 25 } });
+    });
+    expect(
+      await screen.findByText(/Showing 2000 of 2500 live orders — the board loads at most 2,000/, undefined, { timeout: 20_000 })
+    ).toBeInTheDocument();
+    const livePages = api.calls.filter((c) => c.path === '/admin/orders' && c.query.get('status')?.includes('PLACED'));
+    expect(livePages).toHaveLength(20);
+  }, 30_000);
 
   it('products: every page is read, not just the first 200', async () => {
     const product = (i: number) => ({ id: `p${i}`, name: `Product ${i}`, is_active: i % 2 === 0, is_available: true });
@@ -417,19 +471,21 @@ describe('lists that used to cap silently', () => {
 
 // ------------------------------------------------------------- 9. cash
 describe('cash hand-ins for inactive riders', () => {
-  const STAFF = [
-    { id: 'u1', full_name: 'Kamal', phone: '+94770000001', role: 'RIDER', rider: { id: 'r1', is_active: true } },
-    { id: 'u2', full_name: 'Old Rider', phone: '+94770000002', role: 'RIDER', rider: { id: 'r2', is_active: false } },
-    { id: 'u3', full_name: 'Packer', phone: '+94770000003', role: 'PACKING_STAFF', rider: null },
+  const RIDERS = [
+    { id: 'r1', full_name: 'Kamal', phone: '+94770000001', vehicle_type: 'MOTORCYCLE', vehicle_registration_number: 'X', open_deliveries: 0, is_active: true },
+    // A disabled rider with no staff account: only include_inactive lists them.
+    { id: 'r2', full_name: 'Old Rider', phone: '+94770000002', vehicle_type: 'MOTORCYCLE', vehicle_registration_number: 'Y', open_deliveries: 0, is_active: false },
   ];
 
-  it('handinRiders adds inactive rider profiles after the active ones', () => {
-    const active = [{ id: 'r1', full_name: 'Kamal', phone: '+94770000001', vehicle_type: 'MOTORCYCLE', vehicle_registration_number: 'X', open_deliveries: 0 }];
-    expect(handinRiders(active, STAFF as never, { id: 'r9', name: 'Gone' })).toEqual([
+  it('handinRiders lists active riders first, then inactive ones marked "(inactive)"', () => {
+    expect(handinRiders([RIDERS[1], RIDERS[0]], { id: 'r9', name: 'Gone' })).toEqual([
       { id: 'r1', label: 'Kamal', inactive: false },
       { id: 'r9', label: 'Gone (inactive)', inactive: true },
       { id: 'r2', label: 'Old Rider (inactive)', inactive: true },
     ]);
+    // Rows without the flag (an older API) count as active.
+    const { is_active: _flag, ...plain } = RIDERS[0];
+    expect(handinRiders([plain])).toEqual([{ id: 'r1', label: 'Kamal', inactive: false }]);
   });
 
   it('the hand-in dialog offers an inactive rider and records for them', async () => {
@@ -438,8 +494,7 @@ describe('cash hand-ins for inactive riders', () => {
       if (c.path === '/admin/cash/reconciliation')
         return ok({ date: '2026-10-06', timezone: 'Asia/Colombo', riders: [], totals: { collected: 0, handed_in: 0, difference: 0, status: 'BALANCED' } });
       if (c.method === 'GET' && c.path === '/admin/cash/handins') return ok({ handins: [] });
-      if (c.path === '/admin/riders') return ok({ riders: [{ id: 'r1', full_name: 'Kamal', phone: '+94770000001', vehicle_type: 'MOTORCYCLE', vehicle_registration_number: 'X', open_deliveries: 0 }] });
-      if (c.path === '/admin/staff') return ok({ staff: STAFF });
+      if (c.path === '/admin/riders') return ok({ riders: c.query.get('include_inactive') === 'true' ? RIDERS : [RIDERS[0]] });
       if (c.method === 'POST' && c.path === '/admin/cash/handins')
         return ok({ handin: { id: 'h1', rider_id: 'r2', rider_name: 'Old Rider', amount: 1500, handin_date: '2026-10-06', note: null } });
       return undefined;
@@ -452,6 +507,9 @@ describe('cash hand-ins for inactive riders', () => {
     await user.type(within(dialog).getByLabelText(/Amount/), '1500');
     await user.click(within(dialog).getByRole('button', { name: 'Record' }));
     await waitFor(() => expect(api.find('POST', '/admin/cash/handins')[0]?.body).toMatchObject({ rider_id: 'r2', amount: 1500 }));
+    expect(api.find('GET', '/admin/riders')[0]?.query.get('include_inactive')).toBe('true');
+    // The staff list is no longer needed to find inactive riders.
+    expect(api.find('GET', '/admin/staff')).toHaveLength(0);
   });
 });
 

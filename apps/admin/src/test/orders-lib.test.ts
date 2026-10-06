@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { allowedActions, formatAge, isPackable, laneOf, primaryAction, type BoardOrderLike } from '../lib/orders';
+import { allowedActions, formatAge, isPackable, laneOf, primaryAction, uncostedSubstitutions, type BoardOrderLike } from '../lib/orders';
 
 /**
  * The Orders board's display rules. They mirror the backend lifecycle
@@ -44,6 +44,28 @@ describe('isPackable (D7, revised: no separate sourcing step)', () => {
     expect(isPackable(order({ items_summary: { total: 1, pending: 0, sourced: 0, packed: 0, unavailable: 0, substituted: 1 } }))).toBe(false);
     expect(isPackable(order({ items_summary: { total: 1, pending: 0, sourced: 0, packed: 0, unavailable: 1, substituted: 0 } }))).toBe(false);
     expect(isPackable(order({ items_summary: { total: 2, pending: 0, sourced: 1, packed: 0, unavailable: 1, substituted: 0 } }))).toBe(true);
+  });
+
+  it('blocks only on a substitution without its cost (uncosted_substitutions, the backend packing rule)', () => {
+    const s = (substituted: number, uncosted: number, pending = 0, unavailable = 0) => ({
+      total: substituted + pending + unavailable,
+      pending,
+      sourced: 0,
+      packed: 0,
+      unavailable,
+      substituted,
+      uncosted_substitutions: uncosted,
+    });
+    expect(isPackable(order({ items_summary: s(1, 0) }))).toBe(true);
+    expect(isPackable(order({ items_summary: s(1, 0, 1) }))).toBe(true);
+    expect(isPackable(order({ items_summary: s(2, 1, 1) }))).toBe(false);
+    expect(isPackable(order({ items_summary: s(1, 1, 1) }))).toBe(false);
+    expect(isPackable(order({ items_summary: s(0, 0, 0, 2) }))).toBe(false);
+    expect(primaryAction(order({ items_summary: s(1, 0) }), 'ADMIN')).toBe('pack');
+    expect(primaryAction(order({ items_summary: s(1, 1, 1) }), 'ADMIN')).toBeNull();
+    expect(uncostedSubstitutions(s(3, 2))).toBe(2);
+    // An older API without the count: every substitution is treated as uncosted.
+    expect(uncostedSubstitutions({ total: 1, pending: 0, sourced: 0, packed: 0, unavailable: 0, substituted: 1 })).toBe(1);
   });
 });
 

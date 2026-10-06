@@ -1,7 +1,7 @@
 import { sql, Transaction } from 'kysely';
 import { db } from '../../database/connection.js';
 import { Database, OrderStatus, ItemFulfillmentStatus } from '../../database/types.js';
-import { ACTIVE_DELIVERY_STATUSES, INITIAL_ORDER_STATUS } from './lifecycle/catalogue.js';
+import { ACTIVE_DELIVERY_STATUSES, INITIAL_ORDER_STATUS, isUncostedSubstitution } from './lifecycle/catalogue.js';
 import { recordOrderPlaced } from './lifecycle/status-writer.js';
 import { DELIVERY_PUBLIC_SELECT } from './delivery.columns.js';
 import { evaluateCoupon, recordRedemption } from '../coupons/coupon.service.js';
@@ -431,6 +431,20 @@ export class OrderRepository {
       .groupBy('order_id')
       .execute();
 
+    // Substitutions PACK would refuse for want of a cost - counted with the
+    // lifecycle's own rule (isUncostedSubstitution), so the board blocks Pack
+    // exactly when the API would.
+    const substitutedItems = await executor
+      .selectFrom('order_items')
+      .select(['order_id', 'item_status', 'actual_unit_cost'])
+      .where('order_id', 'in', ids)
+      .where('item_status', '=', 'SUBSTITUTED')
+      .execute();
+    const uncosted = new Map<string, number>();
+    for (const item of substitutedItems) {
+      if (isUncostedSubstitution(item)) uncosted.set(item.order_id, (uncosted.get(item.order_id) ?? 0) + 1);
+    }
+
     const active = await executor
       .selectFrom('deliveries')
       .innerJoin('riders', 'riders.id', 'deliveries.rider_id')
@@ -462,6 +476,7 @@ export class OrderRepository {
           packed: summary?.packed ?? 0,
           unavailable: summary?.unavailable ?? 0,
           substituted: summary?.substituted ?? 0,
+          uncosted_substitutions: uncosted.get(o.id) ?? 0,
         },
         active_delivery: delivery
           ? {

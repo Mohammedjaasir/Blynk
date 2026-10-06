@@ -12,7 +12,7 @@
  * Manifest (merged, verified in build): the plugin AAR contributes its own
  * <service foregroundServiceType="location">, FOREGROUND_SERVICE_LOCATION and
  * POST_NOTIFICATIONS; the app manifest adds INTERNET, ACCESS_FINE/COARSE/BACKGROUND_LOCATION,
- * FOREGROUND_SERVICE. Required config: capacitor.config.ts android.useLegacyBridge = true
+ * FOREGROUND_SERVICE(_LOCATION), POST_NOTIFICATIONS. Required config: capacitor.config.ts android.useLegacyBridge = true
  * (otherwise updates halt after ~5 min in background, issue #89).
  * Known caveats (github.com/capacitor-community/background-geolocation/issues/<n>):
  *  - #153 (open): Android 14-16 throws SecurityException starting the location FGS if the
@@ -23,14 +23,12 @@
  *    (dontkillmyapp.com: Huawei, Xiaomi, OnePlus, Samsung) may still stop the service.
  *  - #135 (open): non-transparent/invalid notification icon makes the notification
  *    misbehave; the default mipmap/ic_launcher is used here - check on device.
- *  - #141 (open): the plugin never requests POST_NOTIFICATIONS. GAP: neither this file nor
- *    the app requests it, so on Android 13+ the FGS runs but its notification is hidden from
- *    the drawer (visible only in the Task Manager) unless the user grants it in Settings.
- *    Re-checked 2026-10-06: no installed package can ask for it from JS - @capacitor/core has
- *    no generic permission API, this plugin declares only the "location" alias, and the
- *    notification plugins (@capacitor/local-notifications / push-notifications) would be a new
- *    dependency. Left as a documented gap: add one of those (or a small native plugin under
- *    android/) and call its requestPermissions() before start().
+ *  - #141 (open): the plugin never requests POST_NOTIFICATIONS, so on Android 13+ the FGS
+ *    would run with its notification hidden from the drawer. Handled here (2026-10-06): the
+ *    app's own native NotificationPermissionPlugin (android/.../NotificationPermissionPlugin.java,
+ *    JS side lib/notification-permission.ts) is asked via ensureNotifications() after location
+ *    is granted and before start(); a refusal never blocks sharing, it only adds a status note.
+ *    Not yet verified on an Android 13+ device.
  *  - HIGH RISK, MITIGATED (README + issue #14): "after 5 minutes in the background Android
  *    will throttle HTTP requests initiated from the WebView"; the fix is native HTTP
  *    (CapacitorHttp). capacitor.config.ts now sets plugins.CapacitorHttp.enabled = true, which
@@ -45,6 +43,7 @@
  */
 import { registerPlugin } from '@capacitor/core';
 import type { BackgroundGeolocationPlugin, CallbackError, Location } from '@capacitor-community/background-geolocation';
+import { ensureNotificationPermission } from './notification-permission';
 
 export type TrackingPermissionState = 'not_requested' | 'requesting' | 'granted' | 'denied' | 'unavailable';
 
@@ -63,6 +62,12 @@ export interface TrackingPlugin {
     onError: (code: 'permission_denied' | 'position_unavailable') => void
   ): Promise<void>;
   stop(): Promise<void>;
+  /**
+   * Optional: asked after location is granted and before start(). Resolves
+   * false when the watcher's notification will be hidden (Android 13+
+   * notifications refused). Never blocks sharing - only adds a status note.
+   */
+  ensureNotifications?(): Promise<boolean>;
 }
 
 /**
@@ -135,6 +140,8 @@ export const capacitorTrackingPlugin: TrackingPlugin = {
       return 'unavailable';
     }
   },
+
+  ensureNotifications: ensureNotificationPermission,
 
   async start(onPoint, onError) {
     watcherId = await BackgroundGeolocation.addWatcher(

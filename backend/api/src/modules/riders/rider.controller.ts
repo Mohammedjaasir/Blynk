@@ -95,10 +95,23 @@ export class RiderController {
 
 export const riderController = new RiderController();
 
-/** Staff-facing: GET /admin/riders (ADMIN) for the manual assignment picker. */
-export async function listRidersForAssignment(_req: Request, res: Response, next: NextFunction) {
+const ridersListQuerySchema = z.object({
+  /** "true" also lists riders who can no longer deliver (the cash hand-in picker). */
+  include_inactive: z.enum(['true', 'false']).optional(),
+});
+
+/**
+ * Staff-facing: GET /admin/riders (ADMIN, OPERATIONS) for the manual
+ * assignment picker - active riders only. `?include_inactive=true` lists
+ * inactive riders too (each row carries `is_active`), for recording a cash
+ * hand-in from a rider who has since been switched off.
+ */
+export async function listRidersForAssignment(req: Request, res: Response, next: NextFunction) {
   try {
-    const riders = await riderRepository.listActiveRidersForAssignment();
+    const { include_inactive } = ridersListQuerySchema.parse(req.query);
+    const riders = await riderRepository.listActiveRidersForAssignment(undefined, {
+      includeInactive: include_inactive === 'true',
+    });
     res.status(200).json({ success: true, data: { riders } });
   } catch (err) {
     next(err);

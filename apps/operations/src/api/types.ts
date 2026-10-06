@@ -56,6 +56,12 @@ export interface ItemsSummary {
   packed: number;
   unavailable: number;
   substituted: number;
+  /**
+   * Substituted items still without the cost packing requires - counted by
+   * the API with the lifecycle's own rule (backend isUncostedSubstitution).
+   * Missing from an older API: every substitution is then treated as uncosted.
+   */
+  uncosted_substitutions?: number;
 }
 
 export interface ActiveDelivery {
@@ -88,6 +94,11 @@ export interface OrderItemRow {
   unit_snapshot?: string | null;
   quantity: number;
   item_status: 'PENDING' | 'SOURCED' | 'PACKED' | 'UNAVAILABLE' | 'SUBSTITUTED';
+  /**
+   * Admin detail only. Read to tell a substitution with a recorded cost from
+   * one without (what blocks packing); never rendered.
+   */
+  actual_unit_cost?: number | string | null;
 }
 
 export interface OrderHistoryRow {
@@ -164,6 +175,8 @@ export interface RiderOption {
   vehicle_type: string;
   vehicle_registration_number: string;
   open_deliveries: number;
+  /** False only in `GET /admin/riders?include_inactive=true`: the rider can no longer deliver. */
+  is_active?: boolean;
 }
 
 /** One order a rider already carries (`GET /admin/riders/suggestions`). */

@@ -53,6 +53,9 @@
          ACCESS_BACKGROUND_LOCATION ("Allow all the time") is deliberately NOT requested. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Android 13+: asked for at runtime (NotificationPermissionPlugin) just before location
+         sharing starts, so the "Sharing your location" notification shows in the drawer. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- The plugin's manifest declares the GPS feature as required; keep it optional. -->
     <uses-feature android:name="android.hardware.location.gps" android:required="false" tools:replace="android:required" />
 </manifest>

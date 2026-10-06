@@ -96,6 +96,12 @@ export const deliveryLocationPlugin: TrackingPlugin = {
     return browserGeolocationPlugin.requestPermission();
   },
 
+  async ensureNotifications() {
+    // Only the native watcher shows a notification; the browser one has none to hide.
+    const plugin = pluginFor(getLocationMode());
+    return plugin.ensureNotifications ? plugin.ensureNotifications() : true;
+  },
+
   async start(onPoint, onError) {
     const plugin = pluginFor(getLocationMode());
     await plugin.start(onPoint, onError);

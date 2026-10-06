@@ -28,9 +28,15 @@ export class RiderRepository {
    * Active riders the store manager can assign (architecture: GET
    * /admin/riders), with how many deliveries each already holds - counted
    * from real rows. No availability flag: nothing maintains one (plan C10).
+   *
+   * `includeInactive` (GET /admin/riders?include_inactive=true) also returns
+   * riders who can no longer deliver - profile switched off, account
+   * deactivated or staff sign-in disabled - so a cash hand-in can still be
+   * recorded for one. Every row says whether it is active (`is_active`):
+   * the same three checks the default list filters on.
    */
-  async listActiveRidersForAssignment(executor: DBConnection = db) {
-    return await executor
+  async listActiveRidersForAssignment(executor: DBConnection = db, options: { includeInactive?: boolean } = {}) {
+    let query = executor
       .selectFrom('riders')
       .innerJoin('users', 'users.id', 'riders.user_id')
       .select((eb) => [
@@ -48,13 +54,16 @@ export class RiderRepository {
           .whereRef('deliveries.rider_id', '=', 'riders.id')
           .where((inner) => isOpenDelivery(inner))
           .as('open_deliveries'),
-      ])
-      .where('riders.is_active', '=', true)
-      .where('users.is_active', '=', true)
-      // A staff rider whose sign-in an admin disabled cannot act on a delivery.
-      .where('users.staff_disabled_at', 'is', null)
-      .orderBy('users.full_name')
-      .execute();
+        sql<boolean>`(riders.is_active AND users.is_active AND users.staff_disabled_at IS NULL)`.as('is_active'),
+      ]);
+    if (!options.includeInactive) {
+      query = query
+        .where('riders.is_active', '=', true)
+        .where('users.is_active', '=', true)
+        // A staff rider whose sign-in an admin disabled cannot act on a delivery.
+        .where('users.staff_disabled_at', 'is', null);
+    }
+    return await query.orderBy('users.full_name').execute();
   }
 
   /**

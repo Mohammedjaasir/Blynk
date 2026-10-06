@@ -162,15 +162,19 @@ describe('boardOrderLikeFromDetail', () => {
         { id: 'i3', product_name_snapshot: 'Butter', quantity: 1, item_status: 'PACKED' },
         { id: 'i4', product_name_snapshot: 'Eggs', quantity: 1, item_status: 'UNAVAILABLE' },
         { id: 'i5', product_name_snapshot: 'Cheese', quantity: 1, item_status: 'SUBSTITUTED' },
+        { id: 'i6', product_name_snapshot: 'Yoghurt', quantity: 1, item_status: 'SUBSTITUTED', actual_unit_cost: '80.00' },
+        { id: 'i7', product_name_snapshot: 'Curd', quantity: 1, item_status: 'SUBSTITUTED', actual_unit_cost: null },
       ],
     });
     expect(boardOrderLikeFromDetail(detail).items_summary).toEqual({
-      total: 5,
+      total: 7,
       pending: 1,
       sourced: 1,
       packed: 1,
       unavailable: 1,
-      substituted: 1,
+      substituted: 3,
+      // The backend rule: a substitution without a recorded cost (or without the field at all).
+      uncosted_substitutions: 2,
     });
   });
 

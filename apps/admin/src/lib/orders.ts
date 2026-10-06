@@ -24,6 +24,12 @@ export interface ItemsSummary {
   packed: number;
   unavailable: number;
   substituted: number;
+  /**
+   * Substituted items still without the cost packing requires - counted by
+   * the API with the lifecycle's own rule (backend isUncostedSubstitution).
+   * Missing from an older API: every substitution is then treated as uncosted.
+   */
+  uncosted_substitutions?: number;
 }
 
 export interface ActiveDelivery {
@@ -68,22 +74,27 @@ export function laneOf(order: BoardOrderLike): Lane {
   }
 }
 
+/** Substitutions that still need a cost before the order can be packed. */
+export function uncostedSubstitutions(s: ItemsSummary): number {
+  return s.uncosted_substitutions ?? s.substituted;
+}
+
 /**
  * D7, revised 2026-09-30 (the owner: no separate sourcing step): the pack
  * itself takes every pending item off the shelf, so an order packs straight
  * from Placed - as long as there is no substitution without a cost and
- * something is left in the bag (backend `packingBlockers`). Mirrors
- * apps/operations/src/lib/orders.ts.
+ * something is left in the bag (backend `packingBlockers`; a substitution
+ * with its cost counts as in the bag). Mirrors apps/operations/src/lib/orders.ts.
  */
 export function isPackable({ items_summary: s }: BoardOrderLike): boolean {
-  return s.substituted === 0 && s.pending + s.sourced + s.packed > 0;
+  const uncosted = uncostedSubstitutions(s);
+  return uncosted === 0 && s.pending + s.sourced + s.packed + (s.substituted - uncosted) > 0;
 }
 
 /**
- * The same rule from the order's items (admin detail), which - unlike the
- * board's summary - can tell a substitution with a recorded cost from one
- * without (backend packingBlockers). Null when the items do not carry the
- * cost, so the caller falls back to isPackable.
+ * The same rule from the order's items (admin detail, backend
+ * packingBlockers), which the panel prefers as the fresher read. Null when
+ * the items do not carry the cost, so the caller falls back to isPackable.
  */
 export function isPackableFromItems(
   items: ReadonlyArray<{ item_status: string; actual_unit_cost?: unknown }>

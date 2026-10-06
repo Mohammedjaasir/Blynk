@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { cash as cashApi, riders as ridersApi, staff as staffApi } from '../api/resources';
-import type { CashHandin, CashReconciliation, ReconciliationStatus, RiderOption, StaffAccount } from '../api/types';
+import { cash as cashApi, riders as ridersApi } from '../api/resources';
+import type { CashHandin, CashReconciliation, ReconciliationStatus, RiderOption } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
@@ -23,25 +23,24 @@ export interface HandinRider {
 }
 
 /**
- * Riders a hand-in can be recorded for. GET /admin/riders lists active
- * riders only, but a rider switched off today may still owe the cash they
- * collected - so rider profiles from the staff list (GET /admin/staff, which
- * carries each profile's id and is_active) are added, marked inactive. The
- * API records a hand-in for any rider profile.
+ * Riders a hand-in can be recorded for: every rider profile from GET
+ * /admin/riders?include_inactive=true, active first, then those who can no
+ * longer deliver - a rider switched off today may still owe the cash they
+ * collected - marked "(inactive)". The API records a hand-in for any rider
+ * profile. `extra` keeps the rider a row's own button opened the dialog for.
  */
 export function handinRiders(
-  active: ReadonlyArray<RiderOption>,
-  staff: ReadonlyArray<StaffAccount>,
+  riders: ReadonlyArray<RiderOption>,
   extra?: { id: string; name: string | null }
 ): HandinRider[] {
-  const out: HandinRider[] = active.map((r) => ({ id: r.id, label: r.full_name ?? r.phone, inactive: false }));
+  const label = (r: RiderOption) => r.full_name ?? r.phone;
+  const out: HandinRider[] = riders.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, label: label(r), inactive: false }));
   const seen = new Set(out.map((r) => r.id));
   const inactive: HandinRider[] = [];
-  for (const account of staff) {
-    const rider = account.rider;
-    if (!rider || seen.has(rider.id)) continue;
-    seen.add(rider.id);
-    inactive.push({ id: rider.id, label: `${account.full_name ?? account.phone} (inactive)`, inactive: true });
+  for (const r of riders) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    inactive.push({ id: r.id, label: `${label(r)} (inactive)`, inactive: true });
   }
   if (extra && !seen.has(extra.id)) inactive.push({ id: extra.id, label: `${extra.name ?? 'Rider'} (inactive)`, inactive: true });
   inactive.sort((a, b) => a.label.localeCompare(b.label));
@@ -257,15 +256,13 @@ function HandinDialog({
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([
-      ridersApi.listActive().catch(() => [] as RiderOption[]),
-      staffApi.list().catch(() => [] as StaffAccount[]),
-    ]).then(([active, staff]) => {
-      if (cancelled) return;
-      // Either list may be unavailable; the other still offers its riders.
-      const list = (value: unknown) => (Array.isArray(value) ? value : []);
-      setRiders(handinRiders(list(active), list(staff), riderId ? { id: riderId, name: riderName ?? null } : undefined));
-    });
+    void ridersApi
+      .listForCash()
+      .catch(() => [] as RiderOption[])
+      .then((all) => {
+        if (cancelled) return;
+        setRiders(handinRiders(Array.isArray(all) ? all : [], riderId ? { id: riderId, name: riderName ?? null } : undefined));
+      });
     return () => {
       cancelled = true;
     };

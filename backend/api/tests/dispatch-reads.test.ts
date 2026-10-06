@@ -107,6 +107,25 @@ describe('Dispatch read APIs', () => {
       expect(Object.keys(farhan)).not.toContain('is_available');
     });
 
+    it('include_inactive=true also lists inactive riders, each flagged is_active', async () => {
+      const res = await request(app).get('/api/v1/admin/riders?include_inactive=true').set(auth(t.admin));
+      expect(res.status).toBe(200);
+      const riders = res.body.data.riders as Array<Record<string, unknown>>;
+      expect(riders.find((r) => r.id === INACTIVE_RIDER)).toMatchObject({ full_name: 'Inactive Rider', is_active: false });
+      expect(riders.find((r) => r.id === RIDER_A)).toMatchObject({ full_name: 'Farhan Mohamed', is_active: true });
+      // The default list is unchanged: active only, every row flagged active.
+      const plain = await request(app).get('/api/v1/admin/riders?include_inactive=false').set(auth(t.admin));
+      expect(plain.status).toBe(200);
+      expect(plain.body.data.riders.map((r: { id: string }) => r.id)).not.toContain(INACTIVE_RIDER);
+      expect(plain.body.data.riders.every((r: { is_active: boolean }) => r.is_active === true)).toBe(true);
+    });
+
+    it('include_inactive is refused when it is not true/false, and stays staff-only', async () => {
+      expect((await request(app).get('/api/v1/admin/riders?include_inactive=yes').set(auth(t.admin))).status).toBe(400);
+      expect((await request(app).get('/api/v1/admin/riders?include_inactive=true').set(auth(t.staff))).status).toBe(403);
+      expect((await request(app).get('/api/v1/admin/riders?include_inactive=true').set(auth(t.rider))).status).toBe(403);
+    });
+
     it.each([
       ['staff', 'staff'],
       ['customer', 'customer'],
@@ -131,13 +150,60 @@ describe('Dispatch read APIs', () => {
       expect(new Set(orders.map((o) => o.order_status))).toEqual(new Set(['PLACED', 'PACKED']));
 
       const w = orders.find((o) => o.id === waiting.id)!;
-      expect(w.items_summary).toEqual({ total: 2, pending: 1, sourced: 1, packed: 0, unavailable: 0, substituted: 0 });
+      expect(w.items_summary).toEqual({
+        total: 2,
+        pending: 1,
+        sourced: 1,
+        packed: 0,
+        unavailable: 0,
+        substituted: 0,
+        uncosted_substitutions: 0,
+      });
       expect(w.active_delivery).toBeNull();
 
       const p = orders.find((o) => o.id === packed.id)!;
       expect(p.items_summary).toMatchObject({ total: 1, packed: 1, pending: 0 });
       expect(p.active_delivery).toMatchObject({ rider_id: RIDER_A, rider_name: 'Farhan Mohamed', assignment_status: 'ASSIGNED' });
       expect(res.body.data.pagination.total).toBeGreaterThanOrEqual(2);
+    });
+
+    it('counts substitutions that still need a cost, by the same rule packing applies', async () => {
+      const order = await placeOrder([MILK, BUTTER]);
+      // A substitution without a recorded cost: packing refuses it.
+      const sub = await request(app)
+        .post(`/api/v1/admin/orders/${order.id}/resolve-item`)
+        .set(auth(t.staff))
+        .send({ item_id: order.itemFor(BUTTER), item_status: 'SUBSTITUTED' });
+      expect(sub.status).toBe(200);
+      const read = async () => {
+        const res = await request(app).get('/api/v1/admin/orders?status=ITEM_UNAVAILABLE&limit=100').set(auth(t.staff));
+        expect(res.status).toBe(200);
+        return (res.body.data.orders as Array<Record<string, any>>).find((o) => o.id === order.id)!;
+      };
+      expect((await read()).items_summary).toMatchObject({ substituted: 1, uncosted_substitutions: 1 });
+      const refused = await request(app).patch(`/api/v1/admin/orders/${order.id}/status`).set(auth(t.staff)).send({ status: 'PACKED' });
+      expect(refused.status).toBe(422);
+      expect(refused.body.error.code).toBe('ORDER_NOT_PACKABLE');
+
+      // Once the substitution has a cost the board stops blocking, and so does PACK.
+      await pool.query(`UPDATE order_items SET actual_unit_cost = 120 WHERE id = $1`, [order.itemFor(BUTTER)]);
+      expect((await read()).items_summary).toMatchObject({ substituted: 1, uncosted_substitutions: 0 });
+      const packed = await request(app).patch(`/api/v1/admin/orders/${order.id}/status`).set(auth(t.staff)).send({ status: 'PACKED' });
+      expect(packed.status).toBe(200);
+    });
+
+    it('pages through the list with page and limit', async () => {
+      await placeOrder([MILK]);
+      await placeOrder([MILK]);
+      const first = await request(app).get('/api/v1/admin/orders?status=PLACED&limit=1&page=1').set(auth(t.staff));
+      const second = await request(app).get('/api/v1/admin/orders?status=PLACED&limit=1&page=2').set(auth(t.staff));
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(first.body.data.orders).toHaveLength(1);
+      expect(second.body.data.orders).toHaveLength(1);
+      expect(second.body.data.orders[0].id).not.toBe(first.body.data.orders[0].id);
+      expect(second.body.data.pagination).toMatchObject({ page: 2, limit: 1 });
+      expect(second.body.data.pagination.total_pages).toBe(second.body.data.pagination.total);
     });
 
     it('rejects an unknown status in the list', async () => {

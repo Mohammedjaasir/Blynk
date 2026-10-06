@@ -198,6 +198,21 @@ export function Cash() {
   );
 }
 
+/** A rider in the hand-in picker: "(inactive)" when they can no longer deliver. */
+export function cashRiderLabel(r: RiderOption): string {
+  const name = r.full_name ?? r.phone;
+  return r.is_active === false ? `${name} (inactive)` : name;
+}
+
+/** Active riders first (as the API sorts them), then inactive ones by name. */
+export function cashRiderOrder(riders: ReadonlyArray<RiderOption>): RiderOption[] {
+  const active = riders.filter((r) => r.is_active !== false);
+  const inactive = riders
+    .filter((r) => r.is_active === false)
+    .sort((a, b) => cashRiderLabel(a).localeCompare(cashRiderLabel(b)));
+  return [...active, ...inactive];
+}
+
 function HandinDialog({
   date,
   riderId,
@@ -218,9 +233,11 @@ function HandinDialog({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // Inactive riders too: one switched off today may still owe the cash
+    // they collected. Active first, then inactive ones (marked so).
     ridersApi
-      .listActive()
-      .then(setRiders)
+      .listForCash()
+      .then((all) => setRiders(cashRiderOrder(Array.isArray(all) ? all : [])))
       .catch(() => setRiders([]));
   }, []);
 
@@ -253,7 +270,7 @@ function HandinDialog({
             <option value="">{riders === null ? 'Loading riders…' : 'Choose a rider'}</option>
             {(riders ?? []).map((r) => (
               <option key={r.id} value={r.id}>
-                {r.full_name ?? r.phone}
+                {cashRiderLabel(r)}
               </option>
             ))}
           </select>

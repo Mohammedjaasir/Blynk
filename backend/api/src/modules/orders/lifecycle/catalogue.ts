@@ -183,6 +183,15 @@ export interface PackingBlockers {
 }
 
 /**
+ * A substitution packing refuses: the item was substituted but no cost was
+ * recorded for it. The one rule both PACK (packingBlockers) and the staff
+ * board's items_summary.uncosted_substitutions use.
+ */
+export function isUncostedSubstitution(item: { item_status: ItemFulfillmentStatus; actual_unit_cost: unknown }): boolean {
+  return item.item_status === 'SUBSTITUTED' && (item.actual_unit_cost === null || item.actual_unit_cost === undefined);
+}
+
+/**
  * D7, revised 2026-09-30 (owner: "we no need sourcing"): an order packs
  * straight from PLACED. PENDING items are sourced by the pack itself at their
  * estimated cost (lifecycle PACK, stock TAKE_PENDING_STOCK). Still refused: a
@@ -192,15 +201,13 @@ export interface PackingBlockers {
 export function packingBlockers(
   items: ReadonlyArray<{ item_status: ItemFulfillmentStatus; actual_unit_cost: unknown }>
 ): PackingBlockers | null {
-  const unsourcedSubstitutions = items.filter(
-    (i) => i.item_status === 'SUBSTITUTED' && (i.actual_unit_cost === null || i.actual_unit_cost === undefined)
-  ).length;
+  const unsourcedSubstitutions = items.filter(isUncostedSubstitution).length;
   const packable = items.filter(
     (i) =>
       i.item_status === 'PENDING' ||
       i.item_status === 'SOURCED' ||
       i.item_status === 'PACKED' ||
-      (i.item_status === 'SUBSTITUTED' && i.actual_unit_cost !== null && i.actual_unit_cost !== undefined)
+      (i.item_status === 'SUBSTITUTED' && !isUncostedSubstitution(i))
   ).length;
   if (unsourcedSubstitutions === 0 && packable > 0) return null;
   return { unsourced_substitutions: unsourcedSubstitutions, packable_items: packable };

@@ -7,6 +7,8 @@ export interface TrackingState {
   lastError: 'permission_denied' | 'position_unavailable' | 'network' | 'refused' | null;
   /** With lastError 'refused': why the server stopped this sharing, in the rider's words. */
   stopReason?: string | null;
+  /** Android 13+ notifications are off, so the "Sharing your location" notification is hidden. */
+  notificationsOff?: boolean;
 }
 
 /** Time+distance throttle (plan §4): send at most this often... */
@@ -73,10 +75,23 @@ export class DeliveryTracker {
     this.deliveryId = deliveryId;
     this.lastSentPoint = null;
     // A new delivery must not briefly show the previous one's freshness or error.
-    this.setState({ permission: 'requesting', lastSentAt: null, lastError: null, stopReason: null });
+    this.setState({
+      permission: 'requesting',
+      lastSentAt: null,
+      lastError: null,
+      stopReason: null,
+      notificationsOff: false,
+    });
     const permission = await this.plugin.requestPermission();
     this.setState({ permission });
     if (permission !== 'granted') return;
+
+    // Android 13+: ask to show the sharing notification. A refusal never
+    // blocks sharing; the status only gains a one-line note.
+    if (this.plugin.ensureNotifications) {
+      const shown = await this.plugin.ensureNotifications().catch(() => true);
+      this.setState({ notificationsOff: !shown });
+    }
 
     await this.plugin.start(
       (point) => void this.onPoint(point),

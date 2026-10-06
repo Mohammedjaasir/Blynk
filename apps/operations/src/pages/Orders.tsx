@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { orders as ordersApi } from '../api/resources';
+import { ORDER_MAX_PAGES, ORDER_PAGE_LIMIT, orders as ordersApi } from '../api/resources';
 import type { BoardOrder } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { AssignRiderDialog, NoteDialog, needsNote } from '../components/OrderDialogs';
@@ -17,6 +17,7 @@ import {
   type FarBatchRefusal,
   primaryAction,
   shortNumber,
+  uncostedSubstitutions,
   type Lane,
   type OrderAction,
 } from '../lib/orders';
@@ -78,9 +79,10 @@ const FOCUS_LANE: Record<string, Lane> = { packing: 'toPack', readyForRider: 're
 export function Orders() {
   const [searchParams] = useSearchParams();
   const [live, setLive] = useState<BoardOrder[] | null>(null);
-  /** `pagination.total` for the live query - more than one page (100) means
-   * the board is not showing every live order. */
+  /** `pagination.total` for the live query. Every page is read; it exceeds
+   * the rows only when the read stopped at its page bound (`liveTruncated`). */
   const [liveTotal, setLiveTotal] = useState(0);
+  const [liveTruncated, setLiveTruncated] = useState(false);
   const [closed, setClosed] = useState<BoardOrder[]>([]);
   const [closedTotal, setClosedTotal] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export function Orders() {
       const [liveOrders, closedToday] = await Promise.all([ordersApi.live(), ordersApi.closedSince(startOfTodayColombo())]);
       setLive(liveOrders.orders);
       setLiveTotal(liveOrders.total);
+      setLiveTruncated(liveOrders.truncated);
       setClosed(closedToday.orders);
       setClosedTotal(closedToday.total);
       setLoadError(null);
@@ -210,9 +213,10 @@ export function Orders() {
         </p>
       ) : null}
       {live && live.length === 0 ? <p className="orders__empty">No live orders.</p> : null}
-      {live && liveTotal > live.length ? (
+      {live && liveTruncated && liveTotal > live.length ? (
         <p className="banner" role="status">
-          Showing {live.length} of {liveTotal} live orders (the oldest first). Finish or refresh to see the rest.
+          Showing {live.length} of {liveTotal} live orders (the oldest first) — the board loads at most{' '}
+          {(ORDER_PAGE_LIMIT * ORDER_MAX_PAGES).toLocaleString('en-US')}. Finish or refresh to see the rest.
         </p>
       ) : null}
 
@@ -306,6 +310,10 @@ function OrderRow({
 }) {
   const number = shortNumber(order.order_number);
   const exception = laneOf(order) === 'attention';
+  const blocked =
+    (order.order_status === 'PLACED' || order.order_status === 'ITEM_UNAVAILABLE') &&
+    primary === null &&
+    uncostedSubstitutions(order.items_summary) > 0;
   return (
     <li className={`ticket${exception ? ' ticket--exception' : ''}`}>
       <Link to={`/orders/${order.id}`} className="ticket__open" aria-label={`Open order #${number}`}>
@@ -336,6 +344,10 @@ function OrderRow({
           >
             {busy ? 'Saving…' : ACTION_LABEL[primary]}
           </button>
+        </div>
+      ) : blocked ? (
+        <div className="ticket__action">
+          <span className="ticket__hint">Substitution needs a cost</span>
         </div>
       ) : null}
     </li>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { orders as ordersApi } from '../api/resources';
+import { LIVE_ORDERS_LIMIT, LIVE_ORDERS_MAX_PAGES, orders as ordersApi } from '../api/resources';
 import type { BoardOrder, OrderItemRow } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
@@ -17,6 +17,7 @@ import {
   orderErrorMessage,
   primaryAction,
   shortNumber,
+  uncostedSubstitutions,
   type Lane,
   type OrderAction,
 } from '../lib/orders';
@@ -52,6 +53,8 @@ export function Orders() {
   const [live, setLive] = useState<BoardOrder[] | null>(null);
   // Every live order the API has, which can be more than the page it returned.
   const [liveTotal, setLiveTotal] = useState(0);
+  // True only when the board stopped at its page bound with orders unread.
+  const [truncated, setTruncated] = useState(false);
   const [done, setDone] = useState({ delivered: 0, cancelled: 0 });
   const [pendingItem, setPendingItem] = useState<{ order: BoardOrder; item: OrderItemRow } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -73,6 +76,7 @@ export function Orders() {
       ]);
       setLive(liveOrders.orders);
       setLiveTotal(liveOrders.total);
+      setTruncated(liveOrders.truncated);
       setDone({ delivered, cancelled });
       setLoadError(null);
       setLoadedAt(new Date());
@@ -141,7 +145,6 @@ export function Orders() {
 
   const openOrder = live?.find((o) => o.id === openId) ?? null;
   const { delivered, cancelled } = done;
-  const hidden = live ? liveTotal - live.length : 0;
 
   return (
     <div className={`orders${openOrder ? ' orders--with-panel' : ''}`}>
@@ -172,10 +175,11 @@ export function Orders() {
           </p>
         ) : null}
         {!live && !loadError ? <Spinner label="Loading orders" /> : null}
-        {live && hidden > 0 ? (
-          // The board reads at most 100 live orders; never let the rest vanish silently.
+        {live && truncated && liveTotal > live.length ? (
+          // The board reads every page up to its bound; never let the rest vanish silently.
           <p className="ops-notice" role="status">
-            Showing {live.length} of {liveTotal} live orders — refine the view. The oldest are shown first.
+            Showing {live.length} of {liveTotal} live orders — the board loads at most{' '}
+            {(LIVE_ORDERS_LIMIT * LIVE_ORDERS_MAX_PAGES).toLocaleString('en-US')}. The oldest are shown first.
           </p>
         ) : null}
         {live && live.length === 0 ? <p className="orders__empty">No live orders.</p> : null}
@@ -307,7 +311,7 @@ function OrderRow({
   const blocked =
     (order.order_status === 'PLACED' || order.order_status === 'ITEM_UNAVAILABLE') &&
     primary === null &&
-    order.items_summary.substituted > 0;
+    uncostedSubstitutions(order.items_summary) > 0;
   return (
     <li className={`ticket${selected ? ' ticket--selected' : ''}${exception ? ' ticket--exception' : ''}`}>
       <button type="button" className="ticket__open" onClick={onOpen} aria-label={`Open order #${number}`}>

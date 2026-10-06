@@ -619,7 +619,7 @@ void main() {
       expect(addresses.updatedPayload?['postal_code'], '12090');
     });
 
-    testWidgets('editing an old address keeps its second line when line 1 changes',
+    testWidgets('a changed Address box replaces both lines with what was typed',
         (tester) async {
       final legacy = AddressModel.fromJson(const {
         'id': 'a0000001-0000-0000-0000-000000000003',
@@ -639,8 +639,72 @@ void main() {
       await tester.enterText(fieldWith('Address'), 'No. 7, Main Street, Near the mosque');
       await tester.tap(find.text('Save address'));
       await settle(tester);
-      expect(addresses.updatedPayload?['address_line1'], 'No. 7, Main Street');
+      // The whole box becomes line 1 and line 2 is cleared (sent as null),
+      // so the stored address is exactly what the customer typed.
+      expect(addresses.updatedPayload?['address_line1'],
+          'No. 7, Main Street, Near the mosque');
+      expect(addresses.updatedPayload?.containsKey('address_line2'), isTrue);
+      expect(addresses.updatedPayload?['address_line2'], isNull);
+    });
+
+    testWidgets('removing the second line from the box clears it',
+        (tester) async {
+      final legacy = AddressModel.fromJson(const {
+        'id': 'a0000001-0000-0000-0000-000000000004',
+        'label': 'Home',
+        'recipient_name': 'QA Tester',
+        'recipient_phone': '+94771234567',
+        'address_line1': 'No. 5, Main Street',
+        'address_line2': 'Near the mosque',
+        'city': 'Dharga Town',
+        'postal_code': null,
+        'latitude': 6.4382,
+        'longitude': 80.0274,
+        'delivery_instructions': null,
+        'is_default': false,
+      });
+      await pumpScreen(tester, existing: legacy);
+      await tester.enterText(fieldWith('Address'), 'No. 5, Main Street');
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+      expect(addresses.updatedPayload?['address_line1'], 'No. 5, Main Street');
+      expect(addresses.updatedPayload?.containsKey('address_line2'), isTrue);
+      expect(addresses.updatedPayload?['address_line2'], isNull);
+    });
+
+    testWidgets('only whitespace changes in the box count as unchanged',
+        (tester) async {
+      final legacy = AddressModel.fromJson(const {
+        'id': 'a0000001-0000-0000-0000-000000000005',
+        'label': 'Home',
+        'recipient_name': 'QA Tester',
+        'recipient_phone': '+94771234567',
+        'address_line1': 'No. 5, Main Street',
+        'address_line2': 'Near the mosque',
+        'city': 'Dharga Town',
+        'postal_code': null,
+        'latitude': 6.4382,
+        'longitude': 80.0274,
+        'delivery_instructions': null,
+        'is_default': false,
+      });
+      await pumpScreen(tester, existing: legacy);
+      await tester.enterText(
+          fieldWith('Address'), '  No. 5, Main Street,  Near the mosque ');
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+      expect(addresses.updatedPayload?['address_line1'], 'No. 5, Main Street');
       expect(addresses.updatedPayload?.containsKey('address_line2'), isFalse);
+    });
+
+    testWidgets('an address without a second line can be edited', (tester) async {
+      await pumpScreen(tester, existing: _existing);
+      expect(textOf(tester, 'Address'), 'No. 12, Test Lane');
+      await tester.enterText(fieldWith('Address'), 'No. 14, Test Lane');
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+      expect(addresses.updatedPayload?['address_line1'], 'No. 14, Test Lane');
+      expect(addresses.updatedPayload?['address_line2'], isNull);
     });
 
     testWidgets('an address without a second line never sends one on edit', (tester) async {

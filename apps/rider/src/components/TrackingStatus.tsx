@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formatElapsed } from '../lib/format';
+import { NOTIFICATIONS_OFF_NOTE } from '../lib/notification-permission';
 import type { TrackingState } from '../lib/tracking';
 
 /** How often the elapsed text is refreshed while it is on screen. */
@@ -16,6 +17,11 @@ function secondsSince(when: Date): number {
  * The interval exists only while this is mounted - i.e. only while an elapsed
  * time is actually displayed - and is cleared on unmount.
  */
+/** Android 13+ notifications refused: sharing goes on, but its notification is hidden. */
+function NotificationsNote({ state }: { state: TrackingState }) {
+  return state.notificationsOff ? <p className="tracking-status">{NOTIFICATIONS_OFF_NOTE}</p> : null;
+}
+
 function Elapsed({ since }: { since: Date }) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -75,26 +81,32 @@ export function TrackingStatus({ state }: { state: TrackingState }) {
     // A self-healing hiccup, not a blocker: styled as a warning, never as the
     // inverted "stop" treatment the blocking errors use.
     return (
-      <p className="tracking-status tracking-status--retrying">
-        <span>Couldn't send your last location — retrying.</span>
-        {lastSentAt ? (
-          <span>
-            {' '}
-            Last sent <Elapsed since={lastSentAt} />.
-          </span>
-        ) : null}
-      </p>
+      <>
+        <p className="tracking-status tracking-status--retrying">
+          <span>Couldn't send your last location — retrying.</span>
+          {lastSentAt ? (
+            <span>
+              {' '}
+              Last sent <Elapsed since={lastSentAt} />.
+            </span>
+          ) : null}
+        </p>
+        <NotificationsNote state={state} />
+      </>
     );
   }
   return (
-    <p className="tracking-status tracking-status--active">
-      Sharing your location
-      {lastSentAt ? (
-        <>
-          {' — updated '}
-          <Elapsed since={lastSentAt} />
-        </>
-      ) : null}
-    </p>
+    <>
+      <p className="tracking-status tracking-status--active">
+        Sharing your location
+        {lastSentAt ? (
+          <>
+            {' — updated '}
+            <Elapsed since={lastSentAt} />
+          </>
+        ) : null}
+      </p>
+      <NotificationsNote state={state} />
+    </>
   );
 }

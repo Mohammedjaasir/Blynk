@@ -2,7 +2,7 @@
 
 Pre-launch test plan for every Blynk app: the customer app (APK and web at blynk.lk/app/), Operations, Admin, Inventory and Rider.
 
-- **Code:** `main` with the 6 Oct fixes. Testers see the fixes only after the backend, websites and APKs are redeployed and rebuilt (Setup S-01 to S-04).
+- **Code:** `main` with the 6 Oct fixes. Testers see the fixes only after the backend and websites are redeployed and the new APKs are installed (Setup S-01 to S-04).
 - **Prepared:** 6 Oct 2026 · **Site:** https://blynk.lk · **Shop:** https://blynk.lk/app/
 
 ## How to use this sheet
@@ -21,12 +21,7 @@ Pre-launch test plan for every Blynk app: the customer app (APK and web at blynk
 
 | Severity | App | Issue | What testers will see |
 |---|---|---|---|
-| High | All APKs | APKs must be rebuilt and reinstalled before testing | Old installs miss every fix above (see S-04). |
-| Medium | Rider | Android 13+ is not asked for notification permission | The "Sharing your location" notification may be hidden on newer phones; sharing itself works. |
-| Low | Admin | Orders board list still says "Substitution needs a cost" when a cost exists | Open the order: Pack works from the order panel. |
-| Low | Admin | Cash: a disabled rider without a staff account cannot be picked for a hand-in | Rare; record it if seen. |
-| Low | Admin, Ops, Inventory | Live order boards load the first 100 orders per view | A "Showing 100 of N" notice appears when there are more. |
-| Low | Customer | Address line 2 cannot be cleared from the edit form | Line 2 is kept when editing. |
+| High | All APKs | Old installs miss every fix above | Install the new APKs from 6 Oct (see S-04): uninstall the old app first. |
 
 ## Fixed on 6 Oct (check these specially)
 
@@ -58,6 +53,11 @@ Found by checking every app against the backend. All apps call the right endpoin
 | Landing | Said "Pay by cash or card" | Says cash on delivery. |
 | Inventory | Packing staff could not pack or receive stock (owner decision: allow) | Packing staff can restock, write off, audit and Mark packed. |
 | SMS offers | Estimate and opted-out count could differ from what is sent | Counts match the chosen audience; test sends limited to 8 AM–9 PM and 5 per hour. |
+| Rider, Ops | Android 13+ was not asked for notification permission | Asked right after location, before sharing starts; sharing still works if refused, with a note. |
+| Admin, Ops | Board said "Substitution needs a cost" even when a cost existed | Shown only when a substitution really has no cost; Pack allowed otherwise. |
+| Admin, Ops | Cash: disabled riders could not be picked for a hand-in | All riders listed; disabled ones marked (inactive). |
+| Admin, Ops, Inventory | Live order boards loaded only the first 100 orders | Boards load every page (up to 2,000 orders). |
+| Customer | Address line 2 could not be cleared | Editing the address text replaces both lines with what was typed. |
 
 ## Setup before testing
 
@@ -68,7 +68,7 @@ Do these once. Mark each Pass when done so testers know the environment is ready
 | S-01 | P1 | Backend settings in Coolify | 1. Backend app → Environment Variables.<br>2. CORS_ORIGINS includes https://blynk.lk, the Admin and Inventory site addresses, and https://localhost (Android builds of Ops, Admin, Inventory).<br>3. SMS_PROVIDER=sbs, SMS_API_KEY, SMS_API_SECRET (secret), SMS_SENDER_ID = the approved sender.<br>4. SMS_OFFER_LANGUAGES=en. FIREBASE_SERVICE_ACCOUNT_JSON set for push.<br>5. Redeploy backend (and worker if separate). | Deploy log shows migrations up to 027 applied; /health is OK; log says push enabled. | | |
 | S-02 | P1 | Delivery centre on the Clock Tower | 1. Database terminal: psql -U postgres -d postgres.<br>2. Run the two UPDATE lines for 6.441313, 80.011437.<br>3. SELECT code, latitude, longitude FROM dark_stores; | DHARGA-01 shows 6.441313 | 80.011437. | | |
 | S-03 | P1 | Websites redeployed | 1. Landing site: build args API_BASE_URL (ends in /api/v1) and SHARE_BASE_URL=https://blynk.lk; Domains = https://blynk.lk; redeploy.<br>2. Redeploy Admin and Inventory sites. | blynk.lk shows "Install Blynk"; blynk.lk/app/ loads the shop; Admin and Inventory open their sign-in. | | |
-| S-04 | P1 | APKs rebuilt and installed | 1. Customer APK: API_BASE_URL, SHARE_BASE_URL=https://blynk.lk, APP_LINK_HOST=blynk.lk, google-services.json present.<br>2. Operations and Rider APKs: set VITE_API_BASE_URL to the live https API before building (the build now refuses localhost or a missing address).<br>3. Raise versionCode; uninstall old builds; install on test phones. | Each app opens and signs in against the live API ("We couldn’t reach Blynk" on login means a test build pointing at a PC). Rider delivery screen shows "Navigate in Google Maps". | | |
+| S-04 | P1 | APKs rebuilt and installed | 1. Built 6 Oct against the live API: Customer apps/customer/blinkit-clone-Flutter-ecommerce-/build/app/outputs/flutter-apk/app-release.apk; Operations apps/operations/android/app/build/outputs/apk/debug/app-debug.apk; Rider apps/rider/android/app/build/outputs/apk/debug/app-debug.apk. Uninstall old apps, then install these (or rebuild as below).<br>2. Customer APK: API_BASE_URL, SHARE_BASE_URL=https://blynk.lk, APP_LINK_HOST=blynk.lk, google-services.json present.<br>3. Operations and Rider APKs: set VITE_API_BASE_URL to the live https API before building (the build now refuses localhost or a missing address).<br>4. Raise versionCode; uninstall old builds; install on test phones. | Each app opens and signs in against the live API ("We couldn’t reach Blynk" on login means a test build pointing at a PC). Rider delivery screen shows "Navigate in Google Maps". | | |
 | S-05 | P1 | Test accounts and phones | 1. Admin creates: 1 Operations, 1 Inventory, 2 Riders (with vehicle).<br>2. Have 3 customer phones on different networks: Dialog, SLT-Mobitel, Hutch or Airtel.<br>3. Note the Admin account phone (needed for "Send test to my phone"). | Every account signs in to its own app. | | |
 | S-06 | P2 | Test catalog data | 1. A category with 2 sub-categories; a category group on Home.<br>2. 5+ products: some tracked with stock, some untracked; one tracked with 0 stock.<br>3. One coupon each: FIXED, PERCENT, FREE_DELIVERY.<br>4. One active promotion. | Customer Home shows the group, promotion and products. | | |
 
@@ -128,7 +128,7 @@ Android phone with the new customer APK.
 | C-24 | P2 | Logout | 1. Log out, log back in. | Clean sign-in; orders and addresses still there; cart is empty after logout. | | |
 | C-25 | P1 | Cart kept | 1. Add items; close the app fully; reopen.<br>2. Same in the web app with a page reload. | Cart still has the items and quantities. | | |
 | C-26 | P1 | Delete account | 1. With an open order: Profile → Delete account.<br>2. After the order is delivered: Delete account again.<br>3. Log in again with the same number. | First attempt refused: finish or cancel open orders. Second deletes and returns to login. The number can sign up as a new account. | | |
-| C-27 | P2 | Edit an address with two lines | 1. Edit an older address that has a second line; change the name; save. | Second line is still there. | | |
+| C-27 | P2 | Edit an address with two lines | 1. Edit an older address with a second line; change only the name; save.<br>2. Edit it again and change the address text. | First save keeps the second line; second save stores exactly the new text. | | |
 
 ## Landing site and web app
 
@@ -164,7 +164,7 @@ Operations account on the new Ops APK (and once in a browser).
 | O-12 | P2 | Product import | 1. Import an .xlsx: dry run, then import. | Preview lists created/updated/errors; only valid rows import. | | |
 | O-13 | P2 | Categories and groups | 1. Create a sub-category; reorder Home groups; delete a category with products (move them). | Customer Home follows the new order; products moved. | | |
 | O-14 | P2 | Promotions | 1. Create, edit, hide, reorder; remove an image then Cancel. | Customer carousel updates; reorder always moves; the image is still there after Cancel. | | |
-| O-15 | P1 | Cash | 1. Record a hand-in for a rider; check reconciliation. | Collected vs handed in correct; Delete not offered to Operations. | | |
+| O-15 | P1 | Cash | 1. Record a hand-in for a rider, including a disabled rider; check reconciliation. | Collected vs handed in correct; disabled riders marked (inactive); Delete not offered to Operations. | | |
 | O-16 | P1 | Deliver myself: background location | 1. During a delivery, lock the screen 10 minutes. | Customer map keeps updating; notification shows sharing. | | |
 | O-17 | P1 | Staff accounts | 1. Create an Inventory and a Rider account; try to create an Admin. | Ops can create Inventory and Rider only. | | |
 | O-18 | P1 | Delivery fee | 1. More → Delivery fee: change it. | New orders use it. | | |
@@ -229,7 +229,7 @@ Rider account on the new Rider APK, Android 13 or newer.
 | R-03 | P1 | Queue | 1. With orders assigned: Now, Next, Done today. | Correct order; refreshes every 30 s. | | |
 | R-04 | P1 | Delivery screen | 1. Map, address, note, Call buttons. | Customer pin and route shown; Call opens the dialler. | | |
 | R-05 | P1 | Navigate in Google Maps | 1. Tap Navigate in Google Maps. | Google Maps app opens with directions to the customer’s pin. | | |
-| R-06 | P1 | Picked up and location | 1. Tap Picked up; allow location (and notifications). | Notification "Sharing your location"; customer map shows the rider. | | |
+| R-06 | P1 | Picked up and location | 1. Fresh install on Android 13+; tap Picked up.<br>2. Allow location, then allow notifications.<br>3. Repeat after clearing data, tapping Don’t allow for notifications. | Location then notification prompts; "Sharing your location" notification; customer map shows the rider. If notifications are refused, sharing still works and the app says to turn them on. | | |
 | R-07 | P1 | Background 30 minutes | 1. Lock the screen 30 minutes while on the way. | Customer map still updates. | | |
 | R-08 | P1 | Arrived and collect | 1. I’ve arrived; enter the code; collect. | Sharing stops; "Delivered, LKR X collected". | | |
 | R-09 | P1 | Wrong code lock | 1. 5 wrong codes. | Tries left, then a 15-minute countdown. | | |

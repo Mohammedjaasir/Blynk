@@ -11,6 +11,7 @@ import {
   STATUS_LABEL,
   allowedActions,
   boardOrderLikeFromDetail,
+  uncostedSubstitutions,
   formatClock,
   formatMoney,
   orderErrorMessage,
@@ -157,6 +158,9 @@ export function OrderDetail() {
   const actions = allowedActions(boardLike);
   const primary = primaryAction(boardLike);
   const beingPacked = boardLike.order_status === 'PLACED' || boardLike.order_status === 'ITEM_UNAVAILABLE';
+  // The board's rule (backend packingBlockers): a substitution without its
+  // cost blocks Pack until one is recorded.
+  const packBlocked = beingPacked && uncostedSubstitutions(boardLike.items_summary) > 0;
   const number = shortNumber(detail.order_number);
 
   return (
@@ -261,6 +265,7 @@ export function OrderDetail() {
 
       {actions.length > 0 ? (
         <footer className="order-detail__actions">
+          {packBlocked && actions.includes('pack') ? <span className="ticket__hint">Substitution needs a cost</span> : null}
           {actions.map((action) => (
             // Pack works straight from Placed: the pack itself takes every
             // item off the shelf (backend lifecycle PACK). The API still
@@ -270,7 +275,7 @@ export function OrderDetail() {
               key={action}
               type="button"
               className={action === primary ? 'button' : action === 'cancel' ? 'button button--ink-outline' : 'button button--ghost'}
-              disabled={busyAction !== null || busyItem !== null}
+              disabled={busyAction !== null || busyItem !== null || (action === 'pack' && packBlocked)}
               onClick={() => act(action)}
             >
               {busyAction === action ? 'Saving…' : ACTION_LABEL[action]}

@@ -335,6 +335,8 @@ export interface RiderOption {
   vehicle_type: string;
   vehicle_registration_number: string;
   open_deliveries: number;
+  /** False only in GET /admin/riders?include_inactive=true: the rider can no longer deliver. */
+  is_active?: boolean;
 }
 
 /** One order a rider already carries (GET /admin/riders/suggestions). */

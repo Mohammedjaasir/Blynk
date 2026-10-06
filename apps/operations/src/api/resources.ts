@@ -156,23 +156,52 @@ const LIVE_STATUSES = 'PLACED,ITEM_UNAVAILABLE,PACKED,OUT_FOR_DELIVERY,FAILED,CU
 
 /** The API's page size for `GET /admin/orders` (it refuses more). */
 export const ORDER_PAGE_LIMIT = 100;
+/** The most pages a list reads in one load (2,000 orders); past that it says so. */
+export const ORDER_MAX_PAGES = 20;
 
 /**
- * One page of orders plus the API's `pagination.total` - the real count,
- * which may be larger than the page (more than 100 matching orders). Counts
- * shown to the operator use `total`; a list shows "Showing 100 of N". An API
- * without pagination falls back to the page length.
+ * Orders plus the API's `pagination.total` - the real count. Counts shown to
+ * the operator use `total`. An API without pagination falls back to the
+ * page length. `truncated` is true only when `listAllOrders` stopped at
+ * ORDER_MAX_PAGES with orders left unread.
  */
 export interface OrderPage<T> {
   orders: T[];
   total: number;
+  truncated: boolean;
 }
 
+/** One page - enough where only `total` is read (Home's counts). */
 function listOrders<T>(query: Query): Promise<OrderPage<T>> {
   return apiRequest<{ orders: T[]; pagination?: Partial<Pagination> }>('/admin/orders', { query }).then((d) => ({
     orders: d.orders,
     total: Math.max(d.orders.length, Number(d.pagination?.total ?? d.orders.length) || 0),
+    truncated: false,
   }));
+}
+
+/**
+ * Every matching order: the pages are read in sequence up to
+ * pagination.total_pages (at most ORDER_MAX_PAGES). An order that moved
+ * between page reads is kept once.
+ */
+async function listAllOrders<T extends { id: string }>(query: Query): Promise<OrderPage<T>> {
+  const read = (page: number) =>
+    apiRequest<{ orders: T[]; pagination?: Partial<Pagination> }>('/admin/orders', {
+      query: { ...query, page, limit: ORDER_PAGE_LIMIT },
+    });
+  const first = await read(1);
+  const total = Math.max(first.orders.length, Number(first.pagination?.total ?? first.orders.length) || 0);
+  const totalPages = Number(first.pagination?.total_pages ?? 1) || 1;
+  const all = [...first.orders];
+  for (let page = 2; page <= Math.min(totalPages, ORDER_MAX_PAGES); page += 1) {
+    const next = await read(page);
+    all.push(...next.orders);
+    if (next.orders.length < ORDER_PAGE_LIMIT) break;
+  }
+  const seen = new Set<string>();
+  const orders = all.filter((o) => (seen.has(o.id) ? false : (seen.add(o.id), true)));
+  return { orders, total, truncated: totalPages > ORDER_MAX_PAGES };
 }
 
 export const orders = {
@@ -208,13 +237,13 @@ export const orders = {
 
   /** The Orders board's own live query (task F3) - every status that still
    * needs staff attention, oldest first (mirrors Admin's `orders.live()`). */
-  live: () => listOrders<BoardOrder>({ status: LIVE_STATUSES, limit: ORDER_PAGE_LIMIT }),
+  live: () => listAllOrders<BoardOrder>({ status: LIVE_STATUSES }),
 
   /** Orders closed since a given moment (mirrors Admin's `orders.closedSince()`
    * exactly, including `DELIVERED,CANCELLED` - unlike `completedToday` above,
    * which this task's brief for F2 scoped to `DELIVERED` only). */
   closedSince: (since: Date) =>
-    listOrders<BoardOrder>({ status: 'DELIVERED,CANCELLED', since: since.toISOString(), limit: ORDER_PAGE_LIMIT }),
+    listAllOrders<BoardOrder>({ status: 'DELIVERED,CANCELLED', since: since.toISOString() }),
 
   /** One order's full detail - items, customer, rider, history. */
   detail: (id: string) => apiRequest<{ order: OrderDetail }>(`/admin/orders/${id}`).then((d) => d.order),
@@ -271,6 +300,12 @@ export const riders = {
    * Home (F2) only ever read `.length`, so this is a compatible superset,
    * not a breaking change. */
   listActive: () => apiRequest<{ riders: RiderOption[] }>('/admin/riders').then((d) => d.riders),
+
+  /** `GET /admin/riders?include_inactive=true` - every rider profile, inactive
+   * ones too (each row's `is_active` says which): the cash hand-in picker,
+   * since a rider switched off may still owe cash. */
+  listForCash: () =>
+    apiRequest<{ riders: RiderOption[] }>('/admin/riders', { query: { include_inactive: 'true' } }).then((d) => d.riders),
 
   /** `GET /admin/riders/suggestions?order_id=` - the same riders, best first
    * for this order (load, distance to the store, the trip they are on). */

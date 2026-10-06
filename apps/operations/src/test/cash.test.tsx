@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
 import type { CashReconciliation, OrderDetail } from '../api/types';
-import { colomboToday, differenceText } from '../pages/Cash';
+import { cashRiderLabel, cashRiderOrder, colomboToday, differenceText } from '../pages/Cash';
 import { ADMIN_WITH_RIDER, OPERATIONS_STAFF, fail, ok, renderAs } from './helpers';
 
 /**
@@ -96,6 +96,46 @@ describe('Cash screen', () => {
       { rider_id: 'r1', amount: 150, handin_date: colomboToday(), note: 'Late drop' },
     ]);
     expect(await screen.findByText('LKR 150 from Farhan Mohamed recorded.')).toBeInTheDocument();
+  });
+
+  it('the picker offers inactive riders too, marked "(inactive)", and records for them', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(OPERATIONS_STAFF, '/more/cash', {
+      'GET /admin/riders': (call) =>
+        ok({
+          riders:
+            call.query.include_inactive === 'true'
+              ? [
+                  { ...RIDERS[0], is_active: true },
+                  // Disabled, with no staff account: only include_inactive lists them.
+                  { id: 'r9', full_name: 'Old Rider', phone: '+94770000009', vehicle_type: 'MOTORCYCLE', vehicle_registration_number: 'WP-9', open_deliveries: 0, is_active: false },
+                ]
+              : RIDERS,
+        }),
+      'GET /admin/cash/reconciliation': () => ok(RECON),
+      'GET /admin/cash/handins': () => ok({ handins: [] }),
+      'POST /admin/cash/handins': (call) => ok({ handin: { ...HANDIN, rider_id: 'r9', rider_name: 'Old Rider', amount: call.body.amount } }),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Record hand-in' }, { timeout: 5000 }));
+    const dialog = screen.getByRole('dialog', { name: 'Record hand-in' });
+    await within(dialog).findByRole('option', { name: 'Old Rider (inactive)' });
+    expect(within(dialog).getByRole('option', { name: 'Farhan Mohamed' })).toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByRole('combobox'), 'r9');
+    await user.type(within(dialog).getByLabelText(/^Amount/), '300');
+    await user.click(within(dialog).getByRole('button', { name: 'Record' }));
+    expect(api.find('POST', '/admin/cash/handins').map((c) => c.body)).toMatchObject([{ rider_id: 'r9', amount: 300 }]);
+    expect(api.find('GET', '/admin/riders').map((c) => c.query.include_inactive)).toEqual(['true']);
+  });
+
+  it('orders active riders first and labels inactive ones', () => {
+    const base = { phone: '+9477', vehicle_type: 'MOTORCYCLE', vehicle_registration_number: 'X', open_deliveries: 0 };
+    const rows = [
+      { ...base, id: 'a', full_name: 'Zed', is_active: false },
+      { ...base, id: 'b', full_name: 'Kamal', is_active: true },
+      { ...base, id: 'c', full_name: 'Amal', is_active: false },
+      { ...base, id: 'd', full_name: 'Nimal' },
+    ];
+    expect(cashRiderOrder(rows).map(cashRiderLabel)).toEqual(['Kamal', 'Nimal', 'Amal (inactive)', 'Zed (inactive)']);
   });
 
   it('an admin can delete a mistaken hand-in', async () => {

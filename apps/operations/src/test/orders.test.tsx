@@ -89,16 +89,58 @@ function ordersHandlers(live: BoardOrder[], closed: BoardOrder[] = []) {
 const lane = (name: string) => screen.findByRole('region', { name: new RegExp(`^${name}`) });
 
 describe('Orders board', () => {
-  it('says when the board shows only the first 100 of more live orders', async () => {
-    const page = Array.from({ length: 3 }, () => boardOrder());
-    renderAs(ADMIN_WITH_RIDER, '/orders', {
+  it('reads every page of live orders in turn, so none is hidden', async () => {
+    const all = Array.from({ length: 140 }, () => boardOrder());
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/orders', {
       ...ordersHandlers([]),
-      'GET /admin/orders': (call: Call) =>
-        call.query.since
-          ? ok({ orders: [], pagination: { page: 1, limit: 100, total: 0, total_pages: 1 } })
-          : ok({ orders: page, pagination: { page: 1, limit: 100, total: 140, total_pages: 2 } }),
+      'GET /admin/orders': (call: Call) => {
+        if (call.query.since) return ok({ orders: [], pagination: { page: 1, limit: 100, total: 0, total_pages: 1 } });
+        const n = Number(call.query.page ?? '1');
+        return ok({ orders: all.slice((n - 1) * 100, n * 100), pagination: { page: n, limit: 100, total: 140, total_pages: 2 } });
+      },
     });
-    expect(await screen.findByText(/Showing 3 of 140 live orders/, undefined, { timeout: 5_000 })).toBeInTheDocument();
+    const toPack = await lane('To pack');
+    await waitFor(() => expect(within(toPack).getAllByRole('listitem')).toHaveLength(140), { timeout: 5_000 });
+    expect(screen.queryByText(/Showing \d+ of/)).not.toBeInTheDocument();
+    const live = api.find('GET', '/admin/orders').filter((c) => !c.query.since);
+    expect(live.map((c) => [c.query.page, c.query.limit])).toEqual([
+      ['1', '100'],
+      ['2', '100'],
+    ]);
+  });
+
+  it('stops at the page bound and says so', async () => {
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/orders', {
+      ...ordersHandlers([]),
+      'GET /admin/orders': (call: Call) => {
+        if (call.query.since) return ok({ orders: [], pagination: { page: 1, limit: 100, total: 0, total_pages: 1 } });
+        const n = Number(call.query.page ?? '1');
+        const orders = Array.from({ length: 100 }, (_, i) => boardOrder({ id: `o-${n}-${i}` }));
+        return ok({ orders, pagination: { page: n, limit: 100, total: 2500, total_pages: 25 } });
+      },
+    });
+    expect(
+      await screen.findByText(/Showing 2000 of 2500 live orders \(the oldest first\) — the board loads at most 2,000/, undefined, {
+        timeout: 20_000,
+      })
+    ).toBeInTheDocument();
+    expect(api.find('GET', '/admin/orders').filter((c) => !c.query.since)).toHaveLength(20);
+  }, 30_000);
+
+  it('a substitution with its cost packs; one without shows "Substitution needs a cost"', async () => {
+    const costed = boardOrder({
+      items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 1, uncosted_substitutions: 0 },
+    });
+    const uncosted = boardOrder({
+      items_summary: { total: 2, pending: 1, sourced: 0, packed: 0, unavailable: 0, substituted: 1, uncosted_substitutions: 1 },
+    });
+    renderAs(ADMIN_WITH_RIDER, '/orders', ordersHandlers([costed, uncosted]));
+    const toPack = await lane('To pack');
+    const rows = within(toPack).getAllByRole('listitem');
+    expect(within(rows[0]).getByRole('button', { name: /^Pack #/ })).toBeEnabled();
+    expect(within(rows[0]).queryByText('Substitution needs a cost')).not.toBeInTheDocument();
+    expect(within(rows[1]).queryByRole('button', { name: /^Pack #/ })).not.toBeInTheDocument();
+    expect(within(rows[1]).getByText('Substitution needs a cost')).toBeInTheDocument();
   });
 
   it('shows no cap notice when everything fits on one page', async () => {
@@ -295,6 +337,21 @@ describe('Order detail (a standalone route, /orders/:id)', () => {
     expect(await screen.findByRole('button', { name: 'Assign rider' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel order' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mark delivered' })).not.toBeInTheDocument();
+  });
+
+  it('the detail holds Pack back only while a substitution lacks its cost', async () => {
+    const o = boardOrder();
+    const items = (cost: string | null) => [
+      { id: 'i1', product_name_snapshot: 'Milk', quantity: 1, item_status: 'PENDING' as const },
+      { id: 'i2', product_name_snapshot: 'Butter (substitute)', quantity: 1, item_status: 'SUBSTITUTED' as const, actual_unit_cost: cost },
+    ];
+    renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, { 'GET /admin/orders/:id': () => ok({ order: orderDetail(o, { items: items(null) }) }) });
+    expect(await screen.findByRole('button', { name: 'Pack' })).toBeDisabled();
+    expect(screen.getByText('Substitution needs a cost')).toBeInTheDocument();
+    cleanup();
+    renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, { 'GET /admin/orders/:id': () => ok({ order: orderDetail(o, { items: items('120.00') }) }) });
+    expect(await screen.findByRole('button', { name: 'Pack' })).toBeEnabled();
+    expect(screen.queryByText('Substitution needs a cost')).not.toBeInTheDocument();
   });
 
   it('cancelling needs a reason the customer will see, and does not allow an empty submit - only reachable here, not from the board row', async () => {

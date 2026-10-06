@@ -53,14 +53,21 @@ export function laneOf(order: BoardOrderLike): Lane {
   }
 }
 
+/** Substitutions that still need a cost before the order can be packed. */
+export function uncostedSubstitutions(s: ItemsSummary): number {
+  return s.uncosted_substitutions ?? s.substituted;
+}
+
 /**
  * D7, revised 2026-09-30 (the owner: no separate sourcing step): the pack
  * itself takes every pending item off the shelf, so an order packs straight
  * from Placed - as long as there is no substitution without a cost and
- * something is left in the bag (backend `packingBlockers`).
+ * something is left in the bag (backend `packingBlockers`; a substitution
+ * with its cost counts as in the bag). Mirrors apps/admin/src/lib/orders.ts.
  */
 export function isPackable({ items_summary: s }: BoardOrderLike): boolean {
-  return s.substituted === 0 && s.pending + s.sourced + s.packed > 0;
+  const uncosted = uncostedSubstitutions(s);
+  return uncosted === 0 && s.pending + s.sourced + s.packed + (s.substituted - uncosted) > 0;
 }
 
 export type OrderAction =
@@ -242,14 +249,27 @@ const ACTIVE_DELIVERY_STATUSES = new Set(['ASSIGNED', 'ACCEPTED', 'PICKED_UP', '
  * - never a fabricated or guessed number (common.md rule 7).
  */
 export function boardOrderLikeFromDetail(detail: OrderDetail): BoardOrderLike {
-  const items_summary: ItemsSummary = { total: 0, pending: 0, sourced: 0, packed: 0, unavailable: 0, substituted: 0 };
+  const items_summary: ItemsSummary = {
+    total: 0,
+    pending: 0,
+    sourced: 0,
+    packed: 0,
+    unavailable: 0,
+    substituted: 0,
+    uncosted_substitutions: 0,
+  };
   for (const item of detail.items) {
     items_summary.total += 1;
     if (item.item_status === 'PENDING') items_summary.pending += 1;
     else if (item.item_status === 'SOURCED') items_summary.sourced += 1;
     else if (item.item_status === 'PACKED') items_summary.packed += 1;
     else if (item.item_status === 'UNAVAILABLE') items_summary.unavailable += 1;
-    else if (item.item_status === 'SUBSTITUTED') items_summary.substituted += 1;
+    else if (item.item_status === 'SUBSTITUTED') {
+      items_summary.substituted += 1;
+      // The backend rule (isUncostedSubstitution): no recorded cost blocks
+      // packing. A row without the field at all is treated the same way.
+      if (item.actual_unit_cost === null || item.actual_unit_cost === undefined) items_summary.uncosted_substitutions! += 1;
+    }
   }
   const d = detail.delivery;
   const active_delivery: ActiveDelivery | null =

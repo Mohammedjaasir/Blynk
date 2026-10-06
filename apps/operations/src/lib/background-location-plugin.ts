@@ -14,7 +14,9 @@
  * the screen locks, so ACCESS_BACKGROUND_LOCATION ("Allow all the time") is
  * NOT needed and is deliberately not declared. The plugin's own manifest
  * contributes the service, FOREGROUND_SERVICE, FOREGROUND_SERVICE_LOCATION
- * and POST_NOTIFICATIONS.
+ * and POST_NOTIFICATIONS. It never ASKS for POST_NOTIFICATIONS (issue #141),
+ * so ensureNotifications() does, through the app's own native
+ * NotificationPermissionPlugin (lib/notification-permission.ts).
  *
  * Differences from Rider's adapter: the notification wording, and nothing
  * else. The location POSTs do NOT rely on a global CapacitorHttp switch -
@@ -23,6 +25,7 @@
 import { registerPlugin } from '@capacitor/core';
 import type { BackgroundGeolocationPlugin, CallbackError, Location } from '@capacitor-community/background-geolocation';
 import type { TrackingPermissionState, TrackingPlugin } from './geolocation-plugin';
+import { ensureNotificationPermission } from './notification-permission';
 
 /** Inherited Capacitor bridge methods the plugin's own .d.ts does not
  * declare - see the long note in apps/rider/src/lib/tracking-plugin.ts. */
@@ -68,6 +71,9 @@ export const backgroundLocationPlugin: TrackingPlugin = {
       return 'unavailable';
     }
   },
+
+  /** Android 13+ POST_NOTIFICATIONS, so the notification above is not hidden (plugin issue #141). */
+  ensureNotifications: ensureNotificationPermission,
 
   async start(onPoint, onError) {
     watcherId = await BackgroundGeolocation.addWatcher(

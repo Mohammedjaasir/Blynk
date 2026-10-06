@@ -289,18 +289,37 @@ const LIVE_STATUSES = 'PLACED,ITEM_UNAVAILABLE,PACKED,OUT_FOR_DELIVERY,FAILED,CU
  * Order operations over the existing routes. Each status change is one
  * lifecycle action decided by the API (PATCH /admin/orders/:id/status).
  */
-/** The most live orders the board reads at once (the API caps limit at 100). */
+/** The page size the board reads live orders in (the API caps limit at 100). */
 export const LIVE_ORDERS_LIMIT = 100;
+/** The most pages the board reads in one load (2,000 live orders); past that it says so. */
+export const LIVE_ORDERS_MAX_PAGES = 20;
 
-type OrdersPage = { orders: BoardOrder[]; pagination?: { total?: number } };
+type OrdersPage = { orders: BoardOrder[]; pagination?: { total?: number; total_pages?: number } };
 
 export const orders = {
-  /** Oldest first; `total` is every live order, which can exceed `orders.length`. */
-  live: () =>
-    apiRequest<OrdersPage>(`/admin/orders?status=${LIVE_STATUSES}&limit=${LIVE_ORDERS_LIMIT}`).then((d) => ({
-      orders: d.orders,
-      total: d.pagination?.total ?? d.orders.length,
-    })),
+  /**
+   * Every live order, oldest first: the pages are read in sequence until
+   * pagination.total_pages (at most LIVE_ORDERS_MAX_PAGES). `total` is the
+   * API's count; `truncated` is true only when that bound stopped the read.
+   * An order that moved between page reads is kept once.
+   */
+  live: async () => {
+    const read = (page: number) =>
+      apiRequest<OrdersPage>(`/admin/orders?status=${LIVE_STATUSES}&limit=${LIVE_ORDERS_LIMIT}&page=${page}`);
+    const first = await read(1);
+    const total = first.pagination?.total ?? first.orders.length;
+    const totalPages = first.pagination?.total_pages ?? 1;
+    const all = [...first.orders];
+    const last = Math.min(totalPages, LIVE_ORDERS_MAX_PAGES);
+    for (let page = 2; page <= last; page += 1) {
+      const next = await read(page);
+      all.push(...next.orders);
+      if (next.orders.length < LIVE_ORDERS_LIMIT) break;
+    }
+    const seen = new Set<string>();
+    const unique = all.filter((o) => (seen.has(o.id) ? false : (seen.add(o.id), true)));
+    return { orders: unique, total, truncated: totalPages > LIVE_ORDERS_MAX_PAGES };
+  },
 
   /**
    * How many orders reached `status` since `since` - pagination.total, so the
@@ -350,6 +369,12 @@ export const orders = {
 export const riders = {
   /** Active riders only (the API filters); no availability flag exists. */
   listActive: () => apiRequest<{ riders: RiderOption[] }>('/admin/riders').then((d) => d.riders),
+  /**
+   * Every rider profile, inactive ones too (each row's `is_active` says
+   * which) - the cash hand-in picker, since a rider switched off may still
+   * owe cash.
+   */
+  listForCash: () => apiRequest<{ riders: RiderOption[] }>('/admin/riders?include_inactive=true').then((d) => d.riders),
   /** The same riders, best first for one order (load, distance to the store, trip). */
   suggestions: (orderId: string) =>
     apiRequest<RiderSuggestions>(`/admin/riders/suggestions?order_id=${encodeURIComponent(orderId)}`),

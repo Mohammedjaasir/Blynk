@@ -321,7 +321,7 @@ describe('Rider cash page', () => {
   it('records a hand-in for the chosen rider and day', async () => {
     const user = userEvent.setup();
     const api = stubFetch((method, path) => {
-      if (path === '/admin/riders') return respond({ riders: [{ id: 'r1', full_name: 'Kamal', phone: '+94779876543', vehicle_type: 'MOTORCYCLE', vehicle_registration_number: 'X', open_deliveries: 0 }] });
+      if (path === '/admin/riders?include_inactive=true') return respond({ riders: [{ id: 'r1', full_name: 'Kamal', phone: '+94779876543', vehicle_type: 'MOTORCYCLE', vehicle_registration_number: 'X', open_deliveries: 0 }] });
       if (method === 'POST') {
         return respond({ handin: { id: 'h1', rider_id: 'r1', rider_name: 'Kamal', amount: 100, handin_date: '2026-09-30', note: 'Evening', recorded_by_name: 'Admin', created_at: '' } }, 201);
       }

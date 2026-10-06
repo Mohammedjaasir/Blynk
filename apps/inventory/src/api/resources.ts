@@ -123,37 +123,57 @@ export const ledgerApi = {
  */
 const SOURCEABLE_STATUSES: OrderStatus[] = ['PLACED', 'ITEM_UNAVAILABLE'];
 
+/** The most pages of open orders read per status in one load (2,000 orders). */
+export const MAX_ORDER_PAGES = 20;
+
 export interface OpenOrders {
   orders: QueueOrder[];
   /** Open orders the backend has in total (pagination.total, per status, summed). */
   total: number;
+  /** True only when MAX_ORDER_PAGES stopped the read with orders left unread. */
+  truncated: boolean;
 }
+
+type OrdersPage = {
+  orders: Array<QueueOrder & { created_at: string; placed_at: string | null }>;
+  pagination?: Pagination;
+};
 
 export const sourcingApi = {
   /**
-   * Open orders, reduced to the fields sourcing needs (no customer PII). One
-   * page of 100 per status; `total` says how many exist, so the screen can
-   * say when some were not loaded.
+   * Every open order, reduced to the fields sourcing needs (no customer PII).
+   * Each status is read page by page, in sequence, up to
+   * pagination.total_pages (at most MAX_ORDER_PAGES); `total` is the API's
+   * count. An order that moved between reads is kept once.
    */
   async openOrders(): Promise<OpenOrders> {
-    const pages = await Promise.all(
-      SOURCEABLE_STATUSES.map((status) =>
-        apiRequest<{
-          orders: Array<QueueOrder & { created_at: string; placed_at: string | null }>;
-          pagination?: Pagination;
-        }>('/admin/orders', { query: { status, limit: MAX_PAGE_SIZE } })
-      )
-    );
-    const orders = pages
-      .flatMap((page) => page.orders)
+    const raw: OrdersPage['orders'] = [];
+    let total = 0;
+    let truncated = false;
+    for (const status of SOURCEABLE_STATUSES) {
+      const read = (page: number) =>
+        apiRequest<OrdersPage>('/admin/orders', { query: { status, page, limit: MAX_PAGE_SIZE } });
+      const first = await read(1);
+      raw.push(...first.orders);
+      total += Math.max(first.pagination?.total ?? 0, first.orders.length);
+      const totalPages = first.pagination?.total_pages ?? 1;
+      if (totalPages > MAX_ORDER_PAGES) truncated = true;
+      for (let page = 2; page <= Math.min(totalPages, MAX_ORDER_PAGES); page += 1) {
+        const next = await read(page);
+        raw.push(...next.orders);
+        if (next.orders.length < MAX_PAGE_SIZE) break;
+      }
+    }
+    const seen = new Set<string>();
+    const orders = raw
+      .filter((o) => (seen.has(o.id) ? false : (seen.add(o.id), true)))
       .map((o) => ({
         id: o.id,
         order_number: o.order_number,
         order_status: o.order_status,
         placed_at: o.placed_at ?? o.created_at,
       }));
-    const total = pages.reduce((sum, page) => sum + Math.max(page.pagination?.total ?? 0, page.orders.length), 0);
-    return { orders, total };
+    return { orders, total, truncated };
   },
   detail: (orderId: string) => apiRequest<OrderSourcing>(`/admin/orders/${orderId}/sourcing`),
   source: (

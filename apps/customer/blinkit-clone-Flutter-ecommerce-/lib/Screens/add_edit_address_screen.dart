@@ -67,6 +67,10 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   /// postal code are no longer asked: the city is always the hub's, and an
   /// old address's second line is folded into this box when it is edited.
   late final TextEditingController _line1Controller;
+  /// What the Address box showed when the screen opened (an edited
+  /// address's lines folded together); a save compares against it to tell
+  /// whether the customer changed the address.
+  late final String _loadedAddressText;
   late final TextEditingController _latController;
   late final TextEditingController _lngController;
   late final TextEditingController _instructionsController;
@@ -97,13 +101,8 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
     _phoneController = TextEditingController(
         text: e?.recipientPhone ?? _localPhone(me?.phone) ?? '');
     _altPhoneController = TextEditingController(text: e?.alternatePhone ?? '');
-    _line1Controller = TextEditingController(
-      text: [e?.addressLine1, e?.addressLine2]
-          .whereType<String>()
-          .map((v) => v.trim())
-          .where((v) => v.isNotEmpty)
-          .join(', '),
-    );
+    _loadedAddressText = _foldLines(e?.addressLine1, e?.addressLine2);
+    _line1Controller = TextEditingController(text: _loadedAddressText);
     _latController =
         TextEditingController(text: (e?.latitude ?? 6.4382).toString());
     _lngController =
@@ -176,19 +175,19 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   /// the backend's default and an edited one keeps what it had.
   String get _label => widget.existing?.label ?? 'Home';
 
-  /// What goes back as `address_line1` on an edit. The Address box shows an
-  /// old address's two lines folded together ("line 1, line 2"); the second
-  /// line is kept as it was (the edit never sends `address_line2`, so the
-  /// PATCH leaves it alone), so when the box still ends with it, it is taken
-  /// off again rather than saved twice.
-  static String _editedLine1(String box, String? existingLine2) {
-    final line2 = existingLine2?.trim() ?? '';
-    final suffix = ', $line2';
-    if (line2.isNotEmpty && box.endsWith(suffix) && box.length > suffix.length) {
-      return box.substring(0, box.length - suffix.length).trim();
-    }
-    return box;
-  }
+  /// An address's two lines as the one Address box shows them:
+  /// "line 1, line 2", or just line 1 when there is no second line.
+  static String _foldLines(String? line1, String? line2) => [line1, line2]
+      .whereType<String>()
+      .map((v) => v.trim())
+      .where((v) => v.isNotEmpty)
+      .join(', ');
+
+  /// True when the Address box no longer says what it said at load
+  /// (whitespace differences ignored).
+  bool get _addressTextChanged =>
+      AppValidators.normalizeText(_line1Controller.text) !=
+      AppValidators.normalizeText(_loadedAddressText);
 
   Future<void> _save() async {
     final fieldsOk = _formKey.currentState!.validate();
@@ -197,6 +196,7 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
 
     setState(() => _isSaving = true);
     final addressProvider = context.read<AddressProvider>();
+    final addressUnchanged = _isEditing && !_addressTextChanged;
 
     final address = AddressModel(
       id: widget.existing?.id ?? '',
@@ -208,13 +208,15 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
           AppValidators.normalizeText(_phoneController.text),
       // Optional: null (not '') when left empty, which also clears it on edit.
       alternatePhone: AppValidators.normalizePhone(_altPhoneController.text),
-      addressLine1: _isEditing
-          ? _editedLine1(AppValidators.normalizeText(_line1Controller.text),
-              AppValidators.normalizeText(widget.existing?.addressLine2 ?? ''))
+      // An edit the customer did not touch keeps both stored lines as they
+      // were (line 2 is left out of the PATCH below). Once the box is
+      // changed, its whole text becomes line 1 and line 2 is cleared, so the
+      // saved address is exactly what was typed. A new address has no
+      // second line.
+      addressLine1: addressUnchanged
+          ? widget.existing!.addressLine1
           : AppValidators.normalizeText(_line1Controller.text),
-      // A new address has no second line; an edited one keeps its own (the
-      // field is left out of the PATCH below, never sent as null).
-      addressLine2: _isEditing ? widget.existing?.addressLine2 : null,
+      addressLine2: addressUnchanged ? widget.existing!.addressLine2 : null,
       // Not asked any more: the city is the hub's; an edited address keeps
       // its saved city and postal code.
       city: widget.existing?.city ?? StoreInfo.hubName,
@@ -228,10 +230,11 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
 
     try {
       if (_isEditing) {
-        await addressProvider.updateAddress(
-          address.id,
-          address.toCreatePayload()..remove('address_line2'),
-        );
+        final payload = address.toCreatePayload();
+        // Unchanged box: no address_line2, so the PATCH leaves it alone.
+        // Changed box: address_line2 is sent as null to clear it.
+        if (addressUnchanged) payload.remove('address_line2');
+        await addressProvider.updateAddress(address.id, payload);
       } else {
         await addressProvider.createAddress(address);
       }
