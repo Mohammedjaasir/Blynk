@@ -26,10 +26,12 @@ Future<void> _pump(WidgetTester tester, {AuthProvider? auth, double textScale = 
 /// the customer's own and had no entry point outside the dental clinics
 /// screen). It is signed-in only, so the guest rows are unchanged.
 /// "Send feedback" (migration 013) is shown to guests too; tapping it as a
-/// guest goes to log in (feedback_screen_test.dart).
+/// guest goes to log in (feedback_screen_test.dart). "SMS & offers" works
+/// the same way (sms_preferences_screen_test.dart).
 const _signedInRows = [
   'Your orders',
   'Address book',
+  'SMS & offers',
   'My appointments',
   'Send feedback',
   'Share the app',
@@ -51,16 +53,16 @@ void main() {
     expect(find.byType(Image), findsNothing);
   });
 
-  testWidgets('a guest sees the five account-free rows and no Log out', (tester) async {
+  testWidgets('a guest sees the six account-free rows and no Log out', (tester) async {
     await _pump(tester);
 
-    for (final row in ['Your orders', 'Address book', 'Send feedback', 'Share the app', 'About us']) {
+    for (final row in ['Your orders', 'Address book', 'SMS & offers', 'Send feedback', 'Share the app', 'About us']) {
       expect(find.text(row), findsOneWidget, reason: row);
     }
     expect(find.text('Log out'), findsNothing);
   });
 
-  testWidgets('a signed-in user sees exactly the seven real rows, in sentence case', (tester) async {
+  testWidgets('a signed-in user sees exactly the eight real rows, in sentence case', (tester) async {
     await _pump(tester, auth: SignedInAuth());
 
     for (final row in _signedInRows) {

@@ -2035,3 +2035,117 @@ body {
   width: auto;
   min-width: 160px;
 }
+
+/* ---------------------------------------------------------- sms offers */
+.sms-offers {
+  display: grid;
+  grid-template-columns: minmax(0, 760px) minmax(240px, 300px);
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 28px;
+}
+
+.sms-offers__estimate {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.sms-offers__figures {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  transition: opacity 150ms ease;
+}
+
+.sms-offers__figures.is-stale {
+  opacity: 0.55;
+}
+
+.sms-offers__figures div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+}
+
+.sms-offers__figures div:first-child {
+  font-size: var(--text-body);
+  font-weight: 800;
+  color: var(--ink);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sms-offers__figures dd {
+  margin: 0;
+}
+
+.sms-offers__warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: var(--text-meta);
+  font-weight: 600;
+}
+
+.sms-offers__send {
+  width: 100%;
+}
+
+.sms-offers__preview {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--text-meta);
+  line-height: 1.5;
+}
+
+.sms-offers__test {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.sms-offers__history-title {
+  margin-top: 8px;
+}
+
+.sms-offers__snippet {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sms-offers__texts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.sms-offers__texts dt {
+  font-size: var(--text-label);
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sms-offers__texts dd {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1100px) {
+  .sms-offers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sms-offers__estimate {
+    position: static;
+  }
+}

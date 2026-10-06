@@ -194,6 +194,10 @@ abstract final class BlynkIcons {
   static const IconData logout = Icons.logout;
   static const IconData dental = Icons.medical_services_outlined;
   static const IconData feedback = Icons.rate_review_outlined;
+  // SMS & offers (Profile): the row, and the one-of-three language choice.
+  static const IconData sms = Icons.sms_outlined;
+  static const IconData choiceOn = Icons.radio_button_checked;
+  static const IconData choiceOff = Icons.radio_button_unchecked;
   // "Notify me when it's back" on a sold-out product (phase 6).
   static const IconData notifyMe = Icons.notifications_none;
   static const IconData notifyMeOn = Icons.notifications_active_outlined;

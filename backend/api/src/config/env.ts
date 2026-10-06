@@ -50,6 +50,10 @@ const envSchema = z.object({
   SMS_API_SECRET: z.string().optional(),
   SMS_USER_ID: z.string().optional(),
   SMS_SENDER_ID: z.string().optional().default('Blynk'),
+  // Languages SMS offers are written and sent in (migration 027), comma
+  // separated from si, ta, en. English only at launch (owner, 2026-10-06);
+  // set "si,ta,en" to turn Sinhala and Tamil on.
+  SMS_OFFER_LANGUAGES: z.string().optional().default('en'),
   WHATSAPP_API_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
 

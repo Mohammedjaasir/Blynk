@@ -29,7 +29,7 @@ export function More() {
 
   return (
     <div className="page">
-      <PageHeader title="More" description="Riders, rider cash, settings, account and sign-out." />
+      <PageHeader title="More" description="Riders, rider cash, staff, SMS offers, settings and sign-out." />
       <section className="card">
         <p className="card__row">
           <span className="card__label">Signed in as</span>
@@ -60,6 +60,11 @@ export function More() {
         <li>
           <Link className="cat-hub__card" to="/more/staff">
             <span className="cat-hub__title">Staff accounts</span>
+          </Link>
+        </li>
+        <li>
+          <Link className="cat-hub__card" to="/more/sms-offers">
+            <span className="cat-hub__title">SMS offers</span>
           </Link>
         </li>
       </ul>

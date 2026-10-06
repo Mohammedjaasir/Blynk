@@ -1,6 +1,7 @@
 import type { CustomerExportRow } from '../api/types';
 import { formatDay } from './coupons';
 import { loadXlsx } from './productImport';
+import { LANGUAGE_LABEL } from './smsOffers';
 
 /**
  * The Customers "Download Excel" sheet (2026-10-05): one row per customer,
@@ -16,6 +17,8 @@ export const CUSTOMER_EXPORT_COLUMNS = [
   'Last order',
   'Joined',
   'Account',
+  'SMS language',
+  'Offers by SMS',
 ] as const;
 
 export function customerSheetRows(rows: CustomerExportRow[]): (string | number)[][] {
@@ -31,6 +34,9 @@ export function customerSheetRows(rows: CustomerExportRow[]): (string | number)[
       c.last_order_at ? formatDay(c.last_order_at) : 'Never',
       formatDay(c.created_at),
       c.is_active ? 'Active' : 'Blocked',
+      c.sms_language ? LANGUAGE_LABEL[c.sms_language] : 'Not set',
+      // Off = the customer turned offer SMS off in the app; do not text them offers.
+      c.sms_offers ? 'On' : 'Off',
     ]),
   ];
 }
@@ -38,7 +44,7 @@ export function customerSheetRows(rows: CustomerExportRow[]): (string | number)[
 export async function buildCustomersXlsx(rows: CustomerExportRow[]): Promise<Blob> {
   const XLSX = await loadXlsx();
   const sheet = XLSX.utils.aoa_to_sheet(customerSheetRows(rows));
-  sheet['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 8 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 10 }];
+  sheet['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 8 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 13 }];
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, 'Customers');
   const out = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;

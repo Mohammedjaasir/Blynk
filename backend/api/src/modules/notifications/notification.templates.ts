@@ -149,6 +149,12 @@ export class NotificationTemplates {
 
       // The day-before reminder sent by SMS when no app push is possible
       // (dental/appointment-reminders.ts): the same title and body as the push.
+      case 'SMS_OFFER': {
+        // Migration 027: the text is complete when queued (the customer's
+        // language, opt-out line included), so it is sent exactly as written.
+        return typeof data.text === 'string' ? data.text : '';
+      }
+
       case 'DENTAL_APPOINTMENT_REMINDER': {
         const title = typeof data.title === 'string' ? data.title : 'Appointment tomorrow';
         const body = typeof data.body === 'string' ? data.body : '';

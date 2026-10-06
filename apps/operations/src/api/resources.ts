@@ -53,6 +53,12 @@ import type {
   CreateStaffInput,
   StaffAccount,
   UpdateStaffInput,
+  SmsLanguage,
+  SmsOffer,
+  SmsOfferCreated,
+  SmsOfferEstimate,
+  SmsOfferInput,
+  SmsOfferTestResult,
 } from './types';
 
 /**
@@ -868,4 +874,28 @@ export const cash = {
     ),
 
   remove: (id: string) => apiRequest(`/admin/cash/handins/${id}`, { method: 'DELETE' }),
+};
+
+// -------------------------------------------------------------- sms offers
+/**
+ * Offer SMS to registered customers (More -> SMS offers). ADMIN and
+ * OPERATIONS. The backend picks each customer's language, skips those who
+ * turned offers off, appends the opt-out line and enforces 8 AM - 9 PM.
+ */
+export const smsOffers = {
+  list: () => apiRequest<{ offers: SmsOffer[] }>('/admin/sms-offers').then((d) => d.offers),
+
+  estimate: (input: SmsOfferInput) =>
+    apiRequest<{ estimate: SmsOfferEstimate }>('/admin/sms-offers/estimate', { method: 'POST', body: { ...input } }).then(
+      (d) => d.estimate
+    ),
+
+  send: (input: SmsOfferInput) =>
+    apiRequest<{ offer: SmsOfferCreated }>('/admin/sms-offers', { method: 'POST', body: { ...input } }).then(
+      (d) => d.offer
+    ),
+
+  /** Sends one text only to the signed-in staff member's own phone. */
+  test: (language: SmsLanguage, message: string) =>
+    apiRequest<SmsOfferTestResult>('/admin/sms-offers/test', { method: 'POST', body: { language, message } }),
 };

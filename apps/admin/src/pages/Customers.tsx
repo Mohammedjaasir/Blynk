@@ -4,10 +4,11 @@ import { customers as customersApi, orders as ordersApi } from '../api/resources
 import type { CustomerDetail as Detail, CustomerOrderRow, CustomerRow, CustomerSort, OrderDetail } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { OrderBill } from '../components/OrderBill';
-import { EmptyState, Spinner } from '../components/ui';
+import { Badge, EmptyState, Spinner } from '../components/ui';
 import { formatDay } from '../lib/coupons';
 import { buildCustomersXlsx, customerExportFilename } from '../lib/customerExport';
 import { downloadBlob } from '../lib/productImport';
+import { smsLanguageLabel } from '../lib/smsOffers';
 import { ITEM_STATUS_LABEL, STATUS_LABEL, formatClock, formatMoney, orderErrorMessage, shortNumber } from '../lib/orders';
 
 /**
@@ -142,6 +143,8 @@ export function Customers() {
                     Delivered spend
                   </th>
                   <th scope="col">Last order</th>
+                  <th scope="col">SMS language</th>
+                  <th scope="col">Offers</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,6 +159,10 @@ export function Customers() {
                     <td className="num mono">{c.orders_count}</td>
                     <td className="num mono">{formatMoney(c.delivered_spend)}</td>
                     <td className="cell__secondary">{c.last_order_at ? formatDay(c.last_order_at) : 'Never'}</td>
+                    <td>{smsLanguageLabel(c.sms_language)}</td>
+                    <td>
+                      <Badge tone={c.sms_offers ? 'active' : 'inactive'}>{c.sms_offers ? 'On' : 'Off'}</Badge>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -236,6 +243,14 @@ export function CustomerDetail() {
             <div className="figure">
               <span className="figure__value figure__value--sm">{c.last_order_at ? formatDay(c.last_order_at) : 'Never'}</span>
               <span className="figure__label">Last order</span>
+            </div>
+            <div className="figure">
+              <span className="figure__value figure__value--sm">{smsLanguageLabel(c.sms_language)}</span>
+              <span className="figure__label">SMS language</span>
+            </div>
+            <div className="figure">
+              <span className="figure__value figure__value--sm">{c.sms_offers ? 'On' : 'Off'}</span>
+              <span className="figure__label">Offers by SMS</span>
             </div>
           </div>
 

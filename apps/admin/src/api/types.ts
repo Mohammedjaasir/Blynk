@@ -451,6 +451,10 @@ export interface CustomerRow {
   delivered_count: number;
   delivered_spend: number;
   last_order_at: string | null;
+  /** Language the customer picked in the app for SMS; null = never picked. */
+  sms_language: SmsLanguage | null;
+  /** false = the customer turned "Offers by SMS" off. */
+  sms_offers: boolean;
 }
 
 /** GET /admin/customers/export: every customer, by name (ADMIN only). */
@@ -462,6 +466,8 @@ export interface CustomerExportRow {
   orders_count: number;
   delivered_spend: number;
   last_order_at: string | null;
+  sms_language: SmsLanguage | null;
+  sms_offers: boolean;
 }
 
 export interface CustomerOrderRow {
@@ -518,4 +524,61 @@ export interface CashReconciliation {
   timezone: string;
   riders: RiderReconciliation[];
   totals: { collected: number; handed_in: number; difference: number; status: ReconciliationStatus };
+}
+
+// ------------------------------------------------------------ sms offers
+/** Backend migration 027. ADMIN and OPERATIONS. */
+export type SmsLanguage = 'si' | 'ta' | 'en';
+
+export type SmsOfferAudience = 'ALL' | 'ORDERED_30D' | 'ORDERED_90D' | 'NEVER_ORDERED';
+
+export interface SmsOfferInput {
+  audience: SmsOfferAudience;
+  fallback_language: SmsLanguage;
+  messages: Partial<Record<SmsLanguage, string>>;
+}
+
+/** POST /admin/sms-offers/estimate. */
+export interface SmsOfferEstimate {
+  audience: SmsOfferAudience;
+  recipients: number;
+  /** Recipients per language, after the fallback. */
+  by_language: Record<SmsLanguage, number>;
+  /** Customers who never picked a language (they get the fallback). */
+  without_language: number;
+  opted_out: number;
+  /** SMS parts one recipient costs, opt-out line included. */
+  parts_per_sms: Partial<Record<SmsLanguage, number>>;
+  sms_parts_total: number;
+  /** Languages with recipients but no text (only ever enabled ones). */
+  missing_languages: SmsLanguage[];
+  /** Languages offers are written in right now (backend SMS_OFFER_LANGUAGES); ['en'] at launch. */
+  languages: SmsLanguage[];
+}
+
+export interface SmsOfferSent {
+  id: string;
+  created_at: string;
+  recipients: number;
+  sms_parts_total: number;
+}
+
+export interface SmsOfferTestResult {
+  /** The signed-in staff member's own phone, masked. */
+  sent_to: string;
+  sms_parts: number;
+}
+
+export interface SmsOffer {
+  id: string;
+  audience: SmsOfferAudience;
+  fallback_language: SmsLanguage;
+  message_si: string | null;
+  message_ta: string | null;
+  message_en: string | null;
+  recipient_count: number;
+  sms_parts_total: number;
+  created_at: string;
+  sent_by_name: string | null;
+  sent_by_role: string | null;
 }

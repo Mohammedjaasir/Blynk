@@ -2517,3 +2517,56 @@ a.button {
   grid-template-columns: auto auto 1fr auto;
   gap: 10px;
 }
+
+/* -------------------------------------------------------------- sms offers */
+/* More -> SMS offers. Phone-first: every control is at least 44px tall. */
+.sms-choice {
+  min-height: 44px;
+  align-items: center;
+}
+
+.sms-choice input {
+  margin-top: 0;
+}
+
+.sms-segmented {
+  display: flex;
+  width: 100%;
+}
+
+.sms-segmented .segmented__item {
+  flex: 1;
+  min-height: 44px;
+}
+
+.sms-text textarea {
+  resize: vertical;
+}
+
+/* The final SMS as the customer sees it, opt-out line included. */
+.sms-preview {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--canvas);
+  border-radius: var(--radius);
+  font-size: var(--text-meta);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sms-test {
+  min-height: 44px;
+}
+
+.sms-test:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sms-send {
+  min-height: 48px;
+}
+
+.sms-history__text {
+  overflow-wrap: anywhere;
+}

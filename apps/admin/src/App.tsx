@@ -17,6 +17,7 @@ import { Products } from './pages/Products';
 import { Promotions } from './pages/Promotions';
 import { Sales } from './pages/Sales';
 import { Settings } from './pages/Settings';
+import { SmsOffers } from './pages/SmsOffers';
 import { Staff } from './pages/Staff';
 
 /**
@@ -70,6 +71,7 @@ export function AppRoutes() {
         <Route path="coupons" element={<AdminOnly><Coupons /></AdminOnly>} />
         <Route path="customers" element={<AdminOnly><Customers /></AdminOnly>} />
         <Route path="customers/:id" element={<AdminOnly><CustomerDetail /></AdminOnly>} />
+        <Route path="sms-offers" element={<AdminOnly><SmsOffers /></AdminOnly>} />
         <Route path="feedback" element={<AdminOnly><Feedback /></AdminOnly>} />
         <Route path="staff" element={<AdminOnly><Staff /></AdminOnly>} />
         <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />

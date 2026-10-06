@@ -35,6 +35,12 @@ import type {
   CustomerSort,
   SalesRange,
   SalesReport,
+  SmsLanguage,
+  SmsOffer,
+  SmsOfferEstimate,
+  SmsOfferInput,
+  SmsOfferSent,
+  SmsOfferTestResult,
 } from './types';
 
 /**
@@ -374,4 +380,25 @@ export const cash = {
     ),
 
   remove: (id: string) => apiRequest(`/admin/cash/handins/${id}`, { method: 'DELETE' }),
+};
+
+// ------------------------------------------------------------- sms offers
+/** Offer SMS to registered customers (backend migration 027). ADMIN and OPERATIONS. */
+export const smsOffers = {
+  /** Who would get it, in which language, and how many SMS parts it costs. */
+  estimate: (input: SmsOfferInput) =>
+    apiRequest<{ estimate: SmsOfferEstimate }>('/admin/sms-offers/estimate', { method: 'POST', body: { ...input } }).then(
+      (d) => d.estimate
+    ),
+
+  /** 8 AM - 9 PM only (422 OUTSIDE_SENDING_HOURS). */
+  send: (input: SmsOfferInput) =>
+    apiRequest<{ offer: SmsOfferSent }>('/admin/sms-offers', { method: 'POST', body: { ...input } }).then((d) => d.offer),
+
+  /** Only to the signed-in staff member's own phone. */
+  test: (language: SmsLanguage, message: string) =>
+    apiRequest<SmsOfferTestResult>('/admin/sms-offers/test', { method: 'POST', body: { language, message } }),
+
+  /** Newest first. */
+  list: () => apiRequest<{ offers: SmsOffer[] }>('/admin/sms-offers').then((d) => d.offers),
 };

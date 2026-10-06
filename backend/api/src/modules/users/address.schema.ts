@@ -56,6 +56,10 @@ export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;
 export const updateProfileSchema = z.object({
   full_name: z.string().trim().min(2, 'Full name must be at least 2 characters').max(128).optional(),
   email: z.string().trim().email('Invalid email address').max(255).optional(),
+  /** Migration 027: the language offer SMS arrive in. */
+  sms_language: z.enum(['si', 'ta', 'en']).optional(),
+  /** Migration 027: false turns "Offers by SMS" off. */
+  sms_offers: z.boolean().optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

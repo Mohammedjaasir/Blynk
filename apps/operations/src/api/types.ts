@@ -984,3 +984,61 @@ export interface CashReconciliation {
   riders: RiderReconciliation[];
   totals: { collected: number; handed_in: number; difference: number; status: ReconciliationStatus };
 }
+
+// -------------------------------------------------------------- sms offers
+/** Offer SMS to registered customers (backend migration 027). ADMIN and OPERATIONS. */
+export type SmsLanguage = 'si' | 'ta' | 'en';
+export type SmsOfferAudience = 'ALL' | 'ORDERED_30D' | 'ORDERED_90D' | 'NEVER_ORDERED';
+
+/** Body of `POST /admin/sms-offers/estimate` and `POST /admin/sms-offers`. */
+export interface SmsOfferInput {
+  audience: SmsOfferAudience;
+  fallback_language: SmsLanguage;
+  messages: Partial<Record<SmsLanguage, string>>;
+}
+
+/** `POST /admin/sms-offers/estimate` -> `data.estimate`. */
+export interface SmsOfferEstimate {
+  audience: SmsOfferAudience;
+  recipients: number;
+  /** Recipients per language they will be sent, after the fallback. */
+  by_language: Record<SmsLanguage, number>;
+  without_language: number;
+  opted_out: number;
+  parts_per_sms: Partial<Record<SmsLanguage, number>>;
+  sms_parts_total: number;
+  /** Languages that have recipients but no text yet (enabled languages only). */
+  missing_languages: SmsLanguage[];
+  /** Languages offers are written in right now (['en'] at launch). While a
+   * language is off, its customers are sent an enabled one. */
+  languages: SmsLanguage[];
+}
+
+/** `POST /admin/sms-offers` -> `data.offer`. */
+export interface SmsOfferCreated {
+  id: string;
+  created_at: string;
+  recipients: number;
+  sms_parts_total: number;
+}
+
+/** `POST /admin/sms-offers/test` -> `data`. */
+export interface SmsOfferTestResult {
+  sent_to: string;
+  sms_parts: number;
+}
+
+/** A row of `GET /admin/sms-offers` (newest first). */
+export interface SmsOffer {
+  id: string;
+  audience: SmsOfferAudience;
+  fallback_language: SmsLanguage;
+  message_si: string | null;
+  message_ta: string | null;
+  message_en: string | null;
+  recipient_count: number;
+  sms_parts_total: number;
+  created_at: string;
+  sent_by_name: string | null;
+  sent_by_role: string | null;
+}

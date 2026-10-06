@@ -111,6 +111,30 @@ export interface UsersTable {
   login_locked_until: Date | null;
   /** Migration 014: set when an admin disables a staff account (no sign-in, no refresh). */
   staff_disabled_at: Date | null;
+  /** Migration 027: the customer's SMS language; null until they pick one. */
+  sms_language: SmsLanguage | null;
+  /** Migration 027: set when the customer turns "Offers by SMS" off. */
+  sms_offers_opted_out_at: Date | null;
+}
+
+/** Migration 027: the languages an offer SMS can be written in. */
+export type SmsLanguage = 'si' | 'ta' | 'en';
+
+/** Migration 027: who an SMS offer goes to. */
+export type SmsOfferAudience = 'ALL' | 'ORDERED_30D' | 'ORDERED_90D' | 'NEVER_ORDERED';
+
+/** Migration 027: one SMS offer as sent by Admin or Operations. */
+export interface SmsOffersTable {
+  id: Generated<string>;
+  created_by: string | null;
+  audience: SmsOfferAudience;
+  fallback_language: SmsLanguage;
+  message_si: string | null;
+  message_ta: string | null;
+  message_en: string | null;
+  recipient_count: Generated<number>;
+  sms_parts_total: Generated<number>;
+  created_at: Generated<Date>;
 }
 
 export interface OtpVerificationsTable {
@@ -682,6 +706,7 @@ export interface Database {
   dark_stores: DarkStoresTable;
   service_areas: ServiceAreasTable;
   users: UsersTable;
+  sms_offers: SmsOffersTable;
   otp_verifications: OtpVerificationsTable;
   refresh_tokens: RefreshTokensTable;
   customer_addresses: CustomerAddressesTable;

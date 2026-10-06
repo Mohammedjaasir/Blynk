@@ -82,6 +82,8 @@ export class AddressService {
       role: user.role,
       is_active: user.is_active,
       created_at: user.created_at,
+      sms_language: user.sms_language,
+      sms_offers: user.sms_offers_opted_out_at === null,
     };
   }
 
@@ -96,6 +98,8 @@ export class AddressService {
       email: updated.email,
       full_name: updated.full_name,
       role: updated.role,
+      sms_language: updated.sms_language,
+      sms_offers: updated.sms_offers_opted_out_at === null,
     };
   }
 }

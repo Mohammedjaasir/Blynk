@@ -53,6 +53,8 @@ function customer(overrides: Partial<CustomerRow> = {}): CustomerRow {
     delivered_count: 6,
     delivered_spend: 8450.5,
     last_order_at: '2026-09-29T10:00:00.000Z',
+    sms_language: 'ta',
+    sms_offers: true,
     ...overrides,
   };
 }
@@ -137,12 +139,30 @@ describe('Customers page', () => {
     expect(paths).toContain('/admin/customers?search=0771234&sort=spend&page=1&limit=25');
   });
 
+  it('shows each customer’s SMS language and whether offer SMS are on', async () => {
+    stubFetch(() =>
+      respond({
+        customers: [customer(), customer({ id: 'u2', full_name: 'Kasun Perera', sms_language: null, sms_offers: false })],
+        pagination: { page: 1, limit: 25, total: 2, total_pages: 1 },
+      })
+    );
+    wrap(<Customers />);
+    const table = await screen.findByRole('table', { name: 'Customers' });
+    const headers = within(table).getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual(expect.arrayContaining(['SMS language', 'Offers']));
+    const [, first, second] = within(table).getAllByRole('row');
+    expect(first).toHaveTextContent('Tamil');
+    expect(first).toHaveTextContent('On');
+    expect(second).toHaveTextContent('—');
+    expect(second).toHaveTextContent('Off');
+  });
+
   it('downloads every customer as Excel, not just the page on screen', async () => {
     const user = userEvent.setup();
     const download = vi.spyOn(productImport, 'downloadBlob').mockImplementation(() => {});
     const api = stubFetch((_m, path) =>
       path.startsWith('/admin/customers/export')
-        ? respond({ customers: [{ full_name: 'Fathima Rizna', phone: '+94771234567', is_active: true, created_at: '2026-09-01T04:00:00.000Z', orders_count: 7, delivered_spend: 8450.5, last_order_at: null }] })
+        ? respond({ customers: [{ full_name: 'Fathima Rizna', phone: '+94771234567', is_active: true, created_at: '2026-09-01T04:00:00.000Z', orders_count: 7, delivered_spend: 8450.5, last_order_at: null, sms_language: 'en', sms_offers: true }] })
         : respond({ customers: [customer()], pagination: { page: 1, limit: 25, total: 1, total_pages: 1 } })
     );
     wrap(<Customers />);
@@ -170,14 +190,14 @@ describe('Customers page', () => {
     expect(screen.getByRole('button', { name: 'Download Excel' })).toBeEnabled();
   });
 
-  it('the sheet has name, both phone forms, figures, and keeps phones as text', () => {
+  it('the sheet has name, both phone forms, figures, SMS language and offers, and keeps phones as text', () => {
     const rows = customerSheetRows([
-      { full_name: '  Fathima Rizna ', phone: '+94771234567', is_active: true, created_at: '2026-09-01T04:00:00.000Z', orders_count: 7, delivered_spend: 8450.5, last_order_at: '2026-09-29T10:00:00.000Z' },
-      { full_name: null, phone: '+94712223344', is_active: false, created_at: '2026-09-02T04:00:00.000Z', orders_count: 0, delivered_spend: 0, last_order_at: null },
+      { full_name: '  Fathima Rizna ', phone: '+94771234567', is_active: true, created_at: '2026-09-01T04:00:00.000Z', orders_count: 7, delivered_spend: 8450.5, last_order_at: '2026-09-29T10:00:00.000Z', sms_language: 'si', sms_offers: true },
+      { full_name: null, phone: '+94712223344', is_active: false, created_at: '2026-09-02T04:00:00.000Z', orders_count: 0, delivered_spend: 0, last_order_at: null, sms_language: null, sms_offers: false },
     ]);
-    expect(rows[0]).toEqual(['Name', 'Phone', 'Phone (SMS format)', 'Orders', 'Delivered spend (LKR)', 'Last order', 'Joined', 'Account']);
-    expect(rows[1]).toEqual(['Fathima Rizna', '+94771234567', '94771234567', 7, 8450.5, '29 Sept 2026', '1 Sept 2026', 'Active']);
-    expect(rows[2]).toEqual(['', '+94712223344', '94712223344', 0, 0, 'Never', '2 Sept 2026', 'Blocked']);
+    expect(rows[0]).toEqual(['Name', 'Phone', 'Phone (SMS format)', 'Orders', 'Delivered spend (LKR)', 'Last order', 'Joined', 'Account', 'SMS language', 'Offers by SMS']);
+    expect(rows[1]).toEqual(['Fathima Rizna', '+94771234567', '94771234567', 7, 8450.5, '29 Sept 2026', '1 Sept 2026', 'Active', 'Sinhala', 'On']);
+    expect(rows[2]).toEqual(['', '+94712223344', '94712223344', 0, 0, 'Never', '2 Sept 2026', 'Blocked', 'Not set', 'Off']);
     expect(typeof rows[1]![2]).toBe('string');
     expect(customerExportFilename(new Date('2026-10-04T20:00:00.000Z'))).toBe('blynk-customers-2026-10-05.xlsx');
   });
@@ -252,6 +272,8 @@ describe('Customers page', () => {
     );
     expect(await screen.findByRole('heading', { name: 'Fathima Rizna' })).toBeInTheDocument();
     expect(screen.getByLabelText('Customer figures')).toHaveTextContent('LKR 8,450.5Delivered spend');
+    expect(screen.getByLabelText('Customer figures')).toHaveTextContent('TamilSMS language');
+    expect(screen.getByLabelText('Customer figures')).toHaveTextContent('OnOffers by SMS');
     const history = screen.getByRole('table', { name: 'Order history' });
     expect(history).toHaveTextContent('#0042');
     expect(history).toHaveTextContent('Delivered');

@@ -452,7 +452,7 @@ describe('admin scope', () => {
   });
   afterEach(() => tokenStore.clear());
 
-  it('navigates to store orders, sales, cash, catalog, home, coupons, customers, feedback, staff accounts and settings only', async () => {
+  it('navigates to store orders, sales, cash, catalog, home, coupons, customers, SMS offers, feedback, staff accounts and settings only', async () => {
     render(
       <MemoryRouter>
         <ToastProvider>
@@ -479,7 +479,8 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Rider cash' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Coupons' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Customers' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(13);
+    expect(screen.getByRole('link', { name: 'SMS offers' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(14);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

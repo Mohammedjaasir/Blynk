@@ -87,6 +87,7 @@ describe('Admin app access', () => {
       'Promotions',
       'Coupons',
       'Customers',
+      'SMS offers',
       'Feedback',
       'Staff accounts',
       'Settings',

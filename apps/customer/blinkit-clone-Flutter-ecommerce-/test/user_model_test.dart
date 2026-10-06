@@ -43,4 +43,48 @@ void main() {
       expect(restored.isActive, isTrue);
     });
   });
+
+  group('SMS preferences (GET/PATCH /me)', () {
+    Map<String, dynamic> profile(Map<String, dynamic> extra) => {
+          'id': 'u1',
+          'phone': '+94771234567',
+          'role': 'CUSTOMER',
+          ...extra,
+        };
+
+    test('a language never picked (null) parses as no selection', () {
+      final user = UserModel.fromJson(profile({'sms_language': null, 'sms_offers': true}));
+      expect(user.smsLanguage, isNull);
+      expect(user.smsOffers, isTrue);
+    });
+
+    test('each wire language parses to its choice', () {
+      expect(UserModel.fromJson(profile({'sms_language': 'si'})).smsLanguage, SmsLanguage.sinhala);
+      expect(UserModel.fromJson(profile({'sms_language': 'ta'})).smsLanguage, SmsLanguage.tamil);
+      expect(UserModel.fromJson(profile({'sms_language': 'en'})).smsLanguage, SmsLanguage.english);
+      // A value this app does not know is treated as not picked.
+      expect(UserModel.fromJson(profile({'sms_language': 'fr'})).smsLanguage, isNull);
+    });
+
+    test('sms_offers false is an opt-out; true or missing means receiving offers', () {
+      expect(UserModel.fromJson(profile({'sms_offers': false})).smsOffers, isFalse);
+      expect(UserModel.fromJson(profile({'sms_offers': true})).smsOffers, isTrue);
+      expect(UserModel.fromJson(profile({})).smsOffers, isTrue);
+    });
+
+    test('the labels show each language in its own script with English', () {
+      expect(SmsLanguage.values.map((l) => l.label), [
+        'සිංහල (Sinhala)',
+        'தமிழ் (Tamil)',
+        'English',
+      ]);
+    });
+
+    test('round-trips through the saved-session JSON', () {
+      final user = UserModel.fromJson(profile({'sms_language': 'ta', 'sms_offers': false}));
+      final restored = UserModel.fromJsonString(user.toJsonString());
+      expect(restored.smsLanguage, SmsLanguage.tamil);
+      expect(restored.smsOffers, isFalse);
+    });
+  });
 }

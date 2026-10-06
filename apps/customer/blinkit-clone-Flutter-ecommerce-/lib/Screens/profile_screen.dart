@@ -9,6 +9,7 @@ import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Organisms/logout_dialog.dart';
 import 'customer_shell.dart';
 import 'feedback_screen.dart';
+import 'sms_preferences_screen.dart';
 import '../app_responsive.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -57,6 +58,13 @@ class ProfileScreen extends StatelessWidget {
               callback: () {
                 Navigator.of(context).pushNamed('/user/address');
               },
+            ),
+            // Offer SMS end with "Blynk app > Profile > SMS & offers", so the
+            // switch lives one tap from here. A guest is sent to log in first.
+            customListTile(
+              icon: BlynkIcons.sms,
+              title: 'SMS & offers',
+              callback: () => SmsPreferencesScreen.open(context),
             ),
             // The appointment list is the customer's own and the backend
             // scopes it to them, so it is offered only once they are signed

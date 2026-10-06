@@ -78,6 +78,9 @@ export function Layout() {
               <NavLink to="/customers" className="nav__item">
                 Customers
               </NavLink>
+              <NavLink to="/sms-offers" className="nav__item">
+                SMS offers
+              </NavLink>
               <NavLink to="/feedback" className="nav__item">
                 Feedback
               </NavLink>

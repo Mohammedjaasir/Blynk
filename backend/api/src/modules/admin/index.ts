@@ -10,6 +10,7 @@ import { adminStaffRouter } from '../staff/index.js';
 import { adminSettingsRouter } from '../configuration/index.js';
 import { adminCouponsRouter } from '../coupons/index.js';
 import { adminReportsRouter } from '../reports/index.js';
+import { smsOffersRouter } from '../sms-offers/index.js';
 import { adminCashRouter } from '../cash/index.js';
 import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
@@ -53,6 +54,7 @@ adminRouter.use(adminSettingsRouter);
 // only, guarded inside each router.
 adminRouter.use(adminCouponsRouter);
 adminRouter.use(adminReportsRouter);
+adminRouter.use(smsOffersRouter);
 
 // Rider cash hand-ins and reconciliation (migration 019): ADMIN and
 // OPERATIONS, guarded inside.

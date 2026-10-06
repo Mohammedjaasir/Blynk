@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { CreateAddressInput, UpdateAddressInput } from './address.schema.js';
 
@@ -167,12 +168,19 @@ export class AddressRepository {
       .executeTakeFirst();
   }
 
-  async updateUserProfile(id: string, data: { full_name?: string; email?: string }) {
+  async updateUserProfile(
+    id: string,
+    data: { full_name?: string; email?: string; sms_language?: 'si' | 'ta' | 'en'; sms_offers?: boolean }
+  ) {
     const [record] = await db
       .updateTable('users')
       .set({
         ...(data.full_name !== undefined ? { full_name: data.full_name } : {}),
         ...(data.email !== undefined ? { email: data.email } : {}),
+        ...(data.sms_language !== undefined ? { sms_language: data.sms_language } : {}),
+        // Keep the first opt-out time; turning offers back on clears it.
+        ...(data.sms_offers === true ? { sms_offers_opted_out_at: null } : {}),
+        ...(data.sms_offers === false ? { sms_offers_opted_out_at: sql<Date>`coalesce(sms_offers_opted_out_at, now())` } : {}),
         updated_at: new Date(),
       })
       .where('id', '=', id)
