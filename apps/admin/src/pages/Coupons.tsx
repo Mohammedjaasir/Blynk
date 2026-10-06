@@ -53,7 +53,9 @@ export function Coupons() {
 
   async function toggle(c: Coupon) {
     try {
-      const updated = await couponsApi.update(c.id, { discount_type: c.discount_type, is_active: !c.is_active });
+      // Only the switch: sending discount_type makes the API re-check the
+      // type's value, and without it a FIXED or PERCENT coupon is refused.
+      const updated = await couponsApi.update(c.id, { is_active: !c.is_active });
       replace(updated);
       toast.success(updated.is_active ? `${c.code} is switched on.` : `${c.code} is switched off.`);
     } catch (err) {

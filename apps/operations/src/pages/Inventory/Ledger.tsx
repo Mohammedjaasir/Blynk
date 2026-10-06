@@ -45,8 +45,8 @@ export function Ledger() {
 
   useEffect(() => {
     void inventoryApi.stock
-      .list({ include_inactive: true, limit: 200 })
-      .then((r) => setProducts(r.inventory))
+      .listAll({ include_inactive: true })
+      .then(setProducts)
       .catch(() => setProducts([]));
   }, []);
 

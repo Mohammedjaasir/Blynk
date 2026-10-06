@@ -49,14 +49,13 @@ export function Stock() {
   const load = useCallback(async () => {
     try {
       const query = params.get('q') ?? '';
-      const result = await inventoryApi.stock.list({
+      const rows = await inventoryApi.stock.listAll({
         search: query.trim() || undefined,
         tracking_mode: view === 'tracked' ? 'TRACKED' : view === 'untracked' ? 'UNTRACKED' : undefined,
         low_stock_only: view === 'low' || undefined,
         include_inactive: includeInactive || undefined,
-        limit: 200,
       });
-      setRows(result.inventory);
+      setRows(rows);
       setError(null);
     } catch (err) {
       setError(inventoryErrorMessage(err, 'Could not load stock.'));

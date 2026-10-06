@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiError, onSessionEnded, tokenStore } from '../api/client';
 import { authApi } from '../api/resources';
+import { stopTracking } from '../lib/tracker-session';
 import type { AuthUser } from '../api/types';
 
 interface AuthState {
@@ -110,6 +111,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Signing out locally matters more than the server round trip.
     }
+    // Location sharing belongs to this signed-in rider: never past sign-out
+    // (the native watcher and its notification would otherwise keep running).
+    stopTracking().catch(() => undefined);
     tokenStore.clear();
     setUser(null);
     setNotice(null);

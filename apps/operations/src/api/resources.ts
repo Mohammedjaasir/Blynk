@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, tokenStore } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
   AdjustmentType,
@@ -133,7 +133,10 @@ export const auth = {
 
   me: () => apiRequest<AuthUser>('/auth/me'),
 
-  logout: () => apiRequest('/auth/logout', { method: 'POST' }),
+  // Send the refresh token so the server revokes it: without it the route
+  // knows neither the session nor the user, and the session outlives sign-out.
+  logout: () =>
+    apiRequest('/auth/logout', { method: 'POST', body: tokenStore.refresh ? { refresh_token: tokenStore.refresh } : {} }),
 };
 
 // ---------------------------------------------------------------- orders
@@ -780,6 +783,21 @@ export const inventory = {
   stock: {
     list: (query: StockQuery = {}) =>
       apiRequest<{ inventory: StockRow[]; pagination: Pagination }>('/admin/inventory', { query: { ...query } }),
+
+    /**
+     * Every row matching the query, read 100 at a time (the API's page
+     * limit; asking for more is refused with a 400).
+     */
+    listAll: async (query: Omit<StockQuery, 'page' | 'limit'> = {}): Promise<StockRow[]> => {
+      const rows: StockRow[] = [];
+      for (let page = 1; ; page++) {
+        const result = await apiRequest<{ inventory: StockRow[]; pagination: Pagination }>('/admin/inventory', {
+          query: { ...query, page, limit: 100 },
+        });
+        rows.push(...result.inventory);
+        if (page >= result.pagination.total_pages || result.inventory.length === 0) return rows;
+      }
+    },
 
     detail: (productId: string) => apiRequest<StockDetail>(`/admin/inventory/${productId}`),
 

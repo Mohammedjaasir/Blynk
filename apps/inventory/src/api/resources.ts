@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, tokenStore } from './client';
 import type {
   AuthUser,
   LedgerEntry,
@@ -35,7 +35,10 @@ export const authApi = {
       auth: false,
     }),
   me: () => apiRequest<AuthUser>('/auth/me'),
-  logout: () => apiRequest('/auth/logout', { method: 'POST' }),
+  // Send the refresh token so the server revokes it: without it the route
+  // knows neither the session nor the user, and the session outlives sign-out.
+  logout: () =>
+    apiRequest('/auth/logout', { method: 'POST', body: tokenStore.refresh ? { refresh_token: tokenStore.refresh } : {} }),
 };
 
 export interface StockQuery {

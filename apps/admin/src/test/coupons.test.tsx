@@ -198,7 +198,7 @@ describe('Coupons page', () => {
     );
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Switch off WELCOME50' }));
-    expect(api.sent('PATCH', '/admin/coupons/c1')).toEqual([{ discount_type: 'FIXED', is_active: false }]);
+    expect(api.sent('PATCH', '/admin/coupons/c1')).toEqual([{ is_active: false }]);
     expect(await screen.findByRole('button', { name: 'Switch on WELCOME50' })).toBeInTheDocument();
   });
 
