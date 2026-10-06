@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { delivery as deliveryApi, dental as dentalApi, orders as ordersApi, riders as ridersApi } from '../api/resources';
-import type { AdminAppointment, DeliverySummary, HomeOrder, HomeRider } from '../api/types';
+import type { DeliverySummary, HomeRider } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { useLowStock } from '../components/LowStock';
@@ -52,6 +52,11 @@ function addDays(dateString: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** The real number of matching appointments, not the length of one page. */
+function appointmentTotal(result: { appointments: unknown[]; pagination?: { total?: number } }): number {
+  return Math.max(result.appointments.length, Number(result.pagination?.total ?? result.appointments.length) || 0);
+}
+
 /** "1 order needs" vs "3 orders need" - never a bare, ungrammatical count. */
 function plural(count: number, singular: string, pluralForm: string): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
@@ -61,12 +66,14 @@ interface Summary {
   activeDelivery: DeliverySummary | null;
   /** The operator's own deliveries (staff riders): a trip is shown from these. */
   myDeliveries: DeliverySummary[];
-  needingPacking: HomeOrder[];
-  readyForRider: HomeOrder[];
-  onTheRoad: HomeOrder[];
-  completedToday: HomeOrder[];
-  appointmentsToday: AdminAppointment[];
-  appointmentsUpcoming: AdminAppointment[];
+  // Real counts from each query's `pagination.total` - not the length of
+  // one page, which stops at 100.
+  needingPacking: number;
+  readyForRider: number;
+  onTheRoad: number;
+  completedToday: number;
+  appointmentsToday: number;
+  appointmentsUpcoming: number;
   activeRiders: HomeRider[];
 }
 
@@ -103,17 +110,14 @@ export function Home() {
           activeRiders,
           myDeliveries,
         ] = await Promise.all([
-          ordersApi.needingPacking(),
-          ordersApi.readyForRider(),
-          ordersApi.onTheRoad(),
-          ordersApi.completedToday(startOfTodayColombo()),
-          // F9 widened `dental.appointments` into a `list`/`cancel`
-          // sub-object (resources.ts's own doc comment) - `.list()` now
-          // returns the full `{appointments, pagination}` envelope, so this
-          // still-array-only need unwraps it the same way `inventory.stock
-          // .list`'s callers already do elsewhere in this app.
-          dentalApi.appointments.list({ from: today, to: today, limit: 100 }).then((r) => r.appointments),
-          dentalApi.appointments.list({ from: today, to: upcomingEnd, limit: 100 }).then((r) => r.appointments),
+          ordersApi.needingPacking().then((r) => r.total),
+          ordersApi.readyForRider().then((r) => r.total),
+          ordersApi.onTheRoad().then((r) => r.total),
+          ordersApi.completedToday(startOfTodayColombo()).then((r) => r.total),
+          // Only the count is needed, and it is `pagination.total` - the
+          // page itself stops at 100.
+          dentalApi.appointments.list({ from: today, to: today, limit: 100 }).then(appointmentTotal),
+          dentalApi.appointments.list({ from: today, to: upcomingEnd, limit: 100 }).then(appointmentTotal),
           ridersApi.listActive(),
           // ADMIN_ONLY sessions have no rider profile to ask about - this
           // isn't a failure, so it isn't even fetched (brief: "omit ...
@@ -190,9 +194,9 @@ export function Home() {
 
   const trip = tripOf(summary.myDeliveries, position, road);
   const attention: { text: string; to: string; label: string }[] = [];
-  if (summary.needingPacking.length > 0) {
+  if (summary.needingPacking > 0) {
     attention.push({
-      text: `${plural(summary.needingPacking.length, 'order needs', 'orders need')} packing.`,
+      text: `${plural(summary.needingPacking, 'order needs', 'orders need')} packing.`,
       // `?focus=packing` (task F3's Orders board) scrolls straight to the
       // "To pack" lane instead of landing on an unfiltered board - the
       // deep-link nice-to-have review-F2-report.md flagged as F3's job.
@@ -200,9 +204,9 @@ export function Home() {
       label: 'Go to Orders',
     });
   }
-  if (summary.readyForRider.length > 0) {
+  if (summary.readyForRider > 0) {
     attention.push({
-      text: `${plural(summary.readyForRider.length, 'order is', 'orders are')} packed, waiting for a rider.`,
+      text: `${plural(summary.readyForRider, 'order is', 'orders are')} packed, waiting for a rider.`,
       to: '/orders?focus=readyForRider',
       label: 'Assign a rider',
     });
@@ -269,10 +273,10 @@ export function Home() {
       ) : null}
 
       <section className="figures">
-        <Figure value={summary.onTheRoad.length} label="On the road" to="/orders" />
-        <Figure value={summary.completedToday.length} label="Completed today" to="/orders" />
-        <Figure value={summary.appointmentsToday.length} label="Appointments today" to="/catalog" />
-        <Figure value={summary.appointmentsUpcoming.length} label="Upcoming (7 days)" to="/catalog" />
+        <Figure value={summary.onTheRoad} label="On the road" to="/orders" />
+        <Figure value={summary.completedToday} label="Completed today" to="/orders" />
+        <Figure value={summary.appointmentsToday} label="Appointments today" to="/catalog" />
+        <Figure value={summary.appointmentsUpcoming} label="Upcoming (7 days)" to="/catalog" />
         <Figure value={summary.activeRiders.length} label="Active riders" to="/more" />
       </section>
 

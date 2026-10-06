@@ -6,8 +6,6 @@ import type { UpdateLocationInput } from './rider.location.schema.js';
 
 /** No two accepted writes closer together than this, per delivery (plan §5.3, §D.6). */
 export const MIN_LOCATION_INTERVAL_MS = 5_000;
-/** A capture more than this far in the future is a clock-skew problem, not a real point. */
-const MAX_FUTURE_SKEW_MS = 60_000;
 /** Older than this, a point is still accepted and stored but not broadcast live (plan §5.1). */
 const STALE_BROADCAST_THRESHOLD_MS = 5 * 60_000;
 
@@ -49,13 +47,11 @@ export class RiderLocationService {
       });
     }
 
-    const capturedAt = new Date(input.captured_at);
     const nowMs = Date.now();
-    if (capturedAt.getTime() - nowMs > MAX_FUTURE_SKEW_MS) {
-      throw new AppError('captured_at is too far in the future.', 400, 'VALIDATION_ERROR', [
-        { path: ['captured_at'], message: 'timestamp is ahead of the server clock' },
-      ]);
-    }
+    // A phone clock running ahead must not lose the point: a capture time in
+    // the future is clamped to the server's now (never rejected), so it
+    // still orders correctly against later points.
+    const capturedAt = new Date(Math.min(new Date(input.captured_at).getTime(), nowMs));
 
     // Out-of-order or duplicate, fast path: a point no newer than the point
     // this same read just saw stored must never regress the customer's map
@@ -110,7 +106,7 @@ export class RiderLocationService {
       broadcastLocation(row.order_id, {
         latitude: Number(row.current_latitude),
         longitude: Number(row.current_longitude),
-        accuracy: Number(row.location_accuracy_m),
+        accuracy: row.location_accuracy_m == null ? null : Number(row.location_accuracy_m),
         captured_at: row.location_captured_at!.toISOString(),
         received_at: row.location_received_at!.toISOString(),
       });

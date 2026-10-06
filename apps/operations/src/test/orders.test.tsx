@@ -89,6 +89,24 @@ function ordersHandlers(live: BoardOrder[], closed: BoardOrder[] = []) {
 const lane = (name: string) => screen.findByRole('region', { name: new RegExp(`^${name}`) });
 
 describe('Orders board', () => {
+  it('says when the board shows only the first 100 of more live orders', async () => {
+    const page = Array.from({ length: 3 }, () => boardOrder());
+    renderAs(ADMIN_WITH_RIDER, '/orders', {
+      ...ordersHandlers([]),
+      'GET /admin/orders': (call: Call) =>
+        call.query.since
+          ? ok({ orders: [], pagination: { page: 1, limit: 100, total: 0, total_pages: 1 } })
+          : ok({ orders: page, pagination: { page: 1, limit: 100, total: 140, total_pages: 2 } }),
+    });
+    expect(await screen.findByText(/Showing 3 of 140 live orders/, undefined, { timeout: 5_000 })).toBeInTheDocument();
+  });
+
+  it('shows no cap notice when everything fits on one page', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/orders', ordersHandlers([boardOrder()]));
+    await lane('To pack');
+    expect(screen.queryByText(/Showing \d+ of/)).not.toBeInTheDocument();
+  });
+
   it('with nothing live, says so and invents nothing', async () => {
     renderAs(ADMIN_WITH_RIDER, '/orders', ordersHandlers([]));
     expect(await screen.findByText('No live orders.')).toBeInTheDocument();
@@ -560,5 +578,33 @@ describe('Assign dialog: suggested rider and trips (GET /admin/riders/suggestion
     const dialog = await screen.findByRole('dialog', { name: /Assign a rider/ });
     expect(await within(dialog).findByRole('radio', { name: /Farhan Mohamed/ })).toBeInTheDocument();
     expect(dialog).not.toHaveTextContent(/km|location unknown|Suggested/);
+  });
+
+  it('roster fallback: a 409 BATCH_DROPOFFS_TOO_FAR keeps the dialog open and offers "Add to trip anyway"', async () => {
+    const user = userEvent.setup();
+    const o = boardOrder({ order_status: 'PACKED' });
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/orders', {
+      ...ordersHandlers([o]),
+      'GET /admin/riders/suggestions': () => fail(500, 'INTERNAL', 'boom'),
+      'POST /admin/orders/:id/assign-rider': (call: Call) =>
+        call.body.confirm_far_batch
+          ? ok({ delivery: { id: 'd9' } })
+          : {
+              status: 409,
+              error: { code: 'BATCH_DROPOFFS_TOO_FAR', message: 'too far', details: { distance_km: 3.4 } },
+            },
+    });
+    await user.click(within(await lane('Ready for a rider')).getByRole('button', { name: /^Assign rider/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Assign a rider/ });
+    await user.click(await within(dialog).findByRole('radio', { name: /Farhan Mohamed/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Assign' }));
+
+    expect(await within(dialog).findByText(/This drop-off is 3.4 km from that rider's other one/)).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /Assign a rider/ })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Add to trip anyway' }));
+
+    await waitFor(() => expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)).toHaveLength(2));
+    expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)[1].body).toEqual({ rider_id: 'r1', confirm_far_batch: true });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Assign a rider/ })).not.toBeInTheDocument());
   });
 });

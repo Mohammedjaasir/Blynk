@@ -26,12 +26,18 @@
  *  - #141 (open): the plugin never requests POST_NOTIFICATIONS. GAP: neither this file nor
  *    the app requests it, so on Android 13+ the FGS runs but its notification is hidden from
  *    the drawer (visible only in the Task Manager) unless the user grants it in Settings.
+ *    Re-checked 2026-10-06: no installed package can ask for it from JS - @capacitor/core has
+ *    no generic permission API, this plugin declares only the "location" alias, and the
+ *    notification plugins (@capacitor/local-notifications / push-notifications) would be a new
+ *    dependency. Left as a documented gap: add one of those (or a small native plugin under
+ *    android/) and call its requestPermissions() before start().
  *  - HIGH RISK, MITIGATED (README + issue #14): "after 5 minutes in the background Android
  *    will throttle HTTP requests initiated from the WebView"; the fix is native HTTP
  *    (CapacitorHttp). capacitor.config.ts now sets plugins.CapacitorHttp.enabled = true, which
  *    patches global fetch to native HTTP on Android, so api/client.ts fetch() calls are no
  *    longer WebView-throttled. Still unverified on a device (runbook scenario S20). Note the
- *    patched fetch ignores AbortSignal, so client.ts's 15 s timeout does not fire on Android.
+ *    patched fetch ignores AbortSignal, so client.ts races every request against its own 15 s
+ *    deadline, which settles the call whatever the transport does.
  * iOS (out of scope): Info.plist NSLocationWhenInUseUsageDescription,
  * NSLocationAlwaysAndWhenInUseUsageDescription, UIBackgroundModes = [location].
  * checkPermissions()/requestPermissions() used below are inherited bridge methods, see the

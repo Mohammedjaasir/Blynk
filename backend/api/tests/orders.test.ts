@@ -128,7 +128,7 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       addressWithin4kmId = res.body.data.address.id;
     });
 
-    it('allows customer to create address beyond 4 km radius (e.g. 18 km away in Kalutara)', async () => {
+    it('refuses an address beyond the service radius (18 km away in Kalutara) with 422 DELIVERY_OUTSIDE_RADIUS', async () => {
       // Kalutara location (~18 km from Dharga Town)
       const res = await request(app)
         .post('/api/v1/me/addresses')
@@ -144,8 +144,64 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
           is_default: false,
         });
 
-      expect(res.status).toBe(201);
-      addressBeyond4kmId = res.body.data.address.id;
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('DELIVERY_OUTSIDE_RADIUS');
+      expect(res.body.error.details.distance_km).toBeGreaterThan(4.0);
+      expect(res.body.error.details.max_radius_km).toBeGreaterThan(0);
+
+      // An address saved before the rule existed can still be out of zone;
+      // checkout must refuse it too (tested below), so one is written directly.
+      addressBeyond4kmId = (
+        await pool.query(
+          `INSERT INTO customer_addresses (user_id, label, recipient_name, recipient_phone, address_line1, city, latitude, longitude, is_default)
+           VALUES ($1, 'Office', 'Ahmed Rizvi Work', '+94771234567', '500, Galle Road', 'Kalutara', 6.5854, 79.9607, false) RETURNING id`,
+          [customerA.id]
+        )
+      ).rows[0].id;
+    });
+
+    it('PATCH refuses moving the pin out of the zone and keeps omitted fields', async () => {
+      const created = await request(app)
+        .post('/api/v1/me/addresses')
+        .set('Authorization', `Bearer ${tokenCustomerA}`)
+        .send({
+          label: 'Patch zone',
+          recipient_name: 'Ahmed Rizvi',
+          recipient_phone: '077 123 4567',
+          address_line1: '12, Old Mosque Road',
+          address_line2: 'Upstairs',
+          city: 'Dharga Town',
+          latitude: 6.4391,
+          longitude: 80.028,
+        });
+      expect(created.status).toBe(201);
+      const id = created.body.data.address.id;
+
+      const far = await request(app)
+        .patch(`/api/v1/me/addresses/${id}`)
+        .set('Authorization', `Bearer ${tokenCustomerA}`)
+        .send({ latitude: 6.5854, longitude: 79.9607 });
+      expect(far.status).toBe(422);
+      expect(far.body.error.code).toBe('DELIVERY_OUTSIDE_RADIUS');
+      expect(far.body.error.details).toEqual(expect.objectContaining({ distance_km: expect.any(Number), max_radius_km: expect.any(Number) }));
+
+      // Only one coordinate sent: checked against the stored other one.
+      const halfFar = await request(app)
+        .patch(`/api/v1/me/addresses/${id}`)
+        .set('Authorization', `Bearer ${tokenCustomerA}`)
+        .send({ latitude: 6.5854 });
+      expect(halfFar.status).toBe(422);
+
+      const near = await request(app)
+        .patch(`/api/v1/me/addresses/${id}`)
+        .set('Authorization', `Bearer ${tokenCustomerA}`)
+        .send({ latitude: 6.4385, city: 'Dharga Town' });
+      expect(near.status).toBe(200);
+      expect(near.body.data.address.address_line2).toBe('Upstairs');
+      expect(near.body.data.address.label).toBe('Patch zone');
+      expect(Number(near.body.data.address.latitude)).toBeCloseTo(6.4385, 4);
+
+      await pool.query('DELETE FROM customer_addresses WHERE id = $1', [id]);
     });
 
     it('lists customer active addresses with default address prioritized', async () => {
@@ -200,6 +256,28 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
   describe('Checkout & Orders Engine', () => {
     let placedOrderId: string;
     let placedOrderNumber: string;
+
+    it('GET /admin/orders reports pagination.total (all matching orders, not just this page)', async () => {
+      const res = await request(app).get('/api/v1/admin/orders?limit=1').set('Authorization', `Bearer ${tokenAdmin}`);
+      expect(res.status).toBe(200);
+      const { pagination, orders } = res.body.data;
+      expect(orders.length).toBeLessThanOrEqual(1);
+      expect(typeof pagination.total).toBe('number');
+      const count = Number((await pool.query('SELECT count(*) AS n FROM orders')).rows[0].n);
+      expect(pagination.total).toBe(count);
+      expect(pagination.limit).toBe(1);
+    });
+
+    it('staff tokens cannot place orders (403)', async () => {
+      for (const role of ['ADMIN', 'PACKING_STAFF', 'OPERATIONS', 'RIDER'] as const) {
+        const token = generateAccessToken({ id: adminUser.id, phone: adminUser.phone, role });
+        const res = await request(app)
+          .post('/api/v1/orders')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ address_id: addressWithin4kmId, items: [{ product_id: 'b0000001-0000-0000-0000-000000000001', quantity: 1 }] });
+        expect(res.status, role).toBe(403);
+      }
+    });
 
     it('rejects checkout when delivery address is outside 4.00 km service zone with HTTP 422', async () => {
       const res = await request(app)

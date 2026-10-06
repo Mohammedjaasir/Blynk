@@ -16,6 +16,8 @@ import {
   orderErrorMessage,
   primaryAction,
   shortNumber,
+  farBatchRefusal,
+  type FarBatchRefusal,
   type OrderAction,
 } from '../lib/orders';
 
@@ -44,6 +46,7 @@ export function OrderDetail() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dialog, setDialog] = useState<OrderAction | null>(null);
+  const [farRefusal, setFarRefusal] = useState<FarBatchRefusal | null>(null);
   // Per-action, not a single page-level flag (design-audit I7, matching
   // Orders.tsx's own per-order `busyId` pattern) - only the button actually
   // clicked relabels to "Saving…"; the others stay disabled but unchanged.
@@ -69,13 +72,15 @@ export function OrderDetail() {
   }, [load]);
 
   const run = useCallback(
-    async (action: OrderAction, step: () => Promise<unknown>) => {
+    async (action: OrderAction, step: () => Promise<unknown>, keepOpen?: (err: unknown) => boolean) => {
       setBusyAction(action);
       setNotice(null);
       try {
         await step();
         setDialog(null);
       } catch (err) {
+        // A refusal that only needs a confirmation keeps its dialog open.
+        if (keepOpen?.(err)) return;
         const refusedCode = action === 'markDelivered' ? deliveryCodeError(err) : null;
         if (refusedCode) {
           setCodeError(refusedCode);
@@ -96,6 +101,7 @@ export function OrderDetail() {
       if (!id) return;
       if (action === 'assign' || action === 'markDelivered' || needsNote(action)) {
         setCodeError(null);
+        setFarRefusal(null);
         setDialog(action);
         return;
       }
@@ -277,8 +283,22 @@ export function OrderDetail() {
         <AssignRiderDialog
           order={detail}
           busy={busyAction === 'assign'}
-          onClose={() => setDialog(null)}
-          onAssign={(riderId, confirmFar) => void run('assign', () => ordersApi.assignRider(detail.id, riderId, confirmFar))}
+          onClose={() => {
+            setDialog(null);
+            setFarRefusal(null);
+          }}
+          farRefusal={farRefusal}
+          onAssign={(riderId, confirmFar) =>
+            void run(
+              'assign',
+              () => ordersApi.assignRider(detail.id, riderId, confirmFar),
+              (err) => {
+                const refusal = farBatchRefusal(err, riderId, confirmFar);
+                setFarRefusal(refusal);
+                return refusal !== null;
+              }
+            )
+          }
         />
       ) : null}
       {confirmItem ? (

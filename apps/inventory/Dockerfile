@@ -2,8 +2,8 @@
 #
 # Build:  docker build --build-arg VITE_API_BASE_URL=https://api.example.com/api/v1 .
 # The API address is baked in at build time (Vite), so it is a build
-# argument, not a runtime variable. Store builds never set
-# VITE_ENABLE_DEV_SKIP, so "Skip sign-in" is compiled out.
+# argument, not a runtime variable. vite.config.ts refuses a production
+# build when it is missing, localhost or plain http.
 
 FROM node:20-alpine AS build
 WORKDIR /app

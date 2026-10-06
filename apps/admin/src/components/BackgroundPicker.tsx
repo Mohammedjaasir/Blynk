@@ -1,13 +1,25 @@
 import { ImageUploader } from './ImageUploader';
 
 /**
- * Background control for a promotion: solid, gradient, or an image.
+ * Background control for a promotion: solid, gradient, an image under the
+ * app's headline, or finished ARTWORK drawn full-bleed with nothing over it.
+ * IMAGE and ARTWORK share background_image_url.
  *
  * Operators get a curated set of Blynk-consistent swatches rather than a
  * colour wheel or raw CSS - a promotion should always look like Blynk, and
  * nobody running the store should have to reason about hex values.
  */
-export type BackgroundType = 'SOLID' | 'GRADIENT' | 'IMAGE';
+export type BackgroundType = 'SOLID' | 'GRADIENT' | 'IMAGE' | 'ARTWORK';
+
+/** IMAGE and ARTWORK both draw background_image_url. */
+export const usesBackgroundImage = (type: BackgroundType) => type === 'IMAGE' || type === 'ARTWORK';
+
+export const BACKGROUND_TYPE_LABEL: Record<BackgroundType, string> = {
+  SOLID: 'Solid',
+  GRADIENT: 'Gradient',
+  IMAGE: 'Image',
+  ARTWORK: 'Full artwork',
+};
 
 export interface BackgroundValue {
   background_type: BackgroundType;
@@ -68,14 +80,15 @@ export function BackgroundPicker({
         background_image_url: value.background_image_url,
       });
     } else {
-      onChange({ ...value, background_type: 'IMAGE' });
+      // IMAGE <-> ARTWORK keeps the uploaded file: only what is drawn over it changes.
+      onChange({ ...value, background_type: next });
     }
   }
 
   return (
     <div className="bg-picker">
       <div className="segmented" role="group" aria-label="Background type">
-        {(['SOLID', 'GRADIENT', 'IMAGE'] as BackgroundType[]).map((option) => (
+        {(['SOLID', 'GRADIENT', 'IMAGE', 'ARTWORK'] as BackgroundType[]).map((option) => (
           <button
             key={option}
             type="button"
@@ -83,7 +96,7 @@ export function BackgroundPicker({
             aria-pressed={option === type}
             onClick={() => setType(option)}
           >
-            {option === 'SOLID' ? 'Solid' : option === 'GRADIENT' ? 'Gradient' : 'Image'}
+            {BACKGROUND_TYPE_LABEL[option]}
           </button>
         ))}
       </div>
@@ -148,18 +161,18 @@ export function BackgroundPicker({
         </div>
       ) : null}
 
-      {type === 'IMAGE' ? (
+      {usesBackgroundImage(type) ? (
         <>
           <ImageUploader
             value={value.background_image_url}
             folder="promotions"
-            label="Background image"
-            onChange={(url) =>
-              onChange({ ...value, background_type: 'IMAGE', background_image_url: url })
-            }
+            label={type === 'ARTWORK' ? 'Banner artwork' : 'Background image'}
+            onChange={(url) => onChange({ ...value, background_type: type, background_image_url: url })}
           />
           <p className="uploader__hint">
-            The app darkens image backgrounds so the headline stays readable.
+            {type === 'ARTWORK'
+              ? 'A finished banner, shown full-bleed: the app draws no headline, subtitle or shading over it. The headline is still used as its label for screen readers.'
+              : 'The app darkens image backgrounds so the headline stays readable.'}
           </p>
         </>
       ) : null}

@@ -21,6 +21,9 @@ dependencies:
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
   flutter_local_notifications: ^22.3.1
+  # Web build only (conditional import): the browser's fetch streaming and
+  # EventSource for live updates. Already in the lock file via dio's web adapter.
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:

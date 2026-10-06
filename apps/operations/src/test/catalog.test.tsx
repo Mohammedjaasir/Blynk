@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
 import type { AdminProduct, Category, Promotion } from '../api/types';
-import { ADMIN_WITH_RIDER, fail, ok, renderAs } from './helpers';
+import { PRODUCT_PAGE_CAP, catalog } from '../api/resources';
+import { ADMIN_WITH_RIDER, fail, mockApi, ok, renderAs } from './helpers';
 
 /**
  * Products/Categories/Promotions (task F5, plan §12) against a fake Blynk
@@ -134,6 +135,42 @@ describe('Products', () => {
     expect(screen.getByText('Old Stock Yoghurt')).toBeInTheDocument();
     expect(screen.getByText('LKR 210.00')).toBeInTheDocument();
     expect(screen.getByText('Inactive')).toBeInTheDocument();
+  });
+
+  it('pages through every product (200 a page) instead of stopping at the first 200', async () => {
+    const all = Array.from({ length: 450 }, (_, i) => product({ name: `Item ${i}` }));
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/products', {
+      'GET /admin/products': (call) => {
+        const page = Number(call.query.page);
+        return ok({ products: all.slice((page - 1) * 200, page * 200), pagination: { page, limit: 200 } });
+      },
+      'GET /admin/categories': () => ok({ categories: [] }),
+    });
+    expect(await screen.findByText('Item 449')).toBeInTheDocument();
+    expect(api.find('GET', '/admin/products').map((c) => c.query.page)).toEqual(['1', '2', '3']);
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument();
+  });
+
+  it('listAll stops at the page cap and reports that the list is not complete', async () => {
+    let n = 0;
+    // One fixture, copied: `product()` bumps the shared `seq` other fixtures use.
+    const base = product();
+    const api = mockApi({
+      // Never a short page: more products than the cap.
+      'GET /admin/products': () =>
+        ok({ products: Array.from({ length: 200 }, () => ({ ...base, id: `cap-${(n += 1)}`, name: `Row ${n}` })) }),
+    });
+    const result = await catalog.products.listAll();
+    expect(result.capped).toBe(true);
+    expect(result.products).toHaveLength(PRODUCT_PAGE_CAP * 200);
+    expect(api.find('GET', '/admin/products')).toHaveLength(PRODUCT_PAGE_CAP);
+  });
+
+  it('says the list is not complete when the read was capped', async () => {
+    const spy = vi.spyOn(catalog.products, 'listAll').mockResolvedValue({ products: [product({ name: 'Only One' })], capped: true });
+    renderAs(ADMIN_WITH_RIDER, '/catalog/products', { 'GET /admin/categories': () => ok({ categories: [] }) });
+    expect(await screen.findByText('Showing the first 1 products. Search or filter by category to find the rest.')).toBeInTheDocument();
+    spy.mockRestore();
   });
 
   it('shows an honest empty state, not a blank gap', async () => {
@@ -277,7 +314,7 @@ describe('Product form', () => {
     });
   });
 
-  it('uploads an image and stores the returned URL, then removes it', async () => {
+  it('uploads an image and stores the returned URL; Remove clears the field but deletes nothing', async () => {
     const user = userEvent.setup();
     const { api, container } = renderAs(ADMIN_WITH_RIDER, '/catalog/products/new', {
       'GET /admin/categories': () => ok({ categories: [category()] }),
@@ -302,11 +339,67 @@ describe('Product form', () => {
     expect(await screen.findByText('Replace image')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Remove' }));
-    await waitFor(() => {
-      const del = api.find('DELETE', '/admin/media')[0];
-      expect(del?.body).toEqual({ url: 'https://cdn.blynk.test/products/coconut.webp' });
-    });
     expect(screen.getByText('Upload image')).toBeInTheDocument();
+    expect(api.find('DELETE', '/admin/media')).toHaveLength(0);
+  });
+
+  it('deletes the old image only after the product is saved without it', async () => {
+    const user = userEvent.setup();
+    const existing = product({ name: 'Fresh Milk', image_url: 'https://cdn.blynk.test/products/old.webp' });
+    const { api } = renderAs(ADMIN_WITH_RIDER, `/catalog/products/${existing.id}`, {
+      'GET /admin/categories': () => ok({ categories: [category({ id: existing.category_id })] }),
+      'GET /admin/products/:id': () => ok({ product: existing }),
+      'PATCH /admin/products/:id': () => ok({ product: existing }),
+      'GET /admin/products': () => ok({ products: [], pagination: { page: 1, limit: 200, total: 0, total_pages: 1 } }),
+      'DELETE /admin/media': () => ok({ deleted: true }),
+    });
+    await screen.findByDisplayValue('Fresh Milk');
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(api.find('DELETE', '/admin/media')).toHaveLength(0);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.find('DELETE', '/admin/media')).toHaveLength(1));
+    expect(api.find('PATCH', `/admin/products/${existing.id}`)[0].body).toHaveProperty('image_url', null);
+    expect(api.find('DELETE', '/admin/media')[0].body).toEqual({ url: 'https://cdn.blynk.test/products/old.webp' });
+  });
+
+  it('a failed save never deletes the old image', async () => {
+    const user = userEvent.setup();
+    const existing = product({ name: 'Fresh Milk', image_url: 'https://cdn.blynk.test/products/old.webp' });
+    const { api } = renderAs(ADMIN_WITH_RIDER, `/catalog/products/${existing.id}`, {
+      'GET /admin/categories': () => ok({ categories: [category({ id: existing.category_id })] }),
+      'GET /admin/products/:id': () => ok({ product: existing }),
+      'PATCH /admin/products/:id': () => fail(500, 'INTERNAL'),
+      'DELETE /admin/media': () => ok({ deleted: true }),
+    });
+    await screen.findByDisplayValue('Fresh Milk');
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.find('PATCH', `/admin/products/${existing.id}`)).toHaveLength(1));
+    await screen.findByText(/had a problem|went wrong|INTERNAL/i);
+    expect(api.find('DELETE', '/admin/media')).toHaveLength(0);
+  });
+
+  it('refuses an image still over 2 MB before uploading it', async () => {
+    const { api, container } = renderAs(ADMIN_WITH_RIDER, '/catalog/products/new', {
+      'GET /admin/categories': () => ok({ categories: [category()] }),
+      'POST /admin/media': () => ok({ media: { key: 'k', url: 'u' } }),
+    });
+    await screen.findByText('Add product');
+    const big = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'big.jpg', { type: 'image/jpeg' });
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [big] } });
+    expect(await screen.findByText(/larger than 2 MB/)).toBeInTheDocument();
+    expect(api.find('POST', '/admin/media')).toHaveLength(0);
+  });
+
+  it('explains a 413 FILE_TOO_LARGE from the API', async () => {
+    const { container } = renderAs(ADMIN_WITH_RIDER, '/catalog/products/new', {
+      'GET /admin/categories': () => ok({ categories: [category()] }),
+      'POST /admin/media': () => fail(413, 'FILE_TOO_LARGE', 'File too large'),
+    });
+    await screen.findByText('Add product');
+    const file = new File(['abc'], 'coconut.jpg', { type: 'image/jpeg' });
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+    expect(await screen.findByText('That image is larger than 2 MB. Choose a smaller one.')).toBeInTheDocument();
   });
 });
 
@@ -456,6 +549,50 @@ describe('Promotions', () => {
       });
     });
   });
+
+  it('moving between two promotions with the SAME order renumbers the list so the move happens', async () => {
+    const user = userEvent.setup();
+    const first = promotion({ title: 'First', display_order: 0 });
+    const second = promotion({ title: 'Second', display_order: 0 });
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/promotions', {
+      'GET /admin/promotions': () => ok({ promotions: [first, second] }),
+      'GET /admin/categories': () => ok({ categories: [] }),
+      'GET /promotions': () => ok({ promotions: [] }),
+      'PATCH /admin/promotions/reorder': () => ok({ promotions: [second, first] }),
+    });
+    await screen.findByText('First');
+    await user.click(screen.getByRole('button', { name: 'Move First down' }));
+    await waitFor(() => {
+      expect(api.find('PATCH', '/admin/promotions/reorder')[0]?.body).toEqual({
+        items: [
+          { id: second.id, display_order: 10 },
+          { id: first.id, display_order: 20 },
+        ],
+      });
+    });
+  });
+
+  it.each(['1.5', '1001', '-3', 'abc'])(
+    'refuses display order %s inline, sending nothing',
+    async (value) => {
+      const user = userEvent.setup();
+      const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/promotions', {
+        'GET /admin/promotions': () => ok({ promotions: [] }),
+        'GET /admin/categories': () => ok({ categories: [] }),
+        'GET /promotions': () => ok({ promotions: [] }),
+        'POST /admin/promotions': () => ok({ promotion: promotion() }),
+      });
+      await user.click(await screen.findByRole('button', { name: 'Add promotion' }));
+      const dialog = within(screen.getByRole('dialog', { name: 'Promotion' }));
+      await user.type(dialog.getByLabelText(/^Headline/), 'New Year Sale');
+      const order = dialog.getByLabelText(/^Display order/);
+      await user.clear(order);
+      await user.type(order, value);
+      await user.click(dialog.getByRole('button', { name: 'Save' }));
+      expect(await dialog.findByText('Order must be a whole number from 0 to 1000.')).toBeInTheDocument();
+      expect(api.find('POST', '/admin/promotions')).toHaveLength(0);
+    }
+  );
 
   it('creates an informational promotion with null CTA fields when no destination is chosen', async () => {
     const user = userEvent.setup();

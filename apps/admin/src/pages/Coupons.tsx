@@ -4,8 +4,11 @@ import { coupons as couponsApi } from '../api/resources';
 import type { Coupon, CouponType } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
+import { errorMessage, fieldErrors } from '../lib/apiErrors';
 import {
+  COUPON_FIELD_FOR,
   STATE_LABEL,
+  couponInUseMessage,
   TYPE_LABEL,
   couponState,
   describeDiscount,
@@ -25,7 +28,7 @@ import { formatMoney } from '../lib/orders';
  * limits here hold even when customers race for the last use.
  */
 
-const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
+const errorText = errorMessage;
 
 type Dialog = { kind: 'create' } | { kind: 'edit'; coupon: Coupon } | { kind: 'delete'; coupon: Coupon } | null;
 
@@ -70,11 +73,13 @@ export function Coupons() {
       setRows((current) => current?.filter((r) => r.id !== c.id) ?? current);
       toast.success(`${c.code} deleted.`);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError && err.code === 'COUPON_IN_USE'
-          ? `${c.code} has been used on orders, so it cannot be deleted. Switch it off instead.`
-          : errorText(err, 'Could not delete the coupon.')
-      );
+      if (err instanceof ApiError && err.code === 'COUPON_IN_USE') {
+        // Used since the list was read: say why, and show its real usage.
+        toast.error(couponInUseMessage(c.code));
+        await load();
+      } else {
+        toast.error(errorText(err, 'Could not delete the coupon.'));
+      }
     }
   }
 
@@ -219,7 +224,7 @@ function CouponDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const found = validateForm(form, isNew);
+    const found = validateForm(form, isNew, coupon?.usage_count ?? 0);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
     setSaving(true);
@@ -230,8 +235,20 @@ function CouponDialog({
     } catch (err) {
       if (err instanceof ApiError && err.code === 'COUPON_CODE_TAKEN') {
         setErrors({ code: 'Another coupon already uses this code.' });
+      } else if (err instanceof ApiError && err.code === 'COUPON_IN_USE') {
+        setErrors({ form: couponInUseMessage(coupon?.code ?? form.code) });
       } else {
-        setErrors({ form: errorText(err, 'Could not save the coupon.') });
+        // Per-field server details next to their inputs; the rest below.
+        const inline: CouponFormErrors = {};
+        const shown: string[] = [];
+        for (const [field, message] of Object.entries(fieldErrors(err))) {
+          const key = COUPON_FIELD_FOR[field];
+          if (key && !inline[key]) {
+            inline[key] = message;
+            shown.push(field);
+          }
+        }
+        setErrors({ ...inline, form: errorMessage(err, 'Could not save the coupon.', shown) });
       }
     } finally {
       setSaving(false);
@@ -289,7 +306,15 @@ function CouponDialog({
           <Field label="Last day" hint="Optional; the code works until the end of this day." error={errors.ends_on}>
             <input className="input" type="date" value={form.ends_on} onChange={(e) => set('ends_on', e.target.value)} />
           </Field>
-          <Field label="Total uses" hint="Optional; empty means no limit." error={errors.usage_limit}>
+          <Field
+            label="Total uses"
+            hint={
+              coupon && coupon.usage_count > 0
+                ? `Optional; empty means no limit. Used ${coupon.usage_count} so far - the limit cannot be lower.`
+                : 'Optional; empty means no limit.'
+            }
+            error={errors.usage_limit}
+          >
             <input className="input" inputMode="numeric" value={form.usage_limit} onChange={(e) => set('usage_limit', e.target.value)} />
           </Field>
           <Field label="Uses per customer" error={errors.per_customer_limit}>

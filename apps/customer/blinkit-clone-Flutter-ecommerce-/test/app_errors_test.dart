@@ -186,6 +186,41 @@ void main() {
     });
   });
 
+  group('known codes get their own words (2026-10-06)', () {
+    test('LOGIN_LOCKED says the login is locked, not "check your details"', () {
+      final e = AppErrors.from(ApiException(429, 'Too many wrong passwords. Try again in 15 minute(s).',
+          code: 'LOGIN_LOCKED', details: {'retry_after_minutes': 15}));
+      expect(e.title, 'Login locked for now');
+      expect(e.message, 'Too many wrong tries. Wait a few minutes, or log in with an SMS code.');
+      expect(e.message, isNot(contains('15')));
+    });
+
+    test('ACTIVE_ORDERS_EXIST (deleting an account with an open order)', () {
+      final e = AppErrors.from(ApiException(409, 'Finish or cancel your open orders first.', code: 'ACTIVE_ORDERS_EXIST'));
+      expect(e.message, 'Finish or cancel your open orders first.');
+      expect(e.retryable, isFalse);
+    });
+
+    test('DELIVERY_OUTSIDE_RADIUS is the one shared outside-the-area error', () {
+      final e = AppErrors.from(ApiException(422, 'Outside radius', code: 'DELIVERY_OUTSIDE_RADIUS'));
+      expect(e, same(AppErrors.outsideDeliveryArea));
+      expect(e.message, "We don't deliver to this address yet. Choose another address.");
+    });
+
+    test('a 422 with a code this app does not know is a refusal, not a typo', () {
+      final e = AppErrors.from(ApiException(422, 'A developer sentence', code: 'SOMETHING_NEW'));
+      expect(e, same(AppErrors.notPossible));
+      expect(e.kind, CustomerErrorKind.validation);
+      expect(e.message, isNot(AppErrors.validation.message));
+      expect(e.message, isNot(contains('developer')));
+    });
+
+    test('a 422 without a code, or a schema failure, still asks to check the details', () {
+      expect(AppErrors.from(ApiException(422, 'x')), same(AppErrors.validation));
+      expect(AppErrors.from(ApiException(422, 'x', code: 'VALIDATION_ERROR')), same(AppErrors.validation));
+    });
+  });
+
   group('every string is customer-safe', () {
     final all = <String, CustomerError>{
       'offline': AppErrors.offline,
@@ -197,6 +232,8 @@ void main() {
       'server': AppErrors.server,
       'tooManyTries': AppErrors.tooManyTries,
       'unknown': AppErrors.unknown,
+      'notPossible': AppErrors.notPossible,
+      'outsideDeliveryArea': AppErrors.outsideDeliveryArea,
       for (final code in [
         'INVALID_OTP',
         'OTP_EXPIRED',
@@ -209,6 +246,12 @@ void main() {
         'PRODUCT_NOT_FOUND',
         'TOO_MANY_REQUESTS',
         'RATE_LIMITED',
+        'ACTIVE_ORDERS_EXIST',
+        'LOGIN_LOCKED',
+        'ORDER_CANNOT_BE_CANCELLED',
+        'ORDER_ALREADY_CANCELLED',
+        'STORE_UNAVAILABLE',
+        'PHONE_TAKEN',
       ])
         code: AppErrors.from(ApiException(400, 'x', code: code)),
     };

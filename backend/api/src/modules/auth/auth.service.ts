@@ -146,7 +146,7 @@ export class AuthService {
   async verifyOtp(
     phone: string,
     submittedOtp: string,
-    meta: { ipAddress?: string; deviceInfo?: string }
+    meta: { ipAddress?: string; deviceInfo?: string; createAccount?: boolean }
   ): Promise<AuthTokensResult> {
     // 1. Fetch active OTP challenge without transaction
     const activeOtp = await authRepository.findLatestOtp(db, phone);
@@ -227,6 +227,11 @@ export class AuthService {
         // code either. Thrown inside the transaction, so nothing is consumed.
         if (existingUser.staff_disabled_at) throw staffSignInRefused();
         user = await authRepository.updateLastLogin(trx, existingUser.id);
+      } else if (meta.createAccount === false) {
+        // Staff apps sign in with create_account:false - an unknown number is
+        // refused instead of becoming a customer. Thrown inside the
+        // transaction, so the code is not consumed and nothing is written.
+        throw new AppError('No Blynk account uses this number.', 404, 'ACCOUNT_NOT_FOUND');
       } else {
         // First-time login: auto-register as CUSTOMER strictly
         user = await authRepository.createOrGetCustomer(trx, phone);

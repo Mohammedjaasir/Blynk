@@ -8,7 +8,9 @@ export const authApi = {
   verifyOtp: (phone: string, otp: string) =>
     apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/otp/verify', {
       method: 'POST',
-      body: { phone, otp },
+      // Staff sign-in never creates an account: an unknown number is refused
+      // (404 ACCOUNT_NOT_FOUND) instead of becoming a new customer.
+      body: { phone, otp, create_account: false },
       auth: false,
     }),
   /**

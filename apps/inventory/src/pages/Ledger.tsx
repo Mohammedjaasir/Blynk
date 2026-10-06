@@ -36,7 +36,8 @@ export function Ledger() {
     setParams(next, { replace: true });
   }
 
-  const products = useLoad(() => stockApi.list({ include_inactive: true, limit: 100 }), []);
+  // Every product, page by page - the filter must not stop at the first 100.
+  const products = useLoad(() => stockApi.listAll({ include_inactive: true }), []);
   const { data, error, loading, reload } = useLoad(
     () =>
       ledgerApi.list({

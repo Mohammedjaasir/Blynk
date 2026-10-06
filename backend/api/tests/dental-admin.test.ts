@@ -569,6 +569,8 @@ describe('Dental admin CRUD API (task B4, /api/v1/admin/dental/*)', () => {
       expect(res.status).toBe(201);
       blockedDateIds.push(res.body.data.blocked_date.id);
       expect(res.body.data.blocked_date.created_by).toBe(ADMIN.id);
+      // A plain calendar date, never a timezone-shifted ISO timestamp.
+      expect(res.body.data.blocked_date.blocked_date).toBe('2027-12-25');
     });
 
     it('POST rejects a duplicate pairing+date cleanly (uq_doctor_blocked_dates backstop)', async () => {
@@ -613,6 +615,8 @@ describe('Dental admin CRUD API (task B4, /api/v1/admin/dental/*)', () => {
         .set(auth(adminToken));
       expect(res.status).toBe(200);
       expect(res.body.data.blocked_dates.length).toBeGreaterThanOrEqual(1);
+      const listed = res.body.data.blocked_dates.find((b: { id: string }) => b.id === created.body.data.blocked_date.id);
+      expect(listed.blocked_date).toBe('2027-09-09');
     });
 
     it('DELETE unblocks a date', async () => {

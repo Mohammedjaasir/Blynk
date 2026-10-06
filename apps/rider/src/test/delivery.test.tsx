@@ -302,6 +302,31 @@ describe('Delivery', () => {
     expect(screen.queryByText(/^Sharing your location/)).not.toBeInTheDocument();
   });
 
+  it('on a trip, arriving at one stop moves location sharing to the other picked-up delivery straight away', async () => {
+    const user = userEvent.setup();
+    const { state, handler } = serving(detail(onRoad));
+    const { api } = renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': handler,
+      'GET /riders/deliveries': () =>
+        ok({
+          deliveries: [
+            { ...detail(atDoor) },
+            { ...detail({ ...onRoad, delivery_id: 'd-2', order_id: 'o-2', order_number: 'BLK-20260918-0002' }) },
+          ],
+        }),
+      'PATCH /riders/deliveries/:id/status': () => {
+        state.current = detail(atDoor);
+        return ok({ delivery: state.current });
+      },
+    });
+    await waitFor(() => expect(getTracker().getDeliveryId()).toBe('d-1'));
+    await user.click(await screen.findByRole('button', { name: "I've arrived" }));
+    await waitFor(() => expect(getTracker().getDeliveryId()).toBe('d-2'));
+    expect(getTracker().getState().active).toBe(true);
+    expect(api.find('GET', '/riders/deliveries').length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText('Sharing your location for your next stop.')).toBeInTheDocument();
+  });
+
   it('a failing plugin start does not become an unhandled rejection', async () => {
     vi.mocked(capacitorTrackingPlugin.start).mockRejectedValueOnce(new Error('native start failed'));
     renderAs(RIDER, ROUTE, { 'GET /riders/deliveries/:id': () => ok({ delivery: detail(onRoad) }) });

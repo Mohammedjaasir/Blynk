@@ -437,8 +437,18 @@ describe('Doctor availability & blocked dates', () => {
 
     expect(await screen.findByText('Monday')).toBeInTheDocument();
     expect(screen.getByText('09:00–17:00')).toBeInTheDocument();
-    expect(screen.getByText('2027-12-25')).toBeInTheDocument();
+    expect(screen.getByText('Sat, 25 Dec 2027')).toBeInTheDocument();
     expect(screen.getByText('Holiday')).toBeInTheDocument();
+  });
+
+  it('still shows the right day if the API sends the blocked date as an ISO timestamp', async () => {
+    // 6 Oct 2026 at midnight in Colombo, serialised as UTC.
+    const block = blockedDate({ clinic_doctor_id: clinicDoctorId, blocked_date: '2026-10-05T18:30:00.000Z', reason: 'Conference' });
+    renderAs(ADMIN_WITH_RIDER, routePath, {
+      'GET /admin/dental/clinic-doctors/:clinicDoctorId/availability': () => ok({ availability: [] }),
+      'GET /admin/dental/clinic-doctors/:clinicDoctorId/blocked-dates': () => ok({ blocked_dates: [block] }),
+    });
+    expect(await screen.findByText('Tue, 06 Oct 2026')).toBeInTheDocument();
   });
 
   it('adds an availability row with exactly the entered fields', async () => {
@@ -553,7 +563,7 @@ describe('Doctor availability & blocked dates', () => {
       'GET /admin/dental/clinic-doctors/:clinicDoctorId/blocked-dates': () => ok({ blocked_dates: [block] }),
       'DELETE /admin/dental/blocked-dates/:id': () => ({ status: 204 }),
     });
-    await screen.findByText('2027-12-25');
+    await screen.findByText('Sat, 25 Dec 2027');
     await user.click(screen.getByRole('button', { name: 'Unblock' }));
     const confirm = within(screen.getByRole('dialog', { name: 'Unblock date' }));
     await user.click(confirm.getByRole('button', { name: 'Unblock' }));
@@ -696,7 +706,7 @@ describe('End-to-end: standing up a bookable clinic', () => {
       await user.type(blockDialog.getByLabelText('Reason'), 'Year-end closure');
       await user.click(blockDialog.getByRole('button', { name: 'Block date' }));
       await waitFor(() => expect(savedBlocked).toHaveLength(1));
-      expect(await screen.findByText('2027-12-31')).toBeInTheDocument();
+      expect(await screen.findByText('Fri, 31 Dec 2027')).toBeInTheDocument();
       expect(screen.getByText('Year-end closure')).toBeInTheDocument();
       cleanup();
     }

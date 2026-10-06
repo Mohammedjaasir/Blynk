@@ -94,22 +94,36 @@ export const updateThresholdSchema = z.object({
   dark_store_id: z.string().uuid('Invalid dark store ID').optional(),
 });
 
+/**
+ * An optional supplier text field. The Inventory app sends "" for a cleared
+ * field; "" and null are both stored as NULL, so two suppliers with no code
+ * never collide on the UNIQUE suppliers.code. Omitted stays undefined (kept).
+ */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === null || v === '' ? null : v));
+
 export const createSupplierSchema = z.object({
   name: z.string().min(2, 'Supplier name must be at least 2 characters').max(128),
-  code: z.string().max(64).optional(),
-  contact_person: z.string().max(128).optional(),
-  contact_phone: z.string().max(20).optional(),
-  address: z.string().max(500).optional(),
-  notes: z.string().max(500).optional(),
+  code: optionalText(64),
+  contact_person: optionalText(128),
+  contact_phone: optionalText(20),
+  address: optionalText(500),
+  notes: optionalText(500),
 });
 
 export const updateSupplierSchema = z.object({
   name: z.string().min(2).max(128).optional(),
-  code: z.string().max(64).optional(),
-  contact_person: z.string().max(128).optional(),
-  contact_phone: z.string().max(20).optional(),
-  address: z.string().max(500).optional(),
-  notes: z.string().max(500).optional(),
+  code: optionalText(64),
+  contact_person: optionalText(128),
+  contact_phone: optionalText(20),
+  address: optionalText(500),
+  notes: optionalText(500),
   is_active: z.boolean().optional(),
 });
 

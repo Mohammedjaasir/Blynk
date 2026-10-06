@@ -112,7 +112,7 @@ describe('Rider location updates', () => {
   it('rejects malformed and out-of-range coordinates', async () => {
     const { deliveryId } = await assignedOrder();
     await request(app).patch(`/api/v1/riders/deliveries/${deliveryId}/status`).set('Authorization', `Bearer ${tokens.riderA}`).send({ status: 'PICKED_UP' });
-    for (const bad of [point({ latitude: 91 }), point({ longitude: -181 }), point({ accuracy: -1 }), point({ accuracy: 0 }), point({ latitude: 'x' })]) {
+    for (const bad of [point({ latitude: 91 }), point({ longitude: -181 }), point({ accuracy: -1 }), point({ accuracy: 'x' }), point({ latitude: 'x' })]) {
       const res = await send(deliveryId, tokens.riderA, bad);
       expect(res.status).toBe(400);
     }
@@ -140,14 +140,40 @@ describe('Rider location updates', () => {
     expect(Number(row.rows[0].location_accuracy_m)).toBe(100000);
   });
 
-  it('rejects a captured_at far in the future, accepts one only slightly stale', async () => {
+  it('clamps a captured_at in the future to the server now (accepted, never stored ahead), accepts one only slightly stale', async () => {
     const { deliveryId } = await assignedOrder();
     await request(app).patch(`/api/v1/riders/deliveries/${deliveryId}/status`).set('Authorization', `Bearer ${tokens.riderA}`).send({ status: 'PICKED_UP' });
+    const before = Date.now();
     const future = await send(deliveryId, tokens.riderA, point({ captured_at: new Date(Date.now() + 5 * 60_000).toISOString() }));
-    expect(future.status).toBe(400);
-    const slightlyOld = await send(deliveryId, tokens.riderA, point({ captured_at: new Date(Date.now() - 30_000).toISOString() }));
+    expect(future.status).toBe(202);
+    expect(future.body.data.accepted).toBe(true);
+    const row = await pool.query('SELECT location_captured_at FROM deliveries WHERE id = $1', [deliveryId]);
+    const stored = new Date(row.rows[0].location_captured_at).getTime();
+    expect(stored).toBeGreaterThanOrEqual(before - 1000);
+    expect(stored).toBeLessThanOrEqual(Date.now() + 1000);
+
+    const other = await assignedOrder();
+    await request(app).patch(`/api/v1/riders/deliveries/${other.deliveryId}/status`).set('Authorization', `Bearer ${tokens.riderA}`).send({ status: 'PICKED_UP' });
+    const slightlyOld = await send(other.deliveryId, tokens.riderA, point({ captured_at: new Date(Date.now() - 30_000).toISOString() }));
     expect(slightlyOld.status).toBe(202);
     expect(slightlyOld.body.data.accepted).toBe(true);
+  });
+
+  it('accuracy 0 or missing is accepted and stored as unknown (NULL)', async () => {
+    const { deliveryId } = await assignedOrder();
+    await request(app).patch(`/api/v1/riders/deliveries/${deliveryId}/status`).set('Authorization', `Bearer ${tokens.riderA}`).send({ status: 'PICKED_UP' });
+    const zero = await send(deliveryId, tokens.riderA, point({ accuracy: 0 }));
+    expect(zero.status).toBe(202);
+    expect(zero.body.data.accepted).toBe(true);
+    const row = await pool.query('SELECT location_accuracy_m FROM deliveries WHERE id = $1', [deliveryId]);
+    expect(row.rows[0].location_accuracy_m).toBeNull();
+
+    const other = await assignedOrder();
+    await request(app).patch(`/api/v1/riders/deliveries/${other.deliveryId}/status`).set('Authorization', `Bearer ${tokens.riderA}`).send({ status: 'PICKED_UP' });
+    const { accuracy: _omit, ...noAccuracy } = point();
+    const missing = await send(other.deliveryId, tokens.riderA, noAccuracy);
+    expect(missing.status).toBe(202);
+    expect(missing.body.data.accepted).toBe(true);
   });
 
   it('a point no newer than the last accepted one is ignored, never regresses the stored position (duplicate/out-of-order)', async () => {

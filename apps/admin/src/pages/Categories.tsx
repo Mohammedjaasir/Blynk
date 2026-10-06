@@ -1,3 +1,4 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { categories as categoriesApi, categoryGroups as groupsApi } from '../api/resources';
@@ -30,7 +31,7 @@ export function Categories() {
       setRows(await categoriesApi.listAdmin());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load categories.');
+      setError(errorMessage(err, 'Could not load categories.'));
       setRows([]);
     }
   }, []);
@@ -51,7 +52,7 @@ export function Categories() {
       );
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not update the category.');
+      toast.error(errorMessage(err, 'Could not update the category.'));
     }
   }
 
@@ -247,7 +248,7 @@ function CategoryDialog({
       }
       await onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the category.');
+      setError(errorMessage(err, 'Could not save the category.'));
     } finally {
       setSaving(false);
     }
@@ -385,7 +386,7 @@ function DeleteCategoryDialog({
         setTarget('');
         setError('That category can no longer take these products. Choose another one.');
       } else {
-        setError(err instanceof Error ? err.message : 'Could not delete the category.');
+        setError(errorMessage(err, 'Could not delete the category.'));
       }
     } finally {
       setBusy(false);

@@ -2,6 +2,11 @@ import { Router } from 'express';
 import { promotionController } from './promotion.controller.js';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
+import { validate } from '../../middleware/validate.middleware.js';
+import { idParamSchema } from '../catalog/catalog.schema.js';
+
+// A malformed :id is a 400 VALIDATION_ERROR, never a Postgres uuid cast 500.
+const validId = validate({ params: idParamSchema });
 
 // ----------------------------------------------------------------------------
 // 1. CUSTOMER PROMOTIONS ROUTER (/api/v1/promotions)
@@ -40,18 +45,21 @@ adminPromotionsRouter.get(
   '/promotions/:id',
   requireAuth,
   requireRoles('ADMIN'),
+  validId,
   promotionController.getByIdAdmin.bind(promotionController)
 );
 adminPromotionsRouter.patch(
   '/promotions/:id',
   requireAuth,
   requireRoles(['ADMIN', 'OPERATIONS']),
+  validId,
   promotionController.update.bind(promotionController)
 );
 adminPromotionsRouter.delete(
   '/promotions/:id',
   requireAuth,
   requireRoles(['ADMIN', 'OPERATIONS']),
+  validId,
   promotionController.remove.bind(promotionController)
 );
 

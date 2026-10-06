@@ -1,3 +1,4 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { staff as staffApi } from '../api/resources';
@@ -75,7 +76,7 @@ const dateFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Colombo',
 });
 
-const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
+const errorText = (err: unknown, fallback: string) => errorMessage(err, fallback);
 
 function passwordError(password: string): string | undefined {
   if (password.length < PASSWORD_MIN) return `Use at least ${PASSWORD_MIN} characters.`;

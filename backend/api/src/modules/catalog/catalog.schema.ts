@@ -112,11 +112,16 @@ export const createProductSchema = z.object({
   image_url: z.string().trim().url('Must be a valid URL').nullable().optional(),
   image_focal_x: focalPercent.default(50).optional(),
   image_focal_y: focalPercent.default(50).optional(),
-  purchase_cost: z.number().min(0, 'Purchase cost cannot be negative'),
+  // products.purchase_cost is NUMERIC(10,2) and custom_markup_percent
+  // NUMERIC(5,2): anything larger was a Postgres overflow (a 500).
+  purchase_cost: z
+    .number()
+    .min(0, 'Purchase cost cannot be negative')
+    .max(99_999_999.99, 'Purchase cost cannot exceed 99,999,999.99'),
   custom_markup_percent: z
     .number()
     .min(0, 'Markup cannot be negative')
-    .max(1000, 'Markup cannot exceed 1000%')
+    .max(999.99, 'Markup cannot exceed 999.99%')
     .nullable()
     .optional(),
   is_available: z.boolean().default(true).optional(),
@@ -133,6 +138,27 @@ export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 // ----------------------------------------------------------------------------
 export const idParamSchema = z.object({
   id: z.string().uuid('Invalid id'),
+});
+
+/**
+ * GET /admin/products query. A non-numeric page/limit falls back to the
+ * default (it used to reach SQL as NaN, a 500); a malformed category_id is 400.
+ */
+const intOr = (fallback: number) =>
+  z.preprocess((val) => {
+    const n = typeof val === 'string' ? parseInt(val, 10) : typeof val === 'number' ? val : NaN;
+    return Number.isFinite(n) ? n : fallback;
+  }, z.number().int());
+
+export const adminProductListQuerySchema = z.object({
+  search: z.string().trim().max(100).optional(),
+  category_id: z.string().uuid('category_id must be a category id').optional(),
+  is_active: z
+    .enum(['true', 'false', '1', '0'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === '1' ? 'true' : v === '0' ? 'false' : v)),
+  limit: intOr(50).optional(),
+  page: intOr(1).optional(),
 });
 
 export const deleteCategoryQuerySchema = z.object({

@@ -1,3 +1,4 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { categoryGroups as groupsApi } from '../api/resources';
 import type { CategoryGroup, CategoryGroupsOverview, GroupCategory } from '../api/types';
@@ -37,7 +38,7 @@ export function CategoryGroups() {
       setData(await groupsApi.list());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load category groups.');
+      setError(errorMessage(err, 'Could not load category groups.'));
       setData({ groups: [], unassigned: [] });
     }
   }, []);
@@ -54,7 +55,7 @@ export function CategoryGroups() {
       const message = typeof result === 'string' ? result : success;
       if (message) toast.success(message);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not save the change.');
+      toast.error(errorMessage(err, 'Could not save the change.'));
     } finally {
       setBusy(false);
     }
@@ -473,7 +474,7 @@ function GroupDialog({
       }
       await onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the group.');
+      setError(errorMessage(err, 'Could not save the group.'));
     } finally {
       setSaving(false);
     }

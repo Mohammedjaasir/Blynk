@@ -83,6 +83,48 @@ describe('suppliers', () => {
   });
 });
 
+describe('clearing supplier fields', () => {
+  async function openEdit(api = {}) {
+    const rendered = renderAs(ADMIN, '/suppliers', {
+      'GET /admin/suppliers': () => ok({ suppliers: [supplier({ notes: 'Closed on Fridays' })] }),
+      'PATCH /admin/suppliers/:id': (call) => ok({ supplier: supplier(call.body) }),
+      ...api,
+    });
+    const row = (await screen.findByText('Dharga Town Central Grocery')).closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog', { name: /Edit Dharga Town Central Grocery/ });
+    return { ...rendered, dialog };
+  }
+
+  it('sends an empty value for a cleared optional field so the backend removes it', async () => {
+    const { api, dialog } = await openEdit();
+    await userEvent.clear(within(dialog).getByLabelText('Contact person'));
+    await userEvent.clear(within(dialog).getByLabelText('Notes'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/suppliers/sup-1')).toHaveLength(1));
+    const body = api.find('PATCH', '/admin/suppliers/sup-1')[0].body;
+    expect(body.contact_person).toBe('');
+    expect(body.notes).toBe('');
+    expect(body.address).toBe('Main Street, Dharga Town');
+  });
+
+  it('refuses to clear the code (the backend cannot unset it) without calling the API', async () => {
+    const { api, dialog } = await openEdit();
+    await userEvent.clear(within(dialog).getByLabelText(/Code/));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+    expect(await within(dialog).findByText(/A code cannot be removed/)).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/suppliers/sup-1')).toHaveLength(0);
+  });
+
+  it('shows a cleared field as empty, not as a blank value', async () => {
+    renderAs(ADMIN, '/suppliers', {
+      'GET /admin/suppliers': () => ok({ suppliers: [supplier({ contact_person: '', address: '' })] }),
+    });
+    const row = (await screen.findByText('Dharga Town Central Grocery')).closest('tr')!;
+    expect(within(row).getAllByText('—')).toHaveLength(2);
+  });
+});
+
 describe('overview', () => {
   it('puts orderable-but-out-of-stock first and explains what it means', async () => {
     renderAs(ADMIN, '/', {
@@ -100,6 +142,27 @@ describe('overview', () => {
     expect(names).toEqual(['Munchee Super Cream Cracker 490g', 'Pelwatte Salted Butter 200g']);
     expect(screen.getByText(/1 product is orderable but out of stock/)).toBeInTheDocument();
     expect(list).toBeDefined();
+  });
+
+  it('reads every page of products that need stock, not just the first 100', async () => {
+    const { api } = renderAs(ADMIN, '/', {
+      'GET /admin/inventory': (call) =>
+        call.query.get('page') === '2'
+          ? ok(pageOf('inventory', [stockRow({ product_id: 'p-late', product_name: 'Zesta Tea 100g', quantity_on_hand: 0, quantity_available: 0, is_low_stock: true })], 2, 2))
+          : ok(pageOf('inventory', [stockRow({ product_id: 'p-butter', product_name: 'Pelwatte Salted Butter 200g', quantity_on_hand: 3, quantity_available: 3, is_low_stock: true })], 1, 2)),
+    });
+    expect(await screen.findByText('Zesta Tea 100g')).toBeInTheDocument();
+    const calls = api.find('GET', '/admin/inventory');
+    expect(calls.map((c) => c.query.get('page'))).toEqual(['1', '2']);
+    expect(calls.every((c) => c.query.get('low_stock_only') === 'true' && c.query.get('limit') === '100')).toBe(true);
+  });
+
+  it('says when more open orders exist than were loaded', async () => {
+    renderAs(STAFF, '/', {
+      'GET /admin/orders': (call) =>
+        ok({ orders: [], pagination: { page: 1, limit: 100, total: call.query.get('status') === 'PLACED' ? 3 : 0, total_pages: 1 } }),
+    });
+    expect(await screen.findByText(/3 more open orders were not loaded/)).toBeInTheDocument();
   });
 
   it('says what an empty overview means instead of showing blank space', async () => {

@@ -14,16 +14,27 @@ export function PromotionPreview({
   compact?: boolean;
 }) {
   const isImage = promotion.background_type === 'IMAGE' && promotion.background_image_url;
+  // ARTWORK: a finished banner, full-bleed - no scrim and none of the app's
+  // own words over it (backend promotion.schema.ts).
+  const isArtwork = promotion.background_type === 'ARTWORK' && promotion.background_image_url;
+  // The customer app anchors its `cover` crop at the stored focal point.
+  const focalPosition = `${promotion.background_focal_x ?? 50}% ${promotion.background_focal_y ?? 50}%`;
   const isGradient =
     promotion.background_type === 'GRADIENT' &&
     promotion.background_color &&
     promotion.background_color_end;
 
-  const background = isImage
+  const background = isArtwork
+    ? {
+        backgroundImage: `url(${promotion.background_image_url})`,
+        backgroundSize: 'cover',
+        backgroundPosition: focalPosition,
+      }
+    : isImage
     ? {
         backgroundImage: `linear-gradient(90deg, rgba(16,19,25,0.90) 5%, rgba(16,19,25,0.40) 85%), url(${promotion.background_image_url})`,
         backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        backgroundPosition: focalPosition,
       }
     : isGradient
       ? {
@@ -38,10 +49,20 @@ export function PromotionPreview({
       className={compact ? 'promo-preview promo-preview--compact' : 'promo-preview'}
       style={background}
       aria-hidden={compact ? true : undefined}
+      data-background={isArtwork ? 'artwork' : isImage ? 'image' : isGradient ? 'gradient' : 'solid'}
     >
       {/* The row preview is a composition swatch: the title already has its
           own column, so repeating it here would just be noise. */}
-      {compact ? null : (
+      {compact ? null : isArtwork ? (
+        // No headline or subtitle: the banner carries its own words. A button
+        // label, when given, is still drawn; without one the whole card is
+        // the tap target, so nothing is drawn.
+        promotion.cta_label && promotion.cta_destination_type ? (
+          <div className="promo-preview__content">
+            <span className="promo-preview__cta">{promotion.cta_label}</span>
+          </div>
+        ) : null
+      ) : (
       <div className="promo-preview__content">
         <p
           className="promo-preview__title"

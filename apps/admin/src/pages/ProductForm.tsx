@@ -5,6 +5,15 @@ import type { Category } from '../api/types';
 import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
 import { Field, Spinner, useToast } from '../components/ui';
+import { errorMessage, splitServerErrors } from '../lib/apiErrors';
+import { useImageCleanup } from '../lib/imageCleanup';
+
+/** The API's limits (catalog.schema.ts, NUMERIC(5,2) and NUMERIC(10,2)). */
+export const MAX_MARKUP_PERCENT = 999.99;
+export const MAX_PURCHASE_COST = 99_999_999.99;
+
+/** Fields with an inline error slot; a server error on one shows there. */
+const INLINE_FIELDS = ['category_id', 'name', 'sku', 'unit', 'purchase_cost', 'custom_markup_percent'] as const;
 
 interface FormState {
   category_id: string;
@@ -55,6 +64,10 @@ export function ProductForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [effectiveMarkup, setEffectiveMarkup] = useState<number | null>(null);
+  // The image the saved product points at; replaced files are deleted only
+  // after a successful save.
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
+  const images = useImageCleanup([originalImage]);
 
   useEffect(() => {
     void categoriesApi
@@ -96,9 +109,10 @@ export function ProductForm() {
           is_active: product.is_active,
         });
         setEffectiveMarkup(product.effective_markup_percent ?? null);
+        setOriginalImage(product.image_url ?? null);
       })
       .catch((err) =>
-        setServerError(err instanceof Error ? err.message : 'Could not load the product.')
+        setServerError(errorMessage(err, 'Could not load the product.'))
       )
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -130,11 +144,15 @@ export function ProductForm() {
     if (form.sku.trim().length < 3) next.sku = 'SKU must be at least 3 characters';
     if (form.unit.trim().length < 1) next.unit = 'Enter the unit, e.g. 1 L';
     const cost = Number(form.purchase_cost);
-    if (!Number.isFinite(cost) || cost < 0) next.purchase_cost = 'Enter a valid cost';
+    if (!Number.isFinite(cost) || cost < 0) {
+      next.purchase_cost = 'Enter a valid cost';
+    } else if (cost > MAX_PURCHASE_COST) {
+      next.purchase_cost = 'Purchase cost can be at most LKR 99,999,999.99';
+    }
     if (form.custom_markup_percent.trim() !== '') {
       const markup = Number(form.custom_markup_percent);
-      if (!Number.isFinite(markup) || markup < 0 || markup > 1000) {
-        next.custom_markup_percent = 'Markup must be between 0 and 1000';
+      if (!Number.isFinite(markup) || markup < 0 || markup > MAX_MARKUP_PERCENT) {
+        next.custom_markup_percent = 'Markup must be between 0 and 999.99';
       }
     }
     setErrors(next);
@@ -173,9 +191,13 @@ export function ProductForm() {
         await productsApi.create(payload);
         toast.success('Product created.');
       }
+      // Saved: the image it no longer uses (removed or replaced) can go now.
+      await images.afterSave([form.image_url]);
       navigate('/products');
     } catch (err) {
-      setServerError(err instanceof Error ? err.message : 'Could not save the product.');
+      const { inline, message } = splitServerErrors(err, INLINE_FIELDS, 'Could not save the product.');
+      setErrors(inline);
+      setServerError(message);
     } finally {
       setSaving(false);
     }
@@ -263,7 +285,10 @@ export function ProductForm() {
             value={form.image_url}
             folder="products"
             label="Product image"
-            onChange={(url) => setForm({ ...form, image_url: url })}
+            onChange={(url) => {
+              images.track(url);
+              setForm((current) => ({ ...current, image_url: url }));
+            }}
           />
         </section>
 
@@ -282,7 +307,7 @@ export function ProductForm() {
             </Field>
             <Field
               label="Custom markup %"
-              hint="Leave blank to use the category/global markup"
+              hint="0 to 999.99. Leave blank to use the category/global markup"
               error={errors.custom_markup_percent}
             >
               <input

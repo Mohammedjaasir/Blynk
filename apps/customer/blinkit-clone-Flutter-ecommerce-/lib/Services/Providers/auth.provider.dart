@@ -8,6 +8,7 @@ import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Infrastructure/HttpMethods/token_storage.dart';
 import 'package:ecom/Models/user_model.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
+import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/Infrastructure/HttpMethods/auth_response_parsing.dart';
 import 'package:ecom/constants.dart';
 
@@ -260,6 +261,29 @@ class AuthProvider extends ChangeNotifier {
         ).then<void>((_) {}, onError: (_) {}),
       );
     }
+  }
+
+  /// DELETE /me: deletes (anonymises) the customer's account. Returns null
+  /// once the server has done it, and then signs out on this device exactly
+  /// like [logout] does locally - there is no server logout to make, the
+  /// account and its sessions are gone. On a refusal (409
+  /// ACTIVE_ORDERS_EXIST: an order is still open) or a network failure the
+  /// customer stays signed in and the mapped reason is returned.
+  Future<CustomerError?> deleteAccount() async {
+    try {
+      await _request(methodType: 'DELETE', url: '/me');
+    } catch (e) {
+      return AppErrors.from(e);
+    }
+    ApiService.invalidateSession();
+    _clearSession();
+    notifyListeners();
+    // Signed out in memory already; a stuck secure storage must not keep
+    // the customer waiting on a deleted account (the clear carries on).
+    await TokenStorage.clearAll().timeout(const Duration(seconds: 3), onTimeout: () {});
+    _restoreFuture = null;
+    notifyListeners();
+    return null;
   }
 
   /// The server no longer accepts this login. Clears everything locally with

@@ -63,3 +63,12 @@ export async function prepareImageForUpload(file: File): Promise<File> {
     return file;
   }
 }
+
+/** Shown when even the resized copy is over the API's 2 MB cap. */
+export const TOO_LARGE_AFTER_RESIZE_MESSAGE =
+  'This image is still over 2 MB after resizing. Use a smaller or simpler image (2 MB or less).';
+
+/** Checked on the file actually sent, after prepareImageForUpload. */
+export function validatePreparedFile(file: File): ImageValidationResult {
+  return file.size > MAX_UPLOAD_BYTES ? { ok: false, message: TOO_LARGE_AFTER_RESIZE_MESSAGE } : { ok: true };
+}

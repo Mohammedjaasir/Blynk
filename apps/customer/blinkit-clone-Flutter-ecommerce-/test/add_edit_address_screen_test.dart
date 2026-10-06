@@ -7,7 +7,9 @@ import 'package:ecom/Models/user_model.dart';
 import 'package:ecom/Screens/add_edit_address_screen.dart';
 import 'package:ecom/Services/Location/device_location_source.dart';
 import 'package:ecom/UI/Widgets/Organisms/map_provider.dart';
+import 'package:ecom/Services/Exceptions/api_exception.dart';
 import 'package:ecom/Services/Providers/address.provider.dart';
+import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_text_field.dart';
@@ -18,6 +20,11 @@ import 'package:ecom/app_theme.dart';
 /// network - the real AddressProvider's API calls are exercised by the live
 /// integration flow instead.
 class _RecordingAddressProvider extends AddressProvider {
+  _RecordingAddressProvider({super.request});
+
+  /// Hands saves to the real AddressProvider (and so to [request]), to
+  /// check how a real backend refusal is mapped and shown.
+  bool passThrough = false;
   AddressModel? created;
   String? updatedId;
   Map<String, dynamic>? updatedPayload;
@@ -32,6 +39,7 @@ class _RecordingAddressProvider extends AddressProvider {
 
   @override
   Future<AddressModel?> createAddress(AddressModel address) async {
+    if (passThrough) return super.createAddress(address);
     if (shouldFail) throw Exception('network');
     created = address;
     return address;
@@ -42,6 +50,7 @@ class _RecordingAddressProvider extends AddressProvider {
     String id,
     Map<String, dynamic> payload,
   ) async {
+    if (passThrough) return super.updateAddress(id, payload);
     if (shouldFail) throw Exception('network');
     updatedId = id;
     updatedPayload = payload;
@@ -602,10 +611,97 @@ void main() {
       expect(find.text('No. 5, Main Street, Near the mosque'), findsOneWidget);
       await tester.tap(find.text('Save address'));
       await settle(tester);
-      expect(addresses.updatedPayload?['address_line1'], 'No. 5, Main Street, Near the mosque');
-      expect(addresses.updatedPayload?['address_line2'], isNull);
+      // Line 2 is never sent as null (which would wipe it): the field is
+      // left out so the PATCH keeps it, and line 1 is saved without it.
+      expect(addresses.updatedPayload?['address_line1'], 'No. 5, Main Street');
+      expect(addresses.updatedPayload?.containsKey('address_line2'), isFalse);
       expect(addresses.updatedPayload?['city'], 'Dharga Town');
       expect(addresses.updatedPayload?['postal_code'], '12090');
+    });
+
+    testWidgets('editing an old address keeps its second line when line 1 changes',
+        (tester) async {
+      final legacy = AddressModel.fromJson(const {
+        'id': 'a0000001-0000-0000-0000-000000000003',
+        'label': 'Home',
+        'recipient_name': 'QA Tester',
+        'recipient_phone': '+94771234567',
+        'address_line1': 'No. 5, Main Street',
+        'address_line2': 'Near the mosque',
+        'city': 'Galle',
+        'postal_code': null,
+        'latitude': 6.4382,
+        'longitude': 80.0274,
+        'delivery_instructions': null,
+        'is_default': false,
+      });
+      await pumpScreen(tester, existing: legacy);
+      await tester.enterText(fieldWith('Address'), 'No. 7, Main Street, Near the mosque');
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+      expect(addresses.updatedPayload?['address_line1'], 'No. 7, Main Street');
+      expect(addresses.updatedPayload?.containsKey('address_line2'), isFalse);
+    });
+
+    testWidgets('an address without a second line never sends one on edit', (tester) async {
+      await pumpScreen(tester, existing: _existing);
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+      expect(addresses.updatedPayload?['address_line1'], 'No. 12, Test Lane');
+      expect(addresses.updatedPayload?.containsKey('address_line2'), isFalse);
+    });
+  });
+
+  group('outside the delivery area (422 DELIVERY_OUTSIDE_RADIUS)', () {
+    Future<dynamic> refuse({String? methodType, String? url, dynamic body}) async =>
+        throw ApiException(
+          422,
+          'This address is outside our delivery area.',
+          code: 'DELIVERY_OUTSIDE_RADIUS',
+          details: {'distance_km': 6.2, 'max_radius_km': 4},
+        );
+
+    testWidgets('a new address is not saved and the form says why, in our words', (tester) async {
+      addresses = _RecordingAddressProvider(request: refuse)..passThrough = true;
+      await pumpScreen(tester);
+      await fillRequired(tester);
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      // Still on the form, nothing added to the list.
+      expect(find.text('Add Address'), findsOneWidget);
+      expect(addresses.addresses, isEmpty);
+      final note = find.byKey(const Key('address-location-note'));
+      expect(find.descendant(of: note, matching: find.text(AppErrors.outsideDeliveryArea.title)), findsOneWidget);
+      expect(find.descendant(of: note, matching: find.text(AppErrors.outsideDeliveryArea.message)), findsOneWidget);
+      expect(find.textContaining('outside our delivery area'), findsNothing);
+      // A refused save is not a failed list load.
+      expect(addresses.failure, isNull);
+      expect(addresses.saveFailure, same(AppErrors.outsideDeliveryArea));
+    });
+
+    testWidgets('an edit moved outside the area is refused the same way', (tester) async {
+      addresses = _RecordingAddressProvider(request: refuse)..passThrough = true;
+      await pumpScreen(tester, existing: _existing);
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+
+      expect(find.text('Edit Address'), findsOneWidget);
+      expect(find.text(AppErrors.outsideDeliveryArea.title), findsOneWidget);
+    });
+
+    testWidgets('picking another place clears the note', (tester) async {
+      addresses = _RecordingAddressProvider(request: refuse)..passThrough = true;
+      await pumpScreen(tester);
+      await fillRequired(tester);
+      await tester.tap(find.text('Save address'));
+      await settle(tester);
+      expect(find.text(AppErrors.outsideDeliveryArea.title), findsOneWidget);
+
+      await shareLocation(tester);
+
+      expect(find.text(AppErrors.outsideDeliveryArea.title), findsNothing);
+      expect(find.text('Location added'), findsOneWidget);
     });
   });
 

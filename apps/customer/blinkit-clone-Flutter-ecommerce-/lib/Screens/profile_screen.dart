@@ -6,6 +6,7 @@ import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/design/tokens.dart';
 import '../UI/Widgets/Atoms/list_tile.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
+import '../UI/Widgets/Organisms/delete_account_dialog.dart';
 import '../UI/Widgets/Organisms/logout_dialog.dart';
 import 'customer_shell.dart';
 import 'feedback_screen.dart';
@@ -109,6 +110,20 @@ class ProfileScreen extends StatelessWidget {
                 // not put up a second one.
                 callback: () => showLogoutDialog(context),
               ),
+            // Last and set apart: the one irreversible action on the page.
+            if (signedIn) ...[
+              const SizedBox(height: BlynkSpace.s32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: BlynkSpace.s8),
+                child: BlynkButton.destructive(
+                  key: const Key('profile-delete-account'),
+                  label: 'Delete account',
+                  leadingIcon: Icons.delete_outline,
+                  expand: true,
+                  onPressed: () => showDeleteAccountDialog(context),
+                ),
+              ),
+            ],
           ],
         ),
       ),

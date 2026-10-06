@@ -19,6 +19,29 @@ function closesWindow(err: unknown): boolean {
   );
 }
 
+/** Worth sending the next point: no answer, a server error, or rate limiting. */
+function isRetryable(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return true;
+  return err.status === 0 || err.status >= 500 || err.status === 429;
+}
+
+const PROFILE_REFUSED = new Set(['RIDER_PROFILE_NOT_FOUND', 'RIDER_INACTIVE']);
+
+/** Why sharing stopped, in the rider's words. */
+export function refusalReason(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return 'Your session has ended. Sign in again to share your location.';
+    if (err.status === 403 && err.code && PROFILE_REFUSED.has(err.code)) {
+      return "Your rider profile isn't active, so your location can't be shared. Contact the store.";
+    }
+    if (err.status === 403) return "Your account can't share its location for this delivery. Contact the store.";
+    if (err.status === 400) {
+      return 'The server refused your location. Reopen the delivery to try again, or tell the store.';
+    }
+  }
+  return 'Location sharing stopped. Reopen the delivery to try again, or tell the store.';
+}
+
 function createTracker(): DeliveryTracker {
   const tracker: DeliveryTracker = new DeliveryTracker(capacitorTrackingPlugin, async (deliveryId, point) => {
     try {
@@ -38,6 +61,18 @@ function createTracker(): DeliveryTracker {
       if (closesWindow(err)) {
         await enqueue(async () => {
           if (tracker.getDeliveryId() === deliveryId) await tracker.stop();
+        });
+        return;
+      }
+      // Any other refusal the API will repeat for every point (no rider
+      // profile, an inactive rider, a session that could not be renewed, a
+      // point it rejects) stops sharing with the reason, rather than retrying
+      // every few seconds behind "retrying". Only no answer, a server error or
+      // rate limiting is worth another try.
+      if (!isRetryable(err)) {
+        const reason = refusalReason(err);
+        await enqueue(async () => {
+          if (tracker.getDeliveryId() === deliveryId) await tracker.stop(reason);
         });
         return;
       }
@@ -72,8 +107,22 @@ export function getTracker(): DeliveryTracker {
  * a new tracking identity: the old one is stopped before the new one starts.
  * Idempotent and serialized; may reject if the plugin throws (callers swallow).
  */
-export function syncTracking(delivery: DeliverySummary): Promise<void> {
-  return enqueue(() => applyDelivery(delivery));
+export async function syncTracking(delivery: DeliverySummary): Promise<void> {
+  const closedTracked = await enqueue(() => applyDelivery(delivery));
+  // Trips: the rider may have other orders on the road. When the stop being
+  // tracked closes (arrived, delivered, failed, cancelled), carry on with the
+  // next one now, from the rider's list, rather than only when the Queue
+  // screen is next opened.
+  if (closedTracked) await resumeFromList();
+}
+
+/** Re-reads the rider's deliveries and tracks the next one on the road, if any. Never rejects. */
+async function resumeFromList(): Promise<void> {
+  try {
+    await syncTrackingFromList(await deliveriesApi.list());
+  } catch {
+    // Offline or a plugin failure: the Queue and Delivery screens sync again on their next load.
+  }
 }
 
 /**
@@ -104,15 +153,21 @@ export function stopTrackingFor(deliveryId: string): Promise<void> {
   });
 }
 
-async function applyDelivery(delivery: DeliverySummary): Promise<void> {
+/** True when it stopped tracking this delivery because it left the trackable window. */
+async function applyDelivery(delivery: DeliverySummary): Promise<boolean> {
   const current = tracker.getDeliveryId();
   if (isTrackable(delivery)) {
-    if (current === delivery.delivery_id) return;
+    if (current === delivery.delivery_id) return false;
     if (current !== null) await tracker.stop();
     await tracker.start(delivery.delivery_id);
-  } else if (current === delivery.delivery_id || (current === null && tracker.hasPendingStop())) {
-    await tracker.stop();
+    return false;
   }
+  if (current === delivery.delivery_id) {
+    await tracker.stop();
+    return true;
+  }
+  if (current === null && tracker.hasPendingStop()) await tracker.stop();
+  return false;
 }
 
 async function applyStopAny(): Promise<void> {

@@ -55,6 +55,15 @@ export function TrackingStatus({ state }: { state: TrackingState }) {
       </p>
     );
   }
+  // The server refused the sharing for good (profile, session, a rejected
+  // point): it has stopped, and the rider is told why rather than "retrying".
+  if (state.lastError === 'refused' && !state.active) {
+    return (
+      <p className="tracking-status tracking-status--error">
+        Stopped sharing your location. {state.stopReason ?? 'Tell the store.'}
+      </p>
+    );
+  }
   if (state.lastError === 'position_unavailable') {
     return <p className="tracking-status tracking-status--error">Can't get your location — check GPS is on.</p>;
   }

@@ -52,20 +52,20 @@ void main() {
       expect(p!.latitude, 6.44);
     });
 
-    test('each missing field yields null', () {
-      for (final k in ['latitude', 'longitude', 'accuracy', 'captured_at', 'received_at']) {
+    test('each missing required field yields null', () {
+      for (final k in ['latitude', 'longitude', 'captured_at', 'received_at']) {
         expect(RiderLocationPoint.tryParse(eventJson(without: [k])), isNull, reason: 'missing $k');
       }
     });
 
-    test('each null field yields null', () {
-      for (final k in ['latitude', 'longitude', 'accuracy', 'captured_at', 'received_at']) {
+    test('each null required field yields null', () {
+      for (final k in ['latitude', 'longitude', 'captured_at', 'received_at']) {
         expect(RiderLocationPoint.tryParse(eventJson(override: {k: null})), isNull, reason: 'null $k');
       }
     });
 
-    test('each unparseable field yields null', () {
-      for (final k in ['latitude', 'longitude', 'accuracy']) {
+    test('each unparseable coordinate yields null', () {
+      for (final k in ['latitude', 'longitude']) {
         for (final bad in <Object>['abc', '', '  ', true, <int>[1]]) {
           expect(RiderLocationPoint.tryParse(eventJson(override: {k: bad})), isNull, reason: '$k=$bad');
         }
@@ -102,8 +102,8 @@ void main() {
       expect(p.accuracy, 10.0);
     });
 
-    test('NaN and Infinity in any numeric field yield null', () {
-      for (final k in ['latitude', 'longitude', 'accuracy']) {
+    test('NaN and Infinity in a coordinate yield null', () {
+      for (final k in ['latitude', 'longitude']) {
         for (final bad in <Object>[double.nan, double.infinity, double.negativeInfinity, 'NaN', 'Infinity', '-Infinity']) {
           expect(RiderLocationPoint.tryParse(eventJson(override: {k: bad})), isNull, reason: '$k=$bad');
         }
@@ -132,11 +132,16 @@ void main() {
       expect(p.longitude, 0.0);
     });
 
-    test('accuracy must be > 0 (matches the backend validation): 0 and negatives yield null', () {
-      expect(RiderLocationPoint.tryParse(eventJson(override: {'accuracy': 0})), isNull);
-      expect(RiderLocationPoint.tryParse(eventJson(override: {'accuracy': 0.0})), isNull);
-      expect(RiderLocationPoint.tryParse(eventJson(override: {'accuracy': -1})), isNull);
-      expect(RiderLocationPoint.tryParse(eventJson(override: {'accuracy': '-0.5'})), isNull);
+    test('accuracy is optional: missing, null, invalid or not above 0 keeps the point with accuracy unknown', () {
+      for (final bad in <Object?>[null, 0, 0.0, -1, '-0.5', 'abc', double.nan, double.infinity]) {
+        final p = RiderLocationPoint.tryParse(eventJson(override: {'accuracy': bad}));
+        expect(p, isNotNull, reason: 'accuracy=$bad');
+        expect(p!.accuracy, isNull, reason: 'accuracy=$bad');
+        expect(p.latitude, 6.44);
+      }
+      final missing = RiderLocationPoint.tryParse(eventJson(without: ['accuracy']));
+      expect(missing, isNotNull);
+      expect(missing!.accuracy, isNull);
       expect(RiderLocationPoint.tryParse(eventJson(override: {'accuracy': 0.1}))!.accuracy, 0.1);
     });
   });

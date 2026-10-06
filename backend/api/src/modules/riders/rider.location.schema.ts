@@ -19,12 +19,17 @@ export const updateLocationSchema = z.object({
     .min(-180, 'Longitude must be between -180 and 180')
     .max(180, 'Longitude must be between -180 and 180'),
   accuracy: z
-    .number({ required_error: 'accuracy is required', invalid_type_error: 'accuracy must be a number' })
-    .positive('accuracy must be a positive number of meters')
+    .number({ invalid_type_error: 'accuracy must be a number' })
+    .min(0, 'accuracy must be zero or a positive number of meters')
     // deliveries.location_accuracy_m is NUMERIC(7,1): anything above 999999.9 is a Postgres numeric
     // overflow (a 500), and Infinity (`1e999` parses to it) is not storable at all. No real fix is
     // worse than tens of kilometres (an IP/cell-tower fallback), so 100 km is a generous ceiling.
-    .max(MAX_ACCURACY_M, `accuracy must be at most ${MAX_ACCURACY_M} meters`),
+    .max(MAX_ACCURACY_M, `accuracy must be at most ${MAX_ACCURACY_M} meters`)
+    .nullable()
+    .optional()
+    // Some devices report 0 when they have no accuracy estimate: 0, null and
+    // missing all mean "unknown" and are stored as NULL (the column allows it).
+    .transform((v) => (v === undefined || v === null || v === 0 ? null : v)),
   captured_at: z
     .string({ required_error: 'captured_at is required' })
     .datetime({ message: 'captured_at must be an ISO 8601 timestamp' }),

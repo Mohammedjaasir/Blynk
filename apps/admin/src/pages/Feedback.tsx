@@ -1,3 +1,4 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState } from 'react';
 import { feedback as feedbackApi } from '../api/resources';
 import type { FeedbackCategory, FeedbackItem, FeedbackStatus } from '../api/types';
@@ -55,7 +56,7 @@ export function Feedback() {
       setTotalPages(result.pagination.total_pages);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load feedback.');
+      setError(errorMessage(err, 'Could not load feedback.'));
       setRows([]);
     }
   }, [status]);
@@ -76,7 +77,7 @@ export function Feedback() {
       setPage(page + 1);
       setTotalPages(result.pagination.total_pages);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not load more feedback.');
+      toast.error(errorMessage(err, 'Could not load more feedback.'));
     } finally {
       setLoadingMore(false);
     }
@@ -91,7 +92,7 @@ export function Feedback() {
       await feedbackApi.setStatus(item.id, 'READ');
     } catch (err) {
       setStatus(item.status);
-      toast.error(err instanceof Error ? err.message : 'Could not mark the feedback as read.');
+      toast.error(errorMessage(err, 'Could not mark the feedback as read.'));
     }
   }
 

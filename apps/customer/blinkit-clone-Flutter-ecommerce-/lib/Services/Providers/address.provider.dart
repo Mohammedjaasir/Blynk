@@ -26,8 +26,14 @@ class AddressProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _failure?.message;
 
-  /// The customer-facing reason the last address call failed, or null.
+  /// The customer-facing reason loading the list failed, or null.
   CustomerError? get failure => _failure;
+
+  /// Why the last save, delete or default change failed, or null. Kept
+  /// apart from [failure] so a refused save (say, outside the delivery area)
+  /// never replaces the address list with "couldn't load your addresses".
+  CustomerError? get saveFailure => _saveFailure;
+  CustomerError? _saveFailure;
 
   AddressModel? get defaultAddress {
     for (final a in _addresses) {
@@ -41,6 +47,7 @@ class AddressProvider extends ChangeNotifier {
     _addresses = [];
     _isLoading = false;
     _failure = null;
+    _saveFailure = null;
     notifyListeners();
   }
 
@@ -67,7 +74,7 @@ class AddressProvider extends ChangeNotifier {
   }
 
   Future<AddressModel?> createAddress(AddressModel address) async {
-    _failure = null;
+    _saveFailure = null;
     try {
       final response = await _request(
         methodType: 'POST',
@@ -82,7 +89,7 @@ class AddressProvider extends ChangeNotifier {
       notifyListeners();
       return created;
     } catch (e) {
-      _failure = AppErrors.from(e);
+      _saveFailure = AppErrors.from(e);
       notifyListeners();
       rethrow;
     }
@@ -92,7 +99,7 @@ class AddressProvider extends ChangeNotifier {
     String id,
     Map<String, dynamic> changes,
   ) async {
-    _failure = null;
+    _saveFailure = null;
     try {
       final response = await _request(
         methodType: 'PATCH',
@@ -107,14 +114,14 @@ class AddressProvider extends ChangeNotifier {
       notifyListeners();
       return updated;
     } catch (e) {
-      _failure = AppErrors.from(e);
+      _saveFailure = AppErrors.from(e);
       notifyListeners();
       rethrow;
     }
   }
 
   Future<void> deleteAddress(String id) async {
-    _failure = null;
+    _saveFailure = null;
     try {
       await _request(
         methodType: 'DELETE',
@@ -123,14 +130,14 @@ class AddressProvider extends ChangeNotifier {
       _addresses = _addresses.where((a) => a.id != id).toList();
       notifyListeners();
     } catch (e) {
-      _failure = AppErrors.from(e);
+      _saveFailure = AppErrors.from(e);
       notifyListeners();
       rethrow;
     }
   }
 
   Future<void> setDefaultAddress(String id) async {
-    _failure = null;
+    _saveFailure = null;
     try {
       await _request(
         methodType: 'POST',
@@ -155,7 +162,7 @@ class AddressProvider extends ChangeNotifier {
           .toList();
       notifyListeners();
     } catch (e) {
-      _failure = AppErrors.from(e);
+      _saveFailure = AppErrors.from(e);
       notifyListeners();
       rethrow;
     }

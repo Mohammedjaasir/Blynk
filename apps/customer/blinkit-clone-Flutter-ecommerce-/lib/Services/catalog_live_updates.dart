@@ -5,6 +5,7 @@ import 'dart:io' show Platform;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../Infrastructure/HttpMethods/browser_streams.dart';
 import '../Infrastructure/HttpMethods/requesting_methods.dart';
 
 /// Live catalog updates (2026-09-26).
@@ -93,9 +94,33 @@ class CatalogLiveUpdates {
   }
 }
 
-/// The real opener: `GET /catalog/events` on the shared Dio (base URL and
-/// all). The receive timeout sits well above the server's 25 s heartbeat.
-Stream<String> openCatalogEvents() {
+/// Opens [url] with the browser EventSource and yields the named events as
+/// SSE frames.
+typedef EventSourceTextStream = Stream<String> Function(String url, {required List<String> events});
+
+/// The real opener: `GET /catalog/events`.
+///
+/// - Android/iOS: a stream response on the shared Dio (base URL and all).
+///   The receive timeout sits well above the server's 25 s heartbeat.
+/// - Web ([web], default [kIsWeb]): the browser EventSource. Dio's web
+///   adapter buffers the whole response, and this one never ends, so a Dio
+///   stream delivered nothing there. The endpoint is public, so the header
+///   EventSource can't send is not needed.
+Stream<String> openCatalogEvents({
+  bool web = kIsWeb,
+  EventSourceTextStream eventSource = browserEventSourceTextStream,
+  String? baseUrl,
+}) {
+  if (web) {
+    return eventSource(
+      joinApiUrl(baseUrl ?? ApiService.dio.options.baseUrl, '/catalog/events'),
+      events: const ['catalog'],
+    );
+  }
+  return _openDioCatalogEvents();
+}
+
+Stream<String> _openDioCatalogEvents() {
   final cancelToken = CancelToken();
   StreamSubscription<String>? body;
   late final StreamController<String> controller;

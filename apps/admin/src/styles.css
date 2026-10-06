@@ -169,6 +169,8 @@ body {
 .boot {
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 12px;
   min-height: 100vh;
 }
 
@@ -1579,6 +1581,12 @@ body {
 
 .order-items__qty {
   font-weight: 700;
+}
+
+/* A pending item's "Mark unavailable" sits on its own line under the name. */
+.order-items__row > .button {
+  grid-column: 2 / -1;
+  justify-self: start;
 }
 
 .order-items__status {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiRequest, onSessionEnded, tokenStore } from '../api/client';
+import { ApiError, apiRequest, onSessionEnded, refreshSession, tokenStore } from '../api/client';
 
 afterEach(() => {
   tokenStore.clear();
@@ -161,5 +161,67 @@ describe('apiRequest', () => {
     expect(heard).toEqual([]);
     expect(tokenStore.access).toBe('a1');
     unsubscribe();
+  });
+});
+
+describe('refresh failures (a weak connection is not a sign-out)', () => {
+  function stubWithRefresh(refresh: () => Response | Promise<Response>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith('/auth/refresh')) return refresh();
+        return jsonResponse(401, { success: false, error: { code: 'TOKEN_EXPIRED', message: 'expired' } });
+      })
+    );
+  }
+
+  it('keeps the tokens and throws a retryable NETWORK error when the refresh cannot reach the server', async () => {
+    tokenStore.save('stale', 'r1');
+    const heard: string[] = [];
+    const unsubscribe = onSessionEnded((reason) => heard.push(reason));
+    stubWithRefresh(() => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(apiRequest('/admin/orders')).rejects.toMatchObject({ status: 0, code: 'NETWORK' });
+    expect(heard).toEqual([]);
+    expect(tokenStore.access).toBe('stale');
+    expect(tokenStore.refresh).toBe('r1');
+    unsubscribe();
+  });
+
+  it.each([500, 502, 503, 429])('keeps the tokens when the refresh answers %i', async (status) => {
+    tokenStore.save('stale', 'r1');
+    const heard: string[] = [];
+    const unsubscribe = onSessionEnded((reason) => heard.push(reason));
+    stubWithRefresh(() => jsonResponse(status, { success: false, error: { code: 'X', message: 'x' } }));
+    await expect(apiRequest('/admin/orders')).rejects.toMatchObject({ status: 0, code: 'NETWORK' });
+    expect(heard).toEqual([]);
+    expect(tokenStore.refresh).toBe('r1');
+    unsubscribe();
+  });
+
+  it.each([
+    [400, 'INVALID_REFRESH_TOKEN'],
+    [401, 'INVALID_REFRESH_TOKEN'],
+  ])('signs out when the server refuses the refresh token (%i %s)', async (status, code) => {
+    tokenStore.save('stale', 'r1');
+    const heard: string[] = [];
+    const unsubscribe = onSessionEnded((reason) => heard.push(reason));
+    stubWithRefresh(() => jsonResponse(status, { success: false, error: { code, message: 'no' } }));
+    await expect(apiRequest('/admin/orders')).rejects.toMatchObject({ status: 401 });
+    expect(heard).toEqual(['expired']);
+    expect(tokenStore.refresh).toBeNull();
+    unsubscribe();
+  });
+
+  it('refreshSession reports the outcome', async () => {
+    tokenStore.save('stale', 'r1');
+    const failing = async () => {
+      throw new ApiError('The Blynk API did not answer in time.', 0, 'TIMEOUT');
+    };
+    await expect(refreshSession(failing)).resolves.toBe('timeout');
+    expect(tokenStore.refresh).toBe('r1');
+    await expect(refreshSession(async () => ({ status: 401, text: '{}' }))).resolves.toBe('refused');
+    expect(tokenStore.refresh).toBeNull();
   });
 });

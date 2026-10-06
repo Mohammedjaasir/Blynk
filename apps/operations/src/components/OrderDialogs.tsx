@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { riders as ridersApi } from '../api/resources';
 import type { RiderSuggestions } from '../api/types';
-import { formatMoney, orderErrorMessage, shortNumber, type OrderAction } from '../lib/orders';
+import { formatMoney, orderErrorMessage, shortNumber, type FarBatchRefusal, type OrderAction } from '../lib/orders';
 import { DeliveryCodeField, isCompleteDeliveryCode } from './DeliveryCodeField';
 import { distanceText, fromRoster, loadText, riderName, tripText } from '../lib/riderSuggestions';
 
@@ -43,11 +43,15 @@ export function AssignRiderDialog({
   busy,
   onAssign,
   onClose,
+  farRefusal = null,
 }: {
   order: OrderSummary & { id: string };
   busy: boolean;
   onAssign(riderId: string, confirmFarBatch: boolean): void;
   onClose(): void;
+  /** The API answered 409 BATCH_DROPOFFS_TOO_FAR for this rider: offer "Add
+   * to trip anyway" (resent with confirm_far_batch) instead of closing. */
+  farRefusal?: FarBatchRefusal | null;
 }) {
   const titleId = useId();
   const [list, setList] = useState<{ data: RiderSuggestions; ranked: boolean } | null>(null);
@@ -74,7 +78,11 @@ export function AssignRiderDialog({
   const maxKm = list?.data.rules?.max_dropoff_distance_km ?? 0;
   const picked = riders?.find((r) => r.id === chosen) ?? null;
   const pickedTrip = picked ? tripText(picked, maxKm) : null;
-  const label = busy ? 'Assigning…' : pickedTrip ? (pickedTrip.far ? 'Add to trip anyway' : 'Add to trip') : 'Assign';
+  // Far either by the suggestions' own numbers, or because the API said so
+  // for this rider (e.g. the roster fallback, which knows no trips).
+  const refusedFar = picked !== null && farRefusal?.riderId === picked.id;
+  const far = (pickedTrip?.far ?? false) || refusedFar;
+  const label = busy ? 'Assigning…' : far ? 'Add to trip anyway' : pickedTrip ? 'Add to trip' : 'Assign';
 
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -135,7 +143,11 @@ export function AssignRiderDialog({
           </fieldset>
         ) : null}
 
-        {pickedTrip?.far ? (
+        {refusedFar ? (
+          <p className="field__error" role="status">
+            {farRefusal!.message} The rider will take longer to reach both customers.
+          </p>
+        ) : pickedTrip?.far ? (
           <p className="field__error" role="status">
             These drop-offs are far apart. The rider will take longer to reach both customers.
           </p>
@@ -149,7 +161,7 @@ export function AssignRiderDialog({
             type="button"
             className="button"
             disabled={!picked || picked.at_capacity || busy}
-            onClick={() => picked && onAssign(picked.id, pickedTrip?.far ?? false)}
+            onClick={() => picked && onAssign(picked.id, far)}
           >
             {label}
           </button>

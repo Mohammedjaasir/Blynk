@@ -24,6 +24,8 @@ export function Products() {
   const navigate = useNavigate();
 
   const [rows, setRows] = useState<AdminProduct[] | null>(null);
+  /** More products exist than were loaded (see `products.listAll`). */
+  const [capped, setCapped] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -36,12 +38,13 @@ export function Products() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const products = await catalog.products.list({
+      const { products, capped: more } = await catalog.products.listAll({
         search: search.trim() || undefined,
         category_id: categoryId || undefined,
         is_active: status === 'all' ? undefined : status === 'active',
       });
       setRows(products);
+      setCapped(more);
     } catch (err) {
       setError(catalogErrorMessage(err));
       setRows([]);
@@ -139,6 +142,11 @@ export function Products() {
         </p>
       ) : null}
       {error ? <p className="field__error">{error}</p> : null}
+      {rows && capped ? (
+        <p className="banner" role="status">
+          Showing the first {rows.length} products. Search or filter by category to find the rest.
+        </p>
+      ) : null}
 
       {rows === null ? (
         <Spinner label="Loading products" />

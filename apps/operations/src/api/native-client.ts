@@ -1,5 +1,14 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { ApiError, BASE_URL, REQUEST_TIMEOUT_MS, endSession, refreshSession, tokenStore, type RefreshTransport } from './client';
+import {
+  ApiError,
+  BASE_URL,
+  REQUEST_TIMEOUT_MS,
+  connectionError,
+  endSession,
+  refreshSession,
+  tokenStore,
+  type RefreshTransport,
+} from './client';
 
 /**
  * Native HTTP for the live-location POSTs ONLY (2026-10-02).
@@ -15,7 +24,7 @@ import { ApiError, BASE_URL, REQUEST_TIMEOUT_MS, endSession, refreshSession, tok
  *
  * Same contract as client.ts's `apiRequest`: Bearer token, one shared
  * single-flight refresh on a 401 (here sent natively too), the session ends
- * if that refresh is refused, and a non-2xx answer becomes an `ApiError`
+ * only if that refresh is refused (an unreachable refresh keeps the tokens), and a non-2xx answer becomes an `ApiError`
  * carrying the server's status and code (tracker-session.ts stops sharing on
  * a 409 / 404 DELIVERY_NOT_FOUND exactly as it does for the fetch path).
  */
@@ -30,18 +39,26 @@ export function isNativeApp(): boolean {
 
 type Json = Record<string, unknown>;
 
-const nativeRefresh: RefreshTransport = async (url, body) => {
-  const response = await CapacitorHttp.request({
-    url,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    data: body,
-    responseType: 'text',
-    connectTimeout: REQUEST_TIMEOUT_MS,
-    readTimeout: REQUEST_TIMEOUT_MS,
-  });
-  const ok = response.status >= 200 && response.status < 300;
-  return { ok, text: typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? {}) };
+export const nativeRefresh: RefreshTransport = async (url, body) => {
+  let response;
+  try {
+    response = await CapacitorHttp.request({
+      url,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: body,
+      responseType: 'text',
+      connectTimeout: REQUEST_TIMEOUT_MS,
+      readTimeout: REQUEST_TIMEOUT_MS,
+    });
+  } catch {
+    // No answer at all: the refresh token may still be good - keep it.
+    throw connectionError('network');
+  }
+  return {
+    status: response.status,
+    text: typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? {}),
+  };
 };
 
 async function sendNative(path: string, method: string, body: Json): Promise<{ status: number; text: string }> {
@@ -68,7 +85,11 @@ async function sendNative(path: string, method: string, body: Json): Promise<{ s
 export async function nativeApiRequest<T>(path: string, options: { method: 'POST' | 'PATCH'; body: Json }): Promise<T> {
   let response = await sendNative(path, options.method, options.body);
   if (response.status === 401 && tokenStore.refresh) {
-    if (await refreshSession(nativeRefresh)) response = await sendNative(path, options.method, options.body);
+    const outcome = await refreshSession(nativeRefresh);
+    if (outcome === 'refreshed') response = await sendNative(path, options.method, options.body);
+    // Unreachable: keep the session (and the background tracker) alive; the
+    // tracker treats this like any other dropped post and tries again.
+    else if (outcome !== 'refused') throw connectionError(outcome);
   }
   if (response.status === 401) endSession('expired');
 

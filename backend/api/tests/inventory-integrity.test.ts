@@ -553,31 +553,27 @@ describe('Inventory integrity', () => {
     });
   });
 
-  describe('partial sourcing (I6)', () => {
-    it('takes only what was bagged, keeps billing the full ordered quantity, and returns what was taken', async () => {
+  describe('partial sourcing (I6) - not supported (QA 2026-10-06)', () => {
+    it('refuses a partial quantity with 400 PARTIAL_SOURCING_NOT_SUPPORTED and takes no stock; the full quantity sources', async () => {
       const t = await fx.product({ onHand: 10 });
       const order = await fx.placeOrder([{ product_id: t.productId, quantity: 3 }]);
       const billed = await fx.orderRow(order.id);
-      const line = async () =>
-        (await pool.query('SELECT quantity, subtotal::float AS subtotal, unit_selling_price::float AS price FROM order_items WHERE id = $1', [order.itemIds[0]])).rows[0];
-      const billedLine = await line();
 
-      expect((await fx.source(order.id, order.itemIds[0], { quantity: 2 })).status).toBe(200);
+      const partial = await fx.source(order.id, order.itemIds[0], { quantity: 2 });
+      expect(partial.status).toBe(400);
+      expect(partial.body.error.code).toBe('PARTIAL_SOURCING_NOT_SUPPORTED');
+      expect(await fx.onHand(t)).toBe(10);
+      expect(await moves(order.id)).toEqual([]);
 
-      expect(await fx.onHand(t)).toBe(8);
-      // The customer is still billed for the 3 ordered (documented limitation, plan F8).
+      expect((await fx.source(order.id, order.itemIds[0], { quantity: 3 })).status).toBe(200);
+      expect(await fx.onHand(t)).toBe(7);
       expect(await fx.orderRow(order.id)).toEqual(billed);
-      expect(await line()).toEqual(billedLine);
-      expect(billedLine.quantity).toBe(3);
-      expect(billedLine.subtotal).toBeCloseTo(billedLine.price * 3, 2);
-      expect(billed.subtotal).toBeGreaterThan(0);
-      expect(billed.pay_amount).toBe(billed.total);
 
       expect((await fx.customerCancel(order.id)).status).toBe(200);
       expect(await fx.onHand(t)).toBe(10);
       expect(await moves(order.id)).toEqual([
-        ['ORDER_FULFILLMENT', -2],
-        ['ORDER_CANCELLATION_RESTORE', 2],
+        ['ORDER_FULFILLMENT', -3],
+        ['ORDER_CANCELLATION_RESTORE', 3],
       ]);
     });
   });

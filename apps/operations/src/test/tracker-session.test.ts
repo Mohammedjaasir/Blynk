@@ -135,23 +135,54 @@ describe('server-authoritative stop', () => {
     expect(getTracker().getDeliveryId()).toBeNull();
   });
 
-  it('a 404 DELIVERY_NOT_FOUND stops the tracker too, but other 404s do not', async () => {
+  it('a 404 DELIVERY_NOT_FOUND stops the tracker too, and says why', async () => {
     h.sendLocation.mockRejectedValueOnce(new ApiError('Gone.', 404, 'DELIVERY_NOT_FOUND'));
     await syncTracking(onRoad());
     h.fake.onPoint(point());
     await vi.waitFor(() => expect(h.fake.stop).toHaveBeenCalledTimes(1));
-
-    __resetTrackerSessionForTests();
-    vi.clearAllMocks();
-    h.sendLocation.mockRejectedValueOnce(new ApiError('Nope.', 404, 'SOMETHING_ELSE'));
-    await syncTracking(onRoad());
-    h.fake.onPoint(point());
-    await vi.waitFor(() => expect(getTracker().getState().lastError).toBe('network'));
-    expect(h.fake.stop).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(getTracker().getState().stopReason).toBe('This delivery is no longer assigned to you.'));
+    expect(getTracker().getState().lastError).toBe('refused');
   });
 
-  it('any other failure keeps tracking and reports a network problem, never stops', async () => {
-    h.sendLocation.mockRejectedValueOnce(new ApiError('Boom', 500, 'INTERNAL'));
+  it.each([
+    ['RIDER_PROFILE_NOT_FOUND', 'No rider profile is linked to this account.'],
+    ['RIDER_INACTIVE', "This account's rider profile isn't active."],
+    ['RIDER_PROFILE_DISABLED', 'An admin switched off your rider profile.'],
+  ])('a 403 %s stops sharing and keeps the real reason, never "network"', async (code, reason) => {
+    h.sendLocation.mockRejectedValueOnce(new ApiError('Refused.', 403, code));
+    await syncTracking(onRoad());
+    h.fake.onPoint(point());
+    await vi.waitFor(() => expect(getTracker().getState().stopReason).toBe(reason));
+    expect(h.fake.stop).toHaveBeenCalledTimes(1);
+    expect(getTracker().getState()).toMatchObject({ active: false, lastError: 'refused' });
+    expect(getTracker().getDeliveryId()).toBeNull();
+  });
+
+  it('any other non-retryable 4xx (e.g. a 400) stops too, with the server message', async () => {
+    h.sendLocation.mockRejectedValueOnce(new ApiError('Latitude is out of range.', 400, 'SOMETHING_ELSE'));
+    await syncTracking(onRoad());
+    h.fake.onPoint(point());
+    await vi.waitFor(() => expect(getTracker().getState().stopReason).toBe('Latitude is out of range.'));
+    expect(h.fake.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('a new delivery starts with no stale stop reason', async () => {
+    h.sendLocation.mockRejectedValueOnce(new ApiError('Refused.', 403, 'RIDER_INACTIVE'));
+    await syncTracking(onRoad('d-a'));
+    h.fake.onPoint(point());
+    await vi.waitFor(() => expect(getTracker().getState().stopReason).not.toBeNull());
+    await syncTracking(onRoad('d-b'));
+    expect(getTracker().getState()).toMatchObject({ active: true, stopReason: null, lastError: null });
+  });
+
+  it.each([
+    ['a 500', new ApiError('Boom', 500, 'INTERNAL')],
+    ['a 503', new ApiError('Down', 503)],
+    ['a 429', new ApiError('Slow down', 429, 'RATE_LIMITED')],
+    ['a dropped connection', new ApiError('Could not reach the Blynk API.', 0, 'NETWORK')],
+    ['a timeout', new ApiError('The Blynk API did not answer in time.', 0, 'TIMEOUT')],
+  ])('%s keeps tracking and reports a network problem, never stops', async (_label, err) => {
+    h.sendLocation.mockRejectedValueOnce(err);
     await syncTracking(onRoad());
     h.fake.onPoint(point());
     await vi.waitFor(() => expect(getTracker().getState().lastError).toBe('network'));

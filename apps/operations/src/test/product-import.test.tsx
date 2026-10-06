@@ -127,3 +127,29 @@ describe('Product import', () => {
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
   }, 30_000);
 });
+
+describe('Product import: request size', () => {
+  it('shows a 413 PAYLOAD_TOO_LARGE as a clear "split the file" message', async () => {
+    const user = userEvent.setup();
+    renderAs(ADMIN_WITH_RIDER, '/catalog/products/import', {
+      'POST /admin/products/import': () => ({ status: 413, error: { code: 'PAYLOAD_TOO_LARGE', message: 'request entity too large' } }),
+    });
+    const input = await screen.findByLabelText('2. Choose the filled .xlsx or .csv file');
+    await user.upload(input, new File([CSV], 'products.csv', { type: 'text/csv' }));
+    expect(await screen.findByText(/too much to send at once \(over 1 MB\)\. Split it into smaller files/)).toBeInTheDocument();
+  });
+
+  it('warns before sending when the rows would be over 1 MB, and sends nothing', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/products/import', {
+      'POST /admin/products/import': (call) => ok(summarize(call.body.rows, call.body.dry_run)),
+    });
+    const longText = 'x'.repeat(1500);
+    const rows = Array.from({ length: 800 }, (_, i) => `Product ${i},Dairy,1 L,,,300,SKU-${i},,${longText},,,`);
+    const big = [CSV.split('\r\n')[0], ...rows].join('\r\n');
+    const input = await screen.findByLabelText('2. Choose the filled .xlsx or .csv file');
+    await user.upload(input, new File([big], 'big.csv', { type: 'text/csv' }));
+    expect(await screen.findByText(/too big to send at once .*the limit is 1 MB/)).toBeInTheDocument();
+    expect(api.find('POST', '/admin/products/import')).toHaveLength(0);
+  });
+});

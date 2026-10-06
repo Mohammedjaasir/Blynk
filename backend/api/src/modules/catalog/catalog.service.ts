@@ -1,11 +1,11 @@
 import { catalogRepository, ProductQueryParams } from './catalog.repository.js';
+import { generateUniqueSlug } from './catalog.slugs.js';
 import {
   CreateCategoryInput,
   UpdateCategoryInput,
   CreateProductInput,
   UpdateProductInput,
   ProductQueryInput,
-  slugify,
 } from './catalog.schema.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
@@ -110,15 +110,21 @@ export class CatalogService {
   }
 
   async createCategoryAdmin(input: CreateCategoryInput, actor?: AuditActor) {
-    const slug = input.slug ? input.slug.toLowerCase().trim() : slugify(input.name);
-
-    const existing = await catalogRepository.findCategoryBySlug(slug);
-    if (existing) {
-      throw new AppError(
-        `Category with slug '${slug}' already exists.`,
-        409,
-        'CATEGORY_SLUG_EXISTS'
-      );
+    // A slug the client chose and is taken stays a 409; a generated one is
+    // always made unique (and never empty for Sinhala/Tamil names).
+    let slug: string;
+    if (input.slug) {
+      slug = input.slug.toLowerCase().trim();
+      const existing = await catalogRepository.findCategoryBySlug(slug);
+      if (existing) {
+        throw new AppError(
+          `Category with slug '${slug}' already exists.`,
+          409,
+          'CATEGORY_SLUG_EXISTS'
+        );
+      }
+    } else {
+      slug = await generateUniqueSlug(input.name, 'category', async (s) => !!(await catalogRepository.findCategoryBySlug(s)), 128);
     }
 
     if (input.parent_id) await this.assertParentAllowed(input.parent_id);
@@ -387,14 +393,20 @@ export class CatalogService {
     }
 
     // 3. Resolve slug
-    const slug = input.slug ? input.slug.toLowerCase().trim() : slugify(input.name);
-    const slugConflict = await catalogRepository.findProductBySlug(slug);
-    if (slugConflict) {
-      throw new AppError(
-        `Product with slug '${slug}' already exists.`,
-        409,
-        'PRODUCT_SLUG_EXISTS'
-      );
+    // As for categories: only an explicitly chosen, taken slug is a 409.
+    let slug: string;
+    if (input.slug) {
+      slug = input.slug.toLowerCase().trim();
+      const slugConflict = await catalogRepository.findProductBySlug(slug);
+      if (slugConflict) {
+        throw new AppError(
+          `Product with slug '${slug}' already exists.`,
+          409,
+          'PRODUCT_SLUG_EXISTS'
+        );
+      }
+    } else {
+      slug = await generateUniqueSlug(input.name, 'product', async (s) => !!(await catalogRepository.findProductBySlug(s)), 255);
     }
 
     // 4. Create record

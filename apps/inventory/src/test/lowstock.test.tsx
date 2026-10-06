@@ -123,10 +123,10 @@ describe('running low: list page', () => {
     expect(await within(panel).findByRole('heading', { name: 'Pelwatte Salted Butter 200g' })).toBeInTheDocument();
   });
 
-  it('packing staff get "View stock" instead of "Restock"', async () => {
+  it('packing staff can restock too (owner decision)', async () => {
     renderAs(STAFF, '/low-stock', lowStockHandler);
-    expect(await screen.findByRole('link', { name: 'View stock: Pelwatte Salted Butter 200g' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /^Restock/ })).toBeNull();
+    expect(await screen.findByRole('link', { name: 'Restock: Pelwatte Salted Butter 200g' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^View stock/ })).toBeNull();
   });
 
   it('explains an empty list', async () => {

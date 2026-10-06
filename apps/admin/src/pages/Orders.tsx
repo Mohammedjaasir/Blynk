@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { orders as ordersApi } from '../api/resources';
-import type { BoardOrder } from '../api/types';
+import type { BoardOrder, OrderItemRow } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
-import { AssignRiderDialog, NoteDialog, needsNote } from '../components/OrderDialogs';
+import { AssignRiderDialog, MarkDeliveredDialog, NoteDialog, needsNote } from '../components/OrderDialogs';
 import { OrderPanel } from '../components/OrderPanel';
-import { Spinner } from '../components/ui';
+import { ConfirmDialog, Spinner } from '../components/ui';
 import {
   ACTION_LABEL,
   LANES,
@@ -50,7 +50,10 @@ export function Orders() {
   const { user } = useAuth();
   const role = user?.role;
   const [live, setLive] = useState<BoardOrder[] | null>(null);
-  const [closed, setClosed] = useState<BoardOrder[]>([]);
+  // Every live order the API has, which can be more than the page it returned.
+  const [liveTotal, setLiveTotal] = useState(0);
+  const [done, setDone] = useState({ delivered: 0, cancelled: 0 });
+  const [pendingItem, setPendingItem] = useState<{ order: BoardOrder; item: OrderItemRow } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
@@ -62,9 +65,15 @@ export function Orders() {
 
   const load = useCallback(async () => {
     try {
-      const [liveOrders, closedToday] = await Promise.all([ordersApi.live(), ordersApi.closedSince(startOfTodayColombo())]);
-      setLive(liveOrders);
-      setClosed(closedToday);
+      const since = startOfTodayColombo();
+      const [liveOrders, delivered, cancelled] = await Promise.all([
+        ordersApi.live(),
+        ordersApi.countSince('DELIVERED', since),
+        ordersApi.countSince('CANCELLED', since),
+      ]);
+      setLive(liveOrders.orders);
+      setLiveTotal(liveOrders.total);
+      setDone({ delivered, cancelled });
       setLoadError(null);
       setLoadedAt(new Date());
     } catch (err) {
@@ -95,9 +104,11 @@ export function Orders() {
       try {
         await step();
         setDialog(null);
+        setPendingItem(null);
       } catch (err) {
         setNotice(orderErrorMessage(err));
         setDialog(null);
+        setPendingItem(null);
       } finally {
         inFlight.current.delete(order.id);
         setBusyId(null);
@@ -110,7 +121,7 @@ export function Orders() {
 
   const act = useCallback(
     (order: BoardOrder, action: OrderAction) => {
-      if (action === 'assign' || needsNote(action)) {
+      if (action === 'assign' || action === 'markDelivered' || needsNote(action)) {
         setDialog({ action, order });
         return;
       }
@@ -129,8 +140,8 @@ export function Orders() {
   }, [live]);
 
   const openOrder = live?.find((o) => o.id === openId) ?? null;
-  const delivered = closed.filter((o) => o.order_status === 'DELIVERED').length;
-  const cancelled = closed.filter((o) => o.order_status === 'CANCELLED').length;
+  const { delivered, cancelled } = done;
+  const hidden = live ? liveTotal - live.length : 0;
 
   return (
     <div className={`orders${openOrder ? ' orders--with-panel' : ''}`}>
@@ -161,6 +172,12 @@ export function Orders() {
           </p>
         ) : null}
         {!live && !loadError ? <Spinner label="Loading orders" /> : null}
+        {live && hidden > 0 ? (
+          // The board reads at most 100 live orders; never let the rest vanish silently.
+          <p className="ops-notice" role="status">
+            Showing {live.length} of {liveTotal} live orders — refine the view. The oldest are shown first.
+          </p>
+        ) : null}
         {live && live.length === 0 ? <p className="orders__empty">No live orders.</p> : null}
 
         {LANES.map((lane) => {
@@ -208,6 +225,7 @@ export function Orders() {
           version={version}
           busy={busyId === openOrder.id}
           onAction={(action) => act(openOrder, action)}
+          onMarkItemUnavailable={(item) => setPendingItem({ order: openOrder, item })}
           onClose={() => setOpenId(null)}
         />
       ) : null}
@@ -218,6 +236,28 @@ export function Orders() {
           busy={busyId === dialog.order.id}
           onClose={() => setDialog(null)}
           onAssign={(riderId, confirmFar) => void run(dialog.order, () => ordersApi.assignRider(dialog.order.id, riderId, confirmFar))}
+        />
+      ) : null}
+      {dialog?.action === 'markDelivered' ? (
+        <MarkDeliveredDialog
+          order={dialog.order}
+          busy={busyId === dialog.order.id}
+          onClose={() => setDialog(null)}
+          onConfirm={(proof) => void run(dialog.order, () => ordersApi.markDelivered(dialog.order.id, proof))}
+        />
+      ) : null}
+      {pendingItem ? (
+        <ConfirmDialog
+          title="Mark item unavailable"
+          message={`Mark ${pendingItem.item.quantity} × ${pendingItem.item.product_name_snapshot} unavailable on #${shortNumber(
+            pendingItem.order.order_number
+          )}? The customer is told, and it is left out of the bag and the bill. This cannot be undone here.`}
+          confirmLabel="Mark unavailable"
+          destructive
+          onCancel={() => setPendingItem(null)}
+          onConfirm={() =>
+            void run(pendingItem.order, () => ordersApi.markItemUnavailable(pendingItem.order.id, pendingItem.item.id))
+          }
         />
       ) : null}
       {dialog && needsNote(dialog.action) ? (

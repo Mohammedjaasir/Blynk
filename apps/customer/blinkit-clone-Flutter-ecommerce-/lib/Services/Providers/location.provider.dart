@@ -5,7 +5,9 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:ecom/Infrastructure/HttpMethods/browser_streams.dart';
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
+import 'package:ecom/Infrastructure/HttpMethods/token_storage.dart';
 import 'package:ecom/Models/rider_location_model.dart';
 
 /// Yields raw SSE text chunks for one order's location stream. Injectable so
@@ -121,7 +123,110 @@ const double _maxJitter = 0.2;
 /// that were all cut off together (a deploy) do not reconnect in lockstep.
 double _randomJitter() => (_random.nextDouble() * 2 - 1) * _maxJitter;
 
-Stream<String> _dioStreamOpener(String orderId) => openLocationStream(ApiService.dio, orderId);
+/// Android/iOS: the Dio stream above on the shared ApiService.dio.
+Stream<String> dioLocationStreamOpener(String orderId) => openLocationStream(ApiService.dio, orderId);
+
+/// Opens a URL as a streamed text body with the given headers; a non-2xx
+/// answer errors with [BrowserStreamStatus].
+typedef FetchTextStream = Stream<String> Function(String url, {Map<String, String> headers});
+
+/// The web build's location stream (2026-10-06).
+///
+/// On the web, Dio's stream response is buffered whole by dio_web_adapter and
+/// an SSE response never ends, so the Dio opener never delivered a point. The
+/// backend authenticates `GET /orders/:id/location/stream` from the
+/// `Authorization` header only (requireAuth), which rules out the browser
+/// EventSource - it cannot send headers - and there is no REST endpoint that
+/// returns the rider's position to poll instead (the location columns reach
+/// customers through this stream alone, delivery.columns.ts). So the web
+/// opens the same stream with the browser's fetch(), which streams the body
+/// and can send the header.
+///
+/// The access token is read for every connect (every reconnect re-reads it);
+/// a 401 refreshes it once through ApiService's shared refresh and retries,
+/// like the Dio interceptor does on Android. Any other HTTP error becomes a
+/// [LocationStreamRefused], exactly as on Android, so the provider's
+/// stop-or-retry rules are the same on both.
+@visibleForTesting
+Stream<String> openWebLocationStream(
+  String orderId, {
+  required String baseUrl,
+  required Future<String?> Function() accessToken,
+  required Future<String?> Function() refreshAccessToken,
+  required FetchTextStream fetch,
+}) {
+  final url = joinApiUrl(baseUrl, '/orders/${Uri.encodeComponent(orderId)}/location/stream');
+  StreamSubscription<String>? sub;
+  var cancelled = false;
+  late final StreamController<String> controller;
+
+  void finish(Object? error) {
+    sub = null;
+    if (cancelled || controller.isClosed) return;
+    if (error != null) controller.addError(error);
+    controller.close();
+  }
+
+  void open(String? token, {required bool mayRefresh}) {
+    if (cancelled) return;
+    sub = fetch(url, headers: {
+      'Accept': 'text/event-stream',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    }).listen(
+      controller.add,
+      onError: (Object e) async {
+        if (e is BrowserStreamStatus) {
+          if (e.statusCode == 401 && mayRefresh && !cancelled) {
+            String? fresh;
+            try {
+              fresh = await refreshAccessToken();
+            } catch (_) {}
+            if (cancelled) return;
+            if (fresh != null && fresh.isNotEmpty) {
+              open(fresh, mayRefresh: false);
+              return;
+            }
+          }
+          finish(LocationStreamRefused(e.statusCode));
+          return;
+        }
+        finish(e);
+      },
+      onDone: () => finish(null),
+      cancelOnError: true,
+    );
+  }
+
+  controller = StreamController<String>(
+    onListen: () => unawaited(() async {
+      String? token;
+      try {
+        token = await accessToken();
+      } catch (_) {}
+      open(token, mayRefresh: true);
+    }()),
+    onCancel: () {
+      cancelled = true;
+      final s = sub;
+      sub = null;
+      return s?.cancel();
+    },
+  );
+  return controller.stream;
+}
+
+Stream<String> _webStreamOpener(String orderId) => openWebLocationStream(
+      orderId,
+      baseUrl: ApiService.dio.options.baseUrl,
+      accessToken: TokenStorage.getAccessToken,
+      refreshAccessToken: ApiService.refreshAccessToken,
+      fetch: browserFetchTextStream,
+    );
+
+/// The production opener for this platform: fetch() on the web, Dio
+/// everywhere else (Android behaviour is unchanged).
+LocationStreamOpener locationStreamOpenerFor({required bool web}) =>
+    web ? _webStreamOpener : dioLocationStreamOpener;
 
 /// Frames without a terminator are dropped beyond this size so a misbehaving
 /// peer can never grow the buffer without bound.
@@ -141,7 +246,7 @@ class LocationProvider extends ChangeNotifier {
     ReconnectDelay reconnectDelay = defaultReconnectDelay,
     double Function()? jitter,
     Duration minHealthyDuration = const Duration(seconds: 30),
-  })  : _opener = opener ?? _dioStreamOpener,
+  })  : _opener = opener ?? locationStreamOpenerFor(web: kIsWeb),
         _now = now ?? (() => DateTime.now().toUtc()),
         _freshnessInterval = freshnessInterval,
         _reconnectDelay = reconnectDelay,

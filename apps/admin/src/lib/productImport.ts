@@ -109,6 +109,7 @@ export function validateRow(record: Partial<Record<TemplateColumn, unknown>>, ro
   if (cost === null) errors.push({ field: 'cost_price', message: 'Cost price is required.' });
   else if (Number.isNaN(cost)) errors.push({ field: 'cost_price', message: 'Cost price must be a number.' });
   else if (cost < 0) errors.push({ field: 'cost_price', message: 'Cost price cannot be negative.' });
+  else if (cost > 99_999_999.99) errors.push({ field: 'cost_price', message: 'Cost price can be at most 99,999,999.99.' });
 
   const selling = cellNumber(record.selling_price);
   if (selling !== null) {

@@ -27,7 +27,17 @@ import { Staff } from './pages/Staff';
  * this router does.
  */
 function RequireOperations({ children }: { children: JSX.Element }) {
-  const { status } = useAuth();
+  const { status, retry } = useAuth();
+  if (status === 'unreachable') {
+    return (
+      <div className="boot">
+        <p role="status">Could not reach the Blynk API to check your session.</p>
+        <button type="button" className="button" onClick={retry}>
+          Try again
+        </button>
+      </div>
+    );
+  }
   if (status === 'loading') {
     return (
       <div className="boot">

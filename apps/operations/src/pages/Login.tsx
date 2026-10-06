@@ -84,6 +84,13 @@ export function Login() {
         setOtp('');
         setDevOtp(null);
         setError(WRONG_ROLE_MESSAGE);
+      } else if (err instanceof ApiError && err.code === 'ACCOUNT_NOT_FOUND') {
+        // Staff never get an account made for them here (create_account:
+        // false): an unknown number has to be checked, not retried.
+        setStep('phone');
+        setOtp('');
+        setDevOtp(null);
+        setError(errorMessage(err));
       } else {
         setError(errorMessage(err, 'Could not verify the code.'));
       }

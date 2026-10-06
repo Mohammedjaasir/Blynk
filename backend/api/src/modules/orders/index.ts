@@ -7,7 +7,8 @@ import { streamOrderLocation } from './order.location.controller.js';
 export const ordersRouter = Router();
 
 // Customer order routes (Guarded by requireAuth)
-ordersRouter.post('/', requireAuth, orderController.createOrder.bind(orderController));
+// Placing an order is for customer accounts only; a staff token gets 403.
+ordersRouter.post('/', requireAuth, requireRoles('CUSTOMER'), orderController.createOrder.bind(orderController));
 // Coupon preview at checkout (migration 018); order creation re-validates.
 ordersRouter.post('/validate-coupon', requireAuth, requireRoles('CUSTOMER'), orderController.validateCoupon.bind(orderController));
 ordersRouter.get('/', requireAuth, orderController.getCustomerOrders.bind(orderController));

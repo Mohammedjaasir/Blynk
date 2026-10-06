@@ -12,12 +12,18 @@ const MESSAGES: Record<string, string> = {
   INSUFFICIENT_TRACKED_INVENTORY:
     'Not enough counted stock to source this item. Restock it, or mark the item unavailable.',
   CANNOT_SOURCE_UNAVAILABLE_ITEM: 'This item was marked unavailable and can no longer be sourced.',
-  ORDER_NOT_IN_SOURCING_STATE: 'This order is cancelled or delivered, so its items can no longer be sourced.',
+  ORDER_NOT_IN_SOURCING_STATE:
+    'This order was already packed, cancelled or delivered, so its items can no longer be sourced. Refresh the sourcing queue.',
+  PARTIAL_SOURCING_NOT_SUPPORTED: 'Source the full quantity, or mark the item unavailable.',
+  INVALID_STATUS_TRANSITION:
+    'This order can no longer be packed - it was already packed, cancelled or delivered. The queue has been refreshed.',
+  ACCOUNT_NOT_FOUND: 'No Blynk account uses this number.',
   SUPPLIER_INACTIVE: 'That supplier has been deactivated. Choose an active supplier.',
   SUPPLIER_CODE_TAKEN: 'Another supplier already uses this code.',
   PRODUCT_NOT_TRACKED: 'Only tracked products can be adjusted. Switch the product to TRACKED first.',
   NEGATIVE_INVENTORY_PROHIBITED: 'That would take stock below zero.',
-  INSUFFICIENT_AVAILABLE_INVENTORY: 'That would leave less stock than is already reserved.',
+  INSUFFICIENT_AVAILABLE_INVENTORY:
+    'Not enough free stock - the rest is reserved for other orders. Restock it, or mark the item unavailable.',
   FORBIDDEN: 'Your account is not allowed to do this.',
   NETWORK: 'Could not reach the Blynk API. Check the connection and try again.',
 };
@@ -31,6 +37,12 @@ export function errorMessage(err: unknown, fallback = 'Something went wrong. Ple
   }
   return fallback;
 }
+
+/**
+ * Refusals on the sourcing screen that mean "this stock is not there": the
+ * dialog offers "Mark unavailable" next to them.
+ */
+export const SHORT_STOCK_CODES = ['INSUFFICIENT_TRACKED_INVENTORY', 'INSUFFICIENT_AVAILABLE_INVENTORY', 'PARTIAL_SOURCING_NOT_SUPPORTED'];
 
 export const isApiError = (err: unknown, code: string) => err instanceof ApiError && err.code === code;
 export const isForbidden = (err: unknown) => err instanceof ApiError && err.status === 403;

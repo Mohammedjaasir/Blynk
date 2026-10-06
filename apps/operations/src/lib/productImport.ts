@@ -319,3 +319,24 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** The API reads at most 1 MB of JSON per request (express.json limit '1mb'); a bigger import is refused with 413 PAYLOAD_TOO_LARGE. */
+export const MAX_IMPORT_PAYLOAD_BYTES = 1024 * 1024;
+
+/** The exact size of the import request body, in bytes (UTF-8). */
+export function importPayloadBytes(rows: unknown[], dryRun: boolean): number {
+  return new TextEncoder().encode(JSON.stringify({ rows, dry_run: dryRun })).length;
+}
+
+/**
+ * Null when the rows fit in one request; otherwise what to tell the operator
+ * BEFORE sending - the API would only refuse it with a 413.
+ */
+export function importTooLargeMessage(rows: unknown[], dryRun: boolean): string | null {
+  const bytes = importPayloadBytes(rows, dryRun);
+  if (bytes <= MAX_IMPORT_PAYLOAD_BYTES) return null;
+  // Aim a little under the limit so each part fits comfortably.
+  const perFile = Math.max(1, Math.floor((rows.length * MAX_IMPORT_PAYLOAD_BYTES * 0.9) / bytes));
+  const mb = (bytes / (1024 * 1024)).toFixed(1);
+  return `This file is too big to send at once (${mb} MB; the limit is 1 MB). Split it into files of about ${perFile} rows and import them one by one. Nothing was sent.`;
+}

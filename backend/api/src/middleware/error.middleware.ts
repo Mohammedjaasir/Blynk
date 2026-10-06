@@ -45,6 +45,25 @@ export function errorMiddleware(
     statusCode = 400;
     code = 'MALFORMED_JSON';
     message = 'Malformed JSON body in request';
+  } else if ('type' in err && err.type === 'entity.too.large') {
+    // express.json / urlencoded over their 1 MB limit.
+    statusCode = 413;
+    code = 'PAYLOAD_TOO_LARGE';
+    message = 'The request body is too large. Send at most 1 MB.';
+  } else if (err.name === 'MulterError') {
+    // Media uploads (multer): a file over the 2 MB cap is 413; any other
+    // multer refusal (extra files, unexpected field) is the client's fault.
+    const multerCode = (err as Error & { code?: string }).code;
+    if (multerCode === 'LIMIT_FILE_SIZE') {
+      statusCode = 413;
+      code = 'FILE_TOO_LARGE';
+      message = 'Images must be 2 MB or smaller.';
+    } else {
+      statusCode = 400;
+      code = 'UPLOAD_ERROR';
+      message = err.message;
+      details = { reason: multerCode ?? null };
+    }
   } else if ('status' in err && typeof err.status === 'number') {
     statusCode = err.status;
     message = err.message;

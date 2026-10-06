@@ -3,6 +3,7 @@ import { delivery as deliveryApi } from '../api/resources';
 import type { DeliverySummary } from '../api/types';
 import { deliveryLocationPlugin } from './location-mode';
 import { isTrackable } from './delivery';
+import { errorMessage } from './errors';
 import { DeliveryTracker } from './tracking';
 
 /**
@@ -23,10 +24,38 @@ import { DeliveryTracker } from './tracking';
  * decline, or on the web, the WebView's navigator.geolocation
  * (geolocation-plugin.ts), which shares only while the app is on screen.
  */
-/** A refusal after which this delivery can never be shared again by this operator. */
-function closesWindow(err: unknown): boolean {
-  return err instanceof ApiError && (err.status === 409 || (err.status === 404 && err.code === 'DELIVERY_NOT_FOUND'));
+/**
+ * Worth sending the next point: no answer at all (NETWORK/TIMEOUT, status
+ * 0), a server problem (5xx) or being rate-limited (408/429). Anything that
+ * is not an ApiError is unexpected and also treated as a passing hiccup.
+ */
+export function isRetryableLocationError(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return true;
+  return err.status === 0 || err.status === 408 || err.status === 429 || err.status >= 500;
 }
+
+/**
+ * Why sharing stopped, in the operator's words, for a refusal that will not
+ * change by retrying (any other 4xx): the delivery left the trackable
+ * window (409) or is no longer theirs (404), their rider profile is missing
+ * or switched off (403), or the session ended (401).
+ */
+export function locationStopReason(err: unknown): string {
+  const code = err instanceof ApiError ? err.code : undefined;
+  if (code && RIDER_REFUSALS[code]) return RIDER_REFUSALS[code];
+  if (err instanceof ApiError) {
+    if (err.status === 409) return 'This delivery is no longer on the road.';
+    if (err.status === 404 && code === 'DELIVERY_NOT_FOUND') return 'This delivery is no longer assigned to you.';
+    if (err.status === 401) return 'You were signed out. Sign in again to share your location.';
+  }
+  return errorMessage(err, 'The server refused your location.');
+}
+
+const RIDER_REFUSALS: Record<string, string> = {
+  RIDER_PROFILE_NOT_FOUND: 'No rider profile is linked to this account.',
+  RIDER_INACTIVE: "This account's rider profile isn't active.",
+  RIDER_PROFILE_DISABLED: 'An admin switched off your rider profile.',
+};
 
 function createTracker(): DeliveryTracker {
   const tracker: DeliveryTracker = new DeliveryTracker(deliveryLocationPlugin, async (deliveryId, point) => {
@@ -38,15 +67,17 @@ function createTracker(): DeliveryTracker {
         captured_at: point.capturedAt.toISOString(),
       });
     } catch (err) {
-      // The server is the authority on the window: 409 (not trackable) or
-      // 404 DELIVERY_NOT_FOUND (reassigned, never ours) mean stop sharing,
-      // not "retry later". Only if it still concerns the delivery being
-      // tracked - a late refusal for a previous delivery must not stop its
-      // replacement - and through the same queue as every other start/stop
-      // so it cannot interleave with one.
-      if (closesWindow(err)) {
+      // The server is the authority: only a connection problem, a 5xx or a
+      // 429 is worth retrying with the next point. Any other refusal - 409
+      // (not trackable), 404 DELIVERY_NOT_FOUND (reassigned), 403
+      // RIDER_PROFILE_NOT_FOUND / RIDER_INACTIVE / RIDER_PROFILE_DISABLED,
+      // a 400 - will not change by retrying: stop sharing and say why. Only
+      // if it still concerns the delivery being tracked - a late refusal for
+      // a previous delivery must not stop its replacement - and through the
+      // same queue as every other start/stop so it cannot interleave with one.
+      if (!isRetryableLocationError(err)) {
         await enqueue(async () => {
-          if (tracker.getDeliveryId() === deliveryId) await tracker.stop();
+          if (tracker.getDeliveryId() === deliveryId) await tracker.stopBecause(locationStopReason(err));
         });
         return;
       }

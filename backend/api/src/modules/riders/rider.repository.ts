@@ -243,7 +243,7 @@ export class RiderRepository {
    */
   async writeLocation(
     deliveryId: string,
-    input: { latitude: number; longitude: number; accuracy: number; capturedAt: Date },
+    input: { latitude: number; longitude: number; accuracy: number | null; capturedAt: Date },
     executor: DBConnection = db
   ) {
     const now = new Date();

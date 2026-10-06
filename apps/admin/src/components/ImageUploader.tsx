@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { deleteImage, uploadImage } from '../api/client';
-import { prepareImageForUpload, validateImageFile } from '../lib/image';
+import { uploadImage } from '../api/client';
+import { errorMessage } from '../lib/apiErrors';
+import { prepareImageForUpload, validateImageFile, validatePreparedFile } from '../lib/image';
 import { Spinner } from './ui';
 
 /**
@@ -8,8 +9,12 @@ import { Spinner } from './ui';
  *
  * The preview appears before the product or promotion is saved: the file is
  * uploaded immediately, the caller receives the URL, and saving the form
- * stores that URL. Removing an image both clears the field and deletes the
- * stored file, so local storage doesn't accumulate orphans.
+ * stores that URL.
+ *
+ * Remove and Replace only change the field. The old file is NOT deleted
+ * here: until the form is saved, the product or promotion still points at
+ * it, and a failed or cancelled save must leave it working. The form
+ * deletes replaced files after a successful save (lib/imageCleanup.ts).
  */
 export function ImageUploader({
   value,
@@ -42,10 +47,18 @@ export function ImageUploader({
     setBusy(true);
     try {
       const prepared = await prepareImageForUpload(file);
+      // The API refuses anything over 2 MB (413 FILE_TOO_LARGE); say so
+      // before sending it rather than after.
+      const sized = validatePreparedFile(prepared);
+      if (!sized.ok) {
+        setError(sized.message ?? 'That image is too large.');
+        setLocalPreview(null);
+        return;
+      }
       const media = await uploadImage(prepared, folder);
       onChange(media.url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.');
+      setError(errorMessage(err, 'Upload failed.'));
       setLocalPreview(null);
     } finally {
       setBusy(false);
@@ -53,16 +66,11 @@ export function ImageUploader({
     }
   }
 
-  async function handleRemove() {
-    const current = value;
+  function handleRemove() {
+    // Only the field: the file is deleted once the form saves without it.
     onChange(null);
     setLocalPreview(null);
-    if (!current) return;
-    try {
-      await deleteImage(current);
-    } catch {
-      // The field is cleared either way; a leftover file is not worth an error.
-    }
+    setError(null);
   }
 
   const preview = value ?? localPreview;
@@ -105,13 +113,13 @@ export function ImageUploader({
               type="button"
               className="button button--ghost"
               disabled={busy}
-              onClick={() => void handleRemove()}
+              onClick={handleRemove}
             >
               Remove
             </button>
           ) : null}
           <p className="uploader__hint">
-            JPEG, PNG or WebP. Large photos are resized before upload.
+            JPEG, PNG or WebP, 2 MB or less after resizing. Large photos are resized before upload.
           </p>
           {error ? <p className="field__error">{error}</p> : null}
         </div>

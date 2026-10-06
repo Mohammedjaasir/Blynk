@@ -135,7 +135,11 @@ export function formFromCoupon(c: Coupon): CouponForm {
 
 const num = (v: string) => (v.trim() === '' ? null : Number(v));
 
-export function validateForm(f: CouponForm, isNew: boolean): CouponFormErrors {
+/**
+ * `usageCount`: times the coupon has already been used. A total-uses limit
+ * below that would describe a coupon that was over-used, so it is refused.
+ */
+export function validateForm(f: CouponForm, isNew: boolean, usageCount = 0): CouponFormErrors {
   const e: CouponFormErrors = {};
   if (isNew && !CODE_PATTERN.test(f.code.trim().toUpperCase())) e.code = 'Use 4-20 letters or digits, no spaces.';
   const value = num(f.discount_value);
@@ -150,6 +154,9 @@ export function validateForm(f: CouponForm, isNew: boolean): CouponFormErrors {
   if (f.starts_on && f.ends_on && f.ends_on < f.starts_on) e.ends_on = 'The last day must be on or after the first day.';
   const limit = num(f.usage_limit);
   if (limit != null && !(Number.isInteger(limit) && limit >= 1)) e.usage_limit = 'Enter a whole number, or leave it empty.';
+  else if (limit != null && limit < usageCount) {
+    e.usage_limit = `Already used ${usageCount} ${usageCount === 1 ? 'time' : 'times'}; the limit cannot be lower than that.`;
+  }
   const per = num(f.per_customer_limit);
   if (!(per != null && Number.isInteger(per) && per >= 1)) e.per_customer_limit = 'Enter a whole number, at least 1.';
   return e;
@@ -172,3 +179,22 @@ export function toInput(f: CouponForm, isNew: boolean): CouponInput {
     is_active: f.is_active,
   };
 }
+
+/** What COUPON_IN_USE means, for any action the API refuses with it. */
+export function couponInUseMessage(code: string): string {
+  return `${code} has already been used on orders, so it cannot be deleted. Switch it off instead to stop new uses; past orders keep their discount.`;
+}
+
+/** API field -> form field, for showing server validation details inline. */
+export const COUPON_FIELD_FOR: Record<string, keyof CouponForm> = {
+  code: 'code',
+  description: 'description',
+  discount_type: 'discount_type',
+  discount_value: 'discount_value',
+  max_discount: 'max_discount',
+  min_subtotal: 'min_subtotal',
+  starts_at: 'starts_on',
+  ends_at: 'ends_on',
+  usage_limit: 'usage_limit',
+  per_customer_limit: 'per_customer_limit',
+};

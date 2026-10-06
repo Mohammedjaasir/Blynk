@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react';
-import { deleteImage, uploadImage, type MediaFolder } from '../api/client';
-import { prepareImageForUpload, validateImageFile } from '../lib/image';
+import { uploadImage, type MediaFolder } from '../api/client';
+import { errorMessage } from '../lib/errors';
+import { MAX_UPLOAD_BYTES, prepareImageForUpload, validateImageFile } from '../lib/image';
 import { Spinner } from './ui';
 
 /**
@@ -39,8 +40,8 @@ export function describeFocal(focal: FocalPoint): string {
 /**
  * Upload / preview / replace / remove for one image (task F5). Ported from
  * `apps/admin/src/components/ImageUploader.tsx` (a fresh implementation, not
- * an import - common.md rule 2) - identical behaviour: the file uploads
- * immediately, the caller receives the stored URL, and saving the
+ * an import - common.md rule 2): the file uploads immediately, the caller
+ * receives the stored URL, and saving the
  * product/promotion form just stores that URL (the backend is the only
  * price/catalog authority either way - an image URL carries no pricing
  * decision, common.md rule 8 doesn't apply to it, but rule 7 does: no field
@@ -99,10 +100,17 @@ export function ImageUploader({
     setBusy(true);
     try {
       const prepared = await prepareImageForUpload(file);
+      // The API refuses anything over 2 MB (413 FILE_TOO_LARGE); say so
+      // before sending it rather than after a slow upload.
+      if (prepared.size > MAX_UPLOAD_BYTES) {
+        setError('That image is larger than 2 MB even after resizing. Choose a smaller one.');
+        setLocalPreview(null);
+        return;
+      }
       const media = await uploadImage(prepared, folder);
       onChange(media.url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.');
+      setError(errorMessage(err, 'Upload failed.'));
       setLocalPreview(null);
     } finally {
       setBusy(false);
@@ -110,8 +118,11 @@ export function ImageUploader({
     }
   }
 
-  async function handleRemove() {
-    const current = value;
+  function handleRemove() {
+    // Only the FIELD is cleared. The stored file is not deleted here: the
+    // saved record still points at it until the form is saved, and a
+    // cancelled or failed save must leave it working. The form deletes
+    // replaced files after a successful save (lib/image.ts `replacedImages`).
     onChange(null);
     setLocalPreview(null);
     // Deliberately NOT also resetting the focal point here. Two callbacks
@@ -122,12 +133,6 @@ export function ImageUploader({
     // hidden while there is no image, and the moment a new one is uploaded
     // the live preview shows that anchor applied to it, with `Reset to
     // centre` one press away.
-    if (!current) return;
-    try {
-      await deleteImage(current);
-    } catch {
-      // The field is cleared either way; a leftover file is not worth an error.
-    }
   }
 
   const preview = value ?? localPreview;
@@ -173,11 +178,11 @@ export function ImageUploader({
             {preview ? 'Replace image' : 'Upload image'}
           </button>
           {preview ? (
-            <button type="button" className="button button--ghost" disabled={busy} onClick={() => void handleRemove()}>
+            <button type="button" className="button button--ghost" disabled={busy} onClick={handleRemove}>
               Remove
             </button>
           ) : null}
-          <p className="uploader__hint">JPEG, PNG or WebP. Large photos are resized before upload.</p>
+          <p className="uploader__hint">JPEG, PNG or WebP, up to 2 MB. Large photos are resized before upload.</p>
           {error ? <p className="field__error-text">{error}</p> : null}
         </div>
       </div>

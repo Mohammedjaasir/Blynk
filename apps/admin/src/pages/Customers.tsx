@@ -1,3 +1,4 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { customers as customersApi, orders as ordersApi } from '../api/resources';
@@ -23,7 +24,7 @@ export const SORT_LABEL: Record<Exclude<CustomerSort, 'name'>, string> = {
 };
 
 const PAGE_SIZE = 25;
-const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
+const errorText = (err: unknown, fallback: string) => errorMessage(err, fallback);
 
 export function Customers() {
   const [query, setQuery] = useState('');

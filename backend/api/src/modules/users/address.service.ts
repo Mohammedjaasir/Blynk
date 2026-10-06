@@ -1,6 +1,7 @@
 import { addressRepository } from './address.repository.js';
 import { CreateAddressInput, UpdateAddressInput, UpdateProfileInput } from './address.schema.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { assertWithinServiceZone } from '../orders/delivery-zone.js';
 
 /**
  * Migration 024: the additional number exists so the rider has someone else
@@ -31,11 +32,16 @@ export class AddressService {
 
   async createAddress(userId: string, input: CreateAddressInput) {
     assertAlternateDiffers(input.recipient_phone, input.alternate_phone);
+    // Same service-zone rule as checkout: an address outside it could never
+    // be ordered to, so it is refused when saved rather than at the cart.
+    await assertWithinServiceZone(input.latitude, input.longitude);
     return await addressRepository.createAddress(userId, input);
   }
 
   async updateAddress(id: string, userId: string, input: UpdateAddressInput) {
-    if (input.recipient_phone !== undefined || input.alternate_phone !== undefined) {
+    const phonesChange = input.recipient_phone !== undefined || input.alternate_phone !== undefined;
+    const pinMoves = input.latitude !== undefined || input.longitude !== undefined;
+    if (phonesChange || pinMoves) {
       // A partial update is checked against what the address will hold afterwards.
       const existing = await addressRepository.findAddressById(id, userId);
       if (!existing) {
@@ -45,6 +51,12 @@ export class AddressService {
         input.recipient_phone ?? existing.recipient_phone,
         input.alternate_phone !== undefined ? input.alternate_phone : existing.alternate_phone
       );
+      if (pinMoves) {
+        await assertWithinServiceZone(
+          input.latitude ?? Number(existing.latitude),
+          input.longitude ?? Number(existing.longitude)
+        );
+      }
     }
     const updated = await addressRepository.updateAddress(id, userId, input);
     if (!updated) {

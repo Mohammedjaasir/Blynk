@@ -12,7 +12,8 @@ export type Action =
   | 'viewSuppliers'
   | 'source' // POST /admin/orders/:id/items/:itemId/source
   | 'markUnavailable' // POST /admin/orders/:id/resolve-item
-  | 'adjustStock' // POST /admin/inventory/:productId/adjust
+  | 'markPacked' // PATCH /admin/orders/:id/status {status:'PACKED'} (pack only - never cancel or deliver here)
+  | 'adjustStock' // POST /admin/inventory/:productId/adjust (restock, write-off, audit count)
   | 'changeTrackingMode' // PATCH /admin/inventory/:productId/mode
   | 'editThreshold' // PATCH /admin/inventory/:productId/threshold (backend also allows OPERATIONS, who can't sign in here)
   | 'manageSuppliers'; // POST/PATCH /admin/suppliers
@@ -24,7 +25,9 @@ const RULES: Record<Action, Role[]> = {
   viewSuppliers: ['ADMIN', 'PACKING_STAFF'],
   source: ['ADMIN', 'PACKING_STAFF'],
   markUnavailable: ['ADMIN', 'PACKING_STAFF'],
-  adjustStock: ['ADMIN'],
+  markPacked: ['ADMIN', 'PACKING_STAFF'],
+  // Owner decision: packing staff receive stock too (restock, write-off, count).
+  adjustStock: ['ADMIN', 'PACKING_STAFF'],
   changeTrackingMode: ['ADMIN'],
   editThreshold: ['ADMIN'],
   manageSuppliers: ['ADMIN'],

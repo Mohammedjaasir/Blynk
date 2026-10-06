@@ -9,6 +9,7 @@ import '../Models/user_model.dart';
 import '../Services/Providers/auth.provider.dart';
 import '../Services/Location/device_location_source.dart';
 import '../Services/Providers/address.provider.dart';
+import '../Services/app_errors.dart';
 import '../Services/store_info.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Atoms/blynk_text_field.dart';
@@ -78,6 +79,10 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   /// red until the customer shares it (2026-10-05, owner: required, so a
   /// rider is never sent to the store's own pin).
   bool _locationMissing = false;
+  /// The server refused the pin as outside the delivery area
+  /// (422 DELIVERY_OUTSIDE_RADIUS): the note under the location button says
+  /// so until the customer picks another place. Nothing was saved.
+  bool _outsideArea = false;
 
   bool get _isEditing => widget.existing != null;
 
@@ -162,6 +167,7 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
       _lngController.text = picked.longitude.toStringAsFixed(6);
       _locationSet = true;
       _locationMissing = false;
+      _outsideArea = false;
     });
   }
 
@@ -169,6 +175,20 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
   /// address (2026-10-05, owner: no Home/Work/Other): a new one is saved with
   /// the backend's default and an edited one keeps what it had.
   String get _label => widget.existing?.label ?? 'Home';
+
+  /// What goes back as `address_line1` on an edit. The Address box shows an
+  /// old address's two lines folded together ("line 1, line 2"); the second
+  /// line is kept as it was (the edit never sends `address_line2`, so the
+  /// PATCH leaves it alone), so when the box still ends with it, it is taken
+  /// off again rather than saved twice.
+  static String _editedLine1(String box, String? existingLine2) {
+    final line2 = existingLine2?.trim() ?? '';
+    final suffix = ', $line2';
+    if (line2.isNotEmpty && box.endsWith(suffix) && box.length > suffix.length) {
+      return box.substring(0, box.length - suffix.length).trim();
+    }
+    return box;
+  }
 
   Future<void> _save() async {
     final fieldsOk = _formKey.currentState!.validate();
@@ -188,8 +208,13 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
           AppValidators.normalizeText(_phoneController.text),
       // Optional: null (not '') when left empty, which also clears it on edit.
       alternatePhone: AppValidators.normalizePhone(_altPhoneController.text),
-      addressLine1: AppValidators.normalizeText(_line1Controller.text),
-      addressLine2: null,
+      addressLine1: _isEditing
+          ? _editedLine1(AppValidators.normalizeText(_line1Controller.text),
+              AppValidators.normalizeText(widget.existing?.addressLine2 ?? ''))
+          : AppValidators.normalizeText(_line1Controller.text),
+      // A new address has no second line; an edited one keeps its own (the
+      // field is left out of the PATCH below, never sent as null).
+      addressLine2: _isEditing ? widget.existing?.addressLine2 : null,
       // Not asked any more: the city is the hub's; an edited address keeps
       // its saved city and postal code.
       city: widget.existing?.city ?? StoreInfo.hubName,
@@ -205,7 +230,7 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
       if (_isEditing) {
         await addressProvider.updateAddress(
           address.id,
-          address.toCreatePayload(),
+          address.toCreatePayload()..remove('address_line2'),
         );
       } else {
         await addressProvider.createAddress(address);
@@ -213,11 +238,14 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
       if (mounted) {
-        // The backend also verifies the delivery geofence server-side on
-        // checkout - a saved address outside it isn't rejected here, only
-        // surfaced honestly if the backend itself reports the failure.
+        // The backend checks the delivery radius when an address is saved
+        // (422 DELIVERY_OUTSIDE_RADIUS) and again at checkout; it is the
+        // authority, so the app does not guess from its own copy of the
+        // hub's position. A refusal is shown next to the location button.
+        final outside = identical(addressProvider.saveFailure, AppErrors.outsideDeliveryArea);
+        if (outside) setState(() => _outsideArea = true);
         showAppToast(
-          msg: addressProvider.errorMessage ?? 'Could not save this address.',
+          msg: addressProvider.saveFailure?.message ?? 'Could not save this address.',
         );
       }
     } finally {
@@ -309,6 +337,15 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
                   onPressed: _useCurrentLocation,
                 ),
                 const SizedBox(height: BlynkSpace.s12),
+                if (_outsideArea)
+                  _SectionNote(
+                    key: const Key('address-location-note'),
+                    icon: Icons.location_off_outlined,
+                    title: AppErrors.outsideDeliveryArea.title,
+                    message: AppErrors.outsideDeliveryArea.message,
+                    problem: true,
+                  )
+                else
                 _SectionNote(
                   key: const Key('address-location-note'),
                   icon: _locationSet

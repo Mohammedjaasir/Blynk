@@ -22,7 +22,7 @@ function toEvent(row: {
   return {
     latitude: Number(row.current_latitude),
     longitude: Number(row.current_longitude),
-    accuracy: Number(row.location_accuracy_m),
+    accuracy: row.location_accuracy_m == null ? null : Number(row.location_accuracy_m),
     captured_at: row.location_captured_at.toISOString(),
     received_at: row.location_received_at.toISOString(),
   };

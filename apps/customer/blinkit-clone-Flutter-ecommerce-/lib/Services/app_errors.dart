@@ -99,6 +99,25 @@ class AppErrors {
     retryable: false,
   );
 
+  /// The pin is outside the hub's delivery radius: at checkout, and (since
+  /// the address endpoints check it too) when an address is saved.
+  static const CustomerError outsideDeliveryArea = CustomerError(
+    kind: CustomerErrorKind.validation,
+    title: "We don't deliver there yet",
+    message: "We don't deliver to this address yet. Choose another address.",
+    retryable: false,
+  );
+
+  /// A 422 the backend sent with a code this app does not know yet: the
+  /// request was understood but a rule refused it, so "check your details"
+  /// would send the customer looking for a typo that is not there.
+  static const CustomerError notPossible = CustomerError(
+    kind: CustomerErrorKind.validation,
+    title: "That can't be done right now",
+    message: "That can't be done right now. Go back, check, and try again.",
+    retryable: false,
+  );
+
   static const CustomerError server = CustomerError(
     kind: CustomerErrorKind.server,
     title: 'Something went wrong',
@@ -147,12 +166,7 @@ class AppErrors {
       message: "This account can't log in right now. Contact support.",
       retryable: false,
     ),
-    'DELIVERY_OUTSIDE_RADIUS': CustomerError(
-      kind: CustomerErrorKind.validation,
-      title: "We don't deliver there yet",
-      message: "We don't deliver to this address yet. Choose another address.",
-      retryable: false,
-    ),
+    'DELIVERY_OUTSIDE_RADIUS': outsideDeliveryArea,
     // Orders are taken 8 AM - 9 PM Colombo time only (owner, 2026-10-06).
     'STORE_CLOSED': CustomerError(
       kind: CustomerErrorKind.validation,
@@ -223,6 +237,44 @@ class AppErrors {
       message: "Your cart is below that coupon's minimum. Add items or remove the code.",
       retryable: false,
     ),
+    // DELETE /me while an order is still open (account deletion).
+    'ACTIVE_ORDERS_EXIST': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'You have open orders',
+      message: 'Finish or cancel your open orders first.',
+      retryable: false,
+    ),
+    // Too many wrong passwords: the login is locked for a few minutes.
+    'LOGIN_LOCKED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Login locked for now',
+      message: 'Too many wrong tries. Wait a few minutes, or log in with an SMS code.',
+      retryable: false,
+    ),
+    'ORDER_CANNOT_BE_CANCELLED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: "Can't cancel now",
+      message: "This order can't be cancelled any more.",
+      retryable: false,
+    ),
+    'ORDER_ALREADY_CANCELLED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Already cancelled',
+      message: 'This order is already cancelled.',
+      retryable: false,
+    ),
+    'STORE_UNAVAILABLE': CustomerError(
+      kind: CustomerErrorKind.server,
+      title: "We can't take orders right now",
+      message: "We can't take orders right now. Try again in a little while.",
+      retryable: true,
+    ),
+    'PHONE_TAKEN': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Number already used',
+      message: 'That phone number is already used by another account.',
+      retryable: false,
+    ),
     'TOO_MANY_REQUESTS': tooManyTries,
     'RATE_LIMITED': tooManyTries,
     // POST /feedback allows 5 messages an hour per customer (migration 013).
@@ -263,7 +315,10 @@ class AppErrors {
     if (status == 404) return notFound;
     if (status == 408) return timeout;
     if (status == 429) return tooManyTries;
-    if (status == 400 || status == 422) return validation;
+    if (status == 400) return validation;
+    // A 422 is the backend understanding the request and a rule saying no.
+    // Only its plain schema failure is about what the customer typed.
+    if (status == 422) return code == null || code == 'VALIDATION_ERROR' ? validation : notPossible;
     if (status >= 500) return server;
     return unknown;
   }

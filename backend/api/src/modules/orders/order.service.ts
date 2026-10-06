@@ -1,7 +1,7 @@
 import { orderRepository, CreateOrderData } from './order.repository.js';
 import { CreateOrderInput, OrderQueryInput } from './order.schema.js';
 import { calculateSellingPrice } from '../pricing/index.js';
-import { isWithinDeliveryRadius } from '../../utils/geo.js';
+import { assertWithinServiceZone } from './delivery-zone.js';
 import { calculateScheduledDeliveryTime, isWithinOrderingHours, orderingClock } from '../../utils/time.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { OrderStatus } from '../../database/types.js';
@@ -187,27 +187,7 @@ export class OrderService {
     }
 
     // 3. Geofence verification (4.00 km Haversine from Dharga Town hub)
-    const store = await orderRepository.findActiveDarkStore();
-    if (!store) {
-      throw new AppError('No active dark store hub found.', 500, 'STORE_UNAVAILABLE');
-    }
-
-    const { isWithin, distanceKm } = isWithinDeliveryRadius(
-      Number(store.latitude),
-      Number(store.longitude),
-      Number(address.latitude),
-      Number(address.longitude),
-      Number(store.radius_km)
-    );
-
-    if (!isWithin) {
-      throw new AppError(
-        `Delivery address is outside the ${Number(store.radius_km).toFixed(2)} km service zone (${distanceKm} km away).`,
-        422,
-        'DELIVERY_OUTSIDE_RADIUS',
-        { distance_km: distanceKm, max_radius_km: Number(store.radius_km) }
-      );
-    }
+    const store = await assertWithinServiceZone(Number(address.latitude), Number(address.longitude));
 
     // 4. Operating window: inside ordering hours this is null (immediate);
     // kept so the column stays meaningful if night ordering ever returns.

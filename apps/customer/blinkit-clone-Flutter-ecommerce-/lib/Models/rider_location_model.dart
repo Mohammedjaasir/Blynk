@@ -49,22 +49,27 @@ class RiderLocationPoint {
     required this.capturedAt,
     required this.receivedAt,
   });
-  final double latitude, longitude, accuracy;
+  final double latitude, longitude;
+
+  /// Metres; null when the rider's phone reported none (the backend stores
+  /// 0 or a missing value as unknown and sends `accuracy: null`).
+  final double? accuracy;
   final DateTime capturedAt, receivedAt;
 
-  /// Returns null on any missing/invalid field - a point is never fabricated.
-  /// Coordinates must be finite and in range; accuracy must be > 0 (as the
-  /// backend validates).
+  /// Returns null on any missing/invalid coordinate or timestamp - a point is
+  /// never fabricated. Coordinates must be finite and in range. Accuracy is
+  /// optional: missing, null, unparseable or not above 0 means "unknown", and
+  /// the position is still shown.
   static RiderLocationPoint? tryParse(Object? json) {
     if (json is! Map) return null;
     final lat = _finiteDouble(json['latitude']);
     final lng = _finiteDouble(json['longitude']);
-    final acc = _finiteDouble(json['accuracy']);
+    final rawAcc = _finiteDouble(json['accuracy']);
+    final acc = rawAcc != null && rawAcc > 0 ? rawAcc : null;
     final capturedAt = _dateTime(json['captured_at']);
     final receivedAt = _dateTime(json['received_at']);
-    if (lat == null || lng == null || acc == null || capturedAt == null || receivedAt == null) return null;
+    if (lat == null || lng == null || capturedAt == null || receivedAt == null) return null;
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
-    if (acc <= 0) return null;
     return RiderLocationPoint(
       latitude: lat,
       longitude: lng,

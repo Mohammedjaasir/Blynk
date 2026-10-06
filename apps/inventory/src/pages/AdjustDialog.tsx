@@ -2,7 +2,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { stockApi } from '../api/resources';
 import type { ManualAdjustmentType, StockDetail } from '../api/types';
 import { Dialog, Field, Spinner, useToast } from '../components/ui';
-import { errorMessage } from '../lib/errors';
+import { errorMessage, isApiError } from '../lib/errors';
 import { ADJUSTMENT_LABEL, formatDelta } from '../lib/format';
 
 /**
@@ -36,9 +36,14 @@ export function AdjustDialog({
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  // The counts this form works from. An audit re-reads them just before
+  // sending, because its delta is "counted minus on hand" and on hand may
+  // have moved (an order, another adjustment) since the panel loaded.
+  const [current, setCurrent] = useState({ onHand: detail.quantity_on_hand, reserved: detail.quantity_reserved });
   const submitting = useRef(false);
 
-  const onHand = detail.quantity_on_hand;
+  const onHand = current.onHand;
   const typeInfo = TYPES.find((t) => t.id === type)!;
   const parsed = /^\d+$/.test(quantity.trim()) ? Number(quantity.trim()) : null;
 
@@ -57,8 +62,8 @@ export function AdjustDialog({
     if (type !== 'INVENTORY_AUDIT_ADJUSTMENT' && parsed === 0) return 'The quantity must be at least 1.';
     if (delta === 0) return `The count matches what is on hand (${onHand}); there is nothing to correct.`;
     if (after !== null && after < 0) return `Only ${onHand} on hand - that would go below zero.`;
-    if (after !== null && after < detail.quantity_reserved) {
-      return `${detail.quantity_reserved} units are reserved, so on hand cannot go below that.`;
+    if (after !== null && after < current.reserved) {
+      return `${current.reserved} units are reserved, so on hand cannot go below that.`;
     }
     if (reason.trim().length === 0) return 'Give a reason - it is kept in the ledger.';
     if (reason.length > 500) return 'Keep the reason under 500 characters.';
@@ -76,7 +81,19 @@ export function AdjustDialog({
     submitting.current = true;
     setBusy(true);
     setError(null);
+    setWarning(null);
     try {
+      if (type === 'INVENTORY_AUDIT_ADJUSTMENT') {
+        const fresh = await stockApi.detail(detail.product_id);
+        setCurrent({ onHand: fresh.quantity_on_hand, reserved: fresh.quantity_reserved });
+        if (fresh.quantity_on_hand !== current.onHand) {
+          setWarning(
+            `On hand changed from ${current.onHand} to ${fresh.quantity_on_hand} since this panel loaded. ` +
+              'Nothing was recorded. Check the new change below and record again.'
+          );
+          return;
+        }
+      }
       const result = await stockApi.adjust(detail.product_id, {
         adjustment_type: type,
         quantity_delta: delta!,
@@ -87,7 +104,11 @@ export function AdjustDialog({
       );
       await onDone();
     } catch (err) {
-      setError(errorMessage(err, 'The adjustment was not recorded.'));
+      setError(
+        isApiError(err, 'INSUFFICIENT_AVAILABLE_INVENTORY')
+          ? 'That would leave less stock than is already reserved for orders.'
+          : errorMessage(err, 'The adjustment was not recorded.')
+      );
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -160,6 +181,11 @@ export function AdjustDialog({
           ) : null}
         </p>
 
+        {warning ? (
+          <p className="notice notice--warn" role="status">
+            {warning}
+          </p>
+        ) : null}
         {error ? (
           <p className="field__error" role="alert">
             {error}

@@ -25,7 +25,9 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly code?: string,
-    readonly details?: unknown
+    readonly details?: unknown,
+    /** The server's clock (its Date header, epoch ms) when the reply was sent, if known. */
+    readonly serverDate?: number
   ) {
     super(message);
     this.name = 'ApiError';
@@ -101,8 +103,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   // Access tokens last 15 minutes. On a 401, trade the refresh token for a
   // new pair once and retry - the backend still decides what that session
   // may do.
+  // Only a refusal ends the session: a refresh that could not reach the
+  // server (offline, timeout, 5xx) keeps the tokens for the next try.
   if (response.status === 401 && auth && tokenStore.refresh) {
-    if (await refreshSession()) response = await send(path, options, auth);
+    const refreshed = await refreshSession();
+    if (refreshed === 'unavailable') {
+      throw new ApiError("Couldn't renew your session. Check your connection.", 0, 'NETWORK');
+    }
+    if (refreshed === 'ok') response = await send(path, options, auth);
   }
   if (response.status === 401 && auth) endSession('expired');
 
@@ -117,10 +125,27 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (!response.ok) {
     const error = (payload.error ?? {}) as { message?: string; code?: string; details?: unknown };
     if (response.status === 403 && error.code && PROFILE_REFUSED.has(error.code)) endSession('profile');
-    throw new ApiError(error.message ?? 'Request failed.', response.status, error.code, error.details);
+    throw new ApiError(
+      error.message ?? 'Request failed.',
+      response.status,
+      error.code,
+      error.details,
+      serverDateOf(response)
+    );
   }
 
   return (payload.data ?? payload) as T;
+}
+
+/** The reply's Date header as epoch ms, when the transport exposes it. */
+function serverDateOf(response: Response): number | undefined {
+  try {
+    const raw = response.headers?.get?.('Date');
+    const parsed = raw ? Date.parse(raw) : NaN;
+    return Number.isFinite(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function send(path: string, { method = 'GET', body }: RequestOptions, auth: boolean) {
@@ -130,52 +155,89 @@ async function send(path: string, { method = 'GET', body }: RequestOptions, auth
     const token = tokenStore.access;
     if (token) headers.Authorization = `Bearer ${token}`;
   }
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(`${BASE_URL}${path}`, {
+    return await fetchWithTimeout(`${BASE_URL}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
     });
   } catch (err) {
     // A timeout is not the same as "nothing was sent": the server may have
     // applied the change. Callers re-read the delivery before retrying.
-    if ((err as Error)?.name === 'AbortError') {
-      throw new ApiError('The Blynk API did not answer in time.', 0, 'TIMEOUT');
-    }
+    if (err instanceof ApiError) throw err;
+    if ((err as Error)?.name === 'AbortError') throw timeoutError();
     throw new ApiError('Could not reach the Blynk API.', 0, 'NETWORK');
+  }
+}
+
+const timeoutError = () => new ApiError('The Blynk API did not answer in time.', 0, 'TIMEOUT');
+
+/**
+ * fetch with a hard deadline. On Android, CapacitorHttp patches fetch to
+ * native HTTP and ignores the AbortSignal, so the abort alone never fires
+ * there and a button could sit on "Saving…" forever. The race settles the
+ * call at the deadline whatever the transport does; the abort still cancels
+ * the request where the platform honours it (the browser).
+ */
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(timeoutError());
+    }, REQUEST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([fetch(url, { ...init, signal: controller.signal }), deadline]);
   } finally {
     clearTimeout(timer);
   }
 }
 
-let refreshing: Promise<boolean> | null = null;
+/**
+ * 'ok': a new token pair is stored. 'rejected': the server refused the
+ * refresh token, so the session is over. 'unavailable': no usable answer
+ * (offline, timeout, 5xx, 429) - the session may well still be valid, so the
+ * tokens are kept for the next try.
+ */
+export type RefreshResult = 'ok' | 'rejected' | 'unavailable';
+
+let refreshing: Promise<RefreshResult> | null = null;
 
 /**
  * One refresh at a time. The backend rotates refresh tokens and treats a
  * reused one as a replay (revoking every session), so concurrent requests
  * must share a single refresh rather than race.
  */
-function refreshSession(): Promise<boolean> {
-  refreshing ??= (async () => {
+function refreshSession(): Promise<RefreshResult> {
+  refreshing ??= (async (): Promise<RefreshResult> => {
     try {
-      const response = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: tokenStore.refresh }),
-      });
-      if (!response.ok) throw new Error('refresh rejected');
-      const payload = JSON.parse(await response.text()) as {
-        data: { access_token: string; refresh_token: string };
-      };
-      tokenStore.save(payload.data.access_token, payload.data.refresh_token);
-      return true;
-    } catch {
-      tokenStore.clear();
-      return false;
+      let response: Response;
+      try {
+        response = await fetchWithTimeout(`${BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: tokenStore.refresh }),
+        });
+      } catch {
+        return 'unavailable';
+      }
+      if (response.status >= 500 || response.status === 429) return 'unavailable';
+      if (!response.ok) {
+        tokenStore.clear();
+        return 'rejected';
+      }
+      try {
+        const payload = JSON.parse(await response.text()) as {
+          data: { access_token: string; refresh_token: string };
+        };
+        tokenStore.save(payload.data.access_token, payload.data.refresh_token);
+        return 'ok';
+      } catch {
+        // A 2xx that isn't the token pair (a proxy page): not a refusal.
+        return 'unavailable';
+      }
     } finally {
       refreshing = null;
     }

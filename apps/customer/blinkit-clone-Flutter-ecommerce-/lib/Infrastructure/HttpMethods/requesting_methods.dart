@@ -76,6 +76,17 @@ class ApiService {
     return flight;
   }
 
+  /// Renews the access token for a request made outside Dio (the web
+  /// build's fetch()-based location stream), through the same shared,
+  /// one-at-a-time refresh the interceptor uses, so the rotating refresh
+  /// token is never spent twice. Null when there is no session, the refresh
+  /// failed, or the session ended meanwhile.
+  static Future<String?> refreshAccessToken() async {
+    final epoch = _sessionEpoch;
+    final outcome = await _refreshTokens(getApiBaseUrl());
+    return epoch == _sessionEpoch ? outcome.accessToken : null;
+  }
+
   static Dio _plainDio(String baseUrl) => Dio(
         BaseOptions(
           baseUrl: baseUrl,

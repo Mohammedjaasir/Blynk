@@ -65,12 +65,16 @@ export const auth = {
       auth: false,
     }),
 
+  /**
+   * create_account:false - staff sign in here, so an unknown number is
+   * refused (404 ACCOUNT_NOT_FOUND) instead of becoming a customer account.
+   */
   verifyOtp: (phone: string, otp: string) =>
     apiRequest<{
       access_token: string;
       refresh_token: string;
       user: AuthUser;
-    }>('/auth/otp/verify', { method: 'POST', body: { phone, otp }, auth: false }),
+    }>('/auth/otp/verify', { method: 'POST', body: { phone, otp, create_account: false }, auth: false }),
 
   me: () => apiRequest<AuthUser>('/auth/me'),
 
@@ -151,6 +155,11 @@ export const categoryGroups = {
 };
 
 // -------------------------------------------------------------- products
+/** The API's largest page of admin products. */
+export const PRODUCT_PAGE_SIZE = 200;
+/** 50 pages = 10,000 products; past that the list says it is partial. */
+export const MAX_PRODUCT_PAGES = 50;
+
 export const products = {
   /**
    * The admin product table reads the customer catalog endpoint for the
@@ -174,6 +183,28 @@ export const products = {
       `/catalog/products?${query.toString()}`,
       { auth: false }
     );
+  },
+
+  /**
+   * Every admin product matching the filters. GET /admin/products returns
+   * one page (at most 200) and no total, so this reads page after page until
+   * a short page. `complete` is false only if MAX_PRODUCT_PAGES were read and
+   * more may remain - the caller says so rather than capping silently.
+   */
+  listAllAdmin: async (params: { search?: string; category_id?: string; is_active?: boolean } = {}) => {
+    const all: AdminProduct[] = [];
+    for (let page = 1; page <= MAX_PRODUCT_PAGES; page++) {
+      const query = new URLSearchParams();
+      if (params.search) query.set('search', params.search);
+      if (params.category_id) query.set('category_id', params.category_id);
+      if (params.is_active !== undefined) query.set('is_active', String(params.is_active));
+      query.set('limit', String(PRODUCT_PAGE_SIZE));
+      query.set('page', String(page));
+      const data = await apiRequest<{ products: AdminProduct[] }>(`/admin/products?${query.toString()}`);
+      all.push(...data.products);
+      if (data.products.length < PRODUCT_PAGE_SIZE) return { products: all, complete: true };
+    }
+    return { products: all, complete: false };
   },
 
   getAdmin: (id: string) =>
@@ -258,14 +289,27 @@ const LIVE_STATUSES = 'PLACED,ITEM_UNAVAILABLE,PACKED,OUT_FOR_DELIVERY,FAILED,CU
  * Order operations over the existing routes. Each status change is one
  * lifecycle action decided by the API (PATCH /admin/orders/:id/status).
  */
-export const orders = {
-  live: () =>
-    apiRequest<{ orders: BoardOrder[] }>(`/admin/orders?status=${LIVE_STATUSES}&limit=100`).then((d) => d.orders),
+/** The most live orders the board reads at once (the API caps limit at 100). */
+export const LIVE_ORDERS_LIMIT = 100;
 
-  closedSince: (since: Date) =>
-    apiRequest<{ orders: BoardOrder[] }>(
-      `/admin/orders?status=DELIVERED,CANCELLED&since=${encodeURIComponent(since.toISOString())}&limit=100`
-    ).then((d) => d.orders),
+type OrdersPage = { orders: BoardOrder[]; pagination?: { total?: number } };
+
+export const orders = {
+  /** Oldest first; `total` is every live order, which can exceed `orders.length`. */
+  live: () =>
+    apiRequest<OrdersPage>(`/admin/orders?status=${LIVE_STATUSES}&limit=${LIVE_ORDERS_LIMIT}`).then((d) => ({
+      orders: d.orders,
+      total: d.pagination?.total ?? d.orders.length,
+    })),
+
+  /**
+   * How many orders reached `status` since `since` - pagination.total, so the
+   * count is right however many there are (one row is fetched, not all).
+   */
+  countSince: (status: 'DELIVERED' | 'CANCELLED', since: Date) =>
+    apiRequest<OrdersPage>(
+      `/admin/orders?status=${status}&since=${encodeURIComponent(since.toISOString())}&limit=1`
+    ).then((d) => d.pagination?.total ?? d.orders.length),
 
   detail: (id: string) => apiRequest<{ order: OrderDetail }>(`/admin/orders/${id}`).then((d) => d.order),
 
@@ -273,6 +317,26 @@ export const orders = {
     apiRequest<{ order: unknown }>(`/admin/orders/${id}/status`, {
       method: 'PATCH',
       body: notes === undefined ? { status } : { status, notes },
+    }),
+
+  /**
+   * Proof of delivery: the customer's 4-digit code, or - only when there is
+   * no code - a written override note. The history records which one it was.
+   */
+  markDelivered: (id: string, proof: { deliveryCode: string } | { notes: string }) =>
+    apiRequest<{ order: unknown }>(`/admin/orders/${id}/status`, {
+      method: 'PATCH',
+      body:
+        'deliveryCode' in proof
+          ? { status: 'DELIVERED', delivery_code: proof.deliveryCode }
+          : { status: 'DELIVERED', notes: proof.notes },
+    }),
+
+  /** A pending item the store cannot supply (lifecycle RESOLVE_ITEM). */
+  markItemUnavailable: (id: string, itemId: string) =>
+    apiRequest<{ order: unknown }>(`/admin/orders/${id}/resolve-item`, {
+      method: 'POST',
+      body: { item_id: itemId, item_status: 'UNAVAILABLE' },
     }),
 
   assignRider: (id: string, riderId: string, confirmFarBatch = false) =>

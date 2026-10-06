@@ -296,18 +296,27 @@ describe('Stage 6 — Inventory & Sourcing Subsystem', () => {
       expect(res.body.error.code).toBe('SUPPLIER_NOT_FOUND');
     });
 
-    it('rejects quantity greater than ordered quantity with 400', async () => {
-      const { orderId, itemId } = await placeFreshOrder();
-      const res = await request(app)
+    it('rejects a quantity other than the ordered one with 400 PARTIAL_SOURCING_NOT_SUPPORTED', async () => {
+      const { orderId, itemId } = await placeFreshOrder(undefined, 2);
+      for (const quantity of [99, 1]) {
+        const res = await request(app)
+          .post(`/api/v1/admin/orders/${orderId}/items/${itemId}/source`)
+          .set('Authorization', `Bearer ${tokenStaff}`)
+          .send({ quantity, actual_unit_cost: 450.0 });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error.code).toBe('PARTIAL_SOURCING_NOT_SUPPORTED');
+        expect(res.body.error.message).toBe('Source the full quantity, or mark the item unavailable.');
+      }
+      const status = (await pool.query('SELECT item_status FROM order_items WHERE id = $1', [itemId])).rows[0].item_status;
+      expect(status).toBe('PENDING');
+
+      // The full quantity, sent explicitly, is accepted.
+      const full = await request(app)
         .post(`/api/v1/admin/orders/${orderId}/items/${itemId}/source`)
         .set('Authorization', `Bearer ${tokenStaff}`)
-        .send({
-          quantity: 99,
-          actual_unit_cost: 450.0,
-        });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error.code).toBe('INVALID_SOURCING_QUANTITY');
+        .send({ quantity: 2, actual_unit_cost: 450.0 });
+      expect(full.status).toBe(200);
     });
   });
 

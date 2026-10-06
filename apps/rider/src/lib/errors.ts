@@ -19,6 +19,8 @@ export const MESSAGES: Record<string, string> = {
   // Used when the API leaves out the details the fuller messages below need.
   WRONG_DELIVERY_CODE: "That code doesn't match. Ask the customer to check it.",
   DELIVERY_CODE_LOCKED: 'Too many wrong codes. Try again later.',
+  // Staff sign-in sends create_account: false, so an unknown number is refused.
+  ACCOUNT_NOT_FOUND: 'No Blynk account uses this number. Ask the store to set you up as a rider.',
 };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -40,7 +42,16 @@ export function deliveryCodeLockedUntil(err: unknown, now = Date.now()): number 
   const { retry_after_seconds: seconds, locked_until: until } = detailsOf(err);
   if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0) return now + seconds * 1000;
   const parsed = typeof until === 'string' ? Date.parse(until) : NaN;
-  return Number.isFinite(parsed) ? parsed : null;
+  if (!Number.isFinite(parsed)) return null;
+  // locked_until is on the server's clock. When the reply's Date header is
+  // known, use the gap between the two so a skewed phone clock can't shorten
+  // or stretch the wait. (Browsers only expose Date across origins if the API
+  // lists it in Access-Control-Expose-Headers; the Android app's native HTTP
+  // always sees it.) Otherwise trust locked_until as it is.
+  if (typeof err.serverDate === 'number' && Number.isFinite(err.serverDate)) {
+    return now + Math.max(0, parsed - err.serverDate);
+  }
+  return parsed;
 }
 
 /** Messages that depend on error.details, not just the code. */

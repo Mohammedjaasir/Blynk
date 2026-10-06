@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { orders as ordersApi } from '../api/resources';
-import type { BoardOrder, OrderDetail } from '../api/types';
+import type { BoardOrder, OrderDetail, OrderItemRow } from '../api/types';
 import {
   ACTION_LABEL,
   ITEM_STATUS_LABEL,
   STATUS_LABEL,
   allowedActions,
+  canMarkItemUnavailable,
   formatClock,
+  isPackableFromItems,
   formatMoney,
   orderErrorMessage,
   primaryAction,
@@ -28,6 +30,7 @@ export function OrderPanel({
   version,
   busy,
   onAction,
+  onMarkItemUnavailable,
   onClose,
 }: {
   order: BoardOrder;
@@ -36,6 +39,8 @@ export function OrderPanel({
   version: number;
   busy: boolean;
   onAction(action: OrderAction): void;
+  /** Asks (with a confirmation) to mark one pending item unavailable. */
+  onMarkItemUnavailable?(item: OrderItemRow): void;
   onClose(): void;
 }) {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
@@ -60,6 +65,11 @@ export function OrderPanel({
 
   const actions = allowedActions(order, role);
   const primary = primaryAction(order, role);
+  // The board's summary cannot tell a substitution with a recorded cost from
+  // one without, so it blocks Pack on any substitution. The detail's items
+  // can: when they show every substitution has its cost, Pack is allowed.
+  const packableFromItems = detail && detail.id === order.id ? isPackableFromItems(detail.items) : null;
+  const packEnabled = primary === 'pack' || (actions.includes('pack') && packableFromItems === true);
 
   return (
     <aside className="order-panel" aria-label={`Order #${number}`}>
@@ -86,6 +96,17 @@ export function OrderPanel({
                   <span className="order-items__qty mono">{item.quantity} ×</span>
                   <span className="order-items__name">{item.product_name_snapshot}</span>
                   <span className="order-items__status">{ITEM_STATUS_LABEL[item.item_status] ?? item.item_status}</span>
+                  {onMarkItemUnavailable && canMarkItemUnavailable(order.order_status, item.item_status, role) ? (
+                    <button
+                      type="button"
+                      className="button button--ghost button--sm"
+                      disabled={busy}
+                      aria-label={`Mark ${item.product_name_snapshot} unavailable`}
+                      onClick={() => onMarkItemUnavailable(item)}
+                    >
+                      Mark unavailable
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -165,7 +186,7 @@ export function OrderPanel({
                     ? 'button button--ink-outline'
                     : 'button button--ghost'
               }
-              disabled={busy || (action === 'pack' && primary !== 'pack')}
+              disabled={busy || (action === 'pack' && !packEnabled)}
               onClick={() => onAction(action)}
             >
               {ACTION_LABEL[action]}

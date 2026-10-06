@@ -193,13 +193,23 @@ describe('application scope', () => {
 });
 
 describe('role permissions mirror the backend guards', () => {
-  const adminOnly: Action[] = ['adjustStock', 'changeTrackingMode', 'editThreshold', 'manageSuppliers'];
-  const both: Action[] = ['viewStock', 'viewLedger', 'viewSourcing', 'viewSuppliers', 'source', 'markUnavailable'];
+  const adminOnly: Action[] = ['changeTrackingMode', 'editThreshold', 'manageSuppliers'];
+  // Owner decision: packing staff also receive stock and pack orders.
+  const both: Action[] = [
+    'viewStock',
+    'viewLedger',
+    'viewSourcing',
+    'viewSuppliers',
+    'source',
+    'markUnavailable',
+    'markPacked',
+    'adjustStock',
+  ];
 
   it('ADMIN can do everything', () => {
     for (const action of [...adminOnly, ...both]) expect(can('ADMIN', action)).toBe(true);
   });
-  it('PACKING_STAFF can read and source but not adjust, change tracking or manage suppliers', () => {
+  it('PACKING_STAFF can read, source, pack and adjust stock, but not change tracking, thresholds or suppliers', () => {
     for (const action of both) expect(can('PACKING_STAFF', action)).toBe(true);
     for (const action of adminOnly) expect(can('PACKING_STAFF', action)).toBe(false);
   });
@@ -209,5 +219,72 @@ describe('role permissions mirror the backend guards', () => {
       expect(can('RIDER', action)).toBe(false);
       expect(can('OPERATIONS', action)).toBe(false);
     }
+  });
+});
+
+describe('SMS sign-in never creates an account, and refused sessions are revoked', () => {
+  it('asks the API not to create an account for an unknown number', async () => {
+    const { api } = renderAs(null, '/login', otpHandlers(ADMIN));
+    await signIn('0775551122');
+    await screen.findByRole('heading', { name: 'Overview' });
+    expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({
+      phone: '0775551122',
+      otp: '123456',
+      create_account: false,
+    });
+  });
+
+  it('says so when no Blynk account uses the number (404 ACCOUNT_NOT_FOUND)', async () => {
+    renderAs(null, '/login', {
+      'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
+      'POST /auth/otp/verify': () => fail(404, 'ACCOUNT_NOT_FOUND', 'Account not found.'),
+    });
+    await signIn('0770000000');
+    expect(await screen.findByRole('alert')).toHaveTextContent('No Blynk account uses this number.');
+    expect(tokenStore.access).toBeNull();
+  });
+
+  it('revokes the just-issued session when an SMS sign-in is refused for its role', async () => {
+    const { api } = renderAs(null, '/login', {
+      ...otpHandlers({ ...ADMIN, id: 'r1', role: 'RIDER' }),
+      'POST /auth/logout': () => ok({ message: 'Logged out successfully' }),
+    });
+    await signIn('0771234567');
+    expect(await screen.findByText(WRONG_ROLE_MESSAGE)).toBeInTheDocument();
+    const logout = api.find('POST', '/auth/logout');
+    expect(logout).toHaveLength(1);
+    expect(logout[0].body).toEqual({ refresh_token: 'ref' });
+    expect(tokenStore.access).toBeNull();
+    expect(tokenStore.refresh).toBeNull();
+  });
+
+  it('revokes the session when a password sign-in is refused for its role', async () => {
+    const { api } = renderAs(null, '/login', {
+      'POST /auth/staff/login': () => ok({ access_token: 'acc', refresh_token: 'ref-ops', user: { ...ADMIN, role: 'OPERATIONS' } }),
+      'POST /auth/logout': () => ok({ message: 'Logged out successfully' }),
+    });
+    await userEvent.type(await screen.findByLabelText('Email'), 'ops@blynk.test');
+    await userEvent.type(screen.getByLabelText('Password'), 'Correct-horse-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByText(OPERATIONS_STAFF_MESSAGE)).toBeInTheDocument();
+    expect(api.find('POST', '/auth/logout')[0]?.body).toEqual({ refresh_token: 'ref-ops' });
+  });
+
+  it('still refuses the role when the revocation call fails', async () => {
+    renderAs(null, '/login', {
+      ...otpHandlers({ ...ADMIN, id: 'c1', role: 'CUSTOMER' }),
+      'POST /auth/logout': () => fail(500, 'INTERNAL', 'boom'),
+    });
+    await signIn('0771234567');
+    expect(await screen.findByText(WRONG_ROLE_MESSAGE)).toBeInTheDocument();
+    expect(tokenStore.access).toBeNull();
+  });
+
+  it('revokes a stored session whose account is not an inventory role', async () => {
+    const { api } = renderAs({ ...ADMIN, role: 'CUSTOMER' }, '/', {
+      'POST /auth/logout': () => ok({ message: 'Logged out successfully' }),
+    });
+    expect(await screen.findByText(WRONG_ROLE_MESSAGE)).toBeInTheDocument();
+    expect(api.find('POST', '/auth/logout')[0]?.body).toEqual({ refresh_token: 'test-refresh' });
   });
 });

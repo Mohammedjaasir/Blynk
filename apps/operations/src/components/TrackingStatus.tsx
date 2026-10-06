@@ -75,6 +75,15 @@ export function TrackingStatus({ state }: { state: TrackingState }) {
   if (state.lastError === 'position_unavailable') {
     return <p className="tracking-status tracking-status--error">Can't get a location — check GPS/location services are on.</p>;
   }
+  // The server refused this delivery's locations for good (rider profile
+  // switched off, delivery reassigned...): say so, never "network".
+  if (!state.active && state.lastError === 'refused' && state.stopReason) {
+    return (
+      <p className="tracking-status tracking-status--error" role="status">
+        Stopped sharing your location: {state.stopReason}
+      </p>
+    );
+  }
   if (!state.active) {
     return state.lastSentAt ? <p className="tracking-status">Stopped sharing your location.</p> : null;
   }

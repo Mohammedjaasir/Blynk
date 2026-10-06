@@ -11,8 +11,10 @@ import {
   formatAge,
   formatClock,
   formatMoney,
+  farBatchRefusal,
   laneOf,
   orderErrorMessage,
+  type FarBatchRefusal,
   primaryAction,
   shortNumber,
   type Lane,
@@ -35,10 +37,13 @@ import {
  * Admin pattern). */
 const REFRESH_MS = 20_000;
 
+/** The board only ever offers `primaryAction` (pack / assign / hand over /
+ * return to packed). "Mark delivered" is not here on purpose: it needs the
+ * customer's code or an override note, so it lives on the order detail
+ * screen (MarkDeliveredDialog) - a bare DELIVERED status would be refused. */
 const STATUS_FOR: Partial<Record<OrderAction, string>> = {
   pack: 'PACKED',
   handOver: 'OUT_FOR_DELIVERY',
-  markDelivered: 'DELIVERED',
   markFailed: 'FAILED',
   markCustomerUnavailable: 'CUSTOMER_UNAVAILABLE',
   restage: 'PACKED',
@@ -73,11 +78,16 @@ const FOCUS_LANE: Record<string, Lane> = { packing: 'toPack', readyForRider: 're
 export function Orders() {
   const [searchParams] = useSearchParams();
   const [live, setLive] = useState<BoardOrder[] | null>(null);
+  /** `pagination.total` for the live query - more than one page (100) means
+   * the board is not showing every live order. */
+  const [liveTotal, setLiveTotal] = useState(0);
   const [closed, setClosed] = useState<BoardOrder[]>([]);
+  const [closedTotal, setClosedTotal] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [dialog, setDialog] = useState<{ action: OrderAction; order: BoardOrder } | null>(null);
+  const [farRefusal, setFarRefusal] = useState<FarBatchRefusal | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const inFlight = useRef(new Set<string>());
   const scrolledRef = useRef(false);
@@ -85,8 +95,10 @@ export function Orders() {
   const load = useCallback(async () => {
     try {
       const [liveOrders, closedToday] = await Promise.all([ordersApi.live(), ordersApi.closedSince(startOfTodayColombo())]);
-      setLive(liveOrders);
-      setClosed(closedToday);
+      setLive(liveOrders.orders);
+      setLiveTotal(liveOrders.total);
+      setClosed(closedToday.orders);
+      setClosedTotal(closedToday.total);
       setLoadError(null);
       setLoadedAt(new Date());
     } catch (err) {
@@ -117,9 +129,10 @@ export function Orders() {
     document.getElementById(`lane-${lane}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [live, searchParams]);
 
-  /** One request per order at a time, whatever is clicked. */
+  /** One request per order at a time, whatever is clicked. `keepOpen` lets a
+   * refusal that only needs a confirmation keep its dialog open. */
   const run = useCallback(
-    async (order: BoardOrder, step: () => Promise<unknown>) => {
+    async (order: BoardOrder, step: () => Promise<unknown>, keepOpen?: (err: unknown) => boolean) => {
       if (inFlight.current.has(order.id)) return;
       inFlight.current.add(order.id);
       setBusyId(order.id);
@@ -127,9 +140,12 @@ export function Orders() {
       try {
         await step();
         setDialog(null);
+        setFarRefusal(null);
       } catch (err) {
+        if (keepOpen?.(err)) return;
         setNotice(orderErrorMessage(err));
         setDialog(null);
+        setFarRefusal(null);
       } finally {
         inFlight.current.delete(order.id);
         setBusyId(null);
@@ -142,6 +158,7 @@ export function Orders() {
   const act = useCallback(
     (order: BoardOrder, action: OrderAction) => {
       if (action === 'assign' || needsNote(action)) {
+        setFarRefusal(null);
         setDialog({ action, order });
         return;
       }
@@ -193,6 +210,11 @@ export function Orders() {
         </p>
       ) : null}
       {live && live.length === 0 ? <p className="orders__empty">No live orders.</p> : null}
+      {live && liveTotal > live.length ? (
+        <p className="banner" role="status">
+          Showing {live.length} of {liveTotal} live orders (the oldest first). Finish or refresh to see the rest.
+        </p>
+      ) : null}
 
       {LANES.map((lane) => {
         const rows = byLane.get(lane.id) ?? [];
@@ -219,6 +241,7 @@ export function Orders() {
           </h2>
           <p className="lane__summary">
             {delivered} delivered · {cancelled} cancelled
+            {closedTotal > closed.length ? ` · counted from ${closed.length} of ${closedTotal} closed today` : ''}
           </p>
         </section>
       ) : null}
@@ -227,8 +250,22 @@ export function Orders() {
         <AssignRiderDialog
           order={dialog.order}
           busy={busyId === dialog.order.id}
-          onClose={() => setDialog(null)}
-          onAssign={(riderId, confirmFar) => void run(dialog.order, () => ordersApi.assignRider(dialog.order.id, riderId, confirmFar))}
+          onClose={() => {
+            setDialog(null);
+            setFarRefusal(null);
+          }}
+          farRefusal={farRefusal}
+          onAssign={(riderId, confirmFar) =>
+            void run(
+              dialog.order,
+              () => ordersApi.assignRider(dialog.order.id, riderId, confirmFar),
+              (err) => {
+                const refusal = farBatchRefusal(err, riderId, confirmFar);
+                setFarRefusal(refusal);
+                return refusal !== null;
+              }
+            )
+          }
         />
       ) : null}
       {dialog && needsNote(dialog.action) ? (

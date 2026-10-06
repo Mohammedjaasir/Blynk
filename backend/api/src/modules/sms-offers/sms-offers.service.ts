@@ -87,13 +87,16 @@ export function smsParts(text: string): number {
 
 type Executor = Kysely<Database> | Transaction<Database>;
 
-/** Customers an audience reaches: active, registered, not opted out. */
-function audienceQuery(executor: Executor, audience: SmsOfferAudience) {
+/**
+ * Customers an audience reaches: active, registered, not opted out. With
+ * `optedOut` it is the same audience's customers who turned offers off.
+ */
+function audienceQuery(executor: Executor, audience: SmsOfferAudience, optedOut = false) {
   let q = executor
     .selectFrom('users as u')
     .where('u.role', '=', 'CUSTOMER')
     .where('u.is_active', '=', true)
-    .where('u.sms_offers_opted_out_at', 'is', null);
+    .where('u.sms_offers_opted_out_at', optedOut ? 'is not' : 'is', null);
   const ordered = (days: number) =>
     sql<boolean>`exists (select 1 from orders o where o.customer_id = u.id and o.created_at >= now() - make_interval(days => ${days}))`;
   if (audience === 'ORDERED_30D') q = q.where(ordered(30));
@@ -113,34 +116,52 @@ export interface AudienceSummary {
   opted_out: number;
 }
 
+/** The number an offer SMS would go to, or null when no SMS can reach it. */
+function smsRecipient(phone: string): string | null {
+  try {
+    return normalizeSriLankanPhone(phone);
+  } catch {
+    return null; // not a Sri Lankan mobile (or a deleted account's placeholder)
+  }
+}
+
 export async function summarizeAudience(audience: SmsOfferAudience, fallback: SmsLanguage): Promise<AudienceSummary> {
-  const rows = await audienceQuery(db, audience)
-    .select(['u.sms_language', sql<string>`count(*)`.as('n')])
-    .groupBy('u.sms_language')
-    .execute();
+  // Counted with exactly the filter sendOffer applies (a valid Sri Lankan
+  // mobile), so the estimate is what a send queues.
+  const rows = await audienceQuery(db, audience).select(['u.phone', 'u.sms_language']).execute();
   const by_language: Record<SmsLanguage, number> = { si: 0, ta: 0, en: 0 };
   let without_language = 0;
   const enabled = enabledOfferLanguages();
   for (const row of rows) {
-    const n = Number(row.n);
+    if (!smsRecipient(row.phone)) continue;
     const lang = languageFor(row.sms_language, fallback, enabled);
-    by_language[lang] += n;
-    if (lang !== row.sms_language) without_language += n;
+    by_language[lang] += 1;
+    if (lang !== row.sms_language) without_language += 1;
   }
-  const optedOut = await db
-    .selectFrom('users')
-    .select(sql<string>`count(*)`.as('n'))
-    .where('role', '=', 'CUSTOMER')
-    .where('is_active', '=', true)
-    .where('sms_offers_opted_out_at', 'is not', null)
-    .executeTakeFirst();
+  // Opted out within this audience only (not every customer who opted out).
+  const optedOutRows = await audienceQuery(db, audience, true).select(['u.phone']).execute();
+  const opted_out = optedOutRows.filter((r) => smsRecipient(r.phone)).length;
   return {
     audience,
     recipients: by_language.si + by_language.ta + by_language.en,
     by_language,
     without_language,
-    opted_out: Number(optedOut?.n ?? 0),
+    opted_out,
   };
+}
+
+/**
+ * The text one customer is sent. The estimate refuses a send while a
+ * language with recipients has no text, but a customer can change language
+ * between that check and the send: then the fallback's text, else any
+ * written text, is used; null (skip) only if nothing is written at all.
+ */
+function offerTextFor(lang: SmsLanguage, fallback: SmsLanguage, messages: OfferMessages): { lang: SmsLanguage; text: string } | null {
+  for (const l of [lang, fallback, ...SMS_LANGUAGES]) {
+    const t = messages[l]?.trim();
+    if (t) return { lang: l, text: withOptOut(t, l) };
+  }
+  return null;
 }
 
 export type OfferMessages = Partial<Record<SmsLanguage, string>>;
@@ -216,14 +237,11 @@ export async function sendOffer(
     const now = new Date();
     const rows = [];
     for (const c of customers) {
-      const lang = languageFor(c.sms_language, input.fallback_language);
-      const text = withOptOut(input.messages[lang]!, lang);
-      let phone: string;
-      try {
-        phone = normalizeSriLankanPhone(c.phone);
-      } catch {
-        continue; // not a Sri Lankan mobile: an SMS could not reach it
-      }
+      const phone = smsRecipient(c.phone);
+      if (!phone) continue; // not a Sri Lankan mobile: an SMS could not reach it
+      const picked = offerTextFor(languageFor(c.sms_language, input.fallback_language), input.fallback_language, input.messages);
+      if (!picked) continue;
+      const { lang, text } = picked;
       recipients += 1;
       parts += smsParts(text);
       rows.push({
@@ -264,8 +282,31 @@ export async function sendOffer(
   });
 }
 
+/** Test SMS one staff member may send per rolling hour. */
+export const MAX_TESTS_PER_HOUR = 5;
+
 /** Sends one language's text to the staff member's own phone, to check it. */
 export async function sendTestOffer(actor: AuditActor, language: SmsLanguage, message: string) {
+  // Same sending window as real offers: a test at 11 PM still wakes someone.
+  if (!isWithinOrderingHours(orderingClock.now())) {
+    throw new AppError('Offers can be sent from 8 AM to 9 PM only.', 422, 'OUTSIDE_SENDING_HOURS');
+  }
+  const recent = await db
+    .selectFrom('notifications')
+    .select(sql<string>`count(*)`.as('n'))
+    .where('user_id', '=', actor.actorId)
+    .where('notification_type', '=', 'SMS_OFFER')
+    .where('idempotency_key', 'like', 'sms-offer-test:%')
+    .where('created_at', '>', sql<Date>`now() - interval '1 hour'`)
+    .executeTakeFirst();
+  if (Number(recent?.n ?? 0) >= MAX_TESTS_PER_HOUR) {
+    throw new AppError(
+      `You can send ${MAX_TESTS_PER_HOUR} test SMS an hour. Try again later.`,
+      429,
+      'TOO_MANY_TESTS',
+      { max_per_hour: MAX_TESTS_PER_HOUR }
+    );
+  }
   const staff = await db.selectFrom('users').select(['phone']).where('id', '=', actor.actorId).executeTakeFirst();
   let phone: string;
   try {

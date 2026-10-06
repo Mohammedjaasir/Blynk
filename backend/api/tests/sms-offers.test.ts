@@ -39,6 +39,10 @@ beforeAll(async () => {
   tamil = await people.customer(1);
   unset = await people.customer(2);
   optedOut = await people.customer(3);
+  // A customer whose number is not a Sri Lankan mobile: no SMS can reach it,
+  // so neither the estimate nor the send counts it.
+  const landline = await people.customer(4);
+  await pool.query("UPDATE users SET phone = '+94112927004' WHERE id = $1", [landline.id]);
   await request(app).patch('/api/v1/me').set(auth(tamil.token)).send({ sms_language: 'ta' }).expect(200);
   await request(app).patch('/api/v1/me').set(auth(optedOut.token)).send({ sms_language: 'en', sms_offers: false }).expect(200);
 });
@@ -116,6 +120,23 @@ describe('sending an offer', () => {
     expect(e.parts_per_sms.ta).toBe(smsParts(`${TEXT.ta}\n${OPT_OUT_LINE.ta}`));
   });
 
+  it('counts opted-out customers within the chosen audience only', async () => {
+    const optedOutFor = async (audience: string) =>
+      (
+        await request(app)
+          .post('/api/v1/admin/sms-offers/estimate')
+          .set(auth(tokens.admin))
+          .send({ audience, fallback_language: 'si', messages: TEXT })
+          .expect(200)
+      ).body.data.estimate.opted_out as number;
+    const all = await optedOutFor('ALL');
+    const never = await optedOutFor('NEVER_ORDERED');
+    const ordered90 = await optedOutFor('ORDERED_90D');
+    expect(never).toBeGreaterThanOrEqual(1); // this file's opted-out customer never ordered
+    // Disjoint audiences: together they can never exceed everyone.
+    expect(never + ordered90).toBeLessThanOrEqual(all);
+  });
+
   it('refuses when a language some customers get has no text', async () => {
     const res = await request(app)
       .post('/api/v1/admin/sms-offers')
@@ -142,6 +163,11 @@ describe('sending an offer', () => {
   });
 
   it('queues one SMS per customer in their language, with the opt-out line', async () => {
+    const estimate = await request(app)
+      .post('/api/v1/admin/sms-offers/estimate')
+      .set(auth(opsToken))
+      .send({ audience: 'ALL', fallback_language: 'si', messages: TEXT })
+      .expect(200);
     const res = await request(app)
       .post('/api/v1/admin/sms-offers')
       .set(auth(opsToken))
@@ -150,6 +176,9 @@ describe('sending an offer', () => {
     const offer = res.body.data.offer;
     offerIds.push(offer.id);
     expect(offer.recipients).toBeGreaterThanOrEqual(2);
+    // The estimate is exactly what the send queued (invalid numbers left out of both).
+    expect(estimate.body.data.estimate.recipients).toBe(offer.recipients);
+    expect(estimate.body.data.estimate.sms_parts_total).toBe(offer.sms_parts_total);
 
     const [toTamil] = await offerSms(offer.id, tamil.id);
     expect(toTamil.payload.text).toBe(`${TEXT.ta}\n${OPT_OUT_LINE.ta}`);
@@ -198,5 +227,31 @@ ${OPT_OUT_LINE.en}`);
     const rows = (await pool.query(`SELECT recipient, payload FROM notifications WHERE idempotency_key LIKE 'sms-offer-test:%'`)).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0].payload.text).toBe(`${TEXT.ta}\n${OPT_OUT_LINE.ta}`);
+  });
+
+  it('test SMS: refused outside 8 AM - 9 PM, and at most 5 per staff member an hour', async () => {
+    const pinned = orderingClock.now;
+    orderingClock.now = () => new Date('2026-10-06T17:00:00.000Z'); // 10:30 PM in Colombo
+    try {
+      const late = await request(app)
+        .post('/api/v1/admin/sms-offers/test')
+        .set(auth(tokens.admin))
+        .send({ language: 'en', message: TEXT.en })
+        .expect(422);
+      expect(late.body.error.code).toBe('OUTSIDE_SENDING_HOURS');
+    } finally {
+      orderingClock.now = pinned;
+    }
+
+    // One test was sent above; four more reach the limit.
+    for (let i = 0; i < 4; i++) {
+      await request(app).post('/api/v1/admin/sms-offers/test').set(auth(tokens.admin)).send({ language: 'en', message: TEXT.en }).expect(202);
+    }
+    const sixth = await request(app)
+      .post('/api/v1/admin/sms-offers/test')
+      .set(auth(tokens.admin))
+      .send({ language: 'en', message: TEXT.en })
+      .expect(429);
+    expect(sixth.body.error.code).toBe('TOO_MANY_TESTS');
   });
 });

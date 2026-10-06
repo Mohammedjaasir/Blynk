@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
+import 'package:ecom/Infrastructure/LocalStorage/cart_storage.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/Providers/address.provider.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
@@ -125,8 +126,12 @@ List<SingleChildWidget> buildAppProviders() => [
         create: (_) => StoreInfoProvider()..load(),
         lazy: false,
       ),
+      // Remembered across restarts and web reloads (device storage). Not
+      // lazy, so the saved cart is read back at launch, before the cart bar
+      // first asks for it.
       ChangeNotifierProvider<CartProvider>(
-        create: (_) => CartProvider(),
+        create: (_) => CartProvider(storage: const SecureCartStorage())..restore(),
+        lazy: false,
       ),
       ChangeNotifierProvider<AddressProvider>(
         create: (_) => AddressProvider(),

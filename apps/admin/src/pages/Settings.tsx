@@ -1,3 +1,4 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { settings as settingsApi } from '../api/resources';
@@ -37,7 +38,7 @@ function DeliveryFeeSettingPanel() {
         setCurrent(setting);
         setValue(String(setting.fee_lkr));
       })
-      .catch((err) => !cancelled && setLoadError(err instanceof Error ? err.message : 'Could not load the delivery fee.'));
+      .catch((err) => !cancelled && setLoadError(errorMessage(err, 'Could not load the delivery fee.')));
     return () => {
       cancelled = true;
     };
@@ -62,7 +63,7 @@ function DeliveryFeeSettingPanel() {
         err instanceof ApiError && err.code === 'VALIDATION_ERROR'
           ? (err.details as Array<{ message?: string }> | undefined)?.[0]?.message
           : undefined;
-      setError(detail ?? (err instanceof Error ? err.message : 'Could not save the delivery fee.'));
+      setError(detail ?? errorMessage(err, 'Could not save the delivery fee.'));
     } finally {
       setSaving(false);
     }

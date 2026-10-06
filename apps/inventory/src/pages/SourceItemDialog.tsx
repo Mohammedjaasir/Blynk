@@ -2,7 +2,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { sourcingApi } from '../api/resources';
 import type { QueueOrder, SourcingItem, StockRow, Supplier } from '../api/types';
 import { Dialog, Field, Spinner } from '../components/ui';
-import { errorMessage, isApiError } from '../lib/errors';
+import { SHORT_STOCK_CODES, errorMessage, isApiError } from '../lib/errors';
 import { formatMoney } from '../lib/format';
 
 /**
@@ -13,6 +13,10 @@ import { formatMoney } from '../lib/format';
  *
  * Suppliers come only from the active list (D2) - the payload never carries
  * a free-text supplier name.
+ *
+ * An item is always sourced in full: the backend refuses partial quantities
+ * (400 PARTIAL_SOURCING_NOT_SUPPORTED). When there is not enough stock for the
+ * whole line, the way forward is "Mark unavailable", offered right here.
  */
 export function SourceItemDialog({
   order,
@@ -34,7 +38,6 @@ export function SourceItemDialog({
   onMarkUnavailable(): void;
 }) {
   const [cost, setCost] = useState('');
-  const [quantity, setQuantity] = useState(String(item.quantity));
   const [supplierId, setSupplierId] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -43,18 +46,16 @@ export function SourceItemDialog({
   const submitting = useRef(false);
 
   const tracked = stock?.tracking_mode === 'TRACKED';
+  // Tracked stock below the ordered quantity: sourcing would be refused.
+  const shortOfStock = tracked && !!stock && stock.quantity_on_hand < item.quantity;
   const costValue = /^\d+(\.\d{1,2})?$/.test(cost.trim()) ? Number(cost.trim()) : null;
-  const qtyValue = /^\d+$/.test(quantity.trim()) ? Number(quantity.trim()) : null;
   const variance = costValue === null ? null : costValue - item.estimated_unit_cost;
 
   function validate(): string | null {
     if (cost.trim() === '') return 'Enter the actual unit cost you paid.';
     if (costValue === null) return 'Enter the cost in rupees, with at most two decimals (e.g. 455.50).';
-    if (qtyValue === null || qtyValue < 1 || qtyValue > item.quantity) {
-      return `Quantity must be a whole number from 1 to ${item.quantity}.`;
-    }
-    if (tracked && stock && qtyValue > stock.quantity_on_hand) {
-      return `Only ${stock.quantity_on_hand} counted in stock. Restock first, or mark the item unavailable.`;
+    if (shortOfStock) {
+      return `Only ${stock!.quantity_on_hand} counted in stock - not enough for all ${item.quantity}. Restock first, or mark the item unavailable.`;
     }
     if (notes.length > 500) return 'Keep the note under 500 characters.';
     return null;
@@ -66,6 +67,7 @@ export function SourceItemDialog({
     const problem = validate();
     if (problem) {
       setError(problem);
+      setOutOfStock(shortOfStock);
       return;
     }
     submitting.current = true;
@@ -75,7 +77,7 @@ export function SourceItemDialog({
     try {
       await sourcingApi.source(order.id, item.id, {
         actual_unit_cost: costValue!,
-        quantity: qtyValue!,
+        quantity: item.quantity,
         ...(supplierId ? { supplier_id: supplierId } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
@@ -85,7 +87,7 @@ export function SourceItemDialog({
         onAlreadySourced();
         return;
       }
-      if (isApiError(err, 'INSUFFICIENT_TRACKED_INVENTORY')) setOutOfStock(true);
+      if (SHORT_STOCK_CODES.some((code) => isApiError(err, code))) setOutOfStock(true);
       setError(errorMessage(err, 'The item was not sourced.'));
     } finally {
       submitting.current = false;
@@ -130,18 +132,22 @@ export function SourceItemDialog({
               data-autofocus
             />
           </Field>
-          <Field label="Quantity sourced" hint={`1 to ${item.quantity}`}>
-            <input
-              className="input input--mono"
-              inputMode="numeric"
-              value={quantity}
-              onChange={(e) => {
-                setQuantity(e.target.value);
-                setError(null);
-              }}
-            />
-          </Field>
         </div>
+        <p className="form__lead">
+          Sourcing all <strong className="mono">{item.quantity} × {item.unit_snapshot}</strong>. An item is sourced in
+          full; if you cannot get all of it, mark it unavailable.
+        </p>
+        {shortOfStock && !error ? (
+          <div className="notice notice--warn" role="status">
+            <span>
+              Only <span className="mono">{stock!.quantity_on_hand}</span> counted in stock - not enough for all{' '}
+              {item.quantity}.
+            </span>
+            <button type="button" className="button button--ghost button--sm" onClick={onMarkUnavailable}>
+              Mark unavailable
+            </button>
+          </div>
+        ) : null}
 
         {variance !== null ? (
           <p className="preview mono" aria-live="polite">

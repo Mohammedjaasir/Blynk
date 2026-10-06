@@ -262,12 +262,27 @@ describe('Security: RBAC — PACKING_STAFF permissions and boundaries', () => {
     expect(res.status).toBe(200);
   });
 
-  it('PACKING_STAFF -> POST /admin/inventory/:productId/adjust is forbidden (403)', async () => {
+  // Owner decision 2026-10-06: Inventory receives stock, so the adjust route
+  // passes the role gate (this body is invalid, so it stops at validation).
+  it('PACKING_STAFF -> POST /admin/inventory/:productId/adjust passes the role check (400 on a bad body, not 403)', async () => {
     const res = await request(app)
       .post('/api/v1/admin/inventory/b0000001-0000-0000-0000-000000000001/adjust')
       .set('Authorization', 'Bearer ' + staffToken)
       .send({ quantity_change: 10, reason: 'Physical count adjustment' });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
+  });
+
+  it('PACKING_STAFF -> PATCH /admin/inventory/:productId/mode and /threshold are forbidden (403)', async () => {
+    const mode = await request(app)
+      .patch('/api/v1/admin/inventory/b0000001-0000-0000-0000-000000000001/mode')
+      .set('Authorization', 'Bearer ' + staffToken)
+      .send({ tracking_mode: 'TRACKED' });
+    expect(mode.status).toBe(403);
+    const threshold = await request(app)
+      .patch('/api/v1/admin/inventory/b0000001-0000-0000-0000-000000000001/threshold')
+      .set('Authorization', 'Bearer ' + staffToken)
+      .send({ low_stock_threshold: 2 });
+    expect(threshold.status).toBe(403);
   });
 
   it('PACKING_STAFF -> POST /admin/suppliers is forbidden (403)', async () => {

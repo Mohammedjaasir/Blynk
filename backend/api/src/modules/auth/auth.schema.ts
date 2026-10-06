@@ -35,6 +35,9 @@ export const verifyOtpSchema = z
       .trim()
       .length(6, 'OTP must be exactly 6 digits.')
       .regex(/^[0-9]{6}$/, 'OTP must contain numeric digits only.'),
+    // Staff apps send false: a code for a number with no account must not
+    // quietly create a customer. Customers omit it (default true).
+    create_account: z.boolean().optional().default(true),
   })
   .refine((data) => Boolean(data.phone || data.phone_number), {
     message: 'Phone number is required.',
@@ -46,6 +49,7 @@ export const verifyOtpSchema = z
       return {
         phone: normalizeSriLankanPhone(raw),
         otp: data.otp,
+        create_account: data.create_account,
       };
     } catch (err: unknown) {
       ctx.addIssue({

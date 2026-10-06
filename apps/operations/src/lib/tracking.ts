@@ -4,7 +4,10 @@ export interface TrackingState {
   permission: TrackingPermissionState;
   active: boolean;
   lastSentAt: Date | null;
-  lastError: 'permission_denied' | 'position_unavailable' | 'network' | null;
+  /** 'refused': the server refused the location for good (stopReason says why). */
+  lastError: 'permission_denied' | 'position_unavailable' | 'network' | 'refused' | null;
+  /** Why sharing was stopped by a server refusal, in the operator's words. */
+  stopReason: string | null;
 }
 
 /** Time+distance throttle, matching the Rider app's own tuning
@@ -34,7 +37,13 @@ function haversineMeters(a: TrackingPoint, b: TrackingPoint): number {
  * in `geolocation-plugin.ts`'s plain browser adapter underneath it.
  */
 export class DeliveryTracker {
-  private state: TrackingState = { permission: 'not_requested', active: false, lastSentAt: null, lastError: null };
+  private state: TrackingState = {
+    permission: 'not_requested',
+    active: false,
+    lastSentAt: null,
+    lastError: null,
+    stopReason: null,
+  };
   private listeners = new Set<(s: TrackingState) => void>();
   private deliveryId: string | null = null;
   private lastSentPoint: TrackingPoint | null = null;
@@ -76,7 +85,7 @@ export class DeliveryTracker {
     this.deliveryId = deliveryId;
     this.lastSentPoint = null;
     // A new delivery must not briefly show the previous one's freshness or error.
-    this.setState({ permission: 'requesting', lastSentAt: null, lastError: null });
+    this.setState({ permission: 'requesting', lastSentAt: null, lastError: null, stopReason: null });
     const permission = await this.plugin.requestPermission();
     this.setState({ permission });
     if (permission !== 'granted') return;
@@ -94,6 +103,15 @@ export class DeliveryTracker {
     this.deliveryId = null;
     this.lastSentPoint = null;
     await this.stopNative();
+  }
+
+  /** Stops because the server refused this delivery's locations for good, and keeps the reason for the operator. */
+  async stopBecause(reason: string): Promise<void> {
+    try {
+      await this.stop();
+    } finally {
+      this.setState({ lastError: 'refused', stopReason: reason });
+    }
   }
 
   /**

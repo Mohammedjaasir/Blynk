@@ -80,7 +80,13 @@ export function Login() {
     } catch (err) {
       // A refused role has already used up the code, so go back to the
       // phone step rather than inviting a retry that can only fail.
-      if (err instanceof Error && err.message === WRONG_ROLE_MESSAGE) {
+      if (err instanceof ApiError && err.code === 'ACCOUNT_NOT_FOUND') {
+        // No account for this number: another code can't help, a different number might.
+        setStep('phone');
+        setOtp('');
+        setDevOtp(null);
+        setError(errorMessage(err));
+      } else if (err instanceof Error && err.message === WRONG_ROLE_MESSAGE) {
         setStep('phone');
         setOtp('');
         setDevOtp(null);

@@ -101,16 +101,17 @@ export class InventoryRepository {
         });
       }
 
-      // Quantity validation
-      const qtyToSource = params.quantity ?? item.quantity;
-      if (qtyToSource <= 0 || qtyToSource > item.quantity) {
+      // Partial sourcing is not supported: an item is sourced in full or
+      // marked unavailable. quantity may be omitted (= the full quantity).
+      if (params.quantity !== undefined && params.quantity !== item.quantity) {
         throw new AppError(
-          `Sourced quantity (${qtyToSource}) must be between 1 and ordered quantity (${item.quantity}).`,
+          'Source the full quantity, or mark the item unavailable.',
           400,
-          'INVALID_SOURCING_QUANTITY',
-          { ordered_quantity: item.quantity, attempted_quantity: qtyToSource }
+          'PARTIAL_SOURCING_NOT_SUPPORTED',
+          { ordered_quantity: item.quantity, attempted_quantity: params.quantity }
         );
       }
+      const qtyToSource = item.quantity;
 
       // 2. Fetch order to get dark store context
       const order = await trx
@@ -740,11 +741,11 @@ export class InventoryRepository {
 
   async createSupplier(data: {
     name: string;
-    code?: string;
-    contact_person?: string;
-    contact_phone?: string;
-    address?: string;
-    notes?: string;
+    code?: string | null;
+    contact_person?: string | null;
+    contact_phone?: string | null;
+    address?: string | null;
+    notes?: string | null;
   }) {
     const [supplier] = await db
       .insertInto('suppliers')
@@ -784,11 +785,11 @@ export class InventoryRepository {
     id: string,
     data: {
       name?: string;
-      code?: string;
-      contact_person?: string;
-      contact_phone?: string;
-      address?: string;
-      notes?: string;
+      code?: string | null;
+      contact_person?: string | null;
+      contact_phone?: string | null;
+      address?: string | null;
+      notes?: string | null;
       is_active?: boolean;
     }
   ) {

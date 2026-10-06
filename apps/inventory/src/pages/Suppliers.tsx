@@ -109,13 +109,13 @@ export function Suppliers() {
                 <tr key={s.id} className={s.is_active ? '' : 'is-muted'}>
                   <td>
                     <span className="cell__primary">{s.name}</span>
-                    <span className="cell__secondary mono">{s.code ?? 'No code'}</span>
+                    <span className="cell__secondary mono">{s.code || 'No code'}</span>
                   </td>
                   <td>
-                    <span>{s.contact_person ?? '—'}</span>
-                    <span className="cell__secondary mono">{s.contact_phone ?? ''}</span>
+                    <span>{s.contact_person || '—'}</span>
+                    <span className="cell__secondary mono">{s.contact_phone || ''}</span>
                   </td>
-                  <td className="cell__secondary">{s.address ?? '—'}</td>
+                  <td className="cell__secondary">{s.address || '—'}</td>
                   <td>
                     <Status tone={s.is_active ? 'ok' : 'muted'}>{s.is_active ? 'Active' : 'Inactive'}</Status>
                   </td>
@@ -218,6 +218,9 @@ function SupplierDialog({
     for (const [key, max] of Object.entries(LIMITS) as Array<[keyof typeof form, number]>) {
       if (form[key].trim().length > max) next[key] = `Keep this under ${max} characters.`;
     }
+    // The backend has no way to set the code back to "none" yet (it takes
+    // strings only, and an empty string would collide on the unique code).
+    if (supplier?.code && !form.code.trim()) next.code = 'A code cannot be removed. Enter a new code instead.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -229,12 +232,15 @@ function SupplierDialog({
     setBusy(true);
     setFormError(null);
 
-    // Send only filled fields. The backend cannot clear a field to empty, and
-    // an empty code would collide with the unique index, so blanks are left out.
+    // A new supplier sends only the filled fields. An edit also sends an
+    // empty string for an optional field that was cleared, which the backend
+    // (updateSupplierSchema: optional strings, no minimum) stores as empty -
+    // that is how a contact, address or note is removed.
     const body: SupplierInput = {};
     for (const key of Object.keys(LIMITS) as Array<keyof typeof form>) {
       const value = form[key].trim();
       if (value) body[key] = value;
+      else if (supplier && key !== 'name' && key !== 'code' && supplier[key]) body[key] = '';
     }
 
     try {
@@ -281,7 +287,7 @@ function SupplierDialog({
           <textarea className="input" rows={2} value={form.notes} onChange={set('notes')} />
         </Field>
         {supplier ? (
-          <p className="form__lead">Fields left blank keep their current value.</p>
+          <p className="form__lead">Clear a field to remove it. A code can be changed but not removed.</p>
         ) : null}
         {formError ? (
           <p className="field__error" role="alert">

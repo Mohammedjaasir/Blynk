@@ -35,6 +35,16 @@ export function isRoleRefusal(err: unknown): err is ApiError {
   return err instanceof ApiError && err.status === 403 && err.code === 'FORBIDDEN';
 }
 
+/** Best-effort server-side revocation; a failed call must not block the refusal. */
+async function revokeQuietly(refreshToken: string | null) {
+  if (!refreshToken) return;
+  try {
+    await authApi.logout(refreshToken);
+  } catch {
+    /* the session expires on its own; nothing more to do here */
+  }
+}
+
 /**
  * Sign-in over the existing Blynk OTP flow. Only ADMIN and PACKING_STAFF get
  * a session here; any other role is signed straight back out. That check is a
@@ -56,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const me = await authApi.me();
         if (cancelled) return;
         if (!INVENTORY_ROLES.includes(me.role)) {
+          await revokeQuietly(tokenStore.refresh);
           tokenStore.clear();
           setNotice(wrongRoleMessage(me.role));
           setStatus('anonymous');
@@ -95,6 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Both sign-in methods end here: the same role gate, the same session.
   const completeSignIn = useCallback(async (data: { access_token: string; refresh_token: string; user: AuthUser }) => {
     if (!INVENTORY_ROLES.includes(data.user.role)) {
+      // The backend has already issued a session for this account. Revoke it
+      // rather than just forgetting it, so the refresh token cannot be reused.
+      await revokeQuietly(data.refresh_token);
       tokenStore.clear();
       throw new ApiError(wrongRoleMessage(data.user.role), 403, 'FORBIDDEN');
     }

@@ -1,3 +1,4 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useEffect, useState } from 'react';
 import { reports as reportsApi } from '../api/resources';
 import type { SalesProduct, SalesRange, SalesReport } from '../api/types';
@@ -31,7 +32,7 @@ export function Sales() {
     reportsApi
       .sales(range)
       .then((r) => !cancelled && setReport(r))
-      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : 'Could not load sales.'));
+      .catch((err) => !cancelled && setError(errorMessage(err, 'Could not load sales.')));
     return () => {
       cancelled = true;
     };

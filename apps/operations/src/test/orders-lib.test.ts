@@ -103,6 +103,20 @@ describe('primaryAction', () => {
     expect(primaryAction(order({ order_status: 'FAILED' }))).toBe('restage');
     expect(primaryAction(order({ order_status: 'OUT_FOR_DELIVERY', active_delivery: withRider('PICKED_UP') }))).toBeNull();
   });
+
+  // The board (Orders.tsx) only acts on primaryAction, so it never needs a
+  // bare "DELIVERED" status: marking delivered needs the customer's code and
+  // lives on the order detail screen.
+  it('is never "Mark delivered", in any status', () => {
+    const statuses = ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'OUT_FOR_DELIVERY', 'FAILED', 'CUSTOMER_UNAVAILABLE', 'DELIVERED', 'CANCELLED'];
+    for (const order_status of statuses) {
+      for (const active_delivery of [null, withRider('ASSIGNED'), withRider('PICKED_UP'), withRider('ARRIVED_AT_CUSTOMER')]) {
+        expect(primaryAction(order({ order_status: order_status as BoardOrderLike['order_status'], active_delivery }))).not.toBe(
+          'markDelivered'
+        );
+      }
+    }
+  });
 });
 
 describe('formatAge', () => {

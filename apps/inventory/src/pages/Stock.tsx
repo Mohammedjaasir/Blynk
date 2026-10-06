@@ -18,6 +18,9 @@ const VIEWS: Array<{ id: View; label: string }> = [
   { id: 'low', label: 'Low & out' },
 ];
 
+/** The backend refuses longer searches (inventoryQuerySchema: search max 100). */
+export const SEARCH_MAX_LENGTH = 100;
+
 /**
  * Every catalog product and its stock. The list comes from the backend's
  * products-first endpoint, so a product created in Admin appears here before
@@ -45,7 +48,8 @@ export function Stock() {
   }
 
   const query: StockQuery = {
-    search: debouncedSearch.trim() || undefined,
+    // A hand-edited ?q= longer than the backend allows is cut, not refused.
+    search: debouncedSearch.trim().slice(0, SEARCH_MAX_LENGTH) || undefined,
     tracking_mode: view === 'tracked' ? 'TRACKED' : view === 'untracked' ? 'UNTRACKED' : undefined,
     low_stock_only: view === 'low' || undefined,
     include_inactive: includeInactive || undefined,
@@ -99,6 +103,7 @@ export function Stock() {
           type="search"
           placeholder="Search name or SKU  ( / )"
           aria-label="Search products by name or SKU"
+          maxLength={SEARCH_MAX_LENGTH}
           value={search}
           onChange={(event) => update({ q: event.target.value })}
         />

@@ -79,6 +79,40 @@ export function isPackable({ items_summary: s }: BoardOrderLike): boolean {
   return s.substituted === 0 && s.pending + s.sourced + s.packed > 0;
 }
 
+/**
+ * The same rule from the order's items (admin detail), which - unlike the
+ * board's summary - can tell a substitution with a recorded cost from one
+ * without (backend packingBlockers). Null when the items do not carry the
+ * cost, so the caller falls back to isPackable.
+ */
+export function isPackableFromItems(
+  items: ReadonlyArray<{ item_status: string; actual_unit_cost?: unknown }>
+): boolean | null {
+  if (items.some((i) => i.item_status === 'SUBSTITUTED' && !('actual_unit_cost' in i))) return null;
+  const hasCost = (i: { actual_unit_cost?: unknown }) => i.actual_unit_cost !== null && i.actual_unit_cost !== undefined;
+  const unsourced = items.filter((i) => i.item_status === 'SUBSTITUTED' && !hasCost(i)).length;
+  const packable = items.filter(
+    (i) =>
+      i.item_status === 'PENDING' ||
+      i.item_status === 'SOURCED' ||
+      i.item_status === 'PACKED' ||
+      (i.item_status === 'SUBSTITUTED' && hasCost(i))
+  ).length;
+  return unsourced === 0 && packable > 0;
+}
+
+/** Order states in which a pending item can still be marked unavailable (RESOLVE_ITEM). */
+export const ITEM_RESOLVABLE_STATES: ReadonlyArray<OrderStatus> = ['PLACED', 'ITEM_UNAVAILABLE'];
+
+/** Whether `role` may mark this item unavailable now: a PENDING item of a PLACED / ITEM_UNAVAILABLE order. */
+export function canMarkItemUnavailable(
+  orderStatus: OrderStatus,
+  itemStatus: string,
+  role: UserRole | undefined
+): boolean {
+  return Boolean(role && STORE.includes(role)) && ITEM_RESOLVABLE_STATES.includes(orderStatus) && itemStatus === 'PENDING';
+}
+
 export type OrderAction =
   | 'pack'
   | 'assign'
@@ -221,6 +255,16 @@ export function orderErrorMessage(err: unknown): string {
       return 'A rider still holds this order. Mark the attempt failed first.';
     case 'ORDER_CHANGED':
       return 'This order changed while you were working. Showing the latest.';
+    case 'WRONG_DELIVERY_CODE':
+    case 'DELIVERY_CODE_LOCKED':
+      // The API's own words carry the tries left / the wait.
+      return err.message;
+    case 'DELIVERY_CODE_NOT_ISSUED':
+      return 'This order has no delivery code. Mark it delivered with an override note instead.';
+    case 'ITEM_ALREADY_SOURCED':
+      return 'That item has already been picked for packing, so it cannot be marked unavailable. Showing the latest.';
+    case 'ITEM_ALREADY_RESOLVED':
+      return 'That item was already marked unavailable or substituted. Showing the latest.';
     case 'COD_ALREADY_COLLECTED':
       return 'Cash for this order is already recorded.';
     case 'INSUFFICIENT_TRACKED_INVENTORY':
@@ -231,7 +275,9 @@ export function orderErrorMessage(err: unknown): string {
     case 'FORBIDDEN':
       return 'Your account cannot make this change.';
     case 'VALIDATION_ERROR':
-      return 'Add a note and try again.';
+      return Array.isArray(err.details) && err.details.some((d: any) => String(d?.field ?? d?.path?.join?.('.') ?? '') === 'delivery_code')
+        ? "Enter the customer's 4-digit delivery code, or write an override note."
+        : 'Add a note and try again.';
     case 'NETWORK':
       return 'Could not reach the Blynk API. Nothing was changed.';
     default:

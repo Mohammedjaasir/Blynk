@@ -73,6 +73,23 @@ describe('ledger', () => {
     expect(fulfilment.querySelector('td:nth-child(6)')!.textContent).toBe('Kasun Perera');
   });
 
+  it('offers every product in the filter, paging past the first 100', async () => {
+    const { api } = renderAs(STAFF, '/ledger', {
+      'GET /admin/inventory/adjustments': () => ok(pageOf('adjustments', ENTRIES)),
+      'GET /admin/inventory': (call) =>
+        call.query.get('page') === '2'
+          ? ok(pageOf('inventory', [stockRow({ product_id: 'p-zesta', product_name: 'Zesta Tea 100g' })], 2, 2))
+          : ok(pageOf('inventory', [stockRow()], 1, 2)),
+    });
+    expect(await screen.findByRole('option', { name: 'Zesta Tea 100g' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Kotmale Fresh Milk 1L' })).toBeInTheDocument();
+    const calls = api.find('GET', '/admin/inventory');
+    expect(calls.map((c) => [c.query.get('page'), c.query.get('limit'), c.query.get('include_inactive')])).toEqual([
+      ['1', '100', 'true'],
+      ['2', '100', 'true'],
+    ]);
+  });
+
   it('sends product, type and date filters to the API', async () => {
     const { api } = renderAs(STAFF, '/ledger', {
       'GET /admin/inventory': () => ok(pageOf('inventory', [stockRow()])),

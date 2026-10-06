@@ -56,6 +56,9 @@ const AuthContext = createContext<AuthState | null>(null);
 export const WRONG_ROLE_MESSAGE =
   'This app is for Blynk operators. Sign in with an Operations or admin account; Inventory staff use the Blynk Inventory site.';
 export const SESSION_ENDED_MESSAGE = 'Your session has ended. Please sign in again.';
+/** Opening the app with no signal: the session is kept, not ended. */
+export const RESTORE_OFFLINE_MESSAGE =
+  "Couldn't reach Blynk to resume your session. You're still signed in - reopen the app when you have signal, or sign in again.";
 
 /**
  * Courtesy check only; the API guards every route by role regardless.
@@ -104,9 +107,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(me);
         setRiderCapability(capability);
         setStatus('authenticated');
-      } catch {
+      } catch (err) {
         if (cancelled) return;
-        tokenStore.clear();
+        // No answer (offline / timeout): keep the tokens so the next launch
+        // resumes the session - a weak signal is not a sign-out. Anything
+        // else (a refused token, a server error after a refused refresh) drops it.
+        if (err instanceof ApiError && (err.code === 'NETWORK' || err.code === 'TIMEOUT')) {
+          setNotice(RESTORE_OFFLINE_MESSAGE);
+        } else {
+          tokenStore.clear();
+        }
         setStatus('anonymous');
       }
     }

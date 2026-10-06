@@ -10,6 +10,7 @@ import {
   buildTemplateBlob,
   downloadBlob,
   errorsCsv,
+  importTooLargeMessage,
   isSupportedFile,
   parseSheet,
   readImportFile,
@@ -93,6 +94,12 @@ export function ProductImport() {
       setStage('preview');
       return;
     }
+    const tooLarge = importTooLargeMessage(valid.map((r) => r.data), true);
+    if (tooLarge) {
+      setError(tooLarge);
+      setStage('preview');
+      return;
+    }
     setStage('checking');
     try {
       setDryRun(await catalog.products.import(valid.map((r) => r.data), true));
@@ -104,6 +111,11 @@ export function ProductImport() {
 
   async function runImport() {
     if (!sheet || toImport.length === 0) return;
+    const tooLarge = importTooLargeMessage(toImport.map((r) => r.data), false);
+    if (tooLarge) {
+      setError(tooLarge);
+      return;
+    }
     setStage('importing');
     setError(null);
     try {

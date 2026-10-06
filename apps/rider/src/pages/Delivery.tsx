@@ -76,6 +76,7 @@ export function Delivery() {
     setTrackingState(tracker.getState());
     return tracker.subscribe(setTrackingState);
   }, []);
+  const trackedId = getTracker().getDeliveryId();
   useEffect(() => {
     // A plugin start/stop that throws must never become an unhandled rejection.
     if (data) syncTracking(data).catch(() => undefined);
@@ -167,7 +168,14 @@ export function Delivery() {
             Loading the delivery…
           </p>
         ) : null}
-        {data ? <Slip delivery={data} trackingState={trackingState} /> : null}
+        {data ? (
+          <Slip
+            delivery={data}
+            trackingState={trackingState}
+            // Trips: after this stop closes, sharing carries on for the next one.
+            trackingOtherStop={trackedId !== null && trackedId !== data.delivery_id}
+          />
+        ) : null}
       </main>
 
       {data ? (
@@ -209,7 +217,15 @@ export function Delivery() {
   );
 }
 
-function Slip({ delivery: d, trackingState }: { delivery: DeliveryDetail; trackingState: TrackingState }) {
+function Slip({
+  delivery: d,
+  trackingState,
+  trackingOtherStop,
+}: {
+  delivery: DeliveryDetail;
+  trackingState: TrackingState;
+  trackingOtherStop: boolean;
+}) {
   const action = nextAction(d);
   const done = action.kind === 'none' && action.reason === 'done';
   const destination = toLatLng(d.delivery_latitude, d.delivery_longitude);
@@ -227,7 +243,13 @@ function Slip({ delivery: d, trackingState }: { delivery: DeliveryDetail; tracki
       {closed || done ? null : <StatusRail stage={stage(d)} />}
       {/* Through ARRIVED_AT_CUSTOMER (plan §2.3, §13): tracking itself ends on arrival,
           but the readout stays to confirm "Stopped sharing your location". */}
-      {isTrackable(d) || canReportFailure(d) ? <TrackingStatus state={trackingState} /> : null}
+      {trackingOtherStop && !isTrackable(d) ? (
+        canReportFailure(d) ? (
+          <p className="tracking-status tracking-status--active">Sharing your location for your next stop.</p>
+        ) : null
+      ) : isTrackable(d) || canReportFailure(d) ? (
+        <TrackingStatus state={trackingState} />
+      ) : null}
 
       {done ? (
         <section className="settled" aria-label="Delivered">

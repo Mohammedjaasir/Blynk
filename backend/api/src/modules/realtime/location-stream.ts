@@ -3,7 +3,8 @@ import type { Response } from 'express';
 export interface LocationEvent {
   latitude: number;
   longitude: number;
-  accuracy: number;
+  /** Meters; null when the device reported no estimate (0 or missing). */
+  accuracy: number | null;
   captured_at: string;
   received_at: string;
 }

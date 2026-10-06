@@ -11,12 +11,23 @@ import { Queue } from './pages/Queue';
  * guarded server side by requireAuth + requireRoles('RIDER') + ownership.
  */
 function RequireRider({ children }: { children: JSX.Element }) {
-  const { status } = useAuth();
+  const { status, retry } = useAuth();
   if (status === 'loading') {
     return (
       <p className="boot" role="status">
         Checking your session…
       </p>
+    );
+  }
+  if (status === 'offline') {
+    // The saved session is kept: no signal must never sign a rider out.
+    return (
+      <main className="boot boot--offline">
+        <p role="status">You're offline. You're still signed in — try again when you have signal.</p>
+        <button type="button" className="primary" onClick={retry}>
+          Try again
+        </button>
+      </main>
     );
   }
   if (status !== 'authenticated') return <Navigate to="/login" replace />;

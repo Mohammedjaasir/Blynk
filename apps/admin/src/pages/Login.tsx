@@ -1,7 +1,8 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useState, type FormEvent, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { useAuth } from '../auth/AuthContext';
+import { SESSION_ENDED_MESSAGE, useAuth } from '../auth/AuthContext';
 import { Field, Spinner } from '../components/ui';
 import blynkLogo from '../assets/blynk-logo-light.png';
 
@@ -11,8 +12,7 @@ import blynkLogo from '../assets/blynk-logo-light.png';
  * importantly, by the API on every admin route.
  */
 export function Login() {
-  const { requestOtp, verifyOtp } = useAuth();
-  const { signInWithPassword } = useAuth();
+  const { requestOtp, verifyOtp, signInWithPassword, sessionEnded } = useAuth();
   const navigate = useNavigate();
 
   // Staff sign in with their email and password by default (backend
@@ -41,7 +41,7 @@ export function Login() {
       navigate('/', { replace: true });
     } catch (err) {
       setPassword('');
-      setError(passwordSignInError(err) ?? (err instanceof Error ? err.message : 'Could not sign in.'));
+      setError(passwordSignInError(err) ?? errorMessage(err, 'Could not sign in.'));
     } finally {
       setBusy(false);
     }
@@ -56,7 +56,7 @@ export function Login() {
       setDevOtp(code ?? null);
       setStep('otp');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send the code.');
+      setError(errorMessage(err, 'Could not send the code.'));
     } finally {
       setBusy(false);
     }
@@ -71,13 +71,21 @@ export function Login() {
       navigate('/', { replace: true });
     } catch (err) {
       // The API has already used up the code by the time a non-admin account
-      // is refused, so the only useful next step is another number.
-      if (err instanceof ApiError && err.status === 403 && err.code === 'FORBIDDEN') {
+      // is refused, so the only useful next step is another number. An
+      // unknown number (no account, never created here) is the same.
+      const accountNotFound = err instanceof ApiError && err.code === 'ACCOUNT_NOT_FOUND';
+      if (accountNotFound || (err instanceof ApiError && err.status === 403 && err.code === 'FORBIDDEN')) {
         setStep('phone');
         setOtp('');
         setDevOtp(null);
       }
-      setError(err instanceof Error ? err.message : 'Could not verify the code.');
+      setError(
+        accountNotFound
+          ? ACCOUNT_NOT_FOUND_MESSAGE
+          : err instanceof Error
+            ? err.message
+            : 'Could not verify the code.'
+      );
     } finally {
       setBusy(false);
     }
@@ -98,6 +106,11 @@ export function Login() {
 
       <div className="login__panel">
         <h1 className="login__title">Sign in</h1>
+        {sessionEnded ? (
+          <p className="login__error" role="status">
+            {SESSION_ENDED_MESSAGE}
+          </p>
+        ) : null}
         <p className="login__subtitle">
           {method === 'password'
             ? 'Use the email and password of your Blynk operations account.'
@@ -240,6 +253,9 @@ export function Login() {
     </div>
   );
 }
+
+export const ACCOUNT_NOT_FOUND_MESSAGE =
+  'No Blynk account uses this number. Check the number, or sign in with your email and password.';
 
 /**
  * The staff's words for the two refusals of an email + password sign-in

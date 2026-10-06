@@ -15,6 +15,14 @@ describe('Health and System Routes', () => {
     expect(res.body.data.database).toHaveProperty('status');
   });
 
+  it('CORS exposes the Date header so browser builds can read the server clock', async () => {
+    const res = await request(app).get('/ready').set('Origin', 'https://admin.blynk.lk');
+    const exposed = String(res.headers['access-control-expose-headers'] ?? '').toLowerCase().split(/\s*,\s*/);
+    expect(exposed).toContain('date');
+    expect(exposed).toContain('x-request-id');
+    expect(res.headers['date']).toBeDefined();
+  });
+
   it('GET /ready returns 200 OK with process uptime and ready status', async () => {
     const res = await request(app).get('/ready');
     expect(res.status).toBe(200);

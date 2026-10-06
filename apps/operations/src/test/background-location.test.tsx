@@ -236,6 +236,28 @@ describe('native-post path (api/native-client.ts)', () => {
     expect(localStorage.getItem('blynk.operations.refreshToken')).toBe('refresh-2');
   });
 
+  it('a refresh that cannot reach the server keeps the tokens and reports NETWORK (tracking keeps retrying)', async () => {
+    h.http.mockResolvedValueOnce({ status: 401, data: '{}', headers: {}, url: '' }).mockRejectedValueOnce(new Error('offline'));
+    const { delivery } = await import('../api/resources');
+    await expect(delivery.sendLocation('d-1', { latitude: 1, longitude: 2, accuracy: 3, captured_at: 'x' })).rejects.toMatchObject({
+      status: 0,
+      code: 'NETWORK',
+    });
+    expect(localStorage.getItem('blynk.operations.accessToken')).toBe('access-1');
+    expect(localStorage.getItem('blynk.operations.refreshToken')).toBe('refresh-1');
+  });
+
+  it('a refused refresh token ends the session', async () => {
+    h.http
+      .mockResolvedValueOnce({ status: 401, data: '{}', headers: {}, url: '' })
+      .mockResolvedValueOnce({ status: 401, data: JSON.stringify({ error: { code: 'INVALID_REFRESH_TOKEN', message: 'no' } }), headers: {}, url: '' });
+    const { delivery } = await import('../api/resources');
+    await expect(delivery.sendLocation('d-1', { latitude: 1, longitude: 2, accuracy: 3, captured_at: 'x' })).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(localStorage.getItem('blynk.operations.refreshToken')).toBeNull();
+  });
+
   it('turns a server refusal into an ApiError with its status and code', async () => {
     h.http.mockResolvedValue({ status: 404, data: JSON.stringify({ error: { code: 'DELIVERY_NOT_FOUND', message: 'gone' } }), headers: {}, url: '' });
     const { delivery } = await import('../api/resources');
@@ -329,5 +351,21 @@ describe('explanation screen and status notice', () => {
     render(<TrackingStatus state={session.getTracker().getState()} />);
     expect(screen.getByText(/also while your screen is off/)).toBeInTheDocument();
     expect(screen.queryByText('Location stops when your screen is off.')).not.toBeInTheDocument();
+  });
+
+  it('a refusal shows the real reason instead of a network warning', async () => {
+    render(
+      <TrackingStatus
+        state={{
+          permission: 'granted',
+          active: false,
+          lastSentAt: new Date(),
+          lastError: 'refused',
+          stopReason: 'An admin switched off your rider profile.',
+        }}
+      />
+    );
+    expect(screen.getByText('Stopped sharing your location: An admin switched off your rider profile.')).toBeInTheDocument();
+    expect(screen.queryByText(/retrying/)).not.toBeInTheDocument();
   });
 });

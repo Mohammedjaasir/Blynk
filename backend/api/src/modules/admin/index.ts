@@ -179,10 +179,12 @@ adminRouter.patch(
   inventoryController.setLowStockThreshold.bind(inventoryController)
 );
 
+// Restock, write-off and stock-take: Inventory (PACKING_STAFF) receives
+// stock too (owner decision 2026-10-06). Mode and threshold stay ADMIN/OPERATIONS.
 adminRouter.post(
   '/inventory/:productId/adjust',
   requireAuth,
-  requireRoles(['ADMIN', 'OPERATIONS']),
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   inventoryController.adjustStock.bind(inventoryController)
 );
 

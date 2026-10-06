@@ -65,3 +65,15 @@ export async function prepareImageForUpload(file: File): Promise<File> {
     return file;
   }
 }
+
+/**
+ * The stored files a successful save left behind: each image the record had
+ * before (`before`) that it no longer uses (`after`). The uploader never
+ * deletes on Remove/Replace any more - the record still points at the old
+ * file until the form is saved, and a cancelled or failed save must leave it
+ * intact - so the form calls this only after its save succeeded.
+ */
+export function replacedImages(before: (string | null | undefined)[], after: (string | null | undefined)[]): string[] {
+  const kept = new Set(after.filter(Boolean));
+  return [...new Set(before.filter((url): url is string => Boolean(url) && !kept.has(url)))];
+}

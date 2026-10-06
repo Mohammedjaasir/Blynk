@@ -14,8 +14,8 @@ import { CustomerState } from './Stock';
 
 /**
  * One product's stock: the count, its customer state, tracking mode and the
- * most recent ledger entries. Adjusting and changing tracking mode are ADMIN
- * actions; staff see the same panel without them.
+ * most recent ledger entries. Admins and packing staff adjust stock (restock,
+ * write-off, count); changing tracking mode and the threshold stay ADMIN-only.
  */
 export function StockPanel({
   productId,
@@ -147,8 +147,12 @@ export function StockPanel({
                 </button>
               ) : null}
             </div>
-            {!can(user?.role, 'adjustStock') ? (
-              <p className="panel__note">Stock adjustments and tracking changes are made by a Blynk admin.</p>
+            {!can(user?.role, 'changeTrackingMode') ? (
+              <p className="panel__note">
+                {tracked
+                  ? 'Tracking changes are made by a Blynk admin.'
+                  : 'Not tracked. A Blynk admin can start tracking it so restocks, write-offs and counts can be recorded.'}
+              </p>
             ) : !tracked ? (
               <p className="panel__note">Start tracking to record restocks, write-offs and counts.</p>
             ) : null}

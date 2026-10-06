@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { deleteImagesQuietly } from '../../api/client';
 import { catalog } from '../../api/resources';
 import type { Category, Promotion } from '../../api/types';
 import {
@@ -11,7 +12,8 @@ import { ImageUploader } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { PromotionPreview } from '../../components/PromotionPreview';
 import { Badge, ConfirmDialog, EmptyState, Field, Spinner } from '../../components/ui';
-import { catalogErrorMessage } from '../../lib/catalog';
+import { MAX_PROMOTION_ORDER, catalogErrorMessage, parseDisplayOrder, planReorder } from '../../lib/catalog';
+import { replacedImages } from '../../lib/image';
 
 /**
  * Home promotions: the carousel at the top of the customer app (task F5,
@@ -54,18 +56,15 @@ export function Promotions() {
     }
   }
 
-  /** Swaps display_order with the neighbour, then persists both. */
+  /** Swaps display_order with the neighbour (renumbering 10, 20, 30... when
+   * the two are equal, so the move always shows), then persists in one call. */
   async function move(promotion: Promotion, direction: -1 | 1) {
     if (!rows) return;
-    const index = rows.findIndex((row) => row.id === promotion.id);
-    const neighbour = rows[index + direction];
-    if (!neighbour) return;
+    const items = planReorder(rows, promotion.id, direction);
+    if (items.length === 0) return;
 
     try {
-      await catalog.promotions.reorder([
-        { id: promotion.id, display_order: neighbour.display_order },
-        { id: neighbour.id, display_order: promotion.display_order },
-      ]);
+      await catalog.promotions.reorder(items);
       await load();
     } catch (err) {
       setNotice(catalogErrorMessage(err));
@@ -295,6 +294,7 @@ function PromotionDialog({
   const [isActive, setIsActive] = useState(promotion?.is_active ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   const isArtwork = background.background_type === 'ARTWORK';
 
@@ -319,6 +319,14 @@ function PromotionDialog({
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setOrderError(null);
+
+    // Checked here so the operator sees which field is wrong, not the API's 400.
+    const order = parseDisplayOrder(displayOrder, MAX_PROMOTION_ORDER);
+    if ('error' in order) {
+      setOrderError(order.error);
+      return;
+    }
 
     if (title.trim().length < 2) {
       setError('Title must be at least 2 characters.');
@@ -364,7 +372,7 @@ function PromotionDialog({
       cta_label: ctaLabel.trim() || null,
       cta_destination_type: destinationType || null,
       cta_destination_value: destinationType === 'CATEGORY' || destinationType === 'PRODUCT' ? destinationValue.trim() : null,
-      display_order: Number(displayOrder) || 0,
+      display_order: order.value,
       is_active: isActive,
     };
 
@@ -375,6 +383,13 @@ function PromotionDialog({
       } else {
         await catalog.promotions.create(payload);
       }
+      // Saved: only now are the replaced (or removed) files safe to delete.
+      void deleteImagesQuietly(
+        replacedImages(
+          [promotion?.image_url, promotion?.background_image_url],
+          [payload.image_url as string | null, payload.background_image_url as string | null]
+        )
+      );
       await onSaved();
     } catch (err) {
       setError(catalogErrorMessage(err));
@@ -497,8 +512,17 @@ function PromotionDialog({
         <section className="editor__section">
           <h3 className="editor__legend">Settings</h3>
           <div className="form__row">
-            <Field label="Display order" hint="Lower numbers appear first">
-              <input className="input" inputMode="numeric" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />
+            <Field label="Display order" hint="Lower numbers appear first (0-1000)" error={orderError ?? undefined}>
+              <input
+                className="input"
+                inputMode="numeric"
+                value={displayOrder}
+                aria-invalid={orderError ? true : undefined}
+                onChange={(e) => {
+                  setDisplayOrder(e.target.value);
+                  setOrderError(null);
+                }}
+              />
             </Field>
             <label className="toggle">
               <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />

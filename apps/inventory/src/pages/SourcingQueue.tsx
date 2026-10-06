@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import { mapLimit } from '../lib/concurrency';
+import { useAutoRefresh } from '../lib/autoRefresh';
 import { sourcingApi, stockApi, suppliersApi } from '../api/resources';
+import { ApiError } from '../api/client';
 import type { OrderSourcing, QueueOrder, SourcingItem, StockRow } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { can } from '../auth/can';
@@ -15,14 +18,37 @@ export interface QueueEntry {
   sourcing: OrderSourcing;
 }
 
-/** Open orders with items still to source, oldest first (first in, first out). */
-export async function loadQueue(): Promise<QueueEntry[]> {
-  const orders = await sourcingApi.openOrders();
-  const details = await Promise.all(orders.map((o) => sourcingApi.detail(o.id)));
-  return orders
+export interface QueueData {
+  entries: QueueEntry[];
+  /** Open orders the backend has that this load did not read (beyond one page). */
+  notLoaded: number;
+}
+
+/** Detail requests in flight at once while loading the queue. */
+export const QUEUE_DETAIL_CONCURRENCY = 5;
+/** How often the queue refreshes itself while the page is visible. */
+export const QUEUE_REFRESH_MS = 30_000;
+
+/**
+ * Nothing left to buy and at least one item to put in the bag: every item is
+ * sourced or unavailable, so the order can be packed.
+ */
+export const isReadyToPack = (sourcing: OrderSourcing) =>
+  sourcing.metrics.pending_items === 0 && sourcing.items.some((i) => i.item_status === 'SOURCED');
+
+/**
+ * Open orders with items still to source, oldest first (first in, first
+ * out), followed in the same order by those ready to pack. Details are read a
+ * few at a time, never one request per order all at once.
+ */
+export async function loadQueue(): Promise<QueueData> {
+  const { orders, total } = await sourcingApi.openOrders();
+  const details = await mapLimit(orders, QUEUE_DETAIL_CONCURRENCY, (o) => sourcingApi.detail(o.id));
+  const entries = orders
     .map((order, i) => ({ order, sourcing: details[i] }))
-    .filter((entry) => entry.sourcing.metrics.pending_items > 0)
+    .filter((entry) => entry.sourcing.metrics.pending_items > 0 || isReadyToPack(entry.sourcing))
     .sort((a, b) => a.order.placed_at.localeCompare(b.order.placed_at) || a.order.id.localeCompare(b.order.id));
+  return { entries, notLoaded: Math.max(0, total - orders.length) };
 }
 
 const ITEM_TONE: Record<SourcingItem['item_status'], Tone> = {
@@ -42,20 +68,53 @@ export function SourcingQueue() {
   const { user } = useAuth();
   const toast = useToast();
   const queue = useLoad(loadQueue, []);
-  const stock = useLoad(() => stockApi.list({ include_inactive: true, limit: 100 }), []);
+  const stock = useLoad(() => stockApi.listAll({ include_inactive: true }), []);
   const suppliers = useLoad(() => suppliersApi.list(true), []);
   const [sourcing, setSourcing] = useState<{ order: QueueOrder; item: SourcingItem } | null>(null);
   const [unavailable, setUnavailable] = useState<{ order: QueueOrder; item: SourcingItem } | null>(null);
   const [unavailableBusy, setUnavailableBusy] = useState(false);
   const [unavailableError, setUnavailableError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [packing, setPacking] = useState<QueueEntry | null>(null);
+  const [packBusy, setPackBusy] = useState(false);
+  const [packError, setPackError] = useState<string | null>(null);
 
   const stockByProduct = new Map<string, StockRow>((stock.data?.inventory ?? []).map((r) => [r.product_id, r]));
-  const entries = queue.data ?? [];
+  const entries = queue.data?.entries ?? [];
+  const notLoaded = queue.data?.notLoaded ?? 0;
   const pendingItems = entries.reduce((sum, e) => sum + e.sourcing.metrics.pending_items, 0);
+  const toSource = entries.filter((e) => e.sourcing.metrics.pending_items > 0).length;
+  const readyToPack = entries.length - toSource;
 
   async function refresh() {
     await Promise.all([queue.reload(), stock.reload()]);
+  }
+
+  // Others source and pack at the same time; keep the list current without
+  // a manual Refresh. Paused while a dialog is open so nothing shifts under it.
+  useAutoRefresh(() => void refresh(), QUEUE_REFRESH_MS, Boolean(sourcing || unavailable || packing));
+
+  async function confirmPacked() {
+    if (!packing) return;
+    setPackBusy(true);
+    setPackError(null);
+    try {
+      await sourcingApi.markPacked(packing.order.id);
+      toast.success(`${packing.order.order_number} marked packed.`);
+      setPacking(null);
+      await refresh();
+    } catch (err) {
+      // Stale order: someone packed or cancelled it first. Explain, refresh.
+      if (err instanceof ApiError && (err.status === 409 || err.status === 422)) {
+        setBanner(`${packing.order.order_number}: ${errorMessage(err)}`);
+        setPacking(null);
+        await refresh();
+        return;
+      }
+      setPackError(errorMessage(err, 'The order was not marked packed.'));
+    } finally {
+      setPackBusy(false);
+    }
   }
 
   async function confirmUnavailable() {
@@ -94,7 +153,7 @@ export function SourcingQueue() {
         description={
           queue.data
             ? entries.length
-              ? `${entries.length} ${entries.length === 1 ? 'order' : 'orders'} · ${pendingItems} ${pendingItems === 1 ? 'item' : 'items'} to source, oldest first.`
+              ? `${toSource} ${toSource === 1 ? 'order' : 'orders'} · ${pendingItems} ${pendingItems === 1 ? 'item' : 'items'} to source, oldest first.${readyToPack ? ` ${readyToPack} ready to pack.` : ''}`
               : 'Nothing waiting.'
             : 'Open orders with items still to buy, oldest first.'
         }
@@ -111,6 +170,14 @@ export function SourcingQueue() {
           <button type="button" className="button button--ghost button--sm" onClick={() => setBanner(null)}>
             Dismiss
           </button>
+        </div>
+      ) : null}
+      {notLoaded > 0 ? (
+        <div className="notice notice--warn" role="status">
+          <span>
+            Not every open order is shown: {notLoaded} more {notLoaded === 1 ? 'order was' : 'orders were'} not
+            loaded. Work through these, then refresh.
+          </span>
         </div>
       ) : null}
       {queue.error ? <LoadError error={queue.error} onRetry={() => void queue.reload()} /> : null}
@@ -150,8 +217,19 @@ export function SourcingQueue() {
                       </Status>
                       <span className="order-group__placed">Placed {formatDateTime(order.placed_at)}</span>
                       <span className="order-group__progress">
-                        {detail.metrics.pending_items} of {detail.metrics.total_items} to source
+                        {isReadyToPack(detail)
+                          ? 'Ready to pack'
+                          : `${detail.metrics.pending_items} of ${detail.metrics.total_items} to source`}
                       </span>
+                      {isReadyToPack(detail) && can(user?.role, 'markPacked') ? (
+                        <button
+                          type="button"
+                          className="button button--sm"
+                          onClick={() => setPacking({ order, sourcing: detail })}
+                        >
+                          Mark packed
+                        </button>
+                      ) : null}
                     </div>
                   </th>
                 </tr>
@@ -238,6 +316,35 @@ export function SourcingQueue() {
             setSourcing(null);
           }}
         />
+      ) : null}
+
+      {packing ? (
+        <ConfirmDialog
+          title="Mark order packed"
+          confirmLabel="Mark packed"
+          busy={packBusy}
+          error={packError}
+          onConfirm={() => void confirmPacked()}
+          onCancel={() => {
+            setPacking(null);
+            setPackError(null);
+          }}
+        >
+          <p>
+            Order <span className="mono">{packing.order.order_number}</span> is packed with:
+          </p>
+          <ul className="consequences" aria-label="Packing list">
+            {packing.sourcing.items
+              .filter((i) => i.item_status === 'SOURCED')
+              .map((i) => (
+                <li key={i.id}>
+                  <span className="mono">{i.quantity} ×</span> {i.product_name_snapshot}{' '}
+                  <span className="cell__muted">({i.unit_snapshot})</span>
+                </li>
+              ))}
+          </ul>
+          <p>The order leaves the sourcing queue and is ready for delivery.</p>
+        </ConfirmDialog>
       ) : null}
 
       {unavailable ? (

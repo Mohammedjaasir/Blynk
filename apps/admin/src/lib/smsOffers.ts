@@ -1,3 +1,4 @@
+import { errorMessage } from './apiErrors';
 import { ApiError } from '../api/client';
 import type { SmsLanguage, SmsOfferAudience, SmsOfferInput } from '../api/types';
 
@@ -117,5 +118,5 @@ export function smsOfferErrorMessage(err: unknown, fallback: string): string {
         return err.message;
     }
   }
-  return err instanceof Error ? err.message : fallback;
+  return errorMessage(err, fallback);
 }

@@ -2,9 +2,8 @@
 
 Pre-launch test plan for every Blynk app: the customer app (APK and web at blynk.lk/app/), Operations, Admin, Inventory and Rider.
 
-- **Code:** `main` at `b7a8e29`. Items marked *Fixed* below are in this code; testers see them only after the backend, websites and APKs are redeployed and rebuilt.
-- **Prepared:** 6 Oct 2026
-- **Site:** https://blynk.lk · **Shop:** https://blynk.lk/app/
+- **Code:** `main` with the 6 Oct fixes. Testers see the fixes only after the backend, websites and APKs are redeployed and rebuilt (Setup S-01 to S-04).
+- **Prepared:** 6 Oct 2026 · **Site:** https://blynk.lk · **Shop:** https://blynk.lk/app/
 
 ## How to use this sheet
 
@@ -18,41 +17,47 @@ Pre-launch test plan for every Blynk app: the customer app (APK and web at blynk
 | Fail | Something differs; write what you saw |
 | Blocked | Could not run it (setup missing, earlier failure); say why |
 
-## Known issues from the code check
-
-Every app was checked against the backend on 6 Oct: all of them call the right endpoints with the right fields and permissions. These are behaviour problems.
+## Still open
 
 | Severity | App | Issue | What testers will see |
 |---|---|---|---|
-| Fixed (needs redeploy) | Operations | Inventory → Stock list asked for 200 rows; the server allows 100 | Stock screen showed "Could not load stock". Now loads every product, 100 at a time. |
-| Fixed (needs redeploy) | Operations | Ledger product filter used the same 200-row request | The product dropdown was always empty. Now filled. |
-| Fixed (needs redeploy) | Admin | Coupon on/off switch sent the coupon type without its value | Switching a fixed or percentage coupon failed with "Request validation failed". Now works. |
-| Fixed (needs redeploy) | Admin, Ops, Inventory, Rider | Sign-out did not end the session on the server | After signing out, the login stayed valid for up to 30 days. Now revoked on sign-out. |
-| Fixed (needs redeploy) | Rider | Sign-out did not stop location sharing | "Sharing your location" stayed on after sign-out. Now stops. |
-| High | Customer | No duplicate protection on Place order | If Place order times out and the customer taps it again, two orders can be created. |
-| High | Inventory | Sourcing part of a line closes the whole line | Sourcing 1 of 3 marks the item done; the customer is still charged for 3. |
-| High | Customer web | Live updates do not stream in the web app | No live rider marker at blynk.lk/app/; status still refreshes every 20 s. The APK is fine. |
-| High | Rider, Ops | APKs must be rebuilt before testing | The installed Rider APK (2 Oct) lacks "Navigate in Google Maps" and the second phone number. |
-| High | Operations | APK build can point at localhost | A plain build uses .env.local (localhost). Build with VITE_API_BASE_URL set to the live API. |
-| Medium | Customer | Addresses outside 4 km can be saved | The customer only learns at Place order: "We don’t deliver there yet". |
-| Medium | Customer | Editing an address drops address line 2 | Older addresses lose their second line when edited. |
-| Medium | Customer | Cart is not saved | Closing the app or refreshing the web app empties the cart. |
-| Medium | Rider | Opening the app with no signal signs the rider out | Rider must sign in again after opening offline. |
-| Medium | Operations | A network blip during token refresh signs the operator out | Operator is sent back to sign-in on a weak connection. |
-| Medium | Admin, Ops | Lists stop at 100 or 200 rows with no warning | Live orders, products, stock lookups and counts quietly stop at the limit. |
-| Medium | Admin, Ops | Removing an image deletes the file before saving | Cancel after Remove leaves a broken image. |
-| Medium | Admin | Markup of 1000% and very large costs give a server error | Error instead of a form message. |
-| Medium | Admin | ARTWORK promotions cannot be edited | Saving one fails; preview cannot draw it. |
-| Medium | Admin | Admin cannot mark items unavailable; Mark delivered is always an override | Use Ops/Inventory for unavailable items. History shows "override" even with the code. |
-| Medium | Admin, Ops | Images over 2 MB give a server error | Error instead of "too large". |
-| Medium | Operations | Dental blocked dates show the day before | A blocked 25 Dec shows as 24 Dec. |
-| Medium | Rider, Ops | Location sending ignores some refusals | If the phone clock is ahead or accuracy is 0, points are refused but the app says "network" and keeps retrying. |
-| Low | Admin, Ops | Promotion up/down arrows do nothing when two have the same order | Reorder appears to succeed but nothing moves. |
-| Low | Landing | Says "Pay by cash or card" | Only cash on delivery exists today. |
-| Low | All staff apps | Signing in by SMS with an unknown number creates a customer account | A stray customer appears in Admin → Customers. |
-| Low | Customer | No account deletion in the app | Needed before Google Play. |
-| Low | Inventory | Packing staff cannot pack orders or receive stock | Only Operations/Admin can. Confirm this is intended. |
-| Low | SMS offers | "Opted out" count is store-wide; estimate includes invalid numbers | Estimate can be slightly higher than what is sent. |
+| High | All APKs | APKs must be rebuilt and reinstalled before testing | Old installs miss every fix above (see S-04). |
+| Medium | Rider | Android 13+ is not asked for notification permission | The "Sharing your location" notification may be hidden on newer phones; sharing itself works. |
+| Low | Admin | Orders board list still says "Substitution needs a cost" when a cost exists | Open the order: Pack works from the order panel. |
+| Low | Admin | Cash: a disabled rider without a staff account cannot be picked for a hand-in | Rare; record it if seen. |
+| Low | Admin, Ops, Inventory | Live order boards load the first 100 orders per view | A "Showing 100 of N" notice appears when there are more. |
+| Low | Customer | Address line 2 cannot be cleared from the edit form | Line 2 is kept when editing. |
+
+## Fixed on 6 Oct (check these specially)
+
+Found by checking every app against the backend. All apps call the right endpoints with the right fields and permissions; these were behaviour problems.
+
+| App | Was | Now |
+|---|---|---|
+| Operations | Inventory → Stock list and Ledger product filter asked for more rows than the server allows | Both load fully now. |
+| Admin | Coupon on/off switch failed for fixed and percentage coupons | Switch works for every type. |
+| Admin, Ops, Inventory, Rider | Sign-out did not end the session on the server | Session is revoked on sign-out. |
+| Customer | Duplicate orders when Place order was retried | A retry reuses the same order reference; the server returns the first order. |
+| Inventory | Sourcing part of a line closed the whole line | No quantity box: source the full quantity or mark the item unavailable. |
+| Customer web | Live rider map and live catalog did not stream in the web app | Both stream at blynk.lk/app/. |
+| Customer | Addresses outside 4 km could be saved | Refused when saving with "We don’t deliver to this address yet". |
+| Customer | Editing an address dropped line 2 | Line 2 is kept. |
+| Customer | Cart was lost on restart or web reload | Cart is kept until the order is placed or the customer logs out. |
+| Customer | No account deletion | Profile → Delete account (orders kept for the store’s records). |
+| Rider, Ops, Admin | Weak connection or opening offline signed staff out | Session kept; a "Try again" notice instead. |
+| Rider, Ops | Location sending ignored refusals; accuracy 0 and fast phone clocks were rejected | Server accepts them; app stops with the real reason on a refusal. |
+| Rider | Sharing stopped for other trip stops after one arrival; buttons could hang on "Saving…" | Sharing moves to the next stop; requests time out after 15 s. |
+| Ops, Rider, Inventory | APK/website build could point at localhost | Production build fails without a proper https API address. |
+| All staff apps | SMS sign-in with an unknown number created a customer account | Shows "No Blynk account uses this number" instead. |
+| Admin, Ops | Remove image deleted the file before saving; images over 2 MB gave a server error | File removed only after saving; clear 2 MB message. |
+| Admin | ARTWORK promotions could not be edited; markup 1000% gave a server error | Both fixed; limits shown next to the fields. |
+| Admin | No Mark unavailable; Mark delivered always recorded as override | Mark unavailable added; Mark delivered takes the customer’s code. |
+| Admin, Ops | Promotion reorder sometimes did nothing; lists capped silently | Reorder always moves; lists say "Showing X of N" or load everything. |
+| Admin | Sinhala/Tamil category or product names clashed | Each gets its own web address automatically. |
+| Operations | Dental blocked dates showed the day before | Correct date shown. |
+| Landing | Said "Pay by cash or card" | Says cash on delivery. |
+| Inventory | Packing staff could not pack or receive stock (owner decision: allow) | Packing staff can restock, write off, audit and Mark packed. |
+| SMS offers | Estimate and opted-out count could differ from what is sent | Counts match the chosen audience; test sends limited to 8 AM–9 PM and 5 per hour. |
 
 ## Setup before testing
 
@@ -63,7 +68,7 @@ Do these once. Mark each Pass when done so testers know the environment is ready
 | S-01 | P1 | Backend settings in Coolify | 1. Backend app → Environment Variables.<br>2. CORS_ORIGINS includes https://blynk.lk, the Admin and Inventory site addresses, and https://localhost (Android builds of Ops, Admin, Inventory).<br>3. SMS_PROVIDER=sbs, SMS_API_KEY, SMS_API_SECRET (secret), SMS_SENDER_ID = the approved sender.<br>4. SMS_OFFER_LANGUAGES=en. FIREBASE_SERVICE_ACCOUNT_JSON set for push.<br>5. Redeploy backend (and worker if separate). | Deploy log shows migrations up to 027 applied; /health is OK; log says push enabled. | | |
 | S-02 | P1 | Delivery centre on the Clock Tower | 1. Database terminal: psql -U postgres -d postgres.<br>2. Run the two UPDATE lines for 6.441313, 80.011437.<br>3. SELECT code, latitude, longitude FROM dark_stores; | DHARGA-01 shows 6.441313 | 80.011437. | | |
 | S-03 | P1 | Websites redeployed | 1. Landing site: build args API_BASE_URL (ends in /api/v1) and SHARE_BASE_URL=https://blynk.lk; Domains = https://blynk.lk; redeploy.<br>2. Redeploy Admin and Inventory sites. | blynk.lk shows "Install Blynk"; blynk.lk/app/ loads the shop; Admin and Inventory open their sign-in. | | |
-| S-04 | P1 | APKs rebuilt and installed | 1. Customer APK: API_BASE_URL, SHARE_BASE_URL=https://blynk.lk, APP_LINK_HOST=blynk.lk, google-services.json present.<br>2. Operations and Rider APKs: set VITE_API_BASE_URL to the live API in the shell before building (Ops .env.local points at localhost).<br>3. Raise versionCode; install on test phones. | Each app opens and signs in against the live API. Rider delivery screen shows "Navigate in Google Maps". | | |
+| S-04 | P1 | APKs rebuilt and installed | 1. Customer APK: API_BASE_URL, SHARE_BASE_URL=https://blynk.lk, APP_LINK_HOST=blynk.lk, google-services.json present.<br>2. Operations and Rider APKs: set VITE_API_BASE_URL to the live https API before building (the build now refuses localhost or a missing address).<br>3. Raise versionCode; uninstall old builds; install on test phones. | Each app opens and signs in against the live API ("We couldn’t reach Blynk" on login means a test build pointing at a PC). Rider delivery screen shows "Navigate in Google Maps". | | |
 | S-05 | P1 | Test accounts and phones | 1. Admin creates: 1 Operations, 1 Inventory, 2 Riders (with vehicle).<br>2. Have 3 customer phones on different networks: Dialog, SLT-Mobitel, Hutch or Airtel.<br>3. Note the Admin account phone (needed for "Send test to my phone"). | Every account signs in to its own app. | | |
 | S-06 | P2 | Test catalog data | 1. A category with 2 sub-categories; a category group on Home.<br>2. 5+ products: some tracked with stock, some untracked; one tracked with 0 stock.<br>3. One coupon each: FIXED, PERCENT, FREE_DELIVERY.<br>4. One active promotion. | Customer Home shows the group, promotion and products. | | |
 
@@ -87,6 +92,7 @@ These check that the apps talk to each other. Run them with real devices side by
 | E2E-12 | P2 | Back-in-stock alert | 1. Tracked product at 0 stock: customer taps Notify me (APK).<br>2. Admin/Inventory restocks it. | Customer receives a push that the product is back. | | |
 | E2E-13 | P1 | SMS offer and opt-out | 1. Customer 1 turns Profile → SMS & offers → Offers by SMS off.<br>2. Admin → SMS offers: Send test to my phone; then send to All customers.<br>3. Ops → More → SMS offers: check history. | Test SMS arrives on the Admin phone with the stop line. Customer 1 gets nothing; others get the English offer. History shows the send with counts. | | |
 | E2E-14 | P1 | Staff accounts and access | 1. Admin creates Ops, Inventory and Rider accounts.<br>2. Each signs in to its own app, then tries the other apps.<br>3. Admin disables one account; Admin resets another’s password. | Each account works only in its own app; others show a "wrong app" message. Disabled account is signed out within 15 minutes; old password stops working. | | |
+| E2E-17 | P2 | Unknown number on a staff app | 1. On Ops, Inventory, Rider and Admin, sign in by SMS with a number that has no account. | "No Blynk account uses this number"; no new customer appears in Admin → Customers. | | |
 | E2E-15 | P1 | Sign-out ends the session | 1. Sign out of Admin, Ops, Inventory and Rider.<br>2. Use the browser Back button / reopen the app. | Every app shows sign-in; nothing from the old session loads. | | |
 | E2E-16 | P2 | Dental booking | 1. Ops sets up a clinic, doctor and weekly availability.<br>2. Customer books a slot, then cancels another booking.<br>3. Ops → Dental → Appointments. | Booking appears in Ops; cancelled one shows cancelled; customer gets confirmation messages. | | |
 
@@ -105,12 +111,12 @@ Android phone with the new customer APK.
 | C-07 | P2 | Product page and share link | 1. Open a product; Share. | Shared text includes https://blynk.lk/p/<id>. | | |
 | C-08 | P2 | Opening a share link | 1. Open the link on a phone with the app installed, then on one without. | Opens in the app; otherwise opens the product in the web shop. | | |
 | C-09 | P1 | Address with current location | 1. Add an address; tap Use my current location. | Location is required to save; pin is close to your real position. | | |
-| C-10 | P1 | Outside 4 km | 1. Save an address more than 4 km from the Clock Tower; try to order. | Order refused: "We don’t deliver there yet" (saving the address is allowed: known issue). | | |
+| C-10 | P1 | Outside 4 km | 1. Try to save an address more than 4 km from the Clock Tower. | Not saved: "We don’t deliver to this address yet". | | |
 | C-11 | P1 | Ordering hours | 1. Open the cart before 8 AM or after 9 PM.<br>2. Leave the cart open across 8:00 AM. | Note "We’re closed now. Orders open at 8 AM"; Place order greyed out; turns on by itself at 8:00. | | |
 | C-12 | P2 | Phone clock wrong | 1. Set the phone clock to midday while it is really night; try to order. | Server refuses: "We’re closed right now. We take orders 8 AM – 9 PM." | | |
 | C-13 | P1 | Coupons at checkout | 1. Apply a valid, an invalid, an expired and a below-minimum coupon. | Valid one discounts the bill; others show a clear reason. | | |
 | C-14 | P1 | Place order | 1. Place an order. | Confirmation shows the server’s total and cash on delivery. | | |
-| C-15 | P1 | Slow network on Place order | 1. Turn on a very slow connection; tap Place order once and wait. | Message "Check Orders before trying again". Check Orders: exactly one order (known risk of duplicates if tapped again). | | |
+| C-15 | P1 | No duplicate orders | 1. Very slow connection; tap Place order; when it times out tap Place order again.<br>2. Double-tap Place order on a normal connection. | Orders shows exactly one order each time. | | |
 | C-16 | P2 | Order history and Order again | 1. Open Orders; open one; Order again. | Details and bill are correct; items are added to the cart. | | |
 | C-17 | P1 | Live tracking and delivery code | 1. During E2E-01, watch the order screen. | Map shows the rider moving; 4-digit code visible only while on the way. | | |
 | C-18 | P1 | Push notifications | 1. Go through packed, on the way, delivered and cancelled. | A push for each; tapping opens the order. | | |
@@ -119,7 +125,10 @@ Android phone with the new customer APK.
 | C-21 | P2 | Help | 1. Open Help. | Says orders and delivery 8 AM – 9 PM, 4 km area; never quotes a fee amount. | | |
 | C-22 | P2 | Offline | 1. Airplane mode; open the app; browse. | Offline banner; no crash; recovers when back online. | | |
 | C-23 | P2 | Large text | 1. Phone font size to largest; browse cart and checkout. | Nothing cut off or overlapping. | | |
-| C-24 | P2 | Logout | 1. Log out, log back in. | Clean sign-in; orders and addresses still there. | | |
+| C-24 | P2 | Logout | 1. Log out, log back in. | Clean sign-in; orders and addresses still there; cart is empty after logout. | | |
+| C-25 | P1 | Cart kept | 1. Add items; close the app fully; reopen.<br>2. Same in the web app with a page reload. | Cart still has the items and quantities. | | |
+| C-26 | P1 | Delete account | 1. With an open order: Profile → Delete account.<br>2. After the order is delivered: Delete account again.<br>3. Log in again with the same number. | First attempt refused: finish or cancel open orders. Second deletes and returns to login. The number can sign up as a new account. | | |
+| C-27 | P2 | Edit an address with two lines | 1. Edit an older address that has a second line; change the name; save. | Second line is still there. | | |
 
 ## Landing site and web app
 
@@ -131,8 +140,8 @@ Android Chrome, iPhone Safari and a desktop browser.
 | W-02 | P1 | Install on iPhone | 1. blynk.lk in Safari → Install Blynk. | Steps: Share → Add to Home Screen; icon opens the shop full screen. | | |
 | W-03 | P1 | Shop in the browser | 1. Shop in your browser → log in with OTP → place an order. | Works end to end (if login or products fail, CORS is wrong: see S-01). | | |
 | W-04 | P1 | Maps in the web app | 1. Add an address with the map picker. | Streets of Dharga Town draw; pin can be moved. | | |
-| W-05 | P2 | Order tracking on the web | 1. Track an order that is on the way. | Status updates (no live rider marker: known issue). | | |
-| W-06 | P2 | Landing content | 1. Read the page top to bottom. | Hours 8–9, "Order every day", no fee amount, no APK link. ("Cash or card" wording: known issue.) | | |
+| W-05 | P1 | Live tracking on the web | 1. Track an order that is on the way at blynk.lk/app/. | Rider marker moves on the map, as in the APK. | | |
+| W-06 | P2 | Landing content | 1. Read the page top to bottom. | Hours 8–9, "Order every day", no fee amount, no APK link, payment shown as cash on delivery. | | |
 | W-07 | P2 | Share link redirect | 1. Open https://blynk.lk/p/<product id> in a browser. | Opens that product in the web shop. | | |
 
 ## Operations app
@@ -154,13 +163,15 @@ Operations account on the new Ops APK (and once in a browser).
 | O-11 | P1 | Products | 1. Create, edit (with image), hide, delete; try a duplicate SKU. | Changes show in the customer app; duplicate SKU refused clearly. | | |
 | O-12 | P2 | Product import | 1. Import an .xlsx: dry run, then import. | Preview lists created/updated/errors; only valid rows import. | | |
 | O-13 | P2 | Categories and groups | 1. Create a sub-category; reorder Home groups; delete a category with products (move them). | Customer Home follows the new order; products moved. | | |
-| O-14 | P2 | Promotions | 1. Create, edit, hide, reorder. | Customer carousel updates (reorder may not move: known issue). | | |
+| O-14 | P2 | Promotions | 1. Create, edit, hide, reorder; remove an image then Cancel. | Customer carousel updates; reorder always moves; the image is still there after Cancel. | | |
 | O-15 | P1 | Cash | 1. Record a hand-in for a rider; check reconciliation. | Collected vs handed in correct; Delete not offered to Operations. | | |
 | O-16 | P1 | Deliver myself: background location | 1. During a delivery, lock the screen 10 minutes. | Customer map keeps updating; notification shows sharing. | | |
 | O-17 | P1 | Staff accounts | 1. Create an Inventory and a Rider account; try to create an Admin. | Ops can create Inventory and Rider only. | | |
 | O-18 | P1 | Delivery fee | 1. More → Delivery fee: change it. | New orders use it. | | |
 | O-19 | P1 | SMS offers | 1. More → SMS offers: write an English offer, estimate, test send, send; try after 9 PM. | One English box; counts and SMS parts shown; after 9 PM refused "8 AM to 9 PM only". | | |
-| O-20 | P2 | Dental admin | 1. Clinics, doctors, availability, block 25 Dec. | All save (blocked date may show 24 Dec: known issue). | | |
+| O-20 | P2 | Dental admin | 1. Clinics, doctors, availability, block 25 Dec. | All save; the blocked date shows 25 Dec. | | |
+| O-22 | P1 | Weak connection | 1. Use the app on very weak signal for 20 minutes during a self-delivery. | Stays signed in; location keeps sharing or says why it stopped. | | |
+| O-23 | P2 | Far trip confirmation | 1. Assign a far-away order to a rider who already has one. | "Add to trip anyway" appears and works. | | |
 | O-21 | P1 | Sign-out | 1. Sign out during a self-delivery. | Location sharing stops; sign-in screen shown. | | |
 
 ## Admin website
@@ -172,11 +183,12 @@ Admin account in a desktop browser.
 | A-01 | P1 | Sign-in and lockout | 1. 5 wrong passwords; then a non-admin account. | Locked for 15 minutes with a clear message; non-admin refused. | | |
 | A-02 | P2 | Dashboard | 1. Open Dashboard. | Counts of products, categories, promotions load. | | |
 | A-03 | P1 | Orders | 1. Open the board and an order; Pack, assign, cancel. | Same rules as Ops; bill and history correct. | | |
-| A-04 | P1 | Product form validation | 1. Markup 999, then 1000; cost blank. | 999 saves; 1000 gives an error (known issue); blank cost saves as 0. | | |
+| A-04 | P1 | Product form validation | 1. Markup 999.99, then 1000; a huge cost. | 999.99 saves; 1000 and the huge cost show a message next to the field. | | |
 | A-05 | P2 | Product import | 1. Import a file with a duplicate SKU and a missing category. | Those rows are listed as errors; others import. | | |
-| A-06 | P2 | Categories with Sinhala/Tamil names | 1. Create two categories with Sinhala names. | Second may be refused as "taken" (known issue). | | |
+| A-06 | P2 | Sinhala/Tamil names | 1. Create two categories and two products with Sinhala or Tamil names. | All save. | | |
 | A-07 | P2 | Category groups | 1. Create, rename, reorder, delete. | Customer Home follows. | | |
-| A-08 | P2 | Promotions and images | 1. Create with an image over 2 MB; remove an image then Cancel. | Large image gives an error (known); removed image may break (known). | | |
+| A-08 | P2 | Promotions and images | 1. Upload an image over 2 MB; remove an image then Cancel; edit an ARTWORK promotion. | Clear 2 MB message; image still there after Cancel; ARTWORK saves. | | |
+| A-18 | P1 | Mark unavailable and deliver with code | 1. On a placed order, Mark unavailable on one item.<br>2. On an order on the way, Mark delivered with the customer’s code. | Total recalculated; history shows the code was used (not an override). | | |
 | A-09 | P1 | Coupons (fixed switch) | 1. Create FIXED, PERCENT, FREE_DELIVERY; switch each off and on; delete a used one. | Switch works for all three; used coupon cannot be deleted. | | |
 | A-10 | P1 | Customers | 1. Search by phone; open one; download Excel. | Shows SMS language and Offers On/Off; Excel has both columns and phones keep the +. | | |
 | A-11 | P1 | Staff accounts | 1. Create each role; Can deliver; disable; reset password; try editing yourself. | Rules enforced with clear messages. | | |
@@ -199,11 +211,12 @@ Inventory (packing staff) account, and once as Admin.
 | I-04 | P1 | Read-only for packing staff | 1. Open a product’s stock panel as Inventory, then as Admin. | Inventory cannot adjust; Admin can. | | |
 | I-05 | P2 | Running low and ledger | 1. Open Running low; ledger with filters and a bad date range. | Lists correct; bad range shows an error. | | |
 | I-06 | P1 | Source items | 1. Sourcing queue: source each item with cost and supplier. | Item marked sourced; tracked stock reduced. | | |
-| I-07 | P1 | Partial quantity | 1. Order of 3; source quantity 1. | Known issue: the whole line is marked done. Record what happens. | | |
+| I-07 | P1 | Full quantity only | 1. Source an item with quantity 3.<br>2. A tracked item with only 1 in stock. | Dialog shows "Sourcing all 3" with no quantity box; with short stock it offers Mark unavailable. | | |
 | I-08 | P1 | Mark unavailable | 1. Mark an item unavailable. | Order total recalculated (including coupon); customer informed. | | |
 | I-09 | P2 | Two people at once | 1. Two browsers source the same item. | Second sees "already sourced" and the queue refreshes. | | |
 | I-10 | P2 | Suppliers | 1. Add, edit, deactivate; duplicate code. | Duplicate refused; deactivated supplier gone from the sourcing list. | | |
 | I-11 | P1 | Sign-out | 1. Sign out. | Sign-in shown. | | |
+| I-12 | P1 | Packing staff: restock and pack | 1. As packing staff: restock a product, write off one, audit.<br>2. Source all items of an order; Mark packed. | Stock changes recorded; the order leaves the queue and shows Packed in Ops; tracking mode and suppliers stay read-only. | | |
 
 ## Rider app
 
@@ -224,9 +237,10 @@ Rider account on the new Rider APK, Android 13 or newer.
 | R-11 | P2 | Trip | 1. 2+ deliveries assigned. | Stops in road order with total cash. | | |
 | R-12 | P2 | My day | 1. Open My day. | Today and this week totals correct. | | |
 | R-13 | P1 | Sign-out stops sharing (fixed) | 1. Sign out while sharing. | Notification disappears; sharing stops. | | |
-| R-14 | P2 | Open with no signal | 1. Airplane mode; open the app. | Known issue: rider is signed out. Record what happens. | | |
+| R-14 | P1 | Open with no signal | 1. Airplane mode; open the app; then turn signal on. | Stays signed in with an offline notice; works again when online. | | |
+| R-15 | P1 | Trip: sharing moves on | 1. Trip with 2 stops on the road; mark the first arrived. | Customer 2 still sees the rider moving; app says sharing for your next stop. | | |
 
 ## Summary
 
-- Total cases: **116** (74 P1)
+- Total cases: **125** (82 P1)
 - Fill in: Pass ___ · Fail ___ · Blocked ___ · Not run ___

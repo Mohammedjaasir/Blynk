@@ -1,4 +1,4 @@
-import { apiRequest, tokenStore } from './client';
+import { apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
   AdjustmentType,
@@ -124,10 +124,13 @@ export const auth = {
       auth: false,
     }),
 
+  /** Staff only ever sign in to an EXISTING account: `create_account: false`
+   * stops the API from creating a customer account for an unknown number -
+   * it answers 404 ACCOUNT_NOT_FOUND instead. */
   verifyOtp: (phone: string, otp: string) =>
     apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/otp/verify', {
       method: 'POST',
-      body: { phone, otp },
+      body: { phone, otp, create_account: false },
       auth: false,
     }),
 
@@ -151,6 +154,27 @@ export const auth = {
 // the querystring instead of each wrapper hand-assembling one.
 const LIVE_STATUSES = 'PLACED,ITEM_UNAVAILABLE,PACKED,OUT_FOR_DELIVERY,FAILED,CUSTOMER_UNAVAILABLE';
 
+/** The API's page size for `GET /admin/orders` (it refuses more). */
+export const ORDER_PAGE_LIMIT = 100;
+
+/**
+ * One page of orders plus the API's `pagination.total` - the real count,
+ * which may be larger than the page (more than 100 matching orders). Counts
+ * shown to the operator use `total`; a list shows "Showing 100 of N". An API
+ * without pagination falls back to the page length.
+ */
+export interface OrderPage<T> {
+  orders: T[];
+  total: number;
+}
+
+function listOrders<T>(query: Query): Promise<OrderPage<T>> {
+  return apiRequest<{ orders: T[]; pagination?: Partial<Pagination> }>('/admin/orders', { query }).then((d) => ({
+    orders: d.orders,
+    total: Math.max(d.orders.length, Number(d.pagination?.total ?? d.orders.length) || 0),
+  }));
+}
+
 export const orders = {
   /**
    * Packing queue - `PLACED` (just placed) and `ITEM_UNAVAILABLE` (needs a
@@ -167,21 +191,12 @@ export const orders = {
    * by F6 - a structurally compatible superset (Home still only reads
    * `.length`), the same widening precedent F3 used for `riders.listActive()`.
    * The query itself is unchanged. */
-  needingPacking: () =>
-    apiRequest<{ orders: QueueOrder[] }>('/admin/orders', {
-      query: { status: 'PLACED,ITEM_UNAVAILABLE', limit: 100 },
-    }).then((d) => d.orders),
+  needingPacking: () => listOrders<QueueOrder>({ status: 'PLACED,ITEM_UNAVAILABLE', limit: ORDER_PAGE_LIMIT }),
 
   /** Packed, waiting for a rider to be assigned. */
-  readyForRider: () =>
-    apiRequest<{ orders: HomeOrder[] }>('/admin/orders', {
-      query: { status: 'PACKED', limit: 100 },
-    }).then((d) => d.orders),
+  readyForRider: () => listOrders<HomeOrder>({ status: 'PACKED', limit: ORDER_PAGE_LIMIT }),
 
-  onTheRoad: () =>
-    apiRequest<{ orders: HomeOrder[] }>('/admin/orders', {
-      query: { status: 'OUT_FOR_DELIVERY', limit: 100 },
-    }).then((d) => d.orders),
+  onTheRoad: () => listOrders<HomeOrder>({ status: 'OUT_FOR_DELIVERY', limit: ORDER_PAGE_LIMIT }),
 
   /** `since` is the moment to count from (Home passes the start of today,
    * Asia/Colombo) - the same `since` semantics as Admin's `closedSince()`,
@@ -189,24 +204,17 @@ export const orders = {
    * `closedSince` also includes `CANCELLED`; Home's "Completed today" figure
    * deliberately does not). */
   completedToday: (since: Date) =>
-    apiRequest<{ orders: HomeOrder[] }>('/admin/orders', {
-      query: { status: 'DELIVERED', since: since.toISOString(), limit: 100 },
-    }).then((d) => d.orders),
+    listOrders<HomeOrder>({ status: 'DELIVERED', since: since.toISOString(), limit: ORDER_PAGE_LIMIT }),
 
   /** The Orders board's own live query (task F3) - every status that still
    * needs staff attention, oldest first (mirrors Admin's `orders.live()`). */
-  live: () =>
-    apiRequest<{ orders: BoardOrder[] }>('/admin/orders', { query: { status: LIVE_STATUSES, limit: 100 } }).then(
-      (d) => d.orders
-    ),
+  live: () => listOrders<BoardOrder>({ status: LIVE_STATUSES, limit: ORDER_PAGE_LIMIT }),
 
   /** Orders closed since a given moment (mirrors Admin's `orders.closedSince()`
    * exactly, including `DELIVERED,CANCELLED` - unlike `completedToday` above,
    * which this task's brief for F2 scoped to `DELIVERED` only). */
   closedSince: (since: Date) =>
-    apiRequest<{ orders: BoardOrder[] }>('/admin/orders', {
-      query: { status: 'DELIVERED,CANCELLED', since: since.toISOString(), limit: 100 },
-    }).then((d) => d.orders),
+    listOrders<BoardOrder>({ status: 'DELIVERED,CANCELLED', since: since.toISOString(), limit: ORDER_PAGE_LIMIT }),
 
   /** One order's full detail - items, customer, rider, history. */
   detail: (id: string) => apiRequest<{ order: OrderDetail }>(`/admin/orders/${id}`).then((d) => d.order),
@@ -610,6 +618,11 @@ export const dental = {
 // named endpoint, kept available) since Admin's own resources.ts defines the
 // identical function and never calls it either - not wired into any screen,
 // documented rather than silently dropped.
+/** `GET /admin/products` serves at most 200 rows a page (catalog.service.ts). */
+export const PRODUCT_PAGE_LIMIT = 200;
+/** 25 pages = 5,000 products: far beyond today's catalog, still a bounded load. */
+export const PRODUCT_PAGE_CAP = 25;
+
 export const catalog = {
   categories: {
     list: (isActive?: boolean) =>
@@ -676,6 +689,31 @@ export const catalog = {
       apiRequest<{ products: AdminProduct[]; pagination: unknown }>('/admin/products', {
         query: { search: params.search, category_id: params.category_id, is_active: params.is_active, limit: params.limit ?? 200 },
       }).then((d) => d.products),
+
+    /**
+     * EVERY product matching the filters. `GET /admin/products` returns at
+     * most 200 rows a page and no total, so this reads page after page until
+     * one comes back short. Stops at PRODUCT_PAGE_CAP pages and says so
+     * (`capped`) rather than loading forever - the screen shows a notice.
+     */
+    listAll: async (
+      params: { search?: string; category_id?: string; is_active?: boolean } = {}
+    ): Promise<{ products: AdminProduct[]; capped: boolean }> => {
+      const products: AdminProduct[] = [];
+      const seen = new Set<string>();
+      for (let page = 1; page <= PRODUCT_PAGE_CAP; page++) {
+        const rows = await apiRequest<{ products: AdminProduct[] }>('/admin/products', {
+          query: { ...params, limit: PRODUCT_PAGE_LIMIT, page },
+        }).then((d) => d.products);
+        const fresh = rows.filter((p) => !seen.has(p.id));
+        for (const p of fresh) seen.add(p.id);
+        products.push(...fresh);
+        // A short page is the last one; a page of nothing new means the API
+        // ignored `page` - either way there is nothing more to read.
+        if (rows.length < PRODUCT_PAGE_LIMIT || fresh.length === 0) return { products, capped: false };
+      }
+      return { products, capped: true };
+    },
 
     getAdmin: (id: string) => apiRequest<{ product: AdminProduct }>(`/admin/products/${id}`).then((d) => d.product),
 

@@ -17,8 +17,9 @@ import '../../../Services/push/push_notifications.dart';
 
 /// The toast for a failed place-order. A timeout is worded as "we could not
 /// confirm" because the order may well have been placed: the customer is sent
-/// to Orders to check rather than told it failed (copy only - nothing here
-/// retries or de-duplicates).
+/// to Orders to check rather than told it failed. Trying again is safe:
+/// OrderProvider.placeOrder sends the same idempotency key for the same
+/// checkout, so the server answers a retry with the order it already made.
 String placeOrderFailureMessage(CustomerError failure) => failure.isTimeout
     ? "We couldn't confirm your order. Check Orders before trying again."
     : failure.message;

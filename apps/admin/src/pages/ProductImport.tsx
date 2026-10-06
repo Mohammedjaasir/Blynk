@@ -1,3 +1,4 @@
+import { errorMessage } from '../lib/apiErrors';
 import { useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { products as productsApi } from '../api/resources';
@@ -68,7 +69,7 @@ export function ProductImport() {
       try {
         setDryRun(await productsApi.importRows(valid.map((r) => r.data), true));
       } catch (err) {
-        setDryRunError(err instanceof Error ? err.message : 'Could not check the file against the store.');
+        setDryRunError(errorMessage(err, 'Could not check the file against the store.'));
       } finally {
         setChecking(false);
       }
@@ -93,7 +94,7 @@ export function ProductImport() {
         `Import finished: ${response.summary.created} added, ${response.summary.updated} updated.`
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'The import failed. Nothing was changed.');
+      toast.error(errorMessage(err, 'The import failed. Nothing was changed.'));
     } finally {
       setImporting(false);
     }

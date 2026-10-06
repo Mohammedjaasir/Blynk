@@ -207,6 +207,28 @@ describe('Stage 2 Authentication & OTP Module', () => {
       expect(verifyRes.body.data.user.role).toBe('CUSTOMER');
     });
 
+    it('create_account:false refuses an unknown number with 404 ACCOUNT_NOT_FOUND and creates nobody', async () => {
+      const phone = '0770000011';
+      const reqRes = await request(app).post('/api/v1/auth/otp/request').send({ phone });
+      const otp = reqRes.body.data.dev_otp;
+
+      const verifyRes = await request(app).post('/api/v1/auth/otp/verify').send({ phone, otp, create_account: false });
+      expect(verifyRes.status).toBe(404);
+      expect(verifyRes.body.error.code).toBe('ACCOUNT_NOT_FOUND');
+      expect(verifyRes.body.error.message).toBe('No Blynk account uses this number.');
+      const userRes = await pool.query("SELECT id FROM users WHERE phone = '+94770000011'");
+      expect(userRes.rows.length).toBe(0);
+    });
+
+    it('create_account:false still signs in an existing account', async () => {
+      const phone = '0775551122';
+      const reqRes = await request(app).post('/api/v1/auth/otp/request').send({ phone });
+      const otp = reqRes.body.data.dev_otp;
+      const verifyRes = await request(app).post('/api/v1/auth/otp/verify').send({ phone, otp, create_account: false });
+      expect(verifyRes.status).toBe(200);
+      expect(verifyRes.body.data.user.role).toBe('ADMIN');
+    });
+
     it('authenticates staff/admin users and preserves elevated roles', async () => {
       // +94775551122 is seeded ADMIN Nawaz Mansoor
       const phone = '0775551122';

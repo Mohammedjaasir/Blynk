@@ -78,8 +78,24 @@ export async function apiRequest<T>(
   // Access tokens last 15 minutes. On a 401, trade the refresh token for a
   // new pair once and retry - the backend still decides whether the
   // refreshed session is allowed to do this.
-  if (response.status === 401 && auth && tokenStore.refresh) {
-    if (await refreshSession()) response = await send(path, options, auth);
+  if (response.status === 401 && auth) {
+    const outcome = tokenStore.refresh ? await refreshSession() : 'refused';
+    if (outcome === 'ok') {
+      response = await send(path, options, auth);
+    } else if (outcome === 'refused') {
+      // The server said no: the session is over. Signed-in screens must not
+      // keep erroring, so the app goes back to sign-in (AuthContext).
+      tokenStore.clear();
+      notifySessionEnded();
+    } else {
+      // No answer (offline, timeout, 5xx): the session may still be good, so
+      // nothing is signed out - the request fails like any network failure.
+      throw new ApiError(
+        outcome === 'unreachable' ? 'Could not reach the Blynk API.' : 'Could not renew your session right now. Try again in a moment.',
+        outcome === 'unreachable' ? 0 : 503,
+        outcome === 'unreachable' ? 'NETWORK' : 'REFRESH_UNAVAILABLE'
+      );
+    }
   }
 
   const text = await response.text();
@@ -125,35 +141,76 @@ async function send(
   }
 }
 
-let refreshing: Promise<boolean> | null = null;
+/**
+ * How a refresh ended. Only `refused` (a 4xx from /auth/refresh: revoked,
+ * expired, replayed) ends the session; `unreachable` (no response, timeout)
+ * and `unavailable` (5xx) leave the tokens alone.
+ */
+export type RefreshOutcome = 'ok' | 'refused' | 'unreachable' | 'unavailable';
+
+/** A refresh that hangs this long counts as unreachable, never as refused. */
+export const REFRESH_TIMEOUT_MS = 15_000;
+
+let refreshing: Promise<RefreshOutcome> | null = null;
 
 /**
  * One refresh at a time. The backend rotates refresh tokens and treats a
  * reused one as a replay (revoking every session), so the several requests
  * a page fires at once must share a single refresh rather than race.
  */
-function refreshSession(): Promise<boolean> {
-  refreshing ??= (async () => {
+function refreshSession(): Promise<RefreshOutcome> {
+  refreshing ??= (async (): Promise<RefreshOutcome> => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS) : null;
     try {
-      const response = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: tokenStore.refresh }),
-      });
-      if (!response.ok) throw new Error('refresh rejected');
-      const payload = JSON.parse(await response.text()) as {
-        data: { access_token: string; refresh_token: string };
-      };
-      tokenStore.save(payload.data.access_token, payload.data.refresh_token);
-      return true;
-    } catch {
-      tokenStore.clear();
-      return false;
+      let response: Response;
+      try {
+        response = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: tokenStore.refresh }),
+          signal: controller?.signal,
+        });
+      } catch {
+        return 'unreachable';
+      }
+      if (response.status >= 500) return 'unavailable';
+      if (!response.ok) {
+        tokenStore.clear();
+        return 'refused';
+      }
+      try {
+        const payload = JSON.parse(await response.text()) as {
+          data: { access_token: string; refresh_token: string };
+        };
+        tokenStore.save(payload.data.access_token, payload.data.refresh_token);
+        return 'ok';
+      } catch {
+        // A 2xx we cannot read: the server did not refuse, so keep the session.
+        return 'unavailable';
+      }
     } finally {
+      if (timer) clearTimeout(timer);
       refreshing = null;
     }
   })();
   return refreshing;
+}
+
+// ------------------------------------------------------- session ended
+type SessionListener = () => void;
+const sessionListeners = new Set<SessionListener>();
+
+/** Called when the server refuses the session (refresh rejected). Returns an unsubscribe. */
+export function onSessionEnded(listener: SessionListener): () => void {
+  sessionListeners.add(listener);
+  return () => {
+    sessionListeners.delete(listener);
+  };
+}
+
+function notifySessionEnded() {
+  for (const listener of [...sessionListeners]) listener();
 }
 
 /** Multipart upload; the browser sets the boundary, so no Content-Type here. */

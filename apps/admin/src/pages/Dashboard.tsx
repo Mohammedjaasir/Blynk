@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest } from '../api/client';
-import { categories as categoriesApi, promotions as promotionsApi } from '../api/resources';
-import type { AdminProduct, Category, Promotion } from '../api/types';
+import { categories as categoriesApi, products as productsApi, promotions as promotionsApi } from '../api/resources';
+import type { Category, Promotion } from '../api/types';
+import { errorMessage } from '../lib/apiErrors';
 import { PageHeader } from '../components/Layout';
 import { Spinner } from '../components/ui';
 
@@ -12,6 +12,8 @@ interface Summary {
   unavailableProducts: number;
   categories: Category[];
   promotions: Promotion[];
+  /** False when the product list was too long to read in full. */
+  productsComplete: boolean;
 }
 
 /**
@@ -29,7 +31,8 @@ export function Dashboard() {
     async function load() {
       try {
         const [products, categories, promotions] = await Promise.all([
-          apiRequest<{ products: AdminProduct[] }>('/admin/products?limit=200'),
+          // Every page: counting only the first 200 understated a larger catalog.
+          productsApi.listAllAdmin(),
           categoriesApi.listAdmin(),
           promotionsApi.listAdmin(),
         ]);
@@ -42,10 +45,11 @@ export function Dashboard() {
           ).length,
           categories,
           promotions,
+          productsComplete: products.complete,
         });
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load the summary.');
+          setError(errorMessage(err, 'Could not load the summary.'));
         }
       }
     }
@@ -111,6 +115,12 @@ export function Dashboard() {
         title="Dashboard"
         description="What customers can see right now."
       />
+
+      {summary.productsComplete ? null : (
+        <p className="form__note" role="status">
+          Product figures count the first {summary.liveProducts + summary.hiddenProducts} products only.
+        </p>
+      )}
 
       <div className="figures">
         <Figure value={summary.liveProducts} label="Live products" to="/products" />

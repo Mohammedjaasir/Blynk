@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
@@ -50,13 +52,35 @@ class CancelOutcome {
       error != null && error!.statusCode >= 400 && error!.statusCode < 500 && error!.statusCode != 408;
 }
 
+final Random _secureRandom = Random.secure();
+
+/// A fresh checkout idempotency key: 128 random bits as hex, well inside the
+/// backend's 128-character limit (order.schema.ts `idempotency_key`).
+String newCheckoutIdempotencyKey() {
+  final bytes = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
+  return 'cust_${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+}
+
 class OrderProvider extends ChangeNotifier {
-  OrderProvider({OrderRequest? request, DateTime Function()? clock})
-      : _request = request ?? _apiRequest,
-        _clock = clock ?? DateTime.now;
+  OrderProvider({
+    OrderRequest? request,
+    DateTime Function()? clock,
+    String Function()? idempotencyKeyGenerator,
+  })  : _request = request ?? _apiRequest,
+        _clock = clock ?? DateTime.now,
+        _newIdempotencyKey = idempotencyKeyGenerator ?? newCheckoutIdempotencyKey;
 
   final OrderRequest _request;
   final DateTime Function() _clock;
+  final String Function() _newIdempotencyKey;
+
+  // One key per checkout attempt (cart + address + coupon + notes). A retry
+  // after a timeout or a lost connection sends the same key, so the server
+  // returns the order it may already have created instead of a second one.
+  // A new key is made only after a successful order, or once what is being
+  // ordered changes.
+  String? _checkoutKey;
+  String? _checkoutKeyFor;
 
   /// A selection-triggered [refreshOrders] within this long of the previous
   /// load is skipped, so flicking between tabs is not polling.
@@ -206,7 +230,22 @@ class OrderProvider extends ChangeNotifier {
     _couponCartKey = null;
     _couponError = null;
     _isApplyingCoupon = false;
+    _checkoutKey = null;
+    _checkoutKeyFor = null;
     notifyListeners();
+  }
+
+  /// The idempotency key the next place-order for this exact checkout will
+  /// send. Exposed for tests.
+  @visibleForTesting
+  String? get pendingCheckoutKey => _checkoutKey;
+
+  String _checkoutKeyForAttempt(String signature) {
+    if (_checkoutKey == null || _checkoutKeyFor != signature) {
+      _checkoutKey = _newIdempotencyKey();
+      _checkoutKeyFor = signature;
+    }
+    return _checkoutKey!;
   }
 
   ApiException _toApiException(Object e) => e is ApiException ? e : ApiService.handleError(e);
@@ -337,21 +376,33 @@ class OrderProvider extends ChangeNotifier {
   /// recalculates prices/totals/delivery fee from its own data - nothing
   /// computed client-side (CartProvider.subtotal) is sent or trusted as the
   /// final total; [placedOrder] reflects the server's authoritative amounts.
+  ///
+  /// Safe to retry: every attempt for the same cart, address, coupon and
+  /// notes sends the same `idempotency_key`, so a retry after a timeout gets
+  /// back the order the first attempt created rather than a duplicate. A call
+  /// while an order is already being placed (a double tap) does nothing and
+  /// returns null.
   Future<OrderModel?> placeOrder({
     required CartProvider cart,
     required String addressId,
     String? customerNotes,
   }) async {
+    if (_isPlacingOrder) return null;
     _isPlacingOrder = true;
     _placeOrderFailure = null;
     notifyListeners();
     final coupon = couponFor(cart);
+    final notes = customerNotes?.trim() ?? '';
+    final idempotencyKey = _checkoutKeyForAttempt(
+      [cartKey(cart), addressId, coupon?.code ?? '', notes].join('|'),
+    );
 
     try {
       final response = await _request(
         'POST',
         '/orders',
         body: {
+          'idempotency_key': idempotencyKey,
           'address_id': addressId,
           'items': cart.lines
               .map((line) => {
@@ -373,6 +424,9 @@ class OrderProvider extends ChangeNotifier {
       }
 
       _lastPlacedOrder = placed;
+      // This checkout is done: the next one gets a key of its own.
+      _checkoutKey = null;
+      _checkoutKeyFor = null;
       // The list on screen does not have this order yet: the next selection of
       // the Orders tab must fetch, not be throttled.
       _lastLoadStartedAt = null;

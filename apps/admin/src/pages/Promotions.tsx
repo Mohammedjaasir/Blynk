@@ -5,8 +5,11 @@ import {
   BackgroundPicker,
   GRADIENT_PRESETS,
   SOLID_SWATCHES,
+  usesBackgroundImage,
   type BackgroundValue,
 } from '../components/BackgroundPicker';
+import { errorMessage } from '../lib/apiErrors';
+import { useImageCleanup } from '../lib/imageCleanup';
 import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
@@ -32,7 +35,7 @@ export function Promotions() {
       setRows(await promotionsApi.listAdmin());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load promotions.');
+      setError(errorMessage(err, 'Could not load promotions.'));
       setRows([]);
     }
   }, []);
@@ -50,25 +53,21 @@ export function Promotions() {
       );
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not update the promotion.');
+      toast.error(errorMessage(err, 'Could not update the promotion.'));
     }
   }
 
-  /** Swaps display_order with the neighbour, then persists both. */
+  /** Swaps with the neighbour (normalising equal orders first), then persists. */
   async function move(promotion: Promotion, direction: -1 | 1) {
     if (!rows) return;
-    const index = rows.findIndex((row) => row.id === promotion.id);
-    const neighbour = rows[index + direction];
-    if (!neighbour) return;
+    const items = reorderItems(rows, promotion.id, direction);
+    if (!items) return;
 
     try {
-      await promotionsApi.reorder([
-        { id: promotion.id, display_order: neighbour.display_order },
-        { id: neighbour.id, display_order: promotion.display_order },
-      ]);
+      await promotionsApi.reorder(items);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not reorder.');
+      toast.error(errorMessage(err, 'Could not reorder.'));
     }
   }
 
@@ -78,7 +77,7 @@ export function Promotions() {
       toast.success('Promotion deleted.');
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not delete the promotion.');
+      toast.error(errorMessage(err, 'Could not delete the promotion.'));
     } finally {
       setPendingDelete(null);
     }
@@ -162,7 +161,9 @@ export function Promotions() {
                 <td className="cell__secondary">
                   {promotion.cta_label
                     ? `${promotion.cta_label} → ${describeDestination(promotion)}`
-                    : 'Informational'}
+                    : promotion.cta_destination_type
+                      ? `Whole card → ${describeDestination(promotion)}`
+                      : 'Informational'}
                 </td>
                 <td>
                   <Badge tone={promotion.is_active ? 'active' : 'inactive'}>
@@ -227,6 +228,42 @@ export function Promotions() {
   );
 }
 
+/**
+ * The reorder request for moving one promotion up (-1) or down (1).
+ *
+ * Normally the two neighbours swap display_order. When they share a value
+ * (several promotions saved with the default 0, say) a swap would change
+ * nothing, so every promotion is first renumbered 10, 20, 30... in the order
+ * shown, then the two swap - the move always takes effect. Null when there
+ * is no neighbour that way.
+ */
+export function reorderItems(
+  rows: ReadonlyArray<Pick<Promotion, 'id' | 'display_order'>>,
+  id: string,
+  direction: -1 | 1
+): { id: string; display_order: number }[] | null {
+  const index = rows.findIndex((row) => row.id === id);
+  const neighbourIndex = index + direction;
+  if (index < 0 || neighbourIndex < 0 || neighbourIndex >= rows.length) return null;
+  const current = rows[index]!;
+  const neighbour = rows[neighbourIndex]!;
+
+  if (current.display_order !== neighbour.display_order) {
+    return [
+      { id: current.id, display_order: neighbour.display_order },
+      { id: neighbour.id, display_order: current.display_order },
+    ];
+  }
+
+  // The API caps display_order at 1000 (and a reorder at 100 items).
+  const step = Math.max(1, Math.min(10, Math.floor(1000 / rows.length)));
+  const normalised = rows.map((row, i) => ({ id: row.id, display_order: (i + 1) * step }));
+  const moved = normalised[index]!.display_order;
+  normalised[index]!.display_order = normalised[neighbourIndex]!.display_order;
+  normalised[neighbourIndex]!.display_order = moved;
+  return normalised;
+}
+
 function describeDestination(promotion: Promotion): string {
   switch (promotion.cta_destination_type) {
     case 'CATEGORY':
@@ -246,6 +283,8 @@ function describeBackground(promotion: Promotion): string {
       return 'Gradient';
     case 'IMAGE':
       return 'Image';
+    case 'ARTWORK':
+      return 'Full artwork';
     default:
       return promotion.background_color
         ? namedColour(promotion.background_color)
@@ -303,6 +342,9 @@ function PromotionDialog({
   const [isActive, setIsActive] = useState(promotion?.is_active ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Files the saved promotion points at; replaced ones go only after a save.
+  const images = useImageCleanup([promotion?.image_url, promotion?.background_image_url]);
+  const isArtwork = background.background_type === 'ARTWORK';
 
   const draft: Promotion = {
     id: promotion?.id ?? 'draft',
@@ -313,6 +355,8 @@ function PromotionDialog({
     background_color: background.background_color,
     background_color_end: background.background_color_end,
     background_image_url: background.background_image_url,
+    background_focal_x: promotion?.background_focal_x,
+    background_focal_y: promotion?.background_focal_y,
     cta_label: ctaLabel || null,
     cta_destination_type: (destinationType || null) as Promotion['cta_destination_type'],
     cta_destination_value: destinationValue || null,
@@ -328,7 +372,8 @@ function PromotionDialog({
       setError('Title must be at least 2 characters.');
       return;
     }
-    if (destinationType && !ctaLabel.trim()) {
+    // ARTWORK may point somewhere with no label: the whole card is the button.
+    if (destinationType && !ctaLabel.trim() && !isArtwork) {
       setError('A promotion with a destination needs a button label.');
       return;
     }
@@ -338,6 +383,10 @@ function PromotionDialog({
     }
     if (background.background_type === 'IMAGE' && !background.background_image_url) {
       setError('Upload a background image, or choose a solid or gradient background.');
+      return;
+    }
+    if (isArtwork && !background.background_image_url) {
+      setError('Upload the banner artwork, or choose another background.');
       return;
     }
     if (
@@ -353,12 +402,13 @@ function PromotionDialog({
       subtitle: subtitle.trim() || null,
       image_url: imageUrl,
       background_type: background.background_type,
-      background_color:
-        background.background_type === 'IMAGE' ? null : background.background_color,
+      background_color: usesBackgroundImage(background.background_type) ? null : background.background_color,
       background_color_end:
         background.background_type === 'GRADIENT' ? background.background_color_end : null,
-      background_image_url:
-        background.background_type === 'IMAGE' ? background.background_image_url : null,
+      // IMAGE and ARTWORK both carry the file; nulling it for ARTWORK is a 400.
+      background_image_url: usesBackgroundImage(background.background_type)
+        ? background.background_image_url
+        : null,
       cta_label: ctaLabel.trim() || null,
       cta_destination_type: destinationType || null,
       cta_destination_value:
@@ -378,9 +428,12 @@ function PromotionDialog({
         await promotionsApi.create(payload);
         toast.success('Promotion created.');
       }
+      // Saved: files it no longer uses (removed, replaced, or a background
+      // switched away from an image) can be deleted now.
+      await images.afterSave([payload.image_url as string | null, payload.background_image_url as string | null]);
       await onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the promotion.');
+      setError(errorMessage(err, 'Could not save the promotion.'));
     } finally {
       setSaving(false);
     }
@@ -393,7 +446,14 @@ function PromotionDialog({
 
         <section className="editor__section">
           <h3 className="editor__legend">Content</h3>
-          <Field label="Headline" hint="The loudest line on the card">
+          <Field
+            label="Headline"
+            hint={
+              isArtwork
+                ? 'Not drawn on full artwork, but required: screen readers announce it and staff lists show it'
+                : 'The loudest line on the card'
+            }
+          >
             <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
           </Field>
           <Field label="Supporting text" hint="Optional second line">
@@ -404,7 +464,14 @@ function PromotionDialog({
             />
           </Field>
           <div className="form__row">
-            <Field label="Button label" hint="Leave blank for an informational promotion">
+            <Field
+              label="Button label"
+              hint={
+                isArtwork
+                  ? 'Optional on full artwork: with no label the whole card opens the destination'
+                  : 'Leave blank for an informational promotion'
+              }
+            >
               <input
                 className="input"
                 value={ctaLabel}
@@ -462,13 +529,22 @@ function PromotionDialog({
             value={imageUrl}
             folder="promotions"
             label="Product or promotional image"
-            onChange={setImageUrl}
+            onChange={(url) => {
+              images.track(url);
+              setImageUrl(url);
+            }}
           />
         </section>
 
         <section className="editor__section">
           <h3 className="editor__legend">Background</h3>
-          <BackgroundPicker value={background} onChange={setBackground} />
+          <BackgroundPicker
+            value={background}
+            onChange={(next) => {
+              images.track(next.background_image_url);
+              setBackground(next);
+            }}
+          />
         </section>
 
         <section className="editor__section">

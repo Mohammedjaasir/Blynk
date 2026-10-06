@@ -78,6 +78,26 @@ class ProductModel {
     );
   }
 
+  /// The same snake_case shape [ProductModel.fromJson] reads, so a product
+  /// written by [toJson] reads back unchanged (the saved cart relies on it).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'category_id': categoryId,
+        'category_name': categoryName,
+        'name': name,
+        'slug': slug,
+        'description': description,
+        'sku': sku,
+        'barcode': barcode,
+        'unit': unit,
+        'pack_size': packSize,
+        'image_url': imageUrl,
+        'image_focal_x': imageFocalX,
+        'image_focal_y': imageFocalY,
+        'selling_price': sellingPrice,
+        'is_available': isAvailable,
+      };
+
   /// The stored focal point as a Flutter [Alignment], ready to hand to a
   /// `cover` image. Defaults to [Alignment.center] for every product that has
   /// never had one set.

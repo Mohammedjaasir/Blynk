@@ -128,9 +128,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   // Access tokens last 15 minutes. On a 401, trade the refresh token for a
   // new pair once and retry - the backend still decides what that session
-  // may do.
+  // may do. Only a refusal of the refresh token itself ends the session; a
+  // refresh that could not reach the server keeps the tokens and surfaces a
+  // retryable connection error instead (a weak signal is not a sign-out).
   if (response.status === 401 && auth && tokenStore.refresh) {
-    if (await refreshSession()) response = await send(path, options, auth);
+    const outcome = await refreshSession();
+    if (outcome === 'refreshed') response = await send(path, options, auth);
+    else if (outcome !== 'refused') throw connectionError(outcome);
   }
   if (response.status === 401 && auth) endSession('expired');
 
@@ -187,7 +191,31 @@ async function send(
   }
 }
 
-let refreshing: Promise<boolean> | null = null;
+/**
+ * What became of a refresh attempt:
+ * - `refreshed`: new tokens saved.
+ * - `refused`: the server rejected the refresh token (400/401/403, e.g.
+ *   INVALID_REFRESH_TOKEN) - the tokens are cleared; the caller ends the session.
+ * - `network` / `timeout`: the server never answered (or answered with a
+ *   5xx/429/unreadable body) - the tokens are KEPT, so a weak connection
+ *   neither signs the operator out nor stops background tracking; the caller
+ *   reports a retryable error.
+ */
+export type RefreshOutcome = 'refreshed' | 'refused' | 'network' | 'timeout';
+
+/** The ApiError a caller throws when a refresh could not reach the server. */
+export function connectionError(outcome: 'network' | 'timeout'): ApiError {
+  return outcome === 'timeout'
+    ? new ApiError('The Blynk API did not answer in time.', 0, 'TIMEOUT')
+    : new ApiError('Could not reach the Blynk API.', 0, 'NETWORK');
+}
+
+/** The refresh token itself was refused (as opposed to a server or connection problem). */
+function refreshRefused(status: number): boolean {
+  return status === 400 || status === 401 || status === 403;
+}
+
+let refreshing: Promise<RefreshOutcome> | null = null;
 
 /**
  * One refresh at a time. The backend rotates refresh tokens and treats a
@@ -198,37 +226,55 @@ let refreshing: Promise<boolean> | null = null;
  *
  * `transport` (native location posts only) sends the refresh over native
  * HTTP so it still works while the WebView is backgrounded; everything else
- * uses fetch, unchanged.
+ * uses fetch. A transport throws (an ApiError NETWORK/TIMEOUT) when it gets
+ * no answer at all.
  */
-export type RefreshTransport = (url: string, body: string) => Promise<{ ok: boolean; text: string }>;
+export type RefreshTransport = (url: string, body: string) => Promise<{ status: number; text: string }>;
 
-export function refreshSession(transport?: RefreshTransport): Promise<boolean> {
-  refreshing ??= (async () => {
+const fetchRefresh: RefreshTransport = async (url, body) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      signal: controller.signal,
+    });
+    return { status: response.status, text: await response.text() };
+  } catch (err) {
+    throw connectionError((err as Error)?.name === 'AbortError' ? 'timeout' : 'network');
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+export function refreshSession(transport: RefreshTransport = fetchRefresh): Promise<RefreshOutcome> {
+  refreshing ??= (async (): Promise<RefreshOutcome> => {
     try {
       const url = `${BASE_URL}/auth/refresh`;
       const body = JSON.stringify({ refresh_token: tokenStore.refresh });
-      let text: string;
-      if (transport) {
-        const response = await transport(url, body);
-        if (!response.ok) throw new Error('refresh rejected');
-        text = response.text;
-      } else {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        });
-        if (!response.ok) throw new Error('refresh rejected');
-        text = await response.text();
+      let response: { status: number; text: string };
+      try {
+        response = await transport(url, body);
+      } catch (err) {
+        return err instanceof ApiError && err.code === 'TIMEOUT' ? 'timeout' : 'network';
       }
-      const payload = JSON.parse(text) as {
-        data: { access_token: string; refresh_token: string };
-      };
-      tokenStore.save(payload.data.access_token, payload.data.refresh_token);
-      return true;
-    } catch {
-      tokenStore.clear();
-      return false;
+      if (refreshRefused(response.status)) {
+        tokenStore.clear();
+        return 'refused';
+      }
+      // 5xx / 429 / anything unexpected: the server is having a moment; the
+      // refresh token may well still be good, so keep it.
+      if (response.status < 200 || response.status >= 300) return 'network';
+      try {
+        const payload = JSON.parse(response.text) as { data?: { access_token?: string; refresh_token?: string } };
+        if (!payload?.data?.access_token) return 'network';
+        tokenStore.save(payload.data.access_token, payload.data.refresh_token);
+        return 'refreshed';
+      } catch {
+        return 'network';
+      }
     } finally {
       refreshing = null;
     }
@@ -264,4 +310,19 @@ export async function uploadImage(file: File, folder: MediaFolder): Promise<{ ke
 
 export async function deleteImage(url: string): Promise<void> {
   await apiRequest('/admin/media', { method: 'DELETE', body: { url } });
+}
+
+/**
+ * After a SUCCESSFUL save only: removes the stored files the record no
+ * longer uses (see lib/image.ts `replacedImages`). Best effort - the record
+ * is already saved, and a leftover file is not worth an error.
+ */
+export async function deleteImagesQuietly(urls: string[]): Promise<void> {
+  await Promise.all(
+    urls.map((url) =>
+      deleteImage(url).catch(() => {
+        /* ignored */
+      })
+    )
+  );
 }

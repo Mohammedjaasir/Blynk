@@ -47,3 +47,35 @@ const visitDate = new Intl.DateTimeFormat('en-GB', {
 });
 /** "05 Jan 2026" in clinic time. */
 export const formatVisitDate = (iso: string) => visitDate.format(new Date(iso));
+
+/**
+ * A blocked date's calendar day as 'YYYY-MM-DD'. The API now sends exactly
+ * that (a date, no time); an older API sent the DATE column as a timestamp
+ * (e.g. '2026-10-05T18:30:00.000Z' for 6 Oct in Colombo), which still works:
+ * it is read as the day it is in clinic time (Asia/Colombo), never shifted
+ * by the device's own time zone. Null when it is neither.
+ */
+export function blockedDay(value: string): string | null {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const instant = new Date(value);
+  if (Number.isNaN(instant.getTime())) return null;
+  // Colombo is UTC+05:30 all year (no daylight saving).
+  return new Date(instant.getTime() + 330 * 60_000).toISOString().slice(0, 10);
+}
+
+const blockedDayFormat = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'short',
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+/** "Mon, 05 Oct 2026" for a blocked date - formatted from the calendar day
+ * itself (at UTC, so no device time zone can move it a day). */
+export function formatBlockedDate(value: string): string {
+  const day = blockedDay(value);
+  if (!day) return value;
+  const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+  return blockedDayFormat.format(new Date(Date.UTC(y, m - 1, d)));
+}

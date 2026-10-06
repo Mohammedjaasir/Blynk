@@ -6,7 +6,12 @@ import type { AuthUser } from '../api/types';
 
 interface AuthState {
   user: AuthUser | null;
-  status: 'loading' | 'authenticated' | 'anonymous';
+  /**
+   * 'offline': a saved session could not be checked (no signal, timeout,
+   * server error). The tokens are kept; retry() checks again.
+   */
+  status: 'loading' | 'authenticated' | 'anonymous' | 'offline';
+  retry(): void;
   /** Why the last session ended, shown on the sign-in page. */
   notice: string | null;
   requestOtp(phone: string): Promise<{ devOtp?: string }>;
@@ -24,6 +29,9 @@ export const SESSION_ENDED_MESSAGE = 'Your session has ended. Please sign in aga
 
 const isRider = (user: AuthUser) => user.role === 'RIDER';
 
+/** The server refused this session (vs. could not be asked). */
+const isSessionRefusal = (err: unknown) => err instanceof ApiError && (err.status === 401 || err.status === 403);
+
 /**
  * Sign-in over the existing Blynk OTP flow. Only RIDER accounts get a session
  * here; any other role is signed straight back out. That check is a courtesy:
@@ -36,6 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthState['status']>('loading');
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Bumped by retry() to run the restore again after an offline launch.
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
     async function restore() {
@@ -54,16 +64,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setUser(me);
         setStatus('authenticated');
-      } catch {
+      } catch (err) {
         if (cancelled) return;
-        tokenStore.clear();
-        setStatus('anonymous');
+        // Only the server refusing the session ends it. The client has
+        // already tried a refresh on a 401, so a 401/403 here is final. No
+        // signal, a timeout or a server error says nothing about the session:
+        // keep the tokens and let the rider retry.
+        if (isSessionRefusal(err)) {
+          tokenStore.clear();
+          setStatus('anonymous');
+          return;
+        }
+        setStatus('offline');
       }
     }
     void restore();
     return () => {
       cancelled = true;
     };
+  }, [attempt]);
+
+  const retry = useCallback(() => {
+    setStatus('loading');
+    setAttempt((n) => n + 1);
   }, []);
 
   // The client clears the tokens when the session can't continue; reflect
@@ -71,6 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       onSessionEnded((reason) => {
+        // Location sharing belongs to this signed-in rider: a session the
+        // server ended must not leave the native watcher running (its sends
+        // could only be refused from now on).
+        stopTracking().catch(() => undefined);
         setUser(null);
         setNotice(reason === 'profile' ? PROFILE_MESSAGE : SESSION_ENDED_MESSAGE);
         setStatus('anonymous');
@@ -121,8 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, status, notice, requestOtp, verifyOtp, signInWithPassword, signOut }),
-    [user, status, notice, requestOtp, verifyOtp, signInWithPassword, signOut]
+    () => ({ user, status, notice, retry, requestOtp, verifyOtp, signInWithPassword, signOut }),
+    [user, status, notice, retry, requestOtp, verifyOtp, signInWithPassword, signOut]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

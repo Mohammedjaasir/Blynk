@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { cash as cashApi, riders as ridersApi } from '../api/resources';
-import type { CashHandin, CashReconciliation, ReconciliationStatus, RiderOption } from '../api/types';
+import { cash as cashApi, riders as ridersApi, staff as staffApi } from '../api/resources';
+import type { CashHandin, CashReconciliation, ReconciliationStatus, RiderOption, StaffAccount } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
+import { errorMessage } from '../lib/apiErrors';
 import { colomboDate } from '../lib/coupons';
 import { formatMoney } from '../lib/orders';
 
@@ -13,7 +14,39 @@ import { formatMoney } from '../lib/orders';
  * in red, over in amber.
  */
 
-const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
+const errorText = errorMessage;
+
+export interface HandinRider {
+  id: string;
+  label: string;
+  inactive: boolean;
+}
+
+/**
+ * Riders a hand-in can be recorded for. GET /admin/riders lists active
+ * riders only, but a rider switched off today may still owe the cash they
+ * collected - so rider profiles from the staff list (GET /admin/staff, which
+ * carries each profile's id and is_active) are added, marked inactive. The
+ * API records a hand-in for any rider profile.
+ */
+export function handinRiders(
+  active: ReadonlyArray<RiderOption>,
+  staff: ReadonlyArray<StaffAccount>,
+  extra?: { id: string; name: string | null }
+): HandinRider[] {
+  const out: HandinRider[] = active.map((r) => ({ id: r.id, label: r.full_name ?? r.phone, inactive: false }));
+  const seen = new Set(out.map((r) => r.id));
+  const inactive: HandinRider[] = [];
+  for (const account of staff) {
+    const rider = account.rider;
+    if (!rider || seen.has(rider.id)) continue;
+    seen.add(rider.id);
+    inactive.push({ id: rider.id, label: `${account.full_name ?? account.phone} (inactive)`, inactive: true });
+  }
+  if (extra && !seen.has(extra.id)) inactive.push({ id: extra.id, label: `${extra.name ?? 'Rider'} (inactive)`, inactive: true });
+  inactive.sort((a, b) => a.label.localeCompare(b.label));
+  return [...out, ...inactive];
+}
 
 export function differenceText(difference: number, status: ReconciliationStatus): string {
   if (status === 'BALANCED') return 'Balanced';
@@ -26,7 +59,7 @@ export function Cash() {
   const [data, setData] = useState<CashReconciliation | null>(null);
   const [handins, setHandins] = useState<CashHandin[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [recording, setRecording] = useState<{ riderId?: string } | null>(null);
+  const [recording, setRecording] = useState<{ riderId?: string; riderName?: string | null } | null>(null);
   const [deleting, setDeleting] = useState<CashHandin | null>(null);
 
   const load = useCallback(async () => {
@@ -120,7 +153,7 @@ export function Cash() {
                         type="button"
                         className="button button--ghost button--sm"
                         aria-label={`Record hand-in for ${r.rider_name ?? 'rider'}`}
-                        onClick={() => setRecording({ riderId: r.rider_id })}
+                        onClick={() => setRecording({ riderId: r.rider_id, riderName: r.rider_name })}
                       >
                         Record
                       </button>
@@ -176,6 +209,7 @@ export function Cash() {
         <HandinDialog
           date={date}
           riderId={recording.riderId}
+          riderName={recording.riderName}
           onClose={() => setRecording(null)}
           onSaved={async (h) => {
             setRecording(null);
@@ -203,15 +237,17 @@ export function Cash() {
 function HandinDialog({
   date,
   riderId,
+  riderName,
   onClose,
   onSaved,
 }: {
   date: string;
   riderId?: string;
+  riderName?: string | null;
   onClose(): void;
   onSaved(h: CashHandin): void;
 }) {
-  const [riders, setRiders] = useState<RiderOption[] | null>(null);
+  const [riders, setRiders] = useState<HandinRider[] | null>(null);
   const [rider, setRider] = useState(riderId ?? '');
   const [amount, setAmount] = useState('');
   const [day, setDay] = useState(date);
@@ -220,11 +256,20 @@ function HandinDialog({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    ridersApi
-      .listActive()
-      .then(setRiders)
-      .catch(() => setRiders([]));
-  }, []);
+    let cancelled = false;
+    void Promise.all([
+      ridersApi.listActive().catch(() => [] as RiderOption[]),
+      staffApi.list().catch(() => [] as StaffAccount[]),
+    ]).then(([active, staff]) => {
+      if (cancelled) return;
+      // Either list may be unavailable; the other still offers its riders.
+      const list = (value: unknown) => (Array.isArray(value) ? value : []);
+      setRiders(handinRiders(list(active), list(staff), riderId ? { id: riderId, name: riderName ?? null } : undefined));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [riderId, riderName]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -254,7 +299,7 @@ function HandinDialog({
             <option value="">{riders === null ? 'Loading riders…' : 'Choose a rider'}</option>
             {(riders ?? []).map((r) => (
               <option key={r.id} value={r.id}>
-                {r.full_name ?? r.phone}
+                {r.label}
               </option>
             ))}
           </select>

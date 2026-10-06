@@ -5,6 +5,11 @@ import { requireAuth, optionalAuth } from '../../middleware/auth.middleware.js';
 import { stockAlertController } from './catalog.stock-alerts.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { categoryGroupsController } from './catalog.groups.js';
+import { validate } from '../../middleware/validate.middleware.js';
+import { idParamSchema } from './catalog.schema.js';
+
+// A malformed :id is a 400 VALIDATION_ERROR, never a Postgres uuid cast 500.
+const validId = validate({ params: idParamSchema });
 
 // ----------------------------------------------------------------------------
 // 1. CUSTOMER CATEGORIES ROUTER (/api/v1/categories)
@@ -28,8 +33,8 @@ productsRouter.delete('/:id/notify-me', requireAuth, requireRoles(['CUSTOMER']),
 export const adminCatalogRouter = Router();
 adminCatalogRouter.get('/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.getCategoriesAdmin.bind(catalogController));
 adminCatalogRouter.post('/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createCategoryAdmin.bind(catalogController));
-adminCatalogRouter.patch('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.updateCategoryAdmin.bind(catalogController));
-adminCatalogRouter.delete('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.deleteCategoryAdmin.bind(catalogController));
+adminCatalogRouter.patch('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.updateCategoryAdmin.bind(catalogController));
+adminCatalogRouter.delete('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.deleteCategoryAdmin.bind(catalogController));
 // Category groups on the customer home (migration 025). /order before /:id.
 adminCatalogRouter.get('/category-groups', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryGroupsController.list);
 adminCatalogRouter.post('/category-groups', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryGroupsController.create);
@@ -40,10 +45,10 @@ adminCatalogRouter.put('/category-groups/:id/categories', requireAuth, requireRo
 // Bulk import (.xlsx/.csv parsed in the browser). Before /products/:id.
 adminCatalogRouter.post('/products/import', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.importProductsAdmin.bind(catalogController));
 adminCatalogRouter.get('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.listProductsAdmin.bind(catalogController));
-adminCatalogRouter.get('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.getProductByIdAdmin.bind(catalogController));
+adminCatalogRouter.get('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.getProductByIdAdmin.bind(catalogController));
 adminCatalogRouter.post('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createProductAdmin.bind(catalogController));
-adminCatalogRouter.patch('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.updateProductAdmin.bind(catalogController));
-adminCatalogRouter.delete('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.deleteProductAdmin.bind(catalogController));
+adminCatalogRouter.patch('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.updateProductAdmin.bind(catalogController));
+adminCatalogRouter.delete('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.deleteProductAdmin.bind(catalogController));
 
 // ----------------------------------------------------------------------------
 // 4. MAIN CATALOG ROUTER (/api/v1/catalog)

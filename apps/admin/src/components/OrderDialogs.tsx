@@ -127,7 +127,7 @@ export function AssignRiderDialog({
   );
 }
 
-type NoteAction = Extract<OrderAction, 'cancel' | 'markDelivered' | 'markFailed' | 'markCustomerUnavailable' | 'restage'>;
+type NoteAction = Extract<OrderAction, 'cancel' | 'markFailed' | 'markCustomerUnavailable' | 'restage'>;
 
 const NOTE_COPY: Record<NoteAction, { title: string; field: string; confirm: string; message(o: BoardOrder): string }> = {
   cancel: {
@@ -135,12 +135,6 @@ const NOTE_COPY: Record<NoteAction, { title: string; field: string; confirm: str
     field: 'Reason — shown to the customer',
     confirm: 'Cancel order',
     message: () => 'The customer is told the order is cancelled, with this reason. This cannot be undone.',
-  },
-  markDelivered: {
-    title: 'Mark delivered',
-    field: 'Note',
-    confirm: 'Mark delivered',
-    message: (o) => `Records ${formatMoney(o.total_amount)} cash as collected and completes the delivery.`,
   },
   markFailed: {
     title: 'Mark failed',
@@ -163,6 +157,97 @@ const NOTE_COPY: Record<NoteAction, { title: string; field: string; confirm: str
 };
 
 export const needsNote = (action: OrderAction): action is NoteAction => action in NOTE_COPY;
+
+/**
+ * Mark delivered (admin). Proof first: the customer's 4-digit delivery code.
+ * Only when there is no code does the admin write an override note, so the
+ * history says truthfully which one it was ("customer code confirmed" or
+ * "without the customer code (override)").
+ */
+export function MarkDeliveredDialog({
+  order,
+  busy,
+  onConfirm,
+  onClose,
+}: {
+  order: BoardOrder;
+  busy: boolean;
+  onConfirm(proof: { deliveryCode: string } | { notes: string }): void;
+  onClose(): void;
+}) {
+  const titleId = useId();
+  const codeId = useId();
+  const noteId = useId();
+  const [code, setCode] = useState('');
+  const [notes, setNotes] = useState('');
+  const hasCode = code.length > 0;
+  const codeComplete = /^[0-9]{4}$/.test(code);
+  const trimmed = notes.trim();
+  const canSubmit = !busy && (hasCode ? codeComplete : trimmed.length > 0);
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <form
+        className="modal__panel"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!canSubmit) return;
+          onConfirm(hasCode ? { deliveryCode: code } : { notes: trimmed });
+        }}
+      >
+        <h2 className="modal__title" id={titleId}>
+          Mark delivered #{shortNumber(order.order_number)}
+        </h2>
+        <p className="modal__message">
+          Records {formatMoney(order.total_amount)} cash as collected and completes the delivery.
+        </p>
+        <label className="field" htmlFor={codeId}>
+          <span className="field__label">Customer's delivery code</span>
+          <input
+            id={codeId}
+            className="input mono"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={4}
+            value={code}
+            onChange={(event) => setCode(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+            autoFocus
+          />
+          {hasCode && !codeComplete ? (
+            <span className="field__error">The code has 4 digits.</span>
+          ) : (
+            <span className="field__hint">The 4 digits the customer sees in the app.</span>
+          )}
+        </label>
+        <label className="field" htmlFor={noteId}>
+          <span className="field__label">Note (only without a code)</span>
+          <textarea
+            id={noteId}
+            className="input"
+            rows={3}
+            maxLength={1000}
+            value={notes}
+            disabled={hasCode}
+            onChange={(event) => setNotes(event.target.value)}
+          />
+          <span className="field__hint">
+            {hasCode
+              ? 'Not needed: the code confirms the delivery.'
+              : 'No code? Say why - it is recorded as delivered without the customer code.'}
+          </span>
+        </label>
+        <div className="modal__actions">
+          <button type="button" className="button button--ghost" onClick={onClose}>
+            Back
+          </button>
+          <button type="submit" className="button button--ink" disabled={!canSubmit}>
+            {busy ? 'Saving…' : 'Mark delivered'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 /** A deliberate step that needs a staff note (the API refuses it without one). */
 export function NoteDialog({

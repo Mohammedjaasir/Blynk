@@ -49,7 +49,8 @@ export function createApp(): Express {
       origin: allowedOrigins,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'Idempotency-Key', 'x-idempotency-key'],
-      exposedHeaders: ['x-request-id'],
+      // Date: browser builds read the server clock (delivery-code lock countdown).
+      exposedHeaders: ['x-request-id', 'Date'],
       maxAge: 86400, // 24 hours
     })
   );

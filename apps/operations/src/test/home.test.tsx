@@ -166,4 +166,26 @@ describe('Home', () => {
     renderAs(ADMIN_NO_RIDER, '/', homeHandlers({ onTheRoad: [{ id: 'o-1' }, { id: 'o-2' }, { id: 'o-3' }] }));
     expect(await screen.findByRole('link', { name: '3 On the road' })).toBeInTheDocument();
   });
+
+  it('counts from pagination.total, not the 100-row page', async () => {
+    renderAs(ADMIN_NO_RIDER, '/', {
+      ...homeHandlers(),
+      'GET /admin/orders': (call: Call) => {
+        const total = { 'PLACED,ITEM_UNAVAILABLE': 130, PACKED: 101, OUT_FOR_DELIVERY: 250, DELIVERED: 180 }[call.query.status as string] ?? 0;
+        const orders = Array.from({ length: Math.min(100, total) }, (_, i) => ({ id: `o-${i}` }));
+        return ok({ orders, pagination: { page: 1, limit: 100, total, total_pages: Math.ceil(total / 100) } });
+      },
+      'GET /admin/dental/appointments': (call: Call) => {
+        const total = call.query.to === call.query.from ? 120 : 340;
+        const appointments = Array.from({ length: 100 }, (_, i) => ({ id: `a-${i}` }));
+        return ok({ appointments, pagination: { page: 1, limit: 100, total, total_pages: Math.ceil(total / 100) } });
+      },
+    });
+    expect(await screen.findByRole('link', { name: '250 On the road' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '180 Completed today' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '120 Appointments today' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '340 Upcoming (7 days)' })).toBeInTheDocument();
+    expect(screen.getByText('130 orders need packing.')).toBeInTheDocument();
+    expect(screen.getByText('101 orders are packed, waiting for a rider.')).toBeInTheDocument();
+  });
 });

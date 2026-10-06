@@ -234,10 +234,19 @@ export interface Promotion {
   subtitle: string | null;
   /** Foreground promotional/product visual. */
   image_url: string | null;
-  background_type: 'SOLID' | 'GRADIENT' | 'IMAGE';
+  /**
+   * ARTWORK (backend promotion.schema.ts): a finished banner in
+   * background_image_url, drawn full-bleed with no scrim, headline or
+   * subtitle. The title is still required - it is the slide's accessibility
+   * label in the customer app.
+   */
+  background_type: 'SOLID' | 'GRADIENT' | 'IMAGE' | 'ARTWORK';
   background_color: string | null;
   background_color_end: string | null;
   background_image_url: string | null;
+  /** Crop anchor for the background image, 0-100 (migration 009); 50 = centre. */
+  background_focal_x?: number;
+  background_focal_y?: number;
   cta_label: string | null;
   cta_destination_type: 'CATEGORY' | 'PRODUCT' | 'CATALOG' | null;
   cta_destination_value: string | null;
@@ -274,6 +283,11 @@ export interface OrderItemRow {
   product_name_snapshot: string;
   quantity: number;
   item_status: 'PENDING' | 'SOURCED' | 'PACKED' | 'UNAVAILABLE' | 'SUBSTITUTED';
+  /**
+   * Admin detail only. Read to tell a substitution with a recorded cost from
+   * one without (what blocks packing); never rendered.
+   */
+  actual_unit_cost?: number | string | null;
 }
 
 export interface OrderHistoryRow {

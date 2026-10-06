@@ -145,6 +145,24 @@ describe('Operations sign-in and session classification', () => {
     expect(tokenStore.access).toBe('a');
   });
 
+  it('OTP sign-in never creates an account: sends create_account false and explains ACCOUNT_NOT_FOUND', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(null, '/login', {
+      'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
+      'POST /auth/otp/verify': () => fail(404, 'ACCOUNT_NOT_FOUND', 'No Blynk account uses this number.'),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
+    await user.type(await screen.findByLabelText('Mobile number'), '0770000000');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
+    expect(await screen.findByText('No Blynk account uses this number.')).toBeInTheDocument();
+    expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({ phone: '0770000000', otp: '123456', create_account: false });
+    // Back on the phone step so the number can be checked.
+    expect(screen.getByLabelText('Mobile number')).toBeInTheDocument();
+    expect(tokenStore.access).toBeNull();
+  });
+
   it('OTP sign-in for an operator with no linked rider profile classifies ADMIN_ONLY', async () => {
     const user = userEvent.setup();
     renderAs(null, '/login', {
@@ -269,6 +287,22 @@ describe('Operations sign-in and session classification', () => {
     });
     await user.click(await screen.findByRole('button', { name: 'Skip sign-in' }));
     await expectRiderCapable();
-    expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({ phone: '0775551122', otp: '999999' });
+    expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({ phone: '0775551122', otp: '999999', create_account: false });
+  });
+
+  it('opening the app with no signal keeps the session (tokens kept) and says so', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/', { 'GET /auth/me': () => NETWORK_DOWN });
+    expect(await screen.findByText(/Couldn't reach Blynk to resume your session/)).toBeInTheDocument();
+    expect(tokenStore.access).toBe('test-access');
+    expect(tokenStore.refresh).toBe('test-refresh');
+  });
+
+  it('a refused session on open still drops the tokens', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/', {
+      'GET /auth/me': () => fail(401, 'TOKEN_EXPIRED'),
+      'POST /auth/refresh': () => fail(401, 'INVALID_REFRESH_TOKEN'),
+    });
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument();
+    expect(tokenStore.access).toBeNull();
   });
 });

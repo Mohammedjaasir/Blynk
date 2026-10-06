@@ -4,7 +4,9 @@ export interface TrackingState {
   permission: TrackingPermissionState;
   active: boolean;
   lastSentAt: Date | null;
-  lastError: 'permission_denied' | 'position_unavailable' | 'network' | null;
+  lastError: 'permission_denied' | 'position_unavailable' | 'network' | 'refused' | null;
+  /** With lastError 'refused': why the server stopped this sharing, in the rider's words. */
+  stopReason?: string | null;
 }
 
 /** Time+distance throttle (plan §4): send at most this often... */
@@ -71,7 +73,7 @@ export class DeliveryTracker {
     this.deliveryId = deliveryId;
     this.lastSentPoint = null;
     // A new delivery must not briefly show the previous one's freshness or error.
-    this.setState({ permission: 'requesting', lastSentAt: null, lastError: null });
+    this.setState({ permission: 'requesting', lastSentAt: null, lastError: null, stopReason: null });
     const permission = await this.plugin.requestPermission();
     this.setState({ permission });
     if (permission !== 'granted') return;
@@ -83,12 +85,17 @@ export class DeliveryTracker {
     this.setState({ active: true, lastError: null });
   }
 
-  async stop(): Promise<void> {
+  /**
+   * `refusedBecause`: the server refused the sharing for good (not a
+   * hiccup); the readout shows this reason instead of a silent stop.
+   */
+  async stop(refusedBecause?: string): Promise<void> {
     // Unbind first: a point or a send still in flight for this delivery must
     // never be attributed to (or reported against) whatever is tracked next.
     this.deliveryId = null;
     this.lastSentPoint = null;
     await this.stopNative();
+    if (refusedBecause) this.setState({ lastError: 'refused', stopReason: refusedBecause });
   }
 
   /**
@@ -129,6 +136,8 @@ export class DeliveryTracker {
       this.lastSentPoint = point;
       this.setState({ lastSentAt: new Date(), lastError: null });
     } catch {
+      // A refusal the session layer turned into a stop has already unbound
+      // this delivery; only a send that will be retried reads as 'network'.
       if (this.deliveryId !== deliveryId) return;
       this.setState({ lastError: 'network' });
     }

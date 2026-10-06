@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger.js';
 import { lockInventoryRow, recordStockMovement } from '../inventory/stock-ledger.js';
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { slugify } from './catalog.schema.js';
+import { generateUniqueSlug } from './catalog.slugs.js';
 
 /**
  * Bulk product import (Admin site and Ops app).
@@ -387,7 +388,9 @@ async function pickSlug(executor: Transaction<Database> | typeof db, row: CleanR
     if (await slugTaken(executor, candidate)) continue;
     return candidate;
   }
-  throw new AppError('Could not make a unique web address from this name; change the name or SKU', 409, 'PRODUCT_SLUG_EXISTS');
+  // A Sinhala/Tamil name slugifies to nothing, or both are taken: a fallback
+  // ("product-<random>" or "<name>-2", ...) rather than failing the row.
+  return generateUniqueSlug(row.name, 'product', async (s) => slugsUsed.has(s) || (await slugTaken(executor, s)), 255);
 }
 
 async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>) {

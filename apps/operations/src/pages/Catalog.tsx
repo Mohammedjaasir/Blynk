@@ -41,7 +41,7 @@ import { isOrderableButOut, stockState } from '../lib/inventory';
  * reads its own real number.
  */
 export function Catalog() {
-  const [productCount, setProductCount] = useState<number | null>(null);
+  const [productCount, setProductCount] = useState<number | string | null>(null);
   const [categoryCount, setCategoryCount] = useState<number | null>(null);
   const [groupCount, setGroupCount] = useState<number | null>(null);
   const [promotionCount, setPromotionCount] = useState<number | null>(null);
@@ -49,17 +49,16 @@ export function Catalog() {
   const [dentalClinicCount, setDentalClinicCount] = useState<number | null>(null);
 
   useEffect(() => {
-    // `GET /admin/products` has no separate count endpoint (its response
-    // carries `{page, limit}` only, not a `total` - see resources.ts's
-    // `products.list` doc comment), so this reads the same list the
-    // Products screen itself loads and counts the rows - a real number, not
-    // a guess, at the cost of one extra request per hub visit.
+    // `GET /admin/products` has no count and no `total`, so this reads every
+    // page the Products screen itself reads (`products.listAll`) and counts
+    // the rows - a real number, not a guess. If the read stopped at its cap,
+    // the count says "N+" rather than pretending it is exact.
     void catalog.categories.list().then((rows) => setCategoryCount(rows.length)).catch(() => setCategoryCount(null));
     void catalog.categoryGroups.list().then((r) => setGroupCount(r.groups.length)).catch(() => setGroupCount(null));
     void catalog.promotions.list().then((rows) => setPromotionCount(rows.length)).catch(() => setPromotionCount(null));
     void catalog.products
-      .list({ limit: 200 })
-      .then((rows) => setProductCount(rows.length))
+      .listAll()
+      .then((r) => setProductCount(r.capped ? `${r.products.length}+` : r.products.length))
       .catch(() => setProductCount(null));
     void inventoryApi.stock
       .list({ low_stock_only: true, limit: 100 })

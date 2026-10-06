@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { deleteImagesQuietly } from '../../api/client';
 import { catalog } from '../../api/resources';
 import type { Category } from '../../api/types';
 import { CENTRE_FOCAL, ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { Field, Spinner } from '../../components/ui';
 import { catalogErrorMessage } from '../../lib/catalog';
+import { replacedImages } from '../../lib/image';
 
 interface FormState {
   category_id: string;
@@ -66,6 +68,8 @@ export function ProductForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [effectiveMarkup, setEffectiveMarkup] = useState<number | null>(null);
+  /** The image the saved product points at - deleted only once a save replaces it. */
+  const [savedImageUrl, setSavedImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     void catalog.categories
@@ -84,6 +88,7 @@ export function ProductForm() {
       .getAdmin(id)
       .then((product) => {
         if (cancelled) return;
+        setSavedImageUrl(product.image_url);
         setForm({
           category_id: product.category_id,
           name: product.name,
@@ -171,6 +176,8 @@ export function ProductForm() {
       } else {
         await catalog.products.create(payload);
       }
+      // Saved: only now is the replaced (or removed) file safe to delete.
+      void deleteImagesQuietly(replacedImages([savedImageUrl], [form.image_url]));
       navigate('/catalog/products');
     } catch (err) {
       setServerError(catalogErrorMessage(err));

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ApiError } from '../../api/client';
+import { ApiError, deleteImagesQuietly } from '../../api/client';
 import { catalog } from '../../api/resources';
 import type { Category, CategoryGroup } from '../../api/types';
 import { ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { Badge, Field, Spinner } from '../../components/ui';
-import { catalogErrorMessage } from '../../lib/catalog';
+import { catalogErrorMessage, parseDisplayOrder } from '../../lib/catalog';
+import { replacedImages } from '../../lib/image';
 
 /**
  * Categories: create, edit and activate/deactivate (task F5). Ported from
@@ -293,9 +294,16 @@ function CategoryDialog({
   const hasChildren = category ? categories.some((c) => c.parent_id === category.id) : false;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const order = parseDisplayOrder(displayOrder);
+    if ('error' in order) {
+      setOrderError(order.error);
+      return;
+    }
+    setOrderError(null);
     if (name.trim().length < 2) {
       setError('Name must be at least 2 characters.');
       return;
@@ -309,7 +317,7 @@ function CategoryDialog({
         image_url: imageUrl,
         image_focal_x: focal.x,
         image_focal_y: focal.y,
-        display_order: Number(displayOrder) || 0,
+        display_order: order.value,
         is_active: isActive,
       };
       // Only sent when it changed: re-sending the same group would append
@@ -321,6 +329,8 @@ function CategoryDialog({
       } else {
         await catalog.categories.create(payload);
       }
+      // Saved: only now is the replaced (or removed) file safe to delete.
+      void deleteImagesQuietly(replacedImages([category?.image_url], [imageUrl]));
       await onSaved();
     } catch (err) {
       setError(catalogErrorMessage(err));
@@ -391,8 +401,17 @@ function CategoryDialog({
             ) : null}
           </select>
         </Field>
-        <Field label="Display order">
-          <input className="input" inputMode="numeric" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />
+        <Field label="Display order" error={orderError ?? undefined}>
+          <input
+            className="input"
+            inputMode="numeric"
+            value={displayOrder}
+            aria-invalid={orderError ? true : undefined}
+            onChange={(e) => {
+              setDisplayOrder(e.target.value);
+              setOrderError(null);
+            }}
+          />
         </Field>
         <label className="toggle">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />

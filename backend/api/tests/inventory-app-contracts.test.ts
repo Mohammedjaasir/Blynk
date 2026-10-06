@@ -274,9 +274,34 @@ describe('Inventory app backend contracts', () => {
       expect(await inventoryRowCount(rowlessId)).toBe(0);
     });
 
-    it('is still ADMIN-only', async () => {
-      const res = await adjust(trackedId, { adjustment_type: 'PURCHASE_RESTOCK', quantity_delta: 1 }, tokenStaff);
-      expect(res.status).toBe(403);
+    it('Inventory (PACKING_STAFF) can mark an order packed but cannot cancel one', async () => {
+      const packed = await placeOrder(untrackedId, 1);
+      const pack = await asStaff(request(app).patch(`/api/v1/admin/orders/${packed.orderId}/status`)).send({ status: 'PACKED' });
+      expect(pack.status, JSON.stringify(pack.body)).toBe(200);
+      expect((await pool.query('SELECT order_status FROM orders WHERE id = $1', [packed.orderId])).rows[0].order_status).toBe('PACKED');
+
+      const open = await placeOrder(untrackedId, 1);
+      const cancel = await asStaff(request(app).patch(`/api/v1/admin/orders/${open.orderId}/status`)).send({ status: 'CANCELLED', notes: 'Staff should not cancel' });
+      expect(cancel.status).toBe(403);
+      expect((await pool.query('SELECT order_status FROM orders WHERE id = $1', [open.orderId])).rows[0].order_status).toBe('PLACED');
+    });
+
+    it('Inventory (PACKING_STAFF) can restock, write off and audit; mode and threshold stay Admin/Operations', async () => {
+      const staffTracked = await createProduct('STAFFADJ', 'Invapp Staff Restock Dhal 1kg');
+      expect((await asAdmin(request(app).patch(`/api/v1/admin/inventory/${staffTracked}/mode`)).send({ tracking_mode: 'TRACKED' })).status).toBe(200);
+
+      const restock = await adjust(staffTracked, { adjustment_type: 'PURCHASE_RESTOCK', quantity_delta: 5, notes: 'Delivery received' }, tokenStaff);
+      expect(restock.status).toBe(200);
+      expect(restock.body.data.inventory.quantity_on_hand).toBe(5);
+      expect((await adjust(staffTracked, { adjustment_type: 'DAMAGE_WRITE_OFF', quantity_delta: -1, notes: 'Torn' }, tokenStaff)).status).toBe(200);
+      expect((await adjust(staffTracked, { adjustment_type: 'INVENTORY_AUDIT_ADJUSTMENT', quantity_delta: 1, notes: 'Count' }, tokenStaff)).status).toBe(200);
+
+      const mode = await asStaff(request(app).patch(`/api/v1/admin/inventory/${staffTracked}/mode`)).send({ tracking_mode: 'UNTRACKED' });
+      expect(mode.status).toBe(403);
+      const threshold = await asStaff(request(app).patch(`/api/v1/admin/inventory/${staffTracked}/threshold`)).send({ low_stock_threshold: 3 });
+      expect(threshold.status).toBe(403);
+      // Customers still cannot adjust.
+      expect((await adjust(staffTracked, { adjustment_type: 'PURCHASE_RESTOCK', quantity_delta: 1 }, tokenCustomer)).status).toBe(403);
     });
   });
 
@@ -459,6 +484,29 @@ describe('Inventory app backend contracts', () => {
       const clash = await asAdmin(request(app).patch(`/api/v1/admin/suppliers/${other.body.data.supplier.id}`)).send({ code });
       expect(clash.status).toBe(409);
       expect(clash.body.error.code).toBe('SUPPLIER_CODE_TAKEN');
+    });
+
+    it('a cleared field ("" or null) is stored as NULL, so two suppliers with no code never collide', async () => {
+      const one = await asAdmin(request(app).post('/api/v1/admin/suppliers')).send({
+        name: 'Invapp Blank Code One', code: '', contact_person: '', contact_phone: '', address: '', notes: '',
+      });
+      expect(one.status).toBe(201);
+      created.suppliers.push(one.body.data.supplier.id);
+      expect(one.body.data.supplier).toMatchObject({ code: null, contact_person: null, contact_phone: null, address: null, notes: null });
+
+      const two = await asAdmin(request(app).post('/api/v1/admin/suppliers')).send({ name: 'Invapp Blank Code Two', code: `${code}-C`, notes: 'Keep me' });
+      expect(two.status).toBe(201);
+      created.suppliers.push(two.body.data.supplier.id);
+
+      // Clearing with "" and with null both store NULL; omitted fields are kept.
+      const cleared = await asAdmin(request(app).patch(`/api/v1/admin/suppliers/${two.body.data.supplier.id}`)).send({ code: '', contact_phone: null });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.data.supplier.code).toBeNull();
+      expect(cleared.body.data.supplier.contact_phone).toBeNull();
+      expect(cleared.body.data.supplier.notes).toBe('Keep me');
+      const nulled = await asAdmin(request(app).patch(`/api/v1/admin/suppliers/${two.body.data.supplier.id}`)).send({ code: null, notes: null });
+      expect(nulled.status).toBe(200);
+      expect(nulled.body.data.supplier.notes).toBeNull();
     });
   });
 

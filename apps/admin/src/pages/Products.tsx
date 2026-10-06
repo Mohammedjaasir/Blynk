@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiRequest } from '../api/client';
 import { categories as categoriesApi, products as productsApi } from '../api/resources';
 import type { AdminProduct, Category } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
+import { errorMessage } from '../lib/apiErrors';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -22,24 +22,23 @@ export function Products() {
   const [categoryId, setCategoryId] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [error, setError] = useState<string | null>(null);
+  const [complete, setComplete] = useState(true);
   const [pendingToggle, setPendingToggle] = useState<AdminProduct | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AdminProduct | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const query = new URLSearchParams();
-      if (search.trim()) query.set('search', search.trim());
-      if (categoryId) query.set('category_id', categoryId);
-      if (status !== 'all') query.set('is_active', String(status === 'active'));
-      query.set('limit', '200');
-
-      const data = await apiRequest<{ products: AdminProduct[] }>(
-        `/admin/products?${query.toString()}`
-      );
+      // Every page, not just the first 200 (the API pages its product list).
+      const data = await productsApi.listAllAdmin({
+        search: search.trim() || undefined,
+        category_id: categoryId || undefined,
+        is_active: status === 'all' ? undefined : status === 'active',
+      });
       setRows(data.products);
+      setComplete(data.complete);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load products.');
+      setError(errorMessage(err, 'Could not load products.'));
       setRows([]);
     }
   }, [search, categoryId, status]);
@@ -66,7 +65,7 @@ export function Products() {
       );
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not update the product.');
+      toast.error(errorMessage(err, 'Could not update the product.'));
     } finally {
       setPendingToggle(null);
     }
@@ -82,7 +81,7 @@ export function Products() {
           : `${product.name} is deleted.`
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not delete the product.');
+      toast.error(errorMessage(err, 'Could not delete the product.'));
     }
     await load();
   }
@@ -138,6 +137,11 @@ export function Products() {
       </div>
 
       {error ? <p className="field__error">{error}</p> : null}
+      {rows && !complete ? (
+        <p className="form__note" role="status">
+          Showing the first {rows.length} products. Refine the search or filters to find the rest.
+        </p>
+      ) : null}
 
       {rows === null ? (
         <Spinner label="Loading products" />

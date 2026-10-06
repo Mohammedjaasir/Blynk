@@ -4,7 +4,7 @@ import { dental } from '../../api/resources';
 import type { DoctorAvailability, DoctorBlockedDate } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
 import { ConfirmDialog, EmptyState, Field, Spinner } from '../../components/ui';
-import { dentalErrorMessage } from '../../lib/dental';
+import { dentalErrorMessage, formatBlockedDate } from '../../lib/dental';
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -161,7 +161,7 @@ export function Availability() {
             {blockedDates.map((block) => (
               <li key={block.id} className="cat-row cat-row--flat">
                 <div className="cat-row__main">
-                  <p className="cat-row__title">{block.blocked_date}</p>
+                  <p className="cat-row__title">{formatBlockedDate(block.blocked_date)}</p>
                   <p className="cat-row__meta">{block.reason}</p>
                 </div>
                 <div className="cat-row__actions">
@@ -220,7 +220,7 @@ export function Availability() {
       {unblocking ? (
         <ConfirmDialog
           title="Unblock date"
-          message={`${unblocking.blocked_date} becomes bookable again for this doctor at this clinic.`}
+          message={`${formatBlockedDate(unblocking.blocked_date)} becomes bookable again for this doctor at this clinic.`}
           confirmLabel="Unblock"
           onConfirm={() => void removeBlock(unblocking)}
           onCancel={() => setUnblocking(null)}

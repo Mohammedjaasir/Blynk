@@ -169,6 +169,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export function orderErrorMessage(err: unknown): string {
   if (!(err instanceof ApiError)) return 'Something went wrong. Nothing was changed.';
   const details = (err.details ?? {}) as Record<string, any>;
+  // (BATCH_DROPOFFS_TOO_FAR is normally answered inside the assign dialog -
+  // see `farBatchRefusal` - this copy is its fallback.)
   switch (err.code) {
     case 'ORDER_NOT_PACKABLE':
       if (details.unsourced_substitutions > 0) {
@@ -255,4 +257,21 @@ export function boardOrderLikeFromDetail(detail: OrderDetail): BoardOrderLike {
       ? { id: d.id, assignment_status: d.assignment_status, rider_id: d.rider_id, rider_name: d.rider_name ?? null }
       : null;
   return { order_status: detail.order_status, items_summary, active_delivery };
+}
+
+/**
+ * The assign-rider refusal that only needs a confirmation (409
+ * BATCH_DROPOFFS_TOO_FAR: the drop-off is far from the rider's other one).
+ * The dialog stays open and offers "Add to trip anyway" for that rider -
+ * which matters most when the suggestions could not load and the plain
+ * roster (no trip distances) was offered instead. Null for anything else.
+ */
+export interface FarBatchRefusal {
+  riderId: string;
+  message: string;
+}
+
+export function farBatchRefusal(err: unknown, riderId: string, confirmed: boolean): FarBatchRefusal | null {
+  if (confirmed || !(err instanceof ApiError) || err.code !== 'BATCH_DROPOFFS_TOO_FAR') return null;
+  return { riderId, message: orderErrorMessage(err) };
 }

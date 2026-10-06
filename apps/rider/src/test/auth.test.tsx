@@ -141,7 +141,7 @@ describe('rider sign-in and session', () => {
     await user.click(await screen.findByRole('button', { name: 'Skip sign-in' }));
     expect(await screen.findByText('No deliveries assigned to you right now.')).toBeInTheDocument();
     await waitFor(() =>
-      expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({ phone: '0779876543', otp: '654321' })
+      expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({ phone: '0779876543', otp: '654321', create_account: false })
     );
   });
 });

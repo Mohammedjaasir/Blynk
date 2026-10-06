@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { tokenStore } from '../api/client';
 import type { OrderSourcing, SourcingItem } from '../api/types';
+import { QUEUE_DETAIL_CONCURRENCY } from '../pages/SourcingQueue';
 import { STAFF, fail, ok, pageOf, renderAs, stockRow, supplier } from './helpers';
 
 beforeEach(() => {
@@ -53,6 +54,18 @@ const sourcingFor = (items: SourcingItem[], orderNumber = ORDER.order_number): O
   items,
 });
 
+const DONE_ITEM = item({
+  id: 'i-done',
+  order_id: 'o2',
+  product_id: 'p-dhal',
+  product_name_snapshot: 'Red Dhal 1kg',
+  sku_snapshot: 'SKU-GRO-010',
+  unit_snapshot: '1 kg',
+  quantity: 3,
+  item_status: 'SOURCED',
+  actual_unit_cost: 455,
+});
+
 function queueHandlers(extra: Record<string, any> = {}) {
   return {
     'GET /admin/orders': (call: any) =>
@@ -60,7 +73,7 @@ function queueHandlers(extra: Record<string, any> = {}) {
     'GET /admin/orders/:id/sourcing': (call: any) =>
       call.path.includes('/o1/')
         ? ok(sourcingFor([item({}), item({ id: 'i-butter', product_id: 'p-butter', product_name_snapshot: 'Pelwatte Salted Butter 200g', quantity: 1, subtotal: 805, estimated_unit_cost: 700 })]))
-        : ok(sourcingFor([item({ id: 'i-done', order_id: 'o2', item_status: 'SOURCED', actual_unit_cost: 455 })], DONE_ORDER.order_number)),
+        : ok(sourcingFor([DONE_ITEM], DONE_ORDER.order_number)),
     'GET /admin/inventory': () =>
       ok(pageOf('inventory', [stockRow({ tracking_mode: 'UNTRACKED', quantity_on_hand: 0, quantity_available: 0 })])),
     'GET /admin/suppliers': () => ok({ suppliers: [supplier()] }),
@@ -75,11 +88,13 @@ async function openSource(name = 'Kotmale Fresh Milk 1L') {
 }
 
 describe('sourcing queue', () => {
-  it('shows only orders with items to source, and never the customer’s name, phone or address', async () => {
+  it('shows orders with items to source and those ready to pack, and never the customer’s name, phone or address', async () => {
     const { api } = renderAs(STAFF, '/sourcing', queueHandlers());
     expect(await screen.findByText('BL-20260918-1301')).toBeInTheDocument();
     expect(screen.getByText('2 of 2 to source')).toBeInTheDocument();
-    expect(screen.queryByText('BL-20260918-1300')).toBeNull(); // fully sourced
+    // Fully sourced: still listed, now to be packed.
+    const done = screen.getByRole('rowgroup', { name: 'Order BL-20260918-1300' });
+    expect(within(done).getByText('Ready to pack')).toBeInTheDocument();
     expect(api.find('GET', '/admin/orders').map((c) => c.query.get('status')).sort()).toEqual(['ITEM_UNAVAILABLE', 'PLACED']);
 
     const text = document.body.textContent!;
@@ -88,7 +103,7 @@ describe('sourcing queue', () => {
     expect(text).not.toContain('Marikar Street');
   });
 
-  it('records sourcing with the actual cost, quantity and an active supplier - never a free-text supplier', async () => {
+  it('records sourcing of the full quantity with the actual cost and an active supplier - never a free-text supplier', async () => {
     const { api } = renderAs(STAFF, '/sourcing', queueHandlers({
       'POST /admin/orders/:id/items/:itemId/source': () => ok({ item: {} }),
     }));
@@ -134,17 +149,70 @@ describe('sourcing queue', () => {
     expect(await screen.findByRole('dialog', { name: 'Mark item unavailable' })).toBeInTheDocument();
   });
 
-  it('validates cost and quantity before calling the API', async () => {
+  it('validates the cost before calling the API', async () => {
     const { api } = renderAs(STAFF, '/sourcing', queueHandlers());
     const dialog = await openSource();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Record sourcing' }));
     expect(await within(dialog).findByText('Enter the actual unit cost you paid.')).toBeInTheDocument();
-    await userEvent.type(within(dialog).getByLabelText(/Actual unit cost/), '455');
-    await userEvent.clear(within(dialog).getByLabelText('Quantity sourced'));
-    await userEvent.type(within(dialog).getByLabelText('Quantity sourced'), '3');
+    await userEvent.type(within(dialog).getByLabelText(/Actual unit cost/), '45.555');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Record sourcing' }));
-    expect(await within(dialog).findByText(/Quantity must be a whole number from 1 to 2/)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/at most two decimals/)).toBeInTheDocument();
     expect(api.find('POST', '/admin/orders/o1/items/i-milk/source')).toHaveLength(0);
+  });
+
+  it('has no quantity field: the whole ordered quantity is sourced, shown as text', async () => {
+    renderAs(STAFF, '/sourcing', queueHandlers());
+    const dialog = await openSource();
+    expect(within(dialog).queryByLabelText(/Quantity/)).toBeNull();
+    expect(within(dialog).getByText(/Sourcing all/)).toHaveTextContent('Sourcing all 2 × 1 L');
+  });
+
+  it('explains 400 PARTIAL_SOURCING_NOT_SUPPORTED and offers Mark unavailable', async () => {
+    renderAs(STAFF, '/sourcing', queueHandlers({
+      'POST /admin/orders/:id/items/:itemId/source': () =>
+        fail(400, 'PARTIAL_SOURCING_NOT_SUPPORTED', 'Partial sourcing is not supported.'),
+    }));
+    const dialog = await openSource();
+    await userEvent.type(within(dialog).getByLabelText(/Actual unit cost/), '455');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record sourcing' }));
+    expect(await within(dialog).findByText('Source the full quantity, or mark the item unavailable.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Mark unavailable' })).toBeInTheDocument();
+  });
+
+  it('offers Mark unavailable on INSUFFICIENT_AVAILABLE_INVENTORY', async () => {
+    renderAs(STAFF, '/sourcing', queueHandlers({
+      'POST /admin/orders/:id/items/:itemId/source': () => fail(409, 'INSUFFICIENT_AVAILABLE_INVENTORY', 'x'),
+    }));
+    const dialog = await openSource();
+    await userEvent.type(within(dialog).getByLabelText(/Actual unit cost/), '455');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record sourcing' }));
+    expect(await within(dialog).findByText(/reserved for other orders/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark unavailable' }));
+    expect(await screen.findByRole('dialog', { name: 'Mark item unavailable' })).toBeInTheDocument();
+  });
+
+  it('says an order no longer in sourcing was already packed, cancelled or delivered', async () => {
+    renderAs(STAFF, '/sourcing', queueHandlers({
+      'POST /admin/orders/:id/items/:itemId/source': () => fail(409, 'ORDER_NOT_IN_SOURCING_STATE', 'x'),
+    }));
+    const dialog = await openSource();
+    await userEvent.type(within(dialog).getByLabelText(/Actual unit cost/), '455');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record sourcing' }));
+    expect(await within(dialog).findByText(/already packed, cancelled or delivered/)).toBeInTheDocument();
+  });
+
+  it('flags short tracked stock up front, offers Mark unavailable and never sends a partial quantity', async () => {
+    const { api } = renderAs(STAFF, '/sourcing', queueHandlers({
+      'GET /admin/inventory': () => ok(pageOf('inventory', [stockRow({ quantity_on_hand: 1, quantity_available: 1 })])),
+    }));
+    const dialog = await openSource();
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Only 1 counted in stock - not enough for all 2.');
+    await userEvent.type(within(dialog).getByLabelText(/Actual unit cost/), '455');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record sourcing' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/Restock first, or mark the item unavailable/);
+    expect(api.find('POST', '/admin/orders/o1/items/i-milk/source')).toHaveLength(0);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark unavailable' }));
+    expect(await screen.findByRole('dialog', { name: 'Mark item unavailable' })).toBeInTheDocument();
   });
 
   it('marks an item unavailable through the existing resolve-item flow after confirmation (D4)', async () => {
@@ -199,5 +267,136 @@ describe('sourcing queue', () => {
   it('says so when nothing is waiting', async () => {
     renderAs(STAFF, '/sourcing');
     expect(await screen.findByText('Nothing to source')).toBeInTheDocument();
+  });
+});
+
+describe('sourcing queue: loading', () => {
+  const manyOrders = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      ...ORDER,
+      id: `o${100 + i}`,
+      order_number: `BL-20260918-${2000 + i}`,
+      placed_at: `2026-09-18T09:${String(i % 60).padStart(2, '0')}:00.000Z`,
+    }));
+
+  it('reads order details at most five at a time', async () => {
+    const orders = manyOrders(12);
+    let inFlight = 0;
+    let peak = 0;
+    renderAs(STAFF, '/sourcing', queueHandlers({
+      'GET /admin/orders': (call: any) => ok(pageOf('orders', call.query.get('status') === 'PLACED' ? orders : [])),
+      'GET /admin/orders/:id/sourcing': async (call: any) => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+        const id = call.path.split('/')[3];
+        return ok(sourcingFor([item({ id: `i-${id}`, order_id: id })], id));
+      },
+    }));
+    expect(await screen.findByText('BL-20260918-2011')).toBeInTheDocument();
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(QUEUE_DETAIL_CONCURRENCY);
+    expect(QUEUE_DETAIL_CONCURRENCY).toBe(5);
+  });
+
+  it('says when the backend has more open orders than were loaded (pagination.total)', async () => {
+    renderAs(STAFF, '/sourcing', queueHandlers({
+      'GET /admin/orders': (call: any) =>
+        ok(
+          call.query.get('status') === 'PLACED'
+            ? { orders: [ORDER], pagination: { page: 1, limit: 100, total: 130, total_pages: 2 } }
+            : { orders: [], pagination: { page: 1, limit: 100, total: 0, total_pages: 1 } }
+        ),
+    }));
+    expect(await screen.findByText(/129 more orders were not loaded/)).toBeInTheDocument();
+    expect(ordersLimitRequested()).toBe('100');
+  });
+
+  it('pages through every product for the stock column, not just the first 100', async () => {
+    const { api } = renderAs(STAFF, '/sourcing', queueHandlers({
+      'GET /admin/inventory': (call: any) =>
+        call.query.get('page') === '2'
+          ? ok(pageOf('inventory', [stockRow({ quantity_on_hand: 47 })], 2, 2))
+          : ok(pageOf('inventory', [stockRow({ product_id: 'p-other', product_name: 'Other' })], 1, 2)),
+    }));
+    const row = (await screen.findByText('Kotmale Fresh Milk 1L')).closest('tr')!;
+    await waitFor(() => expect(within(row).getByText('47')).toBeInTheDocument());
+    const pages = api.find('GET', '/admin/inventory').map((c) => [c.query.get('page'), c.query.get('limit')]);
+    expect(pages).toEqual([
+      ['1', '100'],
+      ['2', '100'],
+    ]);
+  });
+});
+
+/** The limit the queue asked GET /admin/orders for (the backend maximum). */
+function ordersLimitRequested() {
+  const calls = (globalThis.fetch as any).mock.calls as Array<[string]>;
+  const orderCall = calls.map(([url]) => new URL(String(url))).find((u) => u.pathname.endsWith('/admin/orders'));
+  return orderCall?.searchParams.get('limit');
+}
+
+describe('marking an order packed', () => {
+  async function openPack() {
+    const group = await screen.findByRole('rowgroup', { name: 'Order BL-20260918-1300' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Mark packed' }));
+    return screen.findByRole('dialog', { name: 'Mark order packed' });
+  }
+
+  it('is offered only once nothing is left to source', async () => {
+    renderAs(STAFF, '/sourcing', queueHandlers());
+    const pending = await screen.findByRole('rowgroup', { name: 'Order BL-20260918-1301' });
+    expect(within(pending).queryByRole('button', { name: 'Mark packed' })).toBeNull();
+    const done = screen.getByRole('rowgroup', { name: 'Order BL-20260918-1300' });
+    expect(within(done).getByRole('button', { name: 'Mark packed' })).toBeInTheDocument();
+  });
+
+  it('is not offered for an order whose every item is unavailable', async () => {
+    renderAs(STAFF, '/sourcing', queueHandlers({
+      'GET /admin/orders/:id/sourcing': (call: any) =>
+        call.path.includes('/o1/')
+          ? ok(sourcingFor([item({})]))
+          : ok(sourcingFor([{ ...DONE_ITEM, item_status: 'UNAVAILABLE', actual_unit_cost: null }], DONE_ORDER.order_number)),
+    }));
+    expect(await screen.findByText('BL-20260918-1301')).toBeInTheDocument();
+    expect(screen.queryByText('BL-20260918-1300')).toBeNull();
+  });
+
+  it('confirms with a packing list (no prices, no customer), sends PACKED and drops the order from the queue', async () => {
+    let packed = false;
+    const { api } = renderAs(STAFF, '/sourcing', queueHandlers({
+      'GET /admin/orders': (call: any) =>
+        ok(pageOf('orders', call.query.get('status') === 'PLACED' ? (packed ? [ORDER] : [ORDER, DONE_ORDER]) : [])),
+      'PATCH /admin/orders/:id/status': () => {
+        packed = true;
+        return ok({ order: {} });
+      },
+    }));
+    const dialog = await openPack();
+    const list = within(dialog).getByRole('list', { name: 'Packing list' });
+    expect(list).toHaveTextContent('3 × Red Dhal 1kg (1 kg)');
+    expect(dialog.textContent).not.toMatch(/LKR/);
+    expect(dialog.textContent).not.toContain('Ahmed Rizvi');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark packed' }));
+
+    await waitFor(() => expect(api.find('PATCH', '/admin/orders/o2/status')[0]?.body).toEqual({ status: 'PACKED' }));
+    await waitFor(() => expect(screen.queryByText('BL-20260918-1300')).toBeNull());
+    expect(screen.getByText('BL-20260918-1300 marked packed.')).toBeInTheDocument();
+  });
+
+  it.each([
+    [422, 'INVALID_STATUS_TRANSITION'],
+    [409, 'ORDER_NOT_IN_SOURCING_STATE'],
+  ])('explains a %i %s refusal (already packed or cancelled) and refreshes', async (status, code) => {
+    const { api } = renderAs(STAFF, '/sourcing', queueHandlers({
+      'PATCH /admin/orders/:id/status': () => fail(status, code, 'An order in PACKED cannot move to PACKED.'),
+    }));
+    const dialog = await openPack();
+    const loadsBefore = api.find('GET', '/admin/orders/o2/sourcing').length;
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark packed' }));
+    expect(await screen.findByText(/already packed, cancelled or delivered/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(api.find('GET', '/admin/orders/o2/sourcing').length).toBeGreaterThan(loadsBefore));
   });
 });

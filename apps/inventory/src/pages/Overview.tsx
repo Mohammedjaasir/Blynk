@@ -21,7 +21,7 @@ function attentionRank(row: StockRow) {
  */
 export function Overview() {
   const { user } = useAuth();
-  const attention = useLoad(() => stockApi.list({ low_stock_only: true, limit: 100 }), []);
+  const attention = useLoad(() => stockApi.listAll({ low_stock_only: true }), []);
   const lowStock = useLoad(() => stockApi.lowStock(), []);
   const lowCounts = lowStock.data?.counts;
   const queue = useLoad(loadQueue, []);
@@ -31,7 +31,9 @@ export function Overview() {
     (a, b) => attentionRank(a) - attentionRank(b) || a.product_name.localeCompare(b.product_name)
   );
   const orderableEmpty = attentionRows.filter(isOrderableButOut).length;
-  const queueEntries = queue.data ?? [];
+  // Orders still being bought; those ready to pack are on the queue screen.
+  const queueEntries = (queue.data?.entries ?? []).filter((e) => e.sourcing.metrics.pending_items > 0);
+  const notLoaded = queue.data?.notLoaded ?? 0;
   const pendingItems = queueEntries.reduce((sum, e) => sum + e.sourcing.metrics.pending_items, 0);
 
   const firstName = user?.full_name?.split(' ')[0];
@@ -131,6 +133,12 @@ export function Overview() {
           ) : null}
           {queueEntries.length > 6 ? (
             <p className="quiet">and {queueEntries.length - 6} more in the queue.</p>
+          ) : null}
+          {notLoaded > 0 ? (
+            <p className="notice notice--warn">
+              {notLoaded} more open {notLoaded === 1 ? 'order was' : 'orders were'} not loaded. Open the queue and
+              refresh after working through these.
+            </p>
           ) : null}
         </section>
 

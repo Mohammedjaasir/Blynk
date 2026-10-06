@@ -506,6 +506,19 @@ function toAvailabilityDto(row: {
   };
 }
 
+/**
+ * A Postgres DATE as the plain 'YYYY-MM-DD' it is. node-pg parses DATE
+ * (OID 1082) into a JS Date at *local* midnight, which JSON then serialises
+ * as an ISO timestamp shifted to UTC (2027-12-25 became
+ * "2027-12-24T18:30:00.000Z" in Colombo). Reading the local calendar fields
+ * back is the exact inverse of that parse, so no day is ever lost.
+ */
+export function toDateOnly(value: string | Date): string {
+  if (typeof value === 'string') return value.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
 function toBlockedDateDto(row: {
   id: string;
   clinic_doctor_id: string;
@@ -517,7 +530,7 @@ function toBlockedDateDto(row: {
   return {
     id: row.id,
     clinic_doctor_id: row.clinic_doctor_id,
-    blocked_date: row.blocked_date,
+    blocked_date: toDateOnly(row.blocked_date),
     reason: row.reason,
     created_by: row.created_by,
     created_at: row.created_at,

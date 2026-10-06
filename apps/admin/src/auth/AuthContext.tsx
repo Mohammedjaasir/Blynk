@@ -4,10 +4,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { ApiError, tokenStore } from '../api/client';
+import { ApiError, onSessionEnded, tokenStore } from '../api/client';
 import { auth as authApi } from '../api/resources';
 import type { AuthUser } from '../api/types';
 
@@ -22,7 +23,15 @@ import type { AuthUser } from '../api/types';
  */
 interface AuthState {
   user: AuthUser | null;
-  status: 'loading' | 'authenticated' | 'anonymous';
+  /**
+   * `unreachable`: a stored session could not be checked because the API did
+   * not answer. The tokens are kept (nothing refused them) and `retry` tries again.
+   */
+  status: 'loading' | 'authenticated' | 'anonymous' | 'unreachable';
+  /** The server ended the session (refresh refused); sign-in says so. */
+  sessionEnded: boolean;
+  /** Re-check a stored session after `unreachable`. */
+  retry(): void;
   requestOtp(phone: string): Promise<{ devOtp?: string }>;
   verifyOtp(phone: string, otp: string): Promise<void>;
   /** Staff email + password sign-in - the same role gate as an SMS code. */
@@ -31,6 +40,8 @@ interface AuthState {
 }
 
 const AuthContext = createContext<AuthState | null>(null);
+
+export const SESSION_ENDED_MESSAGE = 'Your session has ended. Sign in again.';
 
 export const NOT_ADMIN_MESSAGE =
   'This account is not a Blynk operations account.';
@@ -59,6 +70,24 @@ const isOperations = (user: AuthUser) => OPERATIONS_ROLES.includes(user.role);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthState['status']>('loading');
+  const [sessionEnded, setSessionEnded] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const signingOut = useRef(false);
+  const statusRef = useRef(status);
+  statusRef.current = status;
+
+  // The API client clears the tokens when the server refuses a refresh; the
+  // app has to follow, or every signed-in page would just keep erroring.
+  useEffect(
+    () =>
+      onSessionEnded(() => {
+        if (signingOut.current || statusRef.current === 'anonymous') return;
+        setUser(null);
+        setSessionEnded(true);
+        setStatus('anonymous');
+      }),
+    []
+  );
 
   // Restore an existing session on load, and drop it if the account is not
   // (or is no longer) an operations account.
@@ -69,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setStatus('anonymous');
         return;
       }
+      setStatus('loading');
       try {
         const me = await authApi.me();
         if (cancelled) return;
@@ -79,8 +109,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setUser(me);
         setStatus('authenticated');
-      } catch {
+      } catch (err) {
         if (cancelled) return;
+        // No answer is not a refusal: keep the session and offer a retry.
+        if (err instanceof ApiError && (err.code === 'NETWORK' || err.code === 'REFRESH_UNAVAILABLE' || err.status >= 500)) {
+          setStatus('unreachable');
+          return;
+        }
         tokenStore.clear();
         setStatus('anonymous');
       }
@@ -89,7 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const requestOtp = useCallback(async (phone: string) => {
     const data = await authApi.requestOtp(phone);
@@ -103,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new ApiError(wrongAppMessage(data.user.role), 403, 'FORBIDDEN');
     }
     tokenStore.save(data.access_token, data.refresh_token);
+    setSessionEnded(false);
     setUser(data.user);
     setStatus('authenticated');
   }, []);
@@ -118,19 +156,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    signingOut.current = true;
     try {
       await authApi.logout();
     } catch {
       // Signing out locally matters more than the server round trip.
+    } finally {
+      signingOut.current = false;
     }
     tokenStore.clear();
+    setSessionEnded(false);
     setUser(null);
     setStatus('anonymous');
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, status, requestOtp, verifyOtp, signInWithPassword, signOut }),
-    [user, status, requestOtp, verifyOtp, signInWithPassword, signOut]
+    () => ({ user, status, sessionEnded, retry, requestOtp, verifyOtp, signInWithPassword, signOut }),
+    [user, status, sessionEnded, retry, requestOtp, verifyOtp, signInWithPassword, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

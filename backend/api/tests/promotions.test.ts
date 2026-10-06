@@ -729,5 +729,36 @@ describe('Admin Promotions & Media Module', () => {
       expect(res.status).toBe(200);
       expect(fs.existsSync(path.join(env.MEDIA_ROOT, key))).toBe(false);
     });
+
+    it('keeps an image file while another promotion still uses it; removes it once nothing does', async () => {
+      const upload = await request(app)
+        .post('/api/v1/admin/media')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .field('folder', 'promotions')
+        .attach('file', pngFixture, 'shared.png');
+      const { key, url } = upload.body.data.media;
+      uploadedKeys.push(key);
+      const file = path.join(env.MEDIA_ROOT, key);
+
+      const a = await createPromotion({ title: 'TEST-PROMO shared image A', image_url: url });
+      const b = await createPromotion({ title: 'TEST-PROMO shared image B', image_url: url });
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+
+      // Deleting A: B still shows the file, so it stays.
+      await request(app)
+        .delete(`/api/v1/admin/promotions/${a.body.data.promotion.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(fs.existsSync(file)).toBe(true);
+
+      // Replacing B's image: nothing references the file any more.
+      await request(app)
+        .patch(`/api/v1/admin/promotions/${b.body.data.promotion.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ image_url: null })
+        .expect(200);
+      expect(fs.existsSync(file)).toBe(false);
+    });
   });
 });

@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.middleware.js';
+import { requireRoles } from '../../middleware/role.middleware.js';
+import { deleteCustomerAccount } from './account.service.js';
 import { addressController } from './address.controller.js';
 import { devicesController } from '../notifications/push/devices.controller.js';
 
@@ -12,6 +14,19 @@ meRouter.use(requireAuth);
 
 meRouter.get('/', addressController.getProfile.bind(addressController));
 meRouter.patch('/', addressController.updateProfile.bind(addressController));
+// Customer account deletion: anonymise + deactivate, orders kept for accounting.
+meRouter.delete('/', requireRoles('CUSTOMER'), async (req, res, next) => {
+  try {
+    const data = await deleteCustomerAccount(req.user!.id, {
+      actorId: req.user!.id,
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    });
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
 
 meRouter.get('/addresses', addressController.listAddresses.bind(addressController));
 meRouter.post('/addresses', addressController.createAddress.bind(addressController));

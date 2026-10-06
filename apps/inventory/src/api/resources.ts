@@ -28,17 +28,28 @@ export const authApi = {
       auth: false,
     }),
 
+  /**
+   * create_account: false - Inventory is staff-only, so an unknown number must
+   * never become a new customer account (404 ACCOUNT_NOT_FOUND instead).
+   */
   verifyOtp: (phone: string, otp: string) =>
     apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/otp/verify', {
       method: 'POST',
-      body: { phone, otp },
+      body: { phone, otp, create_account: false },
       auth: false,
     }),
   me: () => apiRequest<AuthUser>('/auth/me'),
   // Send the refresh token so the server revokes it: without it the route
   // knows neither the session nor the user, and the session outlives sign-out.
-  logout: () =>
-    apiRequest('/auth/logout', { method: 'POST', body: tokenStore.refresh ? { refresh_token: tokenStore.refresh } : {} }),
+  // POST /auth/logout needs no access token: the refresh token alone names the
+  // session. Pass one explicitly to revoke tokens that were never stored (a
+  // sign-in refused for its role).
+  logout: (refreshToken: string | null = tokenStore.refresh) =>
+    apiRequest('/auth/logout', {
+      method: 'POST',
+      body: refreshToken ? { refresh_token: refreshToken } : {},
+      auth: false,
+    }),
 };
 
 export interface StockQuery {
@@ -50,9 +61,27 @@ export interface StockQuery {
   limit?: number;
 }
 
+/** The backend's largest page (inventoryQuerySchema: limit max 100). */
+export const MAX_PAGE_SIZE = 100;
+
 export const stockApi = {
   list: (query: StockQuery = {}) =>
     apiRequest<{ inventory: StockRow[]; pagination: Pagination }>('/admin/inventory', { query: { ...query } }),
+  /**
+   * Every matching row, page by page. For lookups and filters (product
+   * pickers, the sourcing queue's stock column, "Needs stock") that must not
+   * silently stop at the first 100 products.
+   */
+  async listAll(query: Omit<StockQuery, 'page' | 'limit'> = {}): Promise<{ inventory: StockRow[] }> {
+    const first = await stockApi.list({ ...query, page: 1, limit: MAX_PAGE_SIZE });
+    const rows = [...first.inventory];
+    const totalPages = first.pagination?.total_pages ?? 1;
+    for (let page = 2; page <= totalPages; page++) {
+      const next = await stockApi.list({ ...query, page, limit: MAX_PAGE_SIZE });
+      rows.push(...next.inventory);
+    }
+    return { inventory: rows };
+  },
   detail: (productId: string) => apiRequest<StockDetail>(`/admin/inventory/${productId}`),
   setMode: (productId: string, tracking_mode: TrackingMode) =>
     apiRequest(`/admin/inventory/${productId}/mode`, { method: 'PATCH', body: { tracking_mode } }),
@@ -94,18 +123,28 @@ export const ledgerApi = {
  */
 const SOURCEABLE_STATUSES: OrderStatus[] = ['PLACED', 'ITEM_UNAVAILABLE'];
 
+export interface OpenOrders {
+  orders: QueueOrder[];
+  /** Open orders the backend has in total (pagination.total, per status, summed). */
+  total: number;
+}
+
 export const sourcingApi = {
-  /** Open orders, reduced to the fields sourcing needs (no customer PII). */
-  async openOrders(): Promise<QueueOrder[]> {
+  /**
+   * Open orders, reduced to the fields sourcing needs (no customer PII). One
+   * page of 100 per status; `total` says how many exist, so the screen can
+   * say when some were not loaded.
+   */
+  async openOrders(): Promise<OpenOrders> {
     const pages = await Promise.all(
       SOURCEABLE_STATUSES.map((status) =>
-        apiRequest<{ orders: Array<QueueOrder & { created_at: string; placed_at: string | null }> }>(
-          '/admin/orders',
-          { query: { status, limit: 100 } }
-        )
+        apiRequest<{
+          orders: Array<QueueOrder & { created_at: string; placed_at: string | null }>;
+          pagination?: Pagination;
+        }>('/admin/orders', { query: { status, limit: MAX_PAGE_SIZE } })
       )
     );
-    return pages
+    const orders = pages
       .flatMap((page) => page.orders)
       .map((o) => ({
         id: o.id,
@@ -113,13 +152,24 @@ export const sourcingApi = {
         order_status: o.order_status,
         placed_at: o.placed_at ?? o.created_at,
       }));
+    const total = pages.reduce((sum, page) => sum + Math.max(page.pagination?.total ?? 0, page.orders.length), 0);
+    return { orders, total };
   },
   detail: (orderId: string) => apiRequest<OrderSourcing>(`/admin/orders/${orderId}/sourcing`),
   source: (
     orderId: string,
     itemId: string,
-    body: { actual_unit_cost: number; quantity: number; supplier_id?: string; notes?: string }
+    // Always the full ordered quantity: the backend refuses partial sourcing
+    // (400 PARTIAL_SOURCING_NOT_SUPPORTED); short stock means "mark unavailable".
+    body: { actual_unit_cost: number; quantity?: number; supplier_id?: string; notes?: string }
   ) => apiRequest(`/admin/orders/${orderId}/items/${itemId}/source`, { method: 'POST', body }),
+  /**
+   * Pack an order whose items are all sourced or unavailable. PATCH status
+   * PACKED is the only status change this app makes (ADMIN and PACKING_STAFF);
+   * the backend refuses anything else, and a stale order with 422/409.
+   */
+  markPacked: (orderId: string) =>
+    apiRequest(`/admin/orders/${orderId}/status`, { method: 'PATCH', body: { status: 'PACKED' } }),
   /** Existing order-resolution flow (D4): removes the item, recalculates, notifies. */
   markUnavailable: (orderId: string, itemId: string) =>
     apiRequest(`/admin/orders/${orderId}/resolve-item`, {

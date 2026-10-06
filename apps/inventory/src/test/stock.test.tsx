@@ -97,6 +97,17 @@ describe('stock levels', () => {
     );
   });
 
+  it('limits the search box to the backend maximum of 100 characters', async () => {
+    renderAs(ADMIN, '/stock', { 'GET /admin/inventory': () => ok(pageOf('inventory', ROWS)) });
+    expect(await screen.findByLabelText(/Search products/)).toHaveAttribute('maxlength', '100');
+  });
+
+  it('cuts a longer search from the address bar to 100 characters', async () => {
+    const { api } = renderAs(ADMIN, `/stock?q=${'a'.repeat(150)}`, { 'GET /admin/inventory': () => ok(pageOf('inventory', [])) });
+    await waitFor(() => expect(api.find('GET', '/admin/inventory').length).toBeGreaterThan(0));
+    expect(api.find('GET', '/admin/inventory').at(-1)!.query.get('search')).toHaveLength(100);
+  });
+
   it('filters by tracking mode and low stock through the API', async () => {
     const { api } = renderAs(ADMIN, '/stock', { 'GET /admin/inventory': () => ok(pageOf('inventory', ROWS)) });
     await screen.findByText('Kotmale Fresh Milk 1L');
@@ -271,12 +282,84 @@ describe('stock adjustments (D3, tracked products, ADMIN)', () => {
     expect(screen.getByText(/Start tracking to record restocks/)).toBeInTheDocument();
   });
 
-  it('gives packing staff the panel without adjust or tracking controls', async () => {
+  it('gives packing staff Adjust stock but no tracking or threshold controls', async () => {
     renderAs(STAFF, '/stock?product=p-milk', adjustHandlers(detail()));
     expect(await screen.findByText('units on hand')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Adjust stock' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Adjust stock' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /tracking/ })).toBeNull();
-    expect(screen.getByText(/made by a Blynk admin/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save threshold' })).toBeNull();
+    expect(screen.getByText('Tracking changes are made by a Blynk admin.')).toBeInTheDocument();
+    expect(screen.getByText('The low-stock threshold is set by a Blynk admin.')).toBeInTheDocument();
+  });
+
+  it('lets packing staff record a restock (owner decision)', async () => {
+    const { api } = renderAs(STAFF, '/stock?product=p-milk', adjustHandlers(detail()));
+    const dialog = await openAdjust();
+    await userEvent.type(within(dialog).getByLabelText('Units received'), '6');
+    await userEvent.type(within(dialog).getByLabelText(/Reason/), 'Morning delivery');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record adjustment' }));
+    await waitFor(() =>
+      expect(api.find('POST', '/admin/inventory/p-milk/adjust')[0]?.body).toEqual({
+        adjustment_type: 'PURCHASE_RESTOCK',
+        quantity_delta: 6,
+        notes: 'Morning delivery',
+      })
+    );
+  });
+
+  it('tells packing staff an untracked product needs an admin to start tracking', async () => {
+    renderAs(STAFF, '/stock?product=p-milk', adjustHandlers(detail({ tracking_mode: 'UNTRACKED' })));
+    expect(await screen.findByText(/A Blynk admin can start tracking it/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Adjust stock' })).toBeNull();
+  });
+
+  it('re-reads on hand before an audit and sends the delta from the current figure', async () => {
+    const { api } = renderAs(ADMIN, '/stock?product=p-milk', adjustHandlers(detail()));
+    const dialog = await openAdjust();
+    const readsBefore = api.find('GET', '/admin/inventory/p-milk').length;
+    await userEvent.click(within(dialog).getByLabelText(/Audit correction/));
+    await userEvent.type(within(dialog).getByLabelText('Counted on hand'), '10');
+    await userEvent.type(within(dialog).getByLabelText(/Reason/), 'Shelf count');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record adjustment' }));
+    await waitFor(() => expect(api.find('POST', '/admin/inventory/p-milk/adjust')).toHaveLength(1));
+    expect(api.find('GET', '/admin/inventory/p-milk').length).toBeGreaterThan(readsBefore);
+    expect(api.find('POST', '/admin/inventory/p-milk/adjust')[0].body.quantity_delta).toBe(-2);
+  });
+
+  it('warns and sends nothing when on hand moved since the panel loaded, then uses the new figure', async () => {
+    let reads = 0;
+    const { api } = renderAs(ADMIN, '/stock?product=p-milk', {
+      ...adjustHandlers(detail()),
+      // First read is the panel; every later read sees an order took 2 units.
+      'GET /admin/inventory/:productId': () => ok(detail(reads++ === 0 ? {} : { quantity_on_hand: 10, quantity_available: 10 })),
+    });
+    const dialog = await openAdjust();
+    await userEvent.click(within(dialog).getByLabelText(/Audit correction/));
+    await userEvent.type(within(dialog).getByLabelText('Counted on hand'), '9');
+    await userEvent.type(within(dialog).getByLabelText(/Reason/), 'Shelf count');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record adjustment' }));
+
+    expect(await within(dialog).findByText(/On hand changed from 12 to 10 since this panel loaded/)).toBeInTheDocument();
+    expect(api.find('POST', '/admin/inventory/p-milk/adjust')).toHaveLength(0);
+    expect(within(dialog).getByText(/On hand 10/)).toHaveTextContent('On hand 10 → 9 (−1)');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record adjustment' }));
+    await waitFor(() =>
+      expect(api.find('POST', '/admin/inventory/p-milk/adjust')[0]?.body).toMatchObject({
+        adjustment_type: 'INVENTORY_AUDIT_ADJUSTMENT',
+        quantity_delta: -1,
+      })
+    );
+  });
+
+  it('explains INSUFFICIENT_AVAILABLE_INVENTORY on an adjustment without offering Mark unavailable', async () => {
+    renderAs(ADMIN, '/stock?product=p-milk', adjustHandlers(detail(), () => fail(409, 'INSUFFICIENT_AVAILABLE_INVENTORY')));
+    const dialog = await openAdjust();
+    await userEvent.click(within(dialog).getByLabelText(/Damage write-off/));
+    await userEvent.type(within(dialog).getByLabelText('Units written off'), '5');
+    await userEvent.type(within(dialog).getByLabelText(/Reason/), 'Torn');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record adjustment' }));
+    expect(await within(dialog).findByText('That would leave less stock than is already reserved for orders.')).toBeInTheDocument();
   });
 
   it('starts tracking after confirmation', async () => {
