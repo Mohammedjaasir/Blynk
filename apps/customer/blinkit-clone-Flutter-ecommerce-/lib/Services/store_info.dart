@@ -13,6 +13,9 @@ abstract final class StoreInfo {
   /// Mirrors the delivery window constant in the backend `utils/time.ts`.
   static const String deliveryHoursLabel = '8 AM – 9 PM';
 
+  /// When ordering opens each morning (the start of [deliveryHoursLabel]).
+  static const String opensAtLabel = '8 AM';
+
   /// Mirrors `dark_stores.radius_km` (default 4.00).
   static const int serviceRadiusKm = 4;
 

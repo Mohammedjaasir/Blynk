@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeSriLankanPhone } from '../src/utils/phone.js';
 import { calculateHaversineKm, isWithinDeliveryRadius } from '../src/utils/geo.js';
-import { calculateScheduledDeliveryTime } from '../src/utils/time.js';
+import { calculateScheduledDeliveryTime, isWithinOrderingHours } from '../src/utils/time.js';
 import { calculateSellingPrice } from '../src/modules/pricing/index.js';
 
 describe('Utility Functions Verification', () => {
@@ -90,6 +90,19 @@ describe('Utility Functions Verification', () => {
       const nightTime = new Date('2026-09-14T18:00:00Z');
       const scheduled = calculateScheduledDeliveryTime(nightTime);
       expect(scheduled).not.toBeNull();
+    });
+  });
+
+  describe('Ordering hours (8 AM - 9 PM Asia/Colombo)', () => {
+    // Colombo is UTC+5:30.
+    it.each([
+      ['7:59 AM', '2026-10-06T02:29:00Z', false],
+      ['8:00 AM', '2026-10-06T02:30:00Z', true],
+      ['8:59 PM', '2026-10-06T15:29:00Z', true],
+      ['9:00 PM', '2026-10-06T15:30:00Z', false],
+      ['midnight', '2026-10-06T18:30:00Z', false],
+    ])('%s Colombo -> open: %s', (_label, utc, open) => {
+      expect(isWithinOrderingHours(new Date(utc))).toBe(open);
     });
   });
 });

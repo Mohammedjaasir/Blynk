@@ -5,6 +5,7 @@ import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { deliveryCodeForDelivery } from './helpers/delivery-code.js';
 import { liftRiderTripCap } from './helpers/rider-trips.js';
+import { orderingClock } from '../src/utils/time.js';
 
 // Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
 liftRiderTripCap();
@@ -218,6 +219,28 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toBe('DELIVERY_OUTSIDE_RADIUS');
       expect(res.body.error.details.distance_km).toBeGreaterThan(4.0);
+    });
+
+    it('refuses orders outside 8 AM - 9 PM Colombo time with HTTP 422 STORE_CLOSED', async () => {
+      const pinned = orderingClock.now;
+      try {
+        for (const utc of ['2026-10-06T15:30:00.000Z', '2026-10-06T02:29:00.000Z']) {
+          // 9:00 PM and 7:59 AM in Colombo (UTC+5:30): both just outside the window.
+          orderingClock.now = () => new Date(utc);
+          const res = await request(app)
+            .post('/api/v1/orders')
+            .set('Authorization', `Bearer ${tokenCustomerA}`)
+            .send({
+              address_id: addressWithin4kmId,
+              items: [{ product_id: 'b0000001-0000-0000-0000-000000000001', quantity: 1 }],
+            });
+          expect(res.status).toBe(422);
+          expect(res.body.error.code).toBe('STORE_CLOSED');
+          expect(res.body.error.message).toContain('8 AM to 9 PM');
+        }
+      } finally {
+        orderingClock.now = pinned;
+      }
     });
 
     it('successfully places an order within 4 km with authoritative pricing and 100 LKR fee', async () => {

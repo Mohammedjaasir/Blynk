@@ -42,7 +42,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(find.text('Order any time,'), findsOneWidget);
+    expect(find.text('Order in a few taps,'), findsOneWidget);
     expect(find.text('pay on delivery.'), findsOneWidget);
     expect(find.text('Get started'), findsOneWidget);
   });

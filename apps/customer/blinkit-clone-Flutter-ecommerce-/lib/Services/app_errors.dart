@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
+import 'package:ecom/Services/store_info.dart';
 
 /// What went wrong, in the words a customer needs. Never the exception text.
 enum CustomerErrorKind {
@@ -150,6 +151,13 @@ class AppErrors {
       kind: CustomerErrorKind.validation,
       title: "We don't deliver there yet",
       message: "We don't deliver to this address yet. Choose another address.",
+      retryable: false,
+    ),
+    // Orders are taken 8 AM - 9 PM Colombo time only (owner, 2026-10-06).
+    'STORE_CLOSED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: "We're closed right now",
+      message: 'We take orders ${StoreInfo.deliveryHoursLabel}. Please order again after ${StoreInfo.opensAtLabel}.',
       retryable: false,
     ),
     'ADDRESS_NOT_FOUND': CustomerError(

@@ -11,6 +11,7 @@ import '../../../Services/Providers/address.provider.dart';
 import '../../../Services/Providers/cart.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
 import '../../../Services/app_errors.dart';
+import '../../../Services/ordering_hours.dart';
 import '../../../Services/store_info.dart';
 import '../../../Services/push/push_notifications.dart';
 
@@ -60,7 +61,10 @@ class CartScreenPaymentContainer extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      OrderingHoursBuilder(builder: (context, isOpen) => _bar(context, isOpen));
+
+  Widget _bar(BuildContext context, bool isOpen) {
     final isPlacingOrder = context.watch<OrderProvider>().isPlacingOrder;
     final isCartEmpty = context.watch<CartProvider>().isEmpty;
     final stack = appButtonTextScale(context) > kStackButtonsAboveTextScale;
@@ -94,7 +98,9 @@ class CartScreenPaymentContainer extends StatelessWidget {
       loading: isPlacingOrder,
       expand: stack,
       // While placing, `loading` swallows taps, so the button keeps its look.
-      onPressed: isCartEmpty ? null : () => _placeOrder(context),
+      // Outside ordering hours the backend would refuse it (STORE_CLOSED),
+      // so the button waits for 8 AM and the note below says why.
+      onPressed: isCartEmpty || !isOpen ? null : () => _placeOrder(context),
     );
 
     return Container(
@@ -103,19 +109,50 @@ class CartScreenPaymentContainer extends StatelessWidget {
       width: double.infinity,
       // A floor, not a fixed height: a large text size must be able to grow the row.
       constraints: const BoxConstraints(minHeight: 70),
-      child: stack
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [method, const SizedBox(height: BlynkSpace.s8), place],
-            )
-          : Row(
-              children: [
-                const Expanded(child: method),
-                const SizedBox(width: BlynkSpace.s8),
-                place,
-              ],
-            ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!isOpen) ...[const ClosedForOrdersNote(), const SizedBox(height: BlynkSpace.s8)],
+          stack
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [method, const SizedBox(height: BlynkSpace.s8), place],
+                )
+              : Row(
+                  children: [
+                    const Expanded(child: method),
+                    const SizedBox(width: BlynkSpace.s8),
+                    place,
+                  ],
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown above Place order outside ordering hours (8 AM - 9 PM Sri Lanka).
+class ClosedForOrdersNote extends StatelessWidget {
+  const ClosedForOrdersNote({super.key});
+
+  static const String text =
+      "We're closed now. Orders open at ${StoreInfo.opensAtLabel} (we take orders ${StoreInfo.deliveryHoursLabel}).";
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: BlynkSpace.s12, vertical: BlynkSpace.s8),
+      decoration: const BoxDecoration(color: BlynkColors.noticeTint, borderRadius: BlynkRadius.smAll),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.schedule, color: BlynkColors.ink, size: BlynkIcons.md),
+          SizedBox(width: BlynkSpace.s8),
+          Expanded(child: Text(text, style: BlynkText.label)),
+        ],
+      ),
     );
   }
 }

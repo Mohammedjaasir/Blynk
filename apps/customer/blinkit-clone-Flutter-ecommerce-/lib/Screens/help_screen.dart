@@ -31,8 +31,8 @@ class HelpScreen extends StatelessWidget {
     _Faq(
       question: 'What are your delivery hours?',
       answer:
-          'You can place an order any time, day or night. Deliveries go out '
-          '${StoreInfo.deliveryHoursLabel}.',
+          'We take orders and deliver ${StoreInfo.deliveryHoursLabel}, every '
+          "day. Orders can't be placed outside those hours.",
     ),
     _Faq(
       question: 'How much is delivery?',

@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => {
       fileParallelism: false,
       environment: 'node',
       globalSetup: ['./tests/setup/db-hygiene.ts'],
+      // Pins the checkout clock inside ordering hours (8 AM - 9 PM Colombo).
+      setupFiles: ['./tests/setup/ordering-clock.ts'],
     },
   };
 });

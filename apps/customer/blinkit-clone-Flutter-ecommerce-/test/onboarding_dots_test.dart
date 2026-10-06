@@ -61,7 +61,7 @@ void main() {
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 60));
       }
-      expect(find.text('Order any time,'), findsOneWidget);
+      expect(find.text('Order in a few taps,'), findsOneWidget);
       expect(find.bySemanticsLabel('Page 2 of 2'), findsOneWidget);
       expect(find.bySemanticsLabel('Page 1 of 2'), findsNothing);
       handle.dispose();

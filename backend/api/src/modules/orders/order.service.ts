@@ -2,7 +2,7 @@ import { orderRepository, CreateOrderData } from './order.repository.js';
 import { CreateOrderInput, OrderQueryInput } from './order.schema.js';
 import { calculateSellingPrice } from '../pricing/index.js';
 import { isWithinDeliveryRadius } from '../../utils/geo.js';
-import { calculateScheduledDeliveryTime } from '../../utils/time.js';
+import { calculateScheduledDeliveryTime, isWithinOrderingHours, orderingClock } from '../../utils/time.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { OrderStatus } from '../../database/types.js';
 import { logger } from '../../utils/logger.js';
@@ -167,6 +167,19 @@ export class OrderService {
       return { order: sanitizeCustomerOrder(existingOrder), is_idempotent_replay: true };
     }
 
+    // 1b. Ordering hours: orders are taken 8 AM - 9 PM (Asia/Colombo) only.
+    // After the replay check, so a retried order that was accepted in time
+    // still answers with that order instead of a refusal.
+    const now = orderingClock.now();
+    if (!isWithinOrderingHours(now)) {
+      throw new AppError(
+        'Blynk takes orders from 8 AM to 9 PM. Please order again after 8 AM.',
+        422,
+        'STORE_CLOSED',
+        { opens_at: '08:00', closes_at: '21:00', timezone: 'Asia/Colombo' }
+      );
+    }
+
     // 2. Address verification (ownership + active)
     const address = await orderRepository.findCustomerAddress(customerId, input.address_id);
     if (!address) {
@@ -196,8 +209,9 @@ export class OrderService {
       );
     }
 
-    // 4. Operating Window & 24/7 Scheduling
-    const scheduledFor = calculateScheduledDeliveryTime(new Date());
+    // 4. Operating window: inside ordering hours this is null (immediate);
+    // kept so the column stays meaningful if night ordering ever returns.
+    const scheduledFor = calculateScheduledDeliveryTime(now);
 
     // 5. Products & Authoritative Pricing
     const { items: orderItemsData, subtotal: subtotalAmount } = await priceCart(input.items);

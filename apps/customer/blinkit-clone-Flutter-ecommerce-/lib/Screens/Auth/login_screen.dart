@@ -66,10 +66,10 @@ class _LoginScreenState extends State<LoginScreen> {
       isAnimated: true,
       stillAssetPath: 'Assets/Images/cart_packing_still.png',
       aspectRatio: 1.0,
-      titleLine1: 'Order any time,',
+      titleLine1: 'Order in a few taps,',
       titleLine2: 'pay on delivery.',
       description:
-          'Deliveries go out ${StoreInfo.deliveryHoursLabel}.\nYou pay in cash when your order arrives.',
+          'We take orders ${StoreInfo.deliveryHoursLabel}.\nYou pay in cash when your order arrives.',
     ),
   ];
 

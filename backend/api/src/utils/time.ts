@@ -13,6 +13,26 @@ export const DEFAULT_OPERATING_HOURS: OperatingHours = {
 };
 
 /**
+ * The clock checkout reads to decide whether ordering is open. Production
+ * uses the real time; tests pin it (tests/setup/ordering-clock.ts) so order
+ * tests pass at any hour of the day.
+ */
+export const orderingClock = { now: (): Date => new Date() };
+
+/**
+ * Whether customers may place an order at this moment: orders are taken only
+ * inside the operating window, 08:00 - 21:00 Asia/Colombo (owner, 2026-10-06;
+ * before that, night orders were accepted and scheduled for 8 AM).
+ */
+export function isWithinOrderingHours(
+  at: Date = orderingClock.now(),
+  config: OperatingHours = DEFAULT_OPERATING_HOURS
+): boolean {
+  const hour = DateTime.fromJSDate(at).setZone(config.timezone).hour;
+  return hour >= config.startHour && hour < config.endHour;
+}
+
+/**
  * Evaluates whether an order placed at a given timestamp falls within
  * the delivery dispatch operating window (08:00 - 21:00 in Asia/Colombo).
  *
