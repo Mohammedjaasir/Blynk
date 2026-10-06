@@ -2,7 +2,7 @@
 
 Pre-launch test plan for every Blynk app: the customer app (APK and web at blynk.lk/app/), Operations, Admin, Inventory and Rider.
 
-- **Code:** `main` at `7b4ce9c` plus the fixes marked *Fixed* below (they reach testers only after the backend, websites and APKs are redeployed and rebuilt).
+- **Code:** `main` at `b7a8e29`. Items marked *Fixed* below are in this code; testers see them only after the backend, websites and APKs are redeployed and rebuilt.
 - **Prepared:** 6 Oct 2026
 - **Site:** https://blynk.lk · **Shop:** https://blynk.lk/app/
 
