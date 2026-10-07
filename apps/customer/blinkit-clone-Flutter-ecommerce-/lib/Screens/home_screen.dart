@@ -9,6 +9,7 @@ import '../UI/Widgets/Atoms/connectivity_banner.dart';
 import '../UI/Widgets/Organisms/dental_home_entry.dart';
 import '../UI/Widgets/Organisms/home_brand_tagline.dart';
 import '../UI/Widgets/Organisms/home_category_groups.dart';
+import '../UI/Widgets/Organisms/home_product_feed.dart';
 import '../UI/Widgets/Organisms/home_screen_app_bar.dart';
 import '../UI/Widgets/Organisms/home_screen_carousel.dart';
 import '../UI/Widgets/Organisms/home_screen_search_bar.dart';
@@ -25,8 +26,9 @@ import '../UI/Widgets/Atoms/entrance_fade.dart';
 /// when the backend returns a live promotion** - the dental entry - then the
 /// shop front: named groups of category tiles ("Grocery & Kitchen", ...), each
 /// tile opening that category's products (2026-10-05, owner's reference
-/// app; it replaced the category preview grid and the per-category
-/// product shelves).
+/// app) - then the products themselves (2026-10-07, owner: "the customer
+/// should be able to scroll and see lots of products"): a rail per category
+/// and an "All products" grid, [HomeProductFeed].
 ///
 /// Nothing here is hardcoded content except the tagline, which is brand copy
 /// rather than data. Every other section renders backend data or does not
@@ -48,7 +50,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   /// Home's entrance: one timeline, five beats. Header, then search, then
-  /// the hero, then the dental entry, then the category groups.
+  /// the hero, then the dental entry, then the category groups with the
+  /// products under them (one beat, so the timeline stays 810 ms).
   /// The tagline rides the search beat - fewer beats reads as one composition arriving, and the
   /// whole thing is over in 810 ms. It runs once; a pull to refresh or a
   /// section scrolling back into view never replays it.
@@ -93,13 +96,13 @@ class _HomeScreenState extends State<HomeScreen>
   /// (`/products`, which takes a slug, titles itself after the category and
   /// lists every product in it).
   ///
-  /// So Home holds no selection at all. Since 2026-10-05 it lists no products
-  /// either: it is the shop front of category groups, and browsing one
-  /// category is its own page.
+  /// So Home holds no selection at all. It lists products (all of them, and a
+  /// rail per category) but browsing one category is still its own page.
 
   /// True while the category groups show a skeleton, so the one shared
   /// pulse runs only then.
-  bool _isLoading(ProductProvider p) => p.isLoadingHomeGroups;
+  bool _isLoading(ProductProvider p) =>
+      p.isLoadingHomeGroups || (p.isLoadingProducts('') && p.productsFor('').isEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen>
       // than a real desktop composition - cap and center it instead.
       body: Center(
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: responsive.contentMaxWidth),
+          constraints: BoxConstraints(maxWidth: responsive.shopMaxWidth),
           // Pull down for the backend's current catalog. Forced, because
           // the customer asked for it explicitly.
           child: SkeletonScope(
@@ -171,6 +174,11 @@ class _HomeScreenState extends State<HomeScreen>
                       // appears, not from frame 0 behind an invisible section.
                       entranceDelay: _timeline.delayOf(4),
                     ),
+                  ),
+                  // The products: a rail per category, then every product.
+                  SliverEntrance(
+                    animation: _timeline.section(4),
+                    sliver: HomeProductFeed(entranceDelay: _timeline.delayOf(4)),
                   ),
                   const SliverToBoxAdapter(
                     child: SizedBox(height: HomeScreen.bottomClearance),

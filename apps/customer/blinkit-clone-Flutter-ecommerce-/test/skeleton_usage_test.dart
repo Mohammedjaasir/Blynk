@@ -183,6 +183,14 @@ void main() {
       expect(find.byType(CategoryTileSkeleton), findsWidgets);
 
       // Everything loaded: the pulse is parked, so the screen can settle.
+      // (Home's product feed, 2026-10-07, loads the catalogue too.)
+      gate.products.complete({
+        'success': true,
+        'data': {
+          'products': <dynamic>[],
+          'pagination': {'page': 1, 'limit': 100, 'total': 0, 'total_pages': 1},
+        },
+      });
       gate.groups.complete(_groups());
       await tester.pump();
       await tester.pump();

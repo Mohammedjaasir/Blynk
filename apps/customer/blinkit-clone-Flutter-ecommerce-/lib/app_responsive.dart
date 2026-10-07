@@ -55,6 +55,11 @@ class Responsive {
     return width;
   }
 
+  /// The shop's width cap (Home's product feed): wider than [contentMaxWidth]
+  /// on a desktop browser so the grid carries 4-5 readable columns instead
+  /// of three oversized cards in a narrow column (owner, 2026-10-07).
+  double get shopMaxWidth => isDesktop ? 1280.0 : contentMaxWidth;
+
   double get horizontalPadding {
     if (isDesktop) return 56.0;
     if (isTablet) return 32.0;
@@ -74,8 +79,13 @@ class Responsive {
 /// |---|---|---|---|---|
 /// | compact | < 600 | **2** | 16 | 12 |
 /// | medium | 600–1023 | **3** | 24 | 16 |
-/// | expanded | 1024–1439 | **4** | 32 | 16 |
-/// | expanded (wide) | ≥ 1440 | **5** | 32 | 16 |
+/// | expanded | 1024–1199 | **4** | 32 | 16 |
+/// | expanded (dense) | 1200–1439 | **5** | 32 | 16 |
+/// | expanded (wide) | ≥ 1440 | **6** | 32 | 16 |
+///
+/// 2026-10-07 (owner: "the browser shopping design is not good"): desktop
+/// went one column denser - four columns in the 1280 dp shop left each card
+/// ~290 dp wide and so tall that a screen held barely two rows.
 ///
 /// The tile's *aspect* is deliberately not a ratio: a product card is a square
 /// image plus a text-scale-dependent chrome block, so a fixed ratio either
@@ -83,8 +93,11 @@ class Responsive {
 /// width and `ProductCard.heightFor(context, tileWidth)` gives the matching
 /// height — pass it as the grid delegate's `mainAxisExtent`.
 abstract final class BlynkProductGrid {
-  /// The fifth column only appears when it can still carry a readable card.
+  /// The sixth column only appears when it can still carry a readable card.
   static const double wide = 1440;
+
+  /// The fifth column: from here a card is still ~230 dp wide.
+  static const double dense = 1200;
 
   /// The narrowest screen that can carry three columns.
   ///
@@ -97,7 +110,8 @@ abstract final class BlynkProductGrid {
   static const double threeColumn = 390;
 
   static int columnsFor(double width) {
-    if (width >= wide) return 5;
+    if (width >= wide) return 6;
+    if (width >= dense) return 5;
     if (width >= AppBreakpoints.desktop) return 4;
     if (width >= AppBreakpoints.tablet) return 3;
     // 2026-09-25: three columns on a phone, but only where it actually fits.

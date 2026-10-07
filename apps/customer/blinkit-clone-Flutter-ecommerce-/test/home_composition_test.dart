@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 
 import 'package:ecom/Models/product_model.dart';
 import 'package:ecom/Screens/home_screen.dart';
+import 'package:ecom/UI/Widgets/Atoms/product_hero.dart';
+import 'package:ecom/UI/Widgets/Organisms/home_product_feed.dart';
 import 'package:ecom/Services/Providers/address.provider.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
@@ -680,15 +682,19 @@ void main() {
       expect(find.text('route:/products'), findsOneWidget);
     });
 
-    testWidgets('Home never queries products itself, in place or otherwise', (tester) async {
-      // The products screen runs the category query; Home is the shop front.
+    testWidgets('Home loads the whole catalogue once and never filters it in place', (tester) async {
+      // Home's product feed (2026-10-07) asks for every product, unfiltered;
+      // the products screen runs the category query.
       final backend = _Backend();
       await _pumpHome(tester, backend: backend);
+      expect(backend.queries.where((q) => q.containsKey('category_slug')), isEmpty);
+      expect(backend.queries, isNotEmpty, reason: 'Home lists products under the tiles');
 
+      // Opening a category never filters Home in place.
+      final before = backend.queries.length;
       await tester.tap(find.text('Biscuits & Snacks'));
       await tester.pumpAndSettle();
-
-      expect(backend.queries, isEmpty, reason: 'the products screen runs that query, not Home');
+      expect(backend.queries.skip(before).where((q) => !q.containsKey('category_slug')), isEmpty);
     });
 
     testWidgets('coming back leaves Home on its groups', (tester) async {
@@ -702,6 +708,23 @@ void main() {
 
       expect(_heading('Grocery & Kitchen'), findsOneWidget);
       expect(find.text('Dairy & Eggs'), findsWidgets);
+    });
+
+    testWidgets('under the groups: a rail per category and every product, one image hero each', (tester) async {
+      await _pumpHome(tester, size: const Size(400, 4000));
+      // Three Dairy & Eggs products: enough for a rail, with "See all".
+      expect(find.text('See all'), findsWidgets);
+      expect(find.text(HomeProductFeed.allProductsTitle), findsOneWidget);
+      // Each product appears twice (rail + grid) but flies from one place.
+      for (final id in ['p1', 'p2', 'p3']) {
+        expect(find.text(
+          {'p1': 'Kotmale Fresh Milk 1L', 'p2': 'Highland Yoghurt 80g', 'p3': 'Maliban Lemon Puff'}[id]!,
+        ), findsNWidgets(2));
+        expect(
+          find.byWidgetPredicate((w) => w is Hero && w.tag == ProductHero.tagFor(id)),
+          findsOneWidget,
+        );
+      }
     });
 
     testWidgets('the groups sit under the dental entry', (tester) async {
@@ -791,7 +814,7 @@ void main() {
       await _pumpHome(tester, backend: _NoGroupsBackend());
 
       expect(find.byType(CategoryWidget), findsNothing);
-      expect(find.byType(ProductCard), findsNothing);
+      // The products still show: they come from the catalogue, not the groups.
       expect(find.textContaining('coming soon'), findsNothing);
     });
   });

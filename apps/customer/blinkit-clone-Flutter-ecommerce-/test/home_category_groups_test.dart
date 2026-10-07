@@ -312,11 +312,13 @@ void main() {
       expect(find.text('See all categories', skipOffstage: false), findsNothing);
     });
 
-    testWidgets('home no longer lists product shelves', (tester) async {
+    testWidgets('home lists products under the groups, from one catalogue request', (tester) async {
+      // Owner, 2026-10-07: "the customer should be able to scroll and see
+      // lots of products" - the feed under the tiles (HomeProductFeed).
       final backend = _Backend();
       await _pumpHome(tester, backend: backend);
-      expect(backend.calls['/catalog/products'], isNull,
-          reason: 'Home is categories now; the products page fetches products');
+      expect(backend.calls['/catalog/products'], 1,
+          reason: 'one unfiltered request for the whole catalogue');
     });
 
     testWidgets('tapping a tile opens that category\'s products, carrying its slug', (tester) async {

@@ -303,9 +303,11 @@ void main() {
       expect(BlynkProductGrid.columnsFor(600), 3);
       expect(BlynkProductGrid.columnsFor(1023), 3);
       expect(BlynkProductGrid.columnsFor(1024), 4);
-      expect(BlynkProductGrid.columnsFor(1439), 4);
-      expect(BlynkProductGrid.columnsFor(1440), 5);
-      expect(BlynkProductGrid.columnsFor(1920), 5);
+      expect(BlynkProductGrid.columnsFor(1199), 4);
+      expect(BlynkProductGrid.columnsFor(1200), 5);
+      expect(BlynkProductGrid.columnsFor(1439), 5);
+      expect(BlynkProductGrid.columnsFor(1440), 6);
+      expect(BlynkProductGrid.columnsFor(1920), 6);
       // The legacy accessor is the same rule, not a second one.
       for (final w in <double>[320, 600, 1024, 1440, 1920]) {
         expect(Responsive(w).gridColumns, BlynkProductGrid.columnsFor(w));

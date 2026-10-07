@@ -30,6 +30,7 @@ class ProductRail extends StatelessWidget {
     this.loadingCount = 4,
     this.controller,
     this.padding,
+    this.heroes = true,
   });
 
   /// Real products from the provider. Never padded out with placeholders.
@@ -44,6 +45,9 @@ class ProductRail extends StatelessWidget {
 
   /// Overrides the gutter-derived edge padding.
   final EdgeInsets? padding;
+
+  /// Whether the cards' images fly to the detail screen ([ProductCard.hero]).
+  final bool heroes;
 
   /// The card width for the available [width] — the one rule, shared with
   /// every other rail.
@@ -80,7 +84,7 @@ class ProductRail extends StatelessWidget {
                   : EntranceFade(
                       key: ValueKey(products[index].id),
                       delay: BlynkMotion.staggerFor(index),
-                      child: ProductCard(product: products[index]),
+                      child: ProductCard(product: products[index], hero: heroes),
                     ),
             ),
           ),

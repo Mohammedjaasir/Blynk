@@ -9,7 +9,7 @@ import '../../../design/tokens.dart';
 import '../Atoms/entrance_fade.dart';
 
 /// The responsive product grid, built on the one rule in [BlynkProductGrid]:
-/// 2 columns compact, 3 medium, 4 expanded, 5 at 1440 and above, with the
+/// 2 columns compact, 3 medium, 4 expanded, 5 from 1200 and 6 from 1440, with the
 /// gutter and tile spacing decided there too.
 ///
 /// The tile height is **measured**, not a fixed aspect ratio: a product card

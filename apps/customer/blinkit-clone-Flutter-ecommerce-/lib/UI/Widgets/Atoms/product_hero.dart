@@ -34,16 +34,21 @@ import 'image_well.dart';
 /// between is the same shape at every frame and the flight is a pure,
 /// uniform zoom: no re-crop, no reshaping, rounded corners throughout.
 ///
-/// **One tag per product, per route.** The tag is the product id. That is
-/// only safe because no screen shows the same product in two lists at once;
-/// two [Hero]s with one tag in a single route assert in debug.
+/// **One tag per product, per route.** The tag is the product id; two
+/// [Hero]s with one tag in a single route assert in debug. Home shows a
+/// product in a category rail and in "All products", so its rails pass
+/// `enabled: false` (via [ProductCard.hero]) and only the grid flies.
 ///
 /// **Reduced motion turns the flight off**, not down.
 class ProductHero extends StatelessWidget {
-  const ProductHero({super.key, required this.productId, required this.child});
+  const ProductHero({super.key, required this.productId, required this.child, this.enabled = true});
 
   final String productId;
   final Widget child;
+
+  /// False draws [child] with no [Hero] at all - for a second copy of a
+  /// product on the same screen.
+  final bool enabled;
 
   /// The tag both ends of the flight share.
   static Object tagFor(String productId) => 'product-image-$productId';
@@ -61,6 +66,7 @@ class ProductHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!enabled) return child;
     return HeroMode(
       enabled: !BlynkMotion.reduced(context),
       child: Hero(

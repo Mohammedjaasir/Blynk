@@ -114,7 +114,12 @@ class _HomeCategoryGroupsState extends State<HomeCategoryGroups> {
               title: HomeCategoryGroups.failureTitle,
               retryKey: HomeCategoryGroups.retryKey,
               scrollable: false,
-              onRetry: () => provider.loadHomeGroups(force: true),
+              // Home's products failed with the groups and show no message of
+              // their own (HomeProductFeed), so this one retry covers both.
+              onRetry: () {
+                provider.loadHomeGroups(force: true);
+                if (provider.productsFailureFor('') != null) provider.loadProducts(force: true);
+              },
             ),
           );
         }

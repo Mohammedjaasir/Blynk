@@ -41,9 +41,14 @@ import 'product_hero.dart';
 /// 128 dp, so a shared row would leave the price ~4 dp and make it vanish the
 /// moment a product entered the cart. See `task-W1-report.md`.
 class ProductCard extends StatelessWidget {
-  const ProductCard({super.key, required this.product});
+  const ProductCard({super.key, required this.product, this.hero = true});
 
   final ProductModel product;
+
+  /// Whether the image flies to the detail screen ([ProductHero]). Off where
+  /// the same product is also shown in another list on the same screen (Home's
+  /// category rails above its "All products" grid): one tag per route.
+  final bool hero;
 
   /// The card's inner padding, the gap under the image well, and the slot the
   /// ADD control / stepper occupies. Public so [ProductCardSkeleton] can wear
@@ -144,6 +149,7 @@ class ProductCard extends StatelessWidget {
               // The image is the one thing that travels to the detail screen.
               child: ProductHero(
                 productId: product.id,
+                enabled: hero,
                 child: ProductImageWell(
                   product: product,
                   semantic: false,
