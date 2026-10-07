@@ -2264,6 +2264,38 @@ a.cat-row__main {
   outline: 3px solid #12151f; outline-offset: 3px;
 }
 
+/* Ops welcome (2026-10-07): dark, like Ops sign-in - never the Rider look. */
+.intro--ops { background: #12151f; color: #fff; }
+.intro--ops .intro__brand { color: #fff; }
+.intro__tag {
+  display: inline-block; margin-left: 4px; padding: 2px 7px; border-radius: 6px; vertical-align: 3px;
+  background: #ffe141; color: #12151f; font-size: 11px; font-weight: 900; letter-spacing: 0.08em;
+}
+.intro--ops .intro__title { color: #fff; }
+.intro--ops .intro__title em { color: #ffe141; }
+.intro--ops .intro__lead { color: #b7bdca; }
+.ops-board { width: 100%; max-width: 420px; margin: 18px 0 22px; display: grid; gap: 10px; text-align: left; }
+.ops-board__row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px;
+  background: #1d2130; border: 1px solid #2a3042;
+}
+.ops-board__row--road { margin-left: 18px; margin-right: -6px; }
+.ops-board__row--low { margin-left: 6px; }
+.ops-board__dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #ffe141; }
+.ops-board__row--road .ops-board__dot { background: #2fbf55; box-shadow: 0 0 0 5px rgba(47, 191, 85, 0.18); }
+.ops-board__row--low .ops-board__dot { background: #ff6b5e; }
+.ops-board__main { flex: 1; min-width: 0; display: grid; line-height: 1.2; }
+.ops-board__main b { font-size: 15px; font-weight: 800; color: #fff; }
+.ops-board__main small { font-size: 12px; color: #9aa1b2; }
+.ops-board__chip { flex: none; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.ops-board__chip--yellow { background: #ffe141; color: #12151f; }
+.ops-board__chip--green { background: #e3f3e6; color: #0c831f; }
+.ops-board__chip--red { background: #ffe4e1; color: #b3261e; }
+.intro--ops .intro__features { margin-top: 0; }
+.intro--ops .intro__features li { background: #1d2130; box-shadow: none; border: 1px solid #2a3042; color: #9aa1b2; }
+.intro--ops .intro__features strong { color: #fff; }
+.intro--ops .intro__cta:focus-visible { outline-color: #ffe141; }
+
 /* ------------------------------------------------------------ packing slip
    /orders/:id/slip. On screen a plain card; printed, only the slip itself
    (window.print() - the app chrome and the toolbar are hidden). */
@@ -2569,4 +2601,26 @@ a.button {
 
 .sms-history__text {
   overflow-wrap: anywhere;
+}
+
+/* Launch (2026-10-07): the native splash, then the logo lifts into the app -
+   the customer app's opening. See components/LaunchScreen.tsx. */
+.launch {
+  position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center;
+  background: #fff; pointer-events: none;
+  animation: launch-fade 1100ms ease-in forwards;
+}
+.launch__logo { width: 256px; height: 256px; animation: launch-logo 1100ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+@keyframes launch-logo {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  55% { transform: translateY(0) scale(1.06); opacity: 1; }
+  62% { transform: translateY(0) scale(1.06); opacity: 1; }
+  100% { transform: translateY(-28px) scale(1.02); opacity: 0; }
+}
+@keyframes launch-fade {
+  0%, 62% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .launch, .launch__logo { animation: none; }
 }

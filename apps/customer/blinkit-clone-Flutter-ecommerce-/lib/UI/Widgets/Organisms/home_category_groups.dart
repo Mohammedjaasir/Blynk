@@ -7,6 +7,7 @@ import '../Atoms/entrance_fade.dart';
 import '../Atoms/failure_states.dart';
 import '../Atoms/section_header.dart';
 import '../../../Models/category_group_model.dart';
+import '../../../Models/category_model.dart';
 import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
 import '../../../Services/Providers/product.provider.dart';
@@ -57,6 +58,25 @@ class HomeCategoryGroups extends StatefulWidget {
 
   /// Loading placeholders: two rows.
   static int skeletonCountFor(double width) => columnsFor(width) * 2;
+
+  /// A group shows at most two rows (owner, 2026-10-07, after the reference
+  /// app); a longer group ends its second row with a "More" tile that opens
+  /// every category.
+  static int maxTilesFor(int columns) => columns * 2;
+
+  static const Key moreTileKey = Key('home-categories-more');
+
+  /// The heading for the backend's catch-all group when it is the only one:
+  /// "More" over a grid that ends in a "More" tile reads as a mistake.
+  static const String onlyGroupTitle = 'Shop by category';
+
+  /// The "More" tile, drawn by [CategoryWidget] like every other tile.
+  static final CategoryModel moreTile = CategoryModel.fromJson(const {
+    'id': 'home-more',
+    'name': 'More',
+    'slug': '',
+    'display_order': 1 << 30,
+  });
 
   @override
   State<HomeCategoryGroups> createState() => _HomeCategoryGroupsState();
@@ -140,7 +160,7 @@ class _HomeCategoryGroupsState extends State<HomeCategoryGroups> {
                 for (final group in groups) ...() {
                   final start = offset;
                   offset += group.categories.length;
-                  return _groupSlivers(context, group, metrics, start);
+                  return _groupSlivers(context, group, metrics, start, onlyGroup: groups.length == 1);
                 }(),
               ],
             );
@@ -154,21 +174,46 @@ class _HomeCategoryGroupsState extends State<HomeCategoryGroups> {
     BuildContext context,
     CategoryGroupModel group,
     _GridMetrics metrics,
-    int start,
-  ) {
+    int start, {
+    bool onlyGroup = false,
+  }) {
+    final cap = HomeCategoryGroups.maxTilesFor(metrics.columns);
+    final overflow = group.categories.length > cap;
+    final tiles = overflow ? group.categories.take(cap - 1).toList() : group.categories;
     return [
       SliverToBoxAdapter(
         child: BlynkSectionHeader(
           key: ValueKey('home-group/${group.key}'),
-          title: group.name,
+          title: onlyGroup && group.isUngrouped ? HomeCategoryGroups.onlyGroupTitle : group.name,
           padding: EdgeInsets.fromLTRB(
               metrics.gutter, BlynkSpace.s24, BlynkSpace.s8, BlynkSpace.s12),
         ),
       ),
       metrics.grid(
-        itemCount: group.categories.length,
+        itemCount: tiles.length + (overflow ? 1 : 0),
         item: (index) {
-          final category = group.categories[index];
+          if (index == tiles.length) {
+            return EntranceFade(
+              key: ValueKey('home-group/${group.key}/more'),
+              delay: widget.entranceDelay + EntranceFade.delayFor(start + index),
+              child: MergeSemantics(
+                child: Semantics(
+                  button: true,
+                  label: 'More categories',
+                  child: CategoryWidget(
+                    key: HomeCategoryGroups.moreTileKey,
+                    category: HomeCategoryGroups.moreTile,
+                    glyph: Icons.more_horiz_rounded,
+                    rounded: true,
+                    fit: BoxFit.contain,
+                    diameter: metrics.tile,
+                    onTap: () => Navigator.of(context).pushNamed('/categories'),
+                  ),
+                ),
+              ),
+            );
+          }
+          final category = tiles[index];
           return EntranceFade(
             key: ValueKey('home-group/${group.key}/${category.id}'),
             delay: widget.entranceDelay + EntranceFade.delayFor(start + index),

@@ -29,10 +29,18 @@ describe('welcome screen (owner reference, 2026-09-28)', () => {
     }
   });
 
-  it.each([/get started/i, /i already have an account/i, /^skip$/i])('%s continues to where the launch was headed', async (name) => {
+  it('"Sign in" continues to where the launch was headed', async () => {
     renderWelcome('/login');
-    await userEvent.click(screen.getByRole('button', { name }));
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
     expect(screen.getByText('login route')).toBeInTheDocument();
     expect(hasSeenIntro()).toBe(true);
+  });
+
+  it('is the Ops look, not the Rider one: no scooter scene, no sign-up wording (owner, 2026-10-07)', () => {
+    const { container } = renderWelcome();
+    expect(container.querySelector('.intro--ops')).not.toBeNull();
+    expect(container.querySelector('img[src*="intro-art"], img[src*="scooter"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /get started|already have an account/i })).toBeNull();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 });

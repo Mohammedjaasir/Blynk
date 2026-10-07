@@ -22,14 +22,14 @@ describe('routing', () => {
   it('every launch opens on the welcome screen, signed out', async () => {
     resetIntroForTests();
     renderAs(null, '/orders');
-    expect(await screen.findByRole('button', { name: /get started/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^sign in/i })).toBeInTheDocument();
     expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
   });
 
   it('every launch opens on the welcome screen, signed in too, then continues', async () => {
     resetIntroForTests();
     renderAs(ADMIN_WITH_RIDER, '/orders', { 'GET /riders/deliveries': () => ok({ deliveries: [] }) });
-    await userEvent.click(await screen.findByRole('button', { name: /get started/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /^sign in/i }));
     expect(await screen.findByText('No live orders.')).toBeInTheDocument();
   });
 

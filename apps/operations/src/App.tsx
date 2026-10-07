@@ -37,6 +37,7 @@ import { Riders } from './pages/Riders';
 import { SmsOffers } from './pages/SmsOffers';
 import { RiderRequests } from './pages/RiderRequests';
 import { StaffAccounts } from './pages/StaffAccounts';
+import { LaunchScreen } from './components/LaunchScreen';
 
 /**
  * Route protection here is for the operator's benefit only. Every
@@ -150,10 +151,13 @@ export function AppRoutes() {
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+    <>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+      <LaunchScreen />
+    </>
   );
 }

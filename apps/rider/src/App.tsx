@@ -6,6 +6,7 @@ import { Delivery } from './pages/Delivery';
 import { Login } from './pages/Login';
 import { MyDay } from './pages/MyDay';
 import { Queue } from './pages/Queue';
+import { LaunchScreen } from './components/LaunchScreen';
 
 /**
  * Route protection is for the rider's benefit only: every rider endpoint is
@@ -86,10 +87,13 @@ export function AppRoutes() {
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+    <>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+      <LaunchScreen />
+    </>
   );
 }

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:ecom/Models/product_model.dart';
 import 'package:ecom/Screens/home_screen.dart';
 import 'package:ecom/UI/Widgets/Atoms/product_hero.dart';
+import 'package:ecom/UI/Widgets/Organisms/home_category_groups.dart';
 import 'package:ecom/UI/Widgets/Organisms/home_product_feed.dart';
 import 'package:ecom/Services/Providers/address.provider.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
@@ -634,13 +635,21 @@ void main() {
       expect(find.text('Categories'), findsNothing, reason: 'the duplicate preview grid is gone');
     });
 
-    testWidgets('a group with ten categories shows all ten, four across', (tester) async {
+    testWidgets('a group with ten categories shows two rows, four across, the last tile "More"', (tester) async {
       await _pumpHome(tester, backend: _ManyCategoriesBackend(), size: const Size(400, 1400));
 
+      // Owner, 2026-10-07: at most two rows; the eighth tile opens every category.
       final tiles = tester.widgetList<CategoryWidget>(find.byType(CategoryWidget)).toList();
       expect(tiles.map((t) => t.category.name).toList(), [
-        for (var i = 1; i <= 10; i++) 'Category $i',
+        for (var i = 1; i <= 7; i++) 'Category $i',
+        'More',
       ]);
+      expect(find.byKey(HomeCategoryGroups.moreTileKey), findsOneWidget);
+      await tester.tap(find.byKey(HomeCategoryGroups.moreTileKey));
+      await tester.pumpAndSettle();
+      expect(find.text('route:/categories'), findsOneWidget, reason: 'the More tile opens the categories page');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
       double rowOf(String name) => tester
           .getTopLeft(find.descendant(of: find.byType(CategoryWidget), matching: find.text(name)))
           .dy;
