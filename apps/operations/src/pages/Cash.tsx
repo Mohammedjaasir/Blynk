@@ -200,7 +200,7 @@ export function Cash() {
 
 /** A rider in the hand-in picker: "(inactive)" when they can no longer deliver. */
 export function cashRiderLabel(r: RiderOption): string {
-  const name = r.full_name ?? r.phone;
+  const name = r.full_name ?? r.phone ?? 'Rider';
   return r.is_active === false ? `${name} (inactive)` : name;
 }
 

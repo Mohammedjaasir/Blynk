@@ -47,14 +47,38 @@ export const emergencyPhoneSchema = z
   .nullable()
   .optional();
 
+/**
+ * A bicycle has no registration number (migration 029 made the column
+ * NULLable); every other vehicle type needs one.
+ */
+export const registrationRequiredFor = (vehicleType: string | null | undefined) => vehicleType !== 'BICYCLE';
+export const REGISTRATION_REQUIRED_MESSAGE = 'Vehicle registration number is required';
+
+/** Zod refinement: the registration number unless the vehicle is a bicycle. */
+export function refineRegistration(
+  d: { vehicle_type?: string | null; vehicle_registration_number?: string | null },
+  ctx: z.RefinementCtx
+) {
+  if (registrationRequiredFor(d.vehicle_type) && !d.vehicle_registration_number) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['vehicle_registration_number'], message: REGISTRATION_REQUIRED_MESSAGE });
+  }
+}
+
+/** '' or null (no registration) becomes null; otherwise the usual checks. */
+export const optionalRegistrationSchema = z
+  .union([z.literal(''), z.null(), registrationSchema])
+  .optional()
+  .transform((v) => (v ? v : null));
+
 /** POST /riders/me/profile */
 export const ownRiderProfileSchema = z
   .object({
     vehicle_type: vehicleTypeSchema,
-    vehicle_registration_number: registrationSchema,
+    vehicle_registration_number: optionalRegistrationSchema,
     emergency_contact_phone: emergencyPhoneSchema,
   })
-  .strict();
+  .strict()
+  .superRefine(refineRegistration);
 
 export type OwnRiderProfileInput = z.infer<typeof ownRiderProfileSchema>;
 
@@ -72,7 +96,8 @@ export type StaffRiderInput = z.infer<typeof staffRiderSchema>;
 export interface RiderProfile {
   id: string;
   vehicle_type: string;
-  vehicle_registration_number: string;
+  /** null only for a bicycle. */
+  vehicle_registration_number: string | null;
   emergency_contact_phone: string | null;
   is_active: boolean;
 }
@@ -229,14 +254,14 @@ export class RiderProfileService {
         logger.info({ staffId, riderId: current.id, by: actorId }, 'Staff rider switched on');
         return profile;
       }
-      if (!input.vehicle_registration_number) {
+      if (!input.vehicle_registration_number && registrationRequiredFor(input.vehicle_type ?? 'MOTORCYCLE')) {
         throw new AppError('Enter the vehicle registration number to let this account deliver.', 400, 'VALIDATION_ERROR', [
           { field: 'vehicle_registration_number', message: 'Vehicle registration number is required', rule: 'custom' },
         ]);
       }
       const values = {
         vehicle_type: input.vehicle_type ?? 'MOTORCYCLE',
-        vehicle_registration_number: input.vehicle_registration_number,
+        vehicle_registration_number: input.vehicle_registration_number ?? null,
       };
       const profile = await trx
         .insertInto('riders')

@@ -4,7 +4,7 @@ import { db } from '../../database/connection.js';
 import { env } from '../../config/env.js';
 import type { Database, SmsLanguage, SmsOfferAudience } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
-import { normalizeSriLankanPhone } from '../../utils/phone.js';
+import { isPlaceholderPhone, normalizeSriLankanPhone } from '../../utils/phone.js';
 import { isWithinOrderingHours, orderingClock } from '../../utils/time.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 
@@ -285,8 +285,13 @@ export async function sendOffer(
 /** Test SMS one staff member may send per rolling hour. */
 export const MAX_TESTS_PER_HOUR = 5;
 
-/** Sends one language's text to the staff member's own phone, to check it. */
-export async function sendTestOffer(actor: AuditActor, language: SmsLanguage, message: string) {
+/**
+ * Sends one language's text to a phone, to check it: `toPhone` (already a
+ * normalised Sri Lankan mobile) when given, else the staff member's own
+ * phone. Admin accounts have no phone (migration 028), so they enter one;
+ * with neither, 400 NO_TEST_PHONE.
+ */
+export async function sendTestOffer(actor: AuditActor, language: SmsLanguage, message: string, toPhone?: string) {
   // Same sending window as real offers: a test at 11 PM still wakes someone.
   if (!isWithinOrderingHours(orderingClock.now())) {
     throw new AppError('Offers can be sent from 8 AM to 9 PM only.', 422, 'OUTSIDE_SENDING_HOURS');
@@ -307,12 +312,17 @@ export async function sendTestOffer(actor: AuditActor, language: SmsLanguage, me
       { max_per_hour: MAX_TESTS_PER_HOUR }
     );
   }
-  const staff = await db.selectFrom('users').select(['phone']).where('id', '=', actor.actorId).executeTakeFirst();
   let phone: string;
   try {
-    phone = normalizeSriLankanPhone(staff?.phone ?? '');
+    if (toPhone) {
+      phone = normalizeSriLankanPhone(toPhone);
+    } else {
+      const staff = await db.selectFrom('users').select(['phone']).where('id', '=', actor.actorId).executeTakeFirst();
+      if (isPlaceholderPhone(staff?.phone)) throw new Error('no phone');
+      phone = normalizeSriLankanPhone(staff?.phone ?? '');
+    }
   } catch {
-    throw new AppError('Your account has no Sri Lankan mobile number to send the test to.', 400, 'NO_TEST_PHONE');
+    throw new AppError('Enter the number to send the test to.', 400, 'NO_TEST_PHONE');
   }
   const text = withOptOut(message, language);
   const now = new Date();

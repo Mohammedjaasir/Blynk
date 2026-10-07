@@ -42,7 +42,8 @@ export class RiderRepository {
       .select((eb) => [
         'riders.id',
         'users.full_name',
-        'users.phone',
+        // An Admin with "Can deliver" has no phone (migration 028): null, never the placeholder.
+        sql<string | null>`CASE WHEN users.phone LIKE 'nophone:%' THEN NULL ELSE users.phone END`.as('phone'),
         'riders.vehicle_type',
         'riders.vehicle_registration_number',
         // Open = what the trip cap counts (riders/batching.ts isOpenDelivery):
@@ -55,7 +56,10 @@ export class RiderRepository {
           .where((inner) => isOpenDelivery(inner))
           .as('open_deliveries'),
         sql<boolean>`(riders.is_active AND users.is_active AND users.staff_disabled_at IS NULL)`.as('is_active'),
-      ]);
+      ])
+      // Rider applications (migration 029): a request still waiting, or
+      // rejected, is never a rider - not even in the include_inactive list.
+      .where('riders.approval_status', '=', 'APPROVED');
     if (!options.includeInactive) {
       query = query
         .where('riders.is_active', '=', true)

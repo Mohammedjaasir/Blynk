@@ -4,12 +4,17 @@ import { requireRoles } from '../../middleware/role.middleware.js';
 import { riderController } from './rider.controller.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { ownRiderProfileSchema, riderProfileService, type OwnRiderProfileInput } from './rider.profile.js';
+import { riderApplicationsPublicRouter } from './rider.applications.js';
 
 export const ridersRouter = Router();
 
 ridersRouter.get('/status', (_req, res) => {
   res.json({ module: 'riders', status: 'ready' });
 });
+
+// Rider applications (migration 029): POST /riders/applications, public -
+// the applicant proves the phone with an SMS code in the body.
+ridersRouter.use(riderApplicationsPublicRouter);
 
 // Backward-compatible test route
 ridersRouter.get('/orders', requireAuth, requireRoles('RIDER'), (_req, res) => {
@@ -97,3 +102,4 @@ export * from './rider.repository.js';
 export * from './rider.service.js';
 export * from './rider.controller.js';
 export * from './rider.profile.js';
+export * from './rider.applications.js';

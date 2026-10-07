@@ -16,8 +16,6 @@ interface AuthState {
   notice: string | null;
   requestOtp(phone: string): Promise<{ devOtp?: string }>;
   verifyOtp(phone: string, otp: string): Promise<void>;
-  /** Email + password: the default sign-in; the same rider-only gate as an SMS code. */
-  signInWithPassword(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -110,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { devOtp: data.dev_otp };
   }, []);
 
-  // Both sign-in methods end here: the same role gate, the same session.
+  // Riders sign in with a phone and an SMS code only (2026-10-07).
   const startSession = useCallback((data: { access_token: string; refresh_token: string; user: AuthUser }) => {
     if (!isRider(data.user)) {
       tokenStore.clear();
@@ -124,11 +122,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyOtp = useCallback(
     async (phone: string, otp: string) => startSession(await authApi.verifyOtp(phone, otp)),
-    [startSession]
-  );
-
-  const signInWithPassword = useCallback(
-    async (email: string, password: string) => startSession(await authApi.passwordLogin(email, password)),
     [startSession]
   );
 
@@ -148,8 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, status, notice, retry, requestOtp, verifyOtp, signInWithPassword, signOut }),
-    [user, status, notice, retry, requestOtp, verifyOtp, signInWithPassword, signOut]
+    () => ({ user, status, notice, retry, requestOtp, verifyOtp, signOut }),
+    [user, status, notice, retry, requestOtp, verifyOtp, signOut]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

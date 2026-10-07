@@ -1299,6 +1299,12 @@ td.cell__secondary {
   outline-offset: 1px;
 }
 
+.login__hint {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
 .login__dev {
   margin: 0;
   padding: 8px 10px;

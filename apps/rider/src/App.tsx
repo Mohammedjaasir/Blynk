@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Welcome, hasSeenIntro } from './pages/Welcome';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { Apply } from './pages/Apply';
 import { Delivery } from './pages/Delivery';
 import { Login } from './pages/Login';
 import { MyDay } from './pages/MyDay';
@@ -51,6 +52,7 @@ export function AppRoutes() {
     <IntroGate>
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/apply" element={<Apply />} />
       <Route path="/welcome" element={<Welcome />} />
       <Route
         path="/"

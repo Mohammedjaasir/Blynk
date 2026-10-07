@@ -9,9 +9,10 @@ interface AuthState {
   status: 'loading' | 'authenticated' | 'anonymous';
   /** Why the last session ended, shown on the sign-in page. */
   notice: string | null;
-  requestOtp(phone: string): Promise<{ devOtp?: string }>;
-  verifyOtp(phone: string, otp: string): Promise<void>;
-  /** Staff email + password sign-in - the same role gate as an SMS code. */
+  /**
+   * Staff email + password sign-in - the only way in: Inventory and Admin
+   * accounts have no phone and no SMS codes (backend migration 028).
+   */
   signInWithPassword(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
 }
@@ -98,12 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const requestOtp = useCallback(async (phone: string) => {
-    const data = await authApi.requestOtp(phone);
-    return { devOtp: data.dev_otp };
-  }, []);
-
-  // Both sign-in methods end here: the same role gate, the same session.
+  // Sign-in ends here: the role gate, then the session.
   const completeSignIn = useCallback(async (data: { access_token: string; refresh_token: string; user: AuthUser }) => {
     if (!INVENTORY_ROLES.includes(data.user.role)) {
       // The backend has already issued a session for this account. Revoke it
@@ -117,11 +113,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setStatus('authenticated');
   }, []);
-
-  const verifyOtp = useCallback(
-    async (phone: string, otp: string) => completeSignIn(await authApi.verifyOtp(phone, otp)),
-    [completeSignIn]
-  );
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => completeSignIn(await authApi.staffLogin(email, password)),
@@ -140,8 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, status, notice, requestOtp, verifyOtp, signInWithPassword, signOut }),
-    [user, status, notice, requestOtp, verifyOtp, signInWithPassword, signOut]
+    () => ({ user, status, notice, signInWithPassword, signOut }),
+    [user, status, notice, signInWithPassword, signOut]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

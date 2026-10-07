@@ -47,10 +47,14 @@ export const APP_FOR_ROLE: Record<CreatableRole, string> = {
   RIDER: 'the Blynk Rider app',
 };
 
-/** The roles each caller may create (mirrors the backend matrix). */
+/**
+ * The roles each caller may create (mirrors the backend matrix). Riders are
+ * not created here: they apply in the Rider app and are approved under
+ * Rider requests (backend migration 029).
+ */
 export function creatableRoles(role: UserRole | undefined): CreatableRole[] {
-  if (role === 'ADMIN') return ['PACKING_STAFF', 'RIDER', 'OPERATIONS', 'ADMIN'];
-  if (role === 'OPERATIONS') return ['PACKING_STAFF', 'RIDER'];
+  if (role === 'ADMIN') return ['PACKING_STAFF', 'OPERATIONS', 'ADMIN'];
+  if (role === 'OPERATIONS') return ['PACKING_STAFF'];
   return [];
 }
 
@@ -63,8 +67,21 @@ const EMERGENCY_PATTERN = /^\+?[0-9 ()-]*$/;
 
 const vehicleText = (rider: NonNullable<StaffAccount['rider']>) =>
   `${VEHICLE_LABEL[rider.vehicle_type as VehicleType] ?? rider.vehicle_type} · ${rider.vehicle_registration_number}`;
-const nameOf = (account: StaffAccount) => account.full_name ?? account.email ?? account.phone;
+const nameOf = (account: StaffAccount) => account.full_name ?? account.email ?? account.phone ?? 'this account';
+/**
+ * Admin and Inventory accounts sign in with email and password only and have
+ * no phone (backend migration 028); Rider and Operations accounts need one.
+ */
+export const roleNeedsPhone = (role: CreatableRole) => role === 'RIDER' || role === 'OPERATIONS';
+/** A staff phone for display: "—" when the account has none. */
+export const phoneText = (phone: string | null | undefined) => phone || '—';
 const canChangeRole = (account: StaffAccount) => account.role === 'PACKING_STAFF' || account.role === 'OPERATIONS';
+
+/** A 400 VALIDATION_ERROR whose details name the `phone` field. */
+function isPhoneValidationError(err: ApiError): boolean {
+  if (err.code !== 'VALIDATION_ERROR' || !Array.isArray(err.details)) return false;
+  return err.details.some((d) => (d as { field?: unknown } | null)?.field === 'phone');
+}
 
 function passwordError(password: string): string | undefined {
   if (password.length < PASSWORD_MIN) return `Use at least ${PASSWORD_MIN} characters.`;
@@ -106,7 +123,7 @@ export function StaffAccounts() {
   const filterId = useId();
   const visible = rows?.filter((r) => roleFilter === 'ALL' || r.role === roleFilter) ?? null;
   // Admins also see Operations and Admin rows; the filter offers what the list can hold.
-  const filterRoles: CreatableRole[] = isAdmin ? ['PACKING_STAFF', 'RIDER', 'OPERATIONS', 'ADMIN'] : roles;
+  const filterRoles: CreatableRole[] = isAdmin ? ['PACKING_STAFF', 'RIDER', 'OPERATIONS', 'ADMIN'] : ['PACKING_STAFF', 'RIDER'];
 
   const load = useCallback(async () => {
     try {
@@ -145,8 +162,8 @@ export function StaffAccounts() {
         title="Staff accounts"
         description={
           isAdmin
-            ? 'Sign-ins for Admin, Operations, Inventory and Rider accounts.'
-            : 'Sign-ins for Inventory and Rider accounts.'
+            ? 'Sign-ins for Admin, Operations, Inventory and Rider accounts. New riders apply in the Rider app; approve them under Rider requests.'
+            : 'Sign-ins for Inventory and Rider accounts. New riders apply in the Rider app; approve them under Rider requests.'
         }
         actions={
           <button type="button" className="button button--sm" onClick={() => setDialog({ kind: 'create' })}>
@@ -206,7 +223,7 @@ export function StaffAccounts() {
                 <p className="cat-row__meta">
                   {ROLE_LABEL[account.role]} · {account.email ?? 'no email'}
                 </p>
-                <p className="cat-row__meta mono">{account.phone}</p>
+                <p className="cat-row__meta mono">{phoneText(account.phone)}</p>
                 {account.rider && (account.role === 'RIDER' || account.rider.is_active) ? (
                   <p className="cat-row__meta">{vehicleText(account.rider)}</p>
                 ) : null}
@@ -463,6 +480,7 @@ function CreateDialog({
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [errors, setErrors] = useState<CreateErrors>({});
   const [saving, setSaving] = useState(false);
+  const needsPhone = roleNeedsPhone(role);
 
   function validate(): CreateErrors {
     const next: CreateErrors = {};
@@ -470,7 +488,7 @@ function CreateDialog({
     if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Enter a valid email address.';
     const pw = passwordError(password);
     if (pw) next.password = pw;
-    if (!PHONE_PATTERN.test(phone.replace(/[\s\-()]/g, ''))) {
+    if (needsPhone && !PHONE_PATTERN.test(phone.replace(/[\s\-()]/g, ''))) {
       next.phone = 'Enter a Sri Lankan mobile number, e.g. 077 123 4567.';
     }
     if (role === 'RIDER') {
@@ -495,7 +513,8 @@ function CreateDialog({
           email: email.trim().toLowerCase(),
           password,
           role,
-          phone: phone.trim(),
+          // Inventory (and Admin) accounts have no phone: never send one.
+          ...(needsPhone ? { phone: phone.trim() } : {}),
           ...(role === 'RIDER'
             ? {
                 vehicle_type: vehicleType,
@@ -510,6 +529,8 @@ function CreateDialog({
         setErrors({ email: 'Another account already uses this email address.' });
       } else if (err instanceof ApiError && err.code === 'PHONE_TAKEN') {
         setErrors({ phone: 'Another account already uses this phone number.' });
+      } else if (err instanceof ApiError && (err.code === 'PHONE_REQUIRED' || isPhoneValidationError(err))) {
+        setErrors({ phone: 'Enter a Sri Lankan mobile number, e.g. 077 123 4567.' });
       } else {
         setErrors({ form: errorMessage(err, 'Could not create the account.') });
       }
@@ -545,16 +566,20 @@ function CreateDialog({
           </select>
         </Field>
         <PasswordInput label="Password" value={password} onChange={setPassword} error={errors.password} />
-        <Field label="Phone" hint="Their mobile number. They can also sign in with an SMS code." error={errors.phone}>
-          <input
-            className="input"
-            type="tel"
-            inputMode="tel"
-            placeholder="077 123 4567"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-        </Field>
+        {needsPhone ? (
+          <Field label="Phone" hint="Their mobile number. They can also sign in with an SMS code." error={errors.phone}>
+            <input
+              className="input"
+              type="tel"
+              inputMode="tel"
+              placeholder="077 123 4567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </Field>
+        ) : (
+          <p className="field__hint">No phone needed: they sign in with their email and password.</p>
+        )}
         {role === 'RIDER' ? (
           <RiderFields
             vehicleType={vehicleType}

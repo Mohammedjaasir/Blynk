@@ -90,6 +90,7 @@ describe('Admin app access', () => {
       'SMS offers',
       'Feedback',
       'Staff accounts',
+      'Rider requests',
       'Settings',
     ]);
   });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '../api/client';
 import { smsOffers } from '../api/resources';
 import type { SmsLanguage, SmsOffer, SmsOfferAudience, SmsOfferEstimate, SmsOfferInput } from '../api/types';
+import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, EmptyState, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
@@ -47,8 +48,6 @@ function offerErrorMessage(err: unknown, fallback: string): string {
         return 'Offers can be sent from 8 AM to 9 PM only.';
       case 'OFFER_NO_RECIPIENTS':
         return 'No customer in this group can get offers.';
-      case 'NO_TEST_PHONE':
-        return 'Your account has no mobile number to send the test to.';
       case 'OFFER_TEXT_MISSING': {
         const missing = (err.details as { missing_languages?: SmsLanguage[] } | undefined)?.missing_languages;
         return missing?.length ? `Write the ${languageNames(missing)} text first.` : 'Write the missing text first.';
@@ -58,9 +57,18 @@ function offerErrorMessage(err: unknown, fallback: string): string {
   return errorMessage(err, fallback);
 }
 
+/** Sri Lankan mobile, as the API's normaliser accepts it (070-078, not 073). */
+const PHONE_PATTERN = /^(?:\+?94|0)?7[0124-8]\d{7}$/;
+const tidyPhone = (phone: string) => phone.replace(/[\s\-()]/g, '');
+
 const truncate = (text: string) => (text.length > HISTORY_PREVIEW ? `${text.slice(0, HISTORY_PREVIEW - 1)}…` : text);
 
 export function SmsOffers() {
+  const { user } = useAuth();
+  // Tests go to this number; it starts as the operator's own phone (if the
+  // account has one) and, left blank, the API falls back to that phone.
+  const [testPhone, setTestPhone] = useState(user?.phone ?? '');
+  const testPhoneId = useId();
   const [audience, setAudience] = useState<SmsOfferAudience>('ALL');
   const [chosenFallback, setFallback] = useState<SmsLanguage>('en');
   const [languages, setLanguages] = useState<SmsLanguage[]>(DEFAULT_LANGUAGES);
@@ -213,10 +221,30 @@ export function SmsOffers() {
         ) : null}
       </section>
 
+      <section className="card">
+        <div className="field">
+          <label className="field__label" htmlFor={testPhoneId}>
+            Send test to
+          </label>
+          <input
+            id={testPhoneId}
+            className="input"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            placeholder="077 123 4567"
+            value={testPhone}
+            onChange={(event) => setTestPhone(event.target.value)}
+          />
+          <span className="field__hint">A mobile number for test texts. Leave it empty to use your own.</span>
+        </div>
+      </section>
+
       {enabled.map((language) => (
         <OfferText
           key={language}
           language={language}
+          testPhone={testPhone}
           value={texts[language]}
           customers={multilingual ? estimate?.by_language[language] : undefined}
           onChange={(value) => setTexts((current) => ({ ...current, [language]: value }))}
@@ -344,11 +372,14 @@ export function SmsOffers() {
 /** One language's text box: count, cost, preview and a test send. */
 function OfferText({
   language,
+  testPhone,
   value,
   customers,
   onChange,
 }: {
   language: SmsLanguage;
+  /** Where the test goes; blank means the operator's own phone. */
+  testPhone: string;
   value: string;
   customers: number | undefined;
   onChange(value: string): void;
@@ -364,11 +395,16 @@ function OfferText({
   const tooLong = value.length > MAX_OFFER_TEXT;
 
   async function sendTest() {
-    setTesting(true);
     setTestNotice(null);
     setTestError(null);
+    const phone = tidyPhone(testPhone.trim());
+    if (phone && !PHONE_PATTERN.test(phone)) {
+      setTestError('Enter a Sri Lankan mobile number to send the test to, e.g. 077 123 4567.');
+      return;
+    }
+    setTesting(true);
     try {
-      const result = await smsOffers.test(language, text);
+      const result = await smsOffers.test(language, text, phone || undefined);
       setTestNotice(`Test sent to ${result.sent_to}`);
     } catch (err) {
       setTestError(offerErrorMessage(err, 'Could not send the test.'));
@@ -410,11 +446,11 @@ function OfferText({
       <button
         type="button"
         className="button sms-test"
-        aria-label={`Send ${name} test to my phone`}
+        aria-label={`Send ${name} test`}
         disabled={!text || tooLong || testing}
         onClick={() => void sendTest()}
       >
-        {testing ? <Spinner label="Sending test" /> : 'Send test to my phone'}
+        {testing ? <Spinner label="Sending test" /> : 'Send test'}
       </button>
       {testNotice ? (
         <p className="quiet quiet--ok" role="status">

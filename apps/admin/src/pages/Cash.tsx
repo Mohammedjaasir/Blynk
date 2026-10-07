@@ -33,7 +33,7 @@ export function handinRiders(
   riders: ReadonlyArray<RiderOption>,
   extra?: { id: string; name: string | null }
 ): HandinRider[] {
-  const label = (r: RiderOption) => r.full_name ?? r.phone;
+  const label = (r: RiderOption) => r.full_name ?? r.phone ?? 'Rider';
   const out: HandinRider[] = riders.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, label: label(r), inactive: false }));
   const seen = new Set(out.map((r) => r.id));
   const inactive: HandinRider[] = [];

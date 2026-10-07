@@ -3,7 +3,7 @@
 Pre-launch test plan for every Blynk app: the customer app (APK and web at blynk.lk/app/), Operations, Admin, Inventory and Rider.
 
 - **Code:** `main` with the 6 Oct fixes. Testers see the fixes only after the backend and websites are redeployed and the new APKs are installed (Setup S-01 to S-04).
-- **Prepared:** 6 Oct 2026 · **Site:** https://blynk.lk · **Shop:** https://blynk.lk/app/
+- **Prepared:** 6 Oct 2026, sign-in rules updated 7 Oct · **Site:** https://blynk.lk · **Shop:** https://blynk.lk/app/
 
 ## How to use this sheet
 
@@ -22,6 +22,15 @@ Pre-launch test plan for every Blynk app: the customer app (APK and web at blynk
 | Severity | App | Issue | What testers will see |
 |---|---|---|---|
 | High | All APKs | Old installs miss every fix above | Install the new APKs from 6 Oct (see S-04): uninstall the old app first. |
+
+## Changed on 7 Oct: sign-in rules
+
+| App | Sign-in now |
+|---|---|
+| Admin website | Email + password only. Admin accounts have no phone number. |
+| Inventory website | Email + password only. Inventory accounts have no phone number. |
+| Operations app | Email + password, or phone + SMS code (unchanged). |
+| Rider app | Phone + SMS code only. New riders apply in the app; Admin or Ops approves under **Rider requests**. Staff can no longer create Rider accounts. |
 
 ## Fixed on 6 Oct (check these specially)
 
@@ -69,7 +78,7 @@ Do these once. Mark each Pass when done so testers know the environment is ready
 | S-02 | P1 | Delivery centre on the Clock Tower | 1. Database terminal: psql -U postgres -d postgres.<br>2. Run the two UPDATE lines for 6.441313, 80.011437.<br>3. SELECT code, latitude, longitude FROM dark_stores; | DHARGA-01 shows 6.441313 | 80.011437. | | |
 | S-03 | P1 | Websites redeployed | 1. Landing site: build args API_BASE_URL (ends in /api/v1) and SHARE_BASE_URL=https://blynk.lk; Domains = https://blynk.lk; redeploy.<br>2. Redeploy Admin and Inventory sites. | blynk.lk shows "Install Blynk"; blynk.lk/app/ loads the shop; Admin and Inventory open their sign-in. | | |
 | S-04 | P1 | APKs rebuilt and installed | 1. Built 6 Oct against the live API: Customer apps/customer/blinkit-clone-Flutter-ecommerce-/build/app/outputs/flutter-apk/app-release.apk; Operations apps/operations/android/app/build/outputs/apk/debug/app-debug.apk; Rider apps/rider/android/app/build/outputs/apk/debug/app-debug.apk. Uninstall old apps, then install these (or rebuild as below).<br>2. Customer APK: API_BASE_URL, SHARE_BASE_URL=https://blynk.lk, APP_LINK_HOST=blynk.lk, google-services.json present.<br>3. Operations and Rider APKs: set VITE_API_BASE_URL to the live https API before building (the build now refuses localhost or a missing address).<br>4. Raise versionCode; uninstall old builds; install on test phones. | Each app opens and signs in against the live API ("We couldn’t reach Blynk" on login means a test build pointing at a PC). Rider delivery screen shows "Navigate in Google Maps". | | |
-| S-05 | P1 | Test accounts and phones | 1. Admin creates: 1 Operations, 1 Inventory, 2 Riders (with vehicle).<br>2. Have 3 customer phones on different networks: Dialog, SLT-Mobitel, Hutch or Airtel.<br>3. Note the Admin account phone (needed for "Send test to my phone"). | Every account signs in to its own app. | | |
+| S-05 | P1 | Test accounts and phones | 1. Admin creates: 1 Operations, 1 Inventory.<br>1b. 2 riders apply in the Rider app; Admin approves them under Rider requests (E2E-18).<br>2. Have 3 customer phones on different networks: Dialog, SLT-Mobitel, Hutch or Airtel.<br>3. For SMS offer tests, type a phone in "Send test to" (Admin has no phone now). | Every account signs in to its own app. | | |
 | S-06 | P2 | Test catalog data | 1. A category with 2 sub-categories; a category group on Home.<br>2. 5+ products: some tracked with stock, some untracked; one tracked with 0 stock.<br>3. One coupon each: FIXED, PERCENT, FREE_DELIVERY.<br>4. One active promotion. | Customer Home shows the group, promotion and products. | | |
 
 ## End-to-end flows (across apps)
@@ -91,8 +100,9 @@ These check that the apps talk to each other. Run them with real devices side by
 | E2E-11 | P1 | Coupon from Admin to checkout | 1. Admin creates a FIXED coupon; switches it off and on.<br>2. Customer applies it at checkout; places the order.<br>3. Customer tries it again past its per-customer limit. | Switch works (fixed bug). Discount shows on the bill; second use is refused with a clear message; Admin shows usage 1. | | |
 | E2E-12 | P2 | Back-in-stock alert | 1. Tracked product at 0 stock: customer taps Notify me (APK).<br>2. Admin/Inventory restocks it. | Customer receives a push that the product is back. | | |
 | E2E-13 | P1 | SMS offer and opt-out | 1. Customer 1 turns Profile → SMS & offers → Offers by SMS off.<br>2. Admin → SMS offers: Send test to my phone; then send to All customers.<br>3. Ops → More → SMS offers: check history. | Test SMS arrives on the Admin phone with the stop line. Customer 1 gets nothing; others get the English offer. History shows the send with counts. | | |
-| E2E-14 | P1 | Staff accounts and access | 1. Admin creates Ops, Inventory and Rider accounts.<br>2. Each signs in to its own app, then tries the other apps.<br>3. Admin disables one account; Admin resets another’s password. | Each account works only in its own app; others show a "wrong app" message. Disabled account is signed out within 15 minutes; old password stops working. | | |
+| E2E-14 | P1 | Staff accounts and access | 1. Admin creates Ops and Inventory accounts; one rider is approved (E2E-18).<br>2. Each signs in to its own app, then tries the other apps.<br>3. Admin disables one account; Admin resets another’s password. | Each account works only in its own app; others show a "wrong app" message. Disabled account is signed out within 15 minutes; old password stops working. | | |
 | E2E-17 | P2 | Unknown number on a staff app | 1. On Ops, Inventory, Rider and Admin, sign in by SMS with a number that has no account. | "No Blynk account uses this number"; no new customer appears in Admin → Customers. | | |
+| E2E-18 | P1 | Rider applies and is approved | 1. New phone: Rider app → Apply to deliver → name, vehicle, plate → SMS code.<br>2. Try to sign in.<br>3. Admin → Rider requests (badge shows 1) → Approve.<br>4. Sign in on the Rider app again.<br>5. A second applicant: Ops → More → Rider requests → Reject with a reason. | Step 2: "waiting for approval" screen. Step 3: rider gets an SMS. Step 4: queue opens. Step 5: that rider sees "not approved" with the reason. | | |
 | E2E-15 | P1 | Sign-out ends the session | 1. Sign out of Admin, Ops, Inventory and Rider.<br>2. Use the browser Back button / reopen the app. | Every app shows sign-in; nothing from the old session loads. | | |
 | E2E-16 | P2 | Dental booking | 1. Ops sets up a clinic, doctor and weekly availability.<br>2. Customer books a slot, then cancels another booking.<br>3. Ops → Dental → Appointments. | Booking appears in Ops; cancelled one shows cancelled; customer gets confirmation messages. | | |
 
@@ -166,7 +176,8 @@ Operations account on the new Ops APK (and once in a browser).
 | O-14 | P2 | Promotions | 1. Create, edit, hide, reorder; remove an image then Cancel. | Customer carousel updates; reorder always moves; the image is still there after Cancel. | | |
 | O-15 | P1 | Cash | 1. Record a hand-in for a rider, including a disabled rider; check reconciliation. | Collected vs handed in correct; disabled riders marked (inactive); Delete not offered to Operations. | | |
 | O-16 | P1 | Deliver myself: background location | 1. During a delivery, lock the screen 10 minutes. | Customer map keeps updating; notification shows sharing. | | |
-| O-17 | P1 | Staff accounts | 1. Create an Inventory and a Rider account; try to create an Admin. | Ops can create Inventory and Rider only. | | |
+| O-17 | P1 | Staff accounts | 1. Open Create account. | Ops can create Inventory only; the page says new riders apply in the Rider app. | | |
+| O-24 | P1 | Rider requests | 1. More → Rider requests: Waiting, Approved, Rejected.<br>2. Approve one; reject one (reason required). | Count shows on More; approved rider can sign in; rejected shows reason and who reviewed. | | |
 | O-18 | P1 | Delivery fee | 1. More → Delivery fee: change it. | New orders use it. | | |
 | O-19 | P1 | SMS offers | 1. More → SMS offers: write an English offer, estimate, test send, send; try after 9 PM. | One English box; counts and SMS parts shown; after 9 PM refused "8 AM to 9 PM only". | | |
 | O-20 | P2 | Dental admin | 1. Clinics, doctors, availability, block 25 Dec. | All save; the blocked date shows 25 Dec. | | |
@@ -180,7 +191,8 @@ Admin account in a desktop browser.
 
 | ID | Pri | Test | Steps | Expected | Status | Notes |
 |---|---|---|---|---|---|---|
-| A-01 | P1 | Sign-in and lockout | 1. 5 wrong passwords; then a non-admin account. | Locked for 15 minutes with a clear message; non-admin refused. | | |
+| A-01 | P1 | Sign-in and lockout | 1. Check there is no SMS option.<br>2. 5 wrong passwords; then a non-admin account. | Email + password only; locked for 15 minutes with a clear message; non-admin refused. | | |
+| A-19 | P1 | Rider requests | 1. Sidebar → Rider requests (badge = waiting count).<br>2. Approve one; reject one with a reason.<br>3. Staff accounts → Create account. | Lists update; Rider is not offered when creating an account. | | |
 | A-02 | P2 | Dashboard | 1. Open Dashboard. | Counts of products, categories, promotions load. | | |
 | A-03 | P1 | Orders | 1. Open the board and an order; Pack, assign, cancel. | Same rules as Ops; bill and history correct. | | |
 | A-04 | P1 | Product form validation | 1. Markup 999.99, then 1000; a huge cost. | 999.99 saves; 1000 and the huge cost show a message next to the field. | | |
@@ -205,7 +217,7 @@ Inventory (packing staff) account, and once as Admin.
 
 | ID | Pri | Test | Steps | Expected | Status | Notes |
 |---|---|---|---|---|---|---|
-| I-01 | P1 | Sign-in | 1. Inventory account; then an Operations account. | Inventory gets in; Ops told to use the Operations app. | | |
+| I-01 | P1 | Sign-in | 1. Check there is no SMS option.<br>2. Inventory account; then an Operations account. | Email + password only; Inventory gets in; Ops told to use the Operations app. | | |
 | I-02 | P2 | Overview | 1. Open Overview. | Needs stock, counts, queue summary, latest ledger. | | |
 | I-03 | P1 | Stock list | 1. Search, views (Tracked, Low & out), include inactive, paging. | Correct rows; untracked show "Sourced on order". | | |
 | I-04 | P1 | Read-only for packing staff | 1. Open a product’s stock panel as Inventory, then as Admin. | Inventory cannot adjust; Admin can. | | |
@@ -225,7 +237,9 @@ Rider account on the new Rider APK, Android 13 or newer.
 | ID | Pri | Test | Steps | Expected | Status | Notes |
 |---|---|---|---|---|---|---|
 | R-01 | P1 | Right version | 1. Open a delivery. | "Navigate in Google Maps" button and Additional phone (if given) are shown. | | |
-| R-02 | P1 | Sign-in | 1. Email + password; then an Ops account. | Rider gets in; Ops refused. | | |
+| R-02 | P1 | Sign-in | 1. Phone + SMS code as an approved rider; then an Ops number. | Rider gets in; Ops refused. No email option. | | |
+| R-16 | P1 | Apply to deliver | 1. Welcome → Get started → fill the form (Bicycle needs no plate) → SMS code. | "Application sent"; it appears in Admin and Ops Rider requests. | | |
+| R-17 | P1 | Waiting and rejected | 1. Sign in while waiting; then after a rejection. | Waiting screen; then "not approved" with the reason. | | |
 | R-03 | P1 | Queue | 1. With orders assigned: Now, Next, Done today. | Correct order; refreshes every 30 s. | | |
 | R-04 | P1 | Delivery screen | 1. Map, address, note, Call buttons. | Customer pin and route shown; Call opens the dialler. | | |
 | R-05 | P1 | Navigate in Google Maps | 1. Tap Navigate in Google Maps. | Google Maps app opens with directions to the customer’s pin. | | |
@@ -242,5 +256,5 @@ Rider account on the new Rider APK, Android 13 or newer.
 
 ## Summary
 
-- Total cases: **125** (82 P1)
+- Total cases: **130** (87 P1)
 - Fill in: Pass ___ · Fail ___ · Blocked ___ · Not run ___

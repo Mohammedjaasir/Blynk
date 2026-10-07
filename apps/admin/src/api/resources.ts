@@ -41,6 +41,9 @@ import type {
   SmsOfferInput,
   SmsOfferSent,
   SmsOfferTestResult,
+  RiderApplication,
+  RiderApplicationPage,
+  RiderApprovalStatus,
 } from './types';
 
 /**
@@ -51,12 +54,6 @@ import type {
 
 // ---------------------------------------------------------------- auth
 export const auth = {
-  requestOtp: (phone: string) =>
-    apiRequest<{ dev_otp?: string; expires_in_minutes?: number }>(
-      '/auth/otp/request',
-      { method: 'POST', body: { phone }, auth: false }
-    ),
-
   /** Staff email + password sign-in (backend migration 012). */
   staffLogin: (email: string, password: string) =>
     apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/staff/login', {
@@ -64,17 +61,6 @@ export const auth = {
       body: { email, password },
       auth: false,
     }),
-
-  /**
-   * create_account:false - staff sign in here, so an unknown number is
-   * refused (404 ACCOUNT_NOT_FOUND) instead of becoming a customer account.
-   */
-  verifyOtp: (phone: string, otp: string) =>
-    apiRequest<{
-      access_token: string;
-      refresh_token: string;
-      user: AuthUser;
-    }>('/auth/otp/verify', { method: 'POST', body: { phone, otp, create_account: false }, auth: false }),
 
   me: () => apiRequest<AuthUser>('/auth/me'),
 
@@ -487,10 +473,32 @@ export const smsOffers = {
   send: (input: SmsOfferInput) =>
     apiRequest<{ offer: SmsOfferSent }>('/admin/sms-offers', { method: 'POST', body: { ...input } }).then((d) => d.offer),
 
-  /** Only to the signed-in staff member's own phone. */
-  test: (language: SmsLanguage, message: string) =>
-    apiRequest<SmsOfferTestResult>('/admin/sms-offers/test', { method: 'POST', body: { language, message } }),
+  /**
+   * To `phone` when given (Sri Lankan mobile), else the signed-in staff
+   * member's own phone; admins have none, so they enter one (400 NO_TEST_PHONE).
+   */
+  test: (language: SmsLanguage, message: string, phone?: string) =>
+    apiRequest<SmsOfferTestResult>('/admin/sms-offers/test', {
+      method: 'POST',
+      body: phone ? { language, message, phone } : { language, message },
+    }),
 
   /** Newest first. */
   list: () => apiRequest<{ offers: SmsOffer[] }>('/admin/sms-offers').then((d) => d.offers),
+};
+
+/** Rider applications from the Rider app, reviewed by Admin or Operations. */
+export const riderApplications = {
+  list: (status: RiderApprovalStatus, page = 1, limit = 50) =>
+    apiRequest<RiderApplicationPage>(`/admin/rider-applications?status=${status}&page=${page}&limit=${limit}`),
+  pendingCount: () => apiRequest<{ pending: number }>('/admin/rider-applications/count').then((d) => d.pending),
+  approve: (id: string) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/approve`, { method: 'POST' }).then(
+      (d) => d.application
+    ),
+  reject: (id: string, reason: string) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/reject`, {
+      method: 'POST',
+      body: { reason },
+    }).then((d) => d.application),
 };

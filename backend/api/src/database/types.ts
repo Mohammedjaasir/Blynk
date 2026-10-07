@@ -39,6 +39,8 @@ export type DeliveryAssignmentStatus =
   | 'FAILED'
   | 'REJECTED';
 
+/** Migration 029: a rider's application state. */
+export type RiderApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type NotificationChannel = 'SMS' | 'WHATSAPP' | 'IN_APP' | 'EMAIL' | 'PUSH';
 export type NotificationStatus = 'QUEUED' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'FAILED';
 
@@ -354,10 +356,17 @@ export interface RidersTable {
   user_id: string;
   dark_store_id: string;
   vehicle_type: Generated<string>;
-  vehicle_registration_number: string;
+  /** NULL only for a BICYCLE (migration 029). */
+  vehicle_registration_number: string | null;
   emergency_contact_phone: string | null;
   is_available: Generated<boolean>;
   is_active: Generated<boolean>;
+  /** Migration 029: riders apply in the Rider app; only APPROVED riders work. */
+  approval_status: Generated<RiderApprovalStatus>;
+  applied_at: Date | null;
+  reviewed_at: Date | null;
+  reviewed_by: string | null;
+  rejection_reason: string | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }

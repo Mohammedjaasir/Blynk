@@ -245,28 +245,73 @@ describe('More -> SMS offers', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Write the Sinhala and Tamil text first.');
   });
 
-  it('sends a test to the staff member own phone', async () => {
+  it('sends a test to the staff member own phone, prefilled in Send test to', async () => {
     const user = userEvent.setup();
     const { api } = open({
       'POST /admin/sms-offers/test': () => ({ status: 202, data: { sent_to: '+94775****22', sms_parts: 1 } }),
     });
     const tamil = await screen.findByLabelText(/^Tamil text/, { selector: 'textarea' });
-    const testButton = screen.getByRole('button', { name: 'Send Tamil test to my phone' });
+    expect(screen.getByLabelText('Send test to')).toHaveValue('+94771112233');
+    const testButton = screen.getByRole('button', { name: 'Send Tamil test' });
     expect(testButton).toBeDisabled();
     fireEvent.change(tamil, { target: { value: 'அரிசி 10% தள்ளுபடி ' } });
     await user.click(testButton);
     expect(await screen.findByText('Test sent to +94775****22')).toBeInTheDocument();
-    expect(api.find('POST', '/admin/sms-offers/test')[0].body).toEqual({ language: 'ta', message: 'அரிசி 10% தள்ளுபடி' });
+    expect(api.find('POST', '/admin/sms-offers/test')[0].body).toEqual({
+      language: 'ta',
+      message: 'அரிசி 10% தள்ளுபடி',
+      phone: '+94771112233',
+    });
   });
 
-  it('explains a missing test phone', async () => {
+  it('sends a test to another number typed in Send test to', async () => {
     const user = userEvent.setup();
-    open({ 'POST /admin/sms-offers/test': () => fail(400, 'NO_TEST_PHONE') });
+    const { api } = open({
+      'POST /admin/sms-offers/test': () => ({ status: 202, data: { sent_to: '+94771****67', sms_parts: 1 } }),
+    });
     fireEvent.change(await screen.findByLabelText(/^English text/, { selector: 'textarea' }), {
       target: { value: 'Rice 10% off' },
     });
-    await user.click(screen.getByRole('button', { name: 'Send English test to my phone' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Your account has no mobile number to send the test to.');
+    const phone = screen.getByLabelText('Send test to');
+    await user.clear(phone);
+    await user.type(phone, '077 123 4567');
+    await user.click(screen.getByRole('button', { name: 'Send English test' }));
+    expect(await screen.findByText('Test sent to +94771****67')).toBeInTheDocument();
+    expect(api.find('POST', '/admin/sms-offers/test')[0].body).toEqual({
+      language: 'en',
+      message: 'Rice 10% off',
+      phone: '0771234567',
+    });
+  });
+
+  it('checks the test number before sending anything', async () => {
+    const user = userEvent.setup();
+    const { api } = open({
+      'POST /admin/sms-offers/test': () => ({ status: 202, data: { sent_to: 'x', sms_parts: 1 } }),
+    });
+    fireEvent.change(await screen.findByLabelText(/^English text/, { selector: 'textarea' }), {
+      target: { value: 'Rice 10% off' },
+    });
+    const phone = screen.getByLabelText('Send test to');
+    await user.clear(phone);
+    await user.type(phone, '12345');
+    await user.click(screen.getByRole('button', { name: 'Send English test' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter a Sri Lankan mobile number to send the test to');
+    expect(api.find('POST', '/admin/sms-offers/test')).toHaveLength(0);
+  });
+
+  it('leaves the phone out when Send test to is blank, and shows the NO_TEST_PHONE message', async () => {
+    const user = userEvent.setup();
+    const { api } = open({
+      'POST /admin/sms-offers/test': () => fail(400, 'NO_TEST_PHONE', 'Enter the number to send the test to.'),
+    });
+    fireEvent.change(await screen.findByLabelText(/^English text/, { selector: 'textarea' }), {
+      target: { value: 'Rice 10% off' },
+    });
+    await user.clear(screen.getByLabelText('Send test to'));
+    await user.click(screen.getByRole('button', { name: 'Send English test' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter the number to send the test to.');
+    expect(api.find('POST', '/admin/sms-offers/test')[0].body).toEqual({ language: 'en', message: 'Rice 10% off' });
   });
 
   it('lists recent offers with who sent them and shortened texts', async () => {

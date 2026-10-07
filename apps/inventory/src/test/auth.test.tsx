@@ -15,61 +15,56 @@ afterEach(() => {
   tokenStore.clear();
 });
 
-async function signIn(phone: string) {
-  await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
-  await userEvent.type(await screen.findByLabelText(/Mobile number/), phone);
-  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
-  await userEvent.type(await screen.findByLabelText(/6-digit code/), '123456');
-  await userEvent.click(screen.getByRole('button', { name: 'Verify and continue' }));
+/** Email + password: the only sign-in (no SMS codes, backend migration 028). */
+async function signIn(email: string) {
+  await userEvent.type(await screen.findByLabelText('Email'), email);
+  await userEvent.type(screen.getByLabelText('Password'), 'Correct-horse-1');
+  await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 }
 
-const otpHandlers = (user: unknown) => ({
-  'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
-  'POST /auth/otp/verify': () => ok({ access_token: 'acc', refresh_token: 'ref', user }),
+const loginHandlers = (user: unknown) => ({
+  'POST /auth/staff/login': () => ok({ access_token: 'acc', refresh_token: 'ref', user }),
 });
 
-describe('sign-in over the existing Blynk OTP flow', () => {
+describe('sign-in', () => {
+  it('offers email + password only: no SMS code, no mobile number, a password-reset note', async () => {
+    const { api } = renderAs(null, '/login');
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /SMS code/i })).toBeNull();
+    expect(screen.queryByLabelText(/Mobile number/)).toBeNull();
+    expect(screen.getByText('Forgot your password? Ask an admin to reset it.')).toBeInTheDocument();
+    expect(api.find('POST', '/auth/otp/request')).toHaveLength(0);
+  });
+
   it('signs in an ADMIN and opens the Overview', async () => {
-    renderAs(null, '/login', otpHandlers(ADMIN));
-    await signIn('0775551122');
+    renderAs(null, '/login', loginHandlers(ADMIN));
+    await signIn('owner@blynk.test');
     expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument();
     expect(tokenStore.access).toBe('acc');
   });
 
   it('signs in PACKING_STAFF', async () => {
-    renderAs(null, '/login', otpHandlers(STAFF));
-    await signIn('0774443322');
+    renderAs(null, '/login', loginHandlers(STAFF));
+    await signIn('packer@blynk.test');
     expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument();
   });
 
   it.each([
     ['CUSTOMER', { ...ADMIN, id: 'c1', role: 'CUSTOMER' }],
     ['RIDER', { ...ADMIN, id: 'r1', role: 'RIDER' }],
-  ])('refuses a %s account, keeps no session and returns to the phone step', async (_role, user) => {
-    renderAs(null, '/login', otpHandlers(user));
-    await signIn('0771234567');
+  ])('refuses a %s account and keeps no session', async (_role, user) => {
+    renderAs(null, '/login', loginHandlers(user));
+    await signIn('someone@blynk.test');
     expect(await screen.findByText(WRONG_ROLE_MESSAGE)).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
-    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
   });
 
-  // Backend migration 014: Operations staff open only the Operations app.
-  it('refuses an OPERATIONS account over SMS code and points it to the Operations app', async () => {
-    renderAs(null, '/login', otpHandlers({ ...ADMIN, id: 'o1', role: 'OPERATIONS' }));
-    await signIn('0771112233');
-    expect(await screen.findByText(OPERATIONS_STAFF_MESSAGE)).toBeInTheDocument();
-    expect(OPERATIONS_STAFF_MESSAGE).toMatch(/Operations app/);
-    expect(tokenStore.access).toBeNull();
-    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
-  });
-
-  it('shows the API message for a wrong code instead of a technical error', async () => {
+  it('shows the API message instead of a technical error', async () => {
     renderAs(null, '/login', {
-      'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
-      'POST /auth/otp/verify': () => fail(401, 'INVALID_OTP', 'Invalid OTP code. 2 attempt(s) remaining.'),
+      'POST /auth/staff/login': () => fail(429, 'RATE_LIMITED', 'Too many sign-in attempts from this device.'),
     });
-    await signIn('0775551122');
-    expect(await screen.findByText('Invalid OTP code. 2 attempt(s) remaining.')).toBeInTheDocument();
+    await signIn('owner@blynk.test');
+    expect(await screen.findByText('Too many sign-in attempts from this device.')).toBeInTheDocument();
   });
 
   it('sends a signed-out visitor to sign-in', async () => {
@@ -158,14 +153,6 @@ describe('email + password sign-in (backend migration 012)', () => {
     await signInWithPassword('owner@blynk.test', 'not-the-password');
     expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts. Try again in 15 minutes.');
   });
-
-  it('can switch to an SMS code and back', async () => {
-    renderAs(null, '/login');
-    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
-    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Use email and password instead' }));
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();
-  });
 });
 
 describe('no development shortcut', () => {
@@ -222,34 +209,13 @@ describe('role permissions mirror the backend guards', () => {
   });
 });
 
-describe('SMS sign-in never creates an account, and refused sessions are revoked', () => {
-  it('asks the API not to create an account for an unknown number', async () => {
-    const { api } = renderAs(null, '/login', otpHandlers(ADMIN));
-    await signIn('0775551122');
-    await screen.findByRole('heading', { name: 'Overview' });
-    expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({
-      phone: '0775551122',
-      otp: '123456',
-      create_account: false,
-    });
-  });
-
-  it('says so when no Blynk account uses the number (404 ACCOUNT_NOT_FOUND)', async () => {
-    renderAs(null, '/login', {
-      'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
-      'POST /auth/otp/verify': () => fail(404, 'ACCOUNT_NOT_FOUND', 'Account not found.'),
-    });
-    await signIn('0770000000');
-    expect(await screen.findByRole('alert')).toHaveTextContent('No Blynk account uses this number.');
-    expect(tokenStore.access).toBeNull();
-  });
-
-  it('revokes the just-issued session when an SMS sign-in is refused for its role', async () => {
+describe('refused sessions are revoked', () => {
+  it('revokes the just-issued session when a sign-in is refused for its role', async () => {
     const { api } = renderAs(null, '/login', {
-      ...otpHandlers({ ...ADMIN, id: 'r1', role: 'RIDER' }),
+      ...loginHandlers({ ...ADMIN, id: 'r1', role: 'RIDER' }),
       'POST /auth/logout': () => ok({ message: 'Logged out successfully' }),
     });
-    await signIn('0771234567');
+    await signIn('rider@blynk.test');
     expect(await screen.findByText(WRONG_ROLE_MESSAGE)).toBeInTheDocument();
     const logout = api.find('POST', '/auth/logout');
     expect(logout).toHaveLength(1);
@@ -272,10 +238,10 @@ describe('SMS sign-in never creates an account, and refused sessions are revoked
 
   it('still refuses the role when the revocation call fails', async () => {
     renderAs(null, '/login', {
-      ...otpHandlers({ ...ADMIN, id: 'c1', role: 'CUSTOMER' }),
+      ...loginHandlers({ ...ADMIN, id: 'c1', role: 'CUSTOMER' }),
       'POST /auth/logout': () => fail(500, 'INTERNAL', 'boom'),
     });
-    await signIn('0771234567');
+    await signIn('customer@blynk.test');
     expect(await screen.findByText(WRONG_ROLE_MESSAGE)).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
   });

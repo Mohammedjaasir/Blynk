@@ -333,40 +333,6 @@ a {
   text-underline-offset: 3px;
 }
 
-/* Sign-in password field with its Show/Hide toggle. */
-.password-input {
-  position: relative;
-  display: flex;
-}
-
-.password-input .input {
-  flex: 1;
-  min-width: 0;
-  padding-right: 72px;
-}
-
-.password-input__toggle {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  transform: translateY(-50%);
-  min-height: 40px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-
-.password-input__toggle:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
-}
-
 /* -------------------------------------------------------------- Tones */
 
 .tone--go {
@@ -1115,6 +1081,156 @@ a {
   color: var(--paper);
   border-radius: 4px;
   font-weight: 600;
+}
+
+/* ------------------------------------- Phone sign-in and applying (2026-10-07) */
+
+.login__body--apply {
+  padding-top: 6vh;
+}
+
+.login__sent {
+  color: var(--ink-2);
+  font-size: 17px;
+}
+
+.login__resend {
+  align-self: flex-start;
+  padding: 0;
+}
+
+.login__resend:disabled {
+  text-decoration: none;
+  color: var(--ink-3);
+}
+
+.login__apply {
+  margin-top: 4px;
+  font-size: 17px;
+  color: var(--ink-2);
+}
+
+.login__apply a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.login__notfound {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-left: 4px solid var(--yellow);
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.apply__lead {
+  color: var(--ink-2);
+  font-size: 18px;
+}
+
+.field__optional {
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.input--upper {
+  text-transform: uppercase;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choices__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 8px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* The radio stays in the accessibility tree; the whole tile is the target. */
+.choice input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.choice--on {
+  background: var(--yellow);
+  box-shadow: inset 0 -3px 0 rgba(18, 21, 31, 0.12);
+}
+
+.choice:has(input:focus-visible) {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.apply-status {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: rise 180ms var(--ease);
+}
+
+.apply-status__tag {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--yellow);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.apply-status__tag--done {
+  background: var(--green-wash);
+  color: var(--green);
+}
+
+.apply-status__tag--stop {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.apply-status__text {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
 /* ------------------------------------------------------------- Motion */

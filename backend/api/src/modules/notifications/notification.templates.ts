@@ -149,6 +149,9 @@ export class NotificationTemplates {
 
       // The day-before reminder sent by SMS when no app push is possible
       // (dental/appointment-reminders.ts): the same title and body as the push.
+      // Rider applications (migration 029): the text is complete when queued.
+      case 'RIDER_APPROVED':
+      case 'RIDER_REJECTED':
       case 'SMS_OFFER': {
         // Migration 027: the text is complete when queued (the customer's
         // language, opt-out line included), so it is sent exactly as written.

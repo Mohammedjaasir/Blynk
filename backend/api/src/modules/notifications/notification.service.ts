@@ -1,6 +1,6 @@
 import { NotificationChannel } from '../../database/types.js';
 import { logger } from '../../utils/logger.js';
-import { normalizeSriLankanPhone } from '../../utils/phone.js';
+import { isPlaceholderPhone, normalizeSriLankanPhone } from '../../utils/phone.js';
 import { DBConnection } from '../orders/order.repository.js';
 import {
   ClaimedNotificationJob,
@@ -48,6 +48,16 @@ export class NotificationService {
    * Sanitizes payload to guarantee no cost or secret leakage.
    */
   async enqueue(options: EnqueueOptions, executor?: DBConnection) {
+    // Admin / Inventory accounts have a 'nophone:' placeholder (migration
+    // 028), not a number: nothing is queued for it.
+    if (isPlaceholderPhone(options.recipient)) {
+      logger.info(
+        { notificationType: options.notification_type, channel: options.channel },
+        'Notification skipped: the account has no phone number'
+      );
+      return null;
+    }
+
     // 1. Normalize recipient
     let normalizedRecipient: string;
     try {

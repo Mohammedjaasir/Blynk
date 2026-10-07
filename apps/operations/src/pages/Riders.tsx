@@ -69,7 +69,7 @@ export function Riders() {
           {rows.map((r) => (
             <li key={r.id} className="cat-row cat-row--flat">
               <div className="cat-row__main">
-                <p className="cat-row__title">{r.full_name ?? r.phone}</p>
+                <p className="cat-row__title">{r.full_name ?? r.phone ?? 'Rider'}</p>
                 <p className="cat-row__meta">
                   {r.vehicle_type} · <span className="mono">{r.vehicle_registration_number}</span>
                 </p>

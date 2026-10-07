@@ -16,10 +16,8 @@ import type {
   AdjustmentType,
 } from './types';
 
-/** Existing Blynk OTP auth - the same endpoints every Blynk app uses. */
+/** Staff auth: email + password only (Inventory and Admin have no SMS codes, backend migration 028). */
 export const authApi = {
-  requestOtp: (phone: string) =>
-    apiRequest<{ dev_otp?: string }>('/auth/otp/request', { method: 'POST', body: { phone }, auth: false }),
   /** Staff email + password sign-in (backend migration 012). */
   staffLogin: (email: string, password: string) =>
     apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/staff/login', {
@@ -28,16 +26,6 @@ export const authApi = {
       auth: false,
     }),
 
-  /**
-   * create_account: false - Inventory is staff-only, so an unknown number must
-   * never become a new customer account (404 ACCOUNT_NOT_FOUND instead).
-   */
-  verifyOtp: (phone: string, otp: string) =>
-    apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/otp/verify', {
-      method: 'POST',
-      body: { phone, otp, create_account: false },
-      auth: false,
-    }),
   me: () => apiRequest<AuthUser>('/auth/me'),
   // Send the refresh token so the server revokes it: without it the route
   // knows neither the session nor the user, and the session outlives sign-out.

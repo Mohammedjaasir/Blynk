@@ -63,7 +63,15 @@ export function Login() {
       setDevOtp(code ?? null);
       setStep('otp');
     } catch (err) {
-      setError(errorMessage(err, 'Could not send the code.'));
+      if (emailSignInRequired(err)) {
+        // Admin / Inventory accounts have no SMS sign-in (backend migration
+        // 028): show the API's words on the email + password form.
+        setMethod('password');
+        setStep('phone');
+        setError(errorMessage(err));
+      } else {
+        setError(errorMessage(err, 'Could not send the code.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -84,6 +92,12 @@ export function Login() {
         setOtp('');
         setDevOtp(null);
         setError(WRONG_ROLE_MESSAGE);
+      } else if (emailSignInRequired(err)) {
+        setMethod('password');
+        setStep('phone');
+        setOtp('');
+        setDevOtp(null);
+        setError(errorMessage(err));
       } else if (err instanceof ApiError && err.code === 'ACCOUNT_NOT_FOUND') {
         // Staff never get an account made for them here (create_account:
         // false): an unknown number has to be checked, not retried.
@@ -307,6 +321,9 @@ function DevSkip({
     </span>
   );
 }
+
+/** 403 EMAIL_SIGN_IN_REQUIRED: the number belongs to an email + password-only account. */
+const emailSignInRequired = (err: unknown) => err instanceof ApiError && err.code === 'EMAIL_SIGN_IN_REQUIRED';
 
 /**
  * The staff's words for the two refusals of an email + password sign-in

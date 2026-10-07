@@ -35,6 +35,7 @@ import { PackingSlip } from './pages/PackingSlip';
 import { Orders } from './pages/Orders';
 import { Riders } from './pages/Riders';
 import { SmsOffers } from './pages/SmsOffers';
+import { RiderRequests } from './pages/RiderRequests';
 import { StaffAccounts } from './pages/StaffAccounts';
 
 /**
@@ -139,6 +140,7 @@ export function AppRoutes() {
         <Route path="more/deliver" element={<DeliverMyself />} />
         <Route path="more/staff" element={<StaffAccounts />} />
         <Route path="more/sms-offers" element={<SmsOffers />} />
+        <Route path="more/rider-requests" element={<RiderRequests />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

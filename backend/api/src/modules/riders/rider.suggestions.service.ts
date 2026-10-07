@@ -22,9 +22,9 @@ export interface TripStop {
 export interface RiderSuggestion {
   id: string;
   full_name: string | null;
-  phone: string;
+  phone: string | null;
   vehicle_type: string;
-  vehicle_registration_number: string;
+  vehicle_registration_number: string | null;
   open_deliveries: number;
   /** Holding as many open deliveries as a trip may carry: cannot take this order. */
   at_capacity: boolean;
@@ -124,5 +124,5 @@ export function compareSuggestions(a: RiderSuggestion, b: RiderSuggestion): numb
   const da = a.distance_km ?? Number.POSITIVE_INFINITY;
   const db = b.distance_km ?? Number.POSITIVE_INFINITY;
   if (da !== db) return da - db;
-  return (a.full_name ?? a.phone).localeCompare(b.full_name ?? b.phone);
+  return (a.full_name ?? a.phone ?? '').localeCompare(b.full_name ?? b.phone ?? '');
 }

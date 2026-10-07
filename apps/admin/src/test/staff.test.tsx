@@ -27,7 +27,8 @@ function account(overrides: Partial<StaffAccount> = {}): StaffAccount {
     id: 's1',
     full_name: 'Kasun Perera',
     email: 'kasun@blynk.lk',
-    phone: '+94774443322',
+    // Inventory and Admin accounts have no phone (backend migration 028).
+    phone: null,
     role: 'PACKING_STAFF',
     has_password: true,
     disabled: false,
@@ -41,7 +42,7 @@ const ADMIN_ROW = account({
   id: 'a1',
   full_name: 'Nawaz Mansoor',
   email: 'ops.admin@blynk.lk',
-  phone: '+94775551122',
+  phone: null,
   role: 'ADMIN',
   read_only: true,
 });
@@ -83,7 +84,7 @@ describe('Staff accounts page', () => {
       respond({
         staff: [
           account(),
-          account({ id: 's2', full_name: 'Ops Person', email: 'ops@blynk.lk', role: 'OPERATIONS', disabled: true }),
+          account({ id: 's2', full_name: 'Ops Person', email: 'ops@blynk.lk', phone: '+94771230000', role: 'OPERATIONS', disabled: true }),
           ADMIN_ROW,
         ],
       })
@@ -93,10 +94,12 @@ describe('Staff accounts page', () => {
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows[0]).toHaveTextContent('Kasun Perera');
     expect(rows[0]).toHaveTextContent('kasun@blynk.lk');
-    expect(rows[0]).toHaveTextContent('+94774443322');
+    // No phone: a dash, never a placeholder.
+    expect(within(rows[0]).getAllByRole('cell')[2]).toHaveTextContent('—');
     expect(rows[0]).toHaveTextContent('Inventory');
     expect(rows[0]).toHaveTextContent('Active');
     expect(rows[1]).toHaveTextContent('Operations');
+    expect(rows[1]).toHaveTextContent('+94771230000');
     expect(rows[1]).toHaveTextContent('Disabled');
     expect(within(rows[1]).getByRole('button', { name: 'Enable' })).toBeInTheDocument();
     expect(rows[2]).toHaveTextContent('Admin');
@@ -117,8 +120,39 @@ describe('Staff accounts page', () => {
     expect(within(dialog).getByText('Enter their full name.')).toBeInTheDocument();
     expect(within(dialog).getByText('Enter a valid email address.')).toBeInTheDocument();
     expect(within(dialog).getByText('Use at least 8 characters.')).toBeInTheDocument();
+    // Inventory (the default role) has no phone; Operations needs one.
+    expect(within(dialog).queryByLabelText(/Phone/)).toBeNull();
+    await user.selectOptions(within(dialog).getByLabelText(/^Role/), 'OPERATIONS');
+    await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
     expect(within(dialog).getByText(/Sri Lankan mobile number/)).toBeInTheDocument();
     expect(sent('POST', '/admin/staff')).toHaveLength(0);
+  });
+
+  it.each([
+    ['PACKING_STAFF', 'Inventory'],
+    ['ADMIN', 'Admin'],
+  ])('creates a %s account without a phone', async (role, label) => {
+    const user = userEvent.setup();
+    stub((method, _path, body) =>
+      method === 'POST'
+        ? respond({ staff: account({ id: 's8', full_name: String(body!.full_name), role: role as StaffAccount['role'], phone: null }) }, 201)
+        : respond({ staff: [] })
+    );
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Create account' }));
+    const dialog = screen.getByRole('dialog', { name: 'Create account' });
+    await user.selectOptions(within(dialog).getByLabelText(/^Role/), role);
+    expect(within(dialog).queryByLabelText(/Phone/)).toBeNull();
+    expect(within(dialog).getByText(`${label} accounts sign in with email and password only, and have no phone number.`)).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Full name'), 'No Phone');
+    await user.type(within(dialog).getByLabelText('Email'), 'nophone@blynk.lk');
+    await user.type(within(dialog).getByLabelText('Password'), 'Correct-horse-1');
+    await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
+    await waitFor(() =>
+      expect(sent('POST', '/admin/staff')).toEqual([
+        { full_name: 'No Phone', email: 'nophone@blynk.lk', password: 'Correct-horse-1', role },
+      ])
+    );
   });
 
   it('creates an Operations account, shows a loading state, and names the app to sign in to', async () => {
@@ -172,6 +206,7 @@ describe('Staff accounts page', () => {
     await user.type(within(dialog).getByLabelText('Full name'), 'Kasun');
     await user.type(within(dialog).getByLabelText('Email'), 'kasun@blynk.lk');
     await user.type(within(dialog).getByLabelText('Password'), 'Correct-horse-1');
+    await user.selectOptions(within(dialog).getByLabelText(/^Role/), 'OPERATIONS');
     await user.type(within(dialog).getByLabelText(/Phone/), '0774443322');
     await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
     expect(await within(dialog).findByText(message)).toBeInTheDocument();
@@ -192,19 +227,43 @@ describe('Staff accounts page', () => {
     expect(await screen.findByText('New password set for Kasun Perera.')).toBeInTheDocument();
   });
 
-  it('changes the role', async () => {
+  it('changes the role to Operations, asking for a phone', async () => {
     const user = userEvent.setup();
     stub((method) =>
-      method === 'PATCH' ? respond({ staff: account({ role: 'OPERATIONS' }) }) : respond({ staff: [account()] })
+      method === 'PATCH'
+        ? respond({ staff: account({ role: 'OPERATIONS', phone: '+94771234567' }) })
+        : respond({ staff: [account()] })
     );
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Change role' }));
     const dialog = screen.getByRole('dialog', { name: 'Change role' });
+    expect(within(dialog).queryByLabelText(/Phone/)).toBeNull();
     await user.selectOptions(within(dialog).getByLabelText(/^Role/), 'OPERATIONS');
     await user.click(within(dialog).getByRole('button', { name: 'Save role' }));
-    await waitFor(() => expect(sent('PATCH', '/admin/staff/s1')).toEqual([{ role: 'OPERATIONS' }]));
+    expect(within(dialog).getByText(/Sri Lankan mobile number/)).toBeInTheDocument();
+    expect(sent('PATCH', '/admin/staff/s1')).toHaveLength(0);
+    await user.type(within(dialog).getByLabelText(/Phone/), '077 123 4567');
+    await user.click(within(dialog).getByRole('button', { name: 'Save role' }));
+    await waitFor(() => expect(sent('PATCH', '/admin/staff/s1')).toEqual([{ role: 'OPERATIONS', phone: '077 123 4567' }]));
     const row = within(screen.getByRole('table')).getAllByRole('row')[1];
     await waitFor(() => expect(row).toHaveTextContent('Operations'));
+    expect(row).toHaveTextContent('+94771234567');
+  });
+
+  it('changes the role to Inventory without a phone, saying the number goes', async () => {
+    const user = userEvent.setup();
+    const ops = account({ role: 'OPERATIONS', phone: '+94771234567' });
+    stub((method) => (method === 'PATCH' ? respond({ staff: account() }) : respond({ staff: [ops] })));
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Change role' }));
+    const dialog = screen.getByRole('dialog', { name: 'Change role' });
+    await user.selectOptions(within(dialog).getByLabelText(/^Role/), 'PACKING_STAFF');
+    expect(within(dialog).getByText(/Inventory accounts have no phone number/)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/Phone/)).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: 'Save role' }));
+    await waitFor(() => expect(sent('PATCH', '/admin/staff/s1')).toEqual([{ role: 'PACKING_STAFF' }]));
+    const row = within(screen.getByRole('table')).getAllByRole('row')[1];
+    await waitFor(() => expect(within(row).getAllByRole('cell')[2]).toHaveTextContent('—'));
   });
 
   it('disables only after confirmation, then shows the account as disabled', async () => {
@@ -299,57 +358,24 @@ describe('Staff accounts page', () => {
     rider: { id: 'rr1', is_active: true, vehicle_type: 'SCOOTER', vehicle_registration_number: 'WP-RAVI-1', emergency_contact_phone: null },
   });
 
-  it('offers all four roles and names each role’s app', async () => {
+  it('offers Inventory, Operations and Admin, and names each role’s app', async () => {
     const user = userEvent.setup();
     stub(() => respond({ staff: [] }));
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Create account' }));
     const dialog = screen.getByRole('dialog', { name: 'Create account' });
     const select = within(dialog).getByLabelText(/^Role/);
-    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Inventory', 'Operations', 'Rider', 'Admin']);
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Inventory', 'Operations', 'Admin']);
     expect(within(dialog).getByText('Signs in to the Blynk Inventory website only.')).toBeInTheDocument();
     await user.selectOptions(select, 'ADMIN');
     expect(within(dialog).getByText('Signs in to the Blynk Admin website only.')).toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Registration number')).toBeNull();
   });
 
-  it('creates a Rider with its vehicle, after asking for the number plate', async () => {
-    const user = userEvent.setup();
-    stub((method, _path, body) =>
-      method === 'POST'
-        ? respond({ staff: { ...RIDER_ROW, id: 'r2', full_name: String(body!.full_name), email: String(body!.email) } }, 201)
-        : respond({ staff: [] })
-    );
+  it('does not create riders: they apply in the Rider app and are approved under Rider requests', async () => {
+    stub(() => respond({ staff: [] }));
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Create account' }));
-    const dialog = screen.getByRole('dialog', { name: 'Create account' });
-    await user.type(within(dialog).getByLabelText('Full name'), 'New Rider');
-    await user.type(within(dialog).getByLabelText('Email'), 'new.rider@blynk.lk');
-    await user.selectOptions(within(dialog).getByLabelText(/^Role/), 'RIDER');
-    expect(within(dialog).getByText('Signs in to the Blynk Rider app only.')).toBeInTheDocument();
-    await user.type(within(dialog).getByLabelText('Password'), 'Rider-pass-1');
-    await user.type(within(dialog).getByLabelText(/^Phone/), '077 111 2233');
-    await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
-    expect(within(dialog).getByText('Enter the number plate.')).toBeInTheDocument();
-    expect(sent('POST', '/admin/staff')).toHaveLength(0);
-
-    await user.selectOptions(within(dialog).getByLabelText('Vehicle'), 'SCOOTER');
-    await user.type(within(dialog).getByLabelText(/Registration number/), 'WP-RAVI-1');
-    await user.type(within(dialog).getByLabelText(/Emergency contact phone/), '0779998877');
-    await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
-    expect(await screen.findByText(/Account created for New Rider\. They sign in to the Blynk Rider app/)).toBeInTheDocument();
-    expect(sent('POST', '/admin/staff')).toEqual([
-      {
-        full_name: 'New Rider',
-        email: 'new.rider@blynk.lk',
-        password: 'Rider-pass-1',
-        role: 'RIDER',
-        phone: '077 111 2233',
-        vehicle_type: 'SCOOTER',
-        vehicle_registration_number: 'WP-RAVI-1',
-        emergency_contact_phone: '0779998877',
-      },
-    ]);
+    expect(await screen.findByText(/New riders apply in the Rider app and are approved under Rider requests/)).toBeInTheDocument();
   });
 
   it('filters by role; riders show their vehicle and can be edited but not moved to another role', async () => {

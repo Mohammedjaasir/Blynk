@@ -221,28 +221,26 @@ describe('Stage 2 Authentication & OTP Module', () => {
     });
 
     it('create_account:false still signs in an existing account', async () => {
-      const phone = '0775551122';
+      // +94771234567 is the seeded CUSTOMER Ahmed Rizvi
+      const phone = '0771234567';
       const reqRes = await request(app).post('/api/v1/auth/otp/request').send({ phone });
       const otp = reqRes.body.data.dev_otp;
       const verifyRes = await request(app).post('/api/v1/auth/otp/verify').send({ phone, otp, create_account: false });
       expect(verifyRes.status).toBe(200);
-      expect(verifyRes.body.data.user.role).toBe('ADMIN');
+      expect(verifyRes.body.data.user.role).toBe('CUSTOMER');
     });
 
-    it('authenticates staff/admin users and preserves elevated roles', async () => {
-      // +94775551122 is seeded ADMIN Nawaz Mansoor
-      const phone = '0775551122';
-
-      const reqRes = await request(app).post('/api/v1/auth/otp/request').send({ phone });
-      const otp = reqRes.body.data.dev_otp;
-
-      const verifyRes = await request(app)
-        .post('/api/v1/auth/otp/verify')
-        .send({ phone, otp });
-
-      expect(verifyRes.status).toBe(200);
-      expect(verifyRes.body.data.user.role).toBe('ADMIN');
-      expect(verifyRes.body.data.user.full_name).toBe('Nawaz Mansoor');
+    it('refuses SMS codes for an ADMIN account: it signs in with email and password (migration 028)', async () => {
+      // Since migration 028 Admin accounts have placeholder phones; one with a
+      // real number left on it is still never sent a code.
+      await pool.query(
+        `INSERT INTO users (phone, full_name, role) VALUES ('+94770000099', 'OTP Test Admin', 'ADMIN') ON CONFLICT (phone) DO NOTHING`
+      );
+      const reqRes = await request(app).post('/api/v1/auth/otp/request').send({ phone: '0770000099' });
+      expect(reqRes.status).toBe(403);
+      expect(reqRes.body.error.code).toBe('EMAIL_SIGN_IN_REQUIRED');
+      const otps = await pool.query("SELECT 1 FROM otp_verifications WHERE phone = '+94770000099'");
+      expect(otps.rowCount).toBe(0);
     });
 
     it('rejects incorrect OTP and counts attempts', async () => {

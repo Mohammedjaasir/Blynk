@@ -26,7 +26,7 @@ describe('opening the app without signal keeps the rider signed in', () => {
     expect(await screen.findByText(/You're offline\. You're still signed in/)).toBeInTheDocument();
     expect(tokenStore.access).toBe('test-access');
     expect(tokenStore.refresh).toBe('test-refresh');
-    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Mobile number')).not.toBeInTheDocument();
 
     online = true;
     await user.click(screen.getByRole('button', { name: 'Try again' }));
@@ -119,19 +119,18 @@ describe('request timeout (CapacitorHttp ignores AbortSignal on Android)', () =>
   });
 });
 
-describe('staff SMS sign-in never creates an account', () => {
+describe('rider SMS sign-in never creates an account', () => {
   it('sends create_account: false and explains ACCOUNT_NOT_FOUND', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(null, '/login', {
       'POST /auth/otp/request': () => ok({ dev_otp: '123456' }),
       'POST /auth/otp/verify': () => fail(404, 'ACCOUNT_NOT_FOUND', 'No Blynk account uses this number.'),
     });
-    await user.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
     await user.type(await screen.findByLabelText('Mobile number'), '0770000000');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
     await user.type(await screen.findByLabelText('6-digit code'), '123456');
     await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('No Blynk account uses this number.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('No rider account uses this number.');
     expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({
       phone: '0770000000',
       otp: '123456',

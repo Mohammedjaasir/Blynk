@@ -13,6 +13,28 @@ export interface AuthUser {
   role: Role;
 }
 
+/** The vehicles a rider can apply with (POST /riders/applications). */
+export type VehicleType = 'MOTORCYCLE' | 'SCOOTER' | 'BICYCLE' | 'THREE_WHEELER' | 'CAR';
+
+/** POST /riders/applications - no session; the SMS code proves the phone. */
+export interface RiderApplicationInput {
+  phone: string;
+  otp: string;
+  /** 2-128 characters. */
+  full_name: string;
+  vehicle_type: VehicleType;
+  /** Required for every vehicle type except BICYCLE; left out when empty. */
+  vehicle_registration_number?: string;
+  /** Left out when the rider gives none. */
+  emergency_contact_phone?: string;
+}
+
+export interface RiderApplication {
+  status: 'PENDING';
+  full_name: string;
+  phone: string;
+}
+
 /** deliveries.assignment_status - the existing enum, nothing added. */
 export type AssignmentStatus =
   | 'ASSIGNED'

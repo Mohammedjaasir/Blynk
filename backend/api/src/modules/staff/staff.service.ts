@@ -3,9 +3,10 @@ import { db } from '../../database/connection.js';
 import type { Database, UserRole } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
-import type { CreateStaffInput, UpdateStaffInput } from './staff.schema.js';
+import { PHONE_ROLES, type CreateStaffInput, type UpdateStaffInput } from './staff.schema.js';
+import { generatePlaceholderPhone, isEmailOnlyRole, isPlaceholderPhone, publicPhone } from '../../utils/phone.js';
 import { findOpenDeliveriesForRiders } from '../riders/batching.js';
-import { storeId } from '../riders/rider.profile.js';
+import { REGISTRATION_REQUIRED_MESSAGE, registrationRequiredFor } from '../riders/rider.profile.js';
 
 /**
  * The permission matrix (owner-approved default, 2026-10-01):
@@ -13,20 +14,24 @@ import { storeId } from '../riders/rider.profile.js';
  *   caller      | lists                    | creates                  | manages
  *   ------------+--------------------------+--------------------------+-------------------------
  *   ADMIN       | ADMIN, OPERATIONS,       | ADMIN, OPERATIONS,       | OPERATIONS,
- *               | PACKING_STAFF, RIDER     | PACKING_STAFF, RIDER     | PACKING_STAFF, RIDER
- *   OPERATIONS  | PACKING_STAFF, RIDER     | PACKING_STAFF, RIDER     | PACKING_STAFF, RIDER
+ *               | PACKING_STAFF, RIDER     | PACKING_STAFF            | PACKING_STAFF, RIDER
+ *   OPERATIONS  | PACKING_STAFF, RIDER     | PACKING_STAFF            | PACKING_STAFF, RIDER
  *
- * An existing ADMIN account is never changed here (CANNOT_EDIT_ADMIN), nobody
- * changes their own account here (CANNOT_EDIT_SELF), and only an ADMIN moves
- * an account between roles. Everything is written to audit_logs.
+ * Riders are never created here: they apply in the Rider app and are approved
+ * under Rider requests (migration 029); a rider still waiting or rejected is
+ * not listed here either. An existing ADMIN account is never changed here
+ * (CANNOT_EDIT_ADMIN) - except that another ADMIN may reset its password
+ * (owner, 2026-10-07) - nobody changes their own account here
+ * (CANNOT_EDIT_SELF), and only an ADMIN moves an account between roles.
+ * Everything is written to audit_logs.
  */
 const LISTED_ROLES: UserRole[] = ['PACKING_STAFF', 'OPERATIONS', 'ADMIN', 'RIDER'];
 
 export type StaffActorRole = 'ADMIN' | 'OPERATIONS';
 
 const CREATABLE_BY: Record<StaffActorRole, UserRole[]> = {
-  ADMIN: ['ADMIN', 'OPERATIONS', 'PACKING_STAFF', 'RIDER'],
-  OPERATIONS: ['PACKING_STAFF', 'RIDER'],
+  ADMIN: ['ADMIN', 'OPERATIONS', 'PACKING_STAFF'],
+  OPERATIONS: ['PACKING_STAFF'],
 };
 const MANAGEABLE_BY: Record<StaffActorRole, UserRole[]> = {
   ADMIN: ['OPERATIONS', 'PACKING_STAFF', 'RIDER'],
@@ -41,7 +46,8 @@ export interface StaffAccount {
   id: string;
   full_name: string | null;
   email: string | null;
-  phone: string;
+  /** null for Admin and Inventory accounts, which have no phone (migration 028). */
+  phone: string | null;
   role: UserRole;
   has_password: boolean;
   disabled: boolean;
@@ -59,7 +65,8 @@ export interface StaffRiderSummary {
   id: string;
   is_active: boolean;
   vehicle_type: string;
-  vehicle_registration_number: string;
+  /** null only for a bicycle. */
+  vehicle_registration_number: string | null;
   emergency_contact_phone: string | null;
 }
 
@@ -100,6 +107,14 @@ type StaffRow = {
 
 type Actor = Pick<AuditMeta, 'actorId' | 'actorRole'>;
 
+/**
+ * Rider requests (migration 029): a RIDER account whose application is still
+ * waiting or was rejected lives under Rider requests, not here.
+ */
+const notAnUnapprovedRider = sql<boolean>`NOT EXISTS (
+  SELECT 1 FROM riders r WHERE r.user_id = users.id AND users.role = 'RIDER' AND r.approval_status <> 'APPROVED'
+)`;
+
 /** Shown read-only: an ADMIN, the caller's own account, or a role the caller does not manage. */
 const readOnlyFor = (row: StaffRow, actor?: Actor) =>
   row.role === 'ADMIN' || (actor ? row.id === actor.actorId || !MANAGEABLE_BY[actor.actorRole].includes(row.role) : false);
@@ -108,7 +123,7 @@ const toAccount = (row: StaffRow, rider: StaffRiderSummary | null = null, actor?
   id: row.id,
   full_name: row.full_name,
   email: row.email,
-  phone: row.phone,
+  phone: publicPhone(row.phone),
   role: row.role,
   has_password: row.has_password,
   disabled: row.disabled,
@@ -167,6 +182,8 @@ const emailTaken = () =>
   new AppError('Another account already uses this email address.', 409, 'EMAIL_TAKEN', { field: 'email' });
 const phoneTaken = () =>
   new AppError('Another account already uses this phone number.', 409, 'PHONE_TAKEN', { field: 'phone' });
+const phoneRequired = () =>
+  new AppError('Enter a phone number for an Operations account.', 400, 'PHONE_REQUIRED', { field: 'phone' });
 const roleForbidden = (message: string) => new AppError(message, 403, 'STAFF_ROLE_FORBIDDEN');
 const roleLabel: Record<string, string> = {
   ADMIN: 'Admin',
@@ -184,6 +201,7 @@ export class StaffService {
   async list(actor: Actor): Promise<StaffAccount[]> {
     const rows = await staffColumns(db)
       .where('role', 'in', LISTED_FOR[actor.actorRole])
+      .where(notAnUnapprovedRider)
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .execute();
@@ -195,30 +213,35 @@ export class StaffService {
   }
 
   /**
-   * Creates an Admin, Operations, Inventory (PACKING_STAFF) or Rider account
-   * that signs in with its email + password - only a role the caller may
-   * create. A Rider gets its riders row in the same transaction, active at
-   * once. The password is stored only as a bcrypt hash made inside Postgres
+   * Creates an Admin, Operations or Inventory (PACKING_STAFF) account that
+   * signs in with its email + password - only a role the caller may create
+   * (riders apply in the Rider app instead). The password is stored only as a bcrypt hash made inside Postgres
    * (pgcrypto), like migration 012's.
    */
   async create(input: CreateStaffInput, meta: AuditMeta): Promise<StaffAccount> {
     if (!CREATABLE_BY[meta.actorRole].includes(input.role)) {
       throw roleForbidden(`${roleLabel[meta.actorRole]} accounts cannot create ${roleLabel[input.role]} accounts.`);
     }
+    // Admin / Inventory accounts have no phone (migration 028): a placeholder
+    // fills the NOT NULL UNIQUE column, and any number sent is ignored. The
+    // schema guarantees a phone for OPERATIONS.
+    const realPhone = isEmailOnlyRole(input.role) ? null : (input.phone ?? null);
+    if (!realPhone && !isEmailOnlyRole(input.role)) throw phoneRequired();
+    const phone = realPhone ?? generatePlaceholderPhone();
     try {
       return await db.transaction().execute(async (trx) => {
         const clash = await trx
           .selectFrom('users')
           .select(['email', 'phone'])
-          .where((eb) => eb.or([eb(sql`lower(email)`, '=', input.email), eb('phone', '=', input.phone)]))
+          .where((eb) => eb.or([eb(sql`lower(email)`, '=', input.email), eb('phone', '=', phone)]))
           .execute();
         if (clash.some((r) => r.email?.toLowerCase() === input.email)) throw emailTaken();
-        if (clash.some((r) => r.phone === input.phone)) throw phoneTaken();
+        if (clash.some((r) => r.phone === phone)) throw phoneTaken();
 
         const { id } = await trx
           .insertInto('users')
           .values({
-            phone: input.phone,
+            phone,
             email: input.email,
             full_name: input.full_name,
             role: input.role,
@@ -228,28 +251,12 @@ export class StaffService {
           .returning('id')
           .executeTakeFirstOrThrow();
 
-        const vehicle: Record<string, unknown> = {};
-        if (input.role === 'RIDER') {
-          const values = {
-            vehicle_type: input.vehicle_type ?? 'MOTORCYCLE',
-            vehicle_registration_number: input.vehicle_registration_number!,
-            emergency_contact_phone: input.emergency_contact_phone ?? null,
-          };
-          const rider = await trx
-            .insertInto('riders')
-            .values({ user_id: id, dark_store_id: await storeId(trx), ...values, is_active: true, is_available: true })
-            .returning('id')
-            .executeTakeFirstOrThrow();
-          Object.assign(vehicle, values, { rider_id: rider.id });
-        }
-
         await audit(trx, meta, 'STAFF_CREATED', id, null, {
           full_name: input.full_name,
           email: input.email,
-          phone: input.phone,
+          phone: realPhone,
           role: input.role,
           by_role: meta.actorRole,
-          ...vehicle,
         });
         const row = await staffColumns(trx).where('id', '=', id).executeTakeFirstOrThrow();
         logger.info({ staffId: id, role: input.role, by: meta.actorId }, 'Staff account created');
@@ -280,14 +287,24 @@ export class StaffService {
       throw new AppError('You cannot change your own account here.', 403, 'CANNOT_EDIT_SELF');
     }
     return db.transaction().execute(async (trx) => {
-      const current = (await staffColumns(trx).where('id', '=', id).forUpdate().executeTakeFirst()) as
-        | StaffRow
-        | undefined;
+      const current = (await staffColumns(trx)
+        .where('id', '=', id)
+        .where(notAnUnapprovedRider)
+        .forUpdate()
+        .executeTakeFirst()) as StaffRow | undefined;
       if (!current || !LISTED_ROLES.includes(current.role)) {
         throw new AppError('Staff account not found.', 404, 'STAFF_NOT_FOUND');
       }
       if (current.role === 'ADMIN') {
-        throw new AppError('Admin accounts cannot be changed here.', 403, 'CANNOT_EDIT_ADMIN');
+        // The one change allowed on an ADMIN account: another ADMIN resets
+        // its password (owner, 2026-10-07) - a body of exactly {password}.
+        const onlyPassword =
+          input.password !== undefined &&
+          Object.entries(input).every(([k, v]) => k === 'password' || v === undefined);
+        if (meta.actorRole !== 'ADMIN' || !onlyPassword) {
+          throw new AppError('Admin accounts cannot be changed here.', 403, 'CANNOT_EDIT_ADMIN');
+        }
+        return this.resetAdminPassword(trx, current, input.password!, meta);
       }
       if (!MANAGEABLE_BY[meta.actorRole].includes(current.role)) {
         throw roleForbidden(`${roleLabel[meta.actorRole]} accounts cannot change ${roleLabel[current.role]} accounts.`);
@@ -316,8 +333,38 @@ export class StaffService {
         oldValues.full_name = current.full_name;
         newValues.full_name = input.full_name;
       }
-      if (input.role !== undefined && input.role !== current.role) {
-        query = query.set({ role: input.role });
+      // Phone: Operations and Rider accounts keep a real number; Inventory
+      // (and Admin) accounts have none (migration 028). Moving an account to
+      // Inventory replaces its number with a placeholder; moving it to
+      // Operations needs a real one (400 PHONE_REQUIRED if it has none).
+      const roleChange = input.role !== undefined && input.role !== current.role;
+      const nextRole = input.role ?? current.role;
+      let nextPhone: string | null = null;
+      if (isEmailOnlyRole(nextRole)) {
+        if (roleChange && !isPlaceholderPhone(current.phone)) {
+          nextPhone = generatePlaceholderPhone();
+          newValues.phone_removed = true; // never the number itself
+        }
+      } else if (PHONE_ROLES.includes(nextRole)) {
+        if (input.phone !== undefined && input.phone !== current.phone) {
+          const taken = await trx
+            .selectFrom('users')
+            .select('id')
+            .where('phone', '=', input.phone)
+            .where('id', '!=', id)
+            .executeTakeFirst();
+          if (taken) throw phoneTaken();
+          nextPhone = input.phone;
+          oldValues.phone = publicPhone(current.phone);
+          newValues.phone = input.phone;
+        } else if (roleChange && isPlaceholderPhone(current.phone)) {
+          throw phoneRequired();
+        }
+      }
+      if (nextPhone) query = query.set({ phone: nextPhone });
+
+      if (roleChange) {
+        query = query.set({ role: input.role! });
         oldValues.role = current.role;
         newValues.role = input.role;
         endSessions = true;
@@ -389,6 +436,14 @@ export class StaffService {
           .forUpdate()
           .executeTakeFirst();
         if (!rider) throw new AppError('This rider has no rider profile.', 404, 'RIDER_PROFILE_NOT_FOUND');
+        // A registration number is needed unless the vehicle is a bicycle.
+        const nextType = input.vehicle_type ?? rider.vehicle_type;
+        const nextReg = input.vehicle_registration_number !== undefined ? input.vehicle_registration_number : rider.vehicle_registration_number;
+        if (registrationRequiredFor(nextType) && !nextReg) {
+          throw new AppError('Enter the vehicle registration number.', 400, 'VALIDATION_ERROR', [
+            { field: 'vehicle_registration_number', message: REGISTRATION_REQUIRED_MESSAGE, rule: 'custom' },
+          ]);
+        }
         const set: Record<string, string | null> = {};
         for (const key of ['vehicle_type', 'vehicle_registration_number', 'emergency_contact_phone'] as const) {
           const next = input[key];
@@ -423,7 +478,48 @@ export class StaffService {
 
       const row = await staffColumns(trx).where('id', '=', id).executeTakeFirstOrThrow();
       return withRider(trx, row as StaffRow, meta);
+    }).catch((err: { code?: string; constraint?: string }) => {
+      // Two edits giving the same number at once meet at the unique index.
+      if (err?.code === '23505' && err.constraint?.includes('phone')) throw phoneTaken();
+      throw err;
     });
+  }
+
+  /**
+   * An ADMIN resets another ADMIN's password: like any reset it clears the
+   * lockout and ends that account's sessions. Audited as STAFF_UPDATED with
+   * password_reset (never the password or its hash).
+   */
+  private async resetAdminPassword(
+    trx: Transaction<Database>,
+    current: StaffRow,
+    password: string,
+    meta: AuditMeta
+  ): Promise<StaffAccount> {
+    await trx
+      .updateTable('users')
+      .set({
+        staff_password_hash: sql<string>`crypt(${password}, gen_salt('bf', 10))`,
+        login_failed_attempts: 0,
+        login_locked_until: null,
+        updated_at: sql`now()`,
+      })
+      .where('id', '=', current.id)
+      .execute();
+    await trx
+      .updateTable('refresh_tokens')
+      .set({ revoked_at: new Date() })
+      .where('user_id', '=', current.id)
+      .where('revoked_at', 'is', null)
+      .execute();
+    await audit(trx, meta, 'STAFF_UPDATED', current.id, {}, {
+      password_reset: true,
+      target_role: 'ADMIN',
+      by_role: meta.actorRole,
+    });
+    logger.info({ staffId: current.id, by: meta.actorId }, 'Admin password reset by another admin');
+    const row = await staffColumns(trx).where('id', '=', current.id).executeTakeFirstOrThrow();
+    return withRider(trx, row as StaffRow, meta);
   }
 }
 

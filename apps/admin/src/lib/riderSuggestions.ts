@@ -5,7 +5,7 @@ import type { RiderOption, RiderSuggestion, RiderSuggestions } from '../api/type
  * 2026-09-30). The backend ranks and decides; this only phrases it.
  */
 
-export const riderName = (r: Pick<RiderOption, 'full_name' | 'phone'>) => r.full_name?.trim() || r.phone;
+export const riderName = (r: Pick<RiderOption, 'full_name' | 'phone'>) => r.full_name?.trim() || r.phone || 'Rider';
 const firstName = (r: Pick<RiderOption, 'full_name' | 'phone'>) => riderName(r).split(/\s+/)[0];
 
 /** "about 1.2 km away" from their last GPS point, or "location unknown". */

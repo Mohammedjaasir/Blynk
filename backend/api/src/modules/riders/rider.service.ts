@@ -53,6 +53,15 @@ export class RiderService {
     if (!rider) {
       throw new AppError('Rider profile not found for this user account.', 403, 'RIDER_PROFILE_NOT_FOUND');
     }
+    // Rider applications (migration 029): not before approval.
+    if (rider.approval_status === 'PENDING') {
+      throw new AppError('Your application is waiting for approval.', 403, 'RIDER_PENDING_APPROVAL');
+    }
+    if (rider.approval_status === 'REJECTED') {
+      throw new AppError("Your application wasn't approved.", 403, 'RIDER_APPLICATION_REJECTED', {
+        reason: rider.rejection_reason,
+      });
+    }
     if (!rider.is_active) {
       throw new AppError('This rider profile is inactive.', 403, 'RIDER_INACTIVE');
     }

@@ -10,6 +10,7 @@ import { authRateLimiter } from './auth.rate-limiter.js';
 import { generateOtp, hashOtp, compareOtp } from './otp.service.js';
 import { SmsProvider } from '../notifications/providers/sms.provider.js';
 import { generateAccessToken, generateRefreshToken, hashToken } from './token.service.js';
+import { isEmailOnlyRole, publicPhone } from '../../utils/phone.js';
 
 
 const otpSms = new SmsProvider();
@@ -27,7 +28,8 @@ export interface AuthTokensResult {
   expires_in: number;
   user: {
     id: string;
-    phone: string;
+    /** null for an account without a phone (Admin / Inventory, migration 028). */
+    phone: string | null;
     role: string;
     full_name: string | null;
     email: string | null;
@@ -43,10 +45,10 @@ export interface RefreshTokensResult {
 
 /**
  * Roles that may sign in with email + password (migration 012; OPERATIONS
- * from 014; RIDER from 2026-10-01, for rider accounts created on the Staff
- * accounts page - same lockout and disabled checks).
+ * from 014). Riders could from 2026-10-01 to 2026-10-07; since then they sign
+ * in with phone + SMS code only (403 PHONE_SIGN_IN_REQUIRED).
  */
-export const STAFF_PASSWORD_ROLES: string[] = ['ADMIN', 'PACKING_STAFF', 'OPERATIONS', 'RIDER'];
+export const STAFF_PASSWORD_ROLES: string[] = ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'];
 
 /**
  * The one refusal for a staff account an admin has disabled (migration 014),
@@ -55,6 +57,62 @@ export const STAFF_PASSWORD_ROLES: string[] = ['ADMIN', 'PACKING_STAFF', 'OPERAT
  */
 export const staffSignInRefused = () =>
   new AppError('Sign-in failed. Check your details or ask your store admin.', 401, 'INVALID_CREDENTIALS');
+/**
+ * Admin and Inventory accounts sign in with email + password only (owner,
+ * 2026-10-07). Since migration 028 they have placeholder phones no OTP can
+ * reach, so this is defence in depth: a real number on such an account is
+ * still never sent a code nor signed in with one.
+ */
+export const emailSignInRequired = () =>
+  new AppError('This account signs in with email and password.', 403, 'EMAIL_SIGN_IN_REQUIRED');
+
+async function refuseEmailOnlyAccount(phone: string): Promise<void> {
+  const user = await db.selectFrom('users').select('role').where('phone', '=', phone).executeTakeFirst();
+  if (user && isEmailOnlyRole(user.role)) throw emailSignInRequired();
+}
+
+/**
+ * Rider applications (migration 029). A rider whose request is still waiting
+ * cannot sign in; a rejected one is told why (only after a correct code, in
+ * verifyOtp). Riders made before applications existed are APPROVED.
+ */
+export const riderPendingApproval = () =>
+  new AppError('Your application is waiting for approval.', 403, 'RIDER_PENDING_APPROVAL');
+export const riderApplicationRejected = (reason: string | null) =>
+  new AppError("Your application wasn't approved.", 403, 'RIDER_APPLICATION_REJECTED', { reason: reason ?? null });
+/** Riders sign in with phone + SMS code only (owner, 2026-10-07). */
+export const phoneSignInRequired = () =>
+  new AppError('Riders sign in with their phone number.', 403, 'PHONE_SIGN_IN_REQUIRED');
+
+/**
+ * Asked for a code by a rider whose application is still PENDING: refused
+ * before any code is made or sent (no SMS is wasted - there is nothing a code
+ * could do for them yet). A REJECTED rider still gets a code: it is how they
+ * apply again (POST /riders/applications); signing in with it is refused.
+ */
+async function refusePendingRider(phone: string): Promise<void> {
+  const row = await db
+    .selectFrom('users')
+    .innerJoin('riders', 'riders.user_id', 'users.id')
+    .select('riders.approval_status')
+    .where('users.phone', '=', phone)
+    .where('users.role', '=', 'RIDER')
+    .executeTakeFirst();
+  if (row?.approval_status === 'PENDING') throw riderPendingApproval();
+}
+
+/** Inside the sign-in transaction: a RIDER account must be APPROVED. */
+async function refuseUnapprovedRider(trx: Transaction<Database>, userId: string): Promise<void> {
+  const rider = await trx
+    .selectFrom('riders')
+    .select(['approval_status', 'rejection_reason'])
+    .where('user_id', '=', userId)
+    .executeTakeFirst();
+  if (!rider || rider.approval_status === 'APPROVED') return;
+  if (rider.approval_status === 'PENDING') throw riderPendingApproval();
+  throw riderApplicationRejected(rider.rejection_reason);
+}
+
 export const LOGIN_MAX_ATTEMPTS = 5;
 export const LOGIN_LOCK_MINUTES = 15;
 
@@ -64,6 +122,11 @@ export class AuthService {
    * Enforces rate limiting and invalidates prior unconsumed challenges.
    */
   async requestOtp(phone: string, clientIp: string): Promise<RequestOtpResult> {
+    // Admin / Inventory: refused before any code is made, stored or sent.
+    await refuseEmailOnlyAccount(phone);
+    // A rider still waiting for approval (migration 029): same.
+    await refusePendingRider(phone);
+
     // Rate limit per phone: max 3 requests per hour
     authRateLimiter.checkLimit(
       `otp_phone:${phone}`,
@@ -141,13 +204,13 @@ export class AuthService {
   }
 
   /**
-   * Verifies an OTP challenge, auto-registers customer if new, and returns access/refresh tokens.
+   * Steps 1-4 of an SMS-code check: the latest unconsumed code for this phone
+   * exists, is not locked or expired, and matches. A wrong code is counted
+   * (committed at once). Returns the challenge id for consumeOtp(). Shared by
+   * sign-in (verifyOtp) and rider applications, so both answer identically
+   * (INVALID_OTP, OTP_EXPIRED, OTP_MAX_ATTEMPTS_EXCEEDED).
    */
-  async verifyOtp(
-    phone: string,
-    submittedOtp: string,
-    meta: { ipAddress?: string; deviceInfo?: string; createAccount?: boolean }
-  ): Promise<AuthTokensResult> {
+  async checkOtp(phone: string, submittedOtp: string): Promise<string> {
     // 1. Fetch active OTP challenge without transaction
     const activeOtp = await authRepository.findLatestOtp(db, phone);
 
@@ -196,20 +259,45 @@ export class AuthService {
       );
     }
 
+    return activeOtp.id;
+  }
+
+  /**
+   * Step 5: consumes the checked challenge under a row lock (no replay, no
+   * double use). Call inside the transaction that acts on it: if that
+   * transaction throws, the code stays usable.
+   */
+  async consumeOtp(trx: Transaction<Database>, phone: string, activeOtpId: string): Promise<void> {
+    const lockedOtp = await authRepository.findActiveOtpForUpdate(trx, phone);
+
+    if (!lockedOtp || lockedOtp.id !== activeOtpId || lockedOtp.consumed_at !== null) {
+      throw new AppError(
+        'Invalid or expired OTP challenge. Please request a new OTP.',
+        401,
+        'INVALID_OTP'
+      );
+    }
+
+    await authRepository.markOtpConsumed(trx, lockedOtp.id);
+  }
+
+  /**
+   * Verifies an OTP challenge, auto-registers customer if new, and returns access/refresh tokens.
+   */
+  async verifyOtp(
+    phone: string,
+    submittedOtp: string,
+    meta: { ipAddress?: string; deviceInfo?: string; createAccount?: boolean }
+  ): Promise<AuthTokensResult> {
+    // Admin / Inventory never sign in with a code (also checked again below,
+    // under the row lock, before anything is consumed).
+    await refuseEmailOnlyAccount(phone);
+
+    const activeOtpId = await this.checkOtp(phone, submittedOtp);
+
     // 5. If valid, open transaction with FOR UPDATE row lock to consume challenge safely and prevent concurrency/replay
     const result = await db.transaction().execute(async (trx) => {
-      const lockedOtp = await authRepository.findActiveOtpForUpdate(trx, phone);
-
-      if (!lockedOtp || lockedOtp.id !== activeOtp.id || lockedOtp.consumed_at !== null) {
-        throw new AppError(
-          'Invalid or expired OTP challenge. Please request a new OTP.',
-          401,
-          'INVALID_OTP'
-        );
-      }
-
-      // Mark challenge consumed
-      await authRepository.markOtpConsumed(trx, lockedOtp.id);
+      await this.consumeOtp(trx, phone, activeOtpId);
 
       // Find or auto-register user
       const existingUser = await authRepository.findUserByPhone(trx, phone, true);
@@ -226,6 +314,9 @@ export class AuthService {
         // A disabled staff account (migration 014) cannot fall back to an SMS
         // code either. Thrown inside the transaction, so nothing is consumed.
         if (existingUser.staff_disabled_at) throw staffSignInRefused();
+        if (isEmailOnlyRole(existingUser.role)) throw emailSignInRequired();
+        // Rider applications (migration 029): only an APPROVED rider signs in.
+        if (existingUser.role === 'RIDER') await refuseUnapprovedRider(trx, existingUser.id);
         user = await authRepository.updateLastLogin(trx, existingUser.id);
       } else if (meta.createAccount === false) {
         // Staff apps sign in with create_account:false - an unknown number is
@@ -277,7 +368,7 @@ export class AuthService {
       expires_in: 900, // 15 minutes in seconds
       user: {
         id: user.id,
-        phone: user.phone,
+        phone: publicPhone(user.phone),
         role: user.role,
         full_name: user.full_name,
         email: user.email,
@@ -311,9 +402,12 @@ export class AuthService {
     );
 
     const wrong = () => new AppError('Wrong email or password.', 401, 'INVALID_CREDENTIALS');
-    const lockedFor = (minutes: number) =>
+    // Admin / Inventory have no SMS code to fall back to (migration 028).
+    const lockedFor = (minutes: number, role: string) =>
       new AppError(
-        `Too many wrong passwords. Try again in ${minutes} minute(s), or sign in with an SMS code.`,
+        !isEmailOnlyRole(role)
+          ? `Too many wrong passwords. Try again in ${minutes} minute(s), or sign in with an SMS code.`
+          : `Too many wrong passwords. Try again in ${minutes} minute(s), or ask an admin to reset your password.`,
         429,
         'LOGIN_LOCKED',
         { retry_after_minutes: minutes }
@@ -344,13 +438,15 @@ export class AuthService {
         .forUpdate()
         .executeTakeFirst();
 
+      // Riders sign in with phone + SMS code only (owner, 2026-10-07).
+      if (row?.role === 'RIDER') throw phoneSignInRequired();
       if (!row || !row.has_password || !STAFF_PASSWORD_ROLES.includes(row.role as string)) throw wrong();
       if (!row.is_active) {
         throw new AppError('Your account has been deactivated. Please contact support.', 403, 'ACCOUNT_DEACTIVATED');
       }
       if (row.login_locked_until && row.login_locked_until > new Date()) {
         const minutes = Math.max(1, Math.ceil((row.login_locked_until.getTime() - Date.now()) / 60000));
-        throw lockedFor(minutes);
+        throw lockedFor(minutes, row.role);
       }
 
       if (!row.password_ok) {
@@ -365,7 +461,7 @@ export class AuthService {
           .where('id', '=', row.id)
           .execute();
         logger.warn({ userId: row.id, attempts, locked: lock }, 'Wrong staff password');
-        return { failed: true as const, locked: lock };
+        return { failed: true as const, locked: lock, role: row.role as string };
       }
 
       // Disabled (migration 014): checked only once the password is right, so
@@ -382,7 +478,7 @@ export class AuthService {
       return { failed: false as const, tokens: await this.issueTokens(trx, user, meta) };
     });
 
-    if (outcome.failed) throw outcome.locked ? lockedFor(LOGIN_LOCK_MINUTES) : wrong();
+    if (outcome.failed) throw outcome.locked ? lockedFor(LOGIN_LOCK_MINUTES, outcome.role) : wrong();
     return outcome.tokens;
   }
 
@@ -490,7 +586,8 @@ export class AuthService {
     }
     return {
       id: user.id,
-      phone: user.phone,
+      // Never the 'nophone:' placeholder of an Admin / Inventory account.
+      phone: publicPhone(user.phone),
       email: user.email,
       full_name: user.full_name,
       role: user.role,

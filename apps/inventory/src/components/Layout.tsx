@@ -72,7 +72,7 @@ export function Layout() {
         </nav>
 
         <div className="sidebar__user">
-          <span className="sidebar__user-name">{user?.full_name ?? user?.phone}</span>
+          <span className="sidebar__user-name">{user?.full_name ?? user?.email ?? user?.phone}</span>
           <span className="sidebar__user-role">{user ? ROLE_LABEL[user.role] : ''}</span>
           <button type="button" className="sidebar__signout" onClick={() => void handleSignOut()}>
             Sign out

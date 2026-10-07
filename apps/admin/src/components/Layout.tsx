@@ -1,4 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { riderApplications } from '../api/resources';
 import { useAuth } from '../auth/AuthContext';
 import blynkMark from '../assets/blynk-mark.png';
 import blynkWordmark from '../assets/blynk-wordmark-light.png';
@@ -16,6 +18,21 @@ export function Layout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN';
+  const { pathname } = useLocation();
+  const [pendingRiders, setPendingRiders] = useState(0);
+
+  // Waiting rider applications, refreshed on every page change.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let live = true;
+    riderApplications
+      .pendingCount()
+      .then((n) => live && setPendingRiders(n))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [isAdmin, pathname]);
 
   async function handleSignOut() {
     await signOut();
@@ -88,6 +105,14 @@ export function Layout() {
               <p className="nav__group">Team</p>
               <NavLink to="/staff" className="nav__item">
                 Staff accounts
+              </NavLink>
+              <NavLink to="/rider-requests" className="nav__item">
+                Rider requests
+                {pendingRiders > 0 ? (
+                  <span className="nav__badge" aria-label={`${pendingRiders} waiting`}>
+                    {pendingRiders}
+                  </span>
+                ) : null}
               </NavLink>
 
               <p className="nav__group">Store settings</p>

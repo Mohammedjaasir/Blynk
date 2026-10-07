@@ -51,7 +51,7 @@ function Shell() {
     <div className="shell">
       <header className="topbar">
         <span className="topbar__brand">Blynk Ops</span>
-        <span className="topbar__user">{user?.full_name ?? user?.phone}</span>
+        <span className="topbar__user">{user?.full_name ?? user?.phone ?? user?.email}</span>
       </header>
 
       <main className="content">

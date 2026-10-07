@@ -51,7 +51,7 @@ function renderWithProviders(ui: React.ReactElement) {
   );
 }
 
-describe('admin sign-in', () => {
+describe('admin sign-in (email + password only, backend migration 028)', () => {
   beforeEach(() => {
     tokenStore.clear();
     vi.restoreAllMocks();
@@ -59,81 +59,29 @@ describe('admin sign-in', () => {
 
   afterEach(() => tokenStore.clear());
 
-  it('signs in an ADMIN account and stores the session', async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith('/auth/otp/request')) return jsonResponse({ dev_otp: '123456' });
-      if (url.endsWith('/auth/otp/verify')) {
-        return jsonResponse({
-          access_token: 'admin-access',
-          refresh_token: 'admin-refresh',
-          user: ADMIN_USER,
-        });
-      }
-      return jsonResponse({});
-    });
+  it('offers no SMS code: no mobile number field, no switch, a password-reset note', async () => {
+    const fetchMock = vi.fn((_input: RequestInfo | URL) => jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
-
     renderWithProviders(<Login />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
-    await userEvent.type(screen.getByLabelText(/Mobile number/), '0775551122');
-    await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
-
-    // The dev code is surfaced, clearly labelled, exactly as the API sends it.
-    expect(await screen.findByText('Dev code: 123456')).toBeInTheDocument();
-
-    await userEvent.type(screen.getByLabelText(/6-digit code/), '123456');
-    await userEvent.click(screen.getByRole('button', { name: 'Verify and continue' }));
-
-    await waitFor(() => expect(tokenStore.access).toBe('admin-access'));
-  });
-
-  it('refuses a customer account and keeps no session', async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith('/auth/otp/request')) return jsonResponse({ dev_otp: '654321' });
-      if (url.endsWith('/auth/otp/verify')) {
-        return jsonResponse({
-          access_token: 'customer-access',
-          refresh_token: 'customer-refresh',
-          user: CUSTOMER_USER,
-        });
-      }
-      return jsonResponse({});
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    renderWithProviders(<Login />);
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
-    await userEvent.type(screen.getByLabelText(/Mobile number/), '0771234567');
-    await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
-    await userEvent.type(await screen.findByLabelText(/6-digit code/), '654321');
-    await userEvent.click(screen.getByRole('button', { name: 'Verify and continue' }));
-
-    expect(await screen.findByText(NOT_ADMIN_MESSAGE)).toBeInTheDocument();
-    expect(tokenStore.access).toBeNull();
-    // The code is spent once the API has verified it, so the form goes back
-    // to the phone step instead of inviting a retry that can only fail.
-    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/6-digit code/)).toBeNull();
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /SMS code/i })).toBeNull();
+    expect(screen.queryByLabelText(/Mobile number/)).toBeNull();
+    expect(screen.queryByText(/6-digit code/)).toBeNull();
+    expect(screen.getByText('Forgot your password? Ask another admin to reset it.')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/auth/otp'))).toBe(false);
   });
 
   it('shows the API error instead of a technical one', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() => jsonResponse({ message: 'Too many OTP requests. Try later.' }, 429))
-    );
+    vi.stubGlobal('fetch', vi.fn(() => jsonResponse({ message: 'Too many sign-in attempts. Try later.' }, 429)));
 
     renderWithProviders(<Login />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
-    await userEvent.type(screen.getByLabelText(/Mobile number/), '0775551122');
-    await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+    await userEvent.type(await screen.findByLabelText('Email'), 'owner@blynk.test');
+    await userEvent.type(screen.getByLabelText('Password'), 'Blynk@1960');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    expect(
-      await screen.findByText('Too many OTP requests. Try later.')
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Too many sign-in attempts. Try later.')).toBeInTheDocument();
   });
 });
 
@@ -214,15 +162,6 @@ describe('admin email + password sign-in (backend migration 012)', () => {
     renderWithProviders(<Login />);
     await signIn('owner@blynk.test', 'not-the-password');
     expect(await screen.findByText('Too many attempts. Try again in 15 minutes.')).toBeInTheDocument();
-  });
-
-  it('can switch to an SMS code and back', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => jsonResponse({})));
-    renderWithProviders(<Login />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
-    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Use email and password instead' }));
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();
   });
 });
 
@@ -473,6 +412,7 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Promotions' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Feedback' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Staff accounts' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Rider requests' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
     // Sales, rider cash, coupons and customers (ADMIN only).
     expect(screen.getByRole('link', { name: 'Sales' })).toBeInTheDocument();
@@ -480,7 +420,7 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Coupons' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Customers' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'SMS offers' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(14);
+    expect(screen.getAllByRole('link')).toHaveLength(15);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

@@ -54,8 +54,13 @@ export const APP_FOR_ROLE: Record<CreatableRole, string> = {
   RIDER: 'the Blynk Rider app',
 };
 
-/** An admin may create all four (backend staff.service.ts permission matrix). */
-const CREATE_ROLES: CreatableRole[] = ['PACKING_STAFF', 'OPERATIONS', 'RIDER', 'ADMIN'];
+/**
+ * Riders are not created here: they apply in the Rider app and are approved
+ * under Rider requests (backend migration 029).
+ */
+const CREATE_ROLES: CreatableRole[] = ['PACKING_STAFF', 'OPERATIONS', 'ADMIN'];
+/** The list still shows every role, riders included. */
+const FILTER_ROLES: CreatableRole[] = ['PACKING_STAFF', 'OPERATIONS', 'RIDER', 'ADMIN'];
 
 /** Only Inventory and Operations accounts move between roles. */
 const canChangeRole = (account: StaffAccount) => account.role === 'PACKING_STAFF' || account.role === 'OPERATIONS';
@@ -68,6 +73,15 @@ const PASSWORD_MAX = 128;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Sri Lankan mobile, as the API's normaliser accepts it (070-078, not 073). */
 const PHONE_PATTERN = /^(?:\+?94|0)?7[0124-8]\d{7}$/;
+/**
+ * Only Operations and Rider accounts have a phone (they can sign in with an
+ * SMS code). Admin and Inventory accounts sign in with email + password only
+ * and have none (backend migration 028).
+ */
+const PHONE_ROLES: ReadonlyArray<CreatableRole> = ['OPERATIONS', 'RIDER'];
+const needsPhone = (role: CreatableRole) => PHONE_ROLES.includes(role);
+const phoneError = (phone: string) =>
+  PHONE_PATTERN.test(phone.replace(/[\s\-()]/g, '')) ? undefined : 'Enter a Sri Lankan mobile number, e.g. 077 123 4567.';
 
 const dateFormat = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -137,7 +151,7 @@ export function Staff() {
     }
   }
 
-  const nameOf = (account: StaffAccount) => account.full_name ?? account.email ?? account.phone;
+  const nameOf = (account: StaffAccount) => account.full_name ?? account.email ?? account.phone ?? 'this account';
 
   async function setCanDeliver(account: StaffAccount, canDeliver: boolean) {
     setDialog(null);
@@ -164,7 +178,7 @@ export function Staff() {
     <>
       <PageHeader
         title="Staff accounts"
-        description="Sign-ins for Admin, Operations, Inventory and Rider accounts. Each account opens only its own app."
+        description="Sign-ins for Admin, Operations, Inventory and Rider accounts. Each account opens only its own app. New riders apply in the Rider app and are approved under Rider requests."
         actions={
           <button type="button" className="button" onClick={() => setDialog({ kind: 'create' })}>
             Create account
@@ -195,7 +209,7 @@ export function Staff() {
             onChange={(e) => setRoleFilter(e.target.value as 'ALL' | CreatableRole)}
           >
             <option value="ALL">All roles</option>
-            {CREATE_ROLES.map((r) => (
+            {FILTER_ROLES.map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABEL[r]}
               </option>
@@ -236,7 +250,7 @@ export function Staff() {
                     <span className="cell__secondary"> Added {dateFormat.format(new Date(account.created_at))}</span>
                   </td>
                   <td className="cell__secondary">{account.email ?? '-'}</td>
-                  <td className="cell__secondary">{account.phone}</td>
+                  <td className="cell__secondary">{account.phone ?? '—'}</td>
                   <td>{ROLE_LABEL[account.role]}</td>
                   <td>
                     {account.read_only ? (
@@ -576,9 +590,10 @@ function CreateStaffDialog({
     if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Enter a valid email address.';
     const pw = passwordError(password);
     if (pw) next.password = pw;
-    // users.phone is required for every Blynk account.
-    if (!PHONE_PATTERN.test(phone.replace(/[\s\-()]/g, ''))) {
-      next.phone = 'Enter a Sri Lankan mobile number, e.g. 077 123 4567.';
+    // Operations and Rider accounts need a phone; Admin and Inventory have none.
+    if (needsPhone(role)) {
+      const bad = phoneError(phone);
+      if (bad) next.phone = bad;
     }
     if (role === 'RIDER') {
       const reg = registrationError(registration);
@@ -601,7 +616,7 @@ function CreateStaffDialog({
         email: email.trim().toLowerCase(),
         password,
         role,
-        phone: phone.trim(),
+        ...(needsPhone(role) ? { phone: phone.trim() } : {}),
         ...(role === 'RIDER'
           ? {
               vehicle_type: vehicleType,
@@ -650,16 +665,20 @@ function CreateStaffDialog({
           </select>
         </Field>
         <PasswordInput label="Password" value={password} onChange={setPassword} error={errors.password} />
-        <Field label="Phone" hint="Their mobile number. They can also sign in with an SMS code." error={errors.phone}>
-          <input
-            className="input"
-            type="tel"
-            inputMode="tel"
-            placeholder="077 123 4567"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-        </Field>
+        {needsPhone(role) ? (
+          <Field label="Phone" hint="Their mobile number. They can also sign in with an SMS code." error={errors.phone}>
+            <input
+              className="input"
+              type="tel"
+              inputMode="tel"
+              placeholder="077 123 4567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </Field>
+        ) : (
+          <p className="modal__message">{ROLE_LABEL[role]} accounts sign in with email and password only, and have no phone number.</p>
+        )}
         {role === 'RIDER' ? (
           <RiderFields
             vehicleType={vehicleType}
@@ -903,8 +922,13 @@ function ChangeRoleDialog({
   onSaved(account: StaffAccount): void;
 }) {
   const [role, setRole] = useState<StaffRole>(account.role === 'OPERATIONS' ? 'OPERATIONS' : 'PACKING_STAFF');
+  const [phone, setPhone] = useState(account.phone ?? '');
+  const [phoneErr, setPhoneErr] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Moving to Operations needs a phone (Inventory accounts have none);
+  // moving to Inventory removes it.
+  const asksPhone = role === 'OPERATIONS' && account.role !== 'OPERATIONS';
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -912,12 +936,17 @@ function ChangeRoleDialog({
       onClose();
       return;
     }
+    const bad = asksPhone ? phoneError(phone) : undefined;
+    setPhoneErr(bad);
+    if (bad) return;
     setSaving(true);
     setFormError(null);
     try {
-      onSaved(await staffApi.update(account.id, { role }));
+      onSaved(await staffApi.update(account.id, asksPhone ? { role, phone: phone.trim() } : { role }));
     } catch (err) {
-      setFormError(errorText(err, 'Could not change the role.'));
+      if (err instanceof ApiError && err.code === 'PHONE_TAKEN') setPhoneErr('Another account already uses this phone number.');
+      else if (err instanceof ApiError && err.code === 'PHONE_REQUIRED') setPhoneErr('Enter their mobile number.');
+      else setFormError(errorText(err, 'Could not change the role.'));
     } finally {
       setSaving(false);
     }
@@ -931,6 +960,20 @@ function ChangeRoleDialog({
           {account.full_name ?? account.email} will be signed out and must sign in again in their new app.
         </p>
         <RoleSelect value={role} onChange={setRole} />
+        {asksPhone ? (
+          <Field label="Phone" hint="Operations accounts need a mobile number. They can also sign in with an SMS code." error={phoneErr}>
+            <input
+              className="input"
+              type="tel"
+              inputMode="tel"
+              placeholder="077 123 4567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </Field>
+        ) : role === 'PACKING_STAFF' && account.role !== 'PACKING_STAFF' ? (
+          <p className="modal__message">Inventory accounts have no phone number: theirs will be removed.</p>
+        ) : null}
         {formError ? <p className="field__error">{formError}</p> : null}
         <div className="modal__actions">
           <button type="button" className="button button--ghost" onClick={onClose}>

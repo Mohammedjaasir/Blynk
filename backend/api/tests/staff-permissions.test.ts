@@ -6,13 +6,16 @@ import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { authRateLimiter } from '../src/modules/auth/auth.rate-limiter.js';
 
 /**
- * Staff accounts permission matrix and Rider credentials (owner, 2026-10-01:
- * "in the admin and operation add the option to create a new credential for
- * rider, admin, inventory"):
+ * Staff accounts permission matrix (owner, 2026-10-01; riders since
+ * 2026-10-07 join by applying in the Rider app - migration 029 - and sign in
+ * with phone + SMS code only):
  *
- *   ADMIN      creates ADMIN, OPERATIONS, PACKING_STAFF, RIDER;
- *   OPERATIONS creates and manages only PACKING_STAFF and RIDER;
+ *   ADMIN      creates ADMIN, OPERATIONS, PACKING_STAFF (RIDER: 400);
+ *   OPERATIONS creates only PACKING_STAFF, manages PACKING_STAFF and RIDER;
  *   an existing ADMIN, and the caller's own account, are never changed here.
+ *
+ * The rider accounts here are inserted as approved riders (as if their
+ * application had been approved).
  *
  * Own throwaway users (phones +9477000975x / 0770009751-9); every row made
  * here - riders, orders, deliveries, audit rows - is removed afterwards.
@@ -57,9 +60,31 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
   });
   const rider = (n: string, extra: Record<string, unknown> = {}) =>
     account(n, 'RIDER', { vehicle_type: 'SCOOTER', vehicle_registration_number: `wp-perm-${n}`, ...extra });
+  /** An approved rider (what an approved application leaves behind). */
+  async function seedRider(n: string, emergency: string | null = null) {
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO users (phone, email, full_name, role, phone_verified_at) VALUES ($1, $2, $3, 'RIDER', now()) RETURNING id`,
+      [`${PREFIX}${n}`, `perm${n}${EMAIL_DOMAIN}`, `Perm RIDER ${n}`]
+    );
+    await pool.query(
+      `INSERT INTO riders (user_id, dark_store_id, vehicle_type, vehicle_registration_number, emergency_contact_phone, is_active, is_available)
+       VALUES ($1, (SELECT id FROM dark_stores WHERE is_active = true LIMIT 1), 'SCOOTER', $2, $3, true, true)`,
+      [rows[0].id, `WP-PERM-${n}`, emergency]
+    );
+    return rows[0].id;
+  }
+  /** Riders sign in with phone + SMS code only. */
+  async function riderSignIn(n: string) {
+    const req = await request(app).post('/api/v1/auth/otp/request').send({ phone: `077000975${n}` });
+    expect(req.status).toBe(200);
+    return request(app)
+      .post('/api/v1/auth/otp/verify')
+      .send({ phone: `077000975${n}`, otp: req.body.data.dev_otp, create_account: false });
+  }
 
   async function cleanup() {
-    const users = `(SELECT id FROM users WHERE phone LIKE '${PREFIX}%')`;
+    // Inventory / Admin accounts made here have no phone (migration 028): matched by email too.
+    const users = `(SELECT id FROM users WHERE phone LIKE '${PREFIX}%' OR email LIKE '%${EMAIL_DOMAIN}')`;
     const riders = `(SELECT id FROM riders WHERE user_id IN ${users})`;
     if (createdOrders.length) {
       await pool.query('DELETE FROM notifications WHERE order_id = ANY($1)', [createdOrders]);
@@ -74,7 +99,7 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
        DELETE FROM riders WHERE user_id IN ${users};
        DELETE FROM refresh_tokens WHERE user_id IN ${users};
        DELETE FROM otp_verifications WHERE phone LIKE '${PREFIX}%';
-       DELETE FROM users WHERE phone LIKE '${PREFIX}%';`
+       DELETE FROM users WHERE id IN ${users};`
     );
   }
 
@@ -135,12 +160,15 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
 
   // ==========================================================================
   describe('ADMIN', () => {
-    it('creates each of the four roles', async () => {
+    it('creates Admin, Operations and Inventory accounts - never a rider (400 RIDERS_JOIN_BY_APPLICATION)', async () => {
+      const refused = await create(tokens.admin, rider('7', { emergency_contact_phone: '077 123 4567' }));
+      expect(refused.status).toBe(400);
+      expect(refused.body.error.code).toBe('RIDERS_JOIN_BY_APPLICATION');
+      expect((await pool.query(`SELECT 1 FROM users WHERE phone = $1`, [`${PREFIX}7`])).rowCount).toBe(0);
       const made: Array<[Record<string, unknown>, string]> = [
         [account('4', 'ADMIN'), 'ADMIN'],
         [account('5', 'OPERATIONS'), 'OPERATIONS'],
         [account('6', 'PACKING_STAFF'), 'PACKING_STAFF'],
-        [rider('7', { emergency_contact_phone: '077 123 4567' }), 'RIDER'],
       ];
       for (const [body, role] of made) {
         const res = await create(tokens.admin, body);
@@ -149,41 +177,21 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
         expect(res.body.data.staff.read_only, role).toBe(role === 'ADMIN');
       }
       // The new admin is untouchable like any other.
-      const newAdmin = (await pool.query(`SELECT id FROM users WHERE phone = $1`, [`${PREFIX}4`])).rows[0].id;
+      const newAdmin = (await pool.query(`SELECT id FROM users WHERE email = $1`, [`perm4${EMAIL_DOMAIN}`])).rows[0].id;
       expect((await patch(tokens.admin, newAdmin, { disabled: true })).body.error.code).toBe('CANNOT_EDIT_ADMIN');
     });
 
-    it('creates the rider with its riders row in the same go, active and assignable', async () => {
-      const { rows } = await pool.query(
-        `SELECT r.vehicle_type, r.vehicle_registration_number, r.emergency_contact_phone, r.is_active, u.role
-           FROM riders r JOIN users u ON u.id = r.user_id WHERE u.phone = $1`,
-        [`${PREFIX}7`]
-      );
-      expect(rows).toEqual([
-        {
-          vehicle_type: 'SCOOTER',
-          vehicle_registration_number: 'WP-PERM-7',
-          emergency_contact_phone: '077 123 4567',
-          is_active: true,
-          role: 'RIDER',
-        },
-      ]);
+    it('an approved rider is listed and assignable', async () => {
+      await seedRider('7', '077 123 4567');
       const riders = await request(app).get('/api/v1/admin/riders').set(auth(tokens.admin));
       expect(riders.body.data.riders.map((r: { phone: string }) => r.phone)).toContain(`${PREFIX}7`);
-      const audit = await pool.query(
-        `SELECT action, new_values FROM audit_logs WHERE entity_id = (SELECT id FROM users WHERE phone = $1)`,
-        [`${PREFIX}7`]
-      );
-      expect(audit.rows[0].action).toBe('STAFF_CREATED');
-      expect(audit.rows[0].new_values).toMatchObject({ role: 'RIDER', by_role: 'ADMIN', vehicle_registration_number: 'WP-PERM-7' });
-      expect(JSON.stringify(audit.rows[0].new_values)).not.toContain(PASSWORD);
     });
 
     it('lists every role, riders with their vehicle', async () => {
       const res = await list(tokens.admin);
       expect(res.status).toBe(200);
-      const mine = (res.body.data.staff as Array<{ phone: string; role: string; rider: unknown }>).filter((s) =>
-        s.phone.startsWith(PREFIX)
+      const mine = (res.body.data.staff as Array<{ email: string | null; phone: string | null; role: string; rider: unknown }>).filter(
+        (s) => s.phone?.startsWith(PREFIX) || s.email?.endsWith(EMAIL_DOMAIN)
       );
       expect(new Set(mine.map((s) => s.role))).toEqual(new Set(['ADMIN', 'OPERATIONS', 'PACKING_STAFF', 'RIDER']));
       expect(mine.find((s) => s.phone === `${PREFIX}7`)!.rider).toMatchObject({
@@ -193,10 +201,7 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
       });
     });
 
-    it('needs a registration number for a rider, and refuses a rider role change', async () => {
-      const res = await create(tokens.admin, account('8', 'RIDER'));
-      expect(res.status).toBe(400);
-      expect(res.body.error.details.map((d: { field: string }) => d.field)).toContain('vehicle_registration_number');
+    it('refuses a rider role change', async () => {
       const riderId = (await pool.query(`SELECT id FROM users WHERE phone = $1`, [`${PREFIX}7`])).rows[0].id;
       const move = await patch(tokens.admin, riderId, { role: 'OPERATIONS' });
       expect(move.status).toBe(422);
@@ -209,16 +214,16 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
     let packerId = '';
     let riderUserId = '';
 
-    it('creates RIDER and PACKING_STAFF accounts', async () => {
+    it('creates PACKING_STAFF accounts; a RIDER is 400 RIDERS_JOIN_BY_APPLICATION', async () => {
       const p = await create(tokens.ops, account('8', 'PACKING_STAFF'));
       expect(p.status).toBe(201);
       packerId = p.body.data.staff.id;
+      const audit = await pool.query(`SELECT new_values FROM audit_logs WHERE entity_id = $1`, [packerId]);
+      expect(audit.rows[0].new_values).toMatchObject({ by_role: 'OPERATIONS', role: 'PACKING_STAFF' });
       const r = await create(tokens.ops, rider('9'));
-      expect(r.status).toBe(201);
-      riderUserId = r.body.data.staff.id;
-      expect(r.body.data.staff.rider).toMatchObject({ vehicle_registration_number: 'WP-PERM-9', is_active: true });
-      const audit = await pool.query(`SELECT new_values FROM audit_logs WHERE entity_id = $1`, [riderUserId]);
-      expect(audit.rows[0].new_values).toMatchObject({ by_role: 'OPERATIONS', role: 'RIDER' });
+      expect(r.status).toBe(400);
+      expect(r.body.error.code).toBe('RIDERS_JOIN_BY_APPLICATION');
+      riderUserId = await seedRider('9');
     });
 
     it('gets 403 creating ADMIN or OPERATIONS accounts', async () => {
@@ -296,19 +301,22 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
     let riderUserId = '';
     let riderRowId = '';
 
-    it('signs in with email + password and reaches the rider routes', async () => {
+    it('signs in with phone + SMS code (not email + password) and reaches the rider routes', async () => {
       const { rows } = await pool.query(
         `SELECT u.id AS user_id, r.id AS rider_id FROM users u JOIN riders r ON r.user_id = u.id WHERE u.phone = $1`,
         [`${PREFIX}9`]
       );
       riderUserId = rows[0].user_id;
       riderRowId = rows[0].rider_id;
-      const res = await login(email, PASSWORD);
+      await pool.query(`UPDATE users SET staff_password_hash = crypt($2, gen_salt('bf', 4)) WHERE id = $1`, [riderUserId, PASSWORD]);
+      const pw = await login(email, PASSWORD);
+      expect(pw.status).toBe(403);
+      expect(pw.body.error.code).toBe('PHONE_SIGN_IN_REQUIRED');
+      const res = await riderSignIn('9');
       expect(res.status).toBe(200);
       expect(res.body.data.user.role).toBe('RIDER');
       const deliveries = await request(app).get('/api/v1/riders/deliveries').set(auth(res.body.data.access_token));
       expect(deliveries.status).toBe(200);
-      expect((await login(email, 'Wrong-pass-123')).status).toBe(401);
     });
 
     it('cannot be disabled while holding an open delivery (409 RIDER_HAS_OPEN_DELIVERIES)', async () => {
@@ -320,7 +328,7 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
       expect((await pool.query(`SELECT staff_disabled_at FROM users WHERE id = $1`, [riderUserId])).rows[0].staff_disabled_at).toBeNull();
 
       // Hand it back so the rider can be disabled.
-      const token = (await login(email, PASSWORD)).body.data.access_token as string;
+      const token = (await riderSignIn('9')).body.data.access_token as string;
       const del = await request(app).get('/api/v1/riders/deliveries').set(auth(token));
       const id = del.body.data.deliveries[0].delivery_id;
       await request(app).patch(`/api/v1/riders/deliveries/${id}/status`).set(auth(token)).send({ status: 'PICKED_UP' });
@@ -336,9 +344,9 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
       expect(off.status).toBe(200);
       expect(off.body.data.staff.disabled).toBe(true);
 
-      const pw = await login(email, PASSWORD);
-      expect(pw.status).toBe(401);
-      expect(pw.body.error.code).toBe('INVALID_CREDENTIALS');
+      const sms = await riderSignIn('9');
+      expect(sms.status).toBe(401);
+      expect(sms.body.error.code).toBe('INVALID_CREDENTIALS');
 
       const riders = await request(app).get('/api/v1/admin/riders').set(auth(tokens.admin));
       expect(riders.body.data.riders.map((r: { id: string }) => r.id)).not.toContain(riderRowId);
@@ -356,7 +364,7 @@ describe('Staff accounts: permission matrix and rider credentials', () => {
 
       // Enabling restores sign-in and assignment.
       expect((await patch(tokens.ops, riderUserId, { disabled: false })).body.data.staff.disabled).toBe(false);
-      expect((await login(email, PASSWORD)).status).toBe(200);
+      expect((await riderSignIn('9')).status).toBe(200);
       expect((await assign(order.id, riderRowId)).status).toBe(200);
     });
   });

@@ -8,10 +8,12 @@ import { useLocation, useNavigate, type Location } from 'react-router-dom';
  *
  * - Shown on EVERY launch, like Blynk Ops' welcome: the flag lives in memory,
  *   so each cold start shows it once (`IntroGate` in App.tsx).
- * - "Get Started", "I Already Have an Account" and "Skip" all continue to
- *   where the launch was headed - sign-in when signed out, the queue when
- *   signed in. Rider accounts are created by the store, so there is no
- *   separate sign-up.
+ * - "Get Started" opens "Apply to deliver" (2026-10-07: riders apply in the
+ *   app, Ops or Admin approve). A rider who is already signed in is sent on
+ *   to the queue by the application page itself.
+ * - "I Already Have an Account" and "Skip" continue to where the launch was
+ *   headed - sign-in (phone + SMS code) when signed out, the queue when
+ *   signed in.
  * - "Good Earnings" wears a wallet, not a currency sign: Blynk prices are in
  *   LKR, and the reference's rupee symbol is India's.
  */
@@ -46,6 +48,11 @@ export function Welcome() {
     markIntroSeen();
     const target = from && from.pathname !== '/welcome' ? from.pathname + from.search : '/';
     navigate(target, { replace: true });
+  }
+
+  function apply() {
+    markIntroSeen();
+    navigate('/apply', { replace: true });
   }
 
   return (
@@ -84,7 +91,7 @@ export function Welcome() {
       </ul>
 
       <div className="rwelcome__actions">
-        <button type="button" className="rwelcome__cta" onClick={go}>
+        <button type="button" className="rwelcome__cta" onClick={apply}>
           Get Started <span aria-hidden="true">→</span>
         </button>
         <button type="button" className="rwelcome__secondary" onClick={go}>

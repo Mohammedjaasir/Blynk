@@ -1,26 +1,31 @@
 import { apiRequest, tokenStore } from './client';
-import type { AuthUser, CodSettlement, DeliveryDetail, DeliverySummary, RiderDay } from './types';
+import type {
+  AuthUser,
+  CodSettlement,
+  DeliveryDetail,
+  DeliverySummary,
+  RiderApplication,
+  RiderApplicationInput,
+  RiderDay,
+} from './types';
 
-/** Existing Blynk OTP auth - the same endpoints every Blynk app uses. */
+/**
+ * Existing Blynk OTP auth - the same endpoints every Blynk app uses. Riders
+ * sign in with their phone and an SMS code only (2026-10-07): the API answers
+ * a rider's email + password with 403 PHONE_SIGN_IN_REQUIRED, so the app
+ * never offers it.
+ */
 export const authApi = {
   requestOtp: (phone: string) =>
     apiRequest<{ dev_otp?: string }>('/auth/otp/request', { method: 'POST', body: { phone }, auth: false }),
   verifyOtp: (phone: string, otp: string) =>
     apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/otp/verify', {
       method: 'POST',
-      // Staff sign-in never creates an account: an unknown number is refused
-      // (404 ACCOUNT_NOT_FOUND) instead of becoming a new customer.
+      // Rider sign-in never creates an account: an unknown number is refused
+      // (404 ACCOUNT_NOT_FOUND) instead of becoming a new customer. A rider
+      // whose application is waiting or was turned down is refused with 403
+      // RIDER_PENDING_APPROVAL / RIDER_APPLICATION_REJECTED.
       body: { phone, otp, create_account: false },
-      auth: false,
-    }),
-  /**
-   * Email + password sign-in (rider accounts made on Staff accounts, backend
-   * STAFF_PASSWORD_ROLES): the same lockout and disabled checks as staff.
-   */
-  passwordLogin: (email: string, password: string) =>
-    apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/staff/login', {
-      method: 'POST',
-      body: { email, password },
       auth: false,
     }),
   me: () => apiRequest<AuthUser>('/auth/me'),
@@ -28,6 +33,22 @@ export const authApi = {
   // knows neither the session nor the user, and the session outlives sign-out.
   logout: () =>
     apiRequest('/auth/logout', { method: 'POST', body: tokenStore.refresh ? { refresh_token: tokenStore.refresh } : {} }),
+};
+
+/**
+ * Riders apply in the app; Ops or Admin approve. No session: the SMS code
+ * (from authApi.requestOtp) proves the phone. 201 means the application is
+ * waiting for review.
+ */
+export const applicationsApi = {
+  submit: async (input: RiderApplicationInput) =>
+    (
+      await apiRequest<{ application: RiderApplication }>('/riders/applications', {
+        method: 'POST',
+        body: { ...input },
+        auth: false,
+      })
+    ).application,
 };
 
 /**

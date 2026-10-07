@@ -145,6 +145,22 @@ describe('Operations sign-in and session classification', () => {
     expect(tokenStore.access).toBe('a');
   });
 
+  it('OTP sign-in for an email-only account (Admin/Inventory) says to use email and password', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(null, '/login', {
+      'POST /auth/otp/request': () =>
+        fail(403, 'EMAIL_SIGN_IN_REQUIRED', 'This account signs in with email and password.'),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
+    await user.type(await screen.findByLabelText('Mobile number'), '0775551133');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This account signs in with email and password.');
+    // Back on the email + password form.
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(api.find('POST', '/auth/otp/verify')).toHaveLength(0);
+    expect(tokenStore.access).toBeNull();
+  });
+
   it('OTP sign-in never creates an account: sends create_account false and explains ACCOUNT_NOT_FOUND', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(null, '/login', {

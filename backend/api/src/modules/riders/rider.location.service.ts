@@ -24,6 +24,9 @@ export class RiderLocationService {
   private async getRiderOrThrow(userId: string) {
     const rider = await riderRepository.findRiderByUserId(userId);
     if (!rider) throw new AppError('Rider profile not found for this user account.', 403, 'RIDER_PROFILE_NOT_FOUND');
+    if (rider.approval_status !== 'APPROVED') {
+      throw new AppError('This rider has not been approved.', 403, 'RIDER_NOT_APPROVED');
+    }
     if (!rider.is_active) throw new AppError('This rider profile is inactive.', 403, 'RIDER_INACTIVE');
     return rider;
   }

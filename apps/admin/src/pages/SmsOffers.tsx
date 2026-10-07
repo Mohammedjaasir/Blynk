@@ -3,6 +3,7 @@ import { smsOffers as smsOffersApi } from '../api/resources';
 import type { SmsLanguage, SmsOffer, SmsOfferAudience, SmsOfferEstimate } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
+import { useSignedInUser } from '../auth/AuthContext';
 import { formatDay } from '../lib/coupons';
 import { formatClock } from '../lib/orders';
 import {
@@ -35,6 +36,9 @@ export const ESTIMATE_DELAY_MS = 400;
 
 const EMPTY_TEXTS: Record<SmsLanguage, string> = { si: '', ta: '', en: '' };
 
+/** A Sri Lankan mobile, as the API's normaliser accepts it. */
+const TEST_PHONE_PATTERN = /^(?:\+?94|0)?7[0124-8]\d{7}$/;
+
 type Estimate = { key: string; data: SmsOfferEstimate } | { key: string; error: string } | null;
 
 export function SmsOffers() {
@@ -49,6 +53,13 @@ export function SmsOffers() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [history, setHistory] = useState<SmsOffer[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  // "Send test to": admins have no phone (backend migration 028), so they
+  // enter one; prefilled with the account's own phone when it has one.
+  const ownPhone = useSignedInUser()?.phone ?? '';
+  const [testPhone, setTestPhone] = useState(ownPhone);
+  useEffect(() => {
+    if (ownPhone) setTestPhone((current) => current || ownPhone);
+  }, [ownPhone]);
 
   const enabled = useMemo(() => SMS_LANGUAGES.filter((l) => languages.includes(l)), [languages]);
   const multilingual = enabled.length > 1;
@@ -144,8 +155,26 @@ export function SmsOffers() {
             ) : null}
           </div>
 
+          <Field label="Send test to" hint="The mobile number test SMS go to, e.g. 077 123 4567.">
+            <input
+              className="input"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="077 123 4567"
+              value={testPhone}
+              onChange={(e) => setTestPhone(e.target.value)}
+            />
+          </Field>
+
           {enabled.map((lang) => (
-            <OfferText key={lang} language={lang} value={texts[lang]} onChange={(value) => setTexts((t) => ({ ...t, [lang]: value }))} />
+            <OfferText
+              key={lang}
+              language={lang}
+              value={texts[lang]}
+              testPhone={testPhone}
+              onChange={(value) => setTexts((t) => ({ ...t, [lang]: value }))}
+            />
           ))}
         </div>
 
@@ -207,17 +236,33 @@ export function SmsOffers() {
 }
 
 /** One language's text: counter, preview with the opt-out line, and a test send. */
-function OfferText({ language, value, onChange }: { language: SmsLanguage; value: string; onChange(value: string): void }) {
+function OfferText({
+  language,
+  value,
+  testPhone,
+  onChange,
+}: {
+  language: SmsLanguage;
+  value: string;
+  /** "Send test to"; blank means the account's own phone (the API refuses if it has none). */
+  testPhone: string;
+  onChange(value: string): void;
+}) {
   const [testing, setTesting] = useState(false);
   const [testNote, setTestNote] = useState<{ ok: boolean; text: string } | null>(null);
   const name = LANGUAGE_LABEL[language];
   const parts = offerParts(value, language);
 
   async function sendTest() {
+    const phone = testPhone.trim();
+    if (phone && !TEST_PHONE_PATTERN.test(phone.replace(/[\s\-()]/g, ''))) {
+      setTestNote({ ok: false, text: 'Enter a Sri Lankan mobile number, e.g. 077 123 4567.' });
+      return;
+    }
     setTesting(true);
     setTestNote(null);
     try {
-      const result = await smsOffersApi.test(language, value.trim());
+      const result = await smsOffersApi.test(language, value.trim(), phone || undefined);
       setTestNote({ ok: true, text: `Test sent to ${result.sent_to}` });
     } catch (err) {
       setTestNote({ ok: false, text: smsOfferErrorMessage(err, 'Could not send the test.') });
@@ -255,11 +300,11 @@ function OfferText({ language, value, onChange }: { language: SmsLanguage; value
         <button
           type="button"
           className="button button--ghost button--sm"
-          aria-label={`Send ${name} test to my phone`}
+          aria-label={`Send ${name} test`}
           disabled={!value.trim() || testing}
           onClick={() => void sendTest()}
         >
-          {testing ? 'Sending…' : 'Send test to my phone'}
+          {testing ? 'Sending…' : 'Send test'}
         </button>
         {testNote ? (
           <span className={testNote.ok ? 'form__note' : 'field__error'} role="status">

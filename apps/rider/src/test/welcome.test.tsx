@@ -13,6 +13,7 @@ function renderWelcome(from?: string) {
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/" element={<p>queue route</p>} />
         <Route path="/login" element={<p>login route</p>} />
+        <Route path="/apply" element={<p>apply route</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -30,7 +31,14 @@ describe('Rider welcome screen', () => {
     expect(screen.queryByText('₹')).not.toBeInTheDocument();
   });
 
-  it.each([/get started/i, /i already have an account/i, /^skip$/i])(
+  it('Get Started opens the rider application', async () => {
+    renderWelcome('/login');
+    await userEvent.click(screen.getByRole('button', { name: /get started/i }));
+    expect(screen.getByText('apply route')).toBeInTheDocument();
+    expect(hasSeenIntro()).toBe(true);
+  });
+
+  it.each([/i already have an account/i, /^skip$/i])(
     '%s continues to where the launch was headed',
     async (name) => {
       renderWelcome('/login');

@@ -30,13 +30,14 @@ describe('Admin staff accounts', () => {
   const login = (email: string, password: string) =>
     request(app).post('/api/v1/auth/staff/login').send({ email, password });
 
+  // Inventory / Admin accounts made here have no phone (migration 028): matched by email too.
+  const mine = `(SELECT id FROM users WHERE phone LIKE '${PREFIX}%' OR email LIKE '%${EMAIL_DOMAIN}')`;
   async function cleanup() {
     await pool.query(
-      `DELETE FROM audit_logs WHERE entity_id IN (SELECT id FROM users WHERE phone LIKE '${PREFIX}%')
-          OR actor_user_id IN (SELECT id FROM users WHERE phone LIKE '${PREFIX}%');
-       DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM users WHERE phone LIKE '${PREFIX}%');
+      `DELETE FROM audit_logs WHERE entity_id IN ${mine} OR actor_user_id IN ${mine};
+       DELETE FROM refresh_tokens WHERE user_id IN ${mine};
        DELETE FROM otp_verifications WHERE phone LIKE '${PREFIX}%';
-       DELETE FROM users WHERE phone LIKE '${PREFIX}%';`
+       DELETE FROM users WHERE id IN ${mine};`
     );
   }
 
@@ -99,8 +100,8 @@ describe('Admin staff accounts', () => {
     it('lists staff and admins newest first, admins read-only, without customers', async () => {
       const res = await request(app).get('/api/v1/admin/staff').set(auth(adminToken));
       expect(res.status).toBe(200);
-      const staff = res.body.data.staff as Array<{ phone: string; role: string; read_only: boolean; created_at: string }>;
-      const mine = staff.filter((s) => s.phone.startsWith(PREFIX));
+      const staff = res.body.data.staff as Array<{ phone: string | null; role: string; read_only: boolean; created_at: string }>;
+      const mine = staff.filter((s) => s.phone?.startsWith(PREFIX));
       expect(mine.map((s) => s.phone)).toEqual(expect.arrayContaining([`${PREFIX}1`, `${PREFIX}3`, `${PREFIX}4`, `${PREFIX}5`]));
       expect(staff.every((s) => ['ADMIN', 'PACKING_STAFF', 'OPERATIONS', 'RIDER'].includes(s.role))).toBe(true);
       expect(mine.find((s) => s.phone === `${PREFIX}1`)!.read_only).toBe(true);
@@ -125,12 +126,15 @@ describe('Admin staff accounts', () => {
         [valid('6', { password: 'short' }), 'password'],
         [valid('6', { password: 'x'.repeat(129) }), 'password'],
         [valid('6', { email: 'not-an-email' }), 'email'],
-        [valid('6', { role: 'RIDER' }), 'vehicle_registration_number'],
         [valid('6', { role: 'CUSTOMER' }), 'role'],
         [valid('6', { full_name: '   ' }), 'full_name'],
         [valid('6', { phone: '12345' }), 'phone'],
         [{ ...valid('6'), phone: undefined }, 'phone'],
       ];
+      // Riders join by application (migration 029), not here.
+      const rider = await create(adminToken, valid('6', { role: 'RIDER' }));
+      expect(rider.status).toBe(400);
+      expect(rider.body.error.code).toBe('RIDERS_JOIN_BY_APPLICATION');
       for (const [body, field] of cases) {
         const res = await create(adminToken, body);
         expect(res.status, field).toBe(400);
@@ -145,7 +149,13 @@ describe('Admin staff accounts', () => {
       const res = await patch(adminToken, id, { full_name: 'Renamed', role: 'PACKING_STAFF' });
       expect(res.status).toBe(200);
       expect(res.body.data.staff).toMatchObject({ full_name: 'Renamed', role: 'PACKING_STAFF' });
-      expect((await patch(adminToken, id, { role: 'OPERATIONS' })).body.data.staff.role).toBe('OPERATIONS');
+      // Inventory accounts have no phone (migration 028): moving back needs one.
+      expect(res.body.data.staff.phone).toBeNull();
+      expect((await patch(adminToken, id, { role: 'OPERATIONS' })).body.error.code).toBe('PHONE_REQUIRED');
+      expect((await patch(adminToken, id, { role: 'OPERATIONS', phone: `${PREFIX}5` })).body.data.staff).toMatchObject({
+        role: 'OPERATIONS',
+        phone: `${PREFIX}5`,
+      });
 
       const admin = await patch(adminToken, otherAdminId, { full_name: 'Nope' });
       expect(admin.status).toBe(403);

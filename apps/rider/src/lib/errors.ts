@@ -19,8 +19,21 @@ export const MESSAGES: Record<string, string> = {
   // Used when the API leaves out the details the fuller messages below need.
   WRONG_DELIVERY_CODE: "That code doesn't match. Ask the customer to check it.",
   DELIVERY_CODE_LOCKED: 'Too many wrong codes. Try again later.',
-  // Staff sign-in sends create_account: false, so an unknown number is refused.
-  ACCOUNT_NOT_FOUND: 'No Blynk account uses this number. Ask the store to set you up as a rider.',
+  // Rider sign-in sends create_account: false, so an unknown number is refused.
+  ACCOUNT_NOT_FOUND: 'No rider account uses this number.',
+  // Phone + SMS code (sign-in and the rider application).
+  INVALID_OTP: "That code isn't right. Check the SMS and try again.",
+  OTP_EXPIRED: 'That code has expired. Ask for a new one.',
+  OTP_MAX_ATTEMPTS_EXCEEDED: 'Too many wrong codes. Ask for a new one.',
+  OTP_DELIVERY_FAILED: "We couldn't send the SMS. Try again in a moment.",
+  TOO_MANY_REQUESTS: 'Too many codes asked for. Wait a while before trying again.',
+  // Rider accounts and applications (2026-10-07).
+  RIDER_PENDING_APPROVAL: "Your application is waiting for approval. We'll send you an SMS when you're approved.",
+  RIDER_APPLICATION_REJECTED: "Your application wasn't approved.",
+  APPLICATION_PENDING: "Your application is waiting for approval. We'll send you an SMS when you're approved.",
+  ALREADY_APPROVED: "You're already an approved rider. Sign in instead.",
+  PHONE_IN_USE: 'This number is already used by another Blynk account. Apply with a different number.',
+  PHONE_SIGN_IN_REQUIRED: 'Riders sign in with their phone number and an SMS code.',
 };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -56,6 +69,17 @@ export function deliveryCodeLockedUntil(err: unknown, now = Date.now()): number 
 
 /** Messages that depend on error.details, not just the code. */
 function detailedMessage(err: ApiError): string | null {
+  if (err.code === 'INVALID_OTP') {
+    const left = detailsOf(err).remaining_attempts;
+    if (typeof left !== 'number' || left <= 0) return null;
+    return `That code isn't right. ${plural(left, 'try', 'tries')} left.`;
+  }
+  if (err.code === 'TOO_MANY_REQUESTS') {
+    const seconds = detailsOf(err).retry_after_seconds;
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return null;
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    return `Too many codes asked for. Try again in ${plural(minutes, 'minute', 'minutes')}.`;
+  }
   if (err.code === 'WRONG_DELIVERY_CODE') {
     const left = detailsOf(err).attempts_remaining;
     if (typeof left !== 'number' || left < 0) return null;

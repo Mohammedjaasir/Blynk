@@ -8,13 +8,17 @@ import { emergencyPhoneSchema, registrationSchema, vehicleTypeSchema } from '../
  *   ADMIN         - "Admin": the Admin website;
  *   OPERATIONS    - "Operations": the Operations app;
  *   PACKING_STAFF - "Inventory": the Inventory website;
- *   RIDER         - "Rider": the Rider app (with its riders row).
+ *   RIDER         - "Rider": the Rider app (with its riders row) - listed and
+ *                   managed here, but never created here: riders apply in the
+ *                   Rider app and are approved under Rider requests
+ *                   (migration 029; 400 RIDERS_JOIN_BY_APPLICATION).
  * Who may create and manage which role is enforced in staff.service.ts
- * (owner, 2026-10-01): ADMIN creates any of the four; OPERATIONS creates and
- * manages only RIDER and PACKING_STAFF. An existing ADMIN account is never
- * changed here, and nobody changes their own account here.
+ * (owner, 2026-10-01): ADMIN creates Admin, Operations and Inventory;
+ * OPERATIONS creates only PACKING_STAFF and manages PACKING_STAFF and RIDER.
+ * An existing ADMIN account is never changed here - except that another
+ * ADMIN may reset its password - and nobody changes their own account here.
  */
-export const creatableRoles = ['ADMIN', 'OPERATIONS', 'PACKING_STAFF', 'RIDER'] as const;
+export const creatableRoles = ['ADMIN', 'OPERATIONS', 'PACKING_STAFF'] as const;
 export type CreatableRole = (typeof creatableRoles)[number];
 
 /** Roles an existing account can be moved between (role changes are ADMIN-only). */
@@ -40,11 +44,15 @@ const fullNameSchema = z
   .max(128, 'Full name must be at most 128 characters');
 
 /**
- * users.phone is NOT NULL UNIQUE (migration 001) - every account, staff
- * included, has a phone number - so it is required here. Normalised with the
- * same Sri Lankan normaliser SMS sign-in uses, so the stored value is the one
- * an SMS code would be sent to.
+ * Operations and Rider accounts need a phone number (they can sign in with an
+ * SMS code); Admin and Inventory accounts have none (owner, 2026-10-07,
+ * migration 028) - users.phone then holds a 'nophone:' placeholder. A phone
+ * is normalised with the same Sri Lankan normaliser SMS sign-in uses, so the
+ * stored value is the one an SMS code would be sent to.
  */
+export const PHONE_ROLES: readonly string[] = ['OPERATIONS', 'RIDER'];
+const PHONE_MESSAGE = 'Phone must be a Sri Lankan mobile number, e.g. 077 123 4567';
+
 const phoneSchema = z
   .string({ required_error: 'Phone number is required' })
   .trim()
@@ -55,14 +63,14 @@ const phoneSchema = z
     } catch {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Phone must be a Sri Lankan mobile number, e.g. 077 123 4567',
+        message: PHONE_MESSAGE,
       });
       return z.NEVER;
     }
   });
 
 const createRoleSchema = z.enum(creatableRoles, {
-  errorMap: () => ({ message: 'Role must be ADMIN, OPERATIONS, PACKING_STAFF (Inventory) or RIDER' }),
+  errorMap: () => ({ message: 'Role must be ADMIN, OPERATIONS or PACKING_STAFF (Inventory)' }),
 });
 
 export const createStaffSchema = z
@@ -77,21 +85,28 @@ export const createStaffSchema = z
       .email('Email must be a valid email address'),
     password: passwordSchema,
     role: createRoleSchema,
-    phone: phoneSchema,
-    // Rider accounts only: the riders row made with the user.
-    vehicle_type: vehicleTypeSchema.optional(),
-    vehicle_registration_number: registrationSchema.optional(),
-    emergency_contact_phone: emergencyPhoneSchema,
+    // Required for OPERATIONS; ignored for ADMIN and PACKING_STAFF (they are
+    // stored with a placeholder - see superRefine / transform).
+    phone: z.string({ invalid_type_error: 'Phone number must be text' }).trim().optional(),
   })
   .superRefine((d, ctx) => {
-    if (d.role === 'RIDER' && !d.vehicle_registration_number) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['vehicle_registration_number'],
-        message: 'Vehicle registration number is required',
-      });
+    if (PHONE_ROLES.includes(d.role)) {
+      if (!d.phone) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['phone'], message: 'Phone number is required' });
+      } else {
+        try {
+          normalizeSriLankanPhone(d.phone);
+        } catch {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['phone'], message: PHONE_MESSAGE });
+        }
+      }
     }
-  });
+  })
+  .transform((d) => ({
+    ...d,
+    // Normalised for OPERATIONS; dropped for ADMIN / PACKING_STAFF.
+    phone: PHONE_ROLES.includes(d.role) && d.phone ? normalizeSriLankanPhone(d.phone) : undefined,
+  }));
 
 export type CreateStaffInput = z.infer<typeof createStaffSchema>;
 
@@ -100,10 +115,15 @@ export const updateStaffSchema = z
     full_name: fullNameSchema.optional(),
     role: roleSchema.optional(),
     password: passwordSchema.optional(),
+    // Operations / Rider accounts only: required when moving an account to
+    // OPERATIONS that has no number yet (400 PHONE_REQUIRED); ignored when
+    // the account is or becomes PACKING_STAFF.
+    phone: phoneSchema.optional(),
     disabled: z.boolean({ invalid_type_error: 'disabled must be true or false' }).optional(),
     // Rider accounts only: their riders row.
     vehicle_type: vehicleTypeSchema.optional(),
-    vehicle_registration_number: registrationSchema.optional(),
+    // null / '' clears it - allowed only for a bicycle (checked in staff.service.ts).
+    vehicle_registration_number: z.union([z.literal(''), z.null(), registrationSchema]).optional().transform((v) => (v === '' ? null : v)),
     emergency_contact_phone: emergencyPhoneSchema,
   })
   .strict()

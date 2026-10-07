@@ -1,6 +1,9 @@
 import { apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
+  RiderApplication,
+  RiderApplicationPage,
+  RiderApprovalStatus,
   AdjustmentType,
   AdminAppointment,
   AdminAppointmentListResult,
@@ -986,7 +989,29 @@ export const smsOffers = {
       (d) => d.offer
     ),
 
-  /** Sends one text only to the signed-in staff member's own phone. */
-  test: (language: SmsLanguage, message: string) =>
-    apiRequest<SmsOfferTestResult>('/admin/sms-offers/test', { method: 'POST', body: { language, message } }),
+  /**
+   * Sends one test text to `phone` (a Sri Lankan mobile) or, when it is
+   * left out, to the signed-in staff member's own phone.
+   */
+  test: (language: SmsLanguage, message: string, phone?: string) =>
+    apiRequest<SmsOfferTestResult>('/admin/sms-offers/test', {
+      method: 'POST',
+      body: { language, message, ...(phone ? { phone } : {}) },
+    }),
+};
+
+/** Rider applications from the Rider app: Admin and Operations approve or reject. */
+export const riderApplications = {
+  list: (status: RiderApprovalStatus, page = 1, limit = 50) =>
+    apiRequest<RiderApplicationPage>(`/admin/rider-applications?status=${status}&page=${page}&limit=${limit}`),
+  pendingCount: () => apiRequest<{ pending: number }>('/admin/rider-applications/count').then((d) => d.pending),
+  approve: (id: string) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/approve`, { method: 'POST' }).then(
+      (d) => d.application
+    ),
+  reject: (id: string, reason: string) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/reject`, {
+      method: 'POST',
+      body: { reason },
+    }).then((d) => d.application),
 };

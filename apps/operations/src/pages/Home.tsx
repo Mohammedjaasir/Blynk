@@ -228,7 +228,7 @@ export function Home() {
   return (
     <div className="page">
       <PageHeader
-        title={`Welcome, ${user?.full_name ?? user?.phone ?? 'operator'}`}
+        title={`Welcome, ${user?.full_name ?? user?.phone ?? user?.email ?? 'operator'}`}
         description="Blynk Operations"
         actions={
           <button type="button" className="button button--ghost" onClick={refresh} disabled={refreshing}>

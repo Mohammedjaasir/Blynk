@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { settings } from '../api/resources';
+import { riderApplications, settings } from '../api/resources';
 import type { DeliveryFeeSetting } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
@@ -21,6 +21,18 @@ import { formatDateTime } from '../lib/inventory';
 export function More() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [pendingRiders, setPendingRiders] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    riderApplications
+      .pendingCount()
+      .then((n) => live && setPendingRiders(n))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   async function handleSignOut() {
     await signOut();
@@ -29,11 +41,11 @@ export function More() {
 
   return (
     <div className="page">
-      <PageHeader title="More" description="Riders, rider cash, staff, SMS offers, settings and sign-out." />
+      <PageHeader title="More" description="Riders, rider requests, rider cash, staff, SMS offers, settings and sign-out." />
       <section className="card">
         <p className="card__row">
           <span className="card__label">Signed in as</span>
-          <span className="card__value">{user?.full_name ?? user?.phone}</span>
+          <span className="card__value">{user?.full_name ?? user?.phone ?? user?.email}</span>
         </p>
         <p className="card__row">
           <span className="card__label">Role</span>
@@ -55,6 +67,16 @@ export function More() {
         <li>
           <Link className="cat-hub__card" to="/more/deliver">
             <span className="cat-hub__title">Deliver orders myself</span>
+          </Link>
+        </li>
+        <li>
+          <Link className="cat-hub__card" to="/more/rider-requests">
+            <span className="cat-hub__title">Rider requests</span>
+            {pendingRiders > 0 ? (
+              <span className="cat-hub__count" aria-label={`${pendingRiders} waiting`}>
+                {pendingRiders}
+              </span>
+            ) : null}
           </Link>
         </li>
         <li>

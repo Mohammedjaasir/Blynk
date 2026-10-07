@@ -17,6 +17,7 @@ import { Products } from './pages/Products';
 import { Promotions } from './pages/Promotions';
 import { Sales } from './pages/Sales';
 import { Settings } from './pages/Settings';
+import { RiderRequests } from './pages/RiderRequests';
 import { SmsOffers } from './pages/SmsOffers';
 import { Staff } from './pages/Staff';
 
@@ -84,6 +85,7 @@ export function AppRoutes() {
         <Route path="sms-offers" element={<AdminOnly><SmsOffers /></AdminOnly>} />
         <Route path="feedback" element={<AdminOnly><Feedback /></AdminOnly>} />
         <Route path="staff" element={<AdminOnly><Staff /></AdminOnly>} />
+        <Route path="rider-requests" element={<AdminOnly><RiderRequests /></AdminOnly>} />
         <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

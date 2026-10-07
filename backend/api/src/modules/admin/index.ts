@@ -15,6 +15,7 @@ import { adminCashRouter } from '../cash/index.js';
 import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
 import { listRiderSuggestions, listRidersForAssignment } from '../riders/rider.controller.js';
+import { adminRiderApplicationsRouter } from '../riders/rider.applications.js';
 import { metrics } from '../../utils/metrics.js';
 import { checkDatabaseConnection, pool } from '../../database/connection.js';
 
@@ -46,6 +47,9 @@ adminRouter.use(adminFeedbackRouter);
 // Staff accounts (migration 014): Inventory / Operations sign-ins. ADMIN
 // only, guarded inside adminStaffRouter.
 adminRouter.use(adminStaffRouter);
+
+// Rider requests (migration 029): ADMIN and OPERATIONS review applications.
+adminRouter.use(adminRiderApplicationsRouter);
 
 // Store settings (delivery fee). ADMIN and OPERATIONS, guarded inside.
 adminRouter.use(adminSettingsRouter);

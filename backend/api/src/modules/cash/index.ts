@@ -7,6 +7,7 @@ import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { publicPhone } from '../../utils/phone.js';
 import { rangeBounds, STORE_ZONE } from '../reports/sales.service.js';
 
 /*
@@ -78,7 +79,13 @@ function handinQuery() {
 const presentHandin = <T extends { amount: unknown }>(row: T) => ({ ...row, amount: money(row.amount) });
 
 export async function createHandin(input: CreateHandinInput, userId: string) {
-  const rider = await db.selectFrom('riders').select('id').where('id', '=', input.rider_id).executeTakeFirst();
+  // A rider request still waiting or rejected (migration 029) is not a rider.
+  const rider = await db
+    .selectFrom('riders')
+    .select('id')
+    .where('id', '=', input.rider_id)
+    .where('approval_status', '=', 'APPROVED')
+    .executeTakeFirst();
   if (!rider) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
   const row = await db
     .insertInto('cash_handins')
@@ -148,7 +155,7 @@ export async function reconciliation(date: string) {
       return {
         rider_id: id,
         rider_name: n?.full_name ?? null,
-        rider_phone: n?.phone ?? null,
+        rider_phone: publicPhone(n?.phone),
         deliveries: c?.deliveries ?? 0,
         handins: h?.handins ?? 0,
         collected: cash,

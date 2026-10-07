@@ -111,8 +111,11 @@ export function smsOfferErrorMessage(err: unknown, fallback: string): string {
       case 'OFFER_NO_RECIPIENTS':
         return 'No customer in this audience can receive offers.';
       case 'NO_TEST_PHONE':
-        return 'Your account has no Sri Lankan mobile number to send the test to.';
+        return 'Enter the number to send the test to.';
       case 'VALIDATION_ERROR':
+        if ((err.details as Array<{ field?: string }> | null | undefined)?.some?.((d) => d.field === 'phone')) {
+          return 'Enter a Sri Lankan mobile number, e.g. 077 123 4567.';
+        }
         return `Check the texts: each can be up to ${MAX_OFFER_TEXT} characters.`;
       default:
         return err.message;

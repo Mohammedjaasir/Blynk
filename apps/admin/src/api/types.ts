@@ -21,7 +21,8 @@ export interface StaffAccount {
   id: string;
   full_name: string | null;
   email: string | null;
-  phone: string;
+  /** null for Admin and Inventory accounts: they have no phone (backend migration 028). */
+  phone: string | null;
   role: CreatableRole;
   has_password: boolean;
   disabled: boolean;
@@ -53,7 +54,8 @@ export interface CreateStaffInput {
   email: string;
   password: string;
   role: CreatableRole;
-  phone: string;
+  /** Operations and Rider accounts only (required for them); Admin and Inventory have none. */
+  phone?: string;
   /** Rider accounts only. */
   vehicle_type?: VehicleType;
   vehicle_registration_number?: string;
@@ -63,6 +65,8 @@ export interface CreateStaffInput {
 export interface UpdateStaffInput {
   full_name?: string;
   role?: StaffRole;
+  /** Needed when moving an account to Operations (400 PHONE_REQUIRED otherwise). */
+  phone?: string;
   password?: string;
   disabled?: boolean;
   /** Rider accounts only. */
@@ -73,7 +77,8 @@ export interface UpdateStaffInput {
 
 export interface AuthUser {
   id: string;
-  phone: string;
+  /** null for accounts without a phone (Admin, Inventory: backend migration 028). */
+  phone: string | null;
   full_name: string | null;
   email: string | null;
   role: UserRole;
@@ -331,7 +336,8 @@ export interface OrderDetail {
 export interface RiderOption {
   id: string;
   full_name: string | null;
-  phone: string;
+  /** null for an Admin who can deliver: admins have no phone (backend migration 028). */
+  phone: string | null;
   vehicle_type: string;
   vehicle_registration_number: string;
   open_deliveries: number;
@@ -580,7 +586,7 @@ export interface SmsOfferSent {
 }
 
 export interface SmsOfferTestResult {
-  /** The signed-in staff member's own phone, masked. */
+  /** The number the test went to, masked. */
   sent_to: string;
   sms_parts: number;
 }
@@ -597,4 +603,30 @@ export interface SmsOffer {
   created_at: string;
   sent_by_name: string | null;
   sent_by_role: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Rider applications (migration 029): riders apply in the Rider app; Admin or
+// Operations approve or reject them here.
+export type RiderApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface RiderApplication {
+  /** riders.id */
+  id: string;
+  user_id: string;
+  full_name: string | null;
+  phone: string | null;
+  vehicle_type: string;
+  vehicle_registration_number: string | null;
+  emergency_contact_phone: string | null;
+  approval_status: RiderApprovalStatus;
+  applied_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
+  rejection_reason: string | null;
+}
+
+export interface RiderApplicationPage {
+  applications: RiderApplication[];
+  pagination: { page: number; limit: number; total: number; total_pages: number };
 }

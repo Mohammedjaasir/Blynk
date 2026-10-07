@@ -68,60 +68,48 @@ describe('More -> Staff accounts as Operations', () => {
     expect(screen.queryByRole('button', { name: 'Change role' })).toBeNull();
   });
 
-  it('offers only Inventory and Rider, and creates a Rider with its vehicle', async () => {
+  it('offers only Inventory: riders apply in the Rider app and are approved under Rider requests', async () => {
+    const user = userEvent.setup();
+    renderAs(OPERATIONS_STAFF, '/more/staff', { 'GET /admin/staff': () => ok({ staff: [] }) });
+    expect(await screen.findByText(/New riders apply in the Rider app; approve them under Rider requests/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(roleOptions(screen.getByRole('dialog', { name: 'Create account' }))).toEqual(['Inventory']);
+  });
+
+  it('creates an Inventory account with no phone and names the Inventory website', async () => {
     const user = userEvent.setup();
     const { api: { find } } = renderAs(OPERATIONS_STAFF, '/more/staff', {
       'GET /admin/staff': () => ok({ staff: [] }),
       'POST /admin/staff': (call: Call) =>
-        ok({ staff: { ...RIDER_ROW, id: 'r2', full_name: call.body.full_name, email: call.body.email } }),
+        ok({ staff: account({ id: 's9', phone: null, full_name: call.body.full_name, email: call.body.email }) }),
     });
     await user.click(await screen.findByRole('button', { name: 'Create account' }));
     const dialog = screen.getByRole('dialog', { name: 'Create account' });
-    expect(roleOptions(dialog)).toEqual(['Inventory', 'Rider']);
-
-    await user.type(within(dialog).getByLabelText(/^Full name/), 'New Rider');
-    await user.type(within(dialog).getByLabelText(/^Email/), 'new.rider@blynk.lk');
-    await user.selectOptions(within(dialog).getByLabelText(/^Role/), 'RIDER');
-    await user.type(within(dialog).getByLabelText('Password'), 'Rider-pass-1');
-    await user.type(within(dialog).getByLabelText(/^Phone/), '077 111 2255');
-    await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
-    expect(within(dialog).getByText('Enter the number plate.')).toBeInTheDocument();
-    expect(find('POST', '/admin/staff')).toHaveLength(0);
-
-    await user.selectOptions(within(dialog).getByLabelText(/^Vehicle/), 'BICYCLE');
-    await user.type(within(dialog).getByLabelText(/^Registration number/), 'WP-NEW-9');
-    await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
-
-    expect(await screen.findByText(/Account created for New Rider\. They sign in to the Blynk Rider app/)).toBeInTheDocument();
-    expect(find('POST', '/admin/staff').map((c) => c.body)).toEqual([
-      {
-        full_name: 'New Rider',
-        email: 'new.rider@blynk.lk',
-        password: 'Rider-pass-1',
-        role: 'RIDER',
-        phone: '077 111 2255',
-        vehicle_type: 'BICYCLE',
-        vehicle_registration_number: 'WP-NEW-9',
-        emergency_contact_phone: null,
-      },
-    ]);
-  });
-
-  it('names the Inventory website for an Inventory account', async () => {
-    const user = userEvent.setup();
-    renderAs(OPERATIONS_STAFF, '/more/staff', {
-      'GET /admin/staff': () => ok({ staff: [] }),
-      'POST /admin/staff': (call: Call) => ok({ staff: account({ id: 's9', full_name: call.body.full_name, email: call.body.email }) }),
-    });
-    await user.click(await screen.findByRole('button', { name: 'Create account' }));
-    const dialog = screen.getByRole('dialog', { name: 'Create account' });
+    // Inventory accounts sign in with email and password only: no phone asked.
+    expect(within(dialog).queryByLabelText(/^Phone/)).toBeNull();
+    expect(within(dialog).getByText(/No phone needed/)).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText(/^Full name/), 'Packer Two');
     await user.type(within(dialog).getByLabelText(/^Email/), 'packer2@blynk.lk');
     await user.type(within(dialog).getByLabelText('Password'), 'Packer-pass-1');
-    await user.type(within(dialog).getByLabelText(/^Phone/), '0771112266');
     expect(within(dialog).queryByLabelText(/^Registration number/)).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
     expect(await screen.findByText(/They sign in to the Blynk Inventory website/)).toBeInTheDocument();
+    expect(find('POST', '/admin/staff').map((c) => c.body)).toEqual([
+      { full_name: 'Packer Two', email: 'packer2@blynk.lk', password: 'Packer-pass-1', role: 'PACKING_STAFF' },
+    ]);
+    // The new row has no phone: shown as a dash.
+    const row = within(screen.getByRole('list', { name: 'Staff accounts' })).getAllByRole('listitem')[0];
+    expect(row).toHaveTextContent('—');
+  });
+
+  it('shows a dash for an account without a phone', async () => {
+    renderAs(OPERATIONS_STAFF, '/more/staff', {
+      'GET /admin/staff': () => ok({ staff: [account({ phone: null, full_name: null }), RIDER_ROW] }),
+    });
+    const items = within(await screen.findByRole('list', { name: 'Staff accounts' })).getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('—');
+    expect(items[0]).toHaveTextContent('kasun@blynk.lk');
+    expect(items[1]).toHaveTextContent('+94771112244');
   });
 
   it('shows the refusal when disabling a rider who still holds a delivery', async () => {
@@ -172,7 +160,7 @@ describe('More -> Staff accounts as Operations', () => {
 });
 
 describe('More -> Staff accounts as an Admin', () => {
-  it('sees every role, all four to create, and Change role on Operations accounts', async () => {
+  it('sees every role, three to create (no riders), and Change role on Operations accounts', async () => {
     const user = userEvent.setup();
     const { api: { find } } = renderAs(ADMIN_NO_RIDER, '/more/staff', {
       'GET /admin/staff': () => ok({ staff: [account(), RIDER_ROW, OPS_ROW, ADMIN_ROW] }),
@@ -191,20 +179,22 @@ describe('More -> Staff accounts as an Admin', () => {
 
     await user.click(screen.getByRole('button', { name: 'Create account' }));
     const dialog = screen.getByRole('dialog', { name: 'Create account' });
-    expect(roleOptions(dialog)).toEqual(['Inventory', 'Rider', 'Operations', 'Admin']);
+    expect(roleOptions(dialog)).toEqual(['Inventory', 'Operations', 'Admin']);
     await user.type(within(dialog).getByLabelText(/^Full name/), 'Second Admin');
     await user.type(within(dialog).getByLabelText(/^Email/), 'admin2@blynk.lk');
     await user.selectOptions(within(dialog).getByLabelText(/^Role/), 'ADMIN');
     await user.type(within(dialog).getByLabelText('Password'), 'Admin-pass-22');
-    await user.type(within(dialog).getByLabelText(/^Phone/), '0771112277');
+    // Admin accounts are email + password only: no phone field, none sent.
+    expect(within(dialog).queryByLabelText(/^Phone/)).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
     expect(await screen.findByText(/They sign in to the Blynk Admin website/)).toBeInTheDocument();
     expect(find('POST', '/admin/staff')[0].body.role).toBe('ADMIN');
+    expect(find('POST', '/admin/staff')[0].body).not.toHaveProperty('phone');
   });
 
   it('names the Ops app for a new Operations account', async () => {
     const user = userEvent.setup();
-    renderAs(ADMIN_NO_RIDER, '/more/staff', {
+    const { api: { find } } = renderAs(ADMIN_NO_RIDER, '/more/staff', {
       'GET /admin/staff': () => ok({ staff: [] }),
       'POST /admin/staff': (call: Call) =>
         ok({ staff: account({ id: 'o9', role: 'OPERATIONS', full_name: call.body.full_name, email: call.body.email }) }),
@@ -218,5 +208,6 @@ describe('More -> Staff accounts as an Admin', () => {
     await user.type(within(dialog).getByLabelText(/^Phone/), '0771112288');
     await user.click(within(dialog).getByRole('button', { name: 'Create account' }));
     expect(await screen.findByText(/They sign in to the Blynk Ops app/)).toBeInTheDocument();
+    expect(find('POST', '/admin/staff')[0].body.phone).toBe('0771112288');
   });
 });

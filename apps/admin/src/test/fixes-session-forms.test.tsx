@@ -6,7 +6,6 @@ import { AppRoutes } from '../App';
 import { AuthProvider, SESSION_ENDED_MESSAGE } from '../auth/AuthContext';
 import { ToastProvider } from '../components/ui';
 import { ApiError, apiRequest, tokenStore } from '../api/client';
-import { Login } from '../pages/Login';
 import { ProductForm } from '../pages/ProductForm';
 import { errorMessage, fieldErrors, splitServerErrors } from '../lib/apiErrors';
 import { imagesToDelete } from '../lib/imageCleanup';
@@ -14,7 +13,7 @@ import { TOO_LARGE_AFTER_RESIZE_MESSAGE } from '../lib/image';
 import { fail, mockApi, ok } from './mockApi';
 
 /**
- * Fixes 1, 2, 3 and 8: staff SMS sign-in never creates an account, an ended
+ * Fixes 2, 3 and 8 (fix 1, staff SMS sign-in, went with SMS sign-in itself): an ended
  * session goes back to sign-in (but an unreachable API does not sign anyone
  * out), images are deleted only after a successful save, and the server's
  * per-field validation details reach the form.
@@ -27,38 +26,8 @@ afterEach(() => {
 });
 
 // --------------------------------------------------------------- 1. SMS sign-in
-describe('staff sign-in by SMS code', () => {
-  beforeEach(() => tokenStore.clear());
-
-  it('sends create_account:false and explains an unknown number', async () => {
-    const user = userEvent.setup();
-    const api = mockApi((c) => {
-      if (c.path === '/auth/otp/request') return ok({ dev_otp: '123456' });
-      if (c.path === '/auth/otp/verify') return fail(404, 'ACCOUNT_NOT_FOUND', 'No Blynk account uses this number.');
-      return undefined;
-    });
-    render(
-      <MemoryRouter>
-        <ToastProvider>
-          <AuthProvider>
-            <Login />
-          </AuthProvider>
-        </ToastProvider>
-      </MemoryRouter>
-    );
-    await user.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
-    await user.type(screen.getByLabelText(/Mobile number/), '0771234567');
-    await user.click(screen.getByRole('button', { name: 'Send code' }));
-    await user.type(await screen.findByLabelText('6-digit code'), '123456');
-    await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
-
-    expect(await screen.findByText(/No Blynk account uses this number\./)).toBeInTheDocument();
-    expect(api.find('POST', '/auth/otp/verify')[0]?.body).toEqual({ phone: '0771234567', otp: '123456', create_account: false });
-    // Back to the number step; nothing was stored.
-    expect(screen.getByLabelText(/Mobile number/)).toBeInTheDocument();
-    expect(tokenStore.access).toBeNull();
-  });
-});
+// Admins no longer sign in with an SMS code at all (backend migration 028):
+// admin.test.tsx checks the sign-in page offers email + password only.
 
 // ------------------------------------------------------------- 2. session end
 describe('session expiry', () => {

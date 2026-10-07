@@ -25,6 +25,9 @@ let tamil: Shopper;
 let unset: Shopper;
 let optedOut: Shopper;
 
+// Admin accounts have no phone (migration 028): the test SMS goes to the number entered.
+const TEST_PHONE = '0770927009';
+
 const TEXT = { si: 'අද දීමනාව: එළවළු 10% අඩුවට', ta: 'இன்றைய சலுகை: காய்கறிகள் 10% தள்ளுபடி', en: 'Today only: vegetables 10% off' };
 
 const offerSms = async (offerId: string, userId: string) =>
@@ -217,15 +220,16 @@ ${OPT_OUT_LINE.en}`);
     }
   });
 
-  it('sends a test to the staff member’s own phone only', async () => {
+  it('sends a test to the number entered only', async () => {
     const res = await request(app)
       .post('/api/v1/admin/sms-offers/test')
       .set(auth(tokens.admin))
-      .send({ language: 'ta', message: TEXT.ta })
+      .send({ language: 'ta', message: TEXT.ta, phone: TEST_PHONE })
       .expect(202);
     expect(res.body.data.sent_to).toMatch(/^\+947\d{2}\*{4}\d{2}$/);
     const rows = (await pool.query(`SELECT recipient, payload FROM notifications WHERE idempotency_key LIKE 'sms-offer-test:%'`)).rows;
     expect(rows).toHaveLength(1);
+    expect(rows[0].recipient).toBe('+94770927009');
     expect(rows[0].payload.text).toBe(`${TEXT.ta}\n${OPT_OUT_LINE.ta}`);
   });
 
@@ -236,7 +240,7 @@ ${OPT_OUT_LINE.en}`);
       const late = await request(app)
         .post('/api/v1/admin/sms-offers/test')
         .set(auth(tokens.admin))
-        .send({ language: 'en', message: TEXT.en })
+        .send({ language: 'en', message: TEXT.en, phone: TEST_PHONE })
         .expect(422);
       expect(late.body.error.code).toBe('OUTSIDE_SENDING_HOURS');
     } finally {
@@ -245,12 +249,12 @@ ${OPT_OUT_LINE.en}`);
 
     // One test was sent above; four more reach the limit.
     for (let i = 0; i < 4; i++) {
-      await request(app).post('/api/v1/admin/sms-offers/test').set(auth(tokens.admin)).send({ language: 'en', message: TEXT.en }).expect(202);
+      await request(app).post('/api/v1/admin/sms-offers/test').set(auth(tokens.admin)).send({ language: 'en', message: TEXT.en, phone: TEST_PHONE }).expect(202);
     }
     const sixth = await request(app)
       .post('/api/v1/admin/sms-offers/test')
       .set(auth(tokens.admin))
-      .send({ language: 'en', message: TEXT.en })
+      .send({ language: 'en', message: TEXT.en, phone: TEST_PHONE })
       .expect(429);
     expect(sixth.body.error.code).toBe('TOO_MANY_TESTS');
   });

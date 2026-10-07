@@ -148,10 +148,18 @@ export async function runDevSeed(): Promise<void> {
       INSERT INTO users (id, phone, email, full_name, role)
       VALUES 
         ('a0000001-0000-0000-0000-000000000001', '+94771234567', 'customer.ahmed@example.com', 'Ahmed Rizvi', 'CUSTOMER'),
-        ('a0000001-0000-0000-0000-000000000002', '+94779876543', 'rider.farhan@blynk.lk', 'Farhan Mohamed', 'RIDER'),
-        ('a0000001-0000-0000-0000-000000000003', '+94775551122', 'ops.admin@blynk.lk', 'Nawaz Mansoor', 'ADMIN'),
-        ('a0000001-0000-0000-0000-000000000004', '+94774443322', 'staff.kasun@blynk.lk', 'Kasun Perera', 'PACKING_STAFF')
+        ('a0000001-0000-0000-0000-000000000002', '+94779876543', 'rider.farhan@blynk.lk', 'Farhan Mohamed', 'RIDER')
       ON CONFLICT (phone) DO UPDATE 
+        SET full_name = EXCLUDED.full_name, role = EXCLUDED.role;
+    `);
+    // Admin and Inventory accounts have no phone (migration 028): a
+    // 'nophone:' placeholder fills users.phone, kept if the row exists.
+    await client.query(`
+      INSERT INTO users (id, phone, email, full_name, role)
+      VALUES 
+        ('a0000001-0000-0000-0000-000000000003', 'nophone:' || substr(md5(random()::text), 1, 12), 'ops.admin@blynk.lk', 'Nawaz Mansoor', 'ADMIN'),
+        ('a0000001-0000-0000-0000-000000000004', 'nophone:' || substr(md5(random()::text), 1, 12), 'staff.kasun@blynk.lk', 'Kasun Perera', 'PACKING_STAFF')
+      ON CONFLICT (id) DO UPDATE 
         SET full_name = EXCLUDED.full_name, role = EXCLUDED.role;
     `);
 

@@ -14,7 +14,8 @@ export type UserRole = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN' | 'OPERA
 
 export interface AuthUser {
   id: string;
-  phone: string;
+  /** null for email+password-only accounts (Admin, Inventory). */
+  phone: string | null;
   full_name: string | null;
   email: string | null;
   role: UserRole;
@@ -171,7 +172,7 @@ export interface HomeRider {
 export interface RiderOption {
   id: string;
   full_name: string | null;
-  phone: string;
+  phone: string | null;
   vehicle_type: string;
   vehicle_registration_number: string;
   open_deliveries: number;
@@ -323,7 +324,8 @@ export interface StaffAccount {
   id: string;
   full_name: string | null;
   email: string | null;
-  phone: string;
+  /** null for Admin and Inventory accounts (email + password only). */
+  phone: string | null;
   role: CreatableRole;
   has_password: boolean;
   disabled: boolean;
@@ -344,7 +346,8 @@ export interface CreateStaffInput {
   email: string;
   password: string;
   role: CreatableRole;
-  phone: string;
+  /** Required for Rider and Operations accounts; never sent for Inventory or Admin. */
+  phone?: string;
   /** Rider accounts only. */
   vehicle_type?: VehicleType;
   vehicle_registration_number?: string;
@@ -356,6 +359,8 @@ export interface UpdateStaffInput {
   role?: StaffRole;
   password?: string;
   disabled?: boolean;
+  /** A Sri Lankan mobile number. */
+  phone?: string;
   /** Rider accounts only. */
   vehicle_type?: VehicleType;
   vehicle_registration_number?: string;
@@ -1054,4 +1059,27 @@ export interface SmsOffer {
   created_at: string;
   sent_by_name: string | null;
   sent_by_role: string | null;
+}
+
+/** Rider applications (backend migration 029). */
+export type RiderApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface RiderApplication {
+  id: string;
+  user_id: string;
+  full_name: string | null;
+  phone: string | null;
+  vehicle_type: string;
+  vehicle_registration_number: string | null;
+  emergency_contact_phone: string | null;
+  approval_status: RiderApprovalStatus;
+  applied_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
+  rejection_reason: string | null;
+}
+
+export interface RiderApplicationPage {
+  applications: RiderApplication[];
+  pagination: { page: number; limit: number; total: number; total_pages: number };
 }

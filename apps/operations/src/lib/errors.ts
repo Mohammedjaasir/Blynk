@@ -12,6 +12,7 @@ export const MESSAGES: Record<string, string> = {
   RIDER_PROFILE_NOT_FOUND: 'No rider profile is linked to this account.',
   RIDER_INACTIVE: "This account's rider profile isn't active.",
   ACCOUNT_NOT_FOUND: 'No Blynk account uses this number.',
+  EMAIL_SIGN_IN_REQUIRED: 'This account signs in with email and password.',
   FILE_TOO_LARGE: 'That image is larger than 2 MB. Choose a smaller one.',
   PAYLOAD_TOO_LARGE: 'That is too much to send at once. Split it into smaller files and try again.',
   NETWORK: "You're offline. Nothing was sent. Try again when you have signal.",

@@ -5,6 +5,24 @@ import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { createStaffSchema, staffIdParamsSchema, updateStaffSchema } from './staff.schema.js';
 import { riderProfileService, staffRiderSchema, type StaffRiderInput } from '../riders/rider.profile.js';
+import { AppError } from '../../middleware/error.middleware.js';
+import type { NextFunction, Request, Response } from 'express';
+
+/**
+ * Riders join by applying in the Rider app and being approved under Rider
+ * requests (migration 029, owner 2026-10-07) - never from Staff accounts.
+ * Checked before body validation, so the answer is this one clear code
+ * rather than a list of missing rider fields.
+ */
+export const RIDERS_JOIN_BY_APPLICATION_MESSAGE =
+  'Riders apply in the Blynk Rider app and are approved under Rider requests.';
+function refuseRiderCreation(req: Request, _res: Response, next: NextFunction) {
+  if (req.body && typeof req.body === 'object' && (req.body as { role?: unknown }).role === 'RIDER') {
+    next(new AppError(RIDERS_JOIN_BY_APPLICATION_MESSAGE, 400, 'RIDERS_JOIN_BY_APPLICATION'));
+    return;
+  }
+  next();
+}
 
 // ----------------------------------------------------------------------------
 // STAFF ACCOUNTS ROUTER (mounted under /api/v1/admin, migration 014)
@@ -21,6 +39,7 @@ adminStaffRouter.post(
   '/staff',
   requireAuth,
   STAFF_MANAGERS,
+  refuseRiderCreation,
   validate({ body: createStaffSchema }),
   staffController.create.bind(staffController)
 );

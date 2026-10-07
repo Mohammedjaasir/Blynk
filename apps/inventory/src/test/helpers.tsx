@@ -53,8 +53,8 @@ export function mockApi(handlers: Record<string, Handler>) {
   };
 }
 
-export const ADMIN: AuthUser = { id: 'a1', phone: '+94775551122', full_name: 'Nawaz Mansoor', role: 'ADMIN' };
-export const STAFF: AuthUser = { id: 's1', phone: '+94774443322', full_name: 'Kasun Perera', role: 'PACKING_STAFF' };
+export const ADMIN: AuthUser = { id: 'a1', phone: null, full_name: 'Nawaz Mansoor', role: 'ADMIN' };
+export const STAFF: AuthUser = { id: 's1', phone: null, full_name: 'Kasun Perera', role: 'PACKING_STAFF' };
 
 /**
  * Empty-but-valid answers for every list the app can load, so a test only

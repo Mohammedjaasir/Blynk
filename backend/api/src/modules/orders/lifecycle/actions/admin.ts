@@ -42,6 +42,10 @@ export const assignRider: ActionImpl<DeliveryRow> = {
     // raced past. Under READ COMMITTED each statement below reads afresh.
     const rider = await lockRider(trx, riderId);
     if (!rider) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
+    // Rider applications (migration 029): only an approved rider takes orders.
+    if (rider.approval_status !== 'APPROVED') {
+      throw new AppError('This rider has not been approved yet.', 409, 'RIDER_NOT_APPROVED');
+    }
     if (!rider.is_active) throw new AppError('This rider is inactive.', 409, 'RIDER_INACTIVE');
     // A rider whose account is disabled (Staff accounts) cannot take an order.
     const account = await trx

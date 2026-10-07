@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ToastProvider } from '../components/ui';
 import { SmsOffers } from '../pages/SmsOffers';
+import { AuthProvider } from '../auth/AuthContext';
 import { ApiError, tokenStore } from '../api/client';
 import type { SmsLanguage, SmsOffer, SmsOfferEstimate } from '../api/types';
 import { OPT_OUT_LINE, languageList, offerInput, offerParts, smsOfferErrorMessage, smsParts, withOptOut } from '../lib/smsOffers';
@@ -265,28 +266,67 @@ describe('SMS offers page', () => {
     expect(textBox('English')).toHaveValue('Rice 10% off today');
   });
 
-  it('sends a test to the staff member’s own phone', async () => {
+  it('sends a test to the number entered under "Send test to"', async () => {
     const user = userEvent.setup();
     const api = stubOffers();
     await renderAll();
-    const tamilTest = screen.getByRole('button', { name: 'Send Tamil test to my phone' });
+    const tamilTest = screen.getByRole('button', { name: 'Send Tamil test' });
     expect(tamilTest).toBeDisabled();
+    await user.type(screen.getByLabelText(/Send test to/), '077 555 1122');
     await user.click(textBox('Tamil'));
     await user.paste(' தமிழ் சலுகை ');
     await user.click(tamilTest);
     expect(await screen.findByText('Test sent to +94775****22')).toBeInTheDocument();
-    expect(api.sent('POST', '/admin/sms-offers/test')).toEqual([{ language: 'ta', message: 'தமிழ் சலுகை' }]);
-    expect(screen.getByRole('button', { name: 'Send Sinhala test to my phone' })).toBeDisabled();
+    expect(api.sent('POST', '/admin/sms-offers/test')).toEqual([
+      { language: 'ta', message: 'தமிழ் சலுகை', phone: '077 555 1122' },
+    ]);
+    expect(screen.getByRole('button', { name: 'Send Sinhala test' })).toBeDisabled();
   });
 
-  it('explains a test when the account has no phone', async () => {
+  it('prefills "Send test to" with the signed-in account’s own phone when it has one', async () => {
+    tokenStore.save('access', 'refresh');
+    stubOffers((_m, path) =>
+      path === '/auth/me'
+        ? respond({ id: 'o1', phone: '+94771234567', full_name: 'Ops', email: null, role: 'ADMIN' })
+        : null
+    );
+    render(
+      <MemoryRouter>
+        <ToastProvider>
+          <AuthProvider>
+            <SmsOffers />
+          </AuthProvider>
+        </ToastProvider>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByLabelText(/Send test to/)).toHaveValue('+94771234567'));
+  });
+
+  it('checks the "Send test to" number before sending', async () => {
     const user = userEvent.setup();
-    stubOffers((_m, path) => (path === '/admin/sms-offers/test' ? respond({ code: 'NO_TEST_PHONE', message: 'no phone' }, 400) : null));
+    const api = stubOffers();
     await renderAll();
+    await user.type(screen.getByLabelText(/Send test to/), '12345');
     await user.click(textBox('English'));
     await user.paste('Hello');
-    await user.click(screen.getByRole('button', { name: 'Send English test to my phone' }));
-    expect(await screen.findByText('Your account has no Sri Lankan mobile number to send the test to.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Send English test' }));
+    expect(await screen.findByText('Enter a Sri Lankan mobile number, e.g. 077 123 4567.')).toBeInTheDocument();
+    expect(api.sent('POST', '/admin/sms-offers/test')).toEqual([]);
+  });
+
+  it('asks for a number when none is entered and the account has no phone', async () => {
+    const user = userEvent.setup();
+    const api = stubOffers((_m, path) =>
+      path === '/admin/sms-offers/test' ? respond({ code: 'NO_TEST_PHONE', message: 'Enter the number to send the test to.' }, 400) : null
+    );
+    await renderAll();
+    expect(screen.getByLabelText(/Send test to/)).toHaveValue('');
+    await user.click(textBox('English'));
+    await user.paste('Hello');
+    await user.click(screen.getByRole('button', { name: 'Send English test' }));
+    expect(await screen.findByText('Enter the number to send the test to.')).toBeInTheDocument();
+    // Blank: no phone is sent, the API falls back to the account's own.
+    expect(api.sent('POST', '/admin/sms-offers/test')).toEqual([{ language: 'en', message: 'Hello' }]);
   });
 
   it('counts characters and SMS parts and previews the opt-out line', async () => {
@@ -344,11 +384,11 @@ describe('SMS offers page, English only (launch)', () => {
     renderPage();
     const panel = estimatePanel();
     await within(panel).findByText('35');
-    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    expect(screen.getAllByRole('textbox', { name: / text$/ })).toHaveLength(1);
     expect(textBox('English')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Sinhala text' })).toBeNull();
     expect(screen.queryByRole('textbox', { name: 'Tamil text' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Send Tamil test to my phone' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Send Tamil test' })).toBeNull();
     expect(screen.queryByLabelText('Customers without a language get')).toBeNull();
     expect(screen.getByTestId('count-en')).toBeInTheDocument();
     expect(screen.queryByTestId('count-si')).toBeNull();
@@ -379,13 +419,13 @@ describe('SMS offers page, English only (launch)', () => {
     stubOffers();
     renderPage();
     // Before the first estimate: English only is assumed.
-    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    expect(screen.getAllByRole('textbox', { name: / text$/ })).toHaveLength(1);
     expect(screen.queryByLabelText('Customers without a language get')).toBeNull();
     expect(await screen.findByRole('textbox', { name: 'Sinhala text' })).toBeInTheDocument();
     expect(textBox('Tamil')).toBeInTheDocument();
     expect(textBox('English')).toBeInTheDocument();
     expect(screen.getByLabelText('Customers without a language get')).toHaveValue('en');
-    expect(screen.getByRole('button', { name: 'Send Sinhala test to my phone' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send Sinhala test' })).toBeInTheDocument();
     expect(estimatePanel()).toHaveTextContent('No language (get English)4');
   });
 

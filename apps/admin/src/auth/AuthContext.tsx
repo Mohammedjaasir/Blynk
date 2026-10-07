@@ -13,8 +13,10 @@ import { auth as authApi } from '../api/resources';
 import type { AuthUser } from '../api/types';
 
 /**
- * Admin session, built on the existing Blynk OTP authentication - there is
- * no separate admin auth system. Only ADMIN users are allowed to hold a
+ * Admin session, built on the existing Blynk staff authentication - there
+ * is no separate admin auth system. Admins sign in with email + password
+ * only (no SMS codes: admin accounts have no phone, backend migration 028).
+ * Only ADMIN users are allowed to hold a
  * session here; anyone else is signed straight back out.
  *
  * This gate is a courtesy to the operator, not a security boundary: the API
@@ -32,9 +34,7 @@ interface AuthState {
   sessionEnded: boolean;
   /** Re-check a stored session after `unreachable`. */
   retry(): void;
-  requestOtp(phone: string): Promise<{ devOtp?: string }>;
-  verifyOtp(phone: string, otp: string): Promise<void>;
-  /** Staff email + password sign-in - the same role gate as an SMS code. */
+  /** Staff email + password sign-in - the only way into Blynk Admin. */
   signInWithPassword(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
 }
@@ -128,12 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  const requestOtp = useCallback(async (phone: string) => {
-    const data = await authApi.requestOtp(phone);
-    return { devOtp: data.dev_otp };
-  }, []);
-
-  // Both sign-in methods end here: the same role gate, the same session.
+  // Sign-in ends here: the role gate, then the session.
   const completeSignIn = useCallback(async (data: { access_token: string; refresh_token: string; user: AuthUser }) => {
     if (!isOperations(data.user)) {
       tokenStore.clear();
@@ -144,11 +139,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setStatus('authenticated');
   }, []);
-
-  const verifyOtp = useCallback(
-    async (phone: string, otp: string) => completeSignIn(await authApi.verifyOtp(phone, otp)),
-    [completeSignIn]
-  );
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => completeSignIn(await authApi.staffLogin(email, password)),
@@ -171,11 +161,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, status, sessionEnded, retry, requestOtp, verifyOtp, signInWithPassword, signOut }),
-    [user, status, sessionEnded, retry, requestOtp, verifyOtp, signInWithPassword, signOut]
+    () => ({ user, status, sessionEnded, retry, signInWithPassword, signOut }),
+    [user, status, sessionEnded, retry, signInWithPassword, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/** The signed-in user, or null - also outside an AuthProvider (page tests). */
+export function useSignedInUser(): AuthUser | null {
+  return useContext(AuthContext)?.user ?? null;
 }
 
 export function useAuth(): AuthState {

@@ -4,6 +4,7 @@ import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import type { AuditActor } from '../audit/audit.writer.js';
+import { normalizeSriLankanPhone } from '../../utils/phone.js';
 import {
   MAX_OFFER_TEXT,
   SMS_LANGUAGES,
@@ -37,6 +38,21 @@ const offerSchema = z.object({
 });
 type OfferBody = z.infer<typeof offerSchema>;
 
+/** Optional "Send test to" number: a Sri Lankan mobile, normalised; blank = own phone. */
+const testPhone = z
+  .string()
+  .trim()
+  .optional()
+  .transform((raw, ctx) => {
+    if (!raw) return undefined;
+    try {
+      return normalizeSriLankanPhone(raw);
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Phone must be a Sri Lankan mobile number, e.g. 077 123 4567' });
+      return z.NEVER;
+    }
+  });
+
 /** Who would get it, in which language, and how many SMS parts it costs. */
 smsOffersRouter.post(
   '/sms-offers/estimate',
@@ -52,9 +68,9 @@ smsOffersRouter.post(
 smsOffersRouter.post(
   '/sms-offers/test',
   ...STAFF,
-  validate({ body: z.object({ language, message: text.min(1, 'Write the text to test') }) }),
+  validate({ body: z.object({ language, message: text.min(1, 'Write the text to test'), phone: testPhone }) }),
   wrap(async (req, res) => {
-    const result = await sendTestOffer(actorOf(req), req.body.language, req.body.message);
+    const result = await sendTestOffer(actorOf(req), req.body.language, req.body.message, req.body.phone);
     res.status(202).json({ success: true, data: result });
   })
 );

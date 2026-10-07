@@ -10,8 +10,10 @@ export type Role = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN' | 'OPERATION
 
 export interface AuthUser {
   id: string;
-  phone: string;
+  /** null: Inventory and Admin accounts have no phone (backend migration 028). */
+  phone: string | null;
   full_name: string | null;
+  email?: string | null;
   role: Role;
 }
 
