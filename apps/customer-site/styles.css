@@ -41,6 +41,9 @@ a { color: inherit; }
 :focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; border-radius: 12px; }
 
 /* ------------------------------ Buttons ------------------------------ */
+/* The hidden attribute always wins (a .btn would otherwise stay inline-flex). */
+[hidden] { display: none !important; }
+
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   min-height: 48px; padding: 0 24px; border: 0; cursor: pointer;
@@ -115,7 +118,7 @@ a { color: inherit; }
 .perk-icon--green { background: var(--green-wash); color: var(--green); }
 .perk-icon--yellow { background: #fff4bf; color: #f2b705; }
 
-.ctas { display: grid; grid-template-columns: repeat(2, minmax(0, 340px)); gap: 20px; margin-top: 40px; }
+.ctas { display: grid; grid-template-columns: minmax(0, 380px); gap: 20px; margin-top: 40px; }
 .cta {
   display: flex; align-items: center; gap: 16px;
   min-height: 80px; padding: 14px 22px; border-radius: 16px;

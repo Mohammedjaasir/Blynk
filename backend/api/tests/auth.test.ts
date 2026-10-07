@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { env } from '../src/config/env.js';
+import { otpSmsText } from '../src/modules/auth/auth.service.js';
 import { pool, db } from '../src/database/connection.js';
 import { authRateLimiter } from '../src/modules/auth/auth.rate-limiter.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
@@ -551,5 +552,12 @@ describe('Stage 2 Authentication & OTP Module', () => {
       // Exactly one must succeed (200), and the other must fail (401 invalid/consumed)
       expect(statuses).toEqual([200, 401]);
     });
+  });
+
+  it('the sign-in code SMS is short: one plain-text part', () => {
+    const text = otpSmsText('123456', 2);
+    expect(text).toBe('123456 is your Blynk code. Valid 2 min. Do not share it.');
+    expect(text.length).toBeLessThanOrEqual(70);
+    expect(/^[ -~]*$/.test(text)).toBe(true);
   });
 });

@@ -129,6 +129,10 @@ async function refuseCustomerInRiderApp(trx: Transaction<Database>, userId: stri
   throw new AppError("This number hasn't applied to deliver with Blynk yet.", 404, 'ACCOUNT_NOT_FOUND');
 }
 
+/** The sign-in code SMS: "123456 is your Blynk code. Valid 2 min. Do not share it." */
+export const otpSmsText = (otp: string, minutes: number) =>
+  `${otp} is your Blynk code. Valid ${minutes} min. Do not share it.`;
+
 export const LOGIN_MAX_ATTEMPTS = 5;
 export const LOGIN_LOCK_MINUTES = 15;
 
@@ -188,7 +192,9 @@ export class AuthService {
       // codes requested in the same millisecond must both go out.
       notificationId: `otp_${crypto.randomUUID()}`,
       recipient: phone,
-      message: `Your Blynk verification code is ${otp}. It expires in ${env.OTP_EXPIRY_MINUTES} minutes. Do not share this code with anyone.`,
+      // Short on purpose (owner, 2026-10-07: SMS cost): plain GSM text,
+      // well inside one 160-character part. The sender name already says Blynk.
+      message: otpSmsText(otp, env.OTP_EXPIRY_MINUTES),
     });
     if (!sms.success) {
       logger.error(

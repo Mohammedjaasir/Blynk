@@ -34,10 +34,10 @@
       <a href="#delivery">Delivery</a>
       <a href="#about">About</a>
     </nav>
-    <a class="btn btn--yellow btn--pill nav__cta" href="/app/">
-      Open App
-      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-    </a>
+    <button type="button" class="btn btn--yellow btn--pill nav__cta" data-install>
+      Download
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+    </button>
   </header>
 
   <main id="top">
@@ -85,11 +85,6 @@
             <span class="cta__text"><strong>Download Blynk</strong><small>For iOS &amp; Android</small></span>
             <svg class="i cta__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           </button>
-          <a class="cta cta--secondary" href="/app/">
-            <svg class="cta__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
-            <span class="cta__text"><strong>Shop in your browser</strong><small>No install needed</small></span>
-            <svg class="i cta__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-          </a>
         </div>
         <p class="assure">
           <svg class="i i--green" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5zm-1.2 14.2-3.5-3.5 1.4-1.4 2.1 2.1 4.8-4.8 1.4 1.4z"/></svg>
@@ -136,8 +131,8 @@
             <p class="kicker">Products</p>
             <h2 id="products-title">Quality essentials, freshly sourced.</h2>
           </div>
-          <a class="btn btn--ink btn--pill" href="/app/">Browse the shop
-            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <button type="button" class="btn btn--ink btn--pill" data-install>Download Blynk
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
         </div>
         <ul class="bento" data-reveal>
           <li class="bento__big">
@@ -151,7 +146,7 @@
           <li class="bento__tile bento__tile--snacks"><svg class="bento__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12l-1 4 1 4-1 4 1 4-1 2H7l-1-2 1-4-1-4 1-4zM10 10h4"/></svg><span>Snacks</span></li>
           <li class="bento__tile bento__tile--home"><svg class="bento__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v4l3 3v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-9l3-3zM9 13h6"/></svg><span>Household</span></li>
           <li class="bento__tile bento__tile--care"><svg class="bento__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2h4v3h-4zM8 5h8l1 4v11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9z"/></svg><span>Personal Care</span></li>
-          <li class="bento__more"><a href="/app/">See everything in the shop <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li>
+          <li class="bento__more"><a href="#top" data-install>Download Blynk to see everything <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li>
         </ul>
       </div>
     </section>
@@ -185,7 +180,6 @@
         </div>
         <div class="band__actions">
           <button type="button" class="btn btn--ink btn--pill" data-install>Download for iOS &amp; Android</button>
-          <a class="btn btn--link" href="/app/">Open the web shop</a>
         </div>
       </div>
     </section>
@@ -199,7 +193,6 @@
         <a href="#products">Products</a>
         <a href="#delivery">Delivery</a>
         <a href="#about">About</a>
-        <a href="/app/">Open App</a>
       </nav>
       <small>© <span data-year></span> Blynk · Dharga Town &amp; Aluthgama, Sri Lanka</small>
     </div>
@@ -236,10 +229,11 @@
     </div>
 
     <div data-guide="desktop" hidden>
-      <p class="sheet__note">Open this page on your phone to add Blynk to its Home Screen — or use Blynk right here in your browser.</p>
+      <p class="sheet__note">Blynk is an app for your phone. Open <strong>blynk.lk</strong> on your Android phone or iPhone and tap <strong>Download Blynk</strong>.</p>
     </div>
 
-    <a class="btn btn--yellow btn--pill btn--block" href="/app/">Open Blynk</a>
+    <!-- Phones only: installing happens from the shop's own page. -->
+    <a class="btn btn--yellow btn--pill btn--block" href="/app/" data-sheet-open>Open Blynk to install</a>
   </dialog>
 
   <script src="/app.js" defer></script>

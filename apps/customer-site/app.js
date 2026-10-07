@@ -20,8 +20,12 @@
   });
 
   const sheet = document.getElementById('install-sheet');
+  // Blynk is released as an installed app only (owner, 2026-10-07): a
+  // computer gets the "open this on your phone" note and no way into the shop.
+  const sheetOpen = sheet.querySelector('[data-sheet-open]');
   function showGuide(kind) {
     for (const el of sheet.querySelectorAll('[data-guide]')) el.hidden = el.dataset.guide !== kind;
+    if (sheetOpen) sheetOpen.hidden = kind === 'desktop';
     if (typeof sheet.showModal === 'function') sheet.showModal();
     else sheet.setAttribute('open', '');
   }
@@ -32,17 +36,23 @@
       return;
     }
     if (deferredPrompt) {
-      deferredPrompt.prompt();
+      const prompt = deferredPrompt;
+      deferredPrompt = null;
       try {
-        await deferredPrompt.userChoice;
-      } finally {
-        deferredPrompt = null;
+        await prompt.prompt();
+        await prompt.userChoice;
+        return;
+      } catch {
+        // The browser refused its own prompt: show the steps instead.
       }
-      return;
     }
     showGuide(isIOS ? 'ios' : isAndroid ? 'android' : 'desktop');
   }
-  for (const button of document.querySelectorAll('[data-install]')) button.addEventListener('click', install);
+  for (const button of document.querySelectorAll('[data-install]'))
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      install();
+    });
 
   // The download button always reads "For iOS & Android" (owner, 2026-10-07);
   // the sheet it opens still shows the steps for the reader's own phone.
