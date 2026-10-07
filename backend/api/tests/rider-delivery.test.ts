@@ -327,7 +327,9 @@ describe('Rider deliveries', () => {
         `SELECT count(*)::int n FROM notifications WHERE order_id = $1 AND notification_type IN ('DELIVERED', 'COD_PAYMENT_CONFIRMED')`,
         [order.id]
       );
-      expect(n.rows[0].n).toBe(2);
+      // Delivered and cash received are not texted any more (CUSTOMER_ORDER_SMS);
+      // the single settlement above is what proves "exactly once".
+      expect(n.rows[0].n).toBe(0);
     });
 
     it('refuses collection when an operator closed the order meanwhile', async () => {

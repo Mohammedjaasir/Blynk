@@ -390,14 +390,12 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       placedOrderId = order.id;
       placedOrderNumber = order.order_number;
 
-      // Verify outbox notification insertion in PostgreSQL
+      // No "order placed" SMS (owner, 2026-10-07: SMS cost; CUSTOMER_ORDER_SMS).
       const notifRes = await pool.query(
         `SELECT * FROM notifications WHERE order_id = $1`,
         [placedOrderId]
       );
-      expect(notifRes.rows.length).toBe(1);
-      expect(notifRes.rows[0].channel).toBe('SMS');
-      expect(notifRes.rows[0].status).toBe('QUEUED');
+      expect(notifRes.rows.length).toBe(0);
     });
 
     it('enforces idempotency: repeated request with same Idempotency-Key returns cached order without duplicate DB rows', async () => {

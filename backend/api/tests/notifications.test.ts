@@ -433,7 +433,7 @@ describe('Stage 5 — Outbox Notification Worker Module', () => {
   });
 
   describe('Stage 4 End-to-End Order Lifecycle Integration', () => {
-    it('order placement creates outbox record which worker successfully transitions to SENT', async () => {
+    it('order placement sends no SMS; an order text in the outbox is sent by the worker', async () => {
       // 1. Ensure valid delivery address within 4 km
       let addrRes = await pool.query(
         `SELECT id FROM customer_addresses WHERE user_id = $1 AND is_deleted = false LIMIT 1`,
@@ -472,9 +472,17 @@ describe('Stage 5 — Outbox Notification Worker Module', () => {
       const placedOrder = orderRes.body.data.order;
       createdOrderIds.push(placedOrder.id);
 
-      // 3. Verify notification is in QUEUED state in PostgreSQL
+      // 3. Placing it queues no SMS (owner, 2026-10-07: SMS cost)...
+      const placedSms = await pool.query(`SELECT 1 FROM notifications WHERE order_id = $1`, [placedOrder.id]);
+      expect(placedSms.rows.length).toBe(0);
+      // ...so queue the order's "out for delivery" text the way the lifecycle does.
+      await pool.query(
+        `INSERT INTO notifications (user_id, order_id, idempotency_key, channel, notification_type, recipient, payload, status)
+         VALUES ($1, $2, $3, 'SMS', 'OUT_FOR_DELIVERY', $4, $5, 'QUEUED')`,
+        [customerId, placedOrder.id, `order_${placedOrder.id}_e2e_OFD_SMS`, customerPhone, JSON.stringify({ order_number: placedOrder.order_number, total_amount: placedOrder.total_amount })]
+      );
       const notifRes = await pool.query(
-        `SELECT * FROM notifications WHERE order_id = $1 AND notification_type = 'ORDER_PLACED'`,
+        `SELECT * FROM notifications WHERE order_id = $1 AND notification_type = 'OUT_FOR_DELIVERY'`,
         [placedOrder.id]
       );
       expect(notifRes.rows.length).toBe(1);

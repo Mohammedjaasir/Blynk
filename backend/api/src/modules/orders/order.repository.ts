@@ -219,24 +219,8 @@ export class OrderRepository {
       // 4. Record initial status in order_status_history (lifecycle PLACE_ORDER)
       await recordOrderPlaced(trx, order.id, data.customer_id);
 
-      // 5. Enqueue outbox notification
-      await trx
-        .insertInto('notifications')
-        .values({
-          user_id: data.customer_id,
-          order_id: order.id,
-          idempotency_key: `order_${order.id}_PLACED_SMS`,
-          channel: 'SMS',
-          notification_type: 'ORDER_PLACED',
-          recipient: data.delivery_recipient_phone,
-          payload: {
-            order_number: order.order_number,
-            total_amount: order.total_amount,
-            scheduled_for: order.scheduled_for,
-          },
-          status: 'QUEUED',
-        })
-        .execute();
+      // 5. No "order placed" SMS (owner, 2026-10-07: SMS cost) - the app
+      // shows the confirmation. See CUSTOMER_ORDER_SMS (lifecycle/notify.ts).
 
       return {
         ...order,

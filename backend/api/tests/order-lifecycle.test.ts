@@ -228,9 +228,9 @@ describe('Order lifecycle', () => {
       expect(await deliveries(order.id)).toEqual([]);
     });
 
-    it('sends one RIDER_ASSIGNED message per assignment', async () => {
+    it('sends no RIDER_ASSIGNED SMS (the app shows the rider)', async () => {
       const { order } = await assignedOrder();
-      expect(await notifications(order.id, 'RIDER_ASSIGNED')).toBe(1);
+      expect(await notifications(order.id, 'RIDER_ASSIGNED')).toBe(0);
     });
   });
 
@@ -307,7 +307,7 @@ describe('Order lifecycle', () => {
       const h = await history(order.id);
       expect(h.at(-1)).toMatchObject({ old_status: 'PLACED', new_status: 'PACKED', changed_by_user_id: staff.id });
       const sms = await pool.query('SELECT notification_type FROM notifications WHERE order_id = $1', [order.id]);
-      expect(sms.rows.map((r) => r.notification_type)).toEqual(['ORDER_PLACED']);
+      expect(sms.rows.map((r) => r.notification_type), 'no SMS for placing or packing (CUSTOMER_ORDER_SMS)').toEqual([]);
     });
 
     it('packs an ITEM_UNAVAILABLE order once the rest is sourced; an all-unavailable order cannot be packed', async () => {
@@ -460,8 +460,9 @@ describe('Order lifecycle', () => {
       const d = (await pool.query('SELECT assignment_status, cod_collected_amount::float amt FROM deliveries WHERE id = $1', [deliveryId])).rows[0];
       expect(d).toEqual({ assignment_status: 'DELIVERED', amt: order.total_amount });
       expect((await history(order.id)).at(-1)).toMatchObject({ old_status: 'OUT_FOR_DELIVERY', new_status: 'DELIVERED', changed_by_user_id: admin.id });
-      expect(await notifications(order.id, 'DELIVERED')).toBe(1);
-      expect(await notifications(order.id, 'COD_PAYMENT_CONFIRMED')).toBe(1);
+      // Delivered and cash received are shown in the app, not texted.
+      expect(await notifications(order.id, 'DELIVERED')).toBe(0);
+      expect(await notifications(order.id, 'COD_PAYMENT_CONFIRMED')).toBe(0);
       // No code: recorded as a written override (proof of delivery, migration 016).
       expect((await history(order.id)).at(-1).reason_or_notes).toBe(
         'Delivered without the customer code (override): Rider phone died; cash counted at the store'
@@ -530,7 +531,7 @@ describe('Order lifecycle', () => {
       const again = await assign(order.id, RIDER_B);
       expect(again.status).toBe(200);
       const riderBDelivery = again.body.data.delivery.id;
-      expect(await notifications(order.id, 'RIDER_ASSIGNED')).toBe(2);
+      expect(await notifications(order.id, 'RIDER_ASSIGNED')).toBe(0);
       expect((await riderStep(riderBDelivery, { status: 'PICKED_UP' }, tokens.riderB)).status).toBe(200);
       expect(await notifications(order.id, 'OUT_FOR_DELIVERY')).toBe(2);
       expect((await riderStep(riderBDelivery, { status: 'ARRIVED_AT_CUSTOMER' }, tokens.riderB)).status).toBe(200);
@@ -676,7 +677,7 @@ describe('Order lifecycle', () => {
         const results = await race(() => setStatus(order.id, 'DELIVERED', tokens.admin, 'n'), () => collect(deliveryId, order.total_amount));
         expect(results.filter((r) => r.status === 200)).toHaveLength(1);
         expect((await history(order.id)).filter((h) => h.new_status === 'DELIVERED')).toHaveLength(1);
-        expect(await notifications(order.id, 'DELIVERED')).toBe(1);
+        expect(await notifications(order.id, 'DELIVERED')).toBe(0); // not texted (CUSTOMER_ORDER_SMS)
       }
     });
 
