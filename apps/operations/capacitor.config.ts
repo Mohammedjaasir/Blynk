@@ -26,8 +26,8 @@ const config: CapacitorConfig = {
   android: {
     useLegacyBridge: true,
   },
-  // Production origin of the app's WebView: https://ops.app.blynk.lk.
-  server: { hostname: 'ops.app.blynk.lk', androidScheme: lanHttp ? 'http' : 'https' },
+  // Production origin of the app's WebView: https://ops.blynk.lk.
+  server: { hostname: 'ops.blynk.lk', androidScheme: lanHttp ? 'http' : 'https' },
 };
 
 export default config;
