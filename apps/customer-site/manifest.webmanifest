@@ -2,7 +2,7 @@
   "id": "/app/",
   "name": "Blynk",
   "short_name": "Blynk",
-  "description": "Fresh groceries and quality essentials, delivered to your door in Dharga Town.",
+  "description": "Fresh groceries and quality essentials, delivered to your door in Dharga Town and its 4 km surroundings, including Aluthgama.",
   "start_url": "/app/",
   "scope": "/app/",
   "display": "standalone",

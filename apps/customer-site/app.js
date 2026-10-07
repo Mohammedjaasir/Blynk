@@ -44,11 +44,8 @@
   }
   for (const button of document.querySelectorAll('[data-install]')) button.addEventListener('click', install);
 
-  // Launch is web-app first on every phone (Play Store later), so the one
-  // install button names the reader's own phone where we can tell.
-  const installFor = document.querySelector('[data-install-for]');
-  if (installFor && isAndroid) installFor.textContent = 'For your Android phone';
-  else if (installFor && isIOS) installFor.textContent = 'For your iPhone';
+  // The download button always reads "For iOS & Android" (owner, 2026-10-07);
+  // the sheet it opens still shows the steps for the reader's own phone.
 
   // Close the sheet by tapping the backdrop.
   sheet.addEventListener('click', (event) => {
