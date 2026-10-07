@@ -10,6 +10,7 @@ import '../Services/Providers/product.provider.dart';
 import '../Services/catalog_live_updates.dart';
 import '../UI/Widgets/Organisms/adaptive_scaffold.dart';
 import '../UI/Widgets/Organisms/cart_bar.dart';
+import '../UI/Widgets/Atoms/snackbar_helper.dart';
 import '../design/tokens.dart';
 import 'help_screen.dart';
 import 'home_screen.dart';
@@ -33,6 +34,10 @@ import 'user_orders_screen.dart';
 /// pushed on top of this shell as full routes, which is why they keep their
 /// own back buttons.
 class CustomerShell extends StatefulWidget {
+  /// How long the "Press back again to exit" second press is accepted.
+  static const Duration exitWindow = Duration(seconds: 2);
+  static const String exitHint = 'Press back again to exit';
+
   const CustomerShell({
     super.key,
     this.initialTab = 0,
@@ -94,6 +99,13 @@ class _CustomerShellState extends State<CustomerShell>
     with WidgetsBindingObserver {
   late int _index = widget.initialTab;
 
+  /// Back on Shop (owner, 2026-10-07: "back exits the app"): the first press
+  /// says "Press back again to exit" and arms [CustomerShell.exitWindow]; a
+  /// second press inside it leaves. Armed means canPop, so Android's
+  /// predictive back still sees the truth.
+  bool _exitArmed = false;
+  Timer? _exitTimer;
+
   @override
   void initState() {
     super.initState();
@@ -132,6 +144,7 @@ class _CustomerShellState extends State<CustomerShell>
 
   @override
   void dispose() {
+    _exitTimer?.cancel();
     _liveRefresh?.cancel();
     _live?.stop();
     WidgetsBinding.instance.removeObserver(this);
@@ -195,9 +208,19 @@ class _CustomerShellState extends State<CustomerShell>
     final hasOpenOrder = context.select<OrderProvider, bool>((p) => p.orders.any(_isOpen));
 
     return PopScope(
-      canPop: _index == 0,
+      canPop: _index == 0 && _exitArmed,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _selectTab(0);
+        if (didPop) return;
+        if (_index != 0) {
+          _selectTab(0);
+          return;
+        }
+        setState(() => _exitArmed = true);
+        _exitTimer?.cancel();
+        _exitTimer = Timer(CustomerShell.exitWindow, () {
+          if (mounted) setState(() => _exitArmed = false);
+        });
+        showBlynkSnackBar(context: context, message: CustomerShell.exitHint);
       },
       child: AdaptiveScaffold(
         selectedIndex: _index,

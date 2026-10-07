@@ -14,6 +14,7 @@
   "dependencies": {
     "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor/android": "^7.6.9",
+    "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.6.9",
     "lucide-react": "^1.48.0",
     "maplibre-gl": "^5.24.0",

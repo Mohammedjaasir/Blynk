@@ -157,11 +157,23 @@ void main() {
       }
     });
 
-    testWidgets('back on Shop leaves the app', (tester) async {
+    testWidgets('back on Shop asks first, then a second press in time leaves the app', (tester) async {
       await pumpShell(tester);
       expect(selectedIndex(tester), 0);
       await systemBack(tester);
+      expect(exited(), isFalse);
+      expect(find.text(CustomerShell.exitHint), findsOneWidget);
+      await systemBack(tester);
       expect(exited(), isTrue);
+    });
+
+    testWidgets('a second press after the window only asks again', (tester) async {
+      await pumpShell(tester);
+      await systemBack(tester);
+      await tester.pump(CustomerShell.exitWindow + const Duration(milliseconds: 100));
+      await systemBack(tester);
+      expect(exited(), isFalse);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('a tab that is not Shop is left with one back press, then Shop exits', (tester) async {
@@ -170,6 +182,8 @@ void main() {
       await systemBack(tester);
       expect(selectedIndex(tester), 0);
       expect(exited(), isFalse);
+      await systemBack(tester);
+      expect(exited(), isFalse, reason: 'Shop asks first');
       await systemBack(tester);
       expect(exited(), isTrue);
     });
@@ -183,13 +197,19 @@ void main() {
           )
           .first);
 
-      expect(scope().canPop, isTrue);
+      // Shop pops only once armed by a first press (press back again to exit).
+      expect(scope().canPop, isFalse);
       await tester.tap(find.text('Help'));
       await tester.pump();
       expect(scope().canPop, isFalse);
       await tester.tap(find.text('Shop'));
       await tester.pump();
+      expect(scope().canPop, isFalse);
+      await systemBack(tester);
       expect(scope().canPop, isTrue);
+      await tester.pump(CustomerShell.exitWindow + const Duration(milliseconds: 100));
+      expect(scope().canPop, isFalse);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('a pushed route above the shell pops normally and keeps the tab', (tester) async {

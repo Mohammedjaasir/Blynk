@@ -7,6 +7,7 @@ import { Login } from './pages/Login';
 import { MyDay } from './pages/MyDay';
 import { Queue } from './pages/Queue';
 import { LaunchScreen } from './components/LaunchScreen';
+import { AndroidBackButton } from './components/AndroidBackButton';
 
 /**
  * Route protection is for the rider's benefit only: every rider endpoint is
@@ -89,6 +90,7 @@ export function App() {
   return (
     <>
       <BrowserRouter>
+        <AndroidBackButton />
         <AuthProvider>
           <AppRoutes />
         </AuthProvider>
