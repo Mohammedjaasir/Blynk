@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { WRONG_ROLE_MESSAGE, useAuth } from '../auth/AuthContext';
@@ -9,6 +9,9 @@ import { errorMessage } from '../lib/errors';
  * ADMIN; anything else is refused here and, more importantly, by the API on
  * every admin route (see `AuthContext`'s own doc comment).
  */
+/** How long before another code can be asked for (codes last 2 minutes). */
+export const RESEND_AFTER_SECONDS = 30;
+
 export function Login() {
   const { status, notice, requestOtp, verifyOtp } = useAuth();
   const { signInWithPassword } = useAuth();
@@ -31,6 +34,13 @@ export function Login() {
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Seconds until "Resend code" is offered (codes last 2 minutes).
+  const [resendIn, setResendIn] = useState(0);
+  useEffect(() => {
+    if (resendIn <= 0) return undefined;
+    const timer = setTimeout(() => setResendIn((n) => Math.max(0, n - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
 
   if (status === 'authenticated') return <Navigate to="/" replace />;
 
@@ -62,6 +72,7 @@ export function Login() {
       const { devOtp: code } = await requestOtp(phone.trim());
       setDevOtp(code ?? null);
       setStep('otp');
+      setResendIn(RESEND_AFTER_SECONDS);
     } catch (err) {
       if (emailSignInRequired(err)) {
         // Admin / Inventory accounts have no SMS sign-in (backend migration
@@ -72,6 +83,21 @@ export function Login() {
       } else {
         setError(errorMessage(err, 'Could not send the code.'));
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendCode() {
+    setError(null);
+    setBusy(true);
+    try {
+      const { devOtp: code } = await requestOtp(phone.trim());
+      setDevOtp(code ?? null);
+      setOtp('');
+      setResendIn(RESEND_AFTER_SECONDS);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not send the code.'));
     } finally {
       setBusy(false);
     }
@@ -253,6 +279,15 @@ export function Login() {
             <button type="submit" className="primary" disabled={busy}>
               {busy ? 'Verifying…' : 'Verify and continue'}
             </button>
+            {resendIn > 0 ? (
+              <p className="login__dev" aria-live="polite">
+                Resend code in {resendIn} s
+              </p>
+            ) : (
+              <button type="button" className="text-button" disabled={busy} onClick={() => void resendCode()}>
+                Resend code
+              </button>
+            )}
             <button
               type="button"
               className="text-button"

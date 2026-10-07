@@ -26,7 +26,7 @@ export const PHONE_FORMAT_MESSAGE = 'Enter a Sri Lankan mobile number, like 077 
 export const OTP_LENGTH = 6;
 
 /** How long before another code can be asked for. */
-export const RESEND_AFTER_SECONDS = 60;
+export const RESEND_AFTER_SECONDS = 30;
 
 /** A countdown to the next "Resend code". start() restarts it; clear() lets a resend happen now. */
 export function useResendTimer(seconds = RESEND_AFTER_SECONDS) {

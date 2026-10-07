@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
+import { env } from '../src/config/env.js';
 import { pool, db } from '../src/database/connection.js';
 import { authRateLimiter } from '../src/modules/auth/auth.rate-limiter.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
@@ -67,7 +68,8 @@ describe('Stage 2 Authentication & OTP Module', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.message).toBe('OTP sent successfully');
-      expect(res.body.data.expires_in_seconds).toBe(300);
+      // 2 minutes by default (owner, 2026-10-07); OTP_EXPIRY_MINUTES overrides it.
+      expect(res.body.data.expires_in_seconds).toBe(env.OTP_EXPIRY_MINUTES * 60);
       expect(res.body.data.dev_otp).toMatch(/^[0-9]{6}$/);
 
       // Verify at-rest hashed storage in PostgreSQL

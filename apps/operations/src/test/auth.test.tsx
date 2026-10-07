@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
@@ -143,6 +143,30 @@ describe('Operations sign-in and session classification', () => {
     await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
     await expectRiderCapable();
     expect(tokenStore.access).toBe('a');
+  });
+
+  it('offers "Resend code" after 30 seconds and sends a new code', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { api } = renderAs(null, '/login', { 'POST /auth/otp/request': () => ok({}) });
+      await user.click(await screen.findByRole('button', { name: 'Use an SMS code instead' }));
+      await user.type(await screen.findByLabelText('Mobile number'), '0775551122');
+      await user.click(screen.getByRole('button', { name: 'Send code' }));
+      expect(await screen.findByText('Resend code in 30 s')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Resend code' })).toBeNull();
+      // The countdown ticks once a second; each tick schedules the next.
+      for (let i = 0; i < 31; i += 1) {
+        await act(async () => {
+          vi.advanceTimersByTime(1000);
+        });
+      }
+      await user.click(await screen.findByRole('button', { name: 'Resend code' }));
+      expect(api.find('POST', '/auth/otp/request')).toHaveLength(2);
+      expect(await screen.findByText(/Resend code in \d+ s/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('OTP sign-in for an email-only account (Admin/Inventory) says to use email and password', async () => {

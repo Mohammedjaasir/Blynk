@@ -19,7 +19,7 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRY: z.string().default('15m'),
   JWT_REFRESH_EXPIRY: z.string().default('30d'),
   OTP_SECRET: z.string().min(16, { message: 'OTP_SECRET must be at least 16 characters' }),
-  OTP_EXPIRY_MINUTES: z.coerce.number().int().positive().default(5),
+  OTP_EXPIRY_MINUTES: z.coerce.number().int().positive().default(2),
   OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
 
   // CORS
