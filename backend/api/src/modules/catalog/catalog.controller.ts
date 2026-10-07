@@ -1,3 +1,4 @@
+import { SHOPPER_ROLES } from '../../middleware/role.middleware.js';
 import { Request, Response, NextFunction } from 'express';
 import { stockAlertRepository } from './catalog.stock-alerts.js';
 import { catalogService } from './catalog.service.js';
@@ -56,7 +57,7 @@ export class CatalogController {
       const product = await catalogService.getProductById(req.params.id as string);
       // Phase 6: whether this signed-in customer asked to hear when it's back.
       const notify_me_subscribed =
-        req.user?.role === 'CUSTOMER' ? await stockAlertRepository.isSubscribed(req.user.id, product.id) : false;
+        req.user && SHOPPER_ROLES.includes(req.user.role) ? await stockAlertRepository.isSubscribed(req.user.id, product.id) : false;
       res.status(200).json({
         success: true,
         data: { product: { ...product, notify_me_subscribed } },

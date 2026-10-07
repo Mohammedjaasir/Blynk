@@ -76,9 +76,12 @@ export class OrderController {
     try {
       const { id } = orderItemParamsSchema.parse(req.params);
       const input = cancelOrderSchema.parse(req.body);
+      // The customer's own cancel: a rider or Operations person cancelling
+      // their own order acts as its customer here. CUSTOMER_CANCEL still
+      // refuses any order that is not the caller's (404).
       const order = await orderService.cancelOrderCustomer(
         id,
-        { id: req.user!.id, role: req.user!.role },
+        { id: req.user!.id, role: 'CUSTOMER' },
         input.reason
       );
       res.status(200).json({

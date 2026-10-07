@@ -2,7 +2,7 @@ import { Router, type Request } from 'express';
 import { sql, type Transaction } from 'kysely';
 import { z } from 'zod';
 import { db } from '../../database/connection.js';
-import type { Database, RiderApprovalStatus } from '../../database/types.js';
+import type { Database, RiderApprovalStatus, UserRole } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
@@ -21,14 +21,19 @@ import { optionalRegistrationSchema, refineRegistration, storeId, vehicleTypeSch
  *   1. In the Rider app the applicant asks for an SMS code (POST
  *      /auth/otp/request - unknown numbers get one) and sends it with their
  *      details to POST /riders/applications (public). The code is checked and
- *      consumed exactly as sign-in does. A new number becomes a RIDER account
- *      (no email, no password) with a riders row that is PENDING and switched
- *      off. No tokens are issued.
+ *      consumed exactly as sign-in does. One number is one account (owner,
+ *      2026-10-07): a new number becomes a CUSTOMER account, and an existing
+ *      customer applies with the number they shop with. Either way a riders
+ *      row is added, PENDING and switched off; the person keeps shopping.
+ *      An Operations number is told to use "Deliver orders myself" instead.
+ *      No tokens are issued.
  *   2. Operations or Admin review the request under "Rider requests"
  *      (/admin/rider-applications): approve (the rider becomes active and
- *      assignable, and is sent an SMS) or reject with a reason.
+ *      assignable, the account becomes RIDER - which still shops - and an
+ *      SMS is sent) or reject with a reason.
  *   3. From then on the rider signs in with phone + SMS code only; PENDING and
- *      REJECTED riders are refused at sign-in (auth.service.ts).
+ *      REJECTED applicants are refused by the Rider app's sign-in
+ *      (auth.service.ts, app: 'rider') but still sign in to shop.
  *
  * A PENDING or REJECTED rider never appears in the rider pickers, suggestions,
  * assignment, cash hand-ins or Staff accounts.
@@ -118,6 +123,9 @@ export interface RiderApplication {
 }
 
 type Trx = Transaction<Database>;
+
+/** A rider applicant's account: CUSTOMER until approved, then RIDER. */
+const APPLICANT_ROLES: UserRole[] = ['CUSTOMER', 'RIDER'];
 type Executor = Trx | typeof db;
 
 function applicationQuery(executor: Executor) {
@@ -139,7 +147,7 @@ function applicationQuery(executor: Executor) {
       'rev.full_name as reviewed_by_name',
       'r.rejection_reason',
     ])
-    .where('u.role', '=', 'RIDER')
+    .where('u.role', 'in', APPLICANT_ROLES)
     // Applications only: riders made before migration 029 (and staff
     // riders) have no applied_at and are not requests.
     .where('r.applied_at', 'is not', null);
@@ -205,19 +213,50 @@ export class RiderApplicationService {
           emergency_contact_phone: input.emergency_contact_phone,
         };
 
-        if (user) {
-          const rider =
-            user.role === 'RIDER'
-              ? await trx
-                  .selectFrom('riders')
-                  .select(['id', 'approval_status'])
-                  .where('user_id', '=', user.id)
-                  .forUpdate()
-                  .executeTakeFirst()
-              : undefined;
-          if (!rider) {
-            throw new AppError('This number is already used by another Blynk account.', 409, 'PHONE_IN_USE');
-          }
+        if (user && user.role === 'OPERATIONS') {
+          throw new AppError(
+            'This number is an Operations account. Use "Deliver orders myself" in the Ops app instead.',
+            409,
+            'STAFF_CAN_DELIVER'
+          );
+        }
+        if (user && !APPLICANT_ROLES.includes(user.role)) {
+          throw new AppError('This number is already used by another Blynk account.', 409, 'PHONE_IN_USE');
+        }
+        const rider = user
+          ? await trx
+              .selectFrom('riders')
+              .select(['id', 'approval_status'])
+              .where('user_id', '=', user.id)
+              .forUpdate()
+              .executeTakeFirst()
+          : undefined;
+
+        if (user && !rider) {
+          // A customer applies with the number they already shop with: the
+          // account stays CUSTOMER (and keeps shopping) until approved.
+          await authService.consumeOtp(trx, input.phone, otpId);
+          await trx
+            .updateTable('users')
+            .set({ full_name: input.full_name, phone_verified_at: sql`COALESCE(phone_verified_at, now())`, updated_at: sql`now()` })
+            .where('id', '=', user.id)
+            .execute();
+          const created = await trx
+            .insertInto('riders')
+            .values({
+              user_id: user.id,
+              dark_store_id: await storeId(trx),
+              ...riderValues,
+              is_active: false,
+              is_available: false,
+              approval_status: 'PENDING',
+              applied_at: sql<Date>`now()`,
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          userId = user.id;
+          riderId = created.id;
+        } else if (user && rider) {
           if (rider.approval_status === 'PENDING') {
             throw new AppError('Your application is already waiting for approval.', 409, 'APPLICATION_PENDING');
           }
@@ -256,9 +295,9 @@ export class RiderApplicationService {
             .values({
               phone: input.phone,
               full_name: input.full_name,
-              role: 'RIDER',
-              // The account itself is fine; the riders row stays switched off
-              // until approved, and sign-in is refused while PENDING.
+              // A customer account that can shop at once; approval makes it
+              // RIDER. The riders row stays switched off until then.
+              role: 'CUSTOMER',
               is_active: true,
               phone_verified_at: sql<Date>`now()`,
             })
@@ -311,7 +350,7 @@ export class RiderApplicationService {
       .selectFrom('riders as r')
       .innerJoin('users as u', 'u.id', 'r.user_id')
       .select(sql<number>`count(*)::int`.as('total'))
-      .where('u.role', '=', 'RIDER')
+      .where('u.role', 'in', APPLICANT_ROLES)
       .where('r.applied_at', 'is not', null)
       .where('r.approval_status', '=', status)
       .execute();
@@ -336,7 +375,7 @@ export class RiderApplicationService {
       .selectFrom('riders as r')
       .innerJoin('users as u', 'u.id', 'r.user_id')
       .select(sql<number>`count(*)::int`.as('n'))
-      .where('u.role', '=', 'RIDER')
+      .where('u.role', 'in', APPLICANT_ROLES)
       .where('r.approval_status', '=', 'PENDING')
       .where('r.applied_at', 'is not', null)
       .executeTakeFirstOrThrow();
@@ -352,7 +391,7 @@ export class RiderApplicationService {
       .where('r.applied_at', 'is not', null)
       .forUpdate()
       .executeTakeFirst();
-    if (!row || row.role !== 'RIDER') throw notFound();
+    if (!row || !APPLICANT_ROLES.includes(row.role)) throw notFound();
     if (row.approval_status !== 'PENDING') throw notPending(row.approval_status);
     return row;
   }
@@ -375,7 +414,13 @@ export class RiderApplicationService {
         .where('id', '=', id)
         .returning('reviewed_at')
         .executeTakeFirstOrThrow();
-      await trx.updateTable('users').set({ is_active: true, updated_at: sql`now()` }).where('id', '=', row.user_id).execute();
+      // A customer who applied becomes a RIDER account - which still shops
+      // (SHOPPER_ROLES) - so the Rider app lets them in.
+      await trx
+        .updateTable('users')
+        .set({ is_active: true, role: 'RIDER', updated_at: sql`now()` })
+        .where('id', '=', row.user_id)
+        .execute();
       await notificationService.enqueue(
         {
           user_id: row.user_id,

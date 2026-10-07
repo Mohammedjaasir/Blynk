@@ -135,6 +135,7 @@ describe('rider SMS sign-in never creates an account', () => {
       phone: '0770000000',
       otp: '123456',
       create_account: false,
+      app: 'rider',
     });
     // Back to the number: another code for the same number can't help.
     expect(screen.getByLabelText('Mobile number')).toBeInTheDocument();

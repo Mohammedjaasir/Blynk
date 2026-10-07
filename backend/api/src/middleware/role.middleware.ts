@@ -26,3 +26,12 @@ export function requireRoles(...roles: (UserRole | UserRole[])[]) {
     next();
   };
 }
+
+/**
+ * Accounts that may also shop (owner, 2026-10-07): one phone number is one
+ * account, and a rider or Operations person keeps using the customer app
+ * with it. Every shopping route still acts only on the caller's own orders,
+ * addresses and bookings. Admin and Inventory have no phone, so never shop.
+ */
+export const SHOPPER_ROLES: UserRole[] = ['CUSTOMER', 'RIDER', 'OPERATIONS'];
+export const requireShopper = () => requireRoles(SHOPPER_ROLES);

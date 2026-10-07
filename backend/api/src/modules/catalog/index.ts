@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { catalogController } from './catalog.controller.js';
 import { requireAuth, optionalAuth } from '../../middleware/auth.middleware.js';
 import { stockAlertController } from './catalog.stock-alerts.js';
-import { requireRoles } from '../../middleware/role.middleware.js';
+import { requireRoles, requireShopper } from '../../middleware/role.middleware.js';
 import { categoryGroupsController } from './catalog.groups.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { idParamSchema } from './catalog.schema.js';
@@ -24,8 +24,8 @@ export const productsRouter = Router();
 productsRouter.get('/', catalogController.getProducts.bind(catalogController));
 productsRouter.get('/:id', optionalAuth, catalogController.getProductById.bind(catalogController));
 // "Notify me when it's back" on a sold-out product (phase 6), customers only.
-productsRouter.post('/:id/notify-me', requireAuth, requireRoles(['CUSTOMER']), stockAlertController.subscribe);
-productsRouter.delete('/:id/notify-me', requireAuth, requireRoles(['CUSTOMER']), stockAlertController.unsubscribe);
+productsRouter.post('/:id/notify-me', requireAuth, requireShopper(), stockAlertController.subscribe);
+productsRouter.delete('/:id/notify-me', requireAuth, requireShopper(), stockAlertController.unsubscribe);
 
 // ----------------------------------------------------------------------------
 // 3. ADMIN CATALOG ROUTER

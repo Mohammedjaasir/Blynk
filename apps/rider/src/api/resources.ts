@@ -25,7 +25,11 @@ export const authApi = {
       // (404 ACCOUNT_NOT_FOUND) instead of becoming a new customer. A rider
       // whose application is waiting or was turned down is refused with 403
       // RIDER_PENDING_APPROVAL / RIDER_APPLICATION_REJECTED.
-      body: { phone, otp, create_account: false },
+      // app: 'rider' - one number can also be a customer account (owner,
+      // 2026-10-07); a customer whose application is waiting or turned down
+      // gets those refusals here, and one who never applied gets
+      // ACCOUNT_NOT_FOUND (shown as "Apply to deliver").
+      body: { phone, otp, create_account: false, app: 'rider' },
       auth: false,
     }),
   me: () => apiRequest<AuthUser>('/auth/me'),

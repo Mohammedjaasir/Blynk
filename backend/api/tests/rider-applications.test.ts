@@ -44,8 +44,11 @@ describe('Rider applications and approval', () => {
 
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
   const requestOtp = (n: string) => request(app).post('/api/v1/auth/otp/request').send({ phone: local(n) });
+  /** Sign-in from the Rider app. */
   const verify = (n: string, otp: string) =>
-    request(app).post('/api/v1/auth/otp/verify').send({ phone: local(n), otp, create_account: false });
+    request(app).post('/api/v1/auth/otp/verify').send({ phone: local(n), otp, create_account: false, app: 'rider' });
+  /** Sign-in from the customer app (one number, one account: it also shops). */
+  const shopVerify = (n: string, otp: string) => request(app).post('/api/v1/auth/otp/verify').send({ phone: local(n), otp });
   const apply = (body: Record<string, unknown>) => request(app).post('/api/v1/riders/applications').send(body);
   const application = (n: string, otp: string, extra: Record<string, unknown> = {}) => ({
     phone: local(n),
@@ -92,6 +95,7 @@ describe('Rider applications and approval', () => {
       await pool.query('DELETE FROM orders WHERE id = ANY($1)', [createdOrders]);
     }
     if (addressId) await pool.query('DELETE FROM customer_addresses WHERE id = $1', [addressId]);
+    await pool.query(`DELETE FROM customer_addresses WHERE user_id IN (SELECT id FROM users WHERE phone LIKE '${PREFIX}%')`);
     await pool.query(
       `DELETE FROM notifications WHERE user_id IN ${users} OR recipient LIKE '${PREFIX}%';
        DELETE FROM audit_logs WHERE entity_id IN ${users} OR entity_id IN ${riders} OR actor_user_id IN ${users};
@@ -219,7 +223,7 @@ describe('Rider applications and approval', () => {
       expect((await pool.query(`SELECT 1 FROM users WHERE phone = $1`, [`${PREFIX}5`])).rowCount).toBe(0);
     });
 
-    it('a new number: 201 PENDING, a RIDER account with no email or password, switched off, no tokens', async () => {
+    it('a new number: 201 PENDING, a CUSTOMER account (until approved) with no email or password, switched off, no tokens', async () => {
       const otp = (await requestOtp('5')).body.data.dev_otp as string;
       const res = await apply(application('5', otp));
       expect(res.status).toBe(201);
@@ -232,7 +236,7 @@ describe('Rider applications and approval', () => {
       const r = await riderOf('5');
       riderId = r.id;
       expect(r).toMatchObject({
-        role: 'RIDER',
+        role: 'CUSTOMER',
         email: null,
         staff_password_hash: null,
         full_name: 'Applicant 5',
@@ -260,11 +264,9 @@ describe('Rider applications and approval', () => {
       expect((await riderOf('6')).emergency_contact_phone).toBeNull();
     });
 
-    it('while PENDING: no code is sent (403), applying again is 409 APPLICATION_PENDING, sign-in is 403', async () => {
+    it('while PENDING: applying again is 409, the Rider app refuses sign-in (403), the customer app lets them shop', async () => {
       const req = await requestOtp('5');
-      expect(req.status).toBe(403);
-      expect(req.body.error).toMatchObject({ code: 'RIDER_PENDING_APPROVAL', message: 'Your application is waiting for approval.' });
-      expect(req.body.data).toBeUndefined();
+      expect(req.status).toBe(200);
 
       const again = await apply(application('5', await plantOtp('5')));
       expect(again.status).toBe(409);
@@ -278,19 +280,39 @@ describe('Rider applications and approval', () => {
       expect(signIn.body.error.code).toBe('RIDER_PENDING_APPROVAL');
       expect(signIn.body.data).toBeUndefined();
       expect((await pool.query(`SELECT 1 FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE phone = $1)`, [`${PREFIX}5`])).rowCount).toBe(0);
+
+      // The same number in the customer app: a normal CUSTOMER session.
+      const shop = await shopVerify('5', await plantOtp('5'));
+      expect(shop.status).toBe(200);
+      expect(shop.body.data.user).toMatchObject({ role: 'CUSTOMER', phone: `${PREFIX}5` });
+      const orders = await request(app).get('/api/v1/orders').set(auth(shop.body.data.access_token));
+      expect(orders.status).toBe(200);
     });
 
-    it('a number used by another account is 409 PHONE_IN_USE (customer, operations)', async () => {
-      for (const n of ['2', '1']) {
-        const otp = (await requestOtp(n)).body.data.dev_otp as string;
-        const res = await apply(application(n, otp));
-        expect(res.status, n).toBe(409);
-        expect(res.body.error).toMatchObject({
-          code: 'PHONE_IN_USE',
-          message: 'This number is already used by another Blynk account.',
-        });
-      }
-      expect((await pool.query(`SELECT role FROM users WHERE phone = $1`, [`${PREFIX}2`])).rows[0].role).toBe('CUSTOMER');
+    it('an existing customer applies with the number they shop with; an Operations number is told to use "Deliver orders myself"', async () => {
+      const ops = await apply(application('1', (await requestOtp('1')).body.data.dev_otp));
+      expect(ops.status).toBe(409);
+      expect(ops.body.error.code).toBe('STAFF_CAN_DELIVER');
+
+      // Customer 2 has never applied: the Rider app says so (Apply to deliver).
+      const before = await verify('2', await plantOtp('2'));
+      expect(before.status).toBe(404);
+      expect(before.body.error.code).toBe('ACCOUNT_NOT_FOUND');
+
+      const res = await apply(application('2', (await requestOtp('2')).body.data.dev_otp, { full_name: 'RA Customer' }));
+      expect(res.status).toBe(201);
+      const r = await riderOf('2');
+      expect(r).toMatchObject({ uid: ids.customer, role: 'CUSTOMER', approval_status: 'PENDING', is_active: false });
+      expect((await verify('2', await plantOtp('2'))).body.error.code).toBe('RIDER_PENDING_APPROVAL');
+
+      // Turned down: told why in the Rider app, still shops in the customer app.
+      expect((await reject(tokens.admin, r.id, { reason: 'Not now' })).status).toBe(200);
+      const refused = await verify('2', await plantOtp('2'));
+      expect(refused.status).toBe(403);
+      expect(refused.body.error).toMatchObject({ code: 'RIDER_APPLICATION_REJECTED', details: { reason: 'Not now' } });
+      const shop = await shopVerify('2', await plantOtp('2'));
+      expect(shop.status).toBe(200);
+      expect(shop.body.data.user).toMatchObject({ id: ids.customer, role: 'CUSTOMER' });
     });
 
     it('is rate-limited per phone', async () => {
@@ -485,6 +507,8 @@ describe('Rider applications and approval', () => {
       const signIn = await verify('5', req.body.data.dev_otp);
       expect(signIn.status).toBe(200);
       expect(signIn.body.data.user).toMatchObject({ role: 'RIDER', phone: `${PREFIX}5`, full_name: 'Applicant 5' });
+      // Approval made the customer account a RIDER; it is the same account.
+      expect((await riderOf('5')).role).toBe('RIDER');
       const token = signIn.body.data.access_token as string;
       expect((await request(app).get('/api/v1/riders/deliveries').set(auth(token))).status).toBe(200);
       expect((await request(app).get('/api/v1/auth/me').set(auth(token))).body.data).toMatchObject({ role: 'RIDER' });
@@ -508,6 +532,43 @@ describe('Rider applications and approval', () => {
       const res = await approve(tokens.admin, '00000000-0000-4000-8000-000000000000');
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe('RIDER_APPLICATION_NOT_FOUND');
+    });
+  });
+
+  // ==========================================================================
+  describe('one number, one account: riders and Operations also shop', () => {
+    it('a rider and an Operations person place, track and cancel their own order; Admin and Inventory cannot order', async () => {
+      const riderUid = (await riderOf('5')).uid;
+      const shoppers = [
+        generateAccessToken({ id: riderUid, phone: `${PREFIX}5`, role: 'RIDER' }),
+        tokens.ops,
+      ];
+      for (const token of shoppers) {
+        const addr = await request(app)
+          .post('/api/v1/me/addresses')
+          .set(auth(token))
+          .send({ label: 'Home', recipient_name: 'Shopper', recipient_phone: '+94771234567', address_line1: 'No. 9, Test Lane', city: 'Dharga Town', latitude: 6.4351, longitude: 80.0243 });
+        expect(addr.status).toBe(201);
+        const placed = await request(app)
+          .post('/api/v1/orders')
+          .set(auth(token))
+          .send({ address_id: addr.body.data.address.id, items: [{ product_id: MILK, quantity: 1 }] });
+        expect(placed.status).toBe(201);
+        const orderId = placed.body.data.order.id as string;
+        createdOrders.push(orderId);
+        const mine = await request(app).get('/api/v1/orders').set(auth(token));
+        expect(mine.body.data.orders.map((o: { id: string }) => o.id)).toEqual([orderId]);
+        // Someone else's order stays out of reach.
+        const cancelOther = await request(app).post(`/api/v1/orders/${createdOrders[0]}/cancel`).set(auth(token)).send({});
+        expect(cancelOther.status).toBe(404);
+        const cancel = await request(app).post(`/api/v1/orders/${orderId}/cancel`).set(auth(token)).send({ reason: 'Test' });
+        expect(cancel.status).toBe(200);
+        expect(cancel.body.data.order.order_status).toBe('CANCELLED');
+      }
+      for (const token of [tokens.admin, tokens.packer]) {
+        const res = await request(app).post('/api/v1/orders').set(auth(token)).send({ address_id: addressId, items: [{ product_id: MILK, quantity: 1 }] });
+        expect(res.status).toBe(403);
+      }
     });
   });
 

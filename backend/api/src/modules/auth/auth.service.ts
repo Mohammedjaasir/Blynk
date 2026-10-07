@@ -113,6 +113,22 @@ async function refuseUnapprovedRider(trx: Transaction<Database>, userId: string)
   throw riderApplicationRejected(rider.rejection_reason);
 }
 
+/**
+ * A CUSTOMER signing in to the Rider app (app: 'rider'): waiting or rejected
+ * applications get their own answer; a customer who never applied gets
+ * ACCOUNT_NOT_FOUND, which the Rider app turns into "Apply to deliver".
+ */
+async function refuseCustomerInRiderApp(trx: Transaction<Database>, userId: string): Promise<void> {
+  const rider = await trx
+    .selectFrom('riders')
+    .select(['approval_status', 'rejection_reason'])
+    .where('user_id', '=', userId)
+    .executeTakeFirst();
+  if (rider?.approval_status === 'PENDING') throw riderPendingApproval();
+  if (rider?.approval_status === 'REJECTED') throw riderApplicationRejected(rider.rejection_reason);
+  throw new AppError("This number hasn't applied to deliver with Blynk yet.", 404, 'ACCOUNT_NOT_FOUND');
+}
+
 export const LOGIN_MAX_ATTEMPTS = 5;
 export const LOGIN_LOCK_MINUTES = 15;
 
@@ -287,7 +303,7 @@ export class AuthService {
   async verifyOtp(
     phone: string,
     submittedOtp: string,
-    meta: { ipAddress?: string; deviceInfo?: string; createAccount?: boolean }
+    meta: { ipAddress?: string; deviceInfo?: string; createAccount?: boolean; app?: 'rider' }
   ): Promise<AuthTokensResult> {
     // Admin / Inventory never sign in with a code (also checked again below,
     // under the row lock, before anything is consumed).
@@ -317,6 +333,10 @@ export class AuthService {
         if (isEmailOnlyRole(existingUser.role)) throw emailSignInRequired();
         // Rider applications (migration 029): only an APPROVED rider signs in.
         if (existingUser.role === 'RIDER') await refuseUnapprovedRider(trx, existingUser.id);
+        // In the Rider app a customer account is only let in once its rider
+        // application is approved (which makes it RIDER); in the customer
+        // app the same account just shops.
+        if (meta.app === 'rider' && existingUser.role === 'CUSTOMER') await refuseCustomerInRiderApp(trx, existingUser.id);
         user = await authRepository.updateLastLogin(trx, existingUser.id);
       } else if (meta.createAccount === false) {
         // Staff apps sign in with create_account:false - an unknown number is

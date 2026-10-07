@@ -268,14 +268,20 @@ describe('Stage 4 Orders, Checkout & COD Settlement Module', () => {
       expect(pagination.limit).toBe(1);
     });
 
-    it('staff tokens cannot place orders (403)', async () => {
-      for (const role of ['ADMIN', 'PACKING_STAFF', 'OPERATIONS', 'RIDER'] as const) {
-        const token = generateAccessToken({ id: adminUser.id, phone: adminUser.phone, role });
-        const res = await request(app)
+    it('Admin and Inventory tokens cannot place orders (403); riders and Operations shop with their own addresses only', async () => {
+      const place = (role: 'ADMIN' | 'PACKING_STAFF' | 'OPERATIONS' | 'RIDER') =>
+        request(app)
           .post('/api/v1/orders')
-          .set('Authorization', `Bearer ${token}`)
+          .set('Authorization', `Bearer ${generateAccessToken({ id: adminUser.id, phone: adminUser.phone, role })}`)
           .send({ address_id: addressWithin4kmId, items: [{ product_id: 'b0000001-0000-0000-0000-000000000001', quantity: 1 }] });
-        expect(res.status, role).toBe(403);
+      for (const role of ['ADMIN', 'PACKING_STAFF'] as const) {
+        expect((await place(role)).status, role).toBe(403);
+      }
+      // One number, one account (owner, 2026-10-07): they pass the role
+      // check, but another customer's address is still not theirs.
+      for (const role of ['OPERATIONS', 'RIDER'] as const) {
+        const res = await place(role);
+        expect(res.status, role).toBe(404);
       }
     });
 

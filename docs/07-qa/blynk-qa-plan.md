@@ -31,6 +31,7 @@ Pre-launch test plan for every Blynk app: the customer app (APK and web at blynk
 | Inventory website | Email + password only. Inventory accounts have no phone number. |
 | Operations app | Email + password, or phone + SMS code (unchanged). |
 | Rider app | Phone + SMS code only. New riders apply in the app; Admin or Ops approves under **Rider requests**. Staff can no longer create Rider accounts. |
+| One number, one account | A customer can apply as a rider with the number they shop with, and keeps shopping after approval. An Ops person can also shop with their number. Admin and Inventory accounts cannot order. SMS codes last 2 minutes; Resend after 30 seconds. |
 
 ## Fixed on 6 Oct (check these specially)
 
@@ -239,6 +240,7 @@ Rider account on the new Rider APK, Android 13 or newer.
 | R-01 | P1 | Right version | 1. Open a delivery. | "Navigate in Google Maps" button and Additional phone (if given) are shown. | | |
 | R-02 | P1 | Sign-in | 1. Phone + SMS code as an approved rider; then an Ops number. | Rider gets in; Ops refused. No email option. | | |
 | R-16 | P1 | Apply to deliver | 1. Welcome → Get started → fill the form (Bicycle needs no plate) → SMS code. | "Application sent"; it appears in Admin and Ops Rider requests. | | |
+| R-18 | P1 | Customer becomes rider, still shops | 1. Shop once with a number in the customer app.<br>2. Apply in the Rider app with the same number; Admin approves.<br>3. Sign in to the Rider app; then place another order in the customer app. | Rider app opens the queue; the customer app still shows the earlier orders and checkout works. | | |
 | R-17 | P1 | Waiting and rejected | 1. Sign in while waiting; then after a rejection. | Waiting screen; then "not approved" with the reason. | | |
 | R-03 | P1 | Queue | 1. With orders assigned: Now, Next, Done today. | Correct order; refreshes every 30 s. | | |
 | R-04 | P1 | Delivery screen | 1. Map, address, note, Call buttons. | Customer pin and route shown; Call opens the dialler. | | |
@@ -256,5 +258,5 @@ Rider account on the new Rider APK, Android 13 or newer.
 
 ## Summary
 
-- Total cases: **130** (87 P1)
+- Total cases: **131** (88 P1)
 - Fill in: Pass ___ · Fail ___ · Blocked ___ · Not run ___

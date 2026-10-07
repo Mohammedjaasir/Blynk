@@ -76,6 +76,7 @@ describe('rider sign-in and session', () => {
       phone: '0779876543',
       otp: '123456',
       create_account: false,
+      app: 'rider',
     });
     expect(api.find('POST', '/auth/staff/login')).toHaveLength(0);
   });
@@ -223,7 +224,7 @@ describe('rider sign-in and session', () => {
     await user.click(await screen.findByRole('button', { name: 'Skip sign-in' }));
     expect(await screen.findByText('No deliveries assigned to you right now.')).toBeInTheDocument();
     await waitFor(() =>
-      expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({ phone: '0779876543', otp: '654321', create_account: false })
+      expect(api.find('POST', '/auth/otp/verify')[0].body).toEqual({ phone: '0779876543', otp: '654321', create_account: false, app: 'rider' })
     );
   });
 });

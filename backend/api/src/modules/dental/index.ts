@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.middleware.js';
-import { requireRoles } from '../../middleware/role.middleware.js';
+import { requireRoles, requireShopper } from '../../middleware/role.middleware.js';
 import { dentalController } from './dental.controller.js';
 import { appointmentController } from './appointment.controller.js';
 import { dentalAdminController } from './dental-admin.controller.js';
@@ -29,7 +29,7 @@ dentalDoctorsRouter.get('/:id/slots', dentalController.getDoctorSlots.bind(denta
 //    (common.md rule 4 - `CUSTOMER` and `ADMIN` only).
 // ----------------------------------------------------------------------------
 export const dentalAppointmentsRouter = Router();
-dentalAppointmentsRouter.use(requireAuth, requireRoles('CUSTOMER'));
+dentalAppointmentsRouter.use(requireAuth, requireShopper());
 // `/holds` is declared before `/:id` so the literal path can never be
 // swallowed by the UUID param route.
 dentalAppointmentsRouter.post('/holds', appointmentController.createHold.bind(appointmentController));

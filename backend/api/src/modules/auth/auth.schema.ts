@@ -38,6 +38,9 @@ export const verifyOtpSchema = z
     // Staff apps send false: a code for a number with no account must not
     // quietly create a customer. Customers omit it (default true).
     create_account: z.boolean().optional().default(true),
+    // The Rider app sends 'rider': a customer whose rider application is
+    // waiting or was rejected is told so instead of being signed in there.
+    app: z.enum(['rider']).optional(),
   })
   .refine((data) => Boolean(data.phone || data.phone_number), {
     message: 'Phone number is required.',
@@ -50,6 +53,7 @@ export const verifyOtpSchema = z
         phone: normalizeSriLankanPhone(raw),
         otp: data.otp,
         create_account: data.create_account,
+        app: data.app,
       };
     } catch (err: unknown) {
       ctx.addIssue({

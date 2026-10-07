@@ -33,6 +33,7 @@ export const MESSAGES: Record<string, string> = {
   APPLICATION_PENDING: "Your application is waiting for approval. We'll send you an SMS when you're approved.",
   ALREADY_APPROVED: "You're already an approved rider. Sign in instead.",
   PHONE_IN_USE: 'This number is already used by another Blynk account. Apply with a different number.',
+  STAFF_CAN_DELIVER: 'This number is an Operations account. Use "Deliver orders myself" in the Ops app instead.',
   PHONE_SIGN_IN_REQUIRED: 'Riders sign in with their phone number and an SMS code.',
 };
 

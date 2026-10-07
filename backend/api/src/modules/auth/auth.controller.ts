@@ -25,6 +25,7 @@ export async function verifyOtpController(req: Request, res: Response, next: Nex
       ipAddress: clientIp,
       deviceInfo,
       createAccount: req.body.create_account !== false,
+      app: req.body.app,
     });
 
     res.status(200).json({
