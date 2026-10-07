@@ -5,8 +5,11 @@
 #   API_BASE_URL     the Blynk API, e.g. https://api.example.com/api/v1 (required)
 #   SHARE_BASE_URL   this site's https address, used in shared product links (optional)
 #   ANDROID_CERT_SHA256  the APK's signing-key SHA-256, if not this PC's debug key (optional)
-#   ANDROID_APK_URL  where "Download for Android" points (default /download/blynk.apk,
-#                    served from the volume mounted at /usr/share/nginx/html/download)
+#   ANDROID_APK_URL  where "Download for Android" points (default /download/blynk.apk)
+#
+# APKs: https://<site>/download/<name>.apk serves a file from a volume mounted
+# at /usr/share/nginx/html/download if there is one, else the copy built in
+# from apps/customer-site/files/ (blynk.apk, rider.apk, ops.apk).
 
 # ---- 1. The shop: the Flutter customer app, built for the web --------------
 FROM ghcr.io/cirruslabs/flutter:stable AS app
@@ -27,6 +30,7 @@ COPY apps/customer-site/nginx.conf /etc/nginx/conf.d/default.conf
 COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-site/app.js \
      apps/customer-site/manifest.webmanifest /usr/share/nginx/html/
 COPY apps/customer-site/assets /usr/share/nginx/html/assets
+COPY apps/customer-site/files /usr/share/nginx/html/files
 # Android App Links. The fingerprint is the key the Blynk APK is signed with;
 # a build signed with another key needs ANDROID_CERT_SHA256 set to its SHA-256.
 COPY apps/customer-site/.well-known /usr/share/nginx/html/.well-known
