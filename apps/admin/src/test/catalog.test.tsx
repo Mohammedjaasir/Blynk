@@ -7,7 +7,7 @@ import { Products } from '../pages/Products';
 import { Categories } from '../pages/Categories';
 import { Settings } from '../pages/Settings';
 import { tokenStore } from '../api/client';
-import { parseDeliveryFee } from '../lib/deliveryFee';
+import { parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
 
 /**
  * Delete product / delete category and the delivery fee setting against a
@@ -268,5 +268,74 @@ describe('delivery fee setting', () => {
     await user.type(input, '200');
     await user.click(within(panel).getByRole('button', { name: 'Save' }));
     expect(await within(panel).findByText('fee_lkr must be at most 1000')).toBeInTheDocument();
+  });
+});
+
+describe('checkout settings (owner, 2026-10-08)', () => {
+  it('validates the free delivery count', () => {
+    expect(parseFreeDeliveryCount('2')).toEqual({ count: 2 });
+    expect(parseFreeDeliveryCount(' 0 ')).toEqual({ count: 0 });
+    expect(parseFreeDeliveryCount('10')).toEqual({ count: 10 });
+    expect(parseFreeDeliveryCount('11')).toHaveProperty('error');
+    expect(parseFreeDeliveryCount('1.5')).toHaveProperty('error');
+    expect(parseFreeDeliveryCount('')).toHaveProperty('error');
+  });
+
+  it('shows both switches and saves them', async () => {
+    const user = userEvent.setup();
+    const api = mockApi((c) => {
+      if (c.method === 'GET' && c.path === '/admin/settings/delivery-fee') return { data: { fee_lkr: 150, updated_at: null } };
+      if (c.method === 'GET' && c.path === '/admin/settings/checkout') {
+        return { data: { coupons_enabled: false, new_customer_free_deliveries: { enabled: true, count: 2 }, updated_at: null } };
+      }
+      if (c.method === 'PATCH' && c.path === '/admin/settings/checkout') return { data: { ...c.body, updated_at: '2026-10-08T05:00:00.000Z' } };
+    });
+    renderPage(<Settings />);
+
+    const panel = await screen.findByRole('region', { name: 'Checkout' });
+    const coupons = await within(panel).findByRole('checkbox', { name: 'Coupon codes at checkout' });
+    const free = within(panel).getByRole('checkbox', { name: 'Free deliveries for new customers' });
+    const count = within(panel).getByLabelText(/Free deliveries per new customer/);
+    expect(coupons).not.toBeChecked();
+    expect(free).toBeChecked();
+    expect(count).toHaveValue('2');
+
+    await user.click(coupons);
+    await user.clear(count);
+    await user.type(count, '3');
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/checkout')[0]?.body).toEqual({
+        coupons_enabled: true,
+        new_customer_free_deliveries: { enabled: true, count: 3 },
+      })
+    );
+
+    await user.click(free);
+    expect(count).toBeDisabled();
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/checkout')[1]?.body).toEqual({
+        coupons_enabled: true,
+        new_customer_free_deliveries: { enabled: false, count: 3 },
+      })
+    );
+  });
+
+  it('refuses a bad count without calling the API', async () => {
+    const user = userEvent.setup();
+    const api = mockApi((c) => {
+      if (c.method === 'GET' && c.path === '/admin/settings/checkout') {
+        return { data: { coupons_enabled: false, new_customer_free_deliveries: { enabled: true, count: 2 }, updated_at: null } };
+      }
+    });
+    renderPage(<Settings />);
+    const panel = await screen.findByRole('region', { name: 'Checkout' });
+    const count = await within(panel).findByLabelText(/Free deliveries per new customer/);
+    await user.clear(count);
+    await user.type(count, '12');
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    expect(await within(panel).findByText('Enter a whole number from 0 to 10.')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(0);
   });
 });

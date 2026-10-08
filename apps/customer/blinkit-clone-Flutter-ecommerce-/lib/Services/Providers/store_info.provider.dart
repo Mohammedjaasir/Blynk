@@ -14,8 +14,11 @@ typedef StoreRequest = Future<dynamic> Function(String url);
 Future<dynamic> _apiGet(String url) =>
     ApiService.requestMethods(methodType: 'GET', url: url);
 
-/// The live store facts from the public `GET /store`. Today only the
-/// delivery fee is read from it; the other facts stay in [StoreInfo].
+/// The live store facts from the public `GET /store`: the delivery fee and,
+/// since the checkout switches (owner, 2026-10-08), whether checkout offers a
+/// coupon field. The other facts stay in [StoreInfo]. This customer's own
+/// free-delivery offer comes from the signed-in `GET /orders/checkout-info`
+/// ([loadCheckoutInfo]).
 ///
 /// Order of truth for [deliveryFee]: the server's answer this session, else
 /// the last good answer cached on the device, else
@@ -49,6 +52,65 @@ class StoreInfoProvider extends ChangeNotifier {
 
   /// The fee the cart estimate and Help quote. Never null, never invalid.
   double get deliveryFee => _deliveryFee;
+
+  bool _couponsEnabled = false;
+
+  /// Whether checkout shows the coupon field (`coupons_enabled` on
+  /// `GET /store`). Hidden until the server says yes: the owner switched
+  /// coupons off (2026-10-08), and a code the server would ignore must not
+  /// look like it worked.
+  bool get couponsEnabled => _couponsEnabled;
+
+  FreeDeliveryOffer? _freeDelivery;
+  Future<void>? _loadingCheckoutInfo;
+
+  /// This customer's new-customer free deliveries, or null when unknown
+  /// (signed out, not loaded yet, or the request failed).
+  FreeDeliveryOffer? get freeDelivery => _freeDelivery;
+
+  /// The fee this customer's next order is estimated at: nothing while a
+  /// free delivery applies, else the store's [deliveryFee]. Advisory only;
+  /// the server decides again when the order is placed.
+  double get checkoutDeliveryFee =>
+      (_freeDelivery?.applies ?? false) ? 0 : _deliveryFee;
+
+  /// Asks `GET /orders/checkout-info` where this customer stands. Pass
+  /// [signedIn] false to forget a previous customer's offer without asking.
+  /// Never throws; a failure leaves the offer unknown (the full fee shows).
+  Future<void> loadCheckoutInfo({required bool signedIn}) {
+    if (!signedIn) {
+      _setFreeDelivery(null);
+      return Future.value();
+    }
+    return _loadingCheckoutInfo ??=
+        _fetchCheckoutInfo().whenComplete(() => _loadingCheckoutInfo = null);
+  }
+
+  Future<void> _fetchCheckoutInfo() async {
+    try {
+      final response = await _request('/orders/checkout-info');
+      final data = response is Map ? response['data'] : null;
+      _setFreeDelivery(
+          FreeDeliveryOffer.tryParse(data is Map ? data['free_delivery'] : null));
+      if (data is Map && data['coupons_enabled'] is bool) {
+        _setCouponsEnabled(data['coupons_enabled'] as bool);
+      }
+    } catch (_) {
+      _setFreeDelivery(null);
+    }
+  }
+
+  void _setFreeDelivery(FreeDeliveryOffer? offer) {
+    if (_disposed || offer == _freeDelivery) return;
+    _freeDelivery = offer;
+    notifyListeners();
+  }
+
+  void _setCouponsEnabled(bool enabled) {
+    if (_disposed || enabled == _couponsEnabled) return;
+    _couponsEnabled = enabled;
+    notifyListeners();
+  }
 
   /// A fee value the app may show: a finite number in 0..[maxDeliveryFee].
   /// A numeric string is accepted too (a Postgres numeric can arrive as one).
@@ -88,6 +150,7 @@ class StoreInfoProvider extends ChangeNotifier {
     try {
       final response = await _request('/store');
       final data = response is Map ? response['data'] : null;
+      if (data is Map) _setCouponsEnabled(data['coupons_enabled'] == true);
       final fee = parseFee(data is Map ? data['delivery_fee_lkr'] : null);
       if (fee == null) return;
       _hasServerFee = true;
@@ -117,3 +180,61 @@ class StoreInfoProvider extends ChangeNotifier {
 double watchDeliveryFee(BuildContext context) =>
     context.watch<StoreInfoProvider?>()?.deliveryFee ??
     StoreInfo.defaultDeliveryFee;
+
+/// The fee this customer's next order is estimated at (free while a
+/// new-customer free delivery applies), rebuilding when it changes. Falls back
+/// to [StoreInfo.defaultDeliveryFee] where no [StoreInfoProvider] is in the
+/// tree.
+double watchCheckoutDeliveryFee(BuildContext context) =>
+    context.watch<StoreInfoProvider?>()?.checkoutDeliveryFee ??
+    StoreInfo.defaultDeliveryFee;
+
+/// Whether checkout shows the coupon field; false where no
+/// [StoreInfoProvider] is in the tree (unknown means hidden).
+bool watchCouponsEnabled(BuildContext context) =>
+    context.watch<StoreInfoProvider?>()?.couponsEnabled ?? false;
+
+/// One customer's new-customer free deliveries (owner, 2026-10-08), from
+/// `free_delivery` on `GET /orders/checkout-info`.
+@immutable
+class FreeDeliveryOffer {
+  const FreeDeliveryOffer({
+    required this.count,
+    required this.remaining,
+    required this.applies,
+  });
+
+  /// Free deliveries every new customer gets.
+  final int count;
+
+  /// How many this customer still has, the next order included.
+  final int remaining;
+
+  /// Whether the next order goes out with no delivery fee.
+  final bool applies;
+
+  /// Null for anything that is not a well-formed offer.
+  static FreeDeliveryOffer? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final count = raw['count'];
+    final remaining = raw['remaining'];
+    final applies = raw['applies'];
+    if (count is! int || remaining is! int || applies is! bool) return null;
+    if (count < 0 || remaining < 0) return null;
+    return FreeDeliveryOffer(
+      count: count,
+      remaining: remaining,
+      applies: applies && remaining > 0,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is FreeDeliveryOffer &&
+      other.count == count &&
+      other.remaining == remaining &&
+      other.applies == applies;
+
+  @override
+  int get hashCode => Object.hash(count, remaining, applies);
+}

@@ -13,6 +13,7 @@ import type {
   CategoryGroupsOverview,
   CustomerProduct,
   DeliveryFeeSetting,
+  CheckoutSettings,
   ImportResponse,
   ImportRow,
   ProductDeleteResult,
@@ -230,6 +231,11 @@ export const settings = {
       method: 'PATCH',
       body: { fee_lkr: feeLkr },
     }),
+
+  getCheckout: () => apiRequest<CheckoutSettings>('/admin/settings/checkout'),
+
+  setCheckout: (body: Partial<Omit<CheckoutSettings, 'updated_at'>>) =>
+    apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
 };
 
 // ------------------------------------------------------------ promotions

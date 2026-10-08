@@ -288,7 +288,7 @@ class _CheckoutBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deliveryFee = watchDeliveryFee(context);
+    final deliveryFee = watchCheckoutDeliveryFee(context);
     final total = context.select<CartProvider, double>(
       (cart) => cartEstimateTotal(cart, deliveryFee),
     );

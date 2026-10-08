@@ -21,6 +21,7 @@ import type {
   CustomerProduct,
   DeliveryDetail,
   DeliveryFeeSetting,
+  CheckoutSettings,
   DeliverySummary,
   RiderDay,
   RiderProfile,
@@ -931,6 +932,12 @@ export const settings = {
     get: () => apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee'),
     update: (fee_lkr: number) =>
       apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee', { method: 'PATCH', body: { fee_lkr } }),
+  },
+  /** Coupon codes on/off and free deliveries for new customers (owner, 2026-10-08). */
+  checkout: {
+    get: () => apiRequest<CheckoutSettings>('/admin/settings/checkout'),
+    update: (body: Partial<Omit<CheckoutSettings, 'updated_at'>>) =>
+      apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
   },
 };
 

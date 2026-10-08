@@ -5,6 +5,7 @@ import { ACTIVE_DELIVERY_STATUSES, INITIAL_ORDER_STATUS, isUncostedSubstitution 
 import { recordOrderPlaced } from './lifecycle/status-writer.js';
 import { DELIVERY_PUBLIC_SELECT } from './delivery.columns.js';
 import { evaluateCoupon, recordRedemption } from '../coupons/coupon.service.js';
+import { freeDeliveryStatus, type FreeDeliveryPolicy } from './free-delivery.js';
 
 export type DBConnection = Transaction<Database> | typeof db;
 
@@ -14,7 +15,13 @@ export interface CreateOrderData {
   customer_id: string;
   dark_store_id: string;
   subtotal_amount: number;
+  /** The standard fee; 0 is charged instead when a free delivery applies. */
   delivery_fee: number;
+  /**
+   * New-customer free deliveries (owner, 2026-10-08), checked under the
+   * customer's row lock inside the order transaction. Absent = no offer.
+   */
+  free_delivery?: FreeDeliveryPolicy | null;
   /** Before any coupon; the discount and final total are settled in the transaction. */
   total_amount: number;
   /** Migration 018: re-checked under the coupon row lock inside the order transaction. */
@@ -134,19 +141,26 @@ export class OrderRepository {
    */
   async createOrderAtomic(data: CreateOrderData) {
     return await db.transaction().execute(async (trx) => {
-      // 0. Coupon (migration 018): locked and re-validated here, so limits
-      //    hold when checkouts race; the preview the app showed is advisory.
+      // 0a. New-customer free delivery: counted under the customer's row lock,
+      //     so two racing checkouts cannot both take the last one.
+      const free = data.free_delivery
+        ? await freeDeliveryStatus(trx, data.customer_id, data.free_delivery, true)
+        : null;
+      const deliveryFee = free?.applies ? 0 : data.delivery_fee;
+
+      // 0b. Coupon (migration 018): locked and re-validated here, so limits
+      //     hold when checkouts race; the preview the app showed is advisory.
       const applied = data.coupon_code
         ? await evaluateCoupon(trx, {
             code: data.coupon_code,
             customerId: data.customer_id,
             subtotal: data.subtotal_amount,
-            deliveryFee: data.delivery_fee,
+            deliveryFee,
             lock: true,
           })
         : null;
       const discountAmount = applied?.discount_amount ?? 0;
-      const totalAmount = Number((data.subtotal_amount + data.delivery_fee - discountAmount).toFixed(2));
+      const totalAmount = Number((data.subtotal_amount + deliveryFee - discountAmount).toFixed(2));
 
       // 1. Insert orders record
       const [order] = await trx
@@ -160,7 +174,7 @@ export class OrderRepository {
           payment_method: 'COD',
           payment_status: 'PENDING',
           subtotal_amount: data.subtotal_amount,
-          delivery_fee: data.delivery_fee,
+          delivery_fee: deliveryFee,
           discount_amount: discountAmount,
           coupon_code: applied?.code ?? null,
           total_amount: totalAmount,

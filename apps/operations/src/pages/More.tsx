@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { riderApplications, settings } from '../api/resources';
-import type { DeliveryFeeSetting } from '../api/types';
+import type { CheckoutSettings, DeliveryFeeSetting } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { Spinner } from '../components/ui';
-import { catalogErrorMessage, parseDeliveryFee } from '../lib/catalog';
+import { catalogErrorMessage, parseDeliveryFee, parseFreeDeliveryCount } from '../lib/catalog';
 import { formatDateTime } from '../lib/inventory';
 
 /**
@@ -16,7 +16,9 @@ import { formatDateTime } from '../lib/inventory';
  * a fabricated action, since the screen it leads to is itself read-only (no
  * rider create/activate/deactivate/edit capability exists in the backend).
  * The "Delivery fee" setting (store-wide, `GET|PATCH
- * /admin/settings/delivery-fee`) lives here as the app's settings area.
+ * /admin/settings/delivery-fee`) lives here as the app's settings area, with
+ * the checkout switches (`GET|PATCH /admin/settings/checkout`; owner,
+ * 2026-10-08): coupon codes on/off and free deliveries for new customers.
  */
 export function More() {
   const { user, signOut } = useAuth();
@@ -92,6 +94,7 @@ export function More() {
       </ul>
 
       <DeliveryFeeCard />
+      <CheckoutSettingsCard />
 
       <section className="card">
         <button type="button" className="button button--ghost" onClick={() => void handleSignOut()}>
@@ -179,6 +182,105 @@ function DeliveryFeeCard() {
       {error ? <p className="field__error" role="alert">{error}</p> : null}
       {notice ? <p className="quiet quiet--ok" role="status">{notice}</p> : null}
       <p className="page__note">Orders already placed keep the fee they were placed with.</p>
+    </section>
+  );
+}
+
+/** Coupon codes at checkout, and free deliveries for new customers. New
+ * orders follow the saved switches; placed orders keep their fee. */
+function CheckoutSettingsCard() {
+  const [current, setCurrent] = useState<CheckoutSettings | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [coupons, setCoupons] = useState(false);
+  const [freeOn, setFreeOn] = useState(true);
+  const [count, setCount] = useState('2');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function show(s: CheckoutSettings) {
+    setCurrent(s);
+    setCoupons(s.coupons_enabled);
+    setFreeOn(s.new_customer_free_deliveries.enabled);
+    setCount(String(s.new_customer_free_deliveries.count));
+  }
+
+  useEffect(() => {
+    settings.checkout
+      .get()
+      .then(show)
+      .catch((err) => setLoadError(catalogErrorMessage(err)));
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setNotice(null);
+    const parsed = parseFreeDeliveryCount(count);
+    if ('error' in parsed) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      show(
+        await settings.checkout.update({
+          coupons_enabled: coupons,
+          new_customer_free_deliveries: { enabled: freeOn, count: parsed.value },
+        })
+      );
+      setNotice('Checkout settings saved.');
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card" aria-labelledby="checkout-settings-title">
+      <h2 className="section-label" id="checkout-settings-title">
+        Checkout
+      </h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading checkout settings" />
+      ) : (
+        <form className="form" onSubmit={save} noValidate>
+          <label className="toggle">
+            <input type="checkbox" checked={coupons} onChange={(e) => setCoupons(e.target.checked)} />
+            <span>
+              <strong>Coupon codes at checkout</strong>
+              <em>When off, the app hides the coupon field.</em>
+            </span>
+          </label>
+          <label className="toggle">
+            <input type="checkbox" checked={freeOn} onChange={(e) => setFreeOn(e.target.checked)} />
+            <span>
+              <strong>Free deliveries for new customers</strong>
+              <em>Cancelled orders do not use one up.</em>
+            </span>
+          </label>
+          <label className="field">
+            <span className="field__label">Free deliveries per new customer</span>
+            <input
+              className="input"
+              inputMode="numeric"
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
+              aria-invalid={error ? true : undefined}
+              disabled={!freeOn}
+            />
+          </label>
+          <button type="submit" className="button" disabled={saving}>
+            {saving ? <Spinner label="Saving" /> : 'Save'}
+          </button>
+        </form>
+      )}
+      {error ? <p className="field__error" role="alert">{error}</p> : null}
+      {notice ? <p className="quiet quiet--ok" role="status">{notice}</p> : null}
+      {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}
     </section>
   );
 }

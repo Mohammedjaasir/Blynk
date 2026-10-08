@@ -14,6 +14,7 @@ import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
+import 'package:ecom/Services/Providers/store_info.provider.dart';
 import 'package:ecom/UI/Widgets/Organisms/order_bill_card.dart';
 import 'package:ecom/app_theme.dart';
 
@@ -146,9 +147,21 @@ void main() {
       cart = CartProvider()..add(_product(_realMilk));
     });
 
-    Future<void> pumpCheckout(WidgetTester tester, dynamic Function(_Call) handler) async {
+    Future<void> pumpCheckout(WidgetTester tester, dynamic Function(_Call) handler,
+        {bool couponsEnabled = true}) async {
       api = _FakeApi(handler);
       orders = OrderProvider(request: api.call);
+      // Coupons are switched on/off in Admin / Operations (owner, 2026-10-08)
+      // and reach the app as coupons_enabled on GET /store.
+      final store = StoreInfoProvider(
+        request: (_) async => {
+          'success': true,
+          'data': {'delivery_fee_lkr': 100, 'coupons_enabled': couponsEnabled},
+        },
+        readCache: () async => null,
+        writeCache: (_) async {},
+      );
+      await tester.runAsync(store.load);
       tester.view.physicalSize = const Size(560, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -160,6 +173,7 @@ void main() {
             ChangeNotifierProvider(create: (_) => AddressProvider()),
             ChangeNotifierProvider.value(value: orders),
             ChangeNotifierProvider(create: (_) => AuthProvider()),
+            ChangeNotifierProvider.value(value: store),
           ],
           child: MaterialApp(theme: AppTheme.appTHeme, home: const CheckoutScreen()),
         ),
@@ -198,6 +212,15 @@ void main() {
       expect(find.text('Discount (WELCOME50)'), findsOneWidget);
       expect(find.text('−LKR 50'), findsOneWidget);
       expect(find.text('LKR 590'), findsOneWidget);
+    });
+
+    testWidgets('coupons switched off: no coupon field, nothing previewed', (tester) async {
+      await pumpCheckout(tester, (_) => _preview(), couponsEnabled: false);
+      await settle(tester);
+      expect(find.text('Have a coupon code?'), findsNothing);
+      expect(find.byKey(const Key('checkout-coupon')), findsNothing);
+      expect(find.text('LKR 640'), findsOneWidget);
+      expect(api.calls, isEmpty);
     });
 
     testWidgets('Remove takes the code off', (tester) async {

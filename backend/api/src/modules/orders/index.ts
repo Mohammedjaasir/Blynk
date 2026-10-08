@@ -12,6 +12,8 @@ export const ordersRouter = Router();
 ordersRouter.post('/', requireAuth, requireShopper(), orderController.createOrder.bind(orderController));
 // Coupon preview at checkout (migration 018); order creation re-validates.
 ordersRouter.post('/validate-coupon', requireAuth, requireShopper(), orderController.validateCoupon.bind(orderController));
+// This customer's delivery fee and coupon switch (owner, 2026-10-08); before /:id.
+ordersRouter.get('/checkout-info', requireAuth, requireShopper(), orderController.getCheckoutInfo.bind(orderController));
 ordersRouter.get('/', requireAuth, orderController.getCustomerOrders.bind(orderController));
 ordersRouter.get('/:id', requireAuth, orderController.getCustomerOrderById.bind(orderController));
 ordersRouter.post('/:id/cancel', requireAuth, orderController.cancelOrder.bind(orderController));

@@ -47,6 +47,19 @@ export function parseDeliveryFee(input: string): { value: number } | { error: st
   return { value };
 }
 
+/**
+ * Free deliveries per new customer (owner, 2026-10-08): a whole number
+ * 0..MAX_FREE_DELIVERIES, as PATCH /admin/settings/checkout accepts.
+ */
+export const MAX_FREE_DELIVERIES = 10;
+export function parseFreeDeliveryCount(input: string): { value: number } | { error: string } {
+  const s = input.trim();
+  if (!/^\d+$/.test(s) || Number(s) > MAX_FREE_DELIVERIES) {
+    return { error: `Enter a whole number from 0 to ${MAX_FREE_DELIVERIES}.` };
+  }
+  return { value: Number(s) };
+}
+
 /** The API's display_order range for promotions (promotion.schema.ts). */
 export const MAX_PROMOTION_ORDER = 1000;
 

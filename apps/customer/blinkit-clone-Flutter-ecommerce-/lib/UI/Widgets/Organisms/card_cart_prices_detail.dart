@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../Services/Providers/auth.provider.dart';
 import '../../../Services/Providers/cart.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
 import '../../../Services/Providers/store_info.provider.dart';
@@ -17,7 +18,8 @@ import '../../../design/tokens.dart';
 /// at two call sites (this card and the cart's pinned checkout bar), which is
 /// how a summary and a bar end up disagreeing. Nothing else here is derived:
 /// the subtotal is the provider's, the fee is the live one from `GET /store`
-/// ([watchDeliveryFee], mirroring `system_configurations.delivery_fee`), and
+/// ([watchCheckoutDeliveryFee]: `system_configurations.delivery_fee`, or 0
+/// while this customer has a new-customer free delivery), and
 /// once an order exists the backend's own `totalAmount` is authoritative — see
 /// `OrderProvider.placeOrder`.
 double cartEstimateTotal(CartProvider cart, double deliveryFee, {double discount = 0}) {
@@ -33,7 +35,12 @@ double cartEstimateTotal(CartProvider cart, double deliveryFee, {double discount
 /// here. The one discount row is a coupon the server has previewed for this
 /// exact cart (backend migration 018, [OrderProvider.couponFor]), shown on
 /// checkout only ([showCoupon]); the server re-checks it at placeOrder.
-class CartPriceDetailWidget extends StatelessWidget {
+///
+/// New-customer free deliveries (owner, 2026-10-08): on mount it asks where
+/// this customer stands ([StoreInfoProvider.loadCheckoutInfo]); while a free
+/// delivery applies the Delivery fee row reads FREE with a short welcome
+/// note. The order's own `deliveryFee` stays authoritative.
+class CartPriceDetailWidget extends StatefulWidget {
   const CartPriceDetailWidget({super.key, this.footer, this.showCoupon = false});
 
   /// Optional content under the total (the desktop checkout CTA).
@@ -43,12 +50,32 @@ class CartPriceDetailWidget extends StatelessWidget {
   final bool showCoupon;
 
   @override
+  State<CartPriceDetailWidget> createState() => _CartPriceDetailWidgetState();
+}
+
+class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final store = context.read<StoreInfoProvider?>();
+      final auth = context.read<AuthProvider?>();
+      if (store == null || auth == null) return;
+      store.loadCheckoutInfo(signedIn: auth.isAuthenticated);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final footer = widget.footer;
     final cart = context.watch<CartProvider>();
     final subtotal = cart.subtotal;
     final itemCount = cart.itemCount;
-    final deliveryFee = watchDeliveryFee(context);
-    final coupon = showCoupon ? context.watch<OrderProvider>().couponFor(cart) : null;
+    final deliveryFee = watchCheckoutDeliveryFee(context);
+    final offer = context.watch<StoreInfoProvider?>()?.freeDelivery;
+    final freeDelivery = offer != null && offer.applies;
+    final coupon = widget.showCoupon ? context.watch<OrderProvider>().couponFor(cart) : null;
     final discount = coupon?.discountAmount ?? 0;
     final total = cartEstimateTotal(cart, deliveryFee, discount: discount);
 
@@ -68,10 +95,32 @@ class CartPriceDetailWidget extends StatelessWidget {
             amount: subtotal,
           ),
           const SizedBox(height: BlynkSpace.s8),
-          _SummaryRow(
-            label: 'Delivery fee',
-            amount: deliveryFee,
-          ),
+          if (freeDelivery) ...[
+            Row(
+              key: const Key('summary-free-delivery'),
+              children: [
+                Expanded(
+                  child: Text(
+                    'Delivery fee',
+                    style: BlynkText.body.copyWith(color: BlynkColors.ink2),
+                  ),
+                ),
+                Text(
+                  'FREE',
+                  style: BlynkType.price.copyWith(color: BlynkColors.positiveInk),
+                ),
+              ],
+            ),
+            const SizedBox(height: BlynkSpace.s4),
+            Text(
+              freeDeliveryNote(offer),
+              style: BlynkText.caption.copyWith(color: BlynkColors.positiveInk),
+            ),
+          ] else
+            _SummaryRow(
+              label: 'Delivery fee',
+              amount: deliveryFee,
+            ),
           if (coupon != null && discount > 0) ...[
             const SizedBox(height: BlynkSpace.s8),
             Row(
@@ -115,12 +164,20 @@ class CartPriceDetailWidget extends StatelessWidget {
           ),
           if (footer != null) ...[
             const SizedBox(height: BlynkSpace.s16),
-            footer!,
+            footer,
           ],
         ],
       ),
     );
   }
+}
+
+/// The line under a FREE delivery fee, e.g. "Free delivery — welcome to
+/// Blynk. 1 of 2 free deliveries left." (the next order included).
+String freeDeliveryNote(FreeDeliveryOffer offer) {
+  final plural = offer.count == 1 ? 'delivery' : 'deliveries';
+  return 'Free delivery — welcome to Blynk. '
+      '${offer.remaining} of ${offer.count} free $plural left.';
 }
 
 class _SummaryRow extends StatelessWidget {

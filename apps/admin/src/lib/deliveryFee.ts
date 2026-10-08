@@ -12,3 +12,15 @@ export function parseDeliveryFee(raw: string): { fee: number } | { error: string
   if (fee < 0 || fee > 1000) return { error: 'The fee must be between LKR 0 and LKR 1,000.' };
   return { fee };
 }
+
+/**
+ * Free deliveries per new customer (owner, 2026-10-08): a whole number
+ * 0..10, as PATCH /admin/settings/checkout accepts.
+ */
+export function parseFreeDeliveryCount(raw: string): { count: number } | { error: string } {
+  const text = raw.trim();
+  if (!/^\d+$/.test(text)) return { error: 'Enter a whole number from 0 to 10.' };
+  const count = Number(text);
+  if (count > 10) return { error: 'Enter a whole number from 0 to 10.' };
+  return { count };
+}

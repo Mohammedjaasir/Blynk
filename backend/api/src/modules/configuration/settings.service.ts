@@ -27,6 +27,72 @@ export const updateDeliveryFeeSchema = z.object({
 });
 export type UpdateDeliveryFeeInput = z.infer<typeof updateDeliveryFeeSchema>;
 
+/**
+ * Checkout switches (owner, 2026-10-08), each editable by Admin and
+ * Operations. No migration: a missing row means the default below.
+ *  - coupons_enabled {"enabled": bool}: "Coupon code is not needed", so off
+ *    until someone turns it on.
+ *  - new_customer_free_deliveries {"enabled": bool, "count": int}: a new
+ *    customer's first `count` orders go out with no delivery fee.
+ */
+export const COUPONS_ENABLED_KEY = 'coupons_enabled';
+export const FREE_DELIVERIES_KEY = 'new_customer_free_deliveries';
+export const DEFAULT_COUPONS_ENABLED = false;
+export const DEFAULT_FREE_DELIVERIES = { enabled: true, count: 2 } as const;
+export const MAX_FREE_DELIVERIES = 10;
+
+export interface CheckoutSettings {
+  coupons_enabled: boolean;
+  new_customer_free_deliveries: { enabled: boolean; count: number };
+}
+
+export const updateCheckoutSettingsSchema = z
+  .object({
+    coupons_enabled: z.boolean({ invalid_type_error: 'coupons_enabled must be true or false' }).optional(),
+    new_customer_free_deliveries: z
+      .object({
+        enabled: z.boolean({ required_error: 'enabled is required', invalid_type_error: 'enabled must be true or false' }),
+        count: z
+          .number({ required_error: 'count is required', invalid_type_error: 'count must be a number' })
+          .int('count must be a whole number')
+          .min(0, 'count cannot be negative')
+          .max(MAX_FREE_DELIVERIES, `count can be at most ${MAX_FREE_DELIVERIES}`),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .refine((v) => v.coupons_enabled !== undefined || v.new_customer_free_deliveries !== undefined, 'Nothing to change');
+export type UpdateCheckoutSettingsInput = z.infer<typeof updateCheckoutSettingsSchema>;
+
+function couponsEnabledFrom(value: unknown): boolean | null {
+  if (value && typeof value === 'object') {
+    const enabled = (value as { enabled?: unknown }).enabled;
+    if (typeof enabled === 'boolean') return enabled;
+  }
+  return null;
+}
+
+function freeDeliveriesFrom(value: unknown): { enabled: boolean; count: number } | null {
+  if (value && typeof value === 'object') {
+    const { enabled, count } = value as { enabled?: unknown; count?: unknown };
+    if (typeof enabled === 'boolean' && typeof count === 'number' && Number.isInteger(count) && count >= 0) {
+      return { enabled, count: Math.min(count, MAX_FREE_DELIVERIES) };
+    }
+  }
+  return null;
+}
+
+/**
+ * The checkout switches as order placement applies them. Tests replace
+ * `read` (tests/setup/checkout-settings.ts) so suites written before the
+ * switches keep their coupons and full delivery fee; a test about the
+ * switches restores settingsService.getCheckoutSettings.
+ */
+export const checkoutSettings = {
+  read: (): Promise<CheckoutSettings> => settingsService.getCheckoutSettings(),
+};
+
 const hhmm = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
 
 /** The stored fee, or null when the row is missing or malformed. */
@@ -80,15 +146,79 @@ export class SettingsService {
     });
   }
 
+  async getCheckoutSettings(): Promise<CheckoutSettings & { updated_at: Date | null }> {
+    const rows = await db
+      .selectFrom('system_configurations')
+      .select(['key', 'value', 'updated_at'])
+      .where('key', 'in', [COUPONS_ENABLED_KEY, FREE_DELIVERIES_KEY])
+      .execute();
+    const coupons = rows.find((r) => r.key === COUPONS_ENABLED_KEY);
+    const free = rows.find((r) => r.key === FREE_DELIVERIES_KEY);
+    const stamps = rows.map((r) => r.updated_at).filter((d): d is Date => d instanceof Date);
+    return {
+      coupons_enabled: (coupons ? couponsEnabledFrom(coupons.value) : null) ?? DEFAULT_COUPONS_ENABLED,
+      new_customer_free_deliveries: (free ? freeDeliveriesFrom(free.value) : null) ?? { ...DEFAULT_FREE_DELIVERIES },
+      updated_at: stamps.length ? new Date(Math.max(...stamps.map((d) => d.getTime()))) : null,
+    };
+  }
+
+  /** Audited (CHECKOUT_SETTINGS_UPDATED); only the switches sent are written. */
+  async setCheckoutSettings(input: UpdateCheckoutSettingsInput, actor: AuditActor) {
+    await db.transaction().execute(async (trx) => {
+      const before = await trx
+        .selectFrom('system_configurations')
+        .select(['key', 'value'])
+        .where('key', 'in', [COUPONS_ENABLED_KEY, FREE_DELIVERIES_KEY])
+        .forUpdate()
+        .execute();
+      const writes: Array<{ key: string; value: object; description: string }> = [];
+      if (input.coupons_enabled !== undefined) {
+        writes.push({ key: COUPONS_ENABLED_KEY, value: { enabled: input.coupons_enabled }, description: 'Whether customers can enter a coupon code at checkout' });
+      }
+      if (input.new_customer_free_deliveries !== undefined) {
+        writes.push({
+          key: FREE_DELIVERIES_KEY,
+          value: input.new_customer_free_deliveries,
+          description: "How many of a new customer's first orders have no delivery fee",
+        });
+      }
+      for (const w of writes) {
+        const value = JSON.stringify(w.value);
+        await trx
+          .insertInto('system_configurations')
+          .values({ key: w.key, value, description: w.description })
+          .onConflict((oc) => oc.column('key').doUpdateSet({ value, updated_at: new Date() }))
+          .execute();
+      }
+      const oldValues: Record<string, unknown> = {};
+      const newValues: Record<string, unknown> = {};
+      for (const w of writes) {
+        oldValues[w.key] = before.find((r) => r.key === w.key)?.value ?? null;
+        newValues[w.key] = w.value;
+      }
+      await writeAudit(trx, actor, {
+        action: 'CHECKOUT_SETTINGS_UPDATED',
+        entityType: 'SYSTEM_CONFIGURATION',
+        entityId: SETTINGS_ENTITY_ID,
+        oldValues: { key: 'checkout', ...oldValues },
+        newValues: { key: 'checkout', ...newValues },
+      });
+      logger.info({ oldValues, newValues, actorId: actor.actorId }, 'Checkout settings changed');
+    });
+    return await this.getCheckoutSettings();
+  }
+
   /**
    * What the customer app and landing site may know about the store. Only
    * values with a real source: the fee (system_configurations), the active
    * dark store's name and radius (dark_stores), and the delivery window the
-   * order scheduler uses (utils/time.ts DEFAULT_OPERATING_HOURS).
+   * order scheduler uses (utils/time.ts DEFAULT_OPERATING_HOURS), plus the
+   * checkout switches (show a coupon field; the new-customer free deliveries).
    */
   async getPublicStore() {
-    const [fee, store] = await Promise.all([
+    const [fee, checkout, store] = await Promise.all([
       this.getDeliveryFee(),
+      this.getCheckoutSettings(),
       db
         .selectFrom('dark_stores')
         .select(['name', 'radius_km'])
@@ -106,6 +236,8 @@ export class SettingsService {
         timezone: 'Asia/Colombo',
       },
       radius_km: store ? Number(store.radius_km) : null,
+      coupons_enabled: checkout.coupons_enabled,
+      new_customer_free_deliveries: checkout.new_customer_free_deliveries,
     };
   }
 }

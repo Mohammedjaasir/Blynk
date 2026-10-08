@@ -14,7 +14,8 @@ export default defineConfig(({ mode }) => {
       environment: 'node',
       globalSetup: ['./tests/setup/db-hygiene.ts'],
       // Pins the checkout clock inside ordering hours (8 AM - 9 PM Colombo).
-      setupFiles: ['./tests/setup/ordering-clock.ts'],
+      // Pins the checkout switches to coupons on, no free deliveries.
+      setupFiles: ['./tests/setup/ordering-clock.ts', './tests/setup/checkout-settings.ts'],
     },
   };
 });

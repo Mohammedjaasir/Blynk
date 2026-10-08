@@ -155,6 +155,13 @@ export interface DeliveryFeeSetting {
   updated_at: string | null;
 }
 
+/** GET/PATCH /admin/settings/checkout - checkout switches (owner, 2026-10-08). */
+export interface CheckoutSettings {
+  coupons_enabled: boolean;
+  new_customer_free_deliveries: { enabled: boolean; count: number };
+  updated_at: string | null;
+}
+
 /** One spreadsheet row sent to POST /admin/products/import. */
 export interface ImportRow {
   row?: number;

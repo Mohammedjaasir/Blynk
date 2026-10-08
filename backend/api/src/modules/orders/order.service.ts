@@ -14,6 +14,8 @@ import { toPublicDelivery } from './delivery.columns.js';
 import { db } from '../../database/connection.js';
 import { evaluateCoupon } from '../coupons/coupon.service.js';
 import type { ValidateCouponInput } from '../coupons/coupon.schema.js';
+import { checkoutSettings } from '../configuration/settings.service.js';
+import { freeDeliveryStatus } from './free-delivery.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -196,6 +198,12 @@ export class OrderService {
     // 5. Products & Authoritative Pricing
     const { items: orderItemsData, subtotal: subtotalAmount } = await priceCart(input.items);
     const deliveryFee = await orderRepository.getDeliveryFee();
+    // Checkout switches (owner, 2026-10-08). With coupons off a code is
+    // ignored, not refused, so an older app that still sends one can order.
+    const settings = await checkoutSettings.read();
+    if (input.coupon_code && !settings.coupons_enabled) {
+      logger.info({ customerId }, 'Coupon code ignored: coupons are switched off');
+    }
     const totalAmount = Number((subtotalAmount + deliveryFee).toFixed(2));
     const orderNumber = generateOrderNumber();
 
@@ -206,8 +214,9 @@ export class OrderService {
       dark_store_id: store.id,
       subtotal_amount: subtotalAmount,
       delivery_fee: deliveryFee,
+      free_delivery: settings.new_customer_free_deliveries,
       total_amount: totalAmount,
-      coupon_code: input.coupon_code ?? null,
+      coupon_code: settings.coupons_enabled ? input.coupon_code ?? null : null,
       scheduled_for: scheduledFor,
       delivery_recipient_name: address.recipient_name,
       delivery_recipient_phone: address.recipient_phone,
@@ -234,8 +243,13 @@ export class OrderService {
    * without using it. Order creation re-checks under the coupon lock.
    */
   async previewCoupon(customerId: string, input: ValidateCouponInput) {
+    const settings = await checkoutSettings.read();
+    if (!settings.coupons_enabled) {
+      throw new AppError('Coupon codes are not available right now.', 422, 'COUPONS_DISABLED');
+    }
     const subtotal = input.items ? (await priceCart(input.items)).subtotal : Number(input.subtotal!.toFixed(2));
-    const deliveryFee = await orderRepository.getDeliveryFee();
+    const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
+    const deliveryFee = free.applies ? 0 : await orderRepository.getDeliveryFee();
     const applied = await evaluateCoupon(db, { code: input.code, customerId, subtotal, deliveryFee });
     return {
       code: applied.code,
@@ -245,6 +259,22 @@ export class OrderService {
       delivery_fee: deliveryFee,
       discount_amount: applied.discount_amount,
       total: Number((subtotal + deliveryFee - applied.discount_amount).toFixed(2)),
+    };
+  }
+
+  /**
+   * GET /orders/checkout-info: what this customer's next order costs to
+   * deliver and whether to show a coupon field. Advisory - order placement
+   * decides again under the customer's row lock.
+   */
+  async getCheckoutInfo(customerId: string) {
+    const [settings, standardFee] = await Promise.all([checkoutSettings.read(), orderRepository.getDeliveryFee()]);
+    const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
+    return {
+      delivery_fee_lkr: free.applies ? 0 : standardFee,
+      standard_delivery_fee_lkr: standardFee,
+      coupons_enabled: settings.coupons_enabled,
+      free_delivery: free,
     };
   }
 

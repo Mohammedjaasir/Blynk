@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../Services/Providers/cart.provider.dart';
+import '../Services/Providers/store_info.provider.dart';
 import '../UI/Widgets/Atoms/card_cancellation_policy.dart';
 import '../UI/Widgets/Atoms/image_well.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
@@ -34,6 +35,9 @@ class CheckoutScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEmpty = context.select<CartProvider, bool>((c) => c.isEmpty);
+    // "Coupon code is not needed" (owner, 2026-10-08): the field shows only
+    // while Admin / Operations have coupons switched on (GET /store).
+    final couponsEnabled = watchCouponsEnabled(context);
 
     return Scaffold(
       backgroundColor: BlynkColors.well,
@@ -74,9 +78,11 @@ class CheckoutScreen extends StatelessWidget {
                     ),
                     const _CheckoutItems(),
                     const SizedBox(height: BlynkSpace.s24),
-                    const CheckoutCouponField(),
-                    const SizedBox(height: BlynkSpace.s16),
-                    const CartPriceDetailWidget(showCoupon: true),
+                    if (couponsEnabled) ...[
+                      const CheckoutCouponField(),
+                      const SizedBox(height: BlynkSpace.s16),
+                    ],
+                    CartPriceDetailWidget(showCoupon: couponsEnabled),
                     const CancellationPolicyCard(),
                   ],
                 ),

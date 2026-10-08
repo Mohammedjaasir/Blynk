@@ -211,3 +211,60 @@ describe('Delivery fee setting', () => {
     expect(await screen.findByText('fee_lkr must be at most 1000')).toBeInTheDocument();
   });
 });
+
+describe('Checkout settings (owner, 2026-10-08)', () => {
+  const CHECKOUT = { coupons_enabled: false, new_customer_free_deliveries: { enabled: true, count: 2 }, updated_at: null };
+
+  it('shows both switches and saves them', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
+      'GET /admin/settings/delivery-fee': () => ok({ fee_lkr: 250, updated_at: null }),
+      'GET /admin/settings/checkout': () => ok(CHECKOUT),
+      'PATCH /admin/settings/checkout': (call) => ok({ ...call.body, updated_at: '2026-10-08T10:00:00Z' }),
+    });
+    const card = (await screen.findByRole('heading', { name: 'Checkout' })).closest('section') as HTMLElement;
+    const coupons = await within(card).findByRole('checkbox', { name: /Coupon codes at checkout/ });
+    const free = within(card).getByRole('checkbox', { name: /Free deliveries for new customers/ });
+    const count = within(card).getByLabelText('Free deliveries per new customer');
+    expect(coupons).not.toBeChecked();
+    expect(free).toBeChecked();
+    expect(count).toHaveValue('2');
+
+    await user.click(coupons);
+    await user.clear(count);
+    await user.type(count, '3');
+    await user.click(within(card).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/checkout')[0]?.body).toEqual({
+        coupons_enabled: true,
+        new_customer_free_deliveries: { enabled: true, count: 3 },
+      })
+    );
+    expect(await within(card).findByText('Checkout settings saved.')).toBeInTheDocument();
+
+    await user.click(free);
+    expect(count).toBeDisabled();
+    await user.click(within(card).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/checkout')[1]?.body).toEqual({
+        coupons_enabled: true,
+        new_customer_free_deliveries: { enabled: false, count: 3 },
+      })
+    );
+  });
+
+  it('refuses a count above 10 before sending anything', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
+      'GET /admin/settings/delivery-fee': () => ok({ fee_lkr: 250, updated_at: null }),
+      'GET /admin/settings/checkout': () => ok(CHECKOUT),
+    });
+    const card = (await screen.findByRole('heading', { name: 'Checkout' })).closest('section') as HTMLElement;
+    const count = await within(card).findByLabelText('Free deliveries per new customer');
+    await user.clear(count);
+    await user.type(count, '11');
+    await user.click(within(card).getByRole('button', { name: 'Save' }));
+    expect(await within(card).findByText('Enter a whole number from 0 to 10.')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(0);
+  });
+});

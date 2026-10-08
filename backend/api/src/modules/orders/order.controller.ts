@@ -46,6 +46,14 @@ export class OrderController {
     }
   }
 
+  async getCheckoutInfo(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getCustomerOrders(req: Request, res: Response, next: NextFunction) {
     try {
       const query = orderQuerySchema.parse(req.query);

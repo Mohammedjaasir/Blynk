@@ -1,7 +1,7 @@
 import { Router, type Request } from 'express';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
-import { settingsService, updateDeliveryFeeSchema } from './settings.service.js';
+import { settingsService, updateCheckoutSettingsSchema, updateDeliveryFeeSchema } from './settings.service.js';
 
 export const configurationRouter = Router();
 
@@ -58,6 +58,36 @@ adminSettingsRouter.patch(
     try {
       const input = updateDeliveryFeeSchema.parse(req.body);
       res.json({ success: true, data: await settingsService.setDeliveryFee(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Checkout switches (owner, 2026-10-08): coupon codes on/off and the free
+// deliveries for new customers. Audited (CHECKOUT_SETTINGS_UPDATED); they
+// apply to orders placed afterwards.
+adminSettingsRouter.get(
+  '/settings/checkout',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await settingsService.getCheckoutSettings() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/checkout',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateCheckoutSettingsSchema.parse(req.body);
+      res.json({ success: true, data: await settingsService.setCheckoutSettings(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

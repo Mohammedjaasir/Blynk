@@ -471,9 +471,10 @@ void main() {
           findsOneWidget);
     });
 
-    // Coupons are real since backend migration 018: checkout offers the code
-    // field, but no Discount / saving line exists until the server has
-    // previewed a code for this cart (coupon_checkout_test.dart).
+    // Coupons are real since backend migration 018, but the field shows only
+    // while they are switched on (GET /store coupons_enabled; owner,
+    // 2026-10-08) - unknown, as here, means hidden. No Discount / saving line
+    // exists until the server has previewed a code (coupon_checkout_test.dart).
     testWidgets('checkout invents no discount, saving or promo row',
         (tester) async {
       cart.add(_product(_realMilk));
@@ -484,7 +485,7 @@ void main() {
       );
       await settle(tester);
 
-      expect(find.text('Have a coupon code?'), findsOneWidget);
+      expect(find.text('Have a coupon code?'), findsNothing);
       for (final fake in [
         'Discount',
         'Saving',
