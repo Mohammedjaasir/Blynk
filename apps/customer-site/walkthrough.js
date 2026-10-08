@@ -59,34 +59,35 @@
         art: phone(home()),
       },
     ],
+    // Android installs the real app (owner, 2026-10-08): the APK downloads
+    // when the guide opens; these are the steps to install it.
     android: [
       {
-        title: 'Tap the menu',
-        text: 'In Chrome, tap the ⋮ menu in the top-right corner.',
-        art: phone(`<rect x="28" y="28" width="140" height="26" rx="13" class="ph-bar"/><text x="98" y="45" class="ph-url">blynk.lk/app</text>
-          <circle cx="188" cy="34" r="2.6" class="ph-dot"/><circle cx="188" cy="41" r="2.6" class="ph-dot"/><circle cx="188" cy="48" r="2.6" class="ph-dot"/>
-          ${ring(188, 41, 14)}${lines(80, 9)}`),
+        title: 'Open the downloaded file',
+        text: 'Blynk is downloading. When it finishes, tap blynk.apk in the notification (or in Chrome\u2019s Downloads).',
+        art: phone(`<rect x="16" y="16" width="188" height="120" rx="22" class="ph-sheet"/>
+          <rect x="28" y="60" width="164" height="54" rx="12" class="ph-row ph-row--hot"/>
+          <path d="M50 77v14M44 85l6 6 6-6" class="ph-stroke ph-hot"/><text x="68" y="83" class="ph-txt ph-txt--hot">blynk.apk</text>
+          <text x="68" y="100" class="ph-txt">Download complete</text>${ring(50, 85, 14)}${lines(160, 7)}`),
       },
       {
-        title: 'Tap “Install app”',
-        text: 'Tap Install app. On some phones it says Add to Home screen.',
-        art: phone(`<rect x="28" y="28" width="140" height="26" rx="13" class="ph-bar"/>${lines(80, 9)}
-          <rect x="80" y="36" width="116" height="190" rx="10" class="ph-sheet"/>
-          <text x="94" y="66" class="ph-txt">New tab</text><text x="94" y="98" class="ph-txt">Bookmarks</text>
-          <rect x="86" y="112" width="104" height="30" rx="8" class="ph-row ph-row--hot"/><text x="94" y="132" class="ph-txt ph-txt--hot">Install app</text>
-          <text x="94" y="166" class="ph-txt">Share…</text><text x="94" y="198" class="ph-txt">Settings</text>
-          ${ring(176, 127, 14)}`),
+        title: 'Allow installs from Chrome',
+        text: 'First time only: Android asks. Tap Settings, switch on \u201cAllow from this source\u201d, then go back.',
+        art: phone(`<text x="34" y="52" class="ph-txt ph-txt--hot">Install unknown apps</text>${lines(70, 2)}
+          <rect x="28" y="130" width="164" height="44" rx="10" class="ph-row"/><text x="40" y="156" class="ph-txt">Allow from this source</text>
+          <rect x="158" y="144" width="26" height="16" rx="8" fill="#0c831f"/><circle cx="176" cy="152" r="6" fill="#fff"/>${ring(171, 152, 16)}
+          ${lines(200, 5)}`),
       },
       {
-        title: 'Tap “Install”',
-        text: 'Chrome asks once more. Tap Install.',
+        title: 'Tap \u201cInstall\u201d',
+        text: 'Android asks if you want to install Blynk. Tap Install.',
         art: phone(`${lines(40, 10)}<rect x="30" y="140" width="160" height="120" rx="14" class="ph-sheet"/>
           ${icon(46, 156, 34)}<text x="90" y="178" class="ph-txt">Install Blynk?</text>
           <text x="66" y="238" class="ph-txt">Cancel</text><text x="140" y="238" class="ph-txt ph-txt--hot">Install</text>${ring(154, 234, 16)}`),
       },
       {
-        title: 'Open Blynk from your Home Screen',
-        text: 'That’s it. Open Blynk like any other app and log in with your number. Allow notifications to hear about your order.',
+        title: 'Open Blynk',
+        text: 'That\u2019s it. Open Blynk from your Home Screen and log in with your number.',
         art: phone(home()),
       },
     ],
@@ -107,39 +108,33 @@
   // steps to follow on a phone; Download there says Blynk is a phone app.
   let onComputer = false;
 
+  // Android's real app (owner, 2026-10-08); bump the version with each new APK.
+  const APK = '/download/blynk.apk?v=6';
+  const APK_32 = '/download/blynk-32bit.apk?v=6';
+
   function render() {
     const step = steps[at];
+    const kind = dialog.dataset.kind;
+    open.href = kind === 'android' ? APK : '/app/';
+    open.textContent = kind === 'android' ? 'Download again' : 'Download';
     stage.innerHTML = `${step.art}<h2 id="install-title" class="walk__title">${step.title}</h2><p class="walk__text">${step.text}</p>`;
     counter.textContent = `Step ${at + 1} of ${steps.length}`;
     dots.innerHTML = steps.map((_, i) => `<span class="walk__dot${i === at ? ' is-on' : ''}"></span>`).join('');
     back.hidden = at === 0;
     const last = at === steps.length - 1;
     next.hidden = last;
-    open.hidden = !last;
+    open.hidden = !last || (onComputer && kind === 'android');
+    if (kind === 'android' && !onComputer && last) {
+      stage.insertAdjacentHTML('beforeend', `<a class="walk__link" href="${APK_32}">Older phone and it won\u2019t install? Get this version</a>`);
+    }
   }
 
   // kind: 'ios' | 'android' | 'desktop'
   window.blynkWalkthrough = function (kind, opts) {
     dialog.dataset.kind = kind;
     onComputer = kind === 'desktop' || Boolean(opts && opts.fromComputer);
-    if (kind === 'android' && opts && typeof opts.installNow === 'function') {
-      // Chrome can install Blynk in one tap: offer that first, the steps second.
-      steps = [];
-      stage.innerHTML =
-        '<img src="/assets/icon-192.png" alt="" width="84" height="84" class="walk__icon"><h2 id="install-title" class="walk__title">Install Blynk</h2><p class="walk__text">One tap: Chrome adds Blynk to your Home Screen, like any other app.</p><div class="walk__choose"><button type="button" class="btn btn--yellow btn--pill" data-walk-now>Install now</button></div><button type="button" class="walk__link" data-walk-steps>Show me the steps instead</button>';
-      stage.querySelector('[data-walk-now]').addEventListener('click', async () => {
-        const ok = await opts.installNow();
-        if (ok) dialog.close();
-        else window.blynkWalkthrough('android');
-      });
-      stage.querySelector('[data-walk-steps]').addEventListener('click', () => window.blynkWalkthrough('android'));
-      counter.textContent = '';
-      dots.innerHTML = '';
-      back.hidden = next.hidden = open.hidden = true;
-      intro.hidden = true;
-      if (typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
-      return;
-    }
+    // On an Android phone the real app downloads straight away.
+    if (kind === 'android' && !onComputer) window.location.href = APK;
     if (kind === 'desktop') {
       // A computer: ask which phone, then walk through that phone's steps
       // (owner, 2026-10-08: "Download Blynk" should always guide).
@@ -160,7 +155,7 @@
           ? 'Blynk is a phone app: open blynk.lk on your phone, tap Download Blynk and follow these steps there.'
           : kind === 'ios'
             ? 'Tap Download at the end, then do these steps in Safari. A helper on that page points at the right button.'
-            : 'Tap Download at the end, then do these steps in Chrome. A helper on that page offers an Install button.';
+            : 'Your download has started. Then:';
       render();
     }
     if (dialog.open) return;

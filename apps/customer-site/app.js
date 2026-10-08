@@ -29,25 +29,8 @@
       window.location.href = '/app/';
       return;
     }
-    // Every device gets the guide (owner, 2026-10-08). On an Android phone
-    // where Chrome can install in one tap, the guide opens on "Install now".
-    if (isAndroid && deferredPrompt && typeof window.blynkWalkthrough === 'function') {
-      window.blynkWalkthrough('android', {
-        installNow: async () => {
-          const prompt = deferredPrompt;
-          deferredPrompt = null;
-          if (!prompt) return false;
-          try {
-            await prompt.prompt();
-            await prompt.userChoice;
-            return true;
-          } catch {
-            return false; // refused: the steps are shown instead
-          }
-        },
-      });
-      return;
-    }
+    // Android: the real app (APK) downloads and the guide shows how to
+    // install it; iPhone: the web app steps; a computer: pick a phone first.
     showGuide(isIOS ? 'ios' : isAndroid ? 'android' : 'desktop');
   }
   // The install guide (2026-10-08): mark the visitor's own phone.

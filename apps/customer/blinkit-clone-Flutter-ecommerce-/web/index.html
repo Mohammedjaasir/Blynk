@@ -101,22 +101,13 @@
         show('Install Blynk: tap <b>Share</b> below, then <b>Add to Home Screen</b>.', { arrow: true });
         return;
       }
-      var prompt = null;
-      window.addEventListener('beforeinstallprompt', function (e) {
-        e.preventDefault();
-        prompt = e;
-        show('Get the Blynk app on your Home Screen.', { button: true });
-      });
+      // Android installs the real app (owner, 2026-10-08): offer the APK.
+      show('Get the Blynk app - smoother and faster.', { button: true });
+      btn.textContent = 'Download';
       btn.addEventListener('click', function () {
-        if (!prompt) return;
-        prompt.prompt();
-        prompt.userChoice.then(function () { bar.style.display = 'none'; prompt = null; });
+        window.location.href = '/download/blynk.apk?v=6';
+        text.innerHTML = 'Downloading... then tap <b>blynk.apk</b> and <b>Install</b>.';
       });
-      window.addEventListener('appinstalled', function () { bar.style.display = 'none'; });
-      // No install offer from the browser: point at Chrome's menu instead.
-      setTimeout(function () {
-        if (!prompt) show('Install Blynk: tap <b>&#8942;</b> above, then <b>Install app</b>.', { arrow: true, top: true });
-      }, 4000);
     })();
   </script>
   <!-- Phones only (owner, 2026-10-08: "we don't need Blynk for computer").
