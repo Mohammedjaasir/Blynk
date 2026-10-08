@@ -635,26 +635,27 @@ void main() {
       expect(find.text('Categories'), findsNothing, reason: 'the duplicate preview grid is gone');
     });
 
-    testWidgets('a group with ten categories shows two rows, four across, the last tile "More"', (tester) async {
+    testWidgets('a group with ten categories is two rows that swipe sideways, first half on top', (tester) async {
       await _pumpHome(tester, backend: _ManyCategoriesBackend(), size: const Size(400, 1400));
 
-      // Owner, 2026-10-07: at most two rows; the eighth tile opens every category.
-      final tiles = tester.widgetList<CategoryWidget>(find.byType(CategoryWidget)).toList();
-      expect(tiles.map((t) => t.category.name).toList(), [
-        for (var i = 1; i <= 7; i++) 'Category $i',
-        'More',
-      ]);
-      expect(find.byKey(HomeCategoryGroups.moreTileKey), findsOneWidget);
-      await tester.tap(find.byKey(HomeCategoryGroups.moreTileKey));
-      await tester.pumpAndSettle();
-      expect(find.text('route:/categories'), findsOneWidget, reason: 'the More tile opens the categories page');
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
+      // Owner, 2026-10-08 (after Noon): two rows that scroll together; the
+      // first five categories on top, the next five below, in display order.
+      expect(find.byKey(HomeCategoryGroups.swipeKey), findsOneWidget);
       double rowOf(String name) => tester
-          .getTopLeft(find.descendant(of: find.byType(CategoryWidget), matching: find.text(name)))
+          .getTopLeft(find.descendant(of: find.byType(CategoryWidget), matching: find.text(name), skipOffstage: false))
           .dy;
-      expect(rowOf('Category 5'), greaterThan(rowOf('Category 4')));
-      expect(rowOf('Category 4'), rowOf('Category 1'));
+      expect(rowOf('Category 1'), rowOf('Category 5'));
+      expect(rowOf('Category 6'), greaterThan(rowOf('Category 1')));
+      expect(rowOf('Category 10'), rowOf('Category 6'));
+      // The fifth column only peeks past the edge; a swipe brings it in.
+      double rightOf(String name) => tester
+          .getTopRight(find.ancestor(of: find.text(name), matching: find.byType(CategoryWidget)))
+          .dx;
+      expect(rightOf('Category 5'), greaterThan(400), reason: 'it peeks past the screen edge');
+      await tester.drag(find.byKey(HomeCategoryGroups.swipeKey), const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(rightOf('Category 5'), lessThanOrEqualTo(400));
+      expect(rightOf('Category 10'), lessThanOrEqualTo(400));
     });
 
     testWidgets('none of them is ever drawn selected: Home holds no filter',

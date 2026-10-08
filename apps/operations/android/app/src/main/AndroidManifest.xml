@@ -40,6 +40,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- "Take photo" for product images (components/ImageUploader.tsx). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- Delivery tab (staff riders, 2026-10-01): the WebView's navigator.geolocation
          shares the operator's position while one of their deliveries is on the road.
          Capacitor's WebChromeClient asks for these at runtime on first use. -->

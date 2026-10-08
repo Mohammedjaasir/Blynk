@@ -583,6 +583,8 @@ describe('Promotions', () => {
         'POST /admin/promotions': () => ok({ promotion: promotion() }),
       });
       await user.click(await screen.findByRole('button', { name: 'Add promotion' }));
+      // New promotions start as a designed banner (2026-10-08); these cases are about the drawn card.
+      await user.click(await screen.findByRole('button', { name: 'Solid' }));
       const dialog = within(screen.getByRole('dialog', { name: 'Promotion' }));
       await user.type(dialog.getByLabelText(/^Headline/), 'New Year Sale');
       const order = dialog.getByLabelText(/^Display order/);
@@ -603,6 +605,8 @@ describe('Promotions', () => {
       'POST /admin/promotions': () => ok({ promotion: promotion() }),
     });
     await user.click(await screen.findByRole('button', { name: 'Add promotion' }));
+    // New promotions start as a designed banner (2026-10-08); these cases are about the drawn card.
+    await user.click(await screen.findByRole('button', { name: 'Solid' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Promotion' }));
     await user.type(dialog.getByLabelText(/^Headline/), 'New Year Sale');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
@@ -705,20 +709,24 @@ describe('Promotions', () => {
         'GET /promotions': () => ok({ promotions: [] }),
       });
       await user.click(await screen.findByRole('button', { name: 'Add promotion' }));
+      // New promotions start as a designed banner (2026-10-08); these cases are about the drawn card.
+      await user.click(await screen.findByRole('button', { name: 'Solid' }));
       const dialog = within(screen.getByRole('dialog', { name: 'Promotion' }));
 
       // The pre-existing three are untouched.
       for (const label of ['Solid', 'Gradient', 'Image']) {
         expect(dialog.getByRole('button', { name: label })).toBeInTheDocument();
       }
-      const option = dialog.getByRole('button', { name: 'Full artwork (no overlay)' });
+      const option = dialog.getByRole('button', { name: 'Designed banner (full picture)' });
       await user.click(option);
       expect(option).toHaveAttribute('aria-pressed', 'true');
 
-      // The same uploader as IMAGE, relabelled - not a second one. Exactly
-      // two uploaders exist in the form: the foreground visual and this one.
+      // The same uploader as IMAGE, relabelled - not a second one. A designed
+      // banner draws only its own picture, so the foreground uploader is
+      // hidden (2026-10-08): this is the only one.
       expect(dialog.getByText('Banner artwork')).toBeInTheDocument();
-      expect(dialog.getAllByRole('button', { name: 'Upload image' })).toHaveLength(2);
+      expect(dialog.getAllByRole('button', { name: 'Upload image' })).toHaveLength(1);
+      expect(dialog.queryByText('Foreground visual')).toBeNull();
       // The hint spells out that the app draws nothing over the banner.
       // (The sentence is split by a <strong>, so match on the paragraph.)
       const hint = dialog.getByText(
@@ -795,7 +803,7 @@ describe('Promotions', () => {
       await screen.findByText('Weekend Market');
       await user.click(screen.getByRole('button', { name: 'Edit' }));
       const dialog = within(screen.getByRole('dialog', { name: 'Promotion' }));
-      await user.click(dialog.getByRole('button', { name: 'Full artwork (no overlay)' }));
+      await user.click(dialog.getByRole('button', { name: 'Designed banner (full picture)' }));
       await user.click(dialog.getByRole('button', { name: 'Save' }));
 
       await waitFor(() => {
@@ -817,9 +825,11 @@ describe('Promotions', () => {
         'GET /promotions': () => ok({ promotions: [] }),
       });
       await user.click(await screen.findByRole('button', { name: 'Add promotion' }));
+      // New promotions start as a designed banner (2026-10-08); these cases are about the drawn card.
+      await user.click(await screen.findByRole('button', { name: 'Solid' }));
       const dialog = within(screen.getByRole('dialog', { name: 'Promotion' }));
       await user.type(dialog.getByLabelText(/^Headline/), 'Avurudu Festival Sale');
-      await user.click(dialog.getByRole('button', { name: 'Full artwork (no overlay)' }));
+      await user.click(dialog.getByRole('button', { name: 'Designed banner (full picture)' }));
       await user.click(dialog.getByRole('button', { name: 'Save' }));
 
       expect(await screen.findByText('Upload the banner artwork, or choose another background type.')).toBeInTheDocument();
@@ -853,7 +863,7 @@ describe('Promotions', () => {
 
       // ARTWORK: the banner draws its own call to action, so the whole card
       // becomes the tap target and the label may stay empty.
-      await user.click(dialog.getByRole('button', { name: 'Full artwork (no overlay)' }));
+      await user.click(dialog.getByRole('button', { name: 'Designed banner (full picture)' }));
       await user.click(dialog.getByRole('button', { name: 'Save' }));
 
       await waitFor(() => {
@@ -1080,14 +1090,16 @@ describe('Image focal point', () => {
         ok({ media: { key: 'promotions/b.webp', url: 'https://cdn.blynk.test/promotions/b.webp' } }),
     });
     await user.click(await screen.findByRole('button', { name: 'Add promotion' }));
+    // New promotions start as a designed banner (2026-10-08); these cases are about the drawn card.
+    await user.click(await screen.findByRole('button', { name: 'Solid' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Promotion' }));
-    await user.click(dialog.getByRole('button', { name: 'Full artwork (no overlay)' }));
+    await user.click(dialog.getByRole('button', { name: 'Designed banner (full picture)' }));
 
-    // The background uploader is the second file input in the dialog (the
-    // first is the foreground visual) - one component, two usages.
-    const inputs = container.querySelectorAll('input[type="file"]');
-    expect(inputs).toHaveLength(2);
-    fireEvent.change(inputs[1]!, {
+    // A designed banner shows only the banner uploader (the foreground visual
+    // is hidden for it, 2026-10-08) - the same component the product form uses.
+    const inputs = container.querySelectorAll('input[type="file"]:not([capture])');
+    expect(inputs).toHaveLength(1);
+    fireEvent.change(inputs[0]!, {
       target: { files: [new File(['x'], 'b.jpg', { type: 'image/jpeg' })] },
     });
     await screen.findByTestId('focal-surface');
@@ -1127,6 +1139,8 @@ describe('Image focal point', () => {
       'POST /admin/promotions': () => ok({ promotion: promotion() }),
     });
     await user.click(await screen.findByRole('button', { name: 'Add promotion' }));
+    // New promotions start as a designed banner (2026-10-08); these cases are about the drawn card.
+    await user.click(await screen.findByRole('button', { name: 'Solid' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Promotion' }));
     await user.type(dialog.getByLabelText(/^Headline/), 'Plain Card');
     await user.click(dialog.getByRole('button', { name: 'Save' }));

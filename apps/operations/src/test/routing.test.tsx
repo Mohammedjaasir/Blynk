@@ -1,7 +1,6 @@
 import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
-import userEvent from '@testing-library/user-event';
 import { resetIntroForTests } from '../pages/Welcome';
 import { ADMIN_WITH_RIDER, ok, renderAs } from './helpers';
 
@@ -26,11 +25,11 @@ describe('routing', () => {
     expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
   });
 
-  it('every launch opens on the welcome screen, signed in too, then continues', async () => {
+  it('signed in, a launch skips the welcome and opens where it was headed (owner, 2026-10-08)', async () => {
     resetIntroForTests();
     renderAs(ADMIN_WITH_RIDER, '/orders', { 'GET /riders/deliveries': () => ok({ deliveries: [] }) });
-    await userEvent.click(await screen.findByRole('button', { name: /^sign in/i }));
     expect(await screen.findByText('No live orders.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^sign in/i })).toBeNull();
   });
 
   it('an authenticated operator can reach every tab route directly by URL', async () => {

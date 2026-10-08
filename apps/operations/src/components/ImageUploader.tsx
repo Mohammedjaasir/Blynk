@@ -81,6 +81,9 @@ export function ImageUploader({
   focalShape?: FocalShape;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // "Take photo" (owner, 2026-10-08): the camera, straight to the same
+  // resize-and-upload path, for products photographed on the spot.
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
@@ -169,6 +172,27 @@ export function ImageUploader({
               if (file) void handleFile(file);
             }}
           />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            data-testid="camera-input"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void handleFile(file);
+            }}
+          />
+          <button
+            type="button"
+            className="button button--ghost"
+            disabled={busy}
+            onClick={() => cameraRef.current?.click()}
+          >
+            Take photo
+          </button>
           <button
             type="button"
             className="button button--ghost"

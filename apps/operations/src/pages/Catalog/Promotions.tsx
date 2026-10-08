@@ -249,8 +249,10 @@ function describeDestination(promotion: Promotion): string {
   }
 }
 
+// New promotions start as a designed banner - one finished picture, like the
+// big shopping apps (owner, 2026-10-08). The other types are one tap away.
 const EMPTY_BACKGROUND: BackgroundValue = {
-  background_type: 'SOLID',
+  background_type: 'ARTWORK',
   background_color: SOLID_SWATCHES[1]!.value,
   background_color_end: null,
   background_image_url: null,
@@ -494,10 +496,13 @@ function PromotionDialog({
           ) : null}
         </section>
 
-        <section className="editor__section">
-          <h3 className="editor__legend">Foreground visual</h3>
-          <ImageUploader value={imageUrl} folder="promotions" label="Product or promotional image" onChange={setImageUrl} />
-        </section>
+        {/* A designed banner draws only its own picture: no product cut-out. */}
+        {isArtwork ? null : (
+          <section className="editor__section">
+            <h3 className="editor__legend">Foreground visual</h3>
+            <ImageUploader value={imageUrl} folder="promotions" label="Product or promotional image" onChange={setImageUrl} />
+          </section>
+        )}
 
         <section className="editor__section">
           <h3 className="editor__legend">Background</h3>

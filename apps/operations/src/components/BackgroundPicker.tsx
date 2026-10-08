@@ -25,7 +25,7 @@ const TYPE_LABELS: Record<BackgroundType, string> = {
   SOLID: 'Solid',
   GRADIENT: 'Gradient',
   IMAGE: 'Image',
-  ARTWORK: 'Full artwork (no overlay)',
+  ARTWORK: 'Designed banner (full picture)',
 };
 
 export interface BackgroundValue {
@@ -96,7 +96,7 @@ export function BackgroundPicker({ value, onChange }: { value: BackgroundValue; 
   return (
     <div className="bg-picker">
       <div className="segmented" role="group" aria-label="Background type">
-        {(['SOLID', 'GRADIENT', 'IMAGE', 'ARTWORK'] as BackgroundType[]).map((option) => (
+        {(['ARTWORK', 'SOLID', 'GRADIENT', 'IMAGE'] as BackgroundType[]).map((option) => (
           <button
             key={option}
             type="button"
@@ -180,7 +180,8 @@ export function BackgroundPicker({ value, onChange }: { value: BackgroundValue; 
           />
           {type === 'ARTWORK' ? (
             <p className="uploader__hint">
-              Your banner is shown exactly as uploaded, filling the whole card. The headline and supporting text are
+              <strong>Best size: 1200 × 630 px</strong> (a wide banner); keep words away from the edges. Your banner
+              is shown exactly as uploaded, filling the whole card. The headline and supporting text are
               <strong> not</strong> drawn over it and there is no darkening, so the artwork must already carry its own
               wording. The headline is still required — it is what a screen reader announces for this slide, and how
               this promotion is listed here.

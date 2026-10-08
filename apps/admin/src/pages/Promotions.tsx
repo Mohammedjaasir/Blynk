@@ -299,8 +299,10 @@ function namedColour(hex: string): string {
   return match ? match.label : hex.toUpperCase();
 }
 
+// New promotions start as a designed banner - one finished picture
+// (owner, 2026-10-08). The other types are one click away.
 const EMPTY_BACKGROUND: BackgroundValue = {
-  background_type: 'SOLID',
+  background_type: 'ARTWORK',
   background_color: SOLID_SWATCHES[1]!.value,
   background_color_end: null,
   background_image_url: null,
@@ -523,18 +525,21 @@ function PromotionDialog({
           ) : null}
         </section>
 
-        <section className="editor__section">
-          <h3 className="editor__legend">Foreground visual</h3>
-          <ImageUploader
-            value={imageUrl}
-            folder="promotions"
-            label="Product or promotional image"
-            onChange={(url) => {
-              images.track(url);
-              setImageUrl(url);
-            }}
-          />
-        </section>
+        {/* A designed banner draws only its own picture: no product cut-out. */}
+        {isArtwork ? null : (
+          <section className="editor__section">
+            <h3 className="editor__legend">Foreground visual</h3>
+            <ImageUploader
+              value={imageUrl}
+              folder="promotions"
+              label="Product or promotional image"
+              onChange={(url) => {
+                images.track(url);
+                setImageUrl(url);
+              }}
+            />
+          </section>
+        )}
 
         <section className="editor__section">
           <h3 className="editor__legend">Background</h3>

@@ -43,6 +43,10 @@ function RequireRider({ children }: { children: JSX.Element }) {
  */
 function IntroGate({ children }: { children: JSX.Element }) {
   const location = useLocation();
+  const { status } = useAuth();
+  // Signed in (or signed in and offline): straight into the app (owner,
+  // 2026-10-08). The welcome is for signed-out launches only.
+  if (status !== 'anonymous') return children;
   if (!hasSeenIntro() && location.pathname !== '/welcome') {
     return <Navigate to="/welcome" replace state={{ from: location }} />;
   }

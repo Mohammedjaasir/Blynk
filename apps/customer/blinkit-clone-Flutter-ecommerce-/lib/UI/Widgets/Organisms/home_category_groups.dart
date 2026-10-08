@@ -59,24 +59,23 @@ class HomeCategoryGroups extends StatefulWidget {
   /// Loading placeholders: two rows.
   static int skeletonCountFor(double width) => columnsFor(width) * 2;
 
-  /// A group shows at most two rows (owner, 2026-10-07, after the reference
-  /// app); a longer group ends its second row with a "More" tile that opens
-  /// every category.
+  /// A group shows at most two rows (owner, 2026-10-07). Since 2026-10-08
+  /// (owner, after Noon's app) a longer group is two rows that swipe sideways
+  /// together - the first half of its categories on top, the rest below, in
+  /// display order - with the next column peeking at the edge.
   static int maxTilesFor(int columns) => columns * 2;
 
-  static const Key moreTileKey = Key('home-categories-more');
+  /// The sideways two-row scroller, when a group has more than two rows' worth.
+  static const Key swipeKey = Key('home-categories-swipe');
+
+  /// How much of the next column shows past the edge, as a fraction of a tile.
+  static const double peek = 0.45;
 
   /// The heading for the backend's catch-all group when it is the only one:
   /// "More" over a grid that ends in a "More" tile reads as a mistake.
   static const String onlyGroupTitle = 'Shop by category';
 
-  /// The "More" tile, drawn by [CategoryWidget] like every other tile.
-  static final CategoryModel moreTile = CategoryModel.fromJson(const {
-    'id': 'home-more',
-    'name': 'More',
-    'slug': '',
-    'display_order': 1 << 30,
-  });
+
 
   @override
   State<HomeCategoryGroups> createState() => _HomeCategoryGroupsState();
@@ -177,9 +176,7 @@ class _HomeCategoryGroupsState extends State<HomeCategoryGroups> {
     int start, {
     bool onlyGroup = false,
   }) {
-    final cap = HomeCategoryGroups.maxTilesFor(metrics.columns);
-    final overflow = group.categories.length > cap;
-    final tiles = overflow ? group.categories.take(cap - 1).toList() : group.categories;
+    final swipe = group.categories.length > HomeCategoryGroups.maxTilesFor(metrics.columns);
     return [
       SliverToBoxAdapter(
         child: BlynkSectionHeader(
@@ -189,53 +186,75 @@ class _HomeCategoryGroupsState extends State<HomeCategoryGroups> {
               metrics.gutter, BlynkSpace.s24, BlynkSpace.s8, BlynkSpace.s12),
         ),
       ),
-      metrics.grid(
-        itemCount: tiles.length + (overflow ? 1 : 0),
-        item: (index) {
-          if (index == tiles.length) {
-            return EntranceFade(
-              key: ValueKey('home-group/${group.key}/more'),
-              delay: widget.entranceDelay + EntranceFade.delayFor(start + index),
-              child: MergeSemantics(
-                child: Semantics(
-                  button: true,
-                  label: 'More categories',
-                  child: CategoryWidget(
-                    key: HomeCategoryGroups.moreTileKey,
-                    category: HomeCategoryGroups.moreTile,
-                    glyph: Icons.more_horiz_rounded,
-                    rounded: true,
-                    fit: BoxFit.contain,
-                    diameter: metrics.tile,
-                    onTap: () => Navigator.of(context).pushNamed('/categories'),
-                  ),
-                ),
-              ),
-            );
-          }
-          final category = tiles[index];
-          return EntranceFade(
-            key: ValueKey('home-group/${group.key}/${category.id}'),
-            delay: widget.entranceDelay + EntranceFade.delayFor(start + index),
-            // Merged so the tile is announced once, as a link, rather than
-            // as a label and a target side by side.
-            child: MergeSemantics(
-              child: Semantics(
-                button: true,
-                child: CategoryWidget(
-                  category: category,
-                  rounded: true,
-                  fit: BoxFit.contain,
-                  diameter: metrics.tile,
-                  onTap: () => Navigator.of(context)
-                      .pushNamed('/products', arguments: category.slug),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
+      if (swipe)
+        SliverToBoxAdapter(child: _twoRowSwipe(context, group, metrics, start))
+      else
+        metrics.grid(
+          itemCount: group.categories.length,
+          item: (index) => _tile(context, group, group.categories[index], start + index, metrics.tile),
+        ),
     ];
+  }
+
+  /// One category tile: opens that category's products page.
+  Widget _tile(BuildContext context, CategoryGroupModel group, CategoryModel category, int order, double size) {
+    return EntranceFade(
+      key: ValueKey('home-group/${group.key}/${category.id}'),
+      delay: widget.entranceDelay + EntranceFade.delayFor(order),
+      // Merged so the tile is announced once, as a link, rather than
+      // as a label and a target side by side.
+      child: MergeSemantics(
+        child: Semantics(
+          button: true,
+          child: CategoryWidget(
+            category: category,
+            rounded: true,
+            fit: BoxFit.contain,
+            diameter: size,
+            onTap: () => Navigator.of(context).pushNamed('/products', arguments: category.slug),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Two rows that scroll sideways together (Noon-style): the first half of
+  /// the group on top, the rest underneath, both in display order.
+  Widget _twoRowSwipe(BuildContext context, CategoryGroupModel group, _GridMetrics metrics, int start) {
+    final all = group.categories;
+    final perRow = (all.length + 1) ~/ 2;
+    final top = all.sublist(0, perRow);
+    final bottom = all.sublist(perRow);
+    // Tiles a little narrower than the grid's so the next column peeks in.
+    final visible = metrics.columns + HomeCategoryGroups.peek;
+    final cellWidth = (metrics.width - metrics.gutter - metrics.spacing * metrics.columns) / visible;
+    final tile = HomeCategoryGroups.tileSizeFor(cellWidth);
+    final cellHeight = CategoryWidget.heightFor(context, tile);
+    return SizedBox(
+      height: cellHeight * 2 + HomeCategoryGroups.rowSpacing,
+      child: ListView.separated(
+        key: HomeCategoryGroups.swipeKey,
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: metrics.gutter),
+        itemCount: perRow,
+        separatorBuilder: (_, __) => SizedBox(width: metrics.spacing),
+        itemBuilder: (context, column) => SizedBox(
+          width: cellWidth,
+          child: Column(
+            children: [
+              SizedBox(height: cellHeight, child: _tile(context, group, top[column], start + column, tile)),
+              const SizedBox(height: HomeCategoryGroups.rowSpacing),
+              SizedBox(
+                height: cellHeight,
+                child: column < bottom.length
+                    ? _tile(context, group, bottom[column], start + perRow + column, tile)
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

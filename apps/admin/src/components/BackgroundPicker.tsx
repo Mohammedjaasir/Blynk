@@ -18,7 +18,7 @@ export const BACKGROUND_TYPE_LABEL: Record<BackgroundType, string> = {
   SOLID: 'Solid',
   GRADIENT: 'Gradient',
   IMAGE: 'Image',
-  ARTWORK: 'Full artwork',
+  ARTWORK: 'Designed banner (full picture)',
 };
 
 export interface BackgroundValue {
@@ -88,7 +88,7 @@ export function BackgroundPicker({
   return (
     <div className="bg-picker">
       <div className="segmented" role="group" aria-label="Background type">
-        {(['SOLID', 'GRADIENT', 'IMAGE', 'ARTWORK'] as BackgroundType[]).map((option) => (
+        {(['ARTWORK', 'SOLID', 'GRADIENT', 'IMAGE'] as BackgroundType[]).map((option) => (
           <button
             key={option}
             type="button"
@@ -171,7 +171,7 @@ export function BackgroundPicker({
           />
           <p className="uploader__hint">
             {type === 'ARTWORK'
-              ? 'A finished banner, shown full-bleed: the app draws no headline, subtitle or shading over it. The headline is still used as its label for screen readers.'
+              ? 'Best size: 1200 × 630 px (a wide banner); keep words away from the edges. A finished banner, shown full-bleed: the app draws no headline, subtitle or shading over it. The headline is still used as its label for screen readers.'
               : 'The app darkens image backgrounds so the headline stays readable.'}
           </p>
         </>

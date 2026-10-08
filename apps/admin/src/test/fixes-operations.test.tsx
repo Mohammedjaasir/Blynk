@@ -78,7 +78,7 @@ describe('ARTWORK promotions', () => {
 
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     const dialog = screen.getByRole('dialog', { name: 'Promotion' });
-    expect(within(dialog).getByRole('button', { name: 'Full artwork' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(dialog).getByRole('button', { name: 'Designed banner (full picture)' })).toHaveAttribute('aria-pressed', 'true');
 
     // The preview draws the banner full-bleed at its focal point, with no headline over it.
     const preview = dialog.querySelector('.promo-preview[data-background="artwork"]') as HTMLElement;
@@ -111,7 +111,7 @@ describe('ARTWORK promotions', () => {
     });
     await user.click(await screen.findByRole('button', { name: 'Edit' }));
     const dialog = screen.getByRole('dialog', { name: 'Promotion' });
-    await user.click(within(dialog).getByRole('button', { name: 'Full artwork' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Designed banner (full picture)' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(api.find('PATCH', '/admin/promotions/p1')[0]?.body).toMatchObject({
