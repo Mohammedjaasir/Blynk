@@ -127,7 +127,7 @@ export const CATALOGUE: Record<ActionName, CatalogueEntry> = {
     lock: 'activeDeliveries', notesRequired: true, stock: 'NONE', notifications: [],
   },
   ADMIN_CANCEL: {
-    action: 'ADMIN_CANCEL', from: ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED'], to: 'CANCELLED', roles: ADMIN,
+    action: 'ADMIN_CANCEL', from: ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'CANCELLED', roles: ADMIN,
     lock: 'order', notesRequired: true, stock: 'RESTORE_ORDER_STOCK', notifications: ['ORDER_CANCELLED'],
   },
   RESTAGE: {

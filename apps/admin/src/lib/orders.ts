@@ -151,7 +151,8 @@ const RULES: ReadonlyArray<[OrderAction, OrderStatus[], UserRole[], (o: BoardOrd
   ['markFailed', ['OUT_FOR_DELIVERY'], ADMIN, () => true],
   ['markCustomerUnavailable', ['OUT_FOR_DELIVERY'], ADMIN, () => true],
   ['restage', ['FAILED', 'CUSTOMER_UNAVAILABLE'], ADMIN, () => true],
-  ['cancel', ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED'], ADMIN, () => true],
+  // A failed or customer-unavailable order can be closed directly too (2026-10-08).
+  ['cancel', ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], ADMIN, () => true],
 ];
 
 export function allowedActions(order: BoardOrderLike, role: UserRole | undefined): OrderAction[] {

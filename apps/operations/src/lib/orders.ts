@@ -94,7 +94,8 @@ const RULES: ReadonlyArray<[OrderAction, OrderStatus[], (o: BoardOrderLike) => b
   ['markFailed', ['OUT_FOR_DELIVERY'], () => true],
   ['markCustomerUnavailable', ['OUT_FOR_DELIVERY'], () => true],
   ['restage', ['FAILED', 'CUSTOMER_UNAVAILABLE'], () => true],
-  ['cancel', ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED'], () => true],
+  // A failed or customer-unavailable order can be closed directly too (2026-10-08).
+  ['cancel', ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], () => true],
 ];
 
 export function allowedActions(order: BoardOrderLike): OrderAction[] {

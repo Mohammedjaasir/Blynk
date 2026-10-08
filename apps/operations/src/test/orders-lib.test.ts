@@ -78,8 +78,8 @@ describe('allowedActions (always ADMIN - no role dimension)', () => {
     ['PACKED', 'ACCEPTED', ['handOver', 'cancel']],
     ['PACKED', 'PICKED_UP', ['cancel']],
     ['OUT_FOR_DELIVERY', 'PICKED_UP', ['markDelivered', 'markFailed', 'markCustomerUnavailable']],
-    ['FAILED', null, ['restage']],
-    ['CUSTOMER_UNAVAILABLE', null, ['restage']],
+    ['FAILED', null, ['restage', 'cancel']],
+    ['CUSTOMER_UNAVAILABLE', null, ['restage', 'cancel']],
     ['DELIVERED', null, []],
     ['CANCELLED', null, []],
   ] as const)('%s (rider %s)', (status, rider, expected) => {

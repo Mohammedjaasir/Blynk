@@ -49,7 +49,8 @@ const EXPECTED: Record<ActionName, { from: OrderStatus[]; to: OrderStatus | null
   ADMIN_MARK_DELIVERED: { from: ['OUT_FOR_DELIVERY'], to: 'DELIVERED', roles: ['ADMIN', 'OPERATIONS'] },
   ADMIN_MARK_FAILED: { from: ['OUT_FOR_DELIVERY'], to: 'FAILED', roles: ['ADMIN', 'OPERATIONS'] },
   ADMIN_MARK_CUSTOMER_UNAVAILABLE: { from: ['OUT_FOR_DELIVERY'], to: 'CUSTOMER_UNAVAILABLE', roles: ['ADMIN', 'OPERATIONS'] },
-  ADMIN_CANCEL: { from: ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED'], to: 'CANCELLED', roles: ['ADMIN', 'OPERATIONS'] },
+  // FAILED and CUSTOMER_UNAVAILABLE added 2026-10-08: close a failed order directly.
+  ADMIN_CANCEL: { from: ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'CANCELLED', roles: ['ADMIN', 'OPERATIONS'] },
   RESTAGE: { from: ['FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'PACKED', roles: ['ADMIN', 'OPERATIONS'] },
 };
 
