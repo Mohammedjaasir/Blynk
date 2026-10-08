@@ -171,7 +171,7 @@ export function BackgroundPicker({
           />
           <p className="uploader__hint">
             {type === 'ARTWORK'
-              ? 'Best size: 1200 × 630 px (a wide banner); keep words away from the edges. A finished banner, shown full-bleed: the app draws no headline, subtitle or shading over it. The headline is still used as its label for screen readers.'
+              ? 'Any size works: the banner is shown whole, at its own shape (a wide picture such as 1200 × 630 px suits phones best). A finished banner, shown full-bleed: the app draws no headline, subtitle or shading over it. The headline is still used as its label for screen readers.'
               : 'The app darkens image backgrounds so the headline stays readable.'}
           </p>
         </>

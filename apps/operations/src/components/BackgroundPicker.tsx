@@ -180,8 +180,8 @@ export function BackgroundPicker({ value, onChange }: { value: BackgroundValue; 
           />
           {type === 'ARTWORK' ? (
             <p className="uploader__hint">
-              <strong>Best size: 1200 × 630 px</strong> (a wide banner); keep words away from the edges. Your banner
-              is shown exactly as uploaded, filling the whole card. The headline and supporting text are
+              <strong>Any size works:</strong> the banner is shown whole, at its own shape (a wide picture such as
+              1200 × 630 px suits phones best). Your banner is shown exactly as uploaded. The headline and supporting text are
               <strong> not</strong> drawn over it and there is no darkening, so the artwork must already carry its own
               wording. The headline is still required — it is what a screen reader announces for this slide, and how
               this promotion is listed here.

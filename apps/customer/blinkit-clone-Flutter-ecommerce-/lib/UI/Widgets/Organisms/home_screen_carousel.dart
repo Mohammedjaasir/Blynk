@@ -42,6 +42,48 @@ class _HomeScreenCarouselState extends State<HomeScreenCarousel> {
   late final PageController _pageController;
   int _currentPage = 0;
   int _slideCount = 0;
+
+  /// Designed banners in any size (owner, 2026-10-08): each artwork's own
+  /// width / height, measured when its picture loads. The carousel is as tall
+  /// as the banner on screen, so nothing is cropped; between two slides the
+  /// height follows the swipe. Until a picture is measured - and for every
+  /// non-artwork slide - the designed card height applies.
+  final Map<String, double> _artworkAspects = {};
+  final Set<String> _measuring = {};
+
+  /// Banner shapes the carousel follows: from a very wide strip to a
+  /// portrait 4:5. Anything beyond is shown at the nearest of the two.
+  static const double minAspect = 0.8;
+  static const double maxAspect = 5.0;
+
+  void _measureArtwork(String url) {
+    if (_artworkAspects.containsKey(url) || !_measuring.add(url)) return;
+    final stream = NetworkImage(url).resolve(ImageConfiguration.empty);
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (info, _) {
+        stream.removeListener(listener);
+        final w = info.image.width.toDouble();
+        final h = info.image.height.toDouble();
+        if (!mounted || h <= 0) return;
+        setState(() => _artworkAspects[url] = (w / h).clamp(minAspect, maxAspect));
+      },
+      onError: (_, __) => stream.removeListener(listener),
+    );
+    stream.addListener(listener);
+  }
+
+  /// The pager height for slide [index] at [width] (the whole carousel width).
+  double _slideHeight(List<PromotionModel> promotions, int index, double width, _HeroMetrics metrics, double designed) {
+    final promotion = promotions[index.clamp(0, promotions.length - 1)];
+    final url = promotion.hasArtwork ? promotion.backgroundImageUrl : null;
+    final aspect = url == null ? null : _artworkAspects[url];
+    if (aspect == null) return designed;
+    final cardWidth = width - metrics.sideMargin * 2;
+    final natural = cardWidth / aspect + BlynkSpace.s4 * 2;
+    // A banner that also carries the app's button needs the card's room for it.
+    return promotion.hasAction ? math.max(natural, designed) : natural;
+  }
   final FocusNode _focusNode = FocusNode(debugLabel: 'promotions carousel');
   bool _keyboardHighlight = false;
 
@@ -176,6 +218,41 @@ class _HomeScreenCarouselState extends State<HomeScreenCarousel> {
     super.dispose();
   }
 
+  Widget _pagerBody(List<PromotionModel> promotions, _HeroMetrics metrics) {
+    // A touch anywhere on the pager is the shopper taking over. Listener
+    // (not GestureDetector) so it sees the press without competing with the
+    // PageView's drag or the slide's own tap.
+    return Listener(
+      onPointerDown: (_) => _pauseForTouch(),
+      onPointerUp: (_) => _resumeAfterRelease(),
+      onPointerCancel: (_) => _resumeAfterRelease(),
+      child: ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(
+        dragDevices: _dragDevices,
+        scrollbars: false,
+      ),
+      child: PageView.builder(
+        controller: _pageController,
+        itemCount: promotions.length,
+        onPageChanged: (index) => setState(() => _currentPage = index),
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: metrics.sideMargin,
+              vertical: BlynkSpace.s4,
+            ),
+            child: _PromoSlide(
+              promotion: promotions[index],
+              isActive: index == _currentPage,
+              metrics: metrics,
+            ),
+          );
+        },
+      ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final promotions = context.watch<ProductProvider>().promotions;
@@ -193,40 +270,26 @@ class _HomeScreenCarouselState extends State<HomeScreenCarousel> {
     final metrics = _HeroMetrics.of(Responsive.of(context));
     _slideCount = promotions.length;
     final multiple = promotions.length > 1;
+    for (final p in promotions) {
+      if (p.hasArtwork) _measureArtwork(p.backgroundImageUrl!);
+    }
+    final designed = metrics.heightFor(context);
 
-    Widget pager = SizedBox(
-      height: metrics.heightFor(context),
-      // A touch anywhere on the pager is the shopper taking over. Listener
-      // (not GestureDetector) so it sees the press without competing with the
-      // PageView's drag or the slide's own tap.
-      child: Listener(
-        onPointerDown: (_) => _pauseForTouch(),
-        onPointerUp: (_) => _resumeAfterRelease(),
-        onPointerCancel: (_) => _resumeAfterRelease(),
-        child: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: _dragDevices,
-          scrollbars: false,
-        ),
-        child: PageView.builder(
-          controller: _pageController,
-          itemCount: promotions.length,
-          onPageChanged: (index) => setState(() => _currentPage = index),
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: metrics.sideMargin,
-                vertical: BlynkSpace.s4,
-              ),
-              child: _PromoSlide(
-                promotion: promotions[index],
-                isActive: index == _currentPage,
-                metrics: metrics,
-              ),
-            );
-          },
-        ),
-        ),
+    Widget pager = LayoutBuilder(
+      builder: (context, constraints) => AnimatedBuilder(
+        animation: _pageController,
+        builder: (context, child) {
+          // Between two slides the height follows the swipe.
+          final page = _pageController.hasClients && _pageController.position.haveDimensions
+              ? (_pageController.page ?? _currentPage.toDouble())
+              : _currentPage.toDouble();
+          final from = page.floor();
+          final t = page - from;
+          final a = _slideHeight(promotions, from, constraints.maxWidth, metrics, designed);
+          final b = _slideHeight(promotions, from + 1, constraints.maxWidth, metrics, designed);
+          return SizedBox(height: a + (b - a) * t, child: child);
+        },
+        child: _pagerBody(promotions, metrics),
       ),
     );
 
