@@ -53,6 +53,26 @@ class AuthProvider extends ChangeNotifier {
   String? get lastDevOtp => _lastDevOtp;
   UserModel? get currentUser => _currentUser;
 
+  /// Signed in, but the account has no name yet (owner, 2026-10-08: the
+  /// customer is asked for it right after the SMS code).
+  bool get needsName => isAuthenticated && (_currentUser?.fullName?.trim().isEmpty ?? true);
+
+  /// The shortest name the backend accepts (PATCH /me full_name).
+  static const int nameMinLength = 2;
+
+  /// Saves the customer's name (PATCH /me) and keeps the cached profile in step.
+  Future<void> saveName(String name) async {
+    final trimmed = name.trim();
+    await _request(methodType: 'PATCH', url: '/me', body: {'full_name': trimmed});
+    final user = _currentUser;
+    if (user != null) {
+      final named = user.copyWithName(trimmed);
+      _currentUser = named;
+      await TokenStorage.saveUserCacheIf(stillValid: () => true, userJson: named.toJsonString());
+    }
+    notifyListeners();
+  }
+
   /// Signed in = holds a credential. A restored session may have only the
   /// refresh token (the HTTP interceptor renews the access token on first use).
   bool get isAuthenticated => _has(_accessToken) || _has(_refreshToken);

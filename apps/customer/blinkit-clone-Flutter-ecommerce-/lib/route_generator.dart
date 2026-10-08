@@ -23,6 +23,7 @@ import 'package:ecom/Screens/order_summary_screen.dart';
 import 'package:ecom/Screens/products_screen.dart';
 import 'package:ecom/Screens/user_address_screen.dart';
 import 'package:ecom/Screens/user_cart_screen.dart';
+import 'package:ecom/Screens/Auth/name_capture_screen.dart';
 
 class AppRouter {
   static Route<dynamic>? generateRoute(RouteSettings settings) {
@@ -40,6 +41,8 @@ class AppRouter {
           settings: settings,
           builder: (_) => const LoginScreen(),
         );
+      case NameCaptureScreen.route:
+        return MaterialPageRoute(settings: settings, builder: (_) => const NameCaptureScreen());
       case '/otp/verify':
         return MaterialPageRoute(
           settings: settings,

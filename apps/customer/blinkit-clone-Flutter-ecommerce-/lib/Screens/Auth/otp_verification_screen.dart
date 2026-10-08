@@ -12,6 +12,7 @@ import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/design/tokens.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_text_field.dart';
+import 'package:ecom/Screens/Auth/name_capture_screen.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
   const OTPVerificationScreen({super.key, this.data, bool? isDebug})
@@ -95,8 +96,9 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
       });
 
       if (!context.mounted) return;
+      // A new customer (no name on the account) is asked for it first.
       Navigator.of(context).pushNamedAndRemoveUntil(
-        '/home',
+        authProvider.needsName ? NameCaptureScreen.route : '/home',
         (route) => false,
       );
     } catch (e) {

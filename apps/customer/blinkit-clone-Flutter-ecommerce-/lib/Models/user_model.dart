@@ -88,6 +88,19 @@ class UserModel {
   factory UserModel.fromJsonString(String source) =>
       UserModel.fromJson(jsonDecode(source) as Map<String, dynamic>);
 
+  /// This profile with the name replaced (the sign-in name step, 2026-10-08).
+  UserModel copyWithName(String name) => UserModel(
+        id: id,
+        phone: phone,
+        email: email,
+        fullName: name,
+        role: role,
+        isActive: isActive,
+        createdAt: createdAt,
+        smsLanguage: smsLanguage,
+        smsOffers: smsOffers,
+      );
+
   /// This profile with the SMS preferences replaced. [smsLanguage] is only
   /// replaced when given; the backend has no way to clear it.
   UserModel copyWithSms({SmsLanguage? smsLanguage, bool? smsOffers}) => UserModel(
