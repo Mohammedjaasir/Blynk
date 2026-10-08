@@ -119,7 +119,11 @@ export class NotificationTemplates {
 
       case 'OUT_FOR_DELIVERY': {
         const total = Number(data.total_amount || 0).toFixed(2);
-        return `Blynk: Order #${orderNumber} is now OUT FOR DELIVERY! Please keep exact cash of LKR ${total} ready for COD.`;
+        // One plain-text part: about 100 characters with the code.
+        const code = typeof data.delivery_code === 'string' ? data.delivery_code : null;
+        return code
+          ? `Blynk: Order #${orderNumber} is on the way. Delivery code: ${code}, show it to the rider. Keep LKR ${total} ready.`
+          : `Blynk: Order #${orderNumber} is on the way. Keep LKR ${total} ready.`;
       }
 
       case 'DELIVERED': {

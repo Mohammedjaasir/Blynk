@@ -413,6 +413,21 @@ describe('Stage 5 — Outbox Notification Worker Module', () => {
       expect(message).not.toContain('purchase_cost');
       expect(message).not.toContain('markup');
     });
+
+    it('the "on the way" SMS carries the delivery code, in one plain part (owner, 2026-10-08)', () => {
+      const message = NotificationTemplates.render('OUT_FOR_DELIVERY', {
+        order_number: 'BL-20261008-3050',
+        total_amount: 580,
+        delivery_code: '0427',
+      });
+      expect(message).toBe('Blynk: Order #BL-20261008-3050 is on the way. Delivery code: 0427, show it to the rider. Keep LKR 580.00 ready.');
+      expect(message.length).toBeLessThanOrEqual(160);
+      expect(/^[ -~]*$/.test(message)).toBe(true);
+      // An older queued row without a code still reads correctly.
+      expect(NotificationTemplates.render('OUT_FOR_DELIVERY', { order_number: 'BL-1', total_amount: 10 })).toBe(
+        'Blynk: Order #BL-1 is on the way. Keep LKR 10.00 ready.'
+      );
+    });
   });
 
   describe('Phone Number Normalization Consistency', () => {

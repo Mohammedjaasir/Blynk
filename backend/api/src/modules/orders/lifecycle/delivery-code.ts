@@ -23,7 +23,7 @@ export function newDeliveryCode(): string {
  * Issues a fresh code for a dispatch, in the dispatch transaction (the order
  * is locked). A re-dispatch replaces the old code and clears the counters.
  */
-export async function issueDeliveryCode(trx: Trx, orderId: string): Promise<void> {
+export async function issueDeliveryCode(trx: Trx, orderId: string): Promise<string> {
   const code = newDeliveryCode();
   await trx
     .insertInto('order_delivery_codes')
@@ -41,6 +41,7 @@ export async function issueDeliveryCode(trx: Trx, orderId: string): Promise<void
       })
     )
     .execute();
+  return code;
 }
 
 /**

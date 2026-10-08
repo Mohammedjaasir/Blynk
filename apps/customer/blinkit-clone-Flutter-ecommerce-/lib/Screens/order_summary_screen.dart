@@ -45,6 +45,13 @@ bool isLiveTrackable(OrderModel order) =>
 bool showsDeliveryCode(OrderModel order) =>
     order.status == OrderStatus.outForDelivery && order.deliveryCode != null;
 
+/// Before pickup there is no code yet (the backend issues it when the rider
+/// picks the order up): say where it will appear (owner, 2026-10-08).
+bool showsDeliveryCodeComing(OrderModel order) =>
+    order.status == OrderStatus.placed ||
+    order.status == OrderStatus.packed ||
+    order.status == OrderStatus.itemUnavailable;
+
 /// The order detail screen: everything the backend knows about one order,
 /// in the order the customer asks it in - where is it, what happened, what
 /// was in it, what it costs, where it's going, and (only if the backend says
@@ -339,6 +346,9 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> with WidgetsBin
       if (showsDeliveryCode(order)) ...[
         DeliveryCodeCard(code: order.deliveryCode!),
         const SizedBox(height: _sectionGap),
+      ] else if (showsDeliveryCodeComing(order)) ...[
+        const DeliveryCodeComingCard(),
+        const SizedBox(height: _sectionGap),
       ],
       // 1b. The live map - only while the rider has the order and is on the
       // way (never before pickup, never after arrival/delivery/failure).
@@ -425,6 +435,26 @@ class DeliveryCodeCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Before pickup: where the delivery code will appear, and that it also comes
+/// by SMS.
+class DeliveryCodeComingCard extends StatelessWidget {
+  const DeliveryCodeComingCard({super.key});
+
+  static const String message =
+      'Your 4-digit delivery code appears here when the rider picks up your order. We also send it by SMS.';
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('order-delivery-code-coming'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(BlynkSpace.s16),
+      decoration: appCardDecoration(),
+      child: Text(message, style: BlynkText.body.copyWith(color: BlynkColors.ink3)),
     );
   }
 }

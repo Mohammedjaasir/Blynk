@@ -40,10 +40,13 @@ export async function dispatch(trx: Trx, order: OrderRow, delivery: DeliveryRow,
     .execute();
   const updated = await setOrderStatus(trx, order, 'OUT_FOR_DELIVERY', actor, note, { dispatched_at: now });
   // Proof of delivery (migration 016): a new code for every dispatch, shown to the customer only.
-  await issueDeliveryCode(trx, order.id);
+  const deliveryCode = await issueDeliveryCode(trx, order.id);
+  // The code rides on the one "on the way" SMS (owner, 2026-10-08): PWA
+  // customers get no push, and the person receiving may not have the app.
   await enqueueCustomerSms(trx, order, 'OUT_FOR_DELIVERY', `order_${order.id}_${delivery.id}_OUT_FOR_DELIVERY_SMS`, {
     order_number: order.order_number,
     total_amount: Number(order.total_amount),
+    delivery_code: deliveryCode,
   });
   return updated;
 }

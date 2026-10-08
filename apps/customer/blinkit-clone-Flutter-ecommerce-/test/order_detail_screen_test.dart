@@ -190,6 +190,20 @@ void main() {
   });
 
   // 2
+  testWidgets('before pickup, says where the delivery code will appear (owner, 2026-10-08)', (tester) async {
+    api.routes[_getKey] = () async => _envelope(orderJson(status: 'PACKED', canCancel: false));
+    await _pumpDetail(tester, api);
+    expect(find.byKey(const Key('order-delivery-code-coming')), findsOneWidget);
+    expect(find.text(DeliveryCodeComingCard.message), findsOneWidget);
+    expect(find.byKey(const Key('order-delivery-code')), findsNothing);
+  });
+
+  testWidgets('no "code coming" note once the order is finished', (tester) async {
+    api.routes[_getKey] = () async => _envelope(orderJson(status: 'CANCELLED'));
+    await _pumpDetail(tester, api);
+    expect(find.byKey(const Key('order-delivery-code-coming')), findsNothing);
+  });
+
   group('the cancel button follows the backend can_cancel flag', () {
     testWidgets('visible when can_cancel is true', (tester) async {
       api.routes[_getKey] = () async => _envelope(orderJson(status: 'PLACED', canCancel: true));
