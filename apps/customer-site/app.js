@@ -29,7 +29,8 @@
       window.location.href = '/app/';
       return;
     }
-    if (deferredPrompt) {
+    // Chrome's own one-tap install on Android phones; everywhere else, the guide.
+    if (deferredPrompt && isAndroid) {
       const prompt = deferredPrompt;
       deferredPrompt = null;
       try {

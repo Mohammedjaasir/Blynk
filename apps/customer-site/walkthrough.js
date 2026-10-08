@@ -119,9 +119,12 @@
   window.blynkWalkthrough = function (kind) {
     dialog.dataset.kind = kind;
     if (kind === 'desktop') {
+      // A computer: ask which phone, then walk through that phone's steps
+      // (owner, 2026-10-08: "Download Blynk" should always guide).
       steps = [];
       stage.innerHTML =
-        '<img src="/assets/icon-192.png" alt="" width="72" height="72" class="walk__icon"><h2 id="install-title" class="walk__title">Blynk is an app for your phone</h2><p class="walk__text">Open <strong>blynk.lk</strong> on your Android phone or iPhone and tap <strong>Download Blynk</strong>.</p>';
+        '<img src="/assets/icon-192.png" alt="" width="72" height="72" class="walk__icon"><h2 id="install-title" class="walk__title">Which phone do you have?</h2><p class="walk__text">Blynk installs on your phone. Pick yours to see the steps, then open <strong>blynk.lk</strong> on it.</p><div class="walk__choose"><button type="button" class="btn btn--yellow btn--pill" data-walk-pick="ios">iPhone</button><button type="button" class="btn btn--yellow btn--pill" data-walk-pick="android">Android</button></div>';
+      for (const b of stage.querySelectorAll('[data-walk-pick]')) b.addEventListener('click', () => window.blynkWalkthrough(b.dataset.walkPick));
       counter.textContent = '';
       dots.innerHTML = '';
       back.hidden = next.hidden = open.hidden = true;

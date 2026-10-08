@@ -488,3 +488,6 @@ html, body { overflow-x: clip; }
 .guide__pick span:last-child { color: var(--ink-2); font-size: 16px; }
 .guide__pick.is-mine { border: 2px solid var(--green); }
 .guide__pick.is-mine .guide__badge::after { content: '  b7  your phone'; font-weight: 600; }
+
+.walk__choose { display: flex; gap: 12px; justify-content: center; margin: 18px 0 6px; }
+.walk__choose .btn { min-width: 130px; }
