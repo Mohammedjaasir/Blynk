@@ -29,7 +29,8 @@ abstract final class StoreInfo {
   /// The backend accepts cash on delivery only (`payment_method` is hard-coded COD).
   static const String paymentMethodLabel = 'Cash on delivery';
 
-  /// No customer support channel exists yet (decision D5), so this is
-  /// deliberately null: callers must not show a contact line.
-  static const String? supportContact = null;
+  /// Customer support, by phone and WhatsApp (owner, 2026-10-08).
+  static const String supportPhone = '+94717107374';
+  static const String supportPhoneLabel = '+94 71 710 7374';
+  static const String supportWhatsAppUrl = 'https://wa.me/94717107374';
 }

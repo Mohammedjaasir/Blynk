@@ -35,8 +35,14 @@
   <!-- MapLibre GL JS: the maplibre_gl plugin's web implementation draws the
        tracking map and the location picker with it (maplibre_gl 0.25 README,
        "Web"). Pinned to an exact 4.x so a release can't change the map. -->
-  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <!-- Smoothness (owner, 2026-10-08): connect early to the API and the
+       image server, and load MapLibre deferred so its ~800 KB never holds up
+       the shop's first paint (defer still runs it before flutter.js). -->
+  <link rel="preconnect" href="https://blynk-api.valgrowlabs.com" crossorigin>
+  <link rel="preconnect" href="https://q26l1nnsapwt2baiv2uqrvhb.72.62.253.92.sslip.io" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" media="print" onload="this.media='all'">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer></script>
 
   <script>
     // The value below is injected by flutter build, do not touch.
@@ -101,13 +107,23 @@
         show('Install Blynk: tap <b>Share</b> below, then <b>Add to Home Screen</b>.', { arrow: true });
         return;
       }
-      // Android installs the real app (owner, 2026-10-08): offer the APK.
-      show('Get the Blynk app - smoother and faster.', { button: true });
-      btn.textContent = 'Download';
-      btn.addEventListener('click', function () {
-        window.location.href = '/download/blynk.apk?v=6';
-        text.innerHTML = 'Downloading... then tap <b>blynk.apk</b> and <b>Install</b>.';
+      // Android adds the web app too (owner, 2026-10-08: full PWA, no APK):
+      // Chrome's own Install prompt when it offers one, else point at its menu.
+      var prompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        prompt = e;
+        show('Get the Blynk app on your Home Screen.', { button: true });
       });
+      btn.addEventListener('click', function () {
+        if (!prompt) return;
+        prompt.prompt();
+        prompt.userChoice.then(function () { bar.style.display = 'none'; prompt = null; });
+      });
+      window.addEventListener('appinstalled', function () { bar.style.display = 'none'; });
+      setTimeout(function () {
+        if (!prompt) show('Install Blynk: tap <b>&#8942;</b> above, then <b>Install app</b>.', { arrow: true, top: true });
+      }, 4000);
     })();
   </script>
   <!-- Phones only (owner, 2026-10-08: "we don't need Blynk for computer").
@@ -132,12 +148,15 @@
           '.bd h1{font-size:30px;margin:16px 0 8px;letter-spacing:-.02em}.bd p{color:#4b5364;font-size:17px;line-height:1.5;margin:0 0 20px}' +
                     '</style>' +
           '<div class="bd"><main><img class="ic" src="icons/Icon-192.png" alt="">' +
-          '<h1>Blynk is a phone app</h1><p>Groceries delivered in Dharga Town and its 4 km surroundings. Open <b>blynk.lk</b> on your phone and tap <b>Download Blynk</b>.</p></main></div>';
+          '<h1>Blynk is a phone app</h1><p>Groceries delivered in Dharga Town and its 4 km surroundings. Open <b>blynk.lk</b> on your phone and tap <b>Get Blynk</b>.</p></main></div>';
       });
     })();
   </script>
   <script>
-    window.addEventListener('load', function(ev) {
+    // Start as soon as the page is parsed (flutter.js is deferred, so it is
+    // ready by then), not at 'load', which also waits for every image and
+    // stylesheet (smoothness, owner 2026-10-08).
+    document.addEventListener('DOMContentLoaded', function(ev) {
       if (window.blynkDesktopGate) return; // a computer: see the gate above
       // Download main.dart.js
       _flutter.loader.loadEntrypoint({

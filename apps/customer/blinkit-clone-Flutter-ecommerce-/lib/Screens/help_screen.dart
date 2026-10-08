@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../design/tokens.dart';
 import '../app_responsive.dart';
+import '../Services/open_link.dart';
 import '../Services/store_info.dart';
 import '../UI/Widgets/Atoms/list_tile.dart';
 import 'feedback_screen.dart';
@@ -10,11 +12,9 @@ import 'feedback_screen.dart';
 /// information (delivery area, hours, fee, payment method, cancellation
 /// rules) that matches the backend's actual business rules.
 ///
-/// There is no support-ticket or chat module in the backend, so this screen
-/// does not pretend to offer one - it answers what it can and points to the
-/// order screens for anything order-specific. Below the answers, "Send
-/// feedback" opens the one-way feedback form (read by the store in Blynk
-/// Admin, not a conversation).
+/// Below the answers: call or WhatsApp the store (owner, 2026-10-08), and
+/// "Send feedback" opens the one-way feedback form (read by the store in
+/// Blynk Admin, not a conversation).
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
@@ -57,6 +57,16 @@ class HelpScreen extends StatelessWidget {
           'Open the order from the Orders tab and check the item list first.',
     ),
   ];
+
+  /// Opens the dialler or WhatsApp; where that is not possible the number is
+  /// copied and shown instead.
+  static void _contact(BuildContext context, String url) {
+    if (openExternalLink(url)) return;
+    Clipboard.setData(const ClipboardData(text: StoreInfo.supportPhone));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Number copied: ${StoreInfo.supportPhoneLabel}')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +121,16 @@ class HelpScreen extends StatelessWidget {
               const SizedBox(height: BlynkSpace.s24),
               ..._faqs.map((faq) => _FaqTile(faq: faq)),
               const SizedBox(height: BlynkSpace.s8),
+              customListTile(
+                icon: Icons.call_outlined,
+                title: 'Call us  ${StoreInfo.supportPhoneLabel}',
+                callback: () => _contact(context, 'tel:${StoreInfo.supportPhone}'),
+              ),
+              customListTile(
+                icon: Icons.chat_outlined,
+                title: 'WhatsApp us',
+                callback: () => _contact(context, StoreInfo.supportWhatsAppUrl),
+              ),
               customListTile(
                 icon: BlynkIcons.feedback,
                 title: 'Send feedback',

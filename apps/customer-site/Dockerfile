@@ -5,11 +5,10 @@
 #   API_BASE_URL     the Blynk API, e.g. https://api.example.com/api/v1 (required)
 #   SHARE_BASE_URL   this site's https address, used in shared product links (optional)
 #   ANDROID_CERT_SHA256  the APK's signing-key SHA-256, if not this PC's debug key (optional)
-#   ANDROID_APK_URL  where "Download for Android" points (default /download/blynk.apk)
 #
 # APKs: https://<site>/download/<name>.apk serves a file from a volume mounted
 # at /usr/share/nginx/html/download if there is one, else the copy built in
-# from apps/customer-site/files/ (blynk.apk, rider.apk, ops.apk).
+# from apps/customer-site/files/ (rider.apk, ops.apk; the customer app is web-only).
 
 # ---- 1. The shop: the Flutter customer app, built for the web --------------
 FROM ghcr.io/cirruslabs/flutter:stable AS app
@@ -38,7 +37,5 @@ COPY apps/customer-site/.well-known /usr/share/nginx/html/.well-known
 ARG ANDROID_CERT_SHA256=
 RUN if [ -n "$ANDROID_CERT_SHA256" ]; then sed -i "s#\"sha256_cert_fingerprints\": \[[^]]*\]#\"sha256_cert_fingerprints\": [\"${ANDROID_CERT_SHA256}\"]#" /usr/share/nginx/html/.well-known/assetlinks.json; fi
 COPY --from=app /src/build/web /usr/share/nginx/html/app
-ARG ANDROID_APK_URL=/download/blynk.apk
-RUN sed -i "s#/download/blynk.apk#${ANDROID_APK_URL}#" /usr/share/nginx/html/index.html \
- && mkdir -p /usr/share/nginx/html/download
+RUN mkdir -p /usr/share/nginx/html/download
 EXPOSE 80

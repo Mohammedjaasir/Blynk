@@ -15,8 +15,10 @@ void main() {
       expect(StoreInfo.paymentMethodLabel, 'Cash on delivery');
     });
 
-    test('has no support contact until one is decided (D5)', () {
-      expect(StoreInfo.supportContact, isNull);
+    test('support: phone and WhatsApp on the same number (owner, 2026-10-08)', () {
+      expect(StoreInfo.supportPhone, '+94717107374');
+      expect(StoreInfo.supportPhoneLabel, '+94 71 710 7374');
+      expect(StoreInfo.supportWhatsAppUrl, 'https://wa.me/94717107374');
     });
   });
 

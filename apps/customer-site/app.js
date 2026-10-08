@@ -29,8 +29,8 @@
       window.location.href = '/app/';
       return;
     }
-    // Android: the real app (APK) downloads and the guide shows how to
-    // install it; iPhone: the web app steps; a computer: pick a phone first.
+    // Full web app (owner, 2026-10-08: no APK): Android and iPhone each get
+    // the steps to add Blynk to the Home Screen; a computer picks a phone first.
     showGuide(isIOS ? 'ios' : isAndroid ? 'android' : 'desktop');
   }
   // The install guide (2026-10-08): mark the visitor's own phone.
@@ -46,10 +46,6 @@
       event.preventDefault();
       install();
     });
-
-  // The download button always reads "For iOS & Android" (owner, 2026-10-07);
-  // the sheet it opens still shows the steps for the reader's own phone.
-
 
   // On desktop, scale the header and hero down together so the whole first
   // screen fits the window height (laptops, browser zoom).
