@@ -103,6 +103,9 @@
   const intro = dialog.querySelector('[data-walk-intro]');
   let steps = [];
   let at = 0;
+  // Blynk is for phones only (owner, 2026-10-08): a computer only gets the
+  // steps to follow on a phone; Download there says Blynk is a phone app.
+  let onComputer = false;
 
   function render() {
     const step = steps[at];
@@ -118,6 +121,7 @@
   // kind: 'ios' | 'android' | 'desktop'
   window.blynkWalkthrough = function (kind, opts) {
     dialog.dataset.kind = kind;
+    onComputer = kind === 'desktop' || Boolean(opts && opts.fromComputer);
     if (kind === 'android' && opts && typeof opts.installNow === 'function') {
       // Chrome can install Blynk in one tap: offer that first, the steps second.
       steps = [];
@@ -141,8 +145,8 @@
       // (owner, 2026-10-08: "Download Blynk" should always guide).
       steps = [];
       stage.innerHTML =
-        '<img src="/assets/icon-192.png" alt="" width="72" height="72" class="walk__icon"><h2 id="install-title" class="walk__title">Which phone do you have?</h2><p class="walk__text">Blynk installs on your phone. Pick yours to see the steps, then open <strong>blynk.lk</strong> on it.</p><div class="walk__choose"><button type="button" class="btn btn--yellow btn--pill" data-walk-pick="ios">iPhone</button><button type="button" class="btn btn--yellow btn--pill" data-walk-pick="android">Android</button></div>';
-      for (const b of stage.querySelectorAll('[data-walk-pick]')) b.addEventListener('click', () => window.blynkWalkthrough(b.dataset.walkPick));
+        '<img src="/assets/icon-192.png" alt="" width="72" height="72" class="walk__icon"><h2 id="install-title" class="walk__title">Which phone do you have?</h2><p class="walk__text">Blynk is an app for your phone. Pick yours to see the steps.</p><div class="walk__choose"><button type="button" class="btn btn--yellow btn--pill" data-walk-pick="ios">iPhone</button><button type="button" class="btn btn--yellow btn--pill" data-walk-pick="android">Android</button></div>';
+      for (const b of stage.querySelectorAll('[data-walk-pick]')) b.addEventListener('click', () => window.blynkWalkthrough(b.dataset.walkPick, { fromComputer: true }));
       counter.textContent = '';
       dots.innerHTML = '';
       back.hidden = next.hidden = open.hidden = true;
@@ -152,9 +156,11 @@
       at = 0;
       intro.hidden = false;
       intro.textContent =
-        kind === 'ios'
-          ? 'Open the Blynk shop in Safari, then do these steps there. A helper on that page points at the right button.'
-          : 'Open the Blynk shop in Chrome, then do these steps there. A helper on that page offers an Install button.';
+        onComputer
+          ? 'Blynk is a phone app: open blynk.lk on your phone, tap Download Blynk and follow these steps there.'
+          : kind === 'ios'
+            ? 'Tap Download at the end, then do these steps in Safari. A helper on that page points at the right button.'
+            : 'Tap Download at the end, then do these steps in Chrome. A helper on that page offers an Install button.';
       render();
     }
     if (dialog.open) return;

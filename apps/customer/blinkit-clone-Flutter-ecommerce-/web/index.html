@@ -119,8 +119,35 @@
       }, 4000);
     })();
   </script>
+  <!-- Phones only (owner, 2026-10-08: "we don't need Blynk for computer").
+       On a computer the shop does not load: a page points to the phone app.
+       ?desktop=1 opens the shop anyway for staff testing (this session). -->
+  <script>
+    (function () {
+      var ua = navigator.userAgent || '';
+      var phone = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var allow = /[?&]desktop=1/.test(location.search);
+      try {
+        if (allow) sessionStorage.setItem('blynk-desktop', '1');
+        allow = allow || sessionStorage.getItem('blynk-desktop') === '1';
+      } catch (e) {}
+      if (phone || allow) return;
+      window.blynkDesktopGate = true;
+      document.addEventListener('DOMContentLoaded', function () {
+        document.body.innerHTML =
+          '<style>body{margin:0;background:#fffdf5;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#12151f}' +
+          '.bd{min-height:100vh;display:grid;place-items:center;padding:24px;text-align:center}' +
+          '.bd main{max-width:420px}.bd .ic{width:84px;height:84px;border-radius:20px}' +
+          '.bd h1{font-size:30px;margin:16px 0 8px;letter-spacing:-.02em}.bd p{color:#4b5364;font-size:17px;line-height:1.5;margin:0 0 20px}' +
+                    '</style>' +
+          '<div class="bd"><main><img class="ic" src="icons/Icon-192.png" alt="">' +
+          '<h1>Blynk is a phone app</h1><p>Groceries delivered in Dharga Town and its 4 km surroundings. Open <b>blynk.lk</b> on your phone and tap <b>Download Blynk</b>.</p></main></div>';
+      });
+    })();
+  </script>
   <script>
     window.addEventListener('load', function(ev) {
+      if (window.blynkDesktopGate) return; // a computer: see the gate above
       // Download main.dart.js
       _flutter.loader.loadEntrypoint({
         serviceWorker: {
