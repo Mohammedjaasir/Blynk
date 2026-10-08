@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
@@ -64,10 +63,11 @@ class PushNotifications {
     RegisterDevice? register,
     UnregisterDevice? unregister,
     bool? enabled,
-  })  : _platform = platform ?? (kIsWeb ? const NoopPushPlatform() : createPushPlatform()),
+  })  : _platform = platform ?? createPushPlatform(),
         _register = register ?? _registerWithApi,
         _unregister = unregister ?? _unregisterWithApi,
-        _enabled = enabled ?? !kIsWeb;
+        // On for the web too since 2026-10-08 (the PWA): push_platform_web.dart.
+        _enabled = enabled ?? true;
 
   /// The app's instance. Replaced in tests.
   static PushNotifications instance = PushNotifications();
@@ -176,6 +176,13 @@ class PushNotifications {
     try {
       await _platform.requestPermission();
     } catch (_) {}
+    // A browser hands out its push token only once allowed, so register now.
+    if (_signedIn) {
+      try {
+        final token = await _platform.getToken();
+        if (token != null && token.isNotEmpty && token != _registeredToken) await _registerToken(token);
+      } catch (_) {}
+    }
   }
 
   @visibleForTesting

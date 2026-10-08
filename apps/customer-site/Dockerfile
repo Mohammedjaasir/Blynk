@@ -28,7 +28,7 @@ RUN rm -f .env && touch .env \
 FROM nginx:1.27-alpine
 COPY apps/customer-site/nginx.conf /etc/nginx/conf.d/default.conf
 COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-site/app.js \
-     apps/customer-site/manifest.webmanifest /usr/share/nginx/html/
+     apps/customer-site/manifest.webmanifest apps/customer-site/firebase-messaging-sw.js /usr/share/nginx/html/
 COPY apps/customer-site/assets /usr/share/nginx/html/assets
 COPY apps/customer-site/files /usr/share/nginx/html/files
 # Android App Links. The fingerprint is the key the Blynk APK is signed with;

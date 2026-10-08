@@ -510,4 +510,11 @@ describe('Back in stock: /catalog/products/:id/notify-me', () => {
     });
     expect(await pushRows(c.id)).toHaveLength(1);
   });
+
+  it('a web push (PWA) shows the Blynk icon and opens the web app (2026-10-08)', async () => {
+    const { webPushIcon } = await import('../src/modules/notifications/push/push.sender.js');
+    const { env } = await import('../src/config/env.js');
+    expect(env.WEB_APP_URL).toMatch(/^https?:\/\//);
+    expect(webPushIcon()).toBe(new URL('/assets/icon-192.png', env.WEB_APP_URL).toString());
+  });
 });

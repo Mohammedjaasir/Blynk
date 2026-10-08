@@ -1,3 +1,4 @@
+import { env } from '../../../config/env.js';
 import { logger } from '../../../utils/logger.js';
 import { pushServiceAccount, type ServiceAccount } from './push.config.js';
 
@@ -82,6 +83,11 @@ class FirebasePushSender implements PushSender {
       data: message.data,
       android: { priority: 'high', notification: { channelId: ORDERS_CHANNEL_ID } },
       apns: { payload: { aps: { sound: 'default' } } },
+      // The PWA (2026-10-08): the browser shows it; a tap opens the web app.
+      webpush: {
+        notification: { icon: webPushIcon() },
+        fcmOptions: { link: env.WEB_APP_URL },
+      },
     });
     return res.responses.map((r, i): PushTokenOutcome => {
       const token = tokens[i]!;
@@ -89,6 +95,11 @@ class FirebasePushSender implements PushSender {
       return { token, ok: false, error: classifyFcmError(r.error?.code, r.error?.message), detail: r.error?.code };
     });
   }
+}
+
+/** The Blynk icon the browser shows beside a web push. */
+export function webPushIcon(): string {
+  return new URL('/assets/icon-192.png', env.WEB_APP_URL).toString();
 }
 
 let override: PushSender | null | undefined;

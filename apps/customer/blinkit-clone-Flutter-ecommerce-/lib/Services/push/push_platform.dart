@@ -1,11 +1,11 @@
 /// The device side of push notifications, behind a seam so the app's logic
 /// ([PushNotifications]) is tested with a fake and never needs Firebase.
 ///
-/// The real implementation is `push_platform_firebase.dart` (Android/iOS).
-/// The web build gets [NoopPushPlatform]: every call does nothing, so the web
-/// shop needs no Firebase web config.
+/// The real implementations are `push_platform_firebase.dart` (Android/iOS)
+/// and `push_platform_web.dart` (the PWA, Firebase web push, 2026-10-08).
+/// [NoopPushPlatform] is the do-nothing stand-in tests and fallbacks use.
 abstract class PushPlatform {
-  /// 'android' or 'ios' - what POST /me/devices records.
+  /// 'android', 'ios' or 'web' - what POST /me/devices records.
   String get platformName;
 
   /// Starts Firebase and local notifications. Throws when it cannot (e.g. a

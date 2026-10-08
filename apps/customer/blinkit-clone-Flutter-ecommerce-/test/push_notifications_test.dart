@@ -189,6 +189,21 @@ void main() {
       expect(await push.takeLaunchTarget(), isNull);
     });
 
+    test('a browser token that only exists once allowed is registered right after the prompt (web, 2026-10-08)', () async {
+      final platform = FakePushPlatform(token: null);
+      final calls = Calls();
+      final push = makePush(platform, calls);
+      await push.start();
+      await push.signedIn();
+      expect(calls.registered, isEmpty, reason: 'no token before permission');
+      platform.token = 'web-tok';
+      await push.requestPermission();
+      expect(calls.registered, ['web-tok/android']);
+      // Asking again does not register the same token twice.
+      await push.requestPermission();
+      expect(calls.registered, hasLength(1));
+    });
+
     test('permission is asked only when push is on', () async {
       final platform = FakePushPlatform();
       final push = makePush(platform, Calls());
