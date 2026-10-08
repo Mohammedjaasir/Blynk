@@ -18,6 +18,21 @@ const isSbs = () => env.SMS_PROVIDER === 'sbs';
  * (SBS Telecom, every Sri Lankan network). Both take the number as
  * 947XXXXXXXX and the approved sender ID from SMS_SENDER_ID.
  */
+/** SBS refuses an Idempotency-Key longer than this (HTTP 400). */
+export const SBS_IDEMPOTENCY_KEY_MAX = 80;
+
+/**
+ * The Idempotency-Key sent to SBS. Short keys go as they are; a longer one
+ * (an offer's "sms-offer:<offer id>:<customer id>" is 83 characters, which
+ * SBS refused, 2026-10-08) becomes a hash of itself: still the same key on
+ * every retry, so a retry still never texts twice.
+ */
+export function sbsIdempotencyKey(key: string): string {
+  const plain = `blynk-${key}`;
+  if (plain.length <= SBS_IDEMPOTENCY_KEY_MAX) return plain;
+  return `blynk-${crypto.createHash('sha256').update(key).digest('hex')}`;
+}
+
 export class SmsProvider implements NotificationProvider {
   readonly channel = 'SMS' as const;
 
@@ -197,7 +212,7 @@ export class SmsProvider implements NotificationProvider {
           Authorization: `Basic ${auth}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
-          'Idempotency-Key': `blynk-${params.idempotencyKey ?? params.notificationId}`.slice(0, 128),
+          'Idempotency-Key': sbsIdempotencyKey(params.idempotencyKey ?? params.notificationId),
         },
         body: JSON.stringify({ to, text: params.message, from: env.SMS_SENDER_ID || 'Blynk' }),
         signal: AbortSignal.timeout(10000),

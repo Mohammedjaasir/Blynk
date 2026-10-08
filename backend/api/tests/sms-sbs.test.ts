@@ -78,4 +78,14 @@ describe('SMS via SBS Telecom', () => {
     expect(result).toMatchObject({ success: false, errorType: 'PERMANENT' });
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it('keeps the Idempotency-Key within the SBS limit of 80 characters (offer keys are 83)', async () => {
+    const { sbsIdempotencyKey, SBS_IDEMPOTENCY_KEY_MAX } = await import('../src/modules/notifications/providers/sms.provider.js');
+    const offerKey = `sms-offer:${'a'.repeat(36)}:${'b'.repeat(36)}`;
+    const key = sbsIdempotencyKey(offerKey);
+    expect(key.length).toBeLessThanOrEqual(SBS_IDEMPOTENCY_KEY_MAX);
+    expect(sbsIdempotencyKey(offerKey)).toBe(key); // the same on a retry
+    expect(sbsIdempotencyKey(`sms-offer:${'a'.repeat(36)}:${'c'.repeat(36)}`)).not.toBe(key);
+    expect(sbsIdempotencyKey('n-1')).toBe('blynk-n-1');
+  });
 });
