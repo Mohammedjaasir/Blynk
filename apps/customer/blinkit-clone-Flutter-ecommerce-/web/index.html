@@ -46,6 +46,79 @@
   <script src="flutter.js" defer></script>
 </head>
 <body>
+  <!-- Install helper (owner, 2026-10-08): in a phone browser - never inside
+       the installed app - point at exactly what to tap to add Blynk to the
+       Home Screen. Continues the walkthrough on blynk.lk. Closable; stays
+       closed for this visit. Plain DOM over the Flutter view. -->
+  <style>
+    .bi-bar { position: fixed; left: 12px; right: 12px; bottom: 40px; z-index: 2147483000; display: none;
+      align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: 16px;
+      background: #12151f; color: #fff; font: 600 14px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+    .bi-bar.is-top { top: 14px; bottom: auto; }
+    .bi-bar img { width: 36px; height: 36px; border-radius: 9px; flex: none; }
+    .bi-bar b { color: #ffe141; }
+    .bi-text { flex: 1; }
+    .bi-btn { border: 0; border-radius: 999px; padding: 10px 16px; background: #ffe141; color: #12151f; font: 800 14px system-ui, sans-serif; cursor: pointer; }
+    .bi-x { border: 0; background: none; color: #c9cdd6; font-size: 22px; line-height: 1; padding: 4px 6px; cursor: pointer; }
+    .bi-arrow { position: absolute; left: 50%; bottom: -26px; margin-left: -10px; width: 20px; height: 20px; color: #ffe141; animation: bi-bounce 1s ease-in-out infinite; }
+    .bi-bar.is-top .bi-arrow { left: auto; right: 10px; bottom: auto; top: -26px; transform: rotate(180deg); animation-name: bi-bounce-up; }
+    @keyframes bi-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+    @keyframes bi-bounce-up { 0%, 100% { transform: rotate(180deg) translateY(0); } 50% { transform: rotate(180deg) translateY(6px); } }
+    @media (prefers-reduced-motion: reduce) { .bi-arrow { animation: none; } }
+  </style>
+  <div class="bi-bar" id="bi-bar" role="status" aria-live="polite">
+    <img src="icons/Icon-192.png" alt="">
+    <span class="bi-text" id="bi-text"></span>
+    <button type="button" class="bi-btn" id="bi-install" hidden>Install</button>
+    <button type="button" class="bi-x" id="bi-close" aria-label="Close">&times;</button>
+    <svg class="bi-arrow" id="bi-arrow" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22 3 11h6V2h6v9h6z"/></svg>
+  </div>
+  <script>
+    (function () {
+      var ua = navigator.userAgent || '';
+      var isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isAndroid = /Android/i.test(ua);
+      var installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+      var closed = false;
+      try { closed = sessionStorage.getItem('blynk-install-helper') === 'closed'; } catch (e) {}
+      if (installed || closed || !(isIOS || isAndroid)) return;
+      var bar = document.getElementById('bi-bar'), text = document.getElementById('bi-text');
+      var btn = document.getElementById('bi-install'), arrow = document.getElementById('bi-arrow');
+      function show(html, opts) {
+        text.innerHTML = html;
+        btn.hidden = !opts.button;
+        arrow.style.display = opts.arrow ? '' : 'none';
+        bar.classList.toggle('is-top', !!opts.top);
+        bar.style.display = 'flex';
+      }
+      document.getElementById('bi-close').addEventListener('click', function () {
+        bar.style.display = 'none';
+        try { sessionStorage.setItem('blynk-install-helper', 'closed'); } catch (e) {}
+      });
+      if (isIOS) {
+        // Safari's Share button is in the bottom toolbar on iPhone.
+        show('Install Blynk: tap <b>Share</b> below, then <b>Add to Home Screen</b>.', { arrow: true });
+        return;
+      }
+      var prompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        prompt = e;
+        show('Get the Blynk app on your Home Screen.', { button: true });
+      });
+      btn.addEventListener('click', function () {
+        if (!prompt) return;
+        prompt.prompt();
+        prompt.userChoice.then(function () { bar.style.display = 'none'; prompt = null; });
+      });
+      window.addEventListener('appinstalled', function () { bar.style.display = 'none'; });
+      // No install offer from the browser: point at Chrome's menu instead.
+      setTimeout(function () {
+        if (!prompt) show('Install Blynk: tap <b>&#8942;</b> above, then <b>Install app</b>.', { arrow: true, top: true });
+      }, 4000);
+    })();
+  </script>
   <script>
     window.addEventListener('load', function(ev) {
       // Download main.dart.js

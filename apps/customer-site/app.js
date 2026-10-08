@@ -19,15 +19,9 @@
     deferredPrompt = event;
   });
 
-  const sheet = document.getElementById('install-sheet');
-  // Blynk is released as an installed app only (owner, 2026-10-07): a
-  // computer gets the "open this on your phone" note and no way into the shop.
-  const sheetOpen = sheet.querySelector('[data-sheet-open]');
+  // The step-by-step walkthrough lives in walkthrough.js (2026-10-08).
   function showGuide(kind) {
-    for (const el of sheet.querySelectorAll('[data-guide]')) el.hidden = el.dataset.guide !== kind;
-    if (sheetOpen) sheetOpen.hidden = kind === 'desktop';
-    if (typeof sheet.showModal === 'function') sheet.showModal();
-    else sheet.setAttribute('open', '');
+    if (typeof window.blynkWalkthrough === 'function') window.blynkWalkthrough(kind);
   }
 
   async function install() {
@@ -52,6 +46,10 @@
   const mine = isIOS ? 'ios' : isAndroid ? 'android' : null;
   if (mine) document.querySelector(`[data-guide-card="${mine}"]`)?.classList.add('is-mine');
 
+  // "Show me how" in the Install section opens the walkthrough for that phone.
+  for (const pick of document.querySelectorAll('[data-walk-kind]'))
+    pick.addEventListener('click', () => showGuide(pick.dataset.walkKind));
+
   for (const button of document.querySelectorAll('[data-install]'))
     button.addEventListener('click', (event) => {
       event.preventDefault();
@@ -61,10 +59,6 @@
   // The download button always reads "For iOS & Android" (owner, 2026-10-07);
   // the sheet it opens still shows the steps for the reader's own phone.
 
-  // Close the sheet by tapping the backdrop.
-  sheet.addEventListener('click', (event) => {
-    if (event.target === sheet) sheet.close();
-  });
 
   // On desktop, scale the header and hero down together so the whole first
   // screen fits the window height (laptops, browser zoom).

@@ -132,26 +132,17 @@
           <h2 id="install-guide-title">Add Blynk to your phone.</h2>
           <p class="lead">Free, in under a minute. No Play Store or App Store needed &mdash; Blynk then opens from your Home Screen like any other app.</p>
         </div>
-        <div class="guide" data-reveal>
-          <article class="guide__card" data-guide-card="android">
-            <h3 class="guide__title"><span class="guide__badge">Android</span> Chrome</h3>
-            <ol class="guide__steps">
-              <li>Open <strong>blynk.lk</strong> in <strong>Chrome</strong>.</li>
-              <li>Tap <strong>Download Blynk</strong>, then <strong>Install</strong>.</li>
-              <li>No install button? Tap the <svg class="i i--inline" viewBox="0 0 24 24" aria-label="menu"><circle class="fill" cx="12" cy="5" r="1.8"/><circle class="fill" cx="12" cy="12" r="1.8"/><circle class="fill" cx="12" cy="19" r="1.8"/></svg> <strong>menu</strong> &rarr; <strong>Install app</strong> (or <strong>Add to Home screen</strong>).</li>
-              <li>Open <strong>Blynk</strong> from your Home Screen and log in with your number.</li>
-            </ol>
-          </article>
-          <article class="guide__card" data-guide-card="ios">
-            <h3 class="guide__title"><span class="guide__badge">iPhone</span> Safari</h3>
-            <ol class="guide__steps">
-              <li>Open <strong>blynk.lk</strong> in <strong>Safari</strong>.</li>
-              <li>Tap <strong>Download Blynk</strong>, then <strong>Open Blynk to install</strong>.</li>
-              <li>Tap the <strong>Share</strong> button <svg class="i i--inline" viewBox="0 0 24 24" aria-label="Share icon"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg> at the bottom of the screen.</li>
-              <li>Choose <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
-              <li>Open <strong>Blynk</strong> from your Home Screen and allow notifications for order updates.</li>
-            </ol>
-          </article>
+        <div class="guide guide--buttons" data-reveal>
+          <button type="button" class="guide__pick" data-walk-kind="ios" data-guide-card="ios">
+            <span class="guide__badge">iPhone</span>
+            <strong>Show me how</strong>
+            <span>4 quick steps in Safari, with pictures</span>
+          </button>
+          <button type="button" class="guide__pick" data-walk-kind="android" data-guide-card="android">
+            <span class="guide__badge">Android</span>
+            <strong>Show me how</strong>
+            <span>4 quick steps in Chrome, with pictures</span>
+          </button>
         </div>
         <p class="guide__note" data-reveal>
           Opened this link inside WhatsApp, Facebook or Instagram? Tap their <strong>&middot;&middot;&middot;</strong> menu and choose
@@ -236,44 +227,26 @@
     </div>
   </footer>
 
-  <!-- ======================= Install instructions ======================= -->
-  <dialog class="sheet" id="install-sheet" aria-labelledby="install-title">
-    <form method="dialog" class="sheet__close-row">
-      <button class="sheet__close" aria-label="Close">
+  <!-- ===================== Install walkthrough (walkthrough.js) ===================== -->
+  <dialog class="walk" id="install-sheet" aria-labelledby="install-title">
+    <div class="walk__top">
+      <span class="walk__count" data-walk-count></span>
+      <form method="dialog"><button class="walk__close" aria-label="Close">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
-      </button>
-    </form>
-    <img src="/assets/icon-192.png" alt="" width="64" height="64" class="sheet__icon">
-    <h2 id="install-title">Add Blynk to your Home Screen</h2>
-
-    <div data-guide="ios">
-      <ol class="sheet__steps">
-        <li>Open <strong>Blynk in Safari</strong> using the button below.</li>
-        <li>Tap the <strong>Share</strong> button
-          <svg class="i i--inline" viewBox="0 0 24 24" aria-label="Share icon"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
-          at the bottom of the screen.</li>
-        <li>Choose <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
-      </ol>
-      <p class="sheet__note">Blynk then opens from your Home Screen like any other app.</p>
+      </button></form>
     </div>
-
-    <div data-guide="android" hidden>
-      <ol class="sheet__steps">
-        <li>Open <strong>Blynk in Chrome</strong> using the button below.</li>
-        <li>Tap <strong>Install</strong> if Chrome offers it, or tap the <strong>⋮ menu</strong>.</li>
-        <li>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong>, then <strong>Install</strong>.</li>
-      </ol>
-      <p class="sheet__note">Blynk then opens from your Home Screen like any other app.</p>
+    <p class="walk__intro" data-walk-intro></p>
+    <div class="walk__stage" data-walk-stage aria-live="polite"></div>
+    <div class="walk__dots" data-walk-dots aria-hidden="true"></div>
+    <div class="walk__nav">
+      <button type="button" class="btn btn--pill walk__back" data-walk-back>Back</button>
+      <button type="button" class="btn btn--yellow btn--pill walk__next" data-walk-next>Next</button>
+      <!-- Phones only: installing happens from the shop's own page. -->
+      <a class="btn btn--yellow btn--pill walk__next" href="/app/" data-walk-open data-sheet-open>Open the Blynk shop</a>
     </div>
-
-    <div data-guide="desktop" hidden>
-      <p class="sheet__note">Blynk is an app for your phone. Open <strong>blynk.lk</strong> on your Android phone or iPhone and tap <strong>Download Blynk</strong>.</p>
-    </div>
-
-    <!-- Phones only: installing happens from the shop's own page. -->
-    <a class="btn btn--yellow btn--pill btn--block" href="/app/" data-sheet-open>Open Blynk to install</a>
   </dialog>
 
+  <script src="/walkthrough.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>
