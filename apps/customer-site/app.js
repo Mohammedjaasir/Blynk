@@ -48,6 +48,10 @@
     }
     showGuide(isIOS ? 'ios' : isAndroid ? 'android' : 'desktop');
   }
+  // The install guide (2026-10-08): mark the visitor's own phone.
+  const mine = isIOS ? 'ios' : isAndroid ? 'android' : null;
+  if (mine) document.querySelector(`[data-guide-card="${mine}"]`)?.classList.add('is-mine');
+
   for (const button of document.querySelectorAll('[data-install]'))
     button.addEventListener('click', (event) => {
       event.preventDefault();
