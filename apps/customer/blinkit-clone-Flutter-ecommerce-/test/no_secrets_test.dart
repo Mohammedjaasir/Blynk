@@ -29,6 +29,10 @@ List<File> _sourceFilesUnder(String dir) {
     // Firebase app config: git-ignored, lives only on the build machine
     // (its API key is a public client identifier, but it stays untracked).
     if (path.endsWith('/google-services.json')) return false;
+    // Firebase web push config (2026-10-08): the web app's Firebase key is
+    // shipped to every browser in main.dart.js, so it cannot be a build-time
+    // secret; it is restricted to the blynk.lk referrer in Google Cloud.
+    if (path.endsWith('lib/Services/push/web_push_config.dart')) return false;
     return !skipExtensions.any(path.toLowerCase().endsWith);
   }).toList();
 }

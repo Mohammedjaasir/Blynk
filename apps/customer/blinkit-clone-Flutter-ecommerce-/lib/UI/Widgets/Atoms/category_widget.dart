@@ -252,6 +252,12 @@ class _Disc extends StatelessWidget {
                   alignment: category.imageAlignment,
                   width: double.infinity,
                   height: double.infinity,
+                  // Until the photo arrives the circle shows its glyph, never
+                  // an empty disc (owner, 2026-10-08: slow loads looked blank).
+                  frameBuilder: (_, child, frame, wasSynchronouslyLoaded) =>
+                      wasSynchronouslyLoaded || frame != null
+                          ? child
+                          : _FallbackGlyph(category: category, glyph: glyph, size: size),
                   errorBuilder: (_, __, ___) => _FallbackGlyph(
                     category: category,
                     glyph: glyph,
