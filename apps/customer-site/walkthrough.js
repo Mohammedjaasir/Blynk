@@ -116,8 +116,26 @@
   }
 
   // kind: 'ios' | 'android' | 'desktop'
-  window.blynkWalkthrough = function (kind) {
+  window.blynkWalkthrough = function (kind, opts) {
     dialog.dataset.kind = kind;
+    if (kind === 'android' && opts && typeof opts.installNow === 'function') {
+      // Chrome can install Blynk in one tap: offer that first, the steps second.
+      steps = [];
+      stage.innerHTML =
+        '<img src="/assets/icon-192.png" alt="" width="84" height="84" class="walk__icon"><h2 id="install-title" class="walk__title">Install Blynk</h2><p class="walk__text">One tap: Chrome adds Blynk to your Home Screen, like any other app.</p><div class="walk__choose"><button type="button" class="btn btn--yellow btn--pill" data-walk-now>Install now</button></div><button type="button" class="walk__link" data-walk-steps>Show me the steps instead</button>';
+      stage.querySelector('[data-walk-now]').addEventListener('click', async () => {
+        const ok = await opts.installNow();
+        if (ok) dialog.close();
+        else window.blynkWalkthrough('android');
+      });
+      stage.querySelector('[data-walk-steps]').addEventListener('click', () => window.blynkWalkthrough('android'));
+      counter.textContent = '';
+      dots.innerHTML = '';
+      back.hidden = next.hidden = open.hidden = true;
+      intro.hidden = true;
+      if (typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
+      return;
+    }
     if (kind === 'desktop') {
       // A computer: ask which phone, then walk through that phone's steps
       // (owner, 2026-10-08: "Download Blynk" should always guide).
@@ -139,6 +157,7 @@
           : 'Open the Blynk shop in Chrome, then do these steps there. A helper on that page offers an Install button.';
       render();
     }
+    if (dialog.open) return;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   };

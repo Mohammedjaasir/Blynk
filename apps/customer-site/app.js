@@ -29,17 +29,24 @@
       window.location.href = '/app/';
       return;
     }
-    // Chrome's own one-tap install on Android phones; everywhere else, the guide.
-    if (deferredPrompt && isAndroid) {
-      const prompt = deferredPrompt;
-      deferredPrompt = null;
-      try {
-        await prompt.prompt();
-        await prompt.userChoice;
-        return;
-      } catch {
-        // The browser refused its own prompt: show the steps instead.
-      }
+    // Every device gets the guide (owner, 2026-10-08). On an Android phone
+    // where Chrome can install in one tap, the guide opens on "Install now".
+    if (isAndroid && deferredPrompt && typeof window.blynkWalkthrough === 'function') {
+      window.blynkWalkthrough('android', {
+        installNow: async () => {
+          const prompt = deferredPrompt;
+          deferredPrompt = null;
+          if (!prompt) return false;
+          try {
+            await prompt.prompt();
+            await prompt.userChoice;
+            return true;
+          } catch {
+            return false; // refused: the steps are shown instead
+          }
+        },
+      });
+      return;
     }
     showGuide(isIOS ? 'ios' : isAndroid ? 'android' : 'desktop');
   }
