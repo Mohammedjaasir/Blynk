@@ -152,6 +152,44 @@
       });
     })();
   </script>
+  <!-- Android back button (owner, 2026-10-09: "back exits the app").
+       Flutter keeps one browser history entry under the app and turns a back
+       to it into an in-app back. Chrome on Android skips history entries a
+       page added before the user touched it, so the first back skipped that
+       entry and closed the app. A CloseWatcher (Chrome 120+) receives the back
+       press instead; it is turned into the same in-app back (history.back()
+       from script is never skipped). While the shop shows "Press back again
+       to exit", the app lifts the watcher so that press really leaves. -->
+  <script>
+    (function () {
+      if (!('CloseWatcher' in window)) return;
+      var watcher = null;
+      var exitArmed = false;
+      function arm() {
+        if (watcher || exitArmed) return;
+        try { watcher = new CloseWatcher(); } catch (e) { return; }
+        watcher.onclose = function () {
+          watcher = null;
+          history.back();
+          setTimeout(arm, 50);
+        };
+      }
+      window.blynkBackGuard = {
+        setExitArmed: function (on) {
+          exitArmed = !!on;
+          if (exitArmed && watcher) {
+            var w = watcher;
+            watcher = null;
+            w.onclose = null;
+            w.destroy();
+          }
+          if (!exitArmed) arm();
+        }
+      };
+      arm();
+      document.addEventListener('pointerdown', arm, true);
+    })();
+  </script>
   <script>
     // Start as soon as the page is parsed (flutter.js is deferred, so it is
     // ready by then), not at 'load', which also waits for every image and

@@ -8,6 +8,7 @@ import '../Services/Providers/auth.provider.dart';
 import '../Services/Providers/order.provider.dart';
 import '../Services/Providers/product.provider.dart';
 import '../Services/catalog_live_updates.dart';
+import '../Services/web_back_guard.dart';
 import '../UI/Widgets/Organisms/adaptive_scaffold.dart';
 import '../UI/Widgets/Organisms/cart_bar.dart';
 import '../UI/Widgets/Atoms/snackbar_helper.dart';
@@ -145,6 +146,7 @@ class _CustomerShellState extends State<CustomerShell>
   @override
   void dispose() {
     _exitTimer?.cancel();
+    if (_exitArmed) setWebBackExitArmed(false);
     _liveRefresh?.cancel();
     _live?.stop();
     WidgetsBinding.instance.removeObserver(this);
@@ -216,8 +218,11 @@ class _CustomerShellState extends State<CustomerShell>
           return;
         }
         setState(() => _exitArmed = true);
+        // The web app: let the next back press leave (web/index.html).
+        setWebBackExitArmed(true);
         _exitTimer?.cancel();
         _exitTimer = Timer(CustomerShell.exitWindow, () {
+          setWebBackExitArmed(false);
           if (mounted) setState(() => _exitArmed = false);
         });
         showBlynkSnackBar(context: context, message: CustomerShell.exitHint);
