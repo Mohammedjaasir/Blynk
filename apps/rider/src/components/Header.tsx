@@ -1,11 +1,15 @@
-import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import mark from '../assets/blynk-mark.png';
+import { Sheet } from './Sheet';
 
 /**
  * The only chrome in the app: who is signed in, a refresh, and sign out.
  * `leading` replaces the mark on inner screens (a back link).
+ *
+ * Owner, 2026-10-09: "My day" sat right beside "Sign out" and riders could
+ * hit the wrong one. My day is now a card on the deliveries list (Queue),
+ * and Sign out asks first.
  */
 export function Header({
   onRefresh,
@@ -19,6 +23,7 @@ export function Header({
   leading?: ReactNode;
 }) {
   const { user, signOut } = useAuth();
+  const [confirming, setConfirming] = useState(false);
   const firstName = user?.full_name?.trim().split(/\s+/)[0] || 'Rider';
   return (
     <header className="bar">
@@ -49,16 +54,24 @@ export function Header({
         </button>
         {/* Home only: signing out mid-delivery is never the next step. */}
         {leading ? null : (
-          <>
-            <Link to="/day" className="bar__link">
-              My day
-            </Link>
-            <button type="button" className="bar__signout" onClick={() => void signOut()}>
-              Sign out
-            </button>
-          </>
+          <button type="button" className="bar__signout" onClick={() => setConfirming(true)}>
+            Sign out
+          </button>
         )}
       </span>
+      {confirming ? (
+        <Sheet title="Sign out?" onClose={() => setConfirming(false)}>
+          <p className="sheet__hint">You won't get new deliveries until you sign in again.</p>
+          <div className="sheet__actions">
+            <button type="button" className="danger" onClick={() => void signOut()}>
+              Sign out
+            </button>
+            <button type="button" className="text-button" data-autofocus onClick={() => setConfirming(false)}>
+              Stay signed in
+            </button>
+          </div>
+        </Sheet>
+      ) : null}
     </header>
   );
 }

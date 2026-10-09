@@ -30,8 +30,8 @@ import 'product_hero.dart';
 /// text size of its own.
 ///
 /// **Product offers (owner, 2026-10-09):** while [ProductModel.isOnOffer] the
-/// price line shows the regular price struck through in red ([StruckPrice]),
-/// then the offer price in red with raised cents ([SalePrice]) - no tag
+/// price line shows the regular price struck through in green ([StruckPrice]),
+/// then the offer price in green with raised cents ([SalePrice]) - no tag
 /// (owner, 2026-10-09: "it should cut the cost and show something like
 /// this"). Both come from the backend's real `offer_price`; a product with no
 /// offer renders exactly as before, in the same fixed-height boxes.
@@ -196,7 +196,7 @@ class ProductCard extends StatelessWidget {
             SizedBox(
               height: priceBox(context),
               child: onOffer
-                  // The old price, struck in red, then the new price in red
+                  // The old price, struck in green, then the new price in green
                   // (owner, 2026-10-09). The struck price gives way first
                   // when the card is narrow.
                   ? OfferPriceLine(

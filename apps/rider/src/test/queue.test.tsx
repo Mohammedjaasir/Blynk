@@ -136,13 +136,28 @@ describe('Deliveries (home)', () => {
     expect(count()).toBe(before + 2);
   });
 
-  it('greets the rider by first name and signs out', async () => {
+  it('greets the rider by first name and signs out only after confirming', async () => {
     const user = userEvent.setup();
     renderAs(RIDER, '/');
     expect(await screen.findByText('Farhan')).toBeInTheDocument();
+    // A mis-tap only opens the question (owner, 2026-10-09).
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Sign out?' });
+    await user.click(within(sheet).getByRole('button', { name: 'Stay signed in' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(tokenStore.access).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Sign out?' })).getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByLabelText('Mobile number')).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
+  });
+
+  it('My day is a card on the list, not beside Sign out in the top bar', async () => {
+    renderAs(RIDER, '/');
+    const card = await screen.findByRole('link', { name: 'My day' });
+    expect(card).toHaveAttribute('href', '/day');
+    expect(card.closest('header')).toBeNull();
   });
 });
 

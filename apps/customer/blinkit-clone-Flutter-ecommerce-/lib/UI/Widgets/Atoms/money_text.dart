@@ -86,7 +86,7 @@ class StruckPrice extends StatelessWidget {
   }
 }
 
-/// The reduced price of an offer (owner, 2026-10-09): red, with the cents
+/// The reduced price of an offer (owner, 2026-10-09): green, with the cents
 /// small and raised - "LKR 220.⁰⁰" - beside a [StruckPrice] of the old one.
 /// Formatted by [formatLkr] like every other amount.
 class SalePrice extends StatelessWidget {
@@ -123,7 +123,7 @@ class SalePrice extends StatelessWidget {
 }
 
 
-/// The old price struck in red, then the new price in red (owner,
+/// The old price struck in green, then the new price in green (owner,
 /// 2026-10-09). The struck price gives way first on a narrow line; the new
 /// price scales down rather than overflow at large text sizes.
 class OfferPriceLine extends StatelessWidget {

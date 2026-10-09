@@ -54,8 +54,9 @@ abstract final class BlynkPalette {
   static const Color strike = Color(0xFF6E757B);
 
   /// The offer price and the line through the old price (owner, 2026-10-09:
-  /// "it should cut the cost"). 4.8:1 on paper, above the 4.5:1 floor.
-  static const Color sale = Color(0xFFD92D20);
+  /// "it should cut the cost"; red did not match the brand, so it is Blynk's
+  /// own green, the same value as [positive]).
+  static const Color sale = Color(0xFF0C831F);
 
   // 2026-09-24: the four `categoryTint*` pastels were DELETED here. They were
   // a reviewed deviation from plan section 5 ("No per-screen colours", "No new

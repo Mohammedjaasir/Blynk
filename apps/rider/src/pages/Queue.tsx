@@ -100,6 +100,17 @@ export function Queue() {
               </section>
             ) : null}
 
+            {/* My day lives here, away from Sign out (owner, 2026-10-09). */}
+            <Link to="/day" className="day-card" aria-label="My day">
+              <span className="day-card__text">
+                <span className="day-card__title">My day</span>
+                <span className="day-card__sub">Deliveries, cash and earnings</span>
+              </span>
+              <span className="day-card__arrow" aria-hidden="true">
+                ›
+              </span>
+            </Link>
+
             {queue.done.length > 0 ? (
               <section className="done" aria-labelledby="done-heading">
                 <h2 id="done-heading" className="eyebrow">

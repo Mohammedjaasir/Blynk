@@ -1701,3 +1701,22 @@ a {
   background: #12151f; color: #fff; font-size: 14px; font-weight: 700; white-space: nowrap;
   box-shadow: 0 6px 20px rgba(18, 21, 31, 0.25); pointer-events: none;
 }
+
+/* My day card on the deliveries list (owner, 2026-10-09: moved away from Sign out). */
+.day-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  margin: 16px 0;
+  padding: 12px 16px;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.day-card__text { display: flex; flex-direction: column; gap: 2px; }
+.day-card__title { font-size: 18px; font-weight: 800; }
+.day-card__sub { font-size: 14px; color: var(--ink-2); }
+.day-card__arrow { font-size: 28px; font-weight: 700; line-height: 1; }
