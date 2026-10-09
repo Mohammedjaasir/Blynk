@@ -4,7 +4,7 @@ import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { deliveryCodeForDelivery } from './helpers/delivery-code.js';
-import { DELIVERY_LOCATION_COLUMNS, DELIVERY_PUBLIC_COLUMNS } from '../src/modules/orders/delivery.columns.js';
+import { DELIVERY_LOCATION_COLUMNS, DELIVERY_PAY_COLUMNS, DELIVERY_PUBLIC_COLUMNS } from '../src/modules/orders/delivery.columns.js';
 import { liftRiderTripCap } from './helpers/rider-trips.js';
 
 // Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
@@ -199,12 +199,12 @@ describe('Delivery payloads never carry the rider location columns (I1)', () => 
   });
 
   describe('a future column cannot leak silently', () => {
-    it('every deliveries column is classified exactly once: public or location', async () => {
+    it('every deliveries column is classified exactly once: public, location or pay', async () => {
       const cols = await pool.query(
         `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'deliveries'`
       );
       const actual = cols.rows.map((r) => r.column_name as string).sort();
-      const classified = [...DELIVERY_PUBLIC_COLUMNS, ...DELIVERY_LOCATION_COLUMNS].sort();
+      const classified = [...DELIVERY_PUBLIC_COLUMNS, ...DELIVERY_LOCATION_COLUMNS, ...DELIVERY_PAY_COLUMNS].sort();
       // Adding a column to `deliveries` fails here until it is put in DELIVERY_PUBLIC_COLUMNS (safe to
       // return to staff) or DELIVERY_LOCATION_COLUMNS (sensitive, dedicated paths only).
       expect(classified).toEqual(actual);

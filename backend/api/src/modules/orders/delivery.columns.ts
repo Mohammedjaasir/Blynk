@@ -23,6 +23,13 @@ export const DELIVERY_LOCATION_COLUMNS = [
   'location_received_at',
 ] as const;
 
+/**
+ * Rider pay snapshot written at settlement (migration 032; owner,
+ * 2026-10-09). Private: read only by the earnings report and cash
+ * reconciliation queries, never returned on a delivery payload.
+ */
+export const DELIVERY_PAY_COLUMNS = ['rider_pay_type', 'rider_commission_percent', 'rider_earning_lkr'] as const;
+
 /** Columns safe to return to staff (admin/packing) and, after sanitising, customers. */
 export const DELIVERY_PUBLIC_COLUMNS = [
   'id',
