@@ -111,7 +111,10 @@ class _AddEditAddressScreenState extends State<AddEditAddressScreen> {
         TextEditingController(text: e?.deliveryInstructions ?? '');
     // Not asked any more: an edited address keeps its default flag, and a
     // customer's first address becomes the default.
-    _isDefault = e?.isDefault ?? _hasNoAddresses();
+    // A new address becomes the one orders go to (owner, 2026-10-10: "when
+    // user adds a new address it must select that address"); an edited one
+    // keeps whether it was the default.
+    _isDefault = e?.isDefault ?? true;
     _locationSet = e != null;
   }
 

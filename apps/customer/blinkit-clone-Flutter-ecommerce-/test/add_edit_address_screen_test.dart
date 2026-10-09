@@ -285,14 +285,15 @@ void main() {
       expect(addresses.created?.isDefault, isTrue);
     });
 
-    testWidgets('a later address is not the default', (tester) async {
+    testWidgets('a later address becomes the selected (default) one too', (tester) async {
+      // Owner, 2026-10-10: a newly added address must be the one selected.
       addresses.existingList = [_existing];
       await pumpScreen(tester);
       await fillRequired(tester);
       await tester.tap(find.text('Save address'));
       await settle(tester);
 
-      expect(addresses.created?.isDefault, isFalse);
+      expect(addresses.created?.isDefault, isTrue);
     });
   });
 

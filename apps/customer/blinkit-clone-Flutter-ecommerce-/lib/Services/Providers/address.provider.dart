@@ -86,6 +86,8 @@ class AddressProvider extends ChangeNotifier {
       if (rawAddress == null) return null;
       final created = AddressModel.fromJson(rawAddress.cast<String, dynamic>());
       _addresses = [..._addresses, created];
+      // The server moved the default to it: no other address is still marked.
+      if (created.isDefault) _addresses = _onlyDefault(created.id);
       notifyListeners();
       return created;
     } catch (e) {
@@ -111,6 +113,7 @@ class AddressProvider extends ChangeNotifier {
       if (rawAddress == null) return null;
       final updated = AddressModel.fromJson(rawAddress.cast<String, dynamic>());
       _addresses = _addresses.map((a) => a.id == id ? updated : a).toList();
+      if (updated.isDefault) _addresses = _onlyDefault(id);
       notifyListeners();
       return updated;
     } catch (e) {
@@ -143,28 +146,33 @@ class AddressProvider extends ChangeNotifier {
         methodType: 'POST',
         url: '/me/addresses/$id/default',
       );
-      _addresses = _addresses
-          .map((a) => AddressModel(
-                id: a.id,
-                label: a.label,
-                recipientName: a.recipientName,
-                recipientPhone: a.recipientPhone,
-                alternatePhone: a.alternatePhone,
-                addressLine1: a.addressLine1,
-                addressLine2: a.addressLine2,
-                city: a.city,
-                postalCode: a.postalCode,
-                latitude: a.latitude,
-                longitude: a.longitude,
-                deliveryInstructions: a.deliveryInstructions,
-                isDefault: a.id == id,
-              ))
-          .toList();
+      _addresses = _onlyDefault(id);
       notifyListeners();
     } catch (e) {
       _saveFailure = AppErrors.from(e);
       notifyListeners();
       rethrow;
     }
+  }
+
+  /// The address list with [id] as the one default (the selected address).
+  List<AddressModel> _onlyDefault(String id) {
+    return _addresses
+        .map((a) => AddressModel(
+              id: a.id,
+              label: a.label,
+              recipientName: a.recipientName,
+              recipientPhone: a.recipientPhone,
+              alternatePhone: a.alternatePhone,
+              addressLine1: a.addressLine1,
+              addressLine2: a.addressLine2,
+              city: a.city,
+              postalCode: a.postalCode,
+              latitude: a.latitude,
+              longitude: a.longitude,
+              deliveryInstructions: a.deliveryInstructions,
+              isDefault: a.id == id,
+            ))
+        .toList();
   }
 }
