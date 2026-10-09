@@ -86,9 +86,8 @@ class StruckPrice extends StatelessWidget {
   }
 }
 
-/// The reduced price of an offer (owner, 2026-10-09): green, with the cents
-/// small and raised - "LKR 220.⁰⁰" - beside a [StruckPrice] of the old one.
-/// Formatted by [formatLkr] like every other amount.
+/// The reduced price of an offer, in Blynk green (owner, 2026-10-09),
+/// formatted exactly like [MoneyText].
 class SalePrice extends StatelessWidget {
   const SalePrice(this.amount, {super.key, this.style, this.maxLines, this.overflow});
 
@@ -99,31 +98,39 @@ class SalePrice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = formatLkr(amount, alwaysShowCents: true);
-    final dot = text.lastIndexOf('.');
-    final base = BlynkType.price.merge(style).copyWith(color: BlynkColors.sale);
-    final cents = BlynkText.raisedCents(base);
+    final text = formatLkr(amount);
     return Semantics(
-      label: formatLkr(amount),
+      label: text,
       excludeSemantics: true,
-      child: Text.rich(
-        TextSpan(children: [
-          TextSpan(text: text.substring(0, dot + 1)),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.top,
-            child: Text(text.substring(dot + 1), style: cents),
-          ),
-        ]),
+      child: Text(
+        text,
         maxLines: maxLines,
         overflow: overflow,
-        style: base,
+        style: BlynkType.price.merge(style).copyWith(color: BlynkColors.sale),
       ),
     );
   }
 }
 
+/// "Save LKR 91" - small, green, for an offer (owner, 2026-10-09).
+class SaveText extends StatelessWidget {
+  const SaveText(this.amount, {super.key, this.style});
 
-/// The old price struck in green, then the new price in green (owner,
+  final double amount;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Save ${formatLkr(amount)}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: BlynkText.caption.merge(style).copyWith(color: BlynkColors.sale, fontWeight: FontWeight.w700),
+    );
+  }
+}
+
+/// The new price in Blynk green, then the old price struck through (owner,
 /// 2026-10-09). The struck price gives way first on a narrow line; the new
 /// price scales down rather than overflow at large text sizes.
 class OfferPriceLine extends StatelessWidget {
@@ -139,20 +146,23 @@ class OfferPriceLine extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = BlynkSpace.s4;
-        final room = constraints.maxWidth.isFinite ? (constraints.maxWidth - gap).clamp(0.0, double.infinity) : double.infinity;
+        final room = constraints.maxWidth.isFinite ? constraints.maxWidth : double.infinity;
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
-            Flexible(
-              child: StruckPrice(regular, key: struckKey, maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: gap),
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: room),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: SalePrice(price, maxLines: 1, style: style),
+              ),
+            ),
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.only(left: gap),
+                child: StruckPrice(regular, key: struckKey, maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
             ),
           ],

@@ -243,8 +243,8 @@ class ComboPriceLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final price = MoneyText(combo.price, maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
     if (!combo.hasSaving) return price;
-    // Same as a product offer (owner, 2026-10-09): the items' total struck
-    // in green, then the combo price in green.
+    // Same as a product offer (owner, 2026-10-09): the combo price in green,
+    // then the items' total struck through.
     return OfferPriceLine(
       regular: combo.itemsTotal,
       price: combo.price,

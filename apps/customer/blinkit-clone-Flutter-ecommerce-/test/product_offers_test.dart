@@ -153,7 +153,7 @@ void main() {
   });
 
   group('ProductCard', () {
-    testWidgets('on offer: the old price struck in red, the new price in red, no tag', (tester) async {
+    testWidgets('on offer: new price in green first, old price struck after, Save tag, no Offer tag', (tester) async {
       await tester.pumpWidget(_host(tester, _card(_product('r', offer: 220, endsAt: _future()))));
       final struck = find.byType(StruckPrice);
       expect(struck, findsOneWidget);
@@ -161,14 +161,13 @@ void main() {
       expect(struckText.data, 'LKR 250');
       expect(struckText.style?.decoration, TextDecoration.lineThrough);
       expect(struckText.style?.decorationColor, BlynkColors.sale);
-      // The new price: red, cents small and raised ("LKR 220.⁰⁰").
+      // The new price: Blynk green, plain "LKR 220", first on the line.
       final sale = find.byType(SalePrice);
       expect(sale, findsOneWidget);
-      expect(tester.widget<SalePrice>(sale).amount, 220);
-      expect(find.textContaining('LKR 220.', findRichText: true), findsOneWidget);
-      expect(find.text('00'), findsOneWidget);
-      // The old price comes first on the line.
-      expect(tester.getTopLeft(struck).dx, lessThan(tester.getTopLeft(sale).dx));
+      expect(find.text('LKR 220'), findsOneWidget);
+      expect(tester.widget<Text>(find.text('LKR 220')).style?.color, BlynkColors.sale);
+      expect(tester.getTopLeft(sale).dx, lessThan(tester.getTopLeft(struck).dx));
+      expect(find.text('Save LKR 30'), findsOneWidget);
       expect(find.byType(OfferTag), findsNothing);
       expect(find.textContaining('Offer'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -180,6 +179,7 @@ void main() {
         expect(find.text('LKR 250'), findsOneWidget);
         expect(find.byType(StruckPrice), findsNothing);
         expect(find.byType(SalePrice), findsNothing);
+        expect(find.textContaining('Save'), findsNothing);
         expect(find.textContaining('%'), findsNothing);
       }
     });

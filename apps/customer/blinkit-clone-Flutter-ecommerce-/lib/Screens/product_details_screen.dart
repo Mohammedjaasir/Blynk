@@ -436,11 +436,12 @@ class _ProductSummary extends StatelessWidget {
                 spacing: BlynkSpace.s8,
                 runSpacing: BlynkSpace.s4,
                 children: [
+                  SalePrice(product.effectivePrice, style: BlynkType.priceHero),
                   StruckPrice(
                     product.sellingPrice,
                     style: BlynkText.body.copyWith(color: BlynkColors.strike),
                   ),
-                  SalePrice(product.effectivePrice, style: BlynkType.priceHero),
+                  SaveText(product.sellingPrice - product.effectivePrice),
                 ],
               )
             else
