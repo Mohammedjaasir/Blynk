@@ -44,6 +44,9 @@ abstract final class BlynkType {
   static final TextStyle priceStruck = BlynkText.caption.copyWith(
     color: BlynkColors.strike,
     decoration: TextDecoration.lineThrough,
+    // The line is red, the old figure stays grey (owner, 2026-10-09).
+    decorationColor: BlynkColors.sale,
+    decorationThickness: 2,
   );
 
   /// §6 `productName` — [BlynkText.heading], clamped to

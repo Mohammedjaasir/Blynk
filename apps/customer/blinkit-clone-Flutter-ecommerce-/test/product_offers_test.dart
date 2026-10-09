@@ -11,6 +11,7 @@ import 'package:ecom/UI/Widgets/Atoms/offer_tag.dart';
 import 'package:ecom/UI/Widgets/Organisms/home_product_feed.dart';
 import 'package:ecom/UI/Widgets/Organisms/product_rail.dart';
 import 'package:ecom/app_theme.dart';
+import 'package:ecom/design/tokens.dart';
 
 /// Product offers (owner, 2026-10-09): a product can be on offer at a reduced
 /// price (Rice LKR 250 -> LKR 220), with an optional end date. The customer
@@ -152,16 +153,24 @@ void main() {
   });
 
   group('ProductCard', () {
-    testWidgets('on offer: offer price, struck regular price and the Offer tag', (tester) async {
+    testWidgets('on offer: the old price struck in red, the new price in red, no tag', (tester) async {
       await tester.pumpWidget(_host(tester, _card(_product('r', offer: 220, endsAt: _future()))));
-      expect(find.text('LKR 220'), findsOneWidget);
       final struck = find.byType(StruckPrice);
       expect(struck, findsOneWidget);
       final struckText = tester.widget<Text>(find.descendant(of: struck, matching: find.byType(Text)));
       expect(struckText.data, 'LKR 250');
       expect(struckText.style?.decoration, TextDecoration.lineThrough);
-      expect(find.byType(OfferTag), findsOneWidget);
-      expect(find.text('Offer −12%'), findsOneWidget);
+      expect(struckText.style?.decorationColor, BlynkColors.sale);
+      // The new price: red, cents small and raised ("LKR 220.⁰⁰").
+      final sale = find.byType(SalePrice);
+      expect(sale, findsOneWidget);
+      expect(tester.widget<SalePrice>(sale).amount, 220);
+      expect(find.textContaining('LKR 220.', findRichText: true), findsOneWidget);
+      expect(find.text('00'), findsOneWidget);
+      // The old price comes first on the line.
+      expect(tester.getTopLeft(struck).dx, lessThan(tester.getTopLeft(sale).dx));
+      expect(find.byType(OfferTag), findsNothing);
+      expect(find.textContaining('Offer'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -170,7 +179,7 @@ void main() {
         await tester.pumpWidget(_host(tester, _card(p)));
         expect(find.text('LKR 250'), findsOneWidget);
         expect(find.byType(StruckPrice), findsNothing);
-        expect(find.byType(OfferTag), findsNothing);
+        expect(find.byType(SalePrice), findsNothing);
         expect(find.textContaining('%'), findsNothing);
       }
     });
@@ -192,7 +201,7 @@ void main() {
         ),
       ));
       expect(tester.takeException(), isNull);
-      expect(find.byType(OfferTag), findsOneWidget);
+      expect(find.byType(SalePrice), findsOneWidget);
     });
   });
 

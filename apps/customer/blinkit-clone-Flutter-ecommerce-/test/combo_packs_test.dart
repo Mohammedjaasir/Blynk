@@ -11,6 +11,7 @@ import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
 import 'package:ecom/Services/app_errors.dart';
+import 'package:ecom/UI/Widgets/Atoms/money_text.dart';
 import 'package:ecom/Services/reorder.dart';
 import 'package:ecom/UI/Widgets/Atoms/card_combo_cart.dart';
 import 'package:ecom/UI/Widgets/Atoms/category_offer_banner.dart';
@@ -221,7 +222,7 @@ void main() {
 
       expect(find.text('Breakfast pack'), findsOneWidget);
       expect(find.text('Bread, Eggs ×2, Milk'), findsOneWidget);
-      expect(find.text('LKR 900'), findsOneWidget);
+      expect(tester.widget<SalePrice>(find.byType(SalePrice)).amount, 900);
       expect(find.byKey(const Key('combo-items-total')), findsOneWidget);
       expect(find.text('LKR 1,020'), findsOneWidget);
       expect(find.byKey(const Key('combo-save-tag')), findsOneWidget);

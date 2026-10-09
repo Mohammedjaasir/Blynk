@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'add_to_cart_button.dart';
 import 'image_well.dart';
 import 'money_text.dart';
-import 'offer_tag.dart';
 import '../../../Models/product_model.dart';
 import '../../../design/tokens.dart';
 import 'blynk_press.dart';
@@ -31,9 +30,10 @@ import 'product_hero.dart';
 /// text size of its own.
 ///
 /// **Product offers (owner, 2026-10-09):** while [ProductModel.isOnOffer] the
-/// price line shows the offer price, then the regular price struck through
-/// ([StruckPrice]), and an [OfferTag] ("Offer −12%") sits on the image well's
-/// corner. Both come from the backend's real `offer_price`; a product with no
+/// price line shows the regular price struck through in red ([StruckPrice]),
+/// then the offer price in red with raised cents ([SalePrice]) - no tag
+/// (owner, 2026-10-09: "it should cut the cost and show something like
+/// this"). Both come from the backend's real `offer_price`; a product with no
 /// offer renders exactly as before, in the same fixed-height boxes.
 ///
 /// **Deliberately absent, because the backend has no field for any of them:**
@@ -168,13 +168,6 @@ class ProductCard extends StatelessWidget {
                       overlay: isAvailable ? null : const _UnavailableWash(),
                     ),
                   ),
-                  if (onOffer)
-                    Positioned(
-                      top: BlynkSpace.s4,
-                      left: BlynkSpace.s4,
-                      right: BlynkSpace.s4,
-                      child: Align(alignment: Alignment.topLeft, child: OfferTag(product: product)),
-                    ),
                 ],
               ),
             ),
@@ -203,34 +196,13 @@ class ProductCard extends StatelessWidget {
             SizedBox(
               height: priceBox(context),
               child: onOffer
-                  // The offer price leads; the regular price, struck
-                  // through, gives way first when the card is narrow.
-                  ? LayoutBuilder(
-                      builder: (context, constraints) => Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          ConstrainedBox(
-                            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-                            child: MoneyText(
-                              product.effectivePrice,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: BlynkCardProduct.price,
-                            ),
-                          ),
-                          Flexible(
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: BlynkSpace.s4),
-                              child: StruckPrice(
-                                product.sellingPrice,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                  // The old price, struck in red, then the new price in red
+                  // (owner, 2026-10-09). The struck price gives way first
+                  // when the card is narrow.
+                  ? OfferPriceLine(
+                      regular: product.sellingPrice,
+                      price: product.effectivePrice,
+                      style: BlynkCardProduct.price,
                     )
                   : MoneyText(
                       product.sellingPrice,

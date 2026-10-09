@@ -243,28 +243,13 @@ class ComboPriceLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final price = MoneyText(combo.price, maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
     if (!combo.hasSaving) return price;
-    return LayoutBuilder(
-      builder: (context, constraints) => Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-            child: price,
-          ),
-          Flexible(
-            child: Padding(
-              padding: const EdgeInsets.only(left: BlynkSpace.s4),
-              child: StruckPrice(
-                combo.itemsTotal,
-                key: const Key('combo-items-total'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ],
-      ),
+    // Same as a product offer (owner, 2026-10-09): the items' total struck
+    // in red, then the combo price in red.
+    return OfferPriceLine(
+      regular: combo.itemsTotal,
+      price: combo.price,
+      style: style,
+      struckKey: const Key('combo-items-total'),
     );
   }
 }

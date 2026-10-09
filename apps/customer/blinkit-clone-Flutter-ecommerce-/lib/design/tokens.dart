@@ -51,6 +51,9 @@ abstract final class BlynkColors {
   /// actually returns an original price.
   static const Color strike = BlynkPalette.strike;
 
+  /// The reduced price, and the red line through the old one.
+  static const Color sale = BlynkPalette.sale;
+
   // 2026-09-24: `categoryTints` was DELETED. See the note in primitives.dart —
   // the category tile no longer paints decorative colour, so the deviation it
   // represented is closed.

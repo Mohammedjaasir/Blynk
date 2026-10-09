@@ -19,7 +19,6 @@ import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Atoms/image_well.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
 import '../UI/Widgets/Atoms/notify_me_button.dart';
-import '../UI/Widgets/Atoms/offer_tag.dart';
 import '../UI/Widgets/Atoms/status_badge.dart';
 import '../design/tokens.dart';
 import 'package:ecom/UI/Widgets/Atoms/product_hero.dart';
@@ -437,12 +436,11 @@ class _ProductSummary extends StatelessWidget {
                 spacing: BlynkSpace.s8,
                 runSpacing: BlynkSpace.s4,
                 children: [
-                  MoneyText(product.effectivePrice, style: BlynkType.priceHero),
                   StruckPrice(
                     product.sellingPrice,
                     style: BlynkText.body.copyWith(color: BlynkColors.strike),
                   ),
-                  OfferTag(product: product),
+                  SalePrice(product.effectivePrice, style: BlynkType.priceHero),
                 ],
               )
             else

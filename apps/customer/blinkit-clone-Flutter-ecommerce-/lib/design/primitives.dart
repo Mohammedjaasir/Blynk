@@ -53,6 +53,10 @@ abstract final class BlynkPalette {
   /// real data source and its tokens are gone.
   static const Color strike = Color(0xFF6E757B);
 
+  /// The offer price and the line through the old price (owner, 2026-10-09:
+  /// "it should cut the cost"). 4.8:1 on paper, above the 4.5:1 floor.
+  static const Color sale = Color(0xFFD92D20);
+
   // 2026-09-24: the four `categoryTint*` pastels were DELETED here. They were
   // a reviewed deviation from plan section 5 ("No per-screen colours", "No new
   // palette"), kept only because removing them meant restyling the category

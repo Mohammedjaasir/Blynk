@@ -85,3 +85,79 @@ class StruckPrice extends StatelessWidget {
     );
   }
 }
+
+/// The reduced price of an offer (owner, 2026-10-09): red, with the cents
+/// small and raised - "LKR 220.⁰⁰" - beside a [StruckPrice] of the old one.
+/// Formatted by [formatLkr] like every other amount.
+class SalePrice extends StatelessWidget {
+  const SalePrice(this.amount, {super.key, this.style, this.maxLines, this.overflow});
+
+  final double amount;
+  final TextStyle? style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = formatLkr(amount, alwaysShowCents: true);
+    final dot = text.lastIndexOf('.');
+    final base = BlynkType.price.merge(style).copyWith(color: BlynkColors.sale);
+    final cents = BlynkText.raisedCents(base);
+    return Semantics(
+      label: formatLkr(amount),
+      excludeSemantics: true,
+      child: Text.rich(
+        TextSpan(children: [
+          TextSpan(text: text.substring(0, dot + 1)),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.top,
+            child: Text(text.substring(dot + 1), style: cents),
+          ),
+        ]),
+        maxLines: maxLines,
+        overflow: overflow,
+        style: base,
+      ),
+    );
+  }
+}
+
+
+/// The old price struck in red, then the new price in red (owner,
+/// 2026-10-09). The struck price gives way first on a narrow line; the new
+/// price scales down rather than overflow at large text sizes.
+class OfferPriceLine extends StatelessWidget {
+  const OfferPriceLine({super.key, required this.regular, required this.price, this.style, this.struckKey});
+
+  final double regular;
+  final double price;
+  final TextStyle? style;
+  final Key? struckKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = BlynkSpace.s4;
+        final room = constraints.maxWidth.isFinite ? (constraints.maxWidth - gap).clamp(0.0, double.infinity) : double.infinity;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Flexible(
+              child: StruckPrice(regular, key: struckKey, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: gap),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: room),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: SalePrice(price, maxLines: 1, style: style),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}

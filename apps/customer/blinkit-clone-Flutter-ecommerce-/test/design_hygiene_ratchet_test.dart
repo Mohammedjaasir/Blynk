@@ -530,8 +530,10 @@ void main() {
         'lib/UI/Widgets/Atoms/combo_card.dart': 'hasSaving',
       };
       // Scanned outside money_text.dart itself, whose own constructor
-      // declaration is not a call site.
-      final constructed = RegExp(r'(?<![A-Za-z_])StruckPrice\s*\(');
+      // declaration is not a call site. OfferPriceLine (money_text.dart,
+      // owner 2026-10-09: old price struck in red, new price in red) strikes
+      // too, so its call sites count the same as StruckPrice's.
+      final constructed = RegExp(r'(?<![A-Za-z_])(?:StruckPrice|OfferPriceLine)\s*\(');
       final callers = all.where((f) => _norm(f.path) != owner);
       expect(callers, isNotEmpty);
       expect(_codeOffenders(callers, constructed).toSet(), offerCallers.keys.toSet(),

@@ -229,4 +229,9 @@ abstract final class BlynkText {
     labelMedium: caption,
     labelSmall: caption,
   );
+
+  /// The small raised cents of an offer price (owner, 2026-10-09):
+  /// "LKR 220.⁰⁰" - 60% of the price's own size.
+  static TextStyle raisedCents(TextStyle price) =>
+      price.copyWith(fontSize: (price.fontSize ?? 16) * 0.6, height: 1);
 }
