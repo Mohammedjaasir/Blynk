@@ -150,7 +150,7 @@ class _DentalDoctorProfileScreenState extends State<DentalDoctorProfileScreen> {
                   Text(doctor.fullName, style: BlynkText.title),
                   const SizedBox(height: BlynkSpace.s4),
                   Text(
-                    dentalSpecialtyLabel(doctor.specialty),
+                    doctor.specialty,
                     style: BlynkText.body.copyWith(color: BlynkColors.ink2),
                   ),
                   // "★ 4.6 (12)", or nothing at all before the first rating.

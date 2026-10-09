@@ -51,7 +51,7 @@ describe('Dental schema migration (007)', () => {
        VALUES ('B1 Test Clinic', 'Test City', 'Test Address', 6.5, 80.0, '+94770000001', '09:00', '17:00') RETURNING id`
     );
     const doctor = await pool.query(
-      `INSERT INTO doctors (full_name, specialty) VALUES ('Dr B1 Test', 'GENERAL_DENTIST') RETURNING id`
+      `INSERT INTO doctors (full_name, specialty) VALUES ('Dr B1 Test', 'General dentist') RETURNING id`
     );
     createdClinicIds.push(clinic.rows[0].id);
     createdDoctorIds.push(doctor.rows[0].id);
@@ -92,19 +92,16 @@ describe('Dental schema migration (007)', () => {
       );
     });
 
-    it('creates the two dental enum types with their exact values', async () => {
-      const specialty = await pool.query(
-        `SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid
-          WHERE t.typname = 'dental_specialty_enum' ORDER BY e.enumsortorder`
+    it('keeps the appointment status enum; the specialty enum is gone (migration 030)', async () => {
+      // 2026-10-09 (owner): a doctor's specialty is free text - migration 030
+      // turned doctors.specialty into VARCHAR(64) and dropped dental_specialty_enum.
+      const specialtyType = await pool.query(`SELECT typname FROM pg_type WHERE typname = 'dental_specialty_enum'`);
+      expect(specialtyType.rows).toHaveLength(0);
+      const column = await pool.query(
+        `SELECT data_type, character_maximum_length, is_nullable FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'doctors' AND column_name = 'specialty'`
       );
-      expect(specialty.rows.map((r) => r.enumlabel)).toEqual([
-        'GENERAL_DENTIST',
-        'ORTHODONTIST',
-        'PERIODONTIST',
-        'ENDODONTIST',
-        'ORAL_SURGEON',
-        'PEDIATRIC_DENTIST',
-      ]);
+      expect(column.rows[0]).toEqual({ data_type: 'character varying', character_maximum_length: 64, is_nullable: 'NO' });
 
       const status = await pool.query(
         `SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid
@@ -294,6 +291,41 @@ describe('Dental schema migration (007)', () => {
       await pool.query(`DELETE FROM appointments WHERE id = $1`, [appointmentId]);
       const after = await pool.query(`SELECT 1 FROM appointment_status_history WHERE appointment_id = $1`, [appointmentId]);
       expect(after.rows).toHaveLength(0);
+    });
+  });
+
+  describe('migration 030 (doctor specialty free text)', () => {
+    it('down maps the labels back to the enum (others -> GENERAL_DENTIST) and up maps them forward again (rolled back, never persisted)', async () => {
+      const read = (name: string) =>
+        fs.readFileSync(path.join(__dirname, '../src/database/migrations', name), 'utf-8');
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const inserted = await client.query(
+          `INSERT INTO doctors (full_name, specialty) VALUES
+             ('Dr 030 A', 'Orthodontist'), ('Dr 030 B', 'Oral surgeon'), ('Dr 030 C', 'Cosmetic dentist')
+           RETURNING id`
+        );
+        const ids = inserted.rows.map((r) => r.id);
+        const specialties = async () =>
+          (
+            await client.query(
+              `SELECT specialty::text AS specialty FROM doctors WHERE id = ANY($1) ORDER BY full_name`,
+              [ids]
+            )
+          ).rows.map((r) => r.specialty);
+
+        await client.query(read('030_doctor_specialty_free_text_down.sql'));
+        expect(await specialties()).toEqual(['ORTHODONTIST', 'ORAL_SURGEON', 'GENERAL_DENTIST']);
+
+        await client.query(read('030_doctor_specialty_free_text.sql'));
+        expect(await specialties()).toEqual(['Orthodontist', 'Oral surgeon', 'General dentist']);
+        const enumType = await client.query(`SELECT typname FROM pg_type WHERE typname = 'dental_specialty_enum'`);
+        expect(enumType.rows).toHaveLength(0);
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+      }
     });
   });
 

@@ -50,7 +50,7 @@ function doctor(overrides: Partial<DentalDoctor> = {}): DentalDoctor {
   return {
     id: `dr${seq}`,
     full_name: `Dr. Doctor ${seq}`,
-    specialty: 'GENERAL_DENTIST',
+    specialty: 'General dentist',
     photo_url: null,
     bio: null,
     is_active: true,
@@ -66,7 +66,7 @@ function rosterRow(overrides: Partial<ClinicDoctorRosterRow> = {}): ClinicDoctor
     clinic_doctor_id: `cd${seq}`,
     doctor_id: `dr${seq}`,
     full_name: `Dr. Roster ${seq}`,
-    specialty: 'GENERAL_DENTIST',
+    specialty: 'General dentist',
     photo_url: null,
     bio: null,
     doctor_is_active: true,
@@ -203,20 +203,22 @@ describe('Dental clinics', () => {
 
 // ------------------------------------------------------------ Dental doctors
 describe('Dental doctors', () => {
-  it('lists real doctors with specialty label and status', async () => {
+  it('lists real doctors with their specialty text and status (an old enum code reads as its label)', async () => {
     const d1 = doctor({ full_name: 'Dr. Nadia Farook', specialty: 'ORTHODONTIST', is_active: true });
-    const d2 = doctor({ full_name: 'Dr. Retired', specialty: 'GENERAL_DENTIST', is_active: false });
+    const d2 = doctor({ full_name: 'Dr. Retired', specialty: 'General dentist', is_active: false });
+    const d3 = doctor({ full_name: 'Dr. Smile', specialty: 'Cosmetic dentist' });
     renderAs(ADMIN_WITH_RIDER, '/catalog/dental/doctors', {
-      'GET /admin/dental/doctors': () => ok({ doctors: [d1, d2] }),
+      'GET /admin/dental/doctors': () => ok({ doctors: [d1, d2, d3] }),
     });
 
     expect(await screen.findByText('Dr. Nadia Farook')).toBeInTheDocument();
     expect(screen.getByText('Orthodontist')).toBeInTheDocument();
+    expect(screen.getByText('Cosmetic dentist')).toBeInTheDocument();
     expect(screen.getByText('Dr. Retired')).toBeInTheDocument();
     expect(screen.getByText('Inactive')).toBeInTheDocument();
   });
 
-  it('creates a doctor via the dialog, specialty chosen from the real backend enum', async () => {
+  it('creates a doctor via the dialog, specialty picked from a suggestion chip', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/dental/doctors', {
       'GET /admin/dental/doctors': () => ok({ doctors: [] }),
@@ -225,18 +227,64 @@ describe('Dental doctors', () => {
     await user.click(await screen.findByRole('button', { name: 'Add doctor' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Doctor' }));
     await user.type(dialog.getByLabelText('Full name'), 'Dr. Nadia Farook');
-    await user.selectOptions(dialog.getByLabelText('Specialty'), 'ORTHODONTIST');
+    // In-app chips, never a native <select> (owner, 2026-10-09).
+    expect(dialog.queryByRole('combobox')).not.toBeInTheDocument();
+    const chip = dialog.getByRole('button', { name: 'Orthodontist' });
+    await user.click(chip);
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    expect(dialog.getByLabelText('Specialty')).toHaveValue('Orthodontist');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
       const call = api.find('POST', '/admin/dental/doctors')[0];
       expect(call?.body).toEqual({
         full_name: 'Dr. Nadia Farook',
-        specialty: 'ORTHODONTIST',
+        specialty: 'Orthodontist',
         photo_url: null,
         bio: null,
         is_active: true,
       });
+    });
+  });
+
+  it('a specialty is required: Save without one is refused in the dialog', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/dental/doctors', {
+      'GET /admin/dental/doctors': () => ok({ doctors: [] }),
+      'POST /admin/dental/doctors': () => ok({ doctor: doctor() }),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Add doctor' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Doctor' }));
+    await user.type(dialog.getByLabelText('Full name'), 'Dr. Nadia Farook');
+    await user.type(dialog.getByLabelText('Specialty'), 'X');
+    await user.click(dialog.getByRole('button', { name: 'Save' }));
+    expect(await dialog.findByText('Specialty must be 2 to 64 characters.')).toBeInTheDocument();
+    expect(api.find('POST', '/admin/dental/doctors')).toHaveLength(0);
+  });
+
+  it('edits a doctor to a free-text specialty; typing deselects the chip', async () => {
+    const user = userEvent.setup();
+    const d = doctor({ full_name: 'Dr. Nadia Farook', specialty: 'ORTHODONTIST' });
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/dental/doctors', {
+      'GET /admin/dental/doctors': () => ok({ doctors: [d] }),
+      'PATCH /admin/dental/doctors/:id': (call) => ok({ doctor: { ...d, ...(call.body as object) } }),
+    });
+    await screen.findByText('Dr. Nadia Farook');
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Doctor' }));
+    // The old enum code opens as its readable label, with its chip on.
+    const input = dialog.getByLabelText('Specialty');
+    expect(input).toHaveValue('Orthodontist');
+    expect(dialog.getByRole('button', { name: 'Orthodontist' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.clear(input);
+    await user.type(input, '  Cosmetic dentist ');
+    expect(dialog.getByRole('button', { name: 'Orthodontist' })).toHaveAttribute('aria-pressed', 'false');
+    await user.click(dialog.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      const call = api.find('PATCH', `/admin/dental/doctors/${d.id}`)[0];
+      expect(call?.body).toMatchObject({ full_name: 'Dr. Nadia Farook', specialty: 'Cosmetic dentist' });
     });
   });
 
@@ -620,10 +668,10 @@ describe('End-to-end: standing up a bookable clinic', () => {
       await user.click(await screen.findByRole('button', { name: 'Add doctor' }));
       const dialog = within(screen.getByRole('dialog', { name: 'Doctor' }));
       await user.type(dialog.getByLabelText('Full name'), 'Dr. Nadia Farook');
-      await user.selectOptions(dialog.getByLabelText('Specialty'), 'ORTHODONTIST');
+      await user.click(dialog.getByRole('button', { name: 'Orthodontist' }));
       await user.click(dialog.getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(api.find('POST', '/admin/dental/doctors')).toHaveLength(1));
-      savedDoctor = doctor({ id: 'dr-e2e', full_name: 'Dr. Nadia Farook', specialty: 'ORTHODONTIST' });
+      savedDoctor = doctor({ id: 'dr-e2e', full_name: 'Dr. Nadia Farook', specialty: 'Orthodontist' });
       cleanup();
     }
 
@@ -718,7 +766,7 @@ describe('End-to-end: standing up a bookable clinic', () => {
         clinic_doctor_id: savedClinicDoctorId,
         doctor_id: savedDoctor!.id,
         full_name: 'Dr. Nadia Farook',
-        specialty: 'ORTHODONTIST',
+        specialty: 'Orthodontist',
         consultation_fee: 4200,
         pairing_is_active: true,
       });

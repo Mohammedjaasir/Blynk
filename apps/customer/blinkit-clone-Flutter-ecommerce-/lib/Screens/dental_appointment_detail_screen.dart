@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../Models/dental_appointment_model.dart';
 import '../Models/dental_clinic_model.dart';
-import '../Models/dental_doctor_model.dart';
 import '../Models/dental_format.dart';
 import '../Models/dental_status_labels.dart';
 import '../Services/Providers/dental.provider.dart';
@@ -208,7 +207,7 @@ class _DentalAppointmentDetailScreenState extends State<DentalAppointmentDetailS
                         Text(doctor.fullName, style: BlynkText.heading),
                         const SizedBox(height: BlynkSpace.s4),
                         Text(
-                          dentalSpecialtyLabel(doctor.specialty),
+                          doctor.specialty,
                           style: BlynkText.body.copyWith(color: BlynkColors.ink2),
                         ),
                       ],

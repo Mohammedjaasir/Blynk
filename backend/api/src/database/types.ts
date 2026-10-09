@@ -44,13 +44,9 @@ export type RiderApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type NotificationChannel = 'SMS' | 'WHATSAPP' | 'IN_APP' | 'EMAIL' | 'PUSH';
 export type NotificationStatus = 'QUEUED' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'FAILED';
 
-export type DentalSpecialty =
-  | 'GENERAL_DENTIST'
-  | 'ORTHODONTIST'
-  | 'PERIODONTIST'
-  | 'ENDODONTIST'
-  | 'ORAL_SURGEON'
-  | 'PEDIATRIC_DENTIST';
+/** Migration 030 (owner, 2026-10-09): a doctor's specialty is free text
+ * (VARCHAR(64)), e.g. "Orthodontist" or "Cosmetic dentist". */
+export type DentalSpecialty = string;
 
 export type DentalAppointmentStatus =
   | 'HELD'

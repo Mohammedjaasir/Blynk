@@ -222,7 +222,7 @@ class _SummaryCard extends StatelessWidget {
                     Text(doctor.fullName, style: BlynkText.heading),
                     const SizedBox(height: BlynkSpace.s4),
                     Text(
-                      dentalSpecialtyLabel(doctor.specialty),
+                      doctor.specialty,
                       style: BlynkText.body.copyWith(color: BlynkColors.ink2),
                     ),
                   ],

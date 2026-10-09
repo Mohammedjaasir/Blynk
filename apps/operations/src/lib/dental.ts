@@ -79,3 +79,21 @@ export function formatBlockedDate(value: string): string {
   const [y, m, d] = day.split('-').map(Number) as [number, number, number];
   return blockedDayFormat.format(new Date(Date.UTC(y, m - 1, d)));
 }
+
+/** The six enum codes doctors.specialty held before migration 030 (owner,
+ * 2026-10-09), in case an old value comes back before the migration runs. */
+const LEGACY_SPECIALTY_LABEL: Record<string, string> = {
+  GENERAL_DENTIST: 'General dentist',
+  ORTHODONTIST: 'Orthodontist',
+  PERIODONTIST: 'Periodontist',
+  ENDODONTIST: 'Endodontist',
+  ORAL_SURGEON: 'Oral surgeon',
+  PEDIATRIC_DENTIST: 'Pediatric dentist',
+};
+
+/** A doctor's specialty as written (free text), or the label of an old
+ * enum code. */
+export function specialtyLabel(specialty: string | null | undefined): string {
+  if (!specialty) return '';
+  return LEGACY_SPECIALTY_LABEL[specialty] ?? specialty;
+}

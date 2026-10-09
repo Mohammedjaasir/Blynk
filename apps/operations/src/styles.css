@@ -1484,6 +1484,37 @@ input {
   color: #fff;
 }
 
+/* Quick-pick chips (dental doctor specialty, owner 2026-10-09): wrap onto
+   as many lines as needed; the picked one is Blynk yellow on ink. */
+.specialty-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.specialty-chip {
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-weight: 700;
+  font-size: var(--text-meta);
+  cursor: pointer;
+}
+
+.specialty-chip.is-selected {
+  background: var(--yellow);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.specialty-chip:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 .swatches {
   display: flex;
   flex-wrap: wrap;

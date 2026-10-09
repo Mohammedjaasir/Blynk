@@ -1,62 +1,25 @@
-// Mirrors the backend's DentalSpecialty enum exactly
-// (backend/api/src/database/types.ts lines 44-50) and the two doctor DTOs
-// B2 actually returns (task-B2-report.md; backend/api/src/modules/dental/
-// doctor.service.ts / clinic.service.ts).
+// The two doctor DTOs B2 returns (task-B2-report.md;
+// backend/api/src/modules/dental/doctor.service.ts / clinic.service.ts).
 
-/// Matches `DentalSpecialty` in `backend/api/src/database/types.ts`
-/// (lines 44-50) exactly. `unknown` is the fallback for any value this app
-/// doesn't recognise yet, so a new specialty added on the backend can never
-/// crash the client - see `dentalSpecialtyFromString`.
-enum DentalSpecialty {
-  generalDentist,
-  orthodontist,
-  periodontist,
-  endodontist,
-  oralSurgeon,
-  pediatricDentist,
-  unknown,
-}
+/// The six enum codes `doctors.specialty` held before migration 030, in case
+/// an old value comes back before the backend is migrated.
+const Map<String, String> _legacySpecialtyLabels = {
+  'GENERAL_DENTIST': 'General dentist',
+  'ORTHODONTIST': 'Orthodontist',
+  'PERIODONTIST': 'Periodontist',
+  'ENDODONTIST': 'Endodontist',
+  'ORAL_SURGEON': 'Oral surgeon',
+  'PEDIATRIC_DENTIST': 'Pediatric dentist',
+};
 
-DentalSpecialty dentalSpecialtyFromString(String? raw) {
-  switch (raw) {
-    case 'GENERAL_DENTIST':
-      return DentalSpecialty.generalDentist;
-    case 'ORTHODONTIST':
-      return DentalSpecialty.orthodontist;
-    case 'PERIODONTIST':
-      return DentalSpecialty.periodontist;
-    case 'ENDODONTIST':
-      return DentalSpecialty.endodontist;
-    case 'ORAL_SURGEON':
-      return DentalSpecialty.oralSurgeon;
-    case 'PEDIATRIC_DENTIST':
-      return DentalSpecialty.pediatricDentist;
-    default:
-      return DentalSpecialty.unknown;
-  }
-}
-
-/// Human-readable specialty name for display (task F2 - clinic/doctor
-/// screens). `unknown` (any backend value this app doesn't recognise yet)
-/// reads as the generic "Dentist" rather than an empty string or the raw
-/// backend enum token.
-String dentalSpecialtyLabel(DentalSpecialty specialty) {
-  switch (specialty) {
-    case DentalSpecialty.generalDentist:
-      return 'General dentist';
-    case DentalSpecialty.orthodontist:
-      return 'Orthodontist';
-    case DentalSpecialty.periodontist:
-      return 'Periodontist';
-    case DentalSpecialty.endodontist:
-      return 'Endodontist';
-    case DentalSpecialty.oralSurgeon:
-      return 'Oral surgeon';
-    case DentalSpecialty.pediatricDentist:
-      return 'Pediatric dentist';
-    case DentalSpecialty.unknown:
-      return 'Dentist';
-  }
+/// A doctor's specialty for display. Since migration 030 (owner,
+/// 2026-10-09) it is free text written by Operations/Admin (e.g.
+/// "Cosmetic dentist") and is shown as-is; an old enum code reads as its
+/// label, and a missing one as the generic "Dentist".
+String dentalSpecialtyLabel(String? raw) {
+  final text = (raw ?? '').trim();
+  if (text.isEmpty) return 'Dentist';
+  return _legacySpecialtyLabels[text] ?? text;
 }
 
 double? _ratingAverage(Object? v) => v == null ? null : double.tryParse(v.toString());
@@ -119,7 +82,8 @@ class DoctorClinicModel {
 class DoctorModel {
   final String id;
   final String fullName;
-  final DentalSpecialty specialty;
+  /// Display text - see [dentalSpecialtyLabel].
+  final String specialty;
   final String rawSpecialty;
   final String? photoUrl;
   final String? bio;
@@ -151,7 +115,7 @@ class DoctorModel {
     return DoctorModel(
       id: (json['id'] ?? '').toString(),
       fullName: (json['full_name'] ?? '').toString(),
-      specialty: dentalSpecialtyFromString(json['specialty']?.toString()),
+      specialty: dentalSpecialtyLabel(json['specialty']?.toString()),
       rawSpecialty: (json['specialty'] ?? '').toString(),
       photoUrl: json['photo_url']?.toString(),
       bio: json['bio']?.toString(),
@@ -185,7 +149,8 @@ class ClinicDoctorModel {
   final String clinicDoctorId;
   final String doctorId;
   final String fullName;
-  final DentalSpecialty specialty;
+  /// Display text - see [dentalSpecialtyLabel].
+  final String specialty;
   final String rawSpecialty;
   final String? photoUrl;
   final String? bio;
@@ -216,7 +181,7 @@ class ClinicDoctorModel {
       clinicDoctorId: (json['clinic_doctor_id'] ?? '').toString(),
       doctorId: (json['doctor_id'] ?? '').toString(),
       fullName: (json['full_name'] ?? '').toString(),
-      specialty: dentalSpecialtyFromString(json['specialty']?.toString()),
+      specialty: dentalSpecialtyLabel(json['specialty']?.toString()),
       rawSpecialty: (json['specialty'] ?? '').toString(),
       photoUrl: json['photo_url']?.toString(),
       bio: json['bio']?.toString(),

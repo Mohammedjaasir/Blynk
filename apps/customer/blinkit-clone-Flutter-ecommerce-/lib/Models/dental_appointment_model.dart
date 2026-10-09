@@ -47,7 +47,8 @@ double? _money(Object? v) => v == null ? null : double.tryParse(v.toString());
 class AppointmentDoctorSummary {
   final String id;
   final String fullName;
-  final DentalSpecialty specialty;
+  /// Display text - see [dentalSpecialtyLabel].
+  final String specialty;
   final String rawSpecialty;
   final String? photoUrl;
 
@@ -65,7 +66,7 @@ class AppointmentDoctorSummary {
     return AppointmentDoctorSummary(
       id: (map['id'] ?? '').toString(),
       fullName: (map['full_name'] ?? '').toString(),
-      specialty: dentalSpecialtyFromString(map['specialty']?.toString()),
+      specialty: dentalSpecialtyLabel(map['specialty']?.toString()),
       rawSpecialty: (map['specialty'] ?? '').toString(),
       photoUrl: map['photo_url']?.toString(),
     );

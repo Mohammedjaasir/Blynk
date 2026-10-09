@@ -22,6 +22,7 @@ function doctor(overrides: Partial<DentalDoctor> = {}): DentalDoctor {
   return {
     id: 'dr1',
     full_name: 'Dr. Nadia Farook',
+    // An old enum code (before migration 030) still reads as its label.
     specialty: 'ORTHODONTIST',
     photo_url: null,
     bio: null,

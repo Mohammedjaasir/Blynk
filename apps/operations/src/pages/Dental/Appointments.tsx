@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { dental } from '../../api/resources';
 import {
   DENTAL_APPOINTMENT_STATUSES,
-  DENTAL_SPECIALTY_LABEL,
   type AdminAppointment,
   type DentalAppointmentStatus,
   type DentalClinic,
@@ -10,7 +9,7 @@ import {
 } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
 import { Badge, EmptyState, Field, Spinner } from '../../components/ui';
-import { dentalErrorMessage } from '../../lib/dental';
+import { dentalErrorMessage, specialtyLabel } from '../../lib/dental';
 import { formatMoney } from '../../lib/orders';
 
 /**
@@ -259,7 +258,7 @@ export function Appointments() {
                   <p className="cat-row__meta">{row.patient_phone ?? 'No phone on file'}</p>
                   {row.patient_notes ? <p className="cat-row__meta">Notes: {row.patient_notes}</p> : null}
                   <p className="cat-row__meta">
-                    {row.clinic.name} · {row.doctor.full_name} ({DENTAL_SPECIALTY_LABEL[row.doctor.specialty]})
+                    {row.clinic.name} · {row.doctor.full_name} ({specialtyLabel(row.doctor.specialty)})
                   </p>
                   <p className="cat-row__meta">{formatDateTime(row.start_at)}</p>
                   <p className="cat-row__meta">

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { dental } from '../../api/resources';
-import { DENTAL_SPECIALTY_LABEL, type ClinicDoctorRosterRow, type DentalClinic, type DentalDoctor } from '../../api/types';
+import { type ClinicDoctorRosterRow, type DentalClinic, type DentalDoctor } from '../../api/types';
 import { LocationPreviewMap } from '../../components/LocationPickerMap';
 import { PageHeader } from '../../components/Layout';
 import { Badge, EmptyState, Field, Spinner } from '../../components/ui';
-import { dentalErrorMessage } from '../../lib/dental';
+import { dentalErrorMessage, specialtyLabel } from '../../lib/dental';
 import { formatMoney } from '../../lib/orders';
 
 /**
@@ -122,7 +122,7 @@ export function ClinicDetail() {
                     </>
                   ) : null}
                 </p>
-                <p className="cat-row__meta">{DENTAL_SPECIALTY_LABEL[row.specialty]}</p>
+                <p className="cat-row__meta">{specialtyLabel(row.specialty)}</p>
                 <p className="cat-row__meta">
                   {row.consultation_fee === null ? 'No consultation fee set' : formatMoney(row.consultation_fee)}
                 </p>
@@ -239,7 +239,7 @@ function AttachDoctorDialog({
               <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
                 {doctors.map((doctor) => (
                   <option key={doctor.id} value={doctor.id}>
-                    {doctor.full_name} — {DENTAL_SPECIALTY_LABEL[doctor.specialty]}
+                    {doctor.full_name} — {specialtyLabel(doctor.specialty)}
                   </option>
                 ))}
               </select>

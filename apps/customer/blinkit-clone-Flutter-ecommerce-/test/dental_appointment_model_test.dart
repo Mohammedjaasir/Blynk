@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ecom/Models/dental_appointment_model.dart';
-import 'package:ecom/Models/dental_doctor_model.dart';
 
 import 'fixtures/dental_fixtures.dart';
 
@@ -64,7 +63,7 @@ void main() {
       expect(a.doctor, isNotNull);
       expect(a.doctor!.id, 'd0000001-0000-0000-0000-000000000001');
       expect(a.doctor!.fullName, 'Dr. Nadeesha Perera');
-      expect(a.doctor!.specialty, DentalSpecialty.orthodontist);
+      expect(a.doctor!.specialty, 'Orthodontist');
 
       expect(a.clinic, isNotNull);
       expect(a.clinic!.id, 'c0000001-0000-0000-0000-000000000001');

@@ -101,7 +101,7 @@ describe('Dental admin CRUD API (task B4, /api/v1/admin/dental/*)', () => {
   function doctorPayload(overrides: Record<string, unknown> = {}) {
     return {
       full_name: uniqueName('Doctor'),
-      specialty: 'GENERAL_DENTIST',
+      specialty: 'General dentist',
       ...overrides,
     };
   }
@@ -123,7 +123,7 @@ describe('Dental admin CRUD API (task B4, /api/v1/admin/dental/*)', () => {
       .send(doctorPayload(overrides));
     expect(res.status).toBe(201);
     doctorIds.push(res.body.data.doctor.id);
-    return res.body.data.doctor as { id: string; is_active: boolean };
+    return res.body.data.doctor as { id: string; is_active: boolean; specialty: string };
   }
 
   async function attachDoctor(clinicId: string, doctorId: string, fee = 2500) {
@@ -259,12 +259,35 @@ describe('Dental admin CRUD API (task B4, /api/v1/admin/dental/*)', () => {
       expect(doctor.is_active).toBe(true);
     });
 
-    it('POST rejects an invalid specialty', async () => {
+    // 2026-10-09 (owner): specialty is free text (migration 030), 2-64 chars.
+    it('POST accepts any free-text specialty, trimmed', async () => {
+      const doctor = await createDoctor({ specialty: '  Cosmetic dentist  ' });
+      expect(doctor.specialty).toBe('Cosmetic dentist');
+    });
+
+    it('POST rejects a specialty that is too short, too long or missing', async () => {
+      for (const specialty of ['X', ' ', 'a'.repeat(65), undefined]) {
+        const res = await request(app)
+          .post('/api/v1/admin/dental/doctors')
+          .set(auth(adminToken))
+          .send(doctorPayload({ specialty }));
+        expect(res.status).toBe(400);
+      }
+    });
+
+    it('PATCH edits the specialty to any free text', async () => {
+      const doctor = await createDoctor({ specialty: 'Orthodontist' });
       const res = await request(app)
-        .post('/api/v1/admin/dental/doctors')
+        .patch(`/api/v1/admin/dental/doctors/${doctor.id}`)
         .set(auth(adminToken))
-        .send(doctorPayload({ specialty: 'NOT_A_REAL_SPECIALTY' }));
-      expect(res.status).toBe(400);
+        .send({ specialty: 'Prosthodontist' });
+      expect(res.status).toBe(200);
+      expect(res.body.data.doctor.specialty).toBe('Prosthodontist');
+      const short = await request(app)
+        .patch(`/api/v1/admin/dental/doctors/${doctor.id}`)
+        .set(auth(adminToken))
+        .send({ specialty: 'P' });
+      expect(short.status).toBe(400);
     });
 
     it('GET list includes inactive doctors', async () => {
@@ -672,7 +695,7 @@ describe('Dental admin CRUD API (task B4, /api/v1/admin/dental/*)', () => {
   // ==========================================================================
   it('walks the full admin setup flow: clinic -> doctor -> pairing+fee -> availability -> blocked date -> roster', async () => {
     const clinic = await createClinic({ operating_start_time: '08:00', operating_end_time: '18:00' });
-    const doctor = await createDoctor({ specialty: 'ORTHODONTIST' });
+    const doctor = await createDoctor({ specialty: 'Orthodontist' });
 
     const attach = await request(app)
       .post(`/api/v1/admin/dental/clinics/${clinic.id}/doctors`)
@@ -707,7 +730,7 @@ describe('Dental admin CRUD API (task B4, /api/v1/admin/dental/*)', () => {
     expect(row.doctor_id).toBe(doctor.id);
     expect(row.consultation_fee).toBe(4200);
     expect(row.pairing_is_active).toBe(true);
-    expect(row.specialty).toBe('ORTHODONTIST');
+    expect(row.specialty).toBe('Orthodontist');
 
     // The freshly-configured clinic-doctor is now genuinely bookable through
     // B2's public endpoint - the concrete proof the admin surface stood up a

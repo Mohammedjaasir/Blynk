@@ -40,7 +40,7 @@ describe('availability.service.ts - slot computation', () => {
        VALUES ('B2 Avail Test Clinic', 'Test City', 'Test Address', 6.5, 80.0, '+94770000002', '08:00', '18:00') RETURNING id`
     );
     const doctor = await pool.query(
-      `INSERT INTO doctors (full_name, specialty) VALUES ('Dr B2 Avail Test', 'GENERAL_DENTIST') RETURNING id`
+      `INSERT INTO doctors (full_name, specialty) VALUES ('Dr B2 Avail Test', 'General dentist') RETURNING id`
     );
     createdClinicIds.push(clinic.rows[0].id);
     createdDoctorIds.push(doctor.rows[0].id);

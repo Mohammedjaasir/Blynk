@@ -470,27 +470,22 @@ export interface AdminAppointmentListResult {
 // functions (`backend/api/src/modules/dental/dental-admin.service.ts`'s own
 // `toXDto` functions) - nothing invented (common.md rule 7).
 
-/** Exact enum from B1's migration (`dental_specialty_enum`,
- * dental-admin.schema.ts's `DENTAL_SPECIALTIES`) - never guessed, verified
- * directly against the real backend source this session. */
-export const DENTAL_SPECIALTIES = [
-  'GENERAL_DENTIST',
-  'ORTHODONTIST',
-  'PERIODONTIST',
-  'ENDODONTIST',
-  'ORAL_SURGEON',
-  'PEDIATRIC_DENTIST',
-] as const;
-export type DentalSpecialty = (typeof DENTAL_SPECIALTIES)[number];
+/** A doctor's specialty is free text since migration 030 (owner,
+ * 2026-10-09): any specialty up to 64 characters, e.g. "Cosmetic dentist".
+ * Show it through `specialtyLabel` (lib/dental.ts), which still reads an old
+ * enum code (e.g. "ORTHODONTIST") correctly. */
+export type DentalSpecialty = string;
 
-export const DENTAL_SPECIALTY_LABEL: Record<DentalSpecialty, string> = {
-  GENERAL_DENTIST: 'General dentist',
-  ORTHODONTIST: 'Orthodontist',
-  PERIODONTIST: 'Periodontist',
-  ENDODONTIST: 'Endodontist',
-  ORAL_SURGEON: 'Oral surgeon',
-  PEDIATRIC_DENTIST: 'Pediatric dentist',
-};
+/** Quick picks in the Add/Edit doctor dialog - suggestions only, the
+ * operator can type any other specialty. */
+export const DENTAL_SPECIALTY_SUGGESTIONS = [
+  'General dentist',
+  'Orthodontist',
+  'Periodontist',
+  'Endodontist',
+  'Oral surgeon',
+  'Pediatric dentist',
+] as const;
 
 /** GET/POST/PATCH /admin/dental/clinics - no hard delete, `is_active` toggle
  * only (verified against the real route table - no DELETE is registered). */

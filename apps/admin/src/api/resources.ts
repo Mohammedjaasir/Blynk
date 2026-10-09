@@ -1,5 +1,7 @@
 import { apiRequest, tokenStore } from './client';
 import type {
+  DentalDoctor,
+  DentalDoctorInput,
   BoardOrder,
   OrderDetail,
   RiderOption,
@@ -507,4 +509,18 @@ export const riderApplications = {
       method: 'POST',
       body: { reason },
     }).then((d) => d.application),
+};
+
+// Dental doctors (owner, 2026-10-09): list, add and edit (also the
+// activate/deactivate switch). No delete endpoint - deactivate instead.
+export const dentalDoctors = {
+  list: () => apiRequest<{ doctors: DentalDoctor[] }>('/admin/dental/doctors').then((d) => d.doctors),
+  create: (input: DentalDoctorInput) =>
+    apiRequest<{ doctor: DentalDoctor }>('/admin/dental/doctors', { method: 'POST', body: { ...input } }).then(
+      (d) => d.doctor
+    ),
+  update: (id: string, input: DentalDoctorInput) =>
+    apiRequest<{ doctor: DentalDoctor }>(`/admin/dental/doctors/${id}`, { method: 'PATCH', body: { ...input } }).then(
+      (d) => d.doctor
+    ),
 };

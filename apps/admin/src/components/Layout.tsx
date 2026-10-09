@@ -102,6 +102,11 @@ export function Layout() {
                 Feedback
               </NavLink>
 
+              <p className="nav__group">Dental</p>
+              <NavLink to="/dental-doctors" className="nav__item">
+                Dental doctors
+              </NavLink>
+
               <p className="nav__group">Team</p>
               <NavLink to="/staff" className="nav__item">
                 Staff accounts

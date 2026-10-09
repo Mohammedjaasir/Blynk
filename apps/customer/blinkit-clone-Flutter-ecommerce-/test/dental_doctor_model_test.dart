@@ -4,20 +4,27 @@ import 'package:ecom/Models/dental_doctor_model.dart';
 import 'fixtures/dental_fixtures.dart';
 
 void main() {
-  group('dentalSpecialtyFromString', () {
-    test('maps every canonical backend value (database/types.ts DentalSpecialty)', () {
-      expect(dentalSpecialtyFromString('GENERAL_DENTIST'), DentalSpecialty.generalDentist);
-      expect(dentalSpecialtyFromString('ORTHODONTIST'), DentalSpecialty.orthodontist);
-      expect(dentalSpecialtyFromString('PERIODONTIST'), DentalSpecialty.periodontist);
-      expect(dentalSpecialtyFromString('ENDODONTIST'), DentalSpecialty.endodontist);
-      expect(dentalSpecialtyFromString('ORAL_SURGEON'), DentalSpecialty.oralSurgeon);
-      expect(dentalSpecialtyFromString('PEDIATRIC_DENTIST'), DentalSpecialty.pediatricDentist);
+  group('dentalSpecialtyLabel', () {
+    // Free text since migration 030 (owner, 2026-10-09).
+    test('shows a free-text specialty exactly as Operations/Admin wrote it (trimmed)', () {
+      expect(dentalSpecialtyLabel('Cosmetic dentist'), 'Cosmetic dentist');
+      expect(dentalSpecialtyLabel('  Prosthodontist '), 'Prosthodontist');
+      expect(dentalSpecialtyLabel('Orthodontist'), 'Orthodontist');
     });
 
-    test('an unrecognised or null value never crashes - falls back to unknown', () {
-      expect(dentalSpecialtyFromString('SOMETHING_NEW'), DentalSpecialty.unknown);
-      expect(dentalSpecialtyFromString(null), DentalSpecialty.unknown);
-      expect(dentalSpecialtyFromString(''), DentalSpecialty.unknown);
+    test('an old enum code (before migration 030) still reads as its label', () {
+      expect(dentalSpecialtyLabel('GENERAL_DENTIST'), 'General dentist');
+      expect(dentalSpecialtyLabel('ORTHODONTIST'), 'Orthodontist');
+      expect(dentalSpecialtyLabel('PERIODONTIST'), 'Periodontist');
+      expect(dentalSpecialtyLabel('ENDODONTIST'), 'Endodontist');
+      expect(dentalSpecialtyLabel('ORAL_SURGEON'), 'Oral surgeon');
+      expect(dentalSpecialtyLabel('PEDIATRIC_DENTIST'), 'Pediatric dentist');
+    });
+
+    test('a missing value reads as the generic "Dentist", never crashes', () {
+      expect(dentalSpecialtyLabel(null), 'Dentist');
+      expect(dentalSpecialtyLabel(''), 'Dentist');
+      expect(dentalSpecialtyLabel('   '), 'Dentist');
     });
   });
 
@@ -28,7 +35,7 @@ void main() {
       expect(doc.clinicDoctorId, 'cd0000001-0000-0000-0000-000000000001');
       expect(doc.doctorId, 'd0000001-0000-0000-0000-000000000001');
       expect(doc.fullName, 'Dr. Nadeesha Perera');
-      expect(doc.specialty, DentalSpecialty.orthodontist);
+      expect(doc.specialty, 'Orthodontist');
       expect(doc.photoUrl, 'https://example.com/photo.jpg');
       expect(doc.bio, '10 years of experience.');
       expect(doc.consultationFee, 3500.0);
@@ -44,10 +51,13 @@ void main() {
       expect(doc.consultationFee, 3500.0);
     });
 
-    test('an unrecognised specialty falls back to unknown, never crashes', () {
-      final doc = ClinicDoctorModel.fromJson(clinicDoctorJson(specialty: 'COSMETIC_DENTIST'));
-      expect(doc.specialty, DentalSpecialty.unknown);
-      expect(doc.rawSpecialty, 'COSMETIC_DENTIST');
+    test('a free-text specialty is shown as written; an old enum code as its label', () {
+      final doc = ClinicDoctorModel.fromJson(clinicDoctorJson(specialty: 'Cosmetic dentist'));
+      expect(doc.specialty, 'Cosmetic dentist');
+      expect(doc.rawSpecialty, 'Cosmetic dentist');
+      final legacy = ClinicDoctorModel.fromJson(clinicDoctorJson(specialty: 'ORAL_SURGEON'));
+      expect(legacy.specialty, 'Oral surgeon');
+      expect(legacy.rawSpecialty, 'ORAL_SURGEON');
     });
 
     test('tryParse rejects a payload with no clinic_doctor_id', () {
@@ -62,7 +72,7 @@ void main() {
 
       expect(doctor.id, 'd0000001-0000-0000-0000-000000000001');
       expect(doctor.fullName, 'Dr. Nadeesha Perera');
-      expect(doctor.specialty, DentalSpecialty.orthodontist);
+      expect(doctor.specialty, 'Orthodontist');
       expect(doctor.photoUrl, isNull);
       expect(doctor.bio, isNull);
       expect(doctor.clinics, hasLength(1));

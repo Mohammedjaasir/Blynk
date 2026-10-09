@@ -637,3 +637,42 @@ export interface RiderApplicationPage {
   applications: RiderApplication[];
   pagination: { page: number; limit: number; total: number; total_pages: number };
 }
+
+// ---------------------------------------------------------------------------
+// Dental doctors (owner, 2026-10-09). The same /admin/dental/doctors
+// endpoints the Operations app uses (ADMIN or OPERATIONS). A doctor's
+// specialty is free text since migration 030 (2-64 characters).
+export type DentalSpecialty = string;
+
+/** Quick picks in the Add/Edit doctor form - the specialty can be any text. */
+export const DENTAL_SPECIALTY_SUGGESTIONS = [
+  'General dentist',
+  'Orthodontist',
+  'Periodontist',
+  'Endodontist',
+  'Oral surgeon',
+  'Pediatric dentist',
+] as const;
+
+export interface DentalDoctor {
+  id: string;
+  full_name: string;
+  specialty: DentalSpecialty;
+  photo_url: string | null;
+  bio: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  /** Visible ratings (migration 023): the list endpoint sends them,
+   * create/update responses do not. */
+  rating_average?: number | null;
+  rating_count?: number;
+}
+
+export interface DentalDoctorInput {
+  full_name?: string;
+  specialty?: DentalSpecialty;
+  photo_url?: string | null;
+  bio?: string | null;
+  is_active?: boolean;
+}

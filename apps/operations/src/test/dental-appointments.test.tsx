@@ -52,7 +52,7 @@ function doctor(overrides: Partial<DentalDoctor> = {}): DentalDoctor {
   return {
     id: `dr${seq}`,
     full_name: `Dr. Doctor ${seq}`,
-    specialty: 'GENERAL_DENTIST',
+    specialty: 'General dentist',
     photo_url: null,
     bio: null,
     is_active: true,
@@ -81,7 +81,7 @@ function appointment(overrides: Partial<AdminAppointment> = {}): AdminAppointmen
     cancellation_reason: null,
     cancelled_by: null,
     created_at: '2027-06-01T00:00:00.000Z',
-    doctor: { id: 'dr1', full_name: 'Dr. Amal Perera', specialty: 'ORTHODONTIST' },
+    doctor: { id: 'dr1', full_name: 'Dr. Amal Perera', specialty: 'Orthodontist' },
     clinic: { id: 'cl1', name: 'Smile Dental', city: 'Colombo' },
     ...overrides,
   };

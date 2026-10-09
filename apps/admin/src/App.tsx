@@ -8,6 +8,7 @@ import { CategoryGroups } from './pages/CategoryGroups';
 import { Coupons } from './pages/Coupons';
 import { CustomerDetail, Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
+import { DentalDoctors } from './pages/DentalDoctors';
 import { Feedback } from './pages/Feedback';
 import { Login } from './pages/Login';
 import { Orders } from './pages/Orders';
@@ -84,6 +85,7 @@ export function AppRoutes() {
         <Route path="customers/:id" element={<AdminOnly><CustomerDetail /></AdminOnly>} />
         <Route path="sms-offers" element={<AdminOnly><SmsOffers /></AdminOnly>} />
         <Route path="feedback" element={<AdminOnly><Feedback /></AdminOnly>} />
+        <Route path="dental-doctors" element={<AdminOnly><DentalDoctors /></AdminOnly>} />
         <Route path="staff" element={<AdminOnly><Staff /></AdminOnly>} />
         <Route path="rider-requests" element={<AdminOnly><RiderRequests /></AdminOnly>} />
         <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />

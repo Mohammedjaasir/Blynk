@@ -29,7 +29,7 @@ Map<String, dynamic> clinicDoctorJson({
   String clinicDoctorId = 'cd0000001-0000-0000-0000-000000000001',
   String doctorId = 'd0000001-0000-0000-0000-000000000001',
   String fullName = 'Dr. Nadeesha Perera',
-  String specialty = 'ORTHODONTIST',
+  String specialty = 'Orthodontist',
   num? consultationFee = 3500,
   num? ratingAverage,
   int ratingCount = 0,
@@ -50,7 +50,7 @@ Map<String, dynamic> clinicDoctorJson({
 Map<String, dynamic> doctorJson({
   String id = 'd0000001-0000-0000-0000-000000000001',
   String fullName = 'Dr. Nadeesha Perera',
-  String specialty = 'ORTHODONTIST',
+  String specialty = 'Orthodontist',
   List<Map<String, dynamic>>? clinics,
   num? ratingAverage,
   int ratingCount = 0,

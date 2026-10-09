@@ -184,7 +184,7 @@ class _DoctorRow extends StatelessWidget {
       key: Key('doctor-row-${doctor.clinicDoctorId}'),
       semanticLabel: [
         doctor.fullName,
-        dentalSpecialtyLabel(doctor.specialty),
+        doctor.specialty,
         if (doctor.ratingLabel != null)
           'rated ${doctor.ratingAverage!.toStringAsFixed(1)} out of 5 from ${doctor.ratingCount} '
               '${doctor.ratingCount == 1 ? 'rating' : 'ratings'}',
@@ -205,7 +205,7 @@ class _DoctorRow extends StatelessWidget {
                 Text(doctor.fullName, style: BlynkText.heading),
                 const SizedBox(height: BlynkSpace.s4),
                 Text(
-                  dentalSpecialtyLabel(doctor.specialty),
+                  doctor.specialty,
                   style: BlynkText.body.copyWith(color: BlynkColors.ink2),
                 ),
                 // "★ 4.6 (12)", or nothing at all before the first rating.

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { dental } from '../../api/resources';
-import { DENTAL_SPECIALTIES, DENTAL_SPECIALTY_LABEL, type DentalDoctor, type DentalSpecialty } from '../../api/types';
+import { DENTAL_SPECIALTY_SUGGESTIONS, type DentalDoctor } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
 import { Badge, EmptyState, Field, Spinner } from '../../components/ui';
-import { dentalErrorMessage, formatRating } from '../../lib/dental';
+import { dentalErrorMessage, formatRating, specialtyLabel } from '../../lib/dental';
 
 /**
  * Dental doctors: create, edit and activate/deactivate (task F8, plan §16).
@@ -13,10 +13,10 @@ import { dentalErrorMessage, formatRating } from '../../lib/dental';
  * No hard-delete endpoint (same reasoning as Clinics.tsx). Attaching a
  * doctor to a clinic (with a fee) happens from a clinic's detail screen.
  *
- * Specialty is a `<select>` populated from `DENTAL_SPECIALTIES`
- * (`src/api/types.ts`), the real backend enum copied from
- * `dental-admin.schema.ts` and re-confirmed against that file this session -
- * never a hardcoded/guessed list (task-F8-brief.md's explicit instruction).
+ * Specialty is free text (owner, 2026-10-09; migration 030): any specialty,
+ * 2-64 characters. The six common ones are Blynk-styled quick-pick chips in
+ * the dialog (never the phone's plain system picker); tapping one fills the
+ * text box, typing anything else deselects them.
  */
 export function Doctors() {
   const [rows, setRows] = useState<DentalDoctor[] | null>(null);
@@ -81,7 +81,7 @@ export function Doctors() {
               <div className="cat-row__main">
                 <p className="cat-row__title">{doctor.full_name}</p>
                 <p className="cat-row__meta">
-                  {DENTAL_SPECIALTY_LABEL[doctor.specialty]}
+                  {specialtyLabel(doctor.specialty)}
                   {formatRating(doctor.rating_average, doctor.rating_count)
                     ? ` · ${formatRating(doctor.rating_average, doctor.rating_count)}`
                     : ''}
@@ -146,7 +146,7 @@ function DoctorDialog({
 }) {
   const [form, setForm] = useState({
     full_name: doctor?.full_name ?? '',
-    specialty: doctor?.specialty ?? DENTAL_SPECIALTIES[0],
+    specialty: specialtyLabel(doctor?.specialty),
     photo_url: doctor?.photo_url ?? '',
     bio: doctor?.bio ?? '',
     is_active: doctor?.is_active ?? true,
@@ -158,6 +158,8 @@ function DoctorDialog({
   function validate(): boolean {
     const next: Record<string, string> = {};
     if (form.full_name.trim().length < 2) next.full_name = 'Name must be at least 2 characters.';
+    const specialty = form.specialty.trim();
+    if (specialty.length < 2 || specialty.length > 64) next.specialty = 'Specialty must be 2 to 64 characters.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -169,7 +171,7 @@ function DoctorDialog({
 
     const payload = {
       full_name: form.full_name.trim(),
-      specialty: form.specialty,
+      specialty: form.specialty.trim(),
       photo_url: form.photo_url.trim() || null,
       bio: form.bio.trim() || null,
       is_active: form.is_active,
@@ -201,19 +203,11 @@ function DoctorDialog({
             onChange={(e) => setForm({ ...form, full_name: e.target.value })}
           />
         </Field>
-        <Field label="Specialty">
-          <select
-            className="input"
-            value={form.specialty}
-            onChange={(e) => setForm({ ...form, specialty: e.target.value as DentalSpecialty })}
-          >
-            {DENTAL_SPECIALTIES.map((specialty) => (
-              <option key={specialty} value={specialty}>
-                {DENTAL_SPECIALTY_LABEL[specialty]}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <SpecialtyPicker
+          value={form.specialty}
+          error={errors.specialty}
+          onChange={(specialty) => setForm({ ...form, specialty })}
+        />
         <Field label="Photo URL" hint="Optional">
           <input
             className="input"
@@ -249,6 +243,58 @@ function DoctorDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Specialty: quick-pick chips for the common ones plus a text box that holds
+ * the actual value (owner, 2026-10-09). A chip is selected while the text
+ * matches it (case-insensitive), so typing free text deselects it. Not a
+ * `Field`: that wraps its content in a <label>, which would send every tap
+ * on the label to the first chip.
+ */
+function SpecialtyPicker({
+  value,
+  error,
+  onChange,
+}: {
+  value: string;
+  error?: string;
+  onChange(value: string): void;
+}) {
+  const labelId = useId();
+  const current = value.trim().toLowerCase();
+  return (
+    <div className="field">
+      <span className="field__label" id={labelId}>
+        Specialty
+      </span>
+      <div className="specialty-chips" role="group" aria-label="Specialty suggestions">
+        {DENTAL_SPECIALTY_SUGGESTIONS.map((suggestion) => {
+          const selected = current === suggestion.toLowerCase();
+          return (
+            <button
+              key={suggestion}
+              type="button"
+              className={`specialty-chip${selected ? ' is-selected' : ''}`}
+              aria-pressed={selected}
+              onClick={() => onChange(suggestion)}
+            >
+              {suggestion}
+            </button>
+          );
+        })}
+      </div>
+      <input
+        className="input"
+        aria-labelledby={labelId}
+        placeholder="Or type a specialty"
+        maxLength={64}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {error ? <span className="field__error-text">{error}</span> : null}
     </div>
   );
 }

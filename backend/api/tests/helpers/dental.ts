@@ -149,7 +149,7 @@ export function dentalFixtures({ idPrefix, namePrefix, phoneBase }: FixtureIdent
 
     const doctorId = (
       await pool.query(
-        `INSERT INTO doctors (full_name, specialty) VALUES ($1, 'GENERAL_DENTIST') RETURNING id`,
+        `INSERT INTO doctors (full_name, specialty) VALUES ($1, 'General dentist') RETURNING id`,
         [`${namePrefix} Doctor ${seq}`]
       )
     ).rows[0].id as string;

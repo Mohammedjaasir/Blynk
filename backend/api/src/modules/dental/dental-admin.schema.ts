@@ -9,14 +9,16 @@ import { APPOINTMENT_LIST_STATUSES } from './appointment.schema.js';
 // module doesn't use the `validate()` middleware).
 // ----------------------------------------------------------------------------
 
-/** Exact enum from B1's migration (`dental_specialty_enum`) - never guessed. */
-export const DENTAL_SPECIALTIES = [
-  'GENERAL_DENTIST',
-  'ORTHODONTIST',
-  'PERIODONTIST',
-  'ENDODONTIST',
-  'ORAL_SURGEON',
-  'PEDIATRIC_DENTIST',
+/** A doctor's specialty is free text since migration 030 (owner, 2026-10-09):
+ * any specialty, e.g. "Cosmetic dentist" or "Prosthodontist". The apps offer
+ * these as quick suggestions only. */
+export const DENTAL_SPECIALTY_SUGGESTIONS = [
+  'General dentist',
+  'Orthodontist',
+  'Periodontist',
+  'Endodontist',
+  'Oral surgeon',
+  'Pediatric dentist',
 ] as const;
 
 // ----------------------------------------------------------------------------
@@ -109,7 +111,11 @@ export type UpdateClinicInput = z.infer<typeof updateClinicSchema>;
 // ----------------------------------------------------------------------------
 export const createDoctorSchema = z.object({
   full_name: z.string().trim().min(2, 'Name must be at least 2 characters').max(128),
-  specialty: z.enum(DENTAL_SPECIALTIES),
+  specialty: z
+    .string()
+    .trim()
+    .min(2, 'Specialty must be at least 2 characters')
+    .max(64, 'Specialty must be at most 64 characters'),
   photo_url: z.string().trim().url('Must be a valid URL').nullable().optional(),
   bio: z.string().trim().max(2000).nullable().optional(),
   is_active: z.boolean().default(true).optional(),

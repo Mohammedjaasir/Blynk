@@ -37,7 +37,7 @@ describe('Dental discovery API (GET /api/v1/dental/*)', () => {
 
   async function makeDoctor(opts: { full_name: string; is_active?: boolean }) {
     const { rows } = await pool.query(
-      `INSERT INTO doctors (full_name, specialty, is_active) VALUES ($1, 'ORTHODONTIST', $2) RETURNING id`,
+      `INSERT INTO doctors (full_name, specialty, is_active) VALUES ($1, 'Orthodontist', $2) RETURNING id`,
       [opts.full_name, opts.is_active ?? true]
     );
     doctorIds.push(rows[0].id);
