@@ -45,6 +45,7 @@ export function Catalog() {
   const [categoryCount, setCategoryCount] = useState<number | null>(null);
   const [groupCount, setGroupCount] = useState<number | null>(null);
   const [promotionCount, setPromotionCount] = useState<number | null>(null);
+  const [comboCount, setComboCount] = useState<number | null>(null);
   const [inventoryAttentionCount, setInventoryAttentionCount] = useState<number | null>(null);
   const [dentalClinicCount, setDentalClinicCount] = useState<number | null>(null);
 
@@ -56,6 +57,8 @@ export function Catalog() {
     void catalog.categories.list().then((rows) => setCategoryCount(rows.length)).catch(() => setCategoryCount(null));
     void catalog.categoryGroups.list().then((r) => setGroupCount(r.groups.length)).catch(() => setGroupCount(null));
     void catalog.promotions.list().then((rows) => setPromotionCount(rows.length)).catch(() => setPromotionCount(null));
+    // Combo packs (migration 033; owner, 2026-10-09).
+    void catalog.combos.list().then((rows) => setComboCount(rows.length)).catch(() => setComboCount(null));
     void catalog.products
       .listAll()
       .then((r) => setProductCount(r.capped ? `${r.products.length}+` : r.products.length))
@@ -69,7 +72,7 @@ export function Catalog() {
 
   return (
     <div className="page">
-      <PageHeader title="Catalog" description="Products, categories, Home promotions, inventory and dental clinics." />
+      <PageHeader title="Catalog" description="Products, categories, Home promotions, combo packs, inventory and dental clinics." />
       <ul className="cat-hub">
         <li>
           <Link className="cat-hub__card" to="/catalog/products">
@@ -93,6 +96,12 @@ export function Catalog() {
           <Link className="cat-hub__card" to="/catalog/promotions">
             <span className="cat-hub__title">Home promotions</span>
             <span className="cat-hub__count">{promotionCount === null ? '—' : promotionCount}</span>
+          </Link>
+        </li>
+        <li>
+          <Link className="cat-hub__card" to="/catalog/combos">
+            <span className="cat-hub__title">Combo packs</span>
+            <span className="cat-hub__count">{comboCount === null ? '—' : comboCount}</span>
           </Link>
         </li>
         <li>

@@ -2785,3 +2785,226 @@ a.button {
 .day-earnings {
   margin-bottom: 8px;
 }
+
+/* Combo packs (migration 033; owner, 2026-10-09). */
+.combo-row__prices {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 2px 0 0;
+}
+
+.combo-row__was {
+  color: var(--ink-3);
+  font-size: var(--text-meta);
+  text-decoration: line-through;
+}
+
+.combo-row .cat-row__badges {
+  flex-wrap: wrap;
+}
+
+/* No combo picture: up to four of its products' pictures in a 2x2 grid. */
+.combo-thumb--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+
+.combo-thumb--grid img {
+  background: var(--surface);
+}
+
+.combo-thumb--grid .cat-row__thumb-empty {
+  grid-column: 1 / -1;
+  background: var(--canvas);
+  align-self: center;
+}
+
+.combo-picked {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.combo-picked__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.combo-picked__thumb {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.combo-picked__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.combo-picked__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.combo-picked__name {
+  margin: 0;
+  font-weight: 700;
+}
+
+/* A quantity stepper: one bordered control, not two loose buttons. */
+.qty-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.qty-stepper__button {
+  width: 34px;
+  min-height: 34px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.qty-stepper__button:hover:not(:disabled) {
+  background: var(--canvas);
+}
+
+.qty-stepper__button:disabled {
+  color: var(--line-strong);
+  cursor: default;
+}
+
+.qty-stepper__value {
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  font-weight: 800;
+}
+
+.combo-search {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.combo-search__results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.combo-search__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.combo-search__row:last-child {
+  border-bottom: 0;
+}
+
+.combo-search__name {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+}
+
+.combo-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+}
+
+.combo-summary strong {
+  color: var(--green);
+}
+
+.combo-summary--bad strong {
+  color: var(--danger);
+}
+
+/* Order detail: a combo's items under its own heading. */
+.order-combo {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.order-combo__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 4px;
+  font-size: var(--text-body);
+  font-weight: 800;
+}
+
+.order-combo__tag {
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  background: var(--yellow);
+  font-size: var(--text-label);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.order-items--combo {
+  padding-left: 12px;
+  border-left: 3px solid var(--yellow);
+}
+
+/* Packing slip: the combo's heading row, its items indented under it. */
+.packing-slip__items .packing-slip__combo-head th {
+  width: auto;
+  padding-top: 10px;
+  font-size: var(--text-body);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.packing-slip__combo td:nth-child(2) {
+  padding-left: 14px;
+}

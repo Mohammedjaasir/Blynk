@@ -85,6 +85,26 @@ export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export const updateCategorySchema = createCategorySchema.partial();
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 
+/**
+ * Migration 033 (owner, 2026-10-09): PUT /admin/categories/:id/offer - % off
+ * everything in the category and its sub-categories, optionally until a
+ * date. More than 0 and less than 100, at most 2 decimals. A new end date in
+ * the future is checked by the service (catalog.offers.ts).
+ */
+export const categoryOfferSchema = z.object({
+  offer_percent: z
+    .number({ required_error: 'offer_percent is required', invalid_type_error: 'Offer percent must be a number' })
+    .gt(0, 'Offer percent must be more than 0')
+    .lt(100, 'Offer percent must be less than 100')
+    .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'Offer percent can have at most 2 decimals'),
+  offer_ends_at: z
+    .string()
+    .datetime({ offset: true, message: 'Offer end must be a date and time, e.g. 2026-10-31T23:59:59+05:30' })
+    .nullable()
+    .optional(),
+});
+export type CategoryOfferInput = z.infer<typeof categoryOfferSchema>;
+
 // ----------------------------------------------------------------------------
 // 3. PRODUCT ADMIN SCHEMAS
 // ----------------------------------------------------------------------------

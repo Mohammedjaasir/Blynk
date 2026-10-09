@@ -517,25 +517,29 @@ void main() {
     // fabricated commerce data. Since product offers (owner, 2026-10-09) the
     // backend sends a real `offer_price`, and the honest callers are exactly
     // the two that strike a product's regular price beside it while
-    // `isOnOffer`: the product card and the product detail screen. A new
+    // `isOnOffer`: the product card and the product detail screen. Combo
+    // packs (owner, 2026-10-09) add the third: the backend sends a combo's
+    // real `items_total` and `saving`, and combo_card.dart strikes one pack's
+    // items total beside the combo price only while `hasSaving`. A new
     // caller anywhere else fails here.
-    test('a struck price is rendered only for a real product offer, in the two known places', () {
+    test('a struck price is rendered only for a real product offer or combo saving, in the three known places', () {
       const owner = 'lib/UI/Widgets/Atoms/money_text.dart';
       const offerCallers = {
-        'lib/UI/Widgets/Atoms/card_product.dart',
-        'lib/Screens/product_details_screen.dart',
+        'lib/UI/Widgets/Atoms/card_product.dart': 'isOnOffer',
+        'lib/Screens/product_details_screen.dart': 'isOnOffer',
+        'lib/UI/Widgets/Atoms/combo_card.dart': 'hasSaving',
       };
       // Scanned outside money_text.dart itself, whose own constructor
       // declaration is not a call site.
       final constructed = RegExp(r'(?<![A-Za-z_])StruckPrice\s*\(');
       final callers = all.where((f) => _norm(f.path) != owner);
       expect(callers, isNotEmpty);
-      expect(_codeOffenders(callers, constructed).toSet(), offerCallers,
-          reason: "StruckPrice only strikes a product's regular price beside its real offer price");
-      for (final path in offerCallers) {
-        expect(_stripLineComments(File(path).readAsStringSync()), contains('isOnOffer'),
+      expect(_codeOffenders(callers, constructed).toSet(), offerCallers.keys.toSet(),
+          reason: "StruckPrice only strikes a regular price beside a real offer or combo price");
+      offerCallers.forEach((path, gate) {
+        expect(_stripLineComments(File(path).readAsStringSync()), contains(gate),
             reason: '$path must gate the struck price on the backend offer');
-      }
+      });
       // The widget itself is still declared (so the guard is not vacuous) and
       // still routes through the token rather than restyling a strike here.
       // Comments are stripped: StruckPrice's own doc comment names the token,

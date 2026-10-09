@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { orders as ordersApi } from '../api/resources';
 import type { OrderDetail } from '../api/types';
-import { formatMoney, orderErrorMessage } from '../lib/orders';
+import { comboHeading, formatMoney, groupOrderItems, orderErrorMessage } from '../lib/orders';
 import { formatPhone } from '../lib/format';
 
 const slipDate = new Intl.DateTimeFormat('en-GB', {
@@ -84,6 +84,10 @@ export function PackingSlip() {
   }
 
   const items = order.items.filter((item) => item.item_status !== 'UNAVAILABLE');
+  // Combo packs grouped under their own heading (owner, 2026-10-09); a combo
+  // whose every item came off the bill is left out like those items.
+  const grouped = groupOrderItems(order, items);
+  const comboGroups = grouped.combos.filter((g) => g.rows.length > 0);
   const cod = codToCollect(order);
   const printable = canPrintHere();
   const address = [order.delivery_address_line1, order.delivery_address_line2, order.delivery_city, order.delivery_postal_code]
@@ -146,8 +150,31 @@ export function PackingSlip() {
               <th scope="col">Unit</th>
             </tr>
           </thead>
+          {comboGroups.map(({ combo, rows }) => (
+            <tbody key={combo.id} className="packing-slip__combo" aria-label={combo.name}>
+              <tr className="packing-slip__combo-head">
+                <th scope="rowgroup" colSpan={3}>
+                  {comboHeading(combo)}
+                </th>
+              </tr>
+              {rows.map((row) => (
+                <tr key={row.key}>
+                  <td className="mono">{row.quantity}</td>
+                  <td>{row.item.product_name_snapshot}</td>
+                  <td>{row.item.unit_snapshot ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
           <tbody>
-            {items.map((item) => (
+            {comboGroups.length > 0 && grouped.loose.length > 0 ? (
+              <tr className="packing-slip__combo-head">
+                <th scope="rowgroup" colSpan={3}>
+                  Other items
+                </th>
+              </tr>
+            ) : null}
+            {grouped.loose.map(({ item }) => (
               <tr key={item.id}>
                 <td className="mono">{item.quantity}</td>
                 <td>{item.product_name_snapshot}</td>

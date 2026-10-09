@@ -192,6 +192,27 @@ class AppErrors {
       message: "An item in your cart isn't available anymore. Remove it and try again.",
       retryable: false,
     ),
+    // Combo packs (owner, 2026-10-09): a combo in the cart ended, changed or
+    // sold out between adding it and placing the order. The checkout reloads
+    // the combos when it sees one of these.
+    'COMBO_NOT_FOUND': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Combo pack ended',
+      message: "A combo pack in your cart isn't available anymore. Remove it and try again.",
+      retryable: false,
+    ),
+    'COMBO_UNAVAILABLE': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Combo pack unavailable',
+      message: "A combo pack in your cart isn't available right now. Remove it and try again.",
+      retryable: false,
+    ),
+    'COMBO_OUT_OF_STOCK': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Combo pack sold out',
+      message: 'A combo pack in your cart has sold out. Remove it or lower the quantity and try again.',
+      retryable: false,
+    ),
     // Coupons (backend migration 018): a code that stopped applying between
     // the checkout preview and placing the order. The field itself words
     // these with their details (coupon_model.dart couponRefusalMessage).

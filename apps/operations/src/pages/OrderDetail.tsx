@@ -11,6 +11,9 @@ import {
   STATUS_LABEL,
   allowedActions,
   boardOrderLikeFromDetail,
+  comboHeading,
+  groupOrderItems,
+  type ItemDisplayRow,
   uncostedSubstitutions,
   formatClock,
   formatMoney,
@@ -55,7 +58,7 @@ export function OrderDetail() {
   // A refused delivery code in "Mark delivered" - shown in the dialog, which stays open.
   const [codeError, setCodeError] = useState<{ message: string; locked: boolean } | null>(null);
   const [busyItem, setBusyItem] = useState<string | null>(null);
-  const [confirmItem, setConfirmItem] = useState<OrderDetailData['items'][number] | null>(null);
+  const [confirmItem, setConfirmItem] = useState<ItemDisplayRow | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -112,12 +115,14 @@ export function OrderDetail() {
   );
 
   /** An item that is not on the shelf comes off the bill (the customer is told). */
-  const markItemUnavailable = async (itemId: string) => {
+  const markItemUnavailable = async (row: ItemDisplayRow) => {
     if (!id) return;
-    setBusyItem(itemId);
+    setBusyItem(row.key);
     setNotice(null);
     try {
-      await ordersApi.markItemUnavailable(id, itemId);
+      // A merged combo row stands for more than one item line (owner,
+      // 2026-10-09): every line of it comes off.
+      for (const itemId of row.ids) await ordersApi.markItemUnavailable(id, itemId);
     } catch (err) {
       setNotice(orderErrorMessage(err));
     } finally {
@@ -162,6 +167,30 @@ export function OrderDetail() {
   // cost blocks Pack until one is recorded.
   const packBlocked = beingPacked && uncostedSubstitutions(boardLike.items_summary) > 0;
   const number = shortNumber(detail.order_number);
+  const grouped = groupOrderItems(detail);
+
+  const itemRow = (row: ItemDisplayRow) => {
+    const { item } = row;
+    return (
+      <li key={row.key} className={`order-items__row order-items__row--${item.item_status.toLowerCase()}`}>
+        <span className="order-items__qty mono">{row.quantity} ×</span>
+        <span className="order-items__name">{item.product_name_snapshot}</span>
+        <span className="order-items__status">{ITEM_STATUS_LABEL[item.item_status] ?? item.item_status}</span>
+        {beingPacked && item.item_status === 'PENDING' ? (
+          // Not on the shelf: off the bill, and the customer is told.
+          <button
+            type="button"
+            className="text-button"
+            disabled={busyItem !== null || busyAction !== null}
+            onClick={() => setConfirmItem(row)}
+            aria-label={`Mark ${item.product_name_snapshot} unavailable`}
+          >
+            {busyItem === row.key ? 'Saving…' : 'Unavailable'}
+          </button>
+        ) : null}
+      </li>
+    );
+  };
 
   return (
     <div className="page order-detail">
@@ -187,27 +216,19 @@ export function OrderDetail() {
 
       <section className="order-detail__section" aria-label="Items">
         <h2 className="order-detail__label">Items</h2>
-        <ul className="order-items">
-          {detail.items.map((item) => (
-            <li key={item.id} className={`order-items__row order-items__row--${item.item_status.toLowerCase()}`}>
-              <span className="order-items__qty mono">{item.quantity} ×</span>
-              <span className="order-items__name">{item.product_name_snapshot}</span>
-              <span className="order-items__status">{ITEM_STATUS_LABEL[item.item_status] ?? item.item_status}</span>
-              {beingPacked && item.item_status === 'PENDING' ? (
-                // Not on the shelf: off the bill, and the customer is told.
-                <button
-                  type="button"
-                  className="text-button"
-                  disabled={busyItem !== null || busyAction !== null}
-                  onClick={() => setConfirmItem(item)}
-                  aria-label={`Mark ${item.product_name_snapshot} unavailable`}
-                >
-                  {busyItem === item.id ? 'Saving…' : 'Unavailable'}
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        {/* Combo packs first, each with what goes in it (owner, 2026-10-09);
+            loose items below as before. */}
+        {grouped.combos.map(({ combo, rows }) => (
+          <div key={combo.id} className="order-combo" role="group" aria-label={combo.name}>
+            <h3 className="order-combo__head">
+              <span className="order-combo__tag">Combo</span>
+              {comboHeading(combo)}
+            </h3>
+            <ul className="order-items order-items--combo">{rows.map(itemRow)}</ul>
+          </div>
+        ))}
+        {grouped.combos.length > 0 && grouped.loose.length > 0 ? <h3 className="order-combo__head">Other items</h3> : null}
+        {grouped.loose.length > 0 ? <ul className="order-items">{grouped.loose.map(itemRow)}</ul> : null}
         <OrderBill order={detail} />
       </section>
 
@@ -313,7 +334,7 @@ export function OrderDetail() {
               Mark item unavailable
             </h2>
             <p className="modal__message">
-              {confirmItem.quantity} × {confirmItem.product_name_snapshot} comes off this order and its bill, and the
+              {confirmItem.quantity} × {confirmItem.item.product_name_snapshot} comes off this order and its bill, and the
               customer is told. This cannot be undone.
             </p>
             <div className="modal__actions">
@@ -324,7 +345,7 @@ export function OrderDetail() {
                 type="button"
                 className="button button--ink"
                 disabled={busyItem !== null}
-                onClick={() => void markItemUnavailable(confirmItem.id)}
+                onClick={() => void markItemUnavailable(confirmItem)}
               >
                 {busyItem ? 'Saving…' : 'Mark unavailable'}
               </button>

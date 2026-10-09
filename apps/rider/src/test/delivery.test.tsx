@@ -78,6 +78,32 @@ describe('Delivery', () => {
     expect(screen.getByRole('list', { name: 'Progress' })).toHaveTextContent('Pick up');
   });
 
+  it('lists a combo pack under its name with its items (owner, 2026-10-09)', async () => {
+    renderAs(RIDER, ROUTE, {
+      'GET /riders/deliveries/:id': () =>
+        ok({
+          delivery: detail({
+            items: [
+              { id: 'i1', product_name_snapshot: 'Kotmale Fresh Milk 1L', quantity: 1, item_status: 'PACKED' },
+              { id: 'c1', product_name_snapshot: 'Bread', quantity: 2, item_status: 'PACKED', order_combo_id: 'oc1', combo_name: 'Breakfast pack', combo_quantity: 2 },
+              { id: 'c2', product_name_snapshot: 'Eggs', quantity: 4, item_status: 'PACKED', order_combo_id: 'oc1', combo_name: 'Breakfast pack', combo_quantity: 2 },
+              // The same product split over two lines inside the combo shows once.
+              { id: 'c3', product_name_snapshot: 'Eggs', quantity: 2, item_status: 'PACKED', order_combo_id: 'oc1', combo_name: 'Breakfast pack', combo_quantity: 2 },
+            ],
+          }),
+        }),
+    });
+    const bag = await screen.findByRole('region', { name: 'In the bag' });
+    expect(within(bag).getByText('Kotmale Fresh Milk 1L')).toBeInTheDocument();
+    const combo = within(bag).getByRole('listitem', { name: 'Combo pack: Breakfast pack' });
+    expect(within(combo).getByText('Breakfast pack')).toBeInTheDocument();
+    expect(within(combo).getByText('Combo pack')).toBeInTheDocument();
+    expect(within(combo).getByText('Bread')).toBeInTheDocument();
+    expect(within(combo).getAllByText('Eggs')).toHaveLength(1);
+    expect(within(combo).getByText('6 ×')).toBeInTheDocument();
+    expect(within(combo).getAllByText('2 ×')).toHaveLength(2); // the pack and the bread
+  });
+
   it('shows the additional phone with its own call button only when the address has one', async () => {
     renderAs(RIDER, ROUTE, {
       'GET /riders/deliveries/:id': () => ok({ delivery: detail({ delivery_alternate_phone: '+94712345678' }) }),

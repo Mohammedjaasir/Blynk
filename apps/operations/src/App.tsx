@@ -5,6 +5,7 @@ import { Cash } from './pages/Cash';
 import { Catalog } from './pages/Catalog';
 import { Categories } from './pages/Catalog/Categories';
 import { CategoryGroups } from './pages/Catalog/CategoryGroups';
+import { Combos } from './pages/Catalog/Combos';
 import { ProductForm } from './pages/Catalog/ProductForm';
 import { ProductImport } from './pages/Catalog/ProductImport';
 import { Products } from './pages/Catalog/Products';
@@ -128,6 +129,7 @@ export function AppRoutes() {
         <Route path="catalog/categories" element={<Categories />} />
         <Route path="catalog/category-groups" element={<CategoryGroups />} />
         <Route path="catalog/promotions" element={<Promotions />} />
+        <Route path="catalog/combos" element={<Combos />} />
         <Route path="catalog/inventory" element={<InventoryOverview />} />
         <Route path="catalog/inventory/stock" element={<InventoryStock />} />
         <Route path="catalog/inventory/low-stock" element={<InventoryRunningLow />} />

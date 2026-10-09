@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { orderComboLineSchema } from '../catalog/catalog.combos.js';
 
 export const orderItemInputSchema = z.object({
   product_id: z.string().uuid('Invalid product_id UUID'),
@@ -7,10 +8,20 @@ export const orderItemInputSchema = z.object({
 
 export const createOrderSchema = z.object({
   address_id: z.string().uuid('Invalid address_id UUID'),
+  // Migration 033: may be empty when the cart holds only combo packs; an
+  // order still needs at least one item or combo (refine below).
   items: z
     .array(orderItemInputSchema)
-    .min(1, 'At least one order item is required')
-    .max(50, 'Cannot exceed 50 distinct items per order'),
+    .max(50, 'Cannot exceed 50 distinct items per order')
+    .default([]),
+  /**
+   * Migration 033 (owner, 2026-10-09): combo packs in the cart, each charged
+   * the combo price by the server. Optional - older apps never send it.
+   */
+  combos: z
+    .array(orderComboLineSchema)
+    .max(20, 'Cannot exceed 20 combo packs per order')
+    .optional(),
   customer_notes: z.string().trim().max(500).nullable().optional(),
   idempotency_key: z.string().trim().max(128).optional(),
   /** Migration 018: re-validated inside the order transaction; any case, stored upper-case. */
@@ -21,6 +32,9 @@ export const createOrderSchema = z.object({
     .pipe(z.string().regex(/^[A-Z0-9]{4,20}$/, 'Coupon codes are 4-20 letters or digits'))
     .nullable()
     .optional(),
+}).refine((v) => v.items.length + (v.combos?.length ?? 0) > 0, {
+  message: 'At least one order item is required',
+  path: ['items'],
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;

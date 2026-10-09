@@ -6,6 +6,7 @@ import '../Atoms/card_product.dart';
 import '../Atoms/entrance_fade.dart';
 import '../Atoms/failure_states.dart';
 import '../Atoms/section_header.dart';
+import 'combo_rail.dart';
 import 'product_rail.dart';
 import 'products_screen_grid.dart';
 import '../../../Models/category_model.dart';
@@ -20,6 +21,9 @@ import '../../../design/tokens.dart';
 /// One request for the whole catalogue ([ProductProvider.loadProducts] with no
 /// category), then, top to bottom:
 ///
+/// * a **"Combo packs" rail** of the live combo packs (owner, 2026-10-09;
+///   [ProductProvider.loadCombos], `GET /combos`), directly above the
+///   Offers rail and on the same rule: only when there is at least one;
 /// * an **"Offers" rail** of the products on offer right now (owner,
 ///   2026-10-09; [ProductProvider.loadOffers], `GET /products?on_offer=true`),
 ///   only when there is at least one - no heading, skeleton or gap otherwise,
@@ -48,6 +52,7 @@ class HomeProductFeed extends StatefulWidget {
 
   static const String allProductsTitle = 'All products';
   static const String offersTitle = 'Offers';
+  static const String combosTitle = 'Combo packs';
   static const Key retryKey = Key('home-products-retry');
 
   /// Category rails for [products], ordered like [categories]: categories
@@ -82,6 +87,7 @@ class _HomeProductFeedState extends State<HomeProductFeed> {
       provider.loadProducts();
       provider.loadCategories();
       provider.loadOffers();
+      provider.loadCombos();
     });
   }
 
@@ -143,9 +149,22 @@ class _HomeProductFeedState extends State<HomeProductFeed> {
 
             final rails = HomeProductFeed.railsFor(provider.categories, products);
             final offers = provider.offerProducts.take(HomeProductFeed.railMaximum).toList();
+            final combos = provider.combos;
             final desktop = width >= AppBreakpoints.desktop;
             final columns = BlynkProductGrid.columnsFor(width);
             return SliverMainAxisGroup(slivers: [
+              // Combo packs: same rule as the offers below - nothing at all
+              // until at least one live combo has arrived.
+              if (combos.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: BlynkSectionHeader(
+                    key: const ValueKey('home-combos'),
+                    title: HomeProductFeed.combosTitle,
+                    padding: header,
+                  ),
+                ),
+                SliverToBoxAdapter(child: ComboRail(key: const ValueKey('home-combos-rail'), combos: combos)),
+              ],
               // Drawn only once offers have arrived, so a slow or failed
               // request never leaves an empty heading or a skeleton gap.
               if (offers.isNotEmpty) ...[

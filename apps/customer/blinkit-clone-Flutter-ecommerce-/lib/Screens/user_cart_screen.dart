@@ -5,6 +5,7 @@ import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/store_info.provider.dart';
 import '../UI/Widgets/Atoms/adaptive_sheet.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
+import '../UI/Widgets/Atoms/card_combo_cart.dart';
 import '../UI/Widgets/Atoms/card_product_cart_screen.dart';
 import '../UI/Widgets/Atoms/connectivity_banner.dart';
 import '../UI/Widgets/Organisms/card_cart_prices_detail.dart';
@@ -191,7 +192,7 @@ class _NarrowCart extends StatelessWidget {
             ),
             SliverPadding(
               padding: EdgeInsets.symmetric(horizontal: BlynkSpace.s16),
-              sliver: _CartLineList(),
+              sliver: SliverMainAxisGroup(slivers: [_CartComboList(), _CartLineList()]),
             ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
@@ -242,7 +243,7 @@ class _WideCart extends StatelessWidget {
                       BlynkSpace.s12,
                       BlynkSpace.s24,
                     ),
-                    sliver: _CartLineList(),
+                    sliver: SliverMainAxisGroup(slivers: [_CartComboList(), _CartLineList()]),
                   ),
                 ],
               ),
@@ -341,6 +342,28 @@ class _CheckoutBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Combo pack lines (owner, 2026-10-09), above the product lines: each is
+/// its own line with the pack's products listed under its name. Removing one
+/// is immediate (the product lines below keep their own animation).
+class _CartComboList extends StatelessWidget {
+  const _CartComboList();
+
+  @override
+  Widget build(BuildContext context) {
+    final combos = context.watch<CartProvider>().comboLines;
+    return SliverList.list(
+      children: [
+        for (final line in combos)
+          Padding(
+            key: ValueKey('cart-combo-line/${line.combo.id}'),
+            padding: const EdgeInsets.only(bottom: BlynkSpace.s12),
+            child: CartComboCard(line: line),
+          ),
+      ],
     );
   }
 }

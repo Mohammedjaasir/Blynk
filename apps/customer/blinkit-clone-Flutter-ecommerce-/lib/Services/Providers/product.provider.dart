@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Models/category_group_model.dart';
 import 'package:ecom/Models/category_model.dart';
+import 'package:ecom/Models/combo_model.dart';
 import 'package:ecom/Models/product_model.dart';
 import 'package:ecom/Models/promotion_model.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
@@ -384,6 +385,54 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
+  // Home's "Combo packs" rail (owner, 2026-10-09): GET /combos, live combos
+  // only (a sold-out one comes with is_available false). Same rules as the
+  // Offers rail: no error is ever shown, the rail is simply not there.
+  List<ComboModel> _combos = [];
+  bool _combosRequested = false;
+  bool _isLoadingCombos = false;
+
+  /// Live combo packs in the backend's order, minus any whose end date has
+  /// passed on the device clock since they were fetched.
+  List<ComboModel> get combos {
+    final now = _clock();
+    return _combos.where((c) => c.isLiveAt(now)).toList();
+  }
+
+  /// The combo with [id] as last loaded, or null.
+  ComboModel? comboById(String id) {
+    for (final c in _combos) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+
+  /// GET /combos. Once unless [force]; a failure keeps the combos already
+  /// on screen (or none). Re-read on every catalog refresh, so a combo
+  /// changed in Ops (tables 'combos' / 'combo_items', or a product price)
+  /// reaches an open app through the same live-update path as products.
+  Future<void> loadCombos({bool force = false}) async {
+    if (_isLoadingCombos) return;
+    if (_combosRequested && !force) return;
+    final hadCombos = _combos.isNotEmpty;
+    _combosRequested = true;
+    _isLoadingCombos = true;
+    try {
+      final response = await _request('/combos', const {});
+      final data = (response is Map ? response['data'] : null) as Map?;
+      final raw = data?['combos'];
+      _combos = [
+        if (raw is List)
+          for (final c in raw) ComboModel.tryParse(c),
+      ].whereType<ComboModel>().toList();
+    } catch (_) {
+      if (!hadCombos) _combos = [];
+    } finally {
+      _isLoadingCombos = false;
+      notifyListeners();
+    }
+  }
+
   Future<void>? _refreshInFlight;
   DateTime? _lastRefreshAt;
 
@@ -417,6 +466,7 @@ class ProductProvider extends ChangeNotifier {
       if (_homeGroupsRequested) loadHomeGroups(force: true),
       loadPromotions(force: true),
       if (_offersRequested) loadOffers(force: true),
+      if (_combosRequested) loadCombos(force: true),
       for (final key in _productsByCategory.keys.toList())
         loadProducts(categorySlug: key.isEmpty ? null : key, force: true),
     ]).whenComplete(() => _refreshInFlight = null);

@@ -204,6 +204,10 @@ abstract final class BlynkIcons {
   // Rating a finished dental visit: filled vs outline carries the meaning.
   static const IconData star = Icons.star_rounded;
   static const IconData starOutline = Icons.star_outline_rounded;
+  // Category offers and combo packs (owner, 2026-10-09): the "10% off
+  // everything here" banner and the combo pack fallback / cart line mark.
+  static const IconData offer = Icons.local_offer_outlined;
+  static const IconData combo = Icons.redeem_outlined;
 
   /// The icons that must read as different things from each other.
   static const List<IconData> distinct = <IconData>[

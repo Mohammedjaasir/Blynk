@@ -5,6 +5,8 @@ import { categories as categoriesApi, categoryGroups as groupsApi } from '../api
 import type { Category, CategoryGroup } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, Field, Spinner, useToast } from '../components/ui';
+import { endOfDay, validateCategoryOffer } from '../lib/combos';
+import { colomboDate, formatDay } from '../lib/coupons';
 
 /**
  * Categories: create, edit, activate/deactivate and delete.
@@ -22,6 +24,8 @@ export function Categories() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Category | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Category | null>(null);
+  // Category offer (owner, 2026-10-09).
+  const [offering, setOffering] = useState<Category | null>(null);
   // For the edit form's Group select; without category groups on the API
   // the select just offers "None".
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
@@ -106,6 +110,12 @@ export function Categories() {
                   <Badge tone={category.is_active ? 'active' : 'inactive'}>
                     {category.is_active ? 'Active' : 'Inactive'}
                   </Badge>
+                  {/* Category offer, while it runs (owner, 2026-10-09). */}
+                  {category.offer_active && category.offer_percent != null ? (
+                    <span className="cell__secondary">
+                      <Badge tone="offer">{`${category.offer_percent}% off`}</Badge>
+                    </span>
+                  ) : null}
                 </td>
                 <td>
                   <div className="row-actions">
@@ -115,6 +125,14 @@ export function Categories() {
                       onClick={() => setEditing(category)}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="button button--ghost button--sm"
+                      onClick={() => setOffering(category)}
+                      aria-label={`Offer for ${category.name}`}
+                    >
+                      Offer
                     </button>
                     <button
                       type="button"
@@ -152,6 +170,18 @@ export function Categories() {
           onClose={() => setDeleting(null)}
           onDeleted={async () => {
             setDeleting(null);
+            await load();
+          }}
+        />
+      ) : null}
+
+      {offering ? (
+        <CategoryOfferDialog
+          category={offering}
+          subCategories={(rows ?? []).filter((c) => c.parent_id === offering.id)}
+          onClose={() => setOffering(null)}
+          onSaved={async () => {
+            setOffering(null);
             await load();
           }}
         />
@@ -332,6 +362,142 @@ function CategoryDialog({
           </button>
           <button type="submit" className="button" disabled={saving}>
             {saving ? <Spinner label="Saving" /> : 'Save'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Category offer (owner, 2026-10-09): % off everything in the category and
+ * its sub-categories, with an optional last day (the offer runs to the end
+ * of that day in Colombo). Save replaces any offer; Remove ends it now.
+ */
+function CategoryOfferDialog({
+  category,
+  subCategories,
+  onClose,
+  onSaved,
+}: {
+  category: Category;
+  subCategories: Category[];
+  onClose(): void;
+  onSaved(): void | Promise<void>;
+}) {
+  const toast = useToast();
+  const stored = category.offer_percent ?? null;
+  const storedEndsAt = category.offer_ends_at ?? null;
+  const storedEndsOn = storedEndsAt ? colomboDate(storedEndsAt) : '';
+  const [percent, setPercent] = useState(stored === null ? '' : String(stored));
+  const [endsOn, setEndsOn] = useState(storedEndsOn);
+  const [errors, setErrors] = useState<{ percent?: string; endsOn?: string }>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const value = Number(percent.trim());
+  const previewOk = percent.trim() !== '' && !validateCategoryOffer(percent, '', '').percent;
+  const subNames = subCategories.map((c) => c.name);
+  const status =
+    stored === null
+      ? null
+      : category.offer_active
+        ? `Running now: ${stored}% off${storedEndsAt ? ` until ${formatDay(storedEndsAt)}` : ''}.`
+        : storedEndsAt
+          ? `Ended on ${formatDay(storedEndsAt)}. Customers pay the normal prices.`
+          : 'Not running.';
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const next = validateCategoryOffer(percent, endsOn, storedEndsOn);
+    setErrors(next);
+    if (next.percent || next.endsOn) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // An unchanged end day goes back exactly as stored (the API checks
+      // only a changed end for being in the past).
+      const endsAt = !endsOn ? null : endsOn === storedEndsOn ? storedEndsAt : endOfDay(endsOn);
+      await categoriesApi.setOffer(category.id, { offer_percent: value, offer_ends_at: endsAt });
+      toast.success(`${value}% off ${category.name} is saved.`);
+      await onSaved();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'OFFER_END_IN_PAST') {
+        setErrors({ endsOn: err.message });
+      } else {
+        setError(errorMessage(err, 'Could not save the offer.'));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    try {
+      await categoriesApi.removeOffer(category.id);
+      toast.success(`The offer on ${category.name} is removed.`);
+      await onSaved();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not remove the offer.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label="Category offer">
+      <form className="modal__panel" onSubmit={save} noValidate>
+        <h2 className="modal__title">{`Offer on ${category.name}`}</h2>
+        {status ? (
+          <p className={`offer-status${category.offer_active ? ' offer-status--running' : ''}`} role="status">
+            {status}
+          </p>
+        ) : null}
+        <div className="form__row">
+          <Field label="% off" hint="More than 0 and less than 100" error={errors.percent}>
+            <input className="input" inputMode="decimal" value={percent} onChange={(e) => setPercent(e.target.value)} />
+          </Field>
+          <Field label="Offer ends" hint="Optional. Runs to the end of this day" error={errors.endsOn}>
+            <input
+              className="input"
+              type="date"
+              value={endsOn}
+              min={colomboDate()}
+              onChange={(e) => setEndsOn(e.target.value)}
+            />
+          </Field>
+        </div>
+        {previewOk ? (
+          <div className="offer-preview">
+            <p className="offer-preview__line">
+              {`${value}% off everything in ${category.name}`}
+              {endsOn ? `, until ${formatDay(endOfDay(endsOn))}` : ''}
+            </p>
+            {subNames.length > 0 ? (
+              <p className="offer-preview__note">{`Also covers its sub-categories: ${subNames.join(', ')}.`}</p>
+            ) : null}
+            <p className="offer-preview__note">A product with its own lower offer price keeps that price.</p>
+          </div>
+        ) : null}
+        {error ? <p className="field__error">{error}</p> : null}
+        <div className="modal__actions">
+          {stored !== null ? (
+            <button
+              type="button"
+              className="button button--ink-outline modal__actions-start"
+              disabled={busy}
+              onClick={() => void remove()}
+            >
+              Remove offer
+            </button>
+          ) : null}
+          <button type="button" className="button button--ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="button" disabled={busy}>
+            {busy ? <Spinner label="Saving" /> : 'Save offer'}
           </button>
         </div>
       </form>

@@ -95,6 +95,17 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
             label: 'Subtotal ($itemCount ${itemCount == 1 ? 'item' : 'items'})',
             amount: subtotal,
           ),
+          // Combo packs (owner, 2026-10-09): the subtotal already charges
+          // the combo price; this only says what the packs save, from the
+          // backend's own `saving` per pack.
+          if (cart.comboSavings > 0) ...[
+            const SizedBox(height: BlynkSpace.s4),
+            Text(
+              'Includes ${formatLkr(cart.comboSavings)} saved on combo packs',
+              key: const Key('summary-combo-savings'),
+              style: BlynkText.caption.copyWith(color: BlynkColors.positiveInk),
+            ),
+          ],
           const SizedBox(height: BlynkSpace.s8),
           if (freeDelivery) ...[
             Row(

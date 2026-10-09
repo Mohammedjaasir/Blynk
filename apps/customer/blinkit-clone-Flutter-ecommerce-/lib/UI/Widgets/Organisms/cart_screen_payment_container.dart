@@ -10,6 +10,8 @@ import '../Atoms/blynk_button.dart';
 import '../../../Services/Providers/address.provider.dart';
 import '../../../Services/Providers/cart.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
+import '../../../Services/Providers/product.provider.dart';
+import '../../../Services/Exceptions/api_exception.dart';
 import '../../../Services/app_errors.dart';
 import '../../../Services/ordering_hours.dart';
 import '../../../Services/store_info.dart';
@@ -55,6 +57,14 @@ class CartScreenPaymentContainer extends StatelessWidget {
         Navigator.of(context).pushNamed('/order/confirm');
       }
     } catch (e) {
+      // A combo pack ended, changed or sold out (owner, 2026-10-09): reload
+      // the combos so the rail and the cart line show where it stands now.
+      if (e is ApiException && (e.code ?? '').startsWith('COMBO_') && context.mounted) {
+        final products = context.read<ProductProvider?>();
+        if (products != null) {
+          unawaited(products.loadCombos(force: true).then((_) => cart.syncCombos(products.combos)));
+        }
+      }
       if (context.mounted) {
         showAppToast(msg: placeOrderFailureMessage(AppErrors.from(e)));
       }

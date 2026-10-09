@@ -13,7 +13,7 @@ import { checkDatabaseConnection, pool } from './database/connection.js';
 // Module routers
 import { authRouter } from './modules/auth/index.js';
 import { usersRouter, meRouter } from './modules/users/index.js';
-import { catalogRouter, categoriesRouter, productsRouter } from './modules/catalog/index.js';
+import { catalogRouter, categoriesRouter, combosRouter, productsRouter } from './modules/catalog/index.js';
 import { pricingRouter } from './modules/pricing/index.js';
 import { inventoryRouter } from './modules/inventory/index.js';
 import { ordersRouter } from './modules/orders/index.js';
@@ -127,6 +127,7 @@ export function createApp(): Express {
   apiRouter.use('/users', usersRouter);
   apiRouter.use('/categories', categoriesRouter);
   apiRouter.use('/products', productsRouter);
+  apiRouter.use('/combos', combosRouter);
   apiRouter.use('/catalog', catalogRouter);
   apiRouter.use('/promotions', promotionsRouter);
   apiRouter.use('/pricing', pricingRouter);

@@ -11,6 +11,7 @@ import {
   deleteCategoryQuerySchema,
   idParamSchema,
   adminProductListQuerySchema,
+  categoryOfferSchema,
 } from './catalog.schema.js';
 import { deleteCategory, deleteProduct } from './catalog.delete.js';
 import { importProducts, importProductsSchema } from './catalog.import.js';
@@ -106,6 +107,27 @@ export class CatalogController {
         success: true,
         data: { category },
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PUT /admin/categories/:id/offer (migration 033; owner, 2026-10-09). */
+  async setCategoryOfferAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = categoryOfferSchema.parse(req.body);
+      const category = await catalogService.setCategoryOffer(req.params.id as string, input, actorOf(req));
+      res.status(200).json({ success: true, data: { category } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** DELETE /admin/categories/:id/offer (migration 033). */
+  async removeCategoryOfferAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const category = await catalogService.removeCategoryOffer(req.params.id as string, actorOf(req));
+      res.status(200).json({ success: true, data: { category } });
     } catch (err) {
       next(err);
     }

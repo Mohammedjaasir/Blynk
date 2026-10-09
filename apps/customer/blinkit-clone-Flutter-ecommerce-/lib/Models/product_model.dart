@@ -46,6 +46,15 @@ class ProductModel {
   /// that ended since the product was fetched.
   final DateTime? offerEndsAt;
 
+  /// Where [offerPrice] comes from (owner, 2026-10-09): 'PRODUCT' (the
+  /// product's own offer price) or 'CATEGORY' (a "10% off everything here"
+  /// category offer), whichever is lower; null with no offer and on a backend
+  /// that predates category offers. The price fields already carry the best
+  /// offer, so this only ever changes wording.
+  final String? offerKind;
+
+  bool get isCategoryOffer => offerKind == 'CATEGORY';
+
   final bool isAvailable;
 
   const ProductModel({
@@ -65,6 +74,7 @@ class ProductModel {
     required this.sellingPrice,
     this.offerPrice,
     this.offerEndsAt,
+    this.offerKind,
     required this.isAvailable,
   });
 
@@ -91,6 +101,7 @@ class ProductModel {
               0.0,
       offerPrice: _parseOfferPrice(json['offer_price'] ?? json['offerPrice']),
       offerEndsAt: _parseDate(json['offer_ends_at'] ?? json['offerEndsAt']),
+      offerKind: _parseOfferKind(json['offer_kind'] ?? json['offerKind']),
       isAvailable: json['is_available'] == true || json['isAvailable'] == true,
     );
   }
@@ -106,6 +117,9 @@ class ProductModel {
     if (value == null || !value.isFinite || value <= 0) return null;
     return value;
   }
+
+  static String? _parseOfferKind(Object? raw) =>
+      raw == 'PRODUCT' || raw == 'CATEGORY' ? raw as String : null;
 
   static DateTime? _parseDate(Object? raw) =>
       raw is String ? DateTime.tryParse(raw.trim()) : null;
@@ -153,6 +167,7 @@ class ProductModel {
         'selling_price': sellingPrice,
         'offer_price': offerPrice,
         'offer_ends_at': offerEndsAt?.toIso8601String(),
+        'offer_kind': offerKind,
         'is_available': isAvailable,
       };
 

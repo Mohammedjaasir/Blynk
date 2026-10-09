@@ -182,14 +182,29 @@ export class RiderRepository {
 
     // What is in the bag: names and quantities only - no prices or costs.
     // Items resolved as unavailable were removed from the order.
-    const items = await executor
+    // Migration 033: an item packed for a combo pack names its combo
+    // (combo_name, combo quantity) so the rider can read "Breakfast pack x1:
+    // bread, eggs, milk"; loose items have no combo keys.
+    const rawItems = await executor
       .selectFrom('order_items')
-      .select(['id', 'product_name_snapshot', 'quantity', 'item_status'])
-      .where('order_id', '=', row.order_id)
-      .where('item_status', '!=', 'UNAVAILABLE')
-      .orderBy('created_at', 'asc')
-      .orderBy('id', 'asc')
+      .leftJoin('order_combos as oc', 'oc.id', 'order_items.order_combo_id')
+      .select([
+        'order_items.id',
+        'order_items.product_name_snapshot',
+        'order_items.quantity',
+        'order_items.item_status',
+        'order_items.order_combo_id',
+        'oc.combo_name_snapshot as combo_name',
+        'oc.quantity as combo_quantity',
+      ])
+      .where('order_items.order_id', '=', row.order_id)
+      .where('order_items.item_status', '!=', 'UNAVAILABLE')
+      .orderBy('order_items.created_at', 'asc')
+      .orderBy('order_items.id', 'asc')
       .execute();
+    const items = rawItems.map(({ order_combo_id, combo_name, combo_quantity, ...item }) =>
+      order_combo_id ? { ...item, order_combo_id, combo_name, combo_quantity } : item
+    );
 
     return {
       ...row,

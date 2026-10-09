@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/store_info.provider.dart';
 import '../UI/Widgets/Atoms/card_cancellation_policy.dart';
+import '../UI/Widgets/Atoms/combo_card.dart';
 import '../UI/Widgets/Atoms/image_well.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
 import '../UI/Widgets/Atoms/section_header.dart';
@@ -129,7 +130,13 @@ class _CheckoutItems extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lines = context.watch<CartProvider>().lines;
+    final cart = context.watch<CartProvider>();
+    final lines = cart.lines;
+    // Combo packs (owner, 2026-10-09) first, each with its products under it.
+    final rows = <Widget>[
+      for (final combo in cart.comboLines) _CheckoutComboRow(line: combo),
+      for (final line in lines) _CheckoutItemRow(line: line),
+    ];
 
     return Container(
       decoration: appCardDecoration(),
@@ -137,9 +144,9 @@ class _CheckoutItems extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var i = 0; i < lines.length; i++) ...[
+          for (var i = 0; i < rows.length; i++) ...[
             if (i > 0) const SizedBox(height: BlynkSpace.s16),
-            _CheckoutItemRow(line: lines[i]),
+            rows[i],
           ],
         ],
       ),
@@ -186,6 +193,63 @@ class _CheckoutItemRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: BlynkType.productUnit,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: BlynkSpace.s12),
+        MoneyText(
+          line.lineTotal,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: BlynkType.price,
+        ),
+      ],
+    );
+  }
+}
+
+/// One combo pack, read-only: its picture, name, the products in one pack in
+/// small text, the packs, and the line total the cart holds.
+class _CheckoutComboRow extends StatelessWidget {
+  const _CheckoutComboRow({required this.line});
+
+  final CartComboLine line;
+
+  static const double _thumb = 48;
+
+  @override
+  Widget build(BuildContext context) {
+    final combo = line.combo;
+    return Row(
+      key: ValueKey('checkout-combo/${combo.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: _thumb, height: _thumb, child: ComboThumb(combo: combo)),
+        const SizedBox(width: BlynkSpace.s12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                combo.name,
+                maxLines: BlynkType.productNameMaxLines,
+                overflow: BlynkType.productNameOverflow,
+                style: BlynkText.rowLabel,
+              ),
+              const SizedBox(height: BlynkSpace.s4 - 2),
+              Text(
+                '${line.quantity} × combo pack',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: BlynkType.productUnit,
+              ),
+              Text(
+                combo.itemsSummary,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: BlynkText.caption.copyWith(color: BlynkColors.ink2),
               ),
             ],
           ),

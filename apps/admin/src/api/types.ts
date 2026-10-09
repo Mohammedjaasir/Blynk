@@ -99,6 +99,14 @@ export interface Category {
   group_sort_order?: number;
   /** The category this one sits inside (null = top level). One level only. */
   parent_id?: string | null;
+  /**
+   * Category offer (owner, 2026-10-09; migration 033): % off every product in
+   * this category and its sub-categories, with an optional end (ISO).
+   * `offer_active` is true only while it runs right now.
+   */
+  offer_percent?: number | null;
+  offer_ends_at?: string | null;
+  offer_active?: boolean;
 }
 
 /** A category as listed inside a group (GET /admin/category-groups). */
@@ -231,9 +239,76 @@ export interface AdminProduct {
   offer_price?: number | null;
   offer_ends_at?: string | null;
   offer_active?: boolean;
+  /** The category offer running on this product (own category or parent; owner, 2026-10-09). */
+  category_offer_percent?: number | null;
+  category_offer_ends_at?: string | null;
+  /** What a customer pays right now: the lower of the product and category offers. */
+  customer_price?: number;
   is_available: boolean;
   is_active: boolean;
   updated_at?: string;
+}
+
+/** Why a combo is not shown to customers (owner, 2026-10-09). */
+export type ComboNotLiveReason = 'INACTIVE' | 'ENDED' | 'ITEM_INACTIVE' | 'NOT_CHEAPER';
+
+/** One product in a combo pack, per pack (GET /admin/combos). */
+export interface ComboItem {
+  product_id: string;
+  name: string;
+  slug: string | null;
+  sku: string | null;
+  unit: string | null;
+  pack_size: string | null;
+  image_url: string | null;
+  image_focal_x?: number;
+  image_focal_y?: number;
+  quantity: number;
+  /** The product's regular price. */
+  selling_price: number;
+  /** What one unit costs on its own today (offers included). */
+  unit_price: number;
+  is_active: boolean;
+  is_available: boolean;
+  in_stock: boolean;
+  /** Tracked units free to sell; null = untracked. */
+  stock_available: number | null;
+}
+
+/** A combo pack as staff see it (owner, 2026-10-09; migration 033). */
+export interface Combo {
+  id: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  price: number;
+  is_active: boolean;
+  ends_at: string | null;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+  items: ComboItem[];
+  /** What one pack's items cost on their own today. */
+  items_total: number;
+  /** items_total - price, never below 0. */
+  saving: number;
+  /** Shown to customers and orderable. */
+  is_live: boolean;
+  /** Live and every item in stock. */
+  is_available: boolean;
+  not_live_reason: ComboNotLiveReason | null;
+}
+
+/** POST /admin/combos; PATCH takes any subset (items replaces the whole list). */
+export interface ComboInput {
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  price: number;
+  is_active: boolean;
+  ends_at?: string | null;
+  display_order: number;
+  items: Array<{ product_id: string; quantity: number }>;
 }
 
 /** What the customer catalog endpoint returns (no cost or markup). */
@@ -313,6 +388,22 @@ export interface OrderItemRow {
    * one without (what blocks packing); never rendered.
    */
   actual_unit_cost?: number | string | null;
+  product_id?: string | null;
+  /** The order combo line this item belongs to; null for a loose item (owner, 2026-10-09). */
+  order_combo_id?: string | null;
+}
+
+/** One combo pack line of an order; its items point at it by order_combo_id. */
+export interface OrderCombo {
+  id: string;
+  order_id: string;
+  combo_id: string | null;
+  name: string;
+  unit_price: number;
+  quantity: number;
+  subtotal: number;
+  /** One pack's items at their own prices. */
+  items_regular_total: number;
 }
 
 export interface OrderHistoryRow {
@@ -348,6 +439,8 @@ export interface OrderDetail {
   delivery_instructions: string | null;
   cancellation_reason: string | null;
   items: OrderItemRow[];
+  /** Combo pack lines (owner, 2026-10-09); absent on older API responses. */
+  combos?: OrderCombo[];
   history: OrderHistoryRow[];
   delivery: { id: string; assignment_status: string; rider_name?: string | null } | null;
 }

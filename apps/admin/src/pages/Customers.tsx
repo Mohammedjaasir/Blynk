@@ -5,12 +5,13 @@ import { customers as customersApi, orders as ordersApi } from '../api/resources
 import type { CustomerDetail as Detail, CustomerOrderRow, CustomerRow, CustomerSort, OrderDetail } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { OrderBill } from '../components/OrderBill';
+import { OrderItems } from '../components/OrderItems';
 import { Badge, EmptyState, Spinner } from '../components/ui';
 import { formatDay } from '../lib/coupons';
 import { buildCustomersXlsx, customerExportFilename } from '../lib/customerExport';
 import { downloadBlob } from '../lib/productImport';
 import { smsLanguageLabel } from '../lib/smsOffers';
-import { ITEM_STATUS_LABEL, STATUS_LABEL, formatClock, formatMoney, orderErrorMessage, shortNumber } from '../lib/orders';
+import { STATUS_LABEL, formatClock, formatMoney, orderErrorMessage, shortNumber } from '../lib/orders';
 
 /**
  * Customers (ADMIN only - the API refuses everyone else, and the rows carry
@@ -364,15 +365,7 @@ function OrderDetailInline({ orderId }: { orderId: string }) {
   if (!detail) return <Spinner label="Loading the order" />;
   return (
     <div className="order-inline" aria-label={`Order #${shortNumber(detail.order_number)} details`}>
-      <ul className="order-items">
-        {detail.items.map((item) => (
-          <li key={item.id} className={`order-items__row order-items__row--${item.item_status.toLowerCase()}`}>
-            <span className="order-items__qty mono">{item.quantity} ×</span>
-            <span className="order-items__name">{item.product_name_snapshot}</span>
-            <span className="order-items__status">{ITEM_STATUS_LABEL[item.item_status] ?? item.item_status}</span>
-          </li>
-        ))}
-      </ul>
+      <OrderItems items={detail.items} combos={detail.combos} />
       <OrderBill order={detail} />
       <p className="cell__secondary">
         {detail.delivery_address_line1}, {detail.delivery_city}

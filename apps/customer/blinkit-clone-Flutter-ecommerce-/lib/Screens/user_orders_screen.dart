@@ -275,7 +275,8 @@ class _OrderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final names = order.items.map((i) => i.productNameSnapshot).toList();
+    // A combo pack is named once, not product by product (owner, 2026-10-09).
+    final names = order.lineNames;
     final shownNames = names.take(2).join(', ');
     final remaining = names.length - 2;
     final namesLine = remaining > 0 ? '$shownNames +$remaining more' : shownNames;

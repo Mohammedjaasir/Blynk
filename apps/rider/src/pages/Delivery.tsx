@@ -11,7 +11,7 @@ import { TrackingStatus } from '../components/TrackingStatus';
 import { DeliveryMap } from '../components/DeliveryMap';
 import { Navigation } from 'lucide-react';
 import { googleMapsDirectionsUrl, toLatLng } from '../lib/route';
-import { canReportFailure, isTrackable, nextAction, stage, statusLabel, statusTone } from '../lib/delivery';
+import { bagRows, canReportFailure, isTrackable, nextAction, stage, statusLabel, statusTone } from '../lib/delivery';
 import { MESSAGES, deliveryCodeLockedUntil, errorCode, errorMessage } from '../lib/errors';
 import { formatMoney, formatPhone, formatTime, shortOrderNumber } from '../lib/format';
 import { getTracker, stopTrackingFor, syncTracking } from '../lib/tracker-session';
@@ -332,12 +332,30 @@ function Slip({
             In the bag
           </h2>
           <ul className="bag__items">
-            {d.items.map((item) => (
-              <li key={item.id} className="bag__item">
-                <span className="bag__qty">{item.quantity} ×</span>
-                <span className="bag__name">{item.product_name_snapshot}</span>
-              </li>
-            ))}
+            {bagRows(d.items).map((row) =>
+              row.kind === 'item' ? (
+                <li key={row.item.id} className="bag__item">
+                  <span className="bag__qty">{row.item.quantity} ×</span>
+                  <span className="bag__name">{row.item.product_name_snapshot}</span>
+                </li>
+              ) : (
+                <li key={row.id} className="bag__item bag__combo" aria-label={`Combo pack: ${row.name}`}>
+                  <span className="bag__qty">{row.quantity} ×</span>
+                  <div className="bag__combo-body">
+                    <span className="bag__name">{row.name}</span>
+                    <span className="bag__combo-tag">Combo pack</span>
+                    <ul className="bag__combo-items">
+                      {row.items.map((it) => (
+                        <li key={it.name} className="bag__combo-item">
+                          <span className="bag__qty">{it.quantity} ×</span>
+                          <span>{it.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </li>
+              )
+            )}
           </ul>
         </section>
       ) : null}

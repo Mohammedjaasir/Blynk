@@ -173,3 +173,91 @@ export function planReorder(
     .filter((r) => r.display_order !== r.before)
     .map(({ id: rowId, display_order }) => ({ id: rowId, display_order }));
 }
+
+// ------------------------------------------------ category offers (033)
+
+/**
+ * A category offer % typed into the category dialog (owner, 2026-10-09),
+ * mirroring PUT /admin/categories/:id/offer: more than 0, less than 100, at
+ * most 2 decimals. The server checks again.
+ */
+export function parseOfferPercent(input: string): { value: number } | { error: string } {
+  const s = input.trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) return { error: 'Enter the % off, like 10 or 12.5.' };
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return { error: 'Use at most 2 decimals.' };
+  const value = Number(s);
+  if (value <= 0) return { error: 'The offer must be more than 0%.' };
+  if (value >= 100) return { error: 'The offer must be less than 100%.' };
+  return { value };
+}
+
+/** "10% off" / "12.5% off" - no trailing zeros. */
+export function offerPercentLabel(percent: number): string {
+  return `${Number(percent.toFixed(2))}% off`;
+}
+
+// ------------------------------------------------------ combo packs (033)
+
+/** Most units of one product in a combo (combo schema). */
+export const MAX_COMBO_ITEM_QTY = 100;
+
+/** What a customer pays for a product right now (owner, 2026-10-09): the
+ * backend's `customer_price` (best active offer) when the API sends it, else
+ * the calculated selling price. Null when neither is known. */
+export function productCustomerPrice(product: {
+  customer_price?: number | null;
+  calculated_selling_price?: number | null;
+  selling_price?: number | null;
+}): number | null {
+  for (const v of [product.customer_price, product.calculated_selling_price, product.selling_price]) {
+    if (v !== null && v !== undefined && Number.isFinite(Number(v))) return Number(v);
+  }
+  return null;
+}
+
+/** A combo price typed into the form: above zero, at most 2 decimals. */
+export function parseComboPrice(input: string): { value: number } | { error: string } {
+  const s = input.trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) return { error: 'Enter the combo price, like 980 or 979.50.' };
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return { error: 'Use at most 2 decimals.' };
+  const value = Number(s);
+  if (value <= 0) return { error: 'The combo price must be more than LKR 0.' };
+  return { value };
+}
+
+/**
+ * The combo rules the server enforces (owner, 2026-10-09), in the
+ * operator's words: at least 2 different products, or 1 product with 2 or
+ * more; and the combo price lower than buying the items separately.
+ * Returns the first broken rule, or null.
+ */
+export function comboRuleError(
+  items: ReadonlyArray<{ quantity: number }>,
+  price: number | null,
+  itemsTotal: number | null
+): string | null {
+  if (items.length === 0) return 'Add the products in this combo.';
+  if (items.length === 1 && items[0]!.quantity < 2) {
+    return 'A combo needs at least 2 products, or 2 or more of one product.';
+  }
+  if (price !== null && itemsTotal !== null && !(price < itemsTotal)) {
+    return 'The combo price must be lower than buying the items separately.';
+  }
+  return null;
+}
+
+/** Why a combo is not on sale, in plain words (owner, 2026-10-09). */
+export function comboNotLiveLabel(reason: string | null): string {
+  switch (reason) {
+    case 'INACTIVE':
+      return 'Switched off';
+    case 'ENDED':
+      return 'Ended';
+    case 'ITEM_INACTIVE':
+      return 'A product is switched off';
+    case 'NOT_CHEAPER':
+      return 'Hidden: items are now cheaper than the combo';
+    default:
+      return 'Not on sale';
+  }
+}

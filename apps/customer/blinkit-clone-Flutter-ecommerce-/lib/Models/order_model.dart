@@ -110,6 +110,11 @@ class OrderItemModel {
   final double subtotal;
   final String itemStatus;
 
+  /// The combo pack line this item belongs to (owner, 2026-10-09), or null
+  /// for a loose item. A combo's items are ordinary items - quantity is per
+  /// pack x packs, the price its share of the combo price.
+  final String? orderComboId;
+
   const OrderItemModel({
     required this.id,
     required this.productId,
@@ -119,6 +124,7 @@ class OrderItemModel {
     required this.quantity,
     required this.subtotal,
     required this.itemStatus,
+    this.orderComboId,
   });
 
   static OrderItemModel? tryParse(Object? json) {
@@ -137,6 +143,48 @@ class OrderItemModel {
       quantity: int.tryParse((json['quantity'] ?? 0).toString()) ?? 0,
       subtotal: double.tryParse((json['subtotal'] ?? 0).toString()) ?? 0.0,
       itemStatus: (json['item_status'] ?? json['itemStatus'] ?? '').toString(),
+      orderComboId: _optionalText(json['order_combo_id'] ?? json['orderComboId']),
+    );
+  }
+}
+
+/// One combo pack line of an order (owner, 2026-10-09), as the backend
+/// snapshotted it: `combos[]` on every order response. Its products are the
+/// order's items whose [OrderItemModel.orderComboId] is this [id].
+class OrderComboModel {
+  final String id;
+  final String? comboId;
+  final String name;
+  final double unitPrice;
+  final int quantity;
+  final double subtotal;
+
+  /// One pack's products at their own prices when it was ordered.
+  final double itemsRegularTotal;
+
+  const OrderComboModel({
+    required this.id,
+    this.comboId,
+    required this.name,
+    required this.unitPrice,
+    required this.quantity,
+    required this.subtotal,
+    this.itemsRegularTotal = 0,
+  });
+
+  static OrderComboModel? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final id = (json['id'] ?? '').toString();
+    if (id.isEmpty) return null;
+    double money(Object? v) => double.tryParse((v ?? 0).toString()) ?? 0.0;
+    return OrderComboModel(
+      id: id,
+      comboId: _optionalText(json['combo_id'] ?? json['comboId']),
+      name: (json['name'] ?? '').toString(),
+      unitPrice: money(json['unit_price'] ?? json['unitPrice']),
+      quantity: int.tryParse((json['quantity'] ?? 0).toString()) ?? 0,
+      subtotal: money(json['subtotal']),
+      itemsRegularTotal: money(json['items_regular_total'] ?? json['itemsRegularTotal']),
     );
   }
 }
@@ -176,6 +224,10 @@ class OrderModel {
   final DateTime? placedAt;
   final DateTime? cancelledAt;
   final List<OrderItemModel> items;
+
+  /// Combo pack lines (owner, 2026-10-09); empty for an order without any
+  /// and on a backend that predates combos.
+  final List<OrderComboModel> combos;
   final List<OrderStatusEvent> history;
   final OrderDeliveryInfo? delivery;
 
@@ -212,6 +264,7 @@ class OrderModel {
     this.placedAt,
     this.cancelledAt,
     this.items = const [],
+    this.combos = const [],
     this.history = const [],
     this.delivery,
     this.deliveryCode,
@@ -226,8 +279,27 @@ class OrderModel {
   bool get showsScheduleNotice => isScheduled && _preDispatch.contains(status);
   bool get showsDelivery => delivery != null && _withDelivery.contains(status);
 
+  /// Items that are not part of a combo pack (all of them when there are no
+  /// combos, or when an item points at a combo line the order did not send).
+  List<OrderItemModel> get looseItems {
+    final ids = {for (final c in combos) c.id};
+    return items.where((i) => i.orderComboId == null || !ids.contains(i.orderComboId)).toList();
+  }
+
+  /// The items of combo line [comboLineId].
+  List<OrderItemModel> itemsOfCombo(String comboLineId) =>
+      items.where((i) => i.orderComboId == comboLineId).toList();
+
+  /// What the order list names: each combo pack by its name, then each loose
+  /// item - a pack's products are not listed one by one.
+  List<String> get lineNames => [
+        for (final c in combos) c.name,
+        for (final i in looseItems) i.productNameSnapshot,
+      ];
+
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     final rawItems = (json['items'] as List?) ?? const [];
+    final rawCombos = json['combos'] is List ? json['combos'] as List : const [];
     final rawHistory = (json['history'] as List?) ?? const [];
     return OrderModel(
       id: (json['id'] ?? '').toString(),
@@ -269,6 +341,7 @@ class OrderModel {
       placedAt: _date(json['placed_at'] ?? json['placedAt'] ?? json['created_at'] ?? json['createdAt']),
       cancelledAt: _date(json['cancelled_at'] ?? json['cancelledAt']),
       items: rawItems.map(OrderItemModel.tryParse).whereType<OrderItemModel>().toList(),
+      combos: rawCombos.map(OrderComboModel.tryParse).whereType<OrderComboModel>().toList(),
       history: rawHistory.map(OrderStatusEvent.tryParse).whereType<OrderStatusEvent>().toList(),
       delivery: OrderDeliveryInfo.tryParse(json['delivery']),
       deliveryCode: _optionalCode(json['delivery_code'] ?? json['deliveryCode']),

@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { ApiError, deleteImagesQuietly } from '../../api/client';
 import { catalog } from '../../api/resources';
 import type { Category, CategoryGroup } from '../../api/types';
 import { ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { Badge, Field, Spinner } from '../../components/ui';
-import { catalogErrorMessage, parseDisplayOrder } from '../../lib/catalog';
+import {
+  catalogErrorMessage,
+  colomboDay,
+  colomboTodayDay,
+  formatColomboDate,
+  offerEndForDay,
+  offerPercentLabel,
+  parseDisplayOrder,
+  parseOfferPercent,
+} from '../../lib/catalog';
 import { replacedImages } from '../../lib/image';
 
 /**
@@ -21,6 +30,12 @@ import { replacedImages } from '../../lib/image';
  * Sub-categories (one level): a category can sit inside a top-level one
  * ("Bread" in "Bakery"), chosen with the form's "Inside category" select.
  * The list shows each child indented right under its parent.
+ *
+ * Category offer (migration 033; owner, 2026-10-09): the edit dialog's Offer
+ * section puts a % off everything in the category and its sub-categories,
+ * optionally until a day, saved on its own (PUT/DELETE
+ * /admin/categories/:id/offer). The list shows an "x% off" tag while the
+ * backend says the offer is running.
  */
 export function Categories() {
   const [rows, setRows] = useState<Category[] | null>(null);
@@ -106,6 +121,9 @@ export function Categories() {
                 {category.description ? <p className="cat-row__meta">{category.description}</p> : null}
                 <div className="cat-row__badges">
                   <Badge tone={category.is_active ? 'active' : 'inactive'}>{category.is_active ? 'Active' : 'Inactive'}</Badge>
+                  {category.offer_active && category.offer_percent != null ? (
+                    <span className="offer-tag">{offerPercentLabel(category.offer_percent)}</span>
+                  ) : null}
                   <span className="cat-row__order">Order {category.display_order}</span>
                 </div>
               </div>
@@ -142,6 +160,7 @@ export function Categories() {
             setEditing(null);
             await load();
           }}
+          onOfferChanged={() => void load()}
         />
       ) : null}
 
@@ -267,6 +286,7 @@ function CategoryDialog({
   categories,
   onClose,
   onSaved,
+  onOfferChanged,
 }: {
   category: Category | null;
   groups: CategoryGroup[];
@@ -274,6 +294,8 @@ function CategoryDialog({
   categories: Category[];
   onClose(): void;
   onSaved(): void | Promise<void>;
+  /** The offer was saved or removed (the dialog stays open). */
+  onOfferChanged?(): void;
 }) {
   const [name, setName] = useState(category?.name ?? '');
   const [description, setDescription] = useState(category?.description ?? '');
@@ -420,6 +442,16 @@ function CategoryDialog({
             <em>Inactive categories disappear from the customer app.</em>
           </span>
         </label>
+        {category ? (
+          <CategoryOfferSection
+            category={category}
+            subCategories={categories.filter((c) => c.parent_id === category.id)}
+            parent={categories.find((c) => c.id === category.parent_id) ?? null}
+            onChanged={onOfferChanged}
+          />
+        ) : (
+          <p className="field__hint">Save the category first to put it on offer.</p>
+        )}
         {error ? <p className="field__error">{error}</p> : null}
         <div className="modal__actions">
           <button type="button" className="button button--ghost" onClick={onClose}>
@@ -431,5 +463,193 @@ function CategoryDialog({
         </div>
       </form>
     </div>
+  );
+}
+
+/**
+ * The category offer (owner, 2026-10-09): % off everything in the category
+ * and its sub-categories, with an optional last day. Saved on its own with
+ * Save offer / Remove offer - separate from the category's Save, so an offer
+ * never goes out by accident with a rename. Checks mirror the server's
+ * (more than 0, less than 100, at most 2 decimals, a changed end in the
+ * future); the server's own refusal is shown as it says it.
+ */
+function CategoryOfferSection({
+  category,
+  subCategories,
+  parent,
+  onChanged,
+}: {
+  category: Category;
+  subCategories: Category[];
+  parent: Category | null;
+  onChanged?(): void;
+}) {
+  const [saved, setSaved] = useState({
+    percent: category.offer_percent ?? null,
+    endsAt: category.offer_ends_at ?? null,
+    active: category.offer_active === true,
+  });
+  const [percent, setPercent] = useState(saved.percent === null ? '' : String(saved.percent));
+  const [endDay, setEndDay] = useState(saved.endsAt ? colomboDay(saved.endsAt) : '');
+  const [busy, setBusy] = useState<'save' | 'remove' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const savedDay = saved.endsAt ? colomboDay(saved.endsAt) : '';
+  const endChanged = endDay !== savedDay;
+  const ended = saved.percent !== null && saved.endsAt !== null && new Date(saved.endsAt).getTime() <= Date.now();
+  const parsed = percent.trim() === '' ? null : parseOfferPercent(percent);
+  const scope =
+    subCategories.length > 0
+      ? `everything in ${category.name} and its sub-categories (${subCategories.map((c) => c.name).join(', ')})`
+      : `everything in ${category.name}`;
+
+  function apply(next: Category, message: string) {
+    const fresh = {
+      percent: next.offer_percent ?? null,
+      endsAt: next.offer_ends_at ?? null,
+      active: next.offer_active === true,
+    };
+    setSaved(fresh);
+    setPercent(fresh.percent === null ? '' : String(fresh.percent));
+    setEndDay(fresh.endsAt ? colomboDay(fresh.endsAt) : '');
+    setNotice(message);
+    onChanged?.();
+  }
+
+  async function save() {
+    setError(null);
+    setNotice(null);
+    if (!parsed) {
+      setError('Enter the % off, like 10 or 12.5.');
+      return;
+    }
+    if ('error' in parsed) {
+      setError(parsed.error);
+      return;
+    }
+    if (endDay !== '' && endChanged && endDay < colomboTodayDay()) {
+      setError('Pick today or a later day for the offer to end.');
+      return;
+    }
+    if (endDay !== '' && !endChanged && ended) {
+      setError('This offer has ended. Pick a new end day, or clear it for no end.');
+      return;
+    }
+    setBusy('save');
+    try {
+      // An untouched end goes back exactly as stored: the form only knows it
+      // as a day, and resending a rebuilt time could move it.
+      const offerEndsAt = endDay === '' ? null : endChanged ? offerEndForDay(endDay) : saved.endsAt;
+      const next = await catalog.categories.setOffer(category.id, {
+        offer_percent: parsed.value,
+        offer_ends_at: offerEndsAt,
+      });
+      apply(next, 'Offer saved.');
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove() {
+    setError(null);
+    setNotice(null);
+    setBusy('remove');
+    try {
+      apply(await catalog.categories.removeOffer(category.id), 'Offer removed.');
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Enter in an offer field saves the offer, not the category form around it.
+  const saveOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (busy === null) void save();
+  };
+
+  return (
+    <section className="form__section" aria-labelledby="category-offer-title">
+      <h3 className="form__section-title" id="category-offer-title">
+        Offer
+      </h3>
+      {saved.percent !== null ? (
+        <p className="offer-summary">
+          {saved.active ? (
+            <span className="offer-tag">Running now</span>
+          ) : ended ? (
+            <span className="offer-tag offer-tag--ended">Ended on {formatColomboDate(saved.endsAt!)}</span>
+          ) : (
+            <span className="offer-tag offer-tag--ended">Not running</span>
+          )}
+          {`${offerPercentLabel(saved.percent)}${saved.endsAt && !ended ? ` until ${formatColomboDate(saved.endsAt)}` : ''}`}
+        </p>
+      ) : null}
+      <div className="form__row">
+        <Field label="Offer (% off)" hint="More than 0 and less than 100">
+          <input
+            className="input"
+            inputMode="decimal"
+            value={percent}
+            onKeyDown={saveOnEnter}
+            onChange={(e) => {
+              setPercent(e.target.value);
+              setError(null);
+            }}
+          />
+        </Field>
+        <Field label="Offer ends" hint="Optional - the offer runs to the end of this day">
+          <input
+            className="input"
+            type="date"
+            value={endDay}
+            // No floor while showing a stored end that has passed.
+            min={ended && !endChanged ? undefined : colomboTodayDay()}
+            onKeyDown={saveOnEnter}
+            onChange={(e) => {
+              setEndDay(e.target.value);
+              setError(null);
+            }}
+          />
+        </Field>
+      </div>
+      {parsed && 'value' in parsed ? (
+        <p className="form__note" role="status">
+          {`${offerPercentLabel(parsed.value)} ${scope}${endDay ? ` until ${formatColomboDate(offerEndForDay(endDay))}` : ''}.`}
+        </p>
+      ) : null}
+      {parent ? (
+        <p className="form__note">
+          {`${category.name} is inside ${parent.name}: when both have an offer, customers get the bigger one.`}
+        </p>
+      ) : null}
+      {error ? <p className="field__error">{error}</p> : null}
+      {notice ? (
+        <p className="form__note" role="status">
+          {notice}
+        </p>
+      ) : null}
+      <div className="offer-actions">
+        <button type="button" className="button button--sm" disabled={busy !== null} onClick={() => void save()}>
+          {busy === 'save' ? <Spinner label="Saving offer" /> : 'Save offer'}
+        </button>
+        {saved.percent !== null ? (
+          <button
+            type="button"
+            className="button button--ghost button--sm"
+            disabled={busy !== null}
+            onClick={() => void remove()}
+          >
+            {busy === 'remove' ? <Spinner label="Removing offer" /> : 'Remove offer'}
+          </button>
+        ) : null}
+      </div>
+    </section>
   );
 }

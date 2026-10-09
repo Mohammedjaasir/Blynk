@@ -18,6 +18,8 @@ import type {
   BoardOrder,
   Category,
   CategoryDeleteResult,
+  Combo,
+  ComboInput,
   CategoryGroup,
   CategoryGroupDeleteResult,
   CategoryGroupsOverview,
@@ -709,6 +711,29 @@ export const catalog = {
         method: 'DELETE',
         query: { move_to_category_id: moveToCategoryId },
       }),
+
+    /** Category offer (migration 033; owner, 2026-10-09): % off everything in
+     * the category and its sub-categories. PUT replaces any existing offer;
+     * a left-out/null `offer_ends_at` means no end. */
+    setOffer: (id: string, body: { offer_percent: number; offer_ends_at: string | null }) =>
+      apiRequest<{ category: Category }>(`/admin/categories/${id}/offer`, { method: 'PUT', body }).then((d) => d.category),
+
+    removeOffer: (id: string) =>
+      apiRequest<{ category: Category }>(`/admin/categories/${id}/offer`, { method: 'DELETE' }).then((d) => d.category),
+  },
+
+  /** Combo packs (migration 033; owner, 2026-10-09). PATCH `items`, when
+   * sent, replaces the whole list. Delete is a soft delete on the server. */
+  combos: {
+    list: () => apiRequest<{ combos: Combo[] }>('/admin/combos').then((d) => d.combos),
+
+    create: (input: ComboInput) =>
+      apiRequest<{ combo: Combo }>('/admin/combos', { method: 'POST', body: input }).then((d) => d.combo),
+
+    update: (id: string, input: Partial<ComboInput>) =>
+      apiRequest<{ combo: Combo }>(`/admin/combos/${id}`, { method: 'PATCH', body: input }).then((d) => d.combo),
+
+    remove: (id: string) => apiRequest<{ id: string; deleted: boolean }>(`/admin/combos/${id}`, { method: 'DELETE' }),
   },
 
   /** Category groups: the titled rows of category tiles on the customer

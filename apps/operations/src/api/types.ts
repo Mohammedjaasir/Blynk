@@ -100,6 +100,28 @@ export interface OrderItemRow {
    * one without (what blocks packing); never rendered.
    */
   actual_unit_cost?: number | string | null;
+  /** The product, for grouping a combo's split lines; absent on older data. */
+  product_id?: string | null;
+  /** The combo line (`OrderDetail.combos[].id`) this item was packed for;
+   * null/absent = a loose item (migration 033; owner, 2026-10-09). */
+  order_combo_id?: string | null;
+}
+
+/**
+ * One combo pack line on an order (migration 033; owner, 2026-10-09): the
+ * combo's name and price as ordered. Its contents are the order's ordinary
+ * items whose `order_combo_id` is this `id`.
+ */
+export interface OrderCombo {
+  id: string;
+  order_id: string;
+  combo_id: string | null;
+  name: string;
+  unit_price: number;
+  quantity: number;
+  subtotal: number;
+  /** One pack's items at their own prices. */
+  items_regular_total: number;
 }
 
 export interface OrderHistoryRow {
@@ -148,6 +170,8 @@ export interface OrderDetail {
   delivery_postal_code?: string | null;
   cancellation_reason: string | null;
   items: OrderItemRow[];
+  /** Combo pack lines (migration 033). Absent on older data - no combos. */
+  combos?: OrderCombo[];
   history: OrderHistoryRow[];
   delivery: { id: string; rider_id: string; assignment_status: string; rider_name?: string | null } | null;
 }
@@ -626,6 +650,15 @@ export interface Category {
   /** The category this one sits inside (null = top level; one level only).
    * Absent on an API from before sub-categories. */
   parent_id?: string | null;
+  /**
+   * Category offer (migration 033; owner, 2026-10-09): % off everything in
+   * this category and its sub-categories, with an optional end.
+   * `offer_active` is the backend's word on whether it runs right now.
+   * Absent on an older API - read as "no offer".
+   */
+  offer_percent?: number | null;
+  offer_ends_at?: string | null;
+  offer_active?: boolean;
 }
 
 /** A category as listed inside a group (`GET /admin/category-groups`). */
@@ -703,10 +736,78 @@ export interface AdminProduct {
   offer_price?: number | null;
   offer_ends_at?: string | null;
   offer_active?: boolean;
+  /** Migration 033: the category % offer reaching this product, and what a
+   * customer pays right now (the best active offer). Absent on older APIs. */
+  category_offer_percent?: number | null;
+  category_offer_ends_at?: string | null;
+  customer_price?: number;
   is_available: boolean;
   is_active: boolean;
   updated_at?: string;
 }
+
+/** One product in a combo pack (`GET /admin/combos`; owner, 2026-10-09). */
+export interface ComboItem {
+  product_id: string;
+  name: string;
+  slug: string;
+  sku: string;
+  unit: string;
+  pack_size: string | null;
+  image_url: string | null;
+  image_focal_x?: number;
+  image_focal_y?: number;
+  quantity: number;
+  /** The regular price. */
+  selling_price: number;
+  /** The price today, offers included. */
+  unit_price: number;
+  is_active: boolean;
+  is_available: boolean;
+  in_stock: boolean;
+  /** Tracked units free; null = untracked. */
+  stock_available: number | null;
+}
+
+export type ComboNotLiveReason = 'INACTIVE' | 'ENDED' | 'ITEM_INACTIVE' | 'NOT_CHEAPER';
+
+/**
+ * A combo pack (migration 033; owner, 2026-10-09): several products sold
+ * together for one price lower than buying them separately. `is_live` /
+ * `not_live_reason` / `is_available` are the backend's word - never worked
+ * out here.
+ */
+export interface Combo {
+  id: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  price: number;
+  is_active: boolean;
+  ends_at: string | null;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  items: ComboItem[];
+  /** One pack's items at today's prices. */
+  items_total: number;
+  saving: number;
+  is_live: boolean;
+  is_available: boolean;
+  not_live_reason: ComboNotLiveReason | null;
+}
+
+/** `POST /admin/combos` body; PATCH takes any subset (`items` replaces the list). */
+export type ComboInput = {
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  price: number;
+  is_active: boolean;
+  ends_at?: string | null;
+  display_order?: number;
+  items: Array<{ product_id: string; quantity: number }>;
+};
 
 /** `GET /catalog/products` (the public customer listing) - no cost or
  * markup fields. Kept for `catalog.products.listPublic()` (the endpoint the

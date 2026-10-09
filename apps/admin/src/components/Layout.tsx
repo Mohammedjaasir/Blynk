@@ -85,6 +85,10 @@ export function Layout() {
               <NavLink to="/category-groups" className="nav__item">
                 Category groups
               </NavLink>
+              {/* Combo packs (owner, 2026-10-09). */}
+              <NavLink to="/combos" className="nav__item">
+                Combo packs
+              </NavLink>
 
               <p className="nav__group">Home</p>
               <NavLink to="/promotions" className="nav__item">

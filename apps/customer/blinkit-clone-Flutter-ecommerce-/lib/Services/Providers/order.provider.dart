@@ -150,9 +150,32 @@ class OrderProvider extends ChangeNotifier {
   /// The code last applied, even if the cart has since changed.
   String? get appliedCouponCode => _coupon?.code;
 
-  /// Product ids and quantities: what a coupon preview was checked against.
-  static String cartKey(CartProvider cart) =>
-      (cart.lines.map((l) => '${l.product.id}x${l.quantity}').toList()..sort()).join(',');
+  /// Product ids and quantities, and combo ids and packs: what a coupon
+  /// preview was checked against (and what one checkout attempt is).
+  static String cartKey(CartProvider cart) => ([
+        ...cart.lines.map((l) => '${l.product.id}x${l.quantity}'),
+        ...cart.comboLines.map((l) => 'combo:${l.combo.id}x${l.quantity}'),
+      ]..sort())
+          .join(',');
+
+  /// The order lines as the backend reads them: `items` (may be empty when
+  /// the cart holds only combos) and, when there are any, `combos:
+  /// [{combo_id, quantity}]` (owner, 2026-10-09). The server re-prices both.
+  static Map<String, Object> orderLines(CartProvider cart) => {
+        'items': cart.lines
+            .map((line) => {
+                  'product_id': line.product.id,
+                  'quantity': line.quantity,
+                })
+            .toList(),
+        if (cart.comboLines.isNotEmpty)
+          'combos': cart.comboLines
+              .map((line) => {
+                    'combo_id': line.combo.id,
+                    'quantity': line.quantity,
+                  })
+              .toList(),
+      };
 
   /// The applied coupon, if it was checked against this exact cart.
   CouponPreview? couponFor(CartProvider cart) =>
@@ -180,7 +203,7 @@ class OrderProvider extends ChangeNotifier {
         '/orders/validate-coupon',
         body: {
           'code': code,
-          'items': cart.lines.map((l) => {'product_id': l.product.id, 'quantity': l.quantity}).toList(),
+          ...orderLines(cart),
         },
       );
       final data = (response is Map ? response['data'] : null) as Map?;
@@ -404,12 +427,7 @@ class OrderProvider extends ChangeNotifier {
         body: {
           'idempotency_key': idempotencyKey,
           'address_id': addressId,
-          'items': cart.lines
-              .map((line) => {
-                    'product_id': line.product.id,
-                    'quantity': line.quantity,
-                  })
-              .toList(),
+          ...orderLines(cart),
           if (customerNotes != null && customerNotes.trim().isNotEmpty)
             'customer_notes': customerNotes.trim(),
           // Re-validated by the server inside the order transaction.

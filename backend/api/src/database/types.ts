@@ -202,6 +202,10 @@ export interface CategoriesTable {
   group_sort_order: Generated<number>;
   /** Migration 026: the category this one sits inside (one level only; null -> top level). */
   parent_id: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Migration 033 (owner, 2026-10-09): % off everything in the category (0 < x < 100); null = no offer. */
+  offer_percent: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  /** Migration 033: when the category offer stops; null runs until removed. */
+  offer_ends_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 /** Migration 025: a heading on the customer home over a grid of category tiles. */
@@ -336,6 +340,43 @@ export interface OrderItemsTable {
   quantity: number;
   subtotal: ColumnType<number, number | string, number | string>;
   item_status: Generated<ItemFulfillmentStatus>;
+  created_at: Generated<Date>;
+  /** Migration 033: the combo line this item was packed for; null for a loose item. */
+  order_combo_id: ColumnType<string | null, string | null | undefined, string | null>;
+}
+
+/** Migration 033 (owner, 2026-10-09): a combo pack - several products at one price. */
+export interface CombosTable {
+  id: Generated<string>;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  price: ColumnType<number, number | string, number | string>;
+  is_active: Generated<boolean>;
+  ends_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  display_order: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  deleted_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+}
+
+export interface ComboItemsTable {
+  combo_id: string;
+  product_id: string;
+  quantity: number;
+  sort_order: Generated<number>;
+}
+
+/** Migration 033: a combo as ordered (snapshot); its items are order_items with order_combo_id. */
+export interface OrderCombosTable {
+  id: Generated<string>;
+  order_id: string;
+  combo_id: string | null;
+  combo_name_snapshot: string;
+  unit_price: ColumnType<number, number | string, number | string>;
+  quantity: number;
+  subtotal: ColumnType<number, number | string, number | string>;
+  items_regular_total: ColumnType<number, number | string, number | string>;
   created_at: Generated<Date>;
 }
 
@@ -478,6 +519,10 @@ export interface ProductCatalogView {
   // Migration 031 appended the product offer (raw; may be ended).
   offer_price: ColumnType<number | null, never, never>;
   offer_ends_at: Date | null;
+  // Migration 033 appended the best ACTIVE category offer (own category or
+  // its parent); null when neither has one running.
+  category_offer_percent: ColumnType<string | null, never, never>;
+  category_offer_ends_at: Date | null;
 }
 
 export interface SuppliersTable {
@@ -755,6 +800,9 @@ export interface Database {
   sourcing_records: SourcingRecordsTable;
   orders: OrdersTable;
   order_items: OrderItemsTable;
+  combos: CombosTable;
+  combo_items: ComboItemsTable;
+  order_combos: OrderCombosTable;
   order_status_history: OrderStatusHistoryTable;
   payments: PaymentsTable;
   riders: RidersTable;

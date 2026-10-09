@@ -3,7 +3,6 @@ import { orders as ordersApi } from '../api/resources';
 import type { BoardOrder, OrderDetail, OrderItemRow } from '../api/types';
 import {
   ACTION_LABEL,
-  ITEM_STATUS_LABEL,
   STATUS_LABEL,
   allowedActions,
   canMarkItemUnavailable,
@@ -18,6 +17,7 @@ import {
 import type { UserRole } from '../api/types';
 import { Spinner } from './ui';
 import { OrderBill } from './OrderBill';
+import { OrderItems } from './OrderItems';
 
 /**
  * One order, read-only apart from the actions this role may take in this
@@ -91,26 +91,23 @@ export function OrderPanel({
         <>
           <section className="order-panel__section" aria-label="Items">
             <h3 className="order-panel__label">Items</h3>
-            <ul className="order-items">
-              {detail.items.map((item) => (
-                <li key={item.id} className={`order-items__row order-items__row--${item.item_status.toLowerCase()}`}>
-                  <span className="order-items__qty mono">{item.quantity} ×</span>
-                  <span className="order-items__name">{item.product_name_snapshot}</span>
-                  <span className="order-items__status">{ITEM_STATUS_LABEL[item.item_status] ?? item.item_status}</span>
-                  {onMarkItemUnavailable && canMarkItemUnavailable(order.order_status, item.item_status, role) ? (
-                    <button
-                      type="button"
-                      className="button button--ghost button--sm"
-                      disabled={busy}
-                      aria-label={`Mark ${item.product_name_snapshot} unavailable`}
-                      onClick={() => onMarkItemUnavailable(item)}
-                    >
-                      Mark unavailable
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            <OrderItems
+              items={detail.items}
+              combos={detail.combos}
+              renderAction={(item) =>
+                onMarkItemUnavailable && canMarkItemUnavailable(order.order_status, item.item_status, role) ? (
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    disabled={busy}
+                    aria-label={`Mark ${item.product_name_snapshot} unavailable`}
+                    onClick={() => onMarkItemUnavailable(item)}
+                  >
+                    Mark unavailable
+                  </button>
+                ) : null
+              }
+            />
             <OrderBill order={detail} />
           </section>
 

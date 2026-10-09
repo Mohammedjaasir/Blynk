@@ -48,7 +48,41 @@ export interface CreateOrderData {
     markup_percentage_applied: number;
     quantity: number;
     subtotal: number;
+    /** Migration 033: index into `combos` when this item was ordered as part of a combo pack. */
+    combo_index?: number;
   }>;
+  /** Migration 033 (owner, 2026-10-09): combo packs, each charged its combo price. */
+  combos?: Array<{
+    combo_id: string;
+    combo_name_snapshot: string;
+    unit_price: number;
+    quantity: number;
+    subtotal: number;
+    items_regular_total: number;
+  }>;
+}
+
+/** Migration 033: an order's combo lines as the API returns them. */
+function toComboLine(row: {
+  id: string;
+  order_id: string;
+  combo_id: string | null;
+  combo_name_snapshot: string;
+  unit_price: unknown;
+  quantity: number;
+  subtotal: unknown;
+  items_regular_total: unknown;
+}) {
+  return {
+    id: row.id,
+    order_id: row.order_id,
+    combo_id: row.combo_id,
+    name: row.combo_name_snapshot,
+    unit_price: Number(Number(row.unit_price).toFixed(2)),
+    quantity: row.quantity,
+    subtotal: Number(Number(row.subtotal).toFixed(2)),
+    items_regular_total: Number(Number(row.items_regular_total).toFixed(2)),
+  };
 }
 
 export class OrderRepository {
@@ -137,6 +171,22 @@ export class OrderRepository {
   }
 
   /**
+   * Migration 033: the running category offer of each product (own category
+   * or its parent, from v_product_catalog), for priceCart.
+   */
+  async findCategoryOffers(productIds: string[], executor: DBConnection = db) {
+    const map = new Map<string, { category_offer_percent: string | null; category_offer_ends_at: Date | null }>();
+    if (productIds.length === 0) return map;
+    const rows = await executor
+      .selectFrom('v_product_catalog')
+      .select(['id', 'category_offer_percent', 'category_offer_ends_at'])
+      .where('id', 'in', productIds)
+      .execute();
+    for (const r of rows) map.set(r.id, { category_offer_percent: r.category_offer_percent, category_offer_ends_at: r.category_offer_ends_at });
+    return map;
+  }
+
+  /**
    * Atomic Order Creation Pipeline.
    */
   async createOrderAtomic(data: CreateOrderData) {
@@ -198,6 +248,15 @@ export class OrderRepository {
         .returningAll()
         .execute();
 
+      // 2a. Combo lines (migration 033), so their items can point at them.
+      const comboRows = data.combos?.length
+        ? await trx
+            .insertInto('order_combos')
+            .values(data.combos.map((c) => ({ ...c, order_id: order.id })))
+            .returningAll()
+            .execute()
+        : [];
+
       // 2. Insert order items
       const itemInserts = data.items.map((item) => ({
         order_id: order.id,
@@ -211,6 +270,7 @@ export class OrderRepository {
         quantity: item.quantity,
         subtotal: item.subtotal,
         item_status: 'PENDING' as ItemFulfillmentStatus,
+        order_combo_id: item.combo_index !== undefined ? comboRows[item.combo_index].id : null,
       }));
 
       const items = await trx
@@ -252,6 +312,7 @@ export class OrderRepository {
           unit_selling_price: Number(Number(it.unit_selling_price).toFixed(2)),
           subtotal: Number(Number(it.subtotal).toFixed(2)),
         })),
+        combos: comboRows.map(toComboLine),
         payment: {
           ...payment,
           amount: Number(Number(payment.amount).toFixed(2)),
@@ -276,7 +337,7 @@ export class OrderRepository {
     const order = await query.executeTakeFirst();
     if (!order) return null;
 
-    const [items, payment, history, delivery] = await Promise.all([
+    const [items, payment, history, delivery, combos] = await Promise.all([
       executor
         .selectFrom('order_items')
         .selectAll()
@@ -304,6 +365,14 @@ export class OrderRepository {
         .where('deliveries.order_id', '=', orderId)
         .where('deliveries.assignment_status', 'not in', ['FAILED', 'REJECTED'])
         .executeTakeFirst(),
+      // Migration 033: combo packs; their items carry order_combo_id.
+      executor
+        .selectFrom('order_combos')
+        .selectAll()
+        .where('order_id', '=', orderId)
+        .orderBy('created_at', 'asc')
+        .orderBy('id', 'asc')
+        .execute(),
     ]);
 
     return {
@@ -317,6 +386,7 @@ export class OrderRepository {
         unit_selling_price: Number(Number(it.unit_selling_price).toFixed(2)),
         subtotal: Number(Number(it.subtotal).toFixed(2)),
       })),
+      combos: combos.map(toComboLine),
       payment: payment
         ? {
             ...payment,
@@ -365,6 +435,15 @@ export class OrderRepository {
           .orderBy('id', 'asc')
           .execute()
       : [];
+    const combos = orders.length
+      ? await executor
+          .selectFrom('order_combos')
+          .selectAll()
+          .where('order_id', 'in', orders.map((o) => o.id))
+          .orderBy('created_at', 'asc')
+          .orderBy('id', 'asc')
+          .execute()
+      : [];
 
     return orders.map((o) => ({
       ...o,
@@ -379,6 +458,7 @@ export class OrderRepository {
           unit_selling_price: Number(Number(it.unit_selling_price).toFixed(2)),
           subtotal: Number(Number(it.subtotal).toFixed(2)),
         })),
+      combos: combos.filter((c) => c.order_id === o.id).map(toComboLine),
     }));
   }
 

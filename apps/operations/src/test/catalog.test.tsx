@@ -98,7 +98,7 @@ describe('Catalog hub', () => {
       // fifth, widening the hub's own description each time - updated here
       // rather than left stale (same "keep the test honest" discipline F3
       // applied to its own placeholder-text assertion in routing.test.tsx).
-      await screen.findByText('Products, categories, Home promotions, inventory and dental clinics.')
+      await screen.findByText('Products, categories, Home promotions, combo packs, inventory and dental clinics.')
     ).toBeInTheDocument();
     expect(screen.queryByText(/built by later tasks/)).not.toBeInTheDocument();
 

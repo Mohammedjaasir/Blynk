@@ -16,7 +16,8 @@ import { evaluateCoupon } from '../coupons/coupon.service.js';
 import type { ValidateCouponInput } from '../coupons/coupon.schema.js';
 import { checkoutSettings } from '../configuration/settings.service.js';
 import { freeDeliveryStatus } from './free-delivery.js';
-import { activeOfferPrice } from '../catalog/catalog.offers.js';
+import { effectivePrice } from '../catalog/catalog.offers.js';
+import { looseQuantities, priceComboLines } from '../catalog/catalog.combos.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -96,18 +97,26 @@ export function sanitizeCustomerOrder(order: any) {
  * Authoritative prices for a cart (order creation and the coupon preview):
  * every product must exist and be on sale; line totals use the pricing rules.
  * A product on an active offer (migration 031; owner, 2026-10-09) is charged
- * its offer price, and unit_selling_price snapshots what was charged.
+ * its offer price, and unit_selling_price snapshots what was charged. With a
+ * category offer running too (migration 033) it is charged the LOWER of the
+ * two (catalog.offers effectivePrice).
+ *
+ * Combo packs (migration 033) are charged the combo price: each becomes a
+ * combo line plus its items, whose unit prices share that price
+ * (catalog.combos priceComboLines). Items come back loose first, then each
+ * combo's items tagged with `combo_index` into `combos`.
  */
-export async function priceCart(items: CreateOrderInput['items']) {
+export async function priceCart(items: CreateOrderInput['items'], comboLines: NonNullable<CreateOrderInput['combos']> = []) {
   const productIds = items.map((it) => it.product_id);
-  const products = await orderRepository.findProductsByIds(productIds);
+  const products = productIds.length ? await orderRepository.findProductsByIds(productIds) : [];
 
   if (products.length !== productIds.length) {
     throw new AppError('One or more requested products were not found.', 400, 'PRODUCT_NOT_FOUND');
   }
 
   const productMap = new Map(products.map((p) => [p.id, p]));
-  const defaultMarkup = await orderRepository.getDefaultMarkup();
+  const defaultMarkup = productIds.length ? await orderRepository.getDefaultMarkup() : 0;
+  const categoryOffers = await orderRepository.findCategoryOffers(productIds);
 
   let subtotalAmount = 0;
   const orderItemsData = items.map((item) => {
@@ -131,7 +140,7 @@ export async function priceCart(items: CreateOrderInput['items']) {
       defaultMarkupPercent: defaultMarkup,
     });
 
-    const unitPrice = activeOfferPrice(prod, priceResult.sellingPrice) ?? priceResult.sellingPrice;
+    const unitPrice = effectivePrice({ ...prod, ...categoryOffers.get(prod.id) }, priceResult.sellingPrice);
     const lineSubtotal = Number((unitPrice * item.quantity).toFixed(2));
     subtotalAmount += lineSubtotal;
 
@@ -145,10 +154,20 @@ export async function priceCart(items: CreateOrderInput['items']) {
       markup_percentage_applied: priceResult.effectiveMarkupPercent,
       quantity: item.quantity,
       subtotal: lineSubtotal,
-    };
+    } as CreateOrderData['items'][number];
   });
 
-  return { items: orderItemsData, subtotal: Number(subtotalAmount.toFixed(2)) };
+  const combos = await priceComboLines(comboLines, looseQuantities(items));
+  combos.forEach((combo, comboIndex) => {
+    subtotalAmount += combo.subtotal;
+    for (const it of combo.items) orderItemsData.push({ ...it, combo_index: comboIndex });
+  });
+
+  return {
+    items: orderItemsData,
+    combos: combos.map(({ items: _items, ...line }) => line),
+    subtotal: Number(subtotalAmount.toFixed(2)),
+  };
 }
 
 export class OrderService {
@@ -200,7 +219,7 @@ export class OrderService {
     const scheduledFor = calculateScheduledDeliveryTime(now);
 
     // 5. Products & Authoritative Pricing
-    const { items: orderItemsData, subtotal: subtotalAmount } = await priceCart(input.items);
+    const { items: orderItemsData, combos: orderCombos, subtotal: subtotalAmount } = await priceCart(input.items, input.combos ?? []);
     const deliveryFee = await orderRepository.getDeliveryFee();
     // Checkout switches (owner, 2026-10-08). With coupons off a code is
     // ignored, not refused, so an older app that still sends one can order.
@@ -234,6 +253,7 @@ export class OrderService {
       delivery_instructions: address.delivery_instructions,
       customer_notes: input.customer_notes ?? null,
       items: orderItemsData,
+      combos: orderCombos,
     };
 
     const createdOrder = await createWithUniqueNumber(orderData);
@@ -251,7 +271,10 @@ export class OrderService {
     if (!settings.coupons_enabled) {
       throw new AppError('Coupon codes are not available right now.', 422, 'COUPONS_DISABLED');
     }
-    const subtotal = input.items ? (await priceCart(input.items)).subtotal : Number(input.subtotal!.toFixed(2));
+    const subtotal =
+      input.items?.length || input.combos?.length
+        ? (await priceCart(input.items ?? [], input.combos ?? [])).subtotal
+        : Number(input.subtotal!.toFixed(2));
     const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
     const deliveryFee = free.applies ? 0 : await orderRepository.getDeliveryFee();
     const applied = await evaluateCoupon(db, { code: input.code, customerId, subtotal, deliveryFee });

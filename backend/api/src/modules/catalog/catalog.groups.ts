@@ -6,6 +6,7 @@ import type { Database } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
+import { activeCategoryOffer } from './catalog.offers.js';
 
 /**
  * Category groups on the customer home (migration 025).
@@ -79,6 +80,9 @@ export interface HomeGroupCategory {
   image_focal_y: number;
   /** Migration 026: always null here - the home lists top-level categories only. */
   parent_id: string | null;
+  /** Migration 033 (owner, 2026-10-09): % off everything in it while an offer runs, else null. */
+  offer_percent: number | null;
+  offer_ends_at: string | null;
 }
 
 export interface HomeGroup {
@@ -114,6 +118,8 @@ export async function listHomeGroups(): Promise<HomeGroup[]> {
         'categories.image_focal_x',
         'categories.image_focal_y',
         'categories.group_sort_order',
+        'categories.offer_percent',
+        'categories.offer_ends_at',
         // A group_id pointing at a deleted group counts as no group.
         'g.id as live_group_id',
       ])
@@ -140,6 +146,7 @@ export async function listHomeGroups(): Promise<HomeGroup[]> {
       image_focal_x: clampFocal(c.image_focal_x),
       image_focal_y: clampFocal(c.image_focal_y),
       parent_id: null,
+      ...activeCategoryOffer(c),
     };
     const list = byGroup.get(key);
     if (list) list.push(tile);

@@ -86,6 +86,13 @@ export interface DeliveryItem {
   product_name_snapshot: string;
   quantity: number;
   item_status: string;
+  /**
+   * Combo packs (migration 033; owner, 2026-10-09): an item packed for a
+   * combo names it; loose items have none of these.
+   */
+  order_combo_id?: string;
+  combo_name?: string;
+  combo_quantity?: number;
 }
 
 export interface DeliveryDetail extends DeliverySummary {

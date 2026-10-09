@@ -1,5 +1,5 @@
 import { ApiError } from '../api/client';
-import type { ActiveDelivery, ItemsSummary, OrderDetail, OrderStatus } from '../api/types';
+import type { ActiveDelivery, ItemsSummary, OrderCombo, OrderDetail, OrderItemRow, OrderStatus } from '../api/types';
 
 /**
  * Display rules for the Orders board/detail (plan §10). They mirror the
@@ -295,4 +295,71 @@ export interface FarBatchRefusal {
 export function farBatchRefusal(err: unknown, riderId: string, confirmed: boolean): FarBatchRefusal | null {
   if (confirmed || !(err instanceof ApiError) || err.code !== 'BATCH_DROPOFFS_TOO_FAR') return null;
   return { riderId, message: orderErrorMessage(err) };
+}
+
+// ------------------------------------------------------ combo packs (033)
+
+/**
+ * One row to show for an order's items: usually one item, but the same
+ * product split over two lines inside one combo (the server does that when
+ * cents need sharing out) shows as one row (owner, 2026-10-09). Only lines
+ * with the same status merge, so a row's status and actions stay true;
+ * `ids` lists every item it stands for.
+ */
+export interface ItemDisplayRow {
+  key: string;
+  ids: string[];
+  item: OrderItemRow;
+  quantity: number;
+}
+
+export interface ComboGroup {
+  combo: OrderCombo;
+  rows: ItemDisplayRow[];
+}
+
+function mergeRows(items: OrderItemRow[]): ItemDisplayRow[] {
+  const rows: ItemDisplayRow[] = [];
+  const byKey = new Map<string, ItemDisplayRow>();
+  for (const item of items) {
+    const product = item.product_id ?? `${item.product_name_snapshot}|${item.unit_snapshot ?? ''}`;
+    const key = `${product}|${item.item_status}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.ids.push(item.id);
+      existing.quantity += item.quantity;
+      continue;
+    }
+    const row: ItemDisplayRow = { key: item.id, ids: [item.id], item, quantity: item.quantity };
+    byKey.set(key, row);
+    rows.push(row);
+  }
+  return rows;
+}
+
+/**
+ * An order's items split for display (owner, 2026-10-09): each combo line
+ * with the items packed for it (same-product lines merged), then the loose
+ * items one row each, as before. An item pointing at a combo line the order
+ * does not list (or an order from before combos) shows as loose.
+ */
+export function groupOrderItems(order: Pick<OrderDetail, 'items' | 'combos'>, items: OrderItemRow[] = order.items): {
+  combos: ComboGroup[];
+  loose: ItemDisplayRow[];
+} {
+  const combos = order.combos ?? [];
+  const known = new Set(combos.map((c) => c.id));
+  const groups = combos.map((combo) => ({
+    combo,
+    rows: mergeRows(items.filter((item) => item.order_combo_id === combo.id)),
+  }));
+  const loose = items
+    .filter((item) => !item.order_combo_id || !known.has(item.order_combo_id))
+    .map((item) => ({ key: item.id, ids: [item.id], item, quantity: item.quantity }));
+  return { combos: groups, loose };
+}
+
+/** "Breakfast pack × 2 — LKR 980" - a combo line's heading. */
+export function comboHeading(combo: OrderCombo): string {
+  return `${combo.name} × ${combo.quantity} — ${formatMoney(combo.subtotal)}`;
 }

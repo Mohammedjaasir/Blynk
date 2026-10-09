@@ -53,7 +53,21 @@ export class CatalogRepository {
   async findActiveCategories() {
     return await db
       .selectFrom('categories')
-      .select(['id', 'name', 'slug', 'description', 'image_url', 'display_order', 'is_active', 'image_focal_x', 'image_focal_y', 'parent_id'])
+      .select([
+        'id',
+        'name',
+        'slug',
+        'description',
+        'image_url',
+        'display_order',
+        'is_active',
+        'image_focal_x',
+        'image_focal_y',
+        'parent_id',
+        // Migration 033: the category offer (raw; catalog.offers decides if it runs).
+        'offer_percent',
+        'offer_ends_at',
+      ])
       .where('is_active', '=', true)
       .where('deleted_at', 'is', null)
       .orderBy('display_order', 'asc')
@@ -179,6 +193,9 @@ export class CatalogRepository {
       group_id?: string | null;
       group_sort_order?: number;
       parent_id?: string | null;
+      /** Migration 033: set only through the category offer endpoints. */
+      offer_percent?: number | null;
+      offer_ends_at?: string | Date | null;
     }
   ) {
     const [record] = await db
@@ -226,6 +243,9 @@ export class CatalogRepository {
         // Migration 031: the offer, raw - catalog.offers decides if it is active.
         'offer_price',
         'offer_ends_at',
+        // Migration 033: the running category offer (own category or its parent).
+        'category_offer_percent',
+        'category_offer_ends_at',
       ])
       .where('is_active', '=', true);
 
@@ -335,6 +355,9 @@ export class CatalogRepository {
         // Migration 031: the offer, raw - catalog.offers decides if it is active.
         'offer_price',
         'offer_ends_at',
+        // Migration 033: the running category offer (own category or its parent).
+        'category_offer_percent',
+        'category_offer_ends_at',
       ])
       .where('is_active', '=', true);
 

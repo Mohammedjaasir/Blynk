@@ -13,6 +13,8 @@ import type {
   CategoryGroup,
   CategoryGroupDeleteResult,
   CategoryGroupsOverview,
+  Combo,
+  ComboInput,
   CustomerProduct,
   DeliveryFeeSetting,
   CheckoutSettings,
@@ -108,6 +110,41 @@ export const categories = {
       }`,
       { method: 'DELETE' }
     ),
+
+  /**
+   * Category offer (owner, 2026-10-09): % off every product in the category
+   * and its sub-categories; replaces any offer it had. 400 OFFER_END_IN_PAST
+   * for a changed end that has passed.
+   */
+  setOffer: (id: string, input: { offer_percent: number; offer_ends_at: string | null }) =>
+    apiRequest<{ category: Category }>(`/admin/categories/${id}/offer`, {
+      method: 'PUT',
+      body: input,
+    }).then((data) => data.category),
+
+  removeOffer: (id: string) =>
+    apiRequest<{ category: Category }>(`/admin/categories/${id}/offer`, { method: 'DELETE' }).then(
+      (data) => data.category
+    ),
+};
+
+// ------------------------------------------------------------ combo packs
+/**
+ * Combo packs (owner, 2026-10-09; migration 033): products at one lower
+ * price. The API refuses a price not below the items' total
+ * (400 COMBO_PRICE_NOT_LOWER) and decides what is live.
+ */
+export const combos = {
+  list: () => apiRequest<{ combos: Combo[] }>('/admin/combos').then((d) => d.combos),
+
+  create: (input: ComboInput) =>
+    apiRequest<{ combo: Combo }>('/admin/combos', { method: 'POST', body: { ...input } }).then((d) => d.combo),
+
+  /** `items`, when sent, replaces the whole list. */
+  update: (id: string, input: Partial<ComboInput>) =>
+    apiRequest<{ combo: Combo }>(`/admin/combos/${id}`, { method: 'PATCH', body: { ...input } }).then((d) => d.combo),
+
+  remove: (id: string) => apiRequest<{ id: string; deleted: boolean }>(`/admin/combos/${id}`, { method: 'DELETE' }),
 };
 
 // ------------------------------------------------------- category groups

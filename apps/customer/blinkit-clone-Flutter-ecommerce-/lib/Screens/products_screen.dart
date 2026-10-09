@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../Models/category_model.dart';
+import '../UI/Widgets/Atoms/category_offer_banner.dart';
 import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Organisms/bottom_cart_container.dart';
 import '../UI/Widgets/Organisms/products_screen_grid.dart';
@@ -69,6 +70,23 @@ class _ProductsScreenState extends State<ProductsScreen> {
         .loadProducts(categorySlug: category.slug, force: true);
   }
 
+  /// The category whose offer the banner shows, or null when none is running.
+  CategoryModel? _offerCategory(ProductProvider provider, String titleSlug) {
+    final known = [
+      ...provider.categories,
+      for (final group in provider.homeGroups) ...group.categories,
+    ];
+    CategoryModel? find(String slug) {
+      if (slug.isEmpty) return null;
+      for (final c in known) {
+        if (c.slug == slug && c.isOfferActive) return c;
+      }
+      return null;
+    }
+
+    return find(_activeSlug) ?? find(titleSlug);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ProductProvider>(
@@ -85,6 +103,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   orElse: () => const CategoryModel(id: '', name: 'Products', slug: ''),
                 )
                 .name;
+
+        // Category offer (owner, 2026-10-09): the picked (sub-)category's own
+        // offer - the backend already gives a sub-category the larger of its
+        // own and its parent's - else the opened category's.
+        final offerCategory = _offerCategory(productProvider, titleSlug);
 
         final products = productProvider.productsFor(_activeSlug);
         final isLoading = productProvider.isLoadingProducts(_activeSlug);
@@ -133,6 +156,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         ),
                       ),
                       Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (offerCategory != null) CategoryOfferBanner(category: offerCategory),
+                            Expanded(
                         // The skeleton gives way to the grid on a crossfade,
                         // top-aligned so the first row lands where its
                         // placeholder was. Keyed by state, so only a change
@@ -159,6 +187,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                   )
                                 : buildProductsGrid(context, products),
                           ),
+                        ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

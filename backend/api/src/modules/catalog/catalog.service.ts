@@ -13,7 +13,15 @@ import { releaseStockAlertsNow } from '../notifications/push/push.events.js';
 import { db } from '../../database/connection.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { resolveGroupPlacement } from './catalog.groups.js';
-import { activeOfferPrice, assertOfferAllowed, publicOffer, sellingPriceFor } from './catalog.offers.js';
+import {
+  activeCategoryOffer,
+  activeOfferPrice,
+  assertCategoryOfferAllowed,
+  assertOfferAllowed,
+  publicOffer,
+  sellingPriceFor,
+} from './catalog.offers.js';
+import type { CategoryOfferInput } from './catalog.schema.js';
 
 export interface CustomerProductDto {
   id: string;
@@ -43,17 +51,49 @@ export interface CustomerProductDto {
    */
   offer_price: number | null;
   offer_ends_at: string | null;
+  /**
+   * Migration 033: which offer offer_price is - the product's own price or
+   * its category's % (the lower of the two wins); null without an offer.
+   */
+  offer_kind: 'PRODUCT' | 'CATEGORY' | null;
   is_available: boolean;
 }
 
 /** Admin/Operations: the offer as stored, plus whether it applies right now. */
-function adminOffer(product: { offer_price: unknown; offer_ends_at: Date | string | null; calculated_selling_price: unknown }) {
+function adminOffer(product: {
+  offer_price: unknown;
+  offer_ends_at: Date | string | null;
+  calculated_selling_price: unknown;
+  category_offer_percent?: unknown;
+  category_offer_ends_at?: Date | string | null;
+}) {
   const selling = Number(Number(product.calculated_selling_price).toFixed(2));
   const offerPrice = product.offer_price === null || product.offer_price === undefined ? null : Number(product.offer_price);
+  const categoryPercent =
+    product.category_offer_percent === null || product.category_offer_percent === undefined ? null : Number(product.category_offer_percent);
   return {
     offer_price: offerPrice,
     offer_ends_at: product.offer_ends_at ? new Date(product.offer_ends_at).toISOString() : null,
     offer_active: activeOfferPrice({ offer_price: offerPrice, offer_ends_at: product.offer_ends_at }, selling) !== null,
+    // Migration 033: the category offer running on this product (own category or parent), if any.
+    category_offer_percent: categoryPercent,
+    category_offer_ends_at: product.category_offer_ends_at ? new Date(product.category_offer_ends_at).toISOString() : null,
+    // What a customer pays right now: the lower of the two offers (catalog.offers bestOffer).
+    customer_price: publicOffer(
+      { offer_price: offerPrice, offer_ends_at: product.offer_ends_at, category_offer_percent: categoryPercent, category_offer_ends_at: product.category_offer_ends_at ?? null },
+      selling
+    ).offer_price ?? selling,
+  };
+}
+
+/** Admin/Operations: a category's offer as stored, plus whether it runs right now (migration 033). */
+function adminCategoryOffer<T extends { offer_percent: unknown; offer_ends_at: Date | string | null }>(category: T) {
+  const percent = category.offer_percent === null || category.offer_percent === undefined ? null : Number(category.offer_percent);
+  return {
+    ...category,
+    offer_percent: percent,
+    offer_ends_at: category.offer_ends_at ? new Date(category.offer_ends_at).toISOString() : null,
+    offer_active: activeCategoryOffer({ offer_percent: percent, offer_ends_at: category.offer_ends_at }).offer_percent !== null,
   };
 }
 
@@ -78,6 +118,15 @@ export class CatalogService {
 
   async listCategories() {
     const categories = await catalogRepository.findActiveCategories();
+    // Migration 033: a category shows the larger running offer of its own and
+    // its parent's - the same one its products get (v_product_catalog).
+    const own = new Map(categories.map((c) => [c.id, activeCategoryOffer(c)]));
+    const offerOf = (c: (typeof categories)[number]) => {
+      const mine = own.get(c.id)!;
+      const parent = c.parent_id ? own.get(c.parent_id) : undefined;
+      if (parent?.offer_percent != null && (mine.offer_percent == null || parent.offer_percent > mine.offer_percent)) return parent;
+      return mine;
+    };
     return categories.map((c) => ({
       id: c.id,
       name: c.name,
@@ -88,6 +137,7 @@ export class CatalogService {
       image_focal_x: clampFocal(c.image_focal_x),
       image_focal_y: clampFocal(c.image_focal_y),
       parent_id: c.parent_id ?? null,
+      ...offerOf(c),
     }));
   }
 
@@ -125,7 +175,57 @@ export class CatalogService {
   // --------------------------------------------------------------------------
 
   async listCategoriesAdmin(isActive?: boolean) {
-    return await catalogRepository.findAllCategories(isActive);
+    return (await catalogRepository.findAllCategories(isActive)).map(adminCategoryOffer);
+  }
+
+  /**
+   * PUT /admin/categories/:id/offer (migration 033; owner, 2026-10-09): % off
+   * everything in the category and its sub-categories, optionally until a
+   * date. Replaces any offer already on the category. Audited.
+   */
+  async setCategoryOffer(id: string, input: CategoryOfferInput, actor?: AuditActor) {
+    const existing = await catalogRepository.findCategoryById(id);
+    if (!existing) throw new AppError('Category not found.', 404, 'CATEGORY_NOT_FOUND');
+    const existingEnds = existing.offer_ends_at ? new Date(existing.offer_ends_at).toISOString() : null;
+    const endsAt = input.offer_ends_at ?? null;
+    assertCategoryOfferAllowed({
+      percent: input.offer_percent,
+      endsAt,
+      endsAtChanged: endsAt === null ? false : new Date(endsAt).toISOString() !== existingEnds,
+    });
+    await catalogRepository.updateCategory(id, { offer_percent: input.offer_percent, offer_ends_at: endsAt });
+    if (actor) {
+      await writeAudit(db, actor, {
+        action: 'CATEGORY_OFFER_SET',
+        entityType: 'CATEGORY',
+        entityId: id,
+        oldValues: { offer_percent: existing.offer_percent === null ? null : Number(existing.offer_percent), offer_ends_at: existingEnds },
+        newValues: { offer_percent: input.offer_percent, offer_ends_at: endsAt ? new Date(endsAt).toISOString() : null },
+      });
+    }
+    logger.info({ categoryId: id, percent: input.offer_percent }, 'Category offer set');
+    return adminCategoryOffer((await catalogRepository.findCategoryById(id))!);
+  }
+
+  /** DELETE /admin/categories/:id/offer: the category's products go back to their own prices. Audited. */
+  async removeCategoryOffer(id: string, actor?: AuditActor) {
+    const existing = await catalogRepository.findCategoryById(id);
+    if (!existing) throw new AppError('Category not found.', 404, 'CATEGORY_NOT_FOUND');
+    if (existing.offer_percent !== null) {
+      await catalogRepository.updateCategory(id, { offer_percent: null, offer_ends_at: null });
+      if (actor) {
+        await writeAudit(db, actor, {
+          action: 'CATEGORY_OFFER_REMOVED',
+          entityType: 'CATEGORY',
+          entityId: id,
+          oldValues: {
+            offer_percent: Number(existing.offer_percent),
+            offer_ends_at: existing.offer_ends_at ? new Date(existing.offer_ends_at).toISOString() : null,
+          },
+        });
+      }
+    }
+    return adminCategoryOffer((await catalogRepository.findCategoryById(id))!);
   }
 
   async createCategoryAdmin(input: CreateCategoryInput, actor?: AuditActor) {
@@ -178,7 +278,7 @@ export class CatalogService {
     }
 
     logger.info({ categoryId: created.id, slug: created.slug }, 'Category created by admin');
-    return created;
+    return adminCategoryOffer(created);
   }
 
   async updateCategoryAdmin(id: string, input: UpdateCategoryInput, actor?: AuditActor) {
@@ -245,7 +345,7 @@ export class CatalogService {
     }
 
     logger.info({ categoryId: id }, 'Category updated by admin');
-    return updated;
+    return updated ? adminCategoryOffer(updated) : updated;
   }
 
   // --------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { orderItemInputSchema } from '../orders/order.schema.js';
+import { orderComboLineSchema } from '../catalog/catalog.combos.js';
 
 /** A-Z and 0-9, 4-20 characters; typed in any case, stored upper-case. */
 export const couponCodeSchema = z
@@ -74,10 +75,12 @@ export const couponIdParamsSchema = z.object({ id: z.string().uuid('Invalid coup
 export const validateCouponSchema = z
   .object({
     code: couponCodeSchema,
-    items: z.array(orderItemInputSchema).min(1).max(50).optional(),
+    items: z.array(orderItemInputSchema).max(50).optional(),
+    /** Migration 033: combo packs in the cart, priced like the order will price them. */
+    combos: z.array(orderComboLineSchema).max(20).optional(),
     subtotal: z.coerce.number().min(0).max(10_000_000).optional(),
   })
-  .refine((v) => v.items !== undefined || v.subtotal !== undefined, {
+  .refine((v) => (v.items?.length ?? 0) + (v.combos?.length ?? 0) > 0 || v.subtotal !== undefined, {
     message: 'Send the cart items or its subtotal',
     path: ['items'],
   });

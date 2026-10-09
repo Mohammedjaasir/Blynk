@@ -1,4 +1,4 @@
-import type { DeliverySummary, OrderStatus } from '../api/types';
+import type { DeliveryItem, DeliverySummary, OrderStatus } from '../api/types';
 import { formatMoney } from './format';
 
 /**
@@ -145,4 +145,35 @@ export function statusTone(d: DeliverySummary): 'go' | 'wait' | 'stop' | 'done' 
   if (action.reason === 'done') return 'done';
   if (action.reason === 'being-packed') return 'wait';
   return 'stop';
+}
+
+export type BagRow =
+  | { kind: 'item'; item: DeliveryItem }
+  | { kind: 'combo'; id: string; name: string; quantity: number; items: Array<{ name: string; quantity: number }> };
+
+/**
+ * Combo packs (migration 033; owner, 2026-10-09): the items packed for one
+ * combo are listed under it ("1 × Breakfast pack: 2 × Bread, 6 × Eggs"), in
+ * the place of its first item; loose items stay as they were. The same
+ * product twice inside one combo is shown once with the quantities added.
+ */
+export function bagRows(items: DeliveryItem[]): BagRow[] {
+  const rows: BagRow[] = [];
+  const combos = new Map<string, Extract<BagRow, { kind: 'combo' }>>();
+  for (const item of items) {
+    if (!item.order_combo_id) {
+      rows.push({ kind: 'item', item });
+      continue;
+    }
+    let combo = combos.get(item.order_combo_id);
+    if (!combo) {
+      combo = { kind: 'combo', id: item.order_combo_id, name: item.combo_name ?? 'Combo pack', quantity: item.combo_quantity ?? 1, items: [] };
+      combos.set(item.order_combo_id, combo);
+      rows.push(combo);
+    }
+    const same = combo.items.find((i) => i.name === item.product_name_snapshot);
+    if (same) same.quantity += item.quantity;
+    else combo.items.push({ name: item.product_name_snapshot, quantity: item.quantity });
+  }
+  return rows;
 }

@@ -5,6 +5,7 @@ import { requireAuth, optionalAuth } from '../../middleware/auth.middleware.js';
 import { stockAlertController } from './catalog.stock-alerts.js';
 import { requireRoles, requireShopper } from '../../middleware/role.middleware.js';
 import { categoryGroupsController } from './catalog.groups.js';
+import { combosController } from './catalog.combos.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { idParamSchema } from './catalog.schema.js';
 
@@ -20,6 +21,13 @@ categoriesRouter.get('/', catalogController.getCategories.bind(catalogController
 // ----------------------------------------------------------------------------
 // 2. CUSTOMER PRODUCTS ROUTER (/api/v1/products)
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// 2b. CUSTOMER COMBO PACKS (/api/v1/combos and /api/v1/catalog/combos; migration 033)
+// ----------------------------------------------------------------------------
+export const combosRouter = Router();
+combosRouter.get('/', combosController.listPublic);
+combosRouter.get('/:id', validId, combosController.getPublic);
+
 export const productsRouter = Router();
 productsRouter.get('/', catalogController.getProducts.bind(catalogController));
 productsRouter.get('/:id', optionalAuth, catalogController.getProductById.bind(catalogController));
@@ -35,6 +43,9 @@ adminCatalogRouter.get('/categories', requireAuth, requireRoles(['ADMIN', 'OPERA
 adminCatalogRouter.post('/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createCategoryAdmin.bind(catalogController));
 adminCatalogRouter.patch('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.updateCategoryAdmin.bind(catalogController));
 adminCatalogRouter.delete('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.deleteCategoryAdmin.bind(catalogController));
+// Category offer (migration 033; owner, 2026-10-09): % off the whole category.
+adminCatalogRouter.put('/categories/:id/offer', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.setCategoryOfferAdmin.bind(catalogController));
+adminCatalogRouter.delete('/categories/:id/offer', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.removeCategoryOfferAdmin.bind(catalogController));
 // Category groups on the customer home (migration 025). /order before /:id.
 adminCatalogRouter.get('/category-groups', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryGroupsController.list);
 adminCatalogRouter.post('/category-groups', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryGroupsController.create);
@@ -42,6 +53,12 @@ adminCatalogRouter.put('/category-groups/order', requireAuth, requireRoles(['ADM
 adminCatalogRouter.patch('/category-groups/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryGroupsController.update);
 adminCatalogRouter.delete('/category-groups/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryGroupsController.remove);
 adminCatalogRouter.put('/category-groups/:id/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryGroupsController.setCategories);
+// Combo packs (migration 033; owner, 2026-10-09).
+adminCatalogRouter.get('/combos', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), combosController.listAdmin);
+adminCatalogRouter.get('/combos/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, combosController.getAdmin);
+adminCatalogRouter.post('/combos', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), combosController.create);
+adminCatalogRouter.patch('/combos/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, combosController.update);
+adminCatalogRouter.delete('/combos/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, combosController.remove);
 // Bulk import (.xlsx/.csv parsed in the browser). Before /products/:id.
 adminCatalogRouter.post('/products/import', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.importProductsAdmin.bind(catalogController));
 adminCatalogRouter.get('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.listProductsAdmin.bind(catalogController));
@@ -63,6 +80,7 @@ catalogRouter.get('/events', streamCatalogEvents);
 catalogRouter.get('/home-groups', categoryGroupsController.home);
 catalogRouter.use('/categories', categoriesRouter);
 catalogRouter.use('/products', productsRouter);
+catalogRouter.use('/combos', combosRouter);
 
 export * from './catalog.schema.js';
 export * from './catalog.repository.js';
@@ -71,3 +89,4 @@ export * from './catalog.controller.js';
 export * from './catalog.events.js';
 export * from './catalog.stock-alerts.js';
 export * from './catalog.groups.js';
+export * from './catalog.combos.js';

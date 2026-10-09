@@ -291,6 +291,9 @@ describe('GET /catalog/home-groups (public)', () => {
       image_focal_x: 20,
       image_focal_y: 80,
       parent_id: null,
+      // Migration 033: no category offer running.
+      offer_percent: null,
+      offer_ends_at: null,
     });
 
     // A switched-off group hides its whole section; the loose one is in "More", last.

@@ -687,6 +687,38 @@ a {
   font-weight: 600;
 }
 
+/* Combo packs (owner, 2026-10-09): the pack's items listed under its name. */
+.bag__combo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bag__combo-tag {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border: 1px solid var(--ink);
+}
+
+.bag__combo-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 2px;
+}
+
+.bag__combo-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  font-size: 14px;
+}
+
 /* --------------------------------------------------------------- Cash */
 
 .cash {

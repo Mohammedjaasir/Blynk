@@ -31,8 +31,31 @@ Future<ReorderResult> reorderInto({
   final quantities = <String, int>{};
   final names = <String, String>{};
   final unavailable = <String>[];
+  var addedUnits = 0;
+
+  // Combo packs (owner, 2026-10-09): a pack still on sale goes back in as a
+  // pack, at today's combo price. One that ended or sold out falls back to
+  // its products, one by one, like any other item.
+  final comboLineIds = <String>{};
+  if (order.combos.any((c) => c.comboId != null)) {
+    await products.loadCombos(force: true);
+    for (final line in order.combos) {
+      final combo = line.comboId == null ? null : products.comboById(line.comboId!);
+      if (combo == null || !combo.isAvailable || line.quantity < 1) continue;
+      final before = cart.comboQuantityOf(combo.id);
+      for (var i = 0; i < line.quantity; i++) {
+        cart.addCombo(combo);
+      }
+      final added = cart.comboQuantityOf(combo.id) - before;
+      if (added > 0) {
+        addedUnits += added;
+        comboLineIds.add(line.id);
+      }
+    }
+  }
 
   for (final item in order.items) {
+    if (item.orderComboId != null && comboLineIds.contains(item.orderComboId)) continue;
     if (item.productId.isEmpty) {
       unavailable.add(item.productNameSnapshot);
       continue;
@@ -43,7 +66,6 @@ Future<ReorderResult> reorderInto({
 
   await Future.wait(quantities.keys.map(products.loadProductDetail));
 
-  var addedUnits = 0;
   var networkFailures = 0;
   for (final entry in quantities.entries) {
     final failure = products.productDetailFailure(entry.key);
