@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
@@ -63,14 +63,15 @@ describe('Riders', () => {
     expect(await screen.findByText('No active riders')).toBeInTheDocument();
   });
 
-  it('offers no create/edit/activate/deactivate control anywhere on this screen - a real DOM assertion, not vacuous', async () => {
+  it('offers no create/activate/deactivate control - only "Change pay" per rider (owner, 2026-10-09)', async () => {
     renderAs(ADMIN_WITH_RIDER, '/more/riders', { 'GET /admin/riders': () => ok({ riders: RIDERS }) });
     await screen.findByText('Farhan Mohamed');
 
-    // No button of any kind renders on this screen - the roster is pure
-    // display, and the backend has no rider create/activate/deactivate/edit
-    // endpoint to wire one up to (common.md rule 9, plan §14/§26 row D).
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    // The only buttons are each rider's pay control (PATCH /admin/riders/:id/pay);
+    // the backend still has no rider create/activate/deactivate endpoint.
+    const buttons = screen.queryAllByRole('button');
+    expect(buttons).toHaveLength(RIDERS.length);
+    for (const b of buttons) expect(b).toHaveTextContent('Change pay');
     for (const forbidden of [/add/i, /new rider/i, /create/i, /edit/i, /activate/i, /deactivate/i, /delete/i, /remove/i]) {
       expect(screen.queryByRole('button', { name: forbidden })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: forbidden })).not.toBeInTheDocument();
@@ -82,5 +83,79 @@ describe('Riders', () => {
     expect(
       await screen.findByText('Rider accounts are currently provisioned outside this app.', { exact: false })
     ).toBeInTheDocument();
+  });
+
+  it('shows each rider type and % - own, or the store default (owner, 2026-10-09)', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/more/riders', {
+      'GET /admin/riders': () =>
+        ok({
+          riders: [
+            { ...RIDERS[0], pay_type: 'COMMISSION', commission_percent: null },
+            { ...RIDERS[1], pay_type: 'COMPANY', commission_percent: null },
+            { ...RIDERS[0], id: 'r3', full_name: 'Nimal', pay_type: 'COMMISSION', commission_percent: 72.5 },
+          ],
+        }),
+      'GET /admin/settings/rider-commission': () => ok({ default_percent: 80, updated_at: null }),
+    });
+    expect(await screen.findByText('Commission · 80% (default)')).toBeInTheDocument();
+    expect(screen.getByText('Company')).toBeInTheDocument();
+    expect(screen.getByText('Commission · 72.5%')).toBeInTheDocument();
+  });
+
+  it('changes a rider to commission with an own % via PATCH /admin/riders/:id/pay', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/more/riders', {
+      'GET /admin/riders': () => ok({ riders: [{ ...RIDERS[0], pay_type: 'COMPANY', commission_percent: null }] }),
+      'GET /admin/settings/rider-commission': () => ok({ default_percent: 80, updated_at: null }),
+      'GET /admin/riders/:id/pay': () =>
+        ok({ pay: { rider_id: 'r1', pay_type: 'COMPANY', commission_percent: null, effective_percent: null, default_percent: 80 } }),
+      'PATCH /admin/riders/:id/pay': (call) =>
+        ok({
+          pay: {
+            rider_id: 'r1',
+            pay_type: call.body.pay_type,
+            commission_percent: call.body.commission_percent,
+            effective_percent: call.body.commission_percent ?? 80,
+            default_percent: 80,
+          },
+        }),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Change pay for Farhan Mohamed' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rider pay' });
+    const commission = await within(dialog).findByRole('button', { name: 'Commission' });
+    expect(within(dialog).getByRole('button', { name: 'Company' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(commission);
+    expect(within(dialog).getByText('Leave blank for the store default (80%).')).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText(/Own commission %/), '85');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(api.find('PATCH', '/admin/riders/r1/pay')).toHaveLength(1));
+    expect(api.find('PATCH', '/admin/riders/r1/pay')[0].body).toEqual({ pay_type: 'COMMISSION', commission_percent: 85 });
+    expect(await screen.findByText('Farhan Mohamed is now Commission · 85%.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('Commission · 85%')).toBeInTheDocument();
+  });
+
+  it('switching back to company sends commission_percent null and shows a server error', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/more/riders', {
+      'GET /admin/riders': () => ok({ riders: [{ ...RIDERS[0], pay_type: 'COMMISSION', commission_percent: 90 }] }),
+      'GET /admin/riders/:id/pay': () =>
+        ok({ pay: { rider_id: 'r1', pay_type: 'COMMISSION', commission_percent: 90, effective_percent: 90, default_percent: 80 } }),
+      'PATCH /admin/riders/:id/pay': () => fail(404, 'RIDER_NOT_FOUND', 'Rider not found'),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Change pay for Farhan Mohamed' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rider pay' });
+    expect(await within(dialog).findByLabelText(/Own commission %/)).toHaveValue('90');
+    await user.click(within(dialog).getByRole('button', { name: 'Company' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/riders/r1/pay')).toHaveLength(1));
+    expect(api.find('PATCH', '/admin/riders/r1/pay')[0].body).toEqual({ pay_type: 'COMPANY', commission_percent: null });
+    expect(await within(dialog).findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('links to the earnings report', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/more/riders', { 'GET /admin/riders': () => ok({ riders: RIDERS }) });
+    expect(await screen.findByRole('link', { name: 'Earnings' })).toHaveAttribute('href', '/more/earnings');
   });
 });

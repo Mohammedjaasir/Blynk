@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
-import { riderApplications } from '../api/resources';
-import type { RiderApplication, RiderApprovalStatus } from '../api/types';
+import { riderApplications, settings } from '../api/resources';
+import type { RiderApplication, RiderApprovalStatus, RiderPayType } from '../api/types';
 import { PageHeader } from '../components/Layout';
-import { ConfirmDialog, EmptyState, Spinner } from '../components/ui';
+import { RiderPayFields } from '../components/RiderPayFields';
+import { EmptyState, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
 import { formatDateTime } from '../lib/inventory';
+import { parseOwnPercent, payLabel } from '../lib/riderPay';
 
 /**
  * Rider requests (backend migration 029). New riders apply in the Rider app;
  * Operations (or an Admin) approves or rejects them here. An approved rider
  * gets an SMS and can then sign in with their phone number.
+ *
+ * Approving also sets the rider type (owner, 2026-10-09): Company (salaried)
+ * or Commission (a % of the standard delivery fee; blank = store default).
  */
 
 const TABS: { status: RiderApprovalStatus; label: string }[] = [
@@ -44,6 +49,10 @@ export function RiderRequests() {
   const [rejecting, setRejecting] = useState<RiderApplication | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [payType, setPayType] = useState<RiderPayType>('COMPANY');
+  const [percent, setPercent] = useState('');
+  const [percentError, setPercentError] = useState<string | null>(null);
+  const [defaultPercent, setDefaultPercent] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setRows(null);
@@ -61,10 +70,37 @@ export function RiderRequests() {
     void load();
   }, [load]);
 
+  function openApprove(app: RiderApplication) {
+    // A new rider starts as Company - the backend's own default (owner, 2026-10-09).
+    setPayType('COMPANY');
+    setPercent('');
+    setPercentError(null);
+    setApproving(app);
+    if (defaultPercent === null) {
+      settings.riderCommission
+        .get()
+        .then((s) => setDefaultPercent(s.default_percent))
+        .catch(() => undefined);
+    }
+  }
+
   async function approve(app: RiderApplication) {
+    let own: number | null = null;
+    if (payType === 'COMMISSION') {
+      const parsed = parseOwnPercent(percent);
+      if ('error' in parsed) {
+        setPercentError(parsed.error);
+        return;
+      }
+      own = parsed.value;
+    }
+    setPercentError(null);
     setBusy(true);
     try {
-      await riderApplications.approve(app.id);
+      await riderApplications.approve(
+        app.id,
+        payType === 'COMMISSION' ? { pay_type: 'COMMISSION', commission_percent: own } : { pay_type: 'COMPANY' }
+      );
       setNotice(`${app.full_name ?? 'The rider'} is approved and gets an SMS to sign in.`);
       setApproving(null);
       await load();
@@ -152,10 +188,17 @@ export function RiderRequests() {
                   {app.reviewed_by_name ? ` by ${app.reviewed_by_name}` : ''}
                 </p>
                 {app.rejection_reason ? <p className="cat-row__meta">Reason: {app.rejection_reason}</p> : null}
+                {app.approval_status === 'APPROVED' && app.pay_type ? (
+                  <p className="cat-row__meta">
+                    <span className={`pay-tag pay-tag--${app.pay_type.toLowerCase()}`}>
+                      {payLabel(app.pay_type, app.commission_percent, null)}
+                    </span>
+                  </p>
+                ) : null}
               </div>
               {status === 'PENDING' ? (
                 <div className="cat-row__actions">
-                  <button type="button" className="button button--sm" onClick={() => setApproving(app)}>
+                  <button type="button" className="button button--sm" onClick={() => openApprove(app)}>
                     Approve
                   </button>
                   <button
@@ -176,13 +219,33 @@ export function RiderRequests() {
       )}
 
       {approving ? (
-        <ConfirmDialog
-          title="Approve this rider?"
-          message={`${approving.full_name ?? 'This rider'} (${readablePhone(approving.phone)}) can then sign in to the Rider app and receive deliveries. They get an SMS.`}
-          confirmLabel={busy ? 'Approving…' : 'Approve'}
-          onConfirm={() => void (busy ? undefined : approve(approving))}
-          onCancel={() => setApproving(null)}
-        />
+        <div className="modal" role="dialog" aria-modal="true" aria-label="Approve this rider?">
+          <div className="modal__panel">
+            <h2 className="modal__title">Approve this rider?</h2>
+            <p className="modal__message">
+              {`${approving.full_name ?? 'This rider'} (${readablePhone(approving.phone)}) can then sign in to the Rider app and receive deliveries. They get an SMS.`}
+            </p>
+            <RiderPayFields
+              payType={payType}
+              onPayType={(next) => {
+                setPayType(next);
+                setPercentError(null);
+              }}
+              percent={percent}
+              onPercent={setPercent}
+              defaultPercent={defaultPercent}
+              error={percentError}
+            />
+            <div className="modal__actions">
+              <button type="button" className="button button--ghost" onClick={() => setApproving(null)}>
+                Cancel
+              </button>
+              <button type="button" className="button" disabled={busy} onClick={() => void approve(approving)}>
+                {busy ? 'Approving…' : 'Approve'}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {rejecting ? (

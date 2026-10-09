@@ -422,7 +422,9 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'SMS offers' })).toBeInTheDocument();
     // Dental doctors (owner, 2026-10-09).
     expect(screen.getByRole('link', { name: 'Dental doctors' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(16);
+    // Rider earnings and rider pay (owner, 2026-10-09).
+    expect(screen.getByRole('link', { name: 'Rider earnings' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(17);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

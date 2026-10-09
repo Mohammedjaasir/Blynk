@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { dayApi } from '../api/resources';
-import type { DayTotals, RiderDayDelivery } from '../api/types';
+import { dayApi, earningsApi } from '../api/resources';
+import type { DayTotals, RiderDayDelivery, RiderEarnings } from '../api/types';
 import { Banner } from '../components/Banner';
 import { Header } from '../components/Header';
 import { errorMessage } from '../lib/errors';
@@ -19,13 +19,29 @@ const OUTCOME: Record<RiderDayDelivery['outcome'], { label: string; tone: string
  * "My day" (2026-09-30): the rider's own work in counts - delivered, not
  * delivered, and the cash collected at the door - today and this week
  * (Monday to Sunday, Sri Lanka time), then today's deliveries one line each.
- * Counts only: no pay amounts. Everything comes from GET /riders/me/day,
- * which only ever answers for the signed-in rider.
+ * Counts and cash come from GET /riders/me/day, which only ever answers for
+ * the signed-in rider.
+ *
+ * Pay (owner, 2026-10-09): GET /riders/me/earnings says whether the rider is a
+ * COMPANY rider (salaried - no earnings shown, hands in all the cash) or a
+ * COMMISSION rider (earns a share of each delivery charge and keeps it out of
+ * the cash collected). Only a COMMISSION rider sees money earned and the
+ * "Hand in X, keep Y" split. That request is separate on purpose: if it fails,
+ * My day still shows and the earnings card simply stays hidden.
  */
 export function MyDay() {
   const { data, error, loading, loadedAt, reload } = useLoad(() => dayApi.get(), []);
-  const refresh = useCallback(() => void reload(), [reload]);
+  // Never surfaced as an error: a failed earnings load only hides the card.
+  const earningsLoad = useLoad(() => earningsApi.get(), []);
+  const reloadEarnings = earningsLoad.reload;
+  const refresh = useCallback(() => {
+    void reload();
+    void reloadEarnings();
+  }, [reload, reloadEarnings]);
   useRevalidate(refresh);
+  // Keep the last good earnings through a failed refresh (as useLoad does for
+  // the day); hide the card only when there is nothing to show.
+  const commission = earningsLoad.data?.pay_type === 'COMMISSION' ? earningsLoad.data : null;
 
   const back = (
     <Link to="/" className="bar__back" aria-label="Back to deliveries">
@@ -50,7 +66,8 @@ export function MyDay() {
 
         {data ? (
           <>
-            <Totals heading="Today" totals={data.today} />
+            {commission ? <EarningsCard earnings={commission} /> : null}
+            <Totals heading="Today" totals={data.today} handIn={commission} />
             <Totals heading="This week" note="Monday to Sunday" totals={data.week} />
 
             <section className="list" aria-labelledby="today-list-heading">
@@ -81,7 +98,53 @@ export function MyDay() {
   );
 }
 
-function Totals({ heading, note, totals }: { heading: string; note?: string; totals: DayTotals }) {
+const plural = (n: number) => `${n} ${n === 1 ? 'delivery' : 'deliveries'}`;
+const percent = new Intl.NumberFormat('en-LK', { maximumFractionDigits: 2 });
+
+/**
+ * COMMISSION riders only (owner, 2026-10-09): money earned today and this week
+ * from their share of each delivered order's standard delivery charge - the
+ * share is earned even when the customer's delivery was free.
+ */
+function EarningsCard({ earnings }: { earnings: RiderEarnings }) {
+  return (
+    <section className="earn" aria-labelledby="earn-heading">
+      <h2 id="earn-heading" className="earn__eyebrow">
+        Your earnings
+      </h2>
+      <p className="earn__today">
+        <span className="earn__label">Today</span>
+        <span className="earn__line">
+          <strong className="earn__amount">{formatMoney(earnings.today.earnings)}</strong> earned
+          <span className="earn__count"> · {plural(earnings.today.deliveries)}</span>
+        </span>
+      </p>
+      <p className="earn__week">
+        <span className="earn__label">This week</span>
+        <span className="earn__line">
+          <strong className="earn__week-amount">{formatMoney(earnings.week.earnings)}</strong>
+          <span className="earn__count"> · {plural(earnings.week.deliveries)}</span>
+        </span>
+      </p>
+      {earnings.commission_percent !== null ? (
+        <p className="earn__share">You earn {percent.format(earnings.commission_percent)}% of each delivery charge</p>
+      ) : null}
+    </section>
+  );
+}
+
+function Totals({
+  heading,
+  note,
+  totals,
+  handIn,
+}: {
+  heading: string;
+  note?: string;
+  totals: DayTotals;
+  /** COMMISSION riders: today's cash split (owner, 2026-10-09). */
+  handIn?: RiderEarnings | null;
+}) {
   const id = `day-${heading.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <section className="day" aria-labelledby={id}>
@@ -107,6 +170,19 @@ function Totals({ heading, note, totals }: { heading: string; note?: string; tot
           <dd className="day__cash">{formatMoney(totals.cash_collected)}</dd>
         </div>
       </dl>
+      {/* A commission rider keeps their earned share out of the cash and hands
+          in the rest (owner, 2026-10-09). Company riders hand in everything,
+          so the plain "Cash collected" figure stays their wording. */}
+      {handIn ? (
+        <p className="handin">
+          <span className="handin__give">
+            Hand in <strong>{formatMoney(handIn.today.cash_to_hand_in)}</strong>
+          </span>
+          <span className="handin__keep">
+            , keep <strong>{formatMoney(handIn.today.cash_to_keep)}</strong>
+          </span>
+        </p>
+      ) : null}
     </section>
   );
 }

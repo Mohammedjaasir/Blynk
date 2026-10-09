@@ -7,6 +7,7 @@ import type {
   RiderApplication,
   RiderApplicationInput,
   RiderDay,
+  RiderEarnings,
 } from './types';
 
 /**
@@ -89,6 +90,14 @@ export const deliveriesApi = {
 /** "My day": today's and this week's counts and cash, for the signed-in rider only. */
 export const dayApi = {
   get: () => apiRequest<RiderDay>('/riders/me/day'),
+};
+
+/**
+ * The signed-in rider's pay type and, for a COMMISSION rider, what they earned
+ * and how much of today's cash they keep vs hand in (owner, 2026-10-09).
+ */
+export const earningsApi = {
+  get: () => apiRequest<RiderEarnings>('/riders/me/earnings'),
 };
 
 async function setStatus(id: string, body: Record<string, unknown>) {

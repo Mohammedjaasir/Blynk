@@ -13,6 +13,12 @@ import { formatMoney } from '../lib/orders';
  * day: collected (settled deliveries), handed in, and the difference -
  * short in red, over in amber. Only an admin may delete a hand-in (the API
  * refuses Operations).
+ *
+ * A COMMISSION rider keeps their earned share out of the cash they collect
+ * and hands in the rest (owner, 2026-10-09): their row says "Hand in LKR X,
+ * keep LKR Y" and short/over is measured against what they should hand in
+ * (`expected_handin`), not everything collected. Company riders keep
+ * nothing, so their rows read as before.
  */
 
 /** Today in Sri Lanka (UTC+05:30 all year), YYYY-MM-DD. */
@@ -109,6 +115,12 @@ export function Cash() {
                       {r.deliveries === 1 ? 'delivery' : 'deliveries'}) · Handed in{' '}
                       <span className="mono">{formatMoney(r.handed_in)}</span>
                     </p>
+                    {r.kept_share > 0 ? (
+                      <p className="cat-row__meta cash-keep">
+                        Hand in <span className="mono">{formatMoney(r.expected_handin)}</span>, keep{' '}
+                        <span className="mono">{formatMoney(r.kept_share)}</span>
+                      </p>
+                    ) : null}
                     <p className={`cash-diff cash-diff--${r.status.toLowerCase()}`}>{differenceText(r.difference, r.status)}</p>
                   </div>
                   <button
@@ -131,6 +143,18 @@ export function Cash() {
                 <span className="card__label">Handed in</span>
                 <span className="card__value mono">{formatMoney(data.totals.handed_in)}</span>
               </p>
+              {data.totals.kept_share > 0 ? (
+                <>
+                  <p className="card__row">
+                    <span className="card__label">Riders keep</span>
+                    <span className="card__value mono">{formatMoney(data.totals.kept_share)}</span>
+                  </p>
+                  <p className="card__row">
+                    <span className="card__label">To hand in</span>
+                    <span className="card__value mono">{formatMoney(data.totals.expected_handin)}</span>
+                  </p>
+                </>
+              ) : null}
               <p className="card__row">
                 <span className="card__label">Difference</span>
                 <span className={`card__value cash-diff cash-diff--${data.totals.status.toLowerCase()}`}>

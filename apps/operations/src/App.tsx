@@ -34,6 +34,7 @@ import { OrderDetail } from './pages/OrderDetail';
 import { PackingSlip } from './pages/PackingSlip';
 import { Orders } from './pages/Orders';
 import { Riders } from './pages/Riders';
+import { RiderEarnings } from './pages/RiderEarnings';
 import { SmsOffers } from './pages/SmsOffers';
 import { RiderRequests } from './pages/RiderRequests';
 import { StaffAccounts } from './pages/StaffAccounts';
@@ -142,6 +143,7 @@ export function AppRoutes() {
         <Route path="catalog/dental/doctors/:doctorId/ratings" element={<DentalDoctorRatings />} />
         <Route path="more" element={<More />} />
         <Route path="more/riders" element={<Riders />} />
+        <Route path="more/earnings" element={<RiderEarnings />} />
         <Route path="more/cash" element={<Cash />} />
         <Route path="more/deliver" element={<DeliverMyself />} />
         <Route path="more/staff" element={<StaffAccounts />} />

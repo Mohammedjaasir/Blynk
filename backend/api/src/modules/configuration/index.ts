@@ -1,7 +1,12 @@
 import { Router, type Request } from 'express';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
-import { settingsService, updateCheckoutSettingsSchema, updateDeliveryFeeSchema } from './settings.service.js';
+import {
+  settingsService,
+  updateCheckoutSettingsSchema,
+  updateDeliveryFeeSchema,
+  updateRiderCommissionSchema,
+} from './settings.service.js';
 
 export const configurationRouter = Router();
 
@@ -88,6 +93,36 @@ adminSettingsRouter.patch(
     try {
       const input = updateCheckoutSettingsSchema.parse(req.body);
       res.json({ success: true, data: await settingsService.setCheckoutSettings(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Rider commission (owner, 2026-10-09): a commission rider's default share of
+// the standard delivery fee. Audited (RIDER_COMMISSION_UPDATED); applies to
+// deliveries settled afterwards.
+adminSettingsRouter.get(
+  '/settings/rider-commission',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await settingsService.getRiderCommission() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/rider-commission',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateRiderCommissionSchema.parse(req.body);
+      res.json({ success: true, data: await settingsService.setRiderCommission(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

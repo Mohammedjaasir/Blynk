@@ -178,6 +178,11 @@ export interface RiderOption {
   open_deliveries: number;
   /** False only in `GET /admin/riders?include_inactive=true`: the rider can no longer deliver. */
   is_active?: boolean;
+  /** How the rider is paid (owner, 2026-10-09). Optional only because other
+   * rows built from this shape (suggestions, fixtures) may leave it out. */
+  pay_type?: RiderPayType;
+  /** The rider's own commission %, or null for the store default. */
+  commission_percent?: number | null;
 }
 
 /** One order a rider already carries (`GET /admin/riders/suggestions`). */
@@ -1006,8 +1011,14 @@ export interface RiderReconciliation {
   handins: number;
   collected: number;
   handed_in: number;
+  /** handed_in - expected_handin: negative = short. */
   difference: number;
   status: ReconciliationStatus;
+  pay_type: RiderPayType;
+  /** The commission share a COMMISSION rider keeps out of the cash; 0 for company riders (owner, 2026-10-09). */
+  kept_share: number;
+  /** collected - kept_share: what the rider should hand in. */
+  expected_handin: number;
 }
 
 /** GET /admin/cash/reconciliation - one Sri Lanka day. */
@@ -1015,7 +1026,102 @@ export interface CashReconciliation {
   date: string;
   timezone: string;
   riders: RiderReconciliation[];
-  totals: { collected: number; handed_in: number; difference: number; status: ReconciliationStatus };
+  totals: {
+    collected: number;
+    handed_in: number;
+    kept_share: number;
+    expected_handin: number;
+    /** handed_in - expected_handin. */
+    difference: number;
+    status: ReconciliationStatus;
+  };
+}
+
+// --------------------------------------------------------------- rider pay
+/**
+ * Rider pay (owner, 2026-10-09): a COMPANY rider is salaried and earns no
+ * per-delivery commission (Blynk keeps the delivery charge); a COMMISSION
+ * rider earns a % of the standard delivery fee - the store default or their
+ * own override - and keeps that share out of the COD cash they collect.
+ */
+export type RiderPayType = 'COMPANY' | 'COMMISSION';
+
+/** `GET|PATCH /admin/riders/:id/pay` -> `data.pay`. */
+export interface RiderPay {
+  rider_id: string;
+  pay_type: RiderPayType;
+  /** The rider's own override, or null for the store default. */
+  commission_percent: number | null;
+  /** The % actually used: a number for COMMISSION, null for COMPANY. */
+  effective_percent: number | null;
+  default_percent: number;
+}
+
+/** Body of `PATCH /admin/riders/:id/pay` and the optional approve body. */
+export interface RiderPayInput {
+  pay_type: RiderPayType;
+  commission_percent?: number | null;
+}
+
+/** `GET|PATCH /admin/settings/rider-commission`. */
+export interface RiderCommissionSetting {
+  default_percent: number;
+  updated_at: string | null;
+}
+
+export type EarningsRange = 'today' | 'this_week' | 'custom';
+
+export interface RiderEarningsFigures {
+  deliveries: number;
+  /** On the standard-fee basis, whatever the customer actually paid. */
+  delivery_charges: number;
+  /** What customers paid for delivery (0 on free deliveries). */
+  customer_delivery_fees: number;
+  rider_share: number;
+  blynk_delivery_share: number;
+  cash_collected: number;
+  cash_kept: number;
+  cash_to_hand_in: number;
+  product_sales: number;
+  product_cost: number;
+  product_margin: number;
+  coupon_discount: number;
+}
+
+export interface RiderEarningsRow extends RiderEarningsFigures {
+  rider_id: string;
+  rider_name: string | null;
+  rider_phone: string | null;
+  pay_type: RiderPayType;
+  commission_percent: number | null;
+  effective_percent: number | null;
+}
+
+/** `GET /admin/reports/rider-earnings`. */
+export interface RiderEarningsReport {
+  range: { from: string; to: string; timezone: string };
+  default_percent: number;
+  riders: RiderEarningsRow[];
+  totals: RiderEarningsFigures;
+}
+
+export interface MyEarningsPeriod {
+  deliveries: number;
+  delivery_charges: number;
+  earnings: number;
+  cash_collected: number;
+  cash_to_keep: number;
+  cash_to_hand_in: number;
+}
+
+/** `GET /riders/me/earnings` - the signed-in user's own rider profile. */
+export interface MyEarnings {
+  timezone: string;
+  pay_type: RiderPayType;
+  /** Effective %, null for COMPANY. */
+  commission_percent: number | null;
+  today: MyEarningsPeriod & { date: string };
+  week: MyEarningsPeriod & { starts_on: string };
 }
 
 // -------------------------------------------------------------- sms offers
@@ -1092,6 +1198,9 @@ export interface RiderApplication {
   reviewed_at: string | null;
   reviewed_by_name: string | null;
   rejection_reason: string | null;
+  /** Set on approval (owner, 2026-10-09). */
+  pay_type?: RiderPayType;
+  commission_percent?: number | null;
 }
 
 export interface RiderApplicationPage {

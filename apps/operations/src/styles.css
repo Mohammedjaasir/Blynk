@@ -2709,3 +2709,79 @@ a.button {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* Rider pay (owner, 2026-10-09). Company riders get a quiet tag; commission
+   riders a Blynk-yellow one, matching the offer tag's voice. */
+.pay-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  font-size: var(--text-meta);
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.pay-tag--company {
+  background: var(--canvas);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+
+.pay-tag--commission {
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+.rider-pay {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rider-pay__types .segmented__item {
+  min-height: 40px;
+  min-width: 112px;
+}
+
+.cash-keep {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.earnings-dates {
+  margin: 12px 0 0;
+}
+
+.earnings-figures {
+  margin: 12px 0;
+}
+
+.earnings-figures .figure__value {
+  font-size: var(--text-title);
+}
+
+.earnings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.earnings-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.earnings-card__head .cat-row__title {
+  margin: 0;
+}
+
+.day-earnings {
+  margin-bottom: 8px;
+}

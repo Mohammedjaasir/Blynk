@@ -1,4 +1,5 @@
 import { riderRepository } from './rider.repository.js';
+import { ownEarnings } from './rider.pay.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import type { RiderDeliveryStatus } from './rider.schema.js';
 import { runTransition } from '../orders/lifecycle/engine.js';
@@ -107,7 +108,8 @@ export class RiderService {
    * "My day" (Rider app): counts and cash for the calling rider only - today
    * and this week (Monday to Sunday, Asia/Colombo) - plus today's finished
    * deliveries. The rider is resolved from the token, never from the request.
-   * No pay amounts: the owner asked for counts only.
+   * No pay amounts here; a commission rider's earnings are on
+   * GET /riders/me/earnings (rider.pay.ts; owner, 2026-10-09).
    */
   async getMyDay(userId: string): Promise<RiderDay> {
     const rider = await this.getRiderOrThrow(userId);
@@ -151,6 +153,12 @@ export class RiderService {
       week: { starts_on: calendar.week_starts_on, ...week },
       deliveries_today: deliveriesToday,
     };
+  }
+
+  /** The calling rider's own earnings today and this week (rider.pay.ts ownEarnings). */
+  async getMyEarnings(userId: string) {
+    const rider = await this.getRiderOrThrow(userId);
+    return await ownEarnings(rider.id);
   }
 
   /** Lifecycle #9 RIDER_COLLECT_COD, settled by the shared COD settlement. */

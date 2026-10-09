@@ -175,6 +175,9 @@ export class OrderRepository {
           payment_status: 'PENDING',
           subtotal_amount: data.subtotal_amount,
           delivery_fee: deliveryFee,
+          // Migration 032 (owner, 2026-10-09): the standard fee, even when this
+          // order goes out free - a commission rider earns their share of it.
+          standard_delivery_fee: data.delivery_fee,
           discount_amount: discountAmount,
           coupon_code: applied?.code ?? null,
           total_amount: totalAmount,

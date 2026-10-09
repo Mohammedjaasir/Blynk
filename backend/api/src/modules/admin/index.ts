@@ -16,6 +16,7 @@ import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
 import { listRiderSuggestions, listRidersForAssignment } from '../riders/rider.controller.js';
 import { adminRiderApplicationsRouter } from '../riders/rider.applications.js';
+import { adminRiderPayRouter } from '../riders/rider.pay.js';
 import { metrics } from '../../utils/metrics.js';
 import { checkDatabaseConnection, pool } from '../../database/connection.js';
 
@@ -50,6 +51,10 @@ adminRouter.use(adminStaffRouter);
 
 // Rider requests (migration 029): ADMIN and OPERATIONS review applications.
 adminRouter.use(adminRiderApplicationsRouter);
+
+// Rider pay (migration 032; owner, 2026-10-09): a rider's type and share, and
+// the rider earnings report. ADMIN and OPERATIONS, guarded inside.
+adminRouter.use(adminRiderPayRouter);
 
 // Store settings (delivery fee). ADMIN and OPERATIONS, guarded inside.
 adminRouter.use(adminSettingsRouter);

@@ -81,6 +81,14 @@ export class RiderController {
     }
   }
 
+  async getMyEarnings(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.status(200).json({ success: true, data: await riderService.getMyEarnings(req.user!.id) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async updateLocation(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = deliveryParamsSchema.parse(req.params);

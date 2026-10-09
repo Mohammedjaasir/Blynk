@@ -1,4 +1,5 @@
 import { enqueueCustomerSms } from './notify.js';
+import { riderPaySnapshot } from '../../riders/rider.pay.js';
 import { setOrderStatus } from './status-writer.js';
 import type { Actor, DeliveryRow, OrderRow, Trx } from './types.js';
 
@@ -25,10 +26,14 @@ export async function settleCod(
 ): Promise<CodSettlement> {
   const { delivery, order, amount, actor, note } = params;
   const now = new Date();
+  // Rider pay (migration 032; owner, 2026-10-09): what this delivery earned,
+  // with the rider's pay type and share as they are now - a snapshot, so a
+  // later change never rewrites it.
+  const pay = await riderPaySnapshot(trx, delivery, order);
 
   await trx
     .updateTable('deliveries')
-    .set({ assignment_status: 'DELIVERED', cod_collected_amount: amount, delivered_at: now, updated_at: now })
+    .set({ assignment_status: 'DELIVERED', cod_collected_amount: amount, delivered_at: now, updated_at: now, ...pay })
     .where('id', '=', delivery.id)
     .execute();
 

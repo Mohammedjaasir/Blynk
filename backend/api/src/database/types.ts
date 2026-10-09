@@ -41,6 +41,8 @@ export type DeliveryAssignmentStatus =
 
 /** Migration 029: a rider's application state. */
 export type RiderApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+/** Migration 032 (owner, 2026-10-09): salaried company rider, or a share of each delivery charge. */
+export type RiderPayType = 'COMPANY' | 'COMMISSION';
 export type NotificationChannel = 'SMS' | 'WHATSAPP' | 'IN_APP' | 'EMAIL' | 'PUSH';
 export type NotificationStatus = 'QUEUED' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'FAILED';
 
@@ -285,6 +287,12 @@ export interface OrdersTable {
   payment_status: Generated<PaymentStatus>;
   subtotal_amount: ColumnType<number, number | string, number | string>;
   delivery_fee: ColumnType<number, number | string, number | string>;
+  /**
+   * Migration 032: the standard delivery fee in effect when the order was
+   * placed (delivery_fee is 0 for a free delivery). A commission rider's share
+   * is of this. Null only on rows written outside order creation.
+   */
+  standard_delivery_fee: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   total_amount: ColumnType<number, number | string, number | string>;
   /** Migration 018: coupon discount snapshot; total = subtotal + delivery_fee - discount_amount. */
   discount_amount: ColumnType<number, number | string | undefined, number | string>;
@@ -370,6 +378,10 @@ export interface RidersTable {
   reviewed_at: Date | null;
   reviewed_by: string | null;
   rejection_reason: string | null;
+  /** Migration 032: COMPANY (default) or COMMISSION. */
+  pay_type: Generated<RiderPayType>;
+  /** Migration 032: this rider's own share of the delivery charge, 0..100; null = the store default. */
+  commission_percent: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
@@ -392,6 +404,14 @@ export interface DeliveriesTable {
   location_accuracy_m: ColumnType<number, number | string, number | string> | null;
   location_captured_at: Date | null;
   location_received_at: Date | null;
+  /**
+   * Migration 032: snapshot taken when the delivery is settled (settleCod) -
+   * the rider's pay type, the share applied and what they earned. Null until
+   * delivered.
+   */
+  rider_pay_type: ColumnType<RiderPayType | null, RiderPayType | null | undefined, RiderPayType | null>;
+  rider_commission_percent: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  rider_earning_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }

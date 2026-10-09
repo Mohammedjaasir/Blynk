@@ -1537,6 +1537,109 @@ a {
   background: transparent;
 }
 
+/* Rider pay (owner, 2026-10-09): COMMISSION riders only. The earnings card is
+   the one dark slip on My day - ink paper, the money in large tabular figures,
+   a yellow edge tying it to the "do this" accent. */
+.earn {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  padding: 16px 16px 14px 20px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: inset 5px 0 0 var(--yellow), 0 8px 22px rgba(18, 21, 31, 0.16);
+  overflow: hidden;
+}
+
+.earn__eyebrow {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--yellow);
+}
+
+.earn__today,
+.earn__week {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.earn__week {
+  padding-top: 10px;
+  border-top: 1px solid rgba(251, 250, 245, 0.16);
+}
+
+.earn__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(251, 250, 245, 0.7);
+}
+
+.earn__line {
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.earn__amount,
+.earn__week-amount {
+  font-family: var(--money);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: var(--paper);
+}
+
+.earn__amount {
+  font-size: 32px;
+  line-height: 1.1;
+}
+
+.earn__week-amount {
+  font-size: 22px;
+}
+
+.earn__count {
+  color: rgba(251, 250, 245, 0.78);
+}
+
+.earn__share {
+  justify-self: start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 225, 65, 0.14);
+  color: var(--yellow);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Today's cash split for a COMMISSION rider: hand in (the next job, yellow
+   edge) and keep (theirs, green). */
+.handin {
+  padding: 12px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: inset 4px 0 0 var(--yellow);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.handin strong {
+  font-family: var(--money);
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.handin__keep strong {
+  color: var(--green);
+}
+
 /* Launch (2026-10-07): the native splash, then the logo lifts into the app -
    the customer app's opening. See components/LaunchScreen.tsx. */
 .launch {

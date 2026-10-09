@@ -71,6 +71,9 @@ export function Layout() {
               <NavLink to="/cash" className="nav__item">
                 Rider cash
               </NavLink>
+              <NavLink to="/rider-earnings" className="nav__item">
+                Rider earnings
+              </NavLink>
 
               <p className="nav__group">Catalog</p>
               <NavLink to="/products" className="nav__item">

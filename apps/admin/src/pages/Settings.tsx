@@ -2,19 +2,22 @@ import { errorMessage } from '../lib/apiErrors';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { settings as settingsApi } from '../api/resources';
-import type { CheckoutSettings, DeliveryFeeSetting } from '../api/types';
+import type { CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
 import { formatDay } from '../lib/coupons';
 import { parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
 import { formatMoney } from '../lib/orders';
+import { formatPercent, parsePercent } from '../lib/riderPay';
 
 /**
  * Store settings: the delivery fee the customer app charges on new orders
  * (GET/PATCH /admin/settings/delivery-fee) and the checkout switches - coupon
  * codes and free deliveries for every customer (GET/PATCH
  * /admin/settings/checkout; owner, 2026-10-08, every customer since a start
- * date: owner, 2026-10-09).
+ * date: owner, 2026-10-09), and the default commission % commission riders
+ * earn of the standard delivery fee (GET/PATCH
+ * /admin/settings/rider-commission; owner, 2026-10-09).
  */
 export function Settings() {
   return (
@@ -22,6 +25,7 @@ export function Settings() {
       <PageHeader title="Settings" description="Store-wide values the customer app uses." />
       <DeliveryFeeSettingPanel />
       <CheckoutSettingsPanel />
+      <RiderCommissionPanel />
     </>
   );
 }
@@ -249,6 +253,90 @@ function CheckoutSettingsPanel() {
           onCancel={() => setConfirmRestart(false)}
         />
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * Commission riders earn this % of the STANDARD delivery fee on each delivery
+ * unless they have their own % (owner, 2026-10-09). Company riders are
+ * salaried and earn no commission.
+ */
+function RiderCommissionPanel() {
+  const toast = useToast();
+  const [current, setCurrent] = useState<RiderCommissionSetting | null>(null);
+  const [value, setValue] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .getRiderCommission()
+      .then((setting) => {
+        if (cancelled) return;
+        setCurrent(setting);
+        setValue(formatPercent(setting.default_percent));
+      })
+      .catch((err) => !cancelled && setLoadError(errorMessage(err, 'Could not load the rider commission.')));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const parsed = parsePercent(value);
+    if ('error' in parsed || parsed.percent === null) {
+      setError('error' in parsed ? parsed.error : 'Enter a percentage from 0 to 100.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await settingsApi.setRiderCommission(parsed.percent);
+      setCurrent(updated);
+      setValue(formatPercent(updated.default_percent));
+      toast.success(`Commission riders now earn ${formatPercent(updated.default_percent)}% of the delivery fee.`);
+    } catch (err) {
+      const detail =
+        err instanceof ApiError && err.code === 'VALIDATION_ERROR'
+          ? (err.details as Array<{ message?: string }> | undefined)?.[0]?.message
+          : undefined;
+      setError(detail ?? errorMessage(err, 'Could not save the rider commission.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-label="Rider commission">
+      <h2 className="panel__title">Rider commission</h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading the rider commission" />
+      ) : (
+        <form className="form" onSubmit={save} noValidate>
+          <p className="panel__body">
+            Commission riders currently earn {formatPercent(current.default_percent)}% of the standard delivery fee
+            {current.updated_at ? ` (changed ${new Date(current.updated_at).toLocaleString()})` : ''}.
+          </p>
+          <Field label="Default commission (%)" hint="0 to 100, up to 2 decimals." error={error ?? undefined}>
+            <input className="input" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />
+          </Field>
+          <p className="form__note">
+            A commission rider keeps this share out of the cash they collect and hands in the rest. Riders with their own %
+            keep it; company riders earn no commission. Past deliveries keep what they earned. Change a rider's type under Rider earnings.
+          </p>
+          <div className="form__actions">
+            <button type="submit" className="button" disabled={saving}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </div>
+        </form>
+      )}
     </section>
   );
 }

@@ -147,3 +147,35 @@ export interface RiderDay {
   /** Newest first. */
   deliveries_today: RiderDayDelivery[];
 }
+
+/**
+ * GET /riders/me/earnings (owner, 2026-10-09): a rider is either a COMPANY
+ * rider (salaried - no per-delivery earnings) or a COMMISSION rider who earns
+ * commission_percent of each delivered order's standard delivery fee, even
+ * when the customer got the delivery free. A commission rider keeps that
+ * share out of the COD cash collected and hands in the rest. Counts are
+ * delivered deliveries only. For COMPANY riders earnings and cash_to_keep are
+ * 0 and cash_to_hand_in equals cash_collected.
+ */
+export type RiderPayType = 'COMPANY' | 'COMMISSION';
+
+export interface EarningsTotals {
+  deliveries: number;
+  /** Standard delivery fees of those deliveries, LKR. */
+  delivery_charges: number;
+  /** The rider's share, LKR (0 for COMPANY riders). */
+  earnings: number;
+  cash_collected: number;
+  cash_to_keep: number;
+  cash_to_hand_in: number;
+}
+
+export interface RiderEarnings {
+  timezone: 'Asia/Colombo';
+  pay_type: RiderPayType;
+  /** Effective share for COMMISSION riders, e.g. 80; null for COMPANY riders. */
+  commission_percent: number | null;
+  today: EarningsTotals & { date: string };
+  /** Monday to Sunday. */
+  week: EarningsTotals & { starts_on: string };
+}

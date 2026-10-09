@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { riderApplications, settings } from '../api/resources';
-import type { CheckoutSettings, DeliveryFeeSetting } from '../api/types';
+import type { CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, Spinner } from '../components/ui';
 import { catalogErrorMessage, formatColomboDate, parseDeliveryFee, parseFreeDeliveryCount } from '../lib/catalog';
 import { formatDateTime } from '../lib/inventory';
+import { formatPercent, parseCommissionPercent } from '../lib/riderPay';
 
 /**
  * The More tab (plan §8: rider list, settings, sign-out). Sign-out is real,
@@ -19,7 +20,9 @@ import { formatDateTime } from '../lib/inventory';
  * /admin/settings/delivery-fee`) lives here as the app's settings area, with
  * the checkout switches (`GET|PATCH /admin/settings/checkout`; owner,
  * 2026-10-08): coupon codes on/off and free deliveries for every customer
- * since a start date (owner, 2026-10-09).
+ * since a start date (owner, 2026-10-09). The rider commission default
+ * (`GET|PATCH /admin/settings/rider-commission`; owner, 2026-10-09) sits
+ * beside them, and "Rider earnings" opens the per-rider earnings report.
  */
 export function More() {
   const { user, signOut } = useAuth();
@@ -44,7 +47,7 @@ export function More() {
 
   return (
     <div className="page">
-      <PageHeader title="More" description="Riders, rider requests, rider cash, staff, SMS offers, settings and sign-out." />
+      <PageHeader title="More" description="Riders, rider requests, rider cash and earnings, staff, SMS offers, settings and sign-out." />
       <section className="card">
         <p className="card__row">
           <span className="card__label">Signed in as</span>
@@ -65,6 +68,11 @@ export function More() {
         <li>
           <Link className="cat-hub__card" to="/more/cash">
             <span className="cat-hub__title">Cash</span>
+          </Link>
+        </li>
+        <li>
+          <Link className="cat-hub__card" to="/more/earnings">
+            <span className="cat-hub__title">Rider earnings</span>
           </Link>
         </li>
         <li>
@@ -96,6 +104,7 @@ export function More() {
 
       <DeliveryFeeCard />
       <CheckoutSettingsCard />
+      <RiderCommissionCard />
 
       <section className="card">
         <button type="button" className="button button--ghost" onClick={() => void handleSignOut()}>
@@ -333,6 +342,91 @@ function CheckoutSettingsCard() {
       {error ? <p className="field__error" role="alert">{error}</p> : null}
       {notice ? <p className="quiet quiet--ok" role="status">{notice}</p> : null}
       {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}
+    </section>
+  );
+}
+
+/** The % of the STANDARD delivery fee a commission rider earns (owner,
+ * 2026-10-09). A rider with their own % (Riders -> Change pay) keeps it;
+ * company riders earn no commission. */
+function RiderCommissionCard() {
+  const [current, setCurrent] = useState<RiderCommissionSetting | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [value, setValue] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    settings.riderCommission
+      .get()
+      .then((s) => {
+        setCurrent(s);
+        setValue(String(s.default_percent));
+      })
+      .catch((err) => setLoadError(catalogErrorMessage(err)));
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setNotice(null);
+    const parsed = parseCommissionPercent(value);
+    if ('error' in parsed) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const saved = await settings.riderCommission.update(parsed.value);
+      setCurrent(saved);
+      setValue(String(saved.default_percent));
+      setNotice(`Rider commission saved: ${formatPercent(saved.default_percent)}.`);
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card" aria-labelledby="rider-commission-title">
+      <h2 className="section-label" id="rider-commission-title">
+        Rider commission
+      </h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading rider commission" />
+      ) : (
+        <>
+          <p className="card__row">
+            <span className="card__label">Default share</span>
+            <span className="card__value mono">{formatPercent(current.default_percent)}</span>
+          </p>
+          <form className="fee-form" onSubmit={save} noValidate>
+            <label className="field">
+              <span className="field__label">Default commission (%)</span>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                aria-invalid={error ? true : undefined}
+              />
+            </label>
+            <button type="submit" className="button" disabled={saving}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </form>
+        </>
+      )}
+      {error ? <p className="field__error" role="alert">{error}</p> : null}
+      {notice ? <p className="quiet quiet--ok" role="status">{notice}</p> : null}
+      {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}
+      <p className="page__note">
+        Commission riders earn this share of the standard delivery fee, unless they have their own. Company riders earn no commission.
+      </p>
     </section>
   );
 }

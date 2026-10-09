@@ -12,6 +12,11 @@ import { formatMoney } from '../lib/orders';
  * staff record what each rider hands in. Per rider and Sri Lanka day:
  * collected (settled deliveries), handed in, and the difference - short
  * in red, over in amber.
+ *
+ * Rider pay (owner, 2026-10-09): a commission rider keeps their earned share
+ * of the delivery fees out of the cash and hands in the rest, so the API
+ * measures short/over against `expected_handin` (collected - kept_share).
+ * Company riders keep nothing and look as before.
  */
 
 const errorText = errorMessage;
@@ -45,6 +50,14 @@ export function handinRiders(
   if (extra && !seen.has(extra.id)) inactive.push({ id: extra.id, label: `${extra.name ?? 'Rider'} (inactive)`, inactive: true });
   inactive.sort((a, b) => a.label.localeCompare(b.label));
   return [...out, ...inactive];
+}
+
+/** "Hand in LKR 2,440, keep LKR 160" when the rider keeps a share; null otherwise. */
+export function keepText(row: { collected: number; kept_share?: number; expected_handin?: number }): string | null {
+  const kept = row.kept_share ?? 0;
+  if (!(kept > 0)) return null;
+  const handIn = row.expected_handin ?? row.collected - kept;
+  return `Hand in ${formatMoney(handIn)}, keep ${formatMoney(kept)}`;
 }
 
 export function differenceText(difference: number, status: ReconciliationStatus): string {
@@ -92,7 +105,7 @@ export function Cash() {
     <>
       <PageHeader
         title="Rider cash"
-        description="Cash each rider collected against what they handed in, per Sri Lanka day."
+        description="Cash each rider collected against what they handed in, per Sri Lanka day. Commission riders keep their share and hand in the rest."
         actions={
           <>
             <input
@@ -142,7 +155,10 @@ export function Cash() {
                   <tr key={r.rider_id} className={`cash-row cash-row--${r.status.toLowerCase()}`}>
                     <td className="cell__primary">{r.rider_name ?? 'Rider'}</td>
                     <td className="num mono">{r.deliveries}</td>
-                    <td className="num mono">{formatMoney(r.collected)}</td>
+                    <td className="num mono">
+                      {formatMoney(r.collected)}
+                      {keepText(r) ? <div className="cell__secondary">{keepText(r)}</div> : null}
+                    </td>
                     <td className="num mono">{formatMoney(r.handed_in)}</td>
                     <td>
                       <span className={`cash-diff cash-diff--${r.status.toLowerCase()}`}>{differenceText(r.difference, r.status)}</span>
@@ -164,7 +180,10 @@ export function Cash() {
                 <tr>
                   <th scope="row">All riders</th>
                   <td />
-                  <td className="num mono">{formatMoney(data.totals.collected)}</td>
+                  <td className="num mono">
+                    {formatMoney(data.totals.collected)}
+                    {keepText(data.totals) ? <div className="cell__secondary">{keepText(data.totals)}</div> : null}
+                  </td>
                   <td className="num mono">{formatMoney(data.totals.handed_in)}</td>
                   <td>
                     <span className={`cash-diff cash-diff--${data.totals.status.toLowerCase()}`}>

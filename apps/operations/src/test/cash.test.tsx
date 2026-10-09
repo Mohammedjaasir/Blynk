@@ -23,10 +23,22 @@ const RECON: CashReconciliation = {
   date: '2026-09-30',
   timezone: 'Asia/Colombo',
   riders: [
-    { rider_id: 'r1', rider_name: 'Farhan Mohamed', rider_phone: '+94779876543', deliveries: 3, handins: 1, collected: 2150, handed_in: 2000, difference: -150, status: 'SHORT' },
-    { rider_id: 'r2', rider_name: 'Imran', rider_phone: '+94779876500', deliveries: 1, handins: 1, collected: 500, handed_in: 520, difference: 20, status: 'OVER' },
+    { rider_id: 'r1', rider_name: 'Farhan Mohamed', rider_phone: '+94779876543', deliveries: 3, handins: 1, collected: 2150, handed_in: 2000, difference: -150, status: 'SHORT', pay_type: 'COMPANY', kept_share: 0, expected_handin: 2150 },
+    { rider_id: 'r2', rider_name: 'Imran', rider_phone: '+94779876500', deliveries: 1, handins: 1, collected: 500, handed_in: 520, difference: 20, status: 'OVER', pay_type: 'COMPANY', kept_share: 0, expected_handin: 500 },
   ],
-  totals: { collected: 2650, handed_in: 2520, difference: -130, status: 'SHORT' },
+  totals: { collected: 2650, handed_in: 2520, kept_share: 0, expected_handin: 2650, difference: -130, status: 'SHORT' },
+};
+
+/** A commission rider keeps their share out of the cash (owner, 2026-10-09):
+ * 2,150 collected, 160 kept, so 1,990 to hand in; 2,000 handed in is over by 10. */
+const RECON_COMMISSION: CashReconciliation = {
+  date: '2026-09-30',
+  timezone: 'Asia/Colombo',
+  riders: [
+    { rider_id: 'r1', rider_name: 'Farhan Mohamed', rider_phone: '+94779876543', deliveries: 2, handins: 1, collected: 2150, handed_in: 2000, difference: 10, status: 'OVER', pay_type: 'COMMISSION', kept_share: 160, expected_handin: 1990 },
+    { rider_id: 'r2', rider_name: 'Imran', rider_phone: '+94779876500', deliveries: 1, handins: 1, collected: 500, handed_in: 500, difference: 0, status: 'BALANCED', pay_type: 'COMPANY', kept_share: 0, expected_handin: 500 },
+  ],
+  totals: { collected: 2650, handed_in: 2500, kept_share: 160, expected_handin: 2490, difference: 10, status: 'OVER' },
 };
 
 const RIDERS = [
@@ -73,6 +85,34 @@ describe('Cash screen', () => {
     expect(api.find('GET', '/admin/cash/reconciliation')[0].query.date).toBe(colomboToday());
     // Operations may not delete a hand-in (the API refuses; so no button).
     expect(within(screen.getByRole('list', { name: 'Hand-ins' })).queryByRole('button')).toBeNull();
+  });
+
+  it('a commission rider shows "Hand in X, keep Y" and short/over against what they should hand in (owner, 2026-10-09)', async () => {
+    renderAs(OPERATIONS_STAFF, '/more/cash', {
+      'GET /admin/cash/reconciliation': () => ok(RECON_COMMISSION),
+      'GET /admin/cash/handins': () => ok({ handins: [] }),
+    });
+    const list = await screen.findByRole('list', { name: 'Cash by rider' });
+    const [commission, company] = within(list).getAllByRole('listitem');
+    expect(commission).toHaveTextContent('Hand in LKR 1,990, keep LKR 160');
+    expect(within(commission).getByText('Over LKR 10')).toHaveClass('cash-diff--over');
+    // The company rider reads exactly as before: no keep line.
+    expect(company).not.toHaveTextContent(/keep/i);
+    expect(within(company).getByText('Balanced')).toBeInTheDocument();
+    const totals = screen.getByRole('region', { name: 'All riders' });
+    expect(totals).toHaveTextContent('Riders keepLKR 160');
+    expect(totals).toHaveTextContent('To hand inLKR 2,490');
+    expect(totals).toHaveTextContent('Over LKR 10');
+  });
+
+  it('a day with only company riders shows no keep or hand-in lines', async () => {
+    renderAs(OPERATIONS_STAFF, '/more/cash', {
+      'GET /admin/cash/reconciliation': () => ok(RECON),
+      'GET /admin/cash/handins': () => ok({ handins: [] }),
+    });
+    await screen.findByRole('list', { name: 'Cash by rider' });
+    expect(screen.queryByText(/keep/i)).toBeNull();
+    expect(screen.queryByText('To hand in')).toBeNull();
   });
 
   it('records a hand-in', async () => {

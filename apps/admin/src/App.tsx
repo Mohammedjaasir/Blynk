@@ -18,6 +18,7 @@ import { Products } from './pages/Products';
 import { Promotions } from './pages/Promotions';
 import { Sales } from './pages/Sales';
 import { Settings } from './pages/Settings';
+import { RiderEarnings } from './pages/RiderEarnings';
 import { RiderRequests } from './pages/RiderRequests';
 import { SmsOffers } from './pages/SmsOffers';
 import { Staff } from './pages/Staff';
@@ -80,6 +81,7 @@ export function AppRoutes() {
         <Route path="promotions" element={<AdminOnly><Promotions /></AdminOnly>} />
         <Route path="sales" element={<AdminOnly><Sales /></AdminOnly>} />
         <Route path="cash" element={<AdminOnly><Cash /></AdminOnly>} />
+        <Route path="rider-earnings" element={<AdminOnly><RiderEarnings /></AdminOnly>} />
         <Route path="coupons" element={<AdminOnly><Coupons /></AdminOnly>} />
         <Route path="customers" element={<AdminOnly><Customers /></AdminOnly>} />
         <Route path="customers/:id" element={<AdminOnly><CustomerDetail /></AdminOnly>} />

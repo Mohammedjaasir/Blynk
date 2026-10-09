@@ -70,6 +70,10 @@ ridersRouter.post(
 // "My day": the calling rider's own counts and cash (never another rider's).
 ridersRouter.get('/me/day', requireAuth, RIDER_OR_OPS, riderController.getMyDay.bind(riderController));
 
+// Rider pay (migration 032; owner, 2026-10-09): the calling rider's own
+// earnings and cash to keep / hand in, today and this week.
+ridersRouter.get('/me/earnings', requireAuth, RIDER_OR_OPS, riderController.getMyEarnings.bind(riderController));
+
 ridersRouter.get(
   '/deliveries/:id',
   requireAuth,
@@ -103,3 +107,4 @@ export * from './rider.service.js';
 export * from './rider.controller.js';
 export * from './rider.profile.js';
 export * from './rider.applications.js';
+export * from './rider.pay.js';

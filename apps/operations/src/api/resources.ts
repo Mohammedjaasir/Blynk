@@ -1,6 +1,12 @@
 import { apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
+  EarningsRange,
+  MyEarnings,
+  RiderCommissionSetting,
+  RiderEarningsReport,
+  RiderPay,
+  RiderPayInput,
   RiderApplication,
   RiderApplicationPage,
   RiderApprovalStatus,
@@ -330,6 +336,19 @@ export const riders = {
    * needs the parsed list; both stay simple as they are.
    */
   myDeliveries: () => apiRequest<{ deliveries: MyDelivery[] }>('/riders/deliveries').then((d) => d.deliveries),
+
+  /** `GET /admin/riders/:id/pay` - company or commission, and the % (owner, 2026-10-09). */
+  pay: (id: string) => apiRequest<{ pay: RiderPay }>(`/admin/riders/${id}/pay`).then((d) => d.pay),
+
+  /** `PATCH /admin/riders/:id/pay` - `commission_percent` null = store default. */
+  updatePay: (id: string, input: RiderPayInput) =>
+    apiRequest<{ pay: RiderPay }>(`/admin/riders/${id}/pay`, { method: 'PATCH', body: { ...input } }).then((d) => d.pay),
+
+  /** `GET /admin/reports/rider-earnings` - per rider delivery share and margin. `from`/`to` only for custom. */
+  earnings: (range: EarningsRange, from?: string, to?: string) =>
+    apiRequest<RiderEarningsReport>('/admin/reports/rider-earnings', {
+      query: range === 'custom' ? { range, from: from ?? '', to: to ?? '' } : { range },
+    }),
 };
 
 // ---------------------------------------------------------------- delivery
@@ -352,6 +371,9 @@ export const delivery = {
 
   /** "My day": the operator's own delivered / not delivered counts and cash. */
   day: () => apiRequest<RiderDay>('/riders/me/day'),
+
+  /** The operator's own pay today and this week (owner, 2026-10-09). */
+  earnings: () => apiRequest<MyEarnings>('/riders/me/earnings'),
 
   /** The operator's own rider profile (staff riders): null when there is none. */
   profile: () => apiRequest<{ profile: RiderProfile | null }>('/riders/me/profile').then((d) => d.profile),
@@ -944,6 +966,13 @@ export const settings = {
     }) =>
       apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
   },
+  /** The % of the standard delivery fee a commission rider earns, unless
+   * they have their own (owner, 2026-10-09). */
+  riderCommission: {
+    get: () => apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission'),
+    update: (default_percent: number) =>
+      apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission', { method: 'PATCH', body: { default_percent } }),
+  },
 };
 
 // ------------------------------------------------------------------ staff
@@ -1017,10 +1046,12 @@ export const riderApplications = {
   list: (status: RiderApprovalStatus, page = 1, limit = 50) =>
     apiRequest<RiderApplicationPage>(`/admin/rider-applications?status=${status}&page=${page}&limit=${limit}`),
   pendingCount: () => apiRequest<{ pending: number }>('/admin/rider-applications/count').then((d) => d.pending),
-  approve: (id: string) =>
-    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/approve`, { method: 'POST' }).then(
-      (d) => d.application
-    ),
+  /** Without `pay` the rider becomes COMPANY (owner, 2026-10-09). */
+  approve: (id: string, pay?: RiderPayInput) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/approve`, {
+      method: 'POST',
+      ...(pay ? { body: { ...pay } } : {}),
+    }).then((d) => d.application),
   reject: (id: string, reason: string) =>
     apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/reject`, {
       method: 'POST',

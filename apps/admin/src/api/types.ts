@@ -363,6 +363,77 @@ export interface RiderOption {
   open_deliveries: number;
   /** False only in GET /admin/riders?include_inactive=true: the rider can no longer deliver. */
   is_active?: boolean;
+  /** Rider pay (backend migration 032, owner 2026-10-09). */
+  pay_type?: RiderPayType;
+  /** The rider's own commission %; null = the store default. */
+  commission_percent?: number | null;
+}
+
+/**
+ * Rider pay (owner, 2026-10-09): a COMPANY rider is salaried - no
+ * per-delivery commission, Blynk keeps the delivery charge. A COMMISSION
+ * rider earns a % of the STANDARD delivery fee (store default, or their own
+ * override) and keeps that share out of the COD cash they collect.
+ */
+export type RiderPayType = 'COMPANY' | 'COMMISSION';
+
+/** GET/PATCH /admin/riders/:id/pay */
+export interface RiderPay {
+  rider_id: string;
+  pay_type: RiderPayType;
+  /** The rider's own override, or null (store default). */
+  commission_percent: number | null;
+  /** The % in force: a number for COMMISSION, null for COMPANY. */
+  effective_percent: number | null;
+  default_percent: number;
+}
+
+/** Body of PATCH /admin/riders/:id/pay and (optionally) the approve call. */
+export interface RiderPayInput {
+  pay_type: RiderPayType;
+  commission_percent?: number | null;
+}
+
+/** GET/PATCH /admin/settings/rider-commission */
+export interface RiderCommissionSetting {
+  default_percent: number;
+  updated_at: string | null;
+}
+
+export type RiderEarningsRange = 'today' | 'this_week' | 'custom';
+
+export interface RiderEarningsFigures {
+  deliveries: number;
+  /** Standard-fee basis - what the commission is a % of. */
+  delivery_charges: number;
+  /** What customers actually paid (0 on free deliveries). */
+  customer_delivery_fees: number;
+  rider_share: number;
+  blynk_delivery_share: number;
+  cash_collected: number;
+  cash_kept: number;
+  cash_to_hand_in: number;
+  product_sales: number;
+  product_cost: number;
+  product_margin: number;
+  coupon_discount: number;
+}
+
+export interface RiderEarningsRow extends RiderEarningsFigures {
+  rider_id: string;
+  rider_name: string | null;
+  rider_phone: string | null;
+  pay_type: RiderPayType;
+  commission_percent: number | null;
+  effective_percent: number | null;
+}
+
+/** GET /admin/reports/rider-earnings */
+export interface RiderEarningsReport {
+  range: { from: string; to: string; timezone: string };
+  default_percent: number;
+  riders: RiderEarningsRow[];
+  totals: RiderEarningsFigures;
 }
 
 /** One order a rider already carries (GET /admin/riders/suggestions). */
@@ -557,15 +628,29 @@ export interface RiderReconciliation {
   handins: number;
   collected: number;
   handed_in: number;
+  /** handed_in - expected_handin since rider pay (negative = short). */
   difference: number;
   status: ReconciliationStatus;
+  /** Rider pay (owner, 2026-10-09). */
+  pay_type?: RiderPayType;
+  /** Commission share the rider keeps out of the cash (0 for a company rider). */
+  kept_share?: number;
+  /** collected - kept_share: what the rider should hand in. */
+  expected_handin?: number;
 }
 
 export interface CashReconciliation {
   date: string;
   timezone: string;
   riders: RiderReconciliation[];
-  totals: { collected: number; handed_in: number; difference: number; status: ReconciliationStatus };
+  totals: {
+    collected: number;
+    handed_in: number;
+    difference: number;
+    status: ReconciliationStatus;
+    kept_share?: number;
+    expected_handin?: number;
+  };
 }
 
 // ------------------------------------------------------------ sms offers
@@ -644,6 +729,10 @@ export interface RiderApplication {
   reviewed_at: string | null;
   reviewed_by_name: string | null;
   rejection_reason: string | null;
+  /** Rider pay (owner, 2026-10-09); meaningful once approved. */
+  pay_type?: RiderPayType;
+  /** Own commission %, null = the store default. */
+  commission_percent?: number | null;
 }
 
 export interface RiderApplicationPage {

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { delivery as deliveryApi } from '../../api/resources';
-import type { DayTotals, RiderDay, RiderDayDelivery } from '../../api/types';
+import type { DayTotals, MyEarnings, MyEarningsPeriod, RiderDay, RiderDayDelivery } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
 import { useAuth } from '../../auth/AuthContext';
 import { deliveryErrorMessage } from '../../lib/delivery';
 import { errorCode } from '../../lib/errors';
 import { formatClock, formatMoney, shortNumber } from '../../lib/orders';
+import { formatPercent } from '../../lib/riderPay';
 
 const OUTCOME: Record<RiderDayDelivery['outcome'], { label: string; tone: string }> = {
   DELIVERED: { label: 'Delivered', tone: 'done' },
@@ -21,16 +22,26 @@ const OUTCOME: Record<RiderDayDelivery['outcome'], { label: string; tone: string
  * Lanka time), then today's deliveries one line each. Counts only, no pay.
  * Everything comes from GET /riders/me/day, which only ever answers for the
  * signed-in user's own rider profile.
+ *
+ * A COMMISSION rider (owner, 2026-10-09) also sees what they earned and how
+ * much of the collected cash to keep and hand in, from GET /riders/me/earnings.
+ * Company riders are salaried, so nothing extra shows for them.
  */
 export function MyDay() {
   const { refreshRiderCapability } = useAuth();
   const [day, setDay] = useState<RiderDay | null>(null);
+  const [earnings, setEarnings] = useState<MyEarnings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noProfile, setNoProfile] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     setRefreshing(true);
+    // Pay is extra: if it cannot load, the day still shows.
+    deliveryApi
+      .earnings()
+      .then(setEarnings)
+      .catch(() => setEarnings(null));
     try {
       setDay(await deliveryApi.day());
       setError(null);
@@ -86,6 +97,7 @@ export function MyDay() {
         <>
           <Totals heading="Today" totals={day.today} />
           <Totals heading="This week" note="Monday to Sunday" totals={day.week} />
+          {earnings?.pay_type === 'COMMISSION' ? <Earnings earnings={earnings} /> : null}
 
           <section className="section" aria-labelledby="day-list-heading">
             <h2 className="section-label" id="day-list-heading">
@@ -139,5 +151,35 @@ function Totals({ heading, note, totals }: { heading: string; note?: string; tot
         </div>
       </dl>
     </section>
+  );
+}
+
+/** Commission pay (owner, 2026-10-09): the rider keeps their share out of the cash. */
+function Earnings({ earnings }: { earnings: MyEarnings }) {
+  const percent = earnings.commission_percent;
+  return (
+    <section className="section" aria-labelledby="day-earnings">
+      <h2 className="section-label" id="day-earnings">
+        Your earnings
+        {percent != null ? <span className="day__note"> · {formatPercent(percent)} of the delivery fee</span> : null}
+      </h2>
+      <EarningsLine label="Today" period={earnings.today} />
+      <EarningsLine label="This week" period={earnings.week} />
+    </section>
+  );
+}
+
+function EarningsLine({ label, period }: { label: string; period: MyEarningsPeriod }) {
+  return (
+    <div className="card day-earnings" aria-label={`Earnings ${label.toLowerCase()}`}>
+      <p className="card__row">
+        <span className="card__label">{label}</span>
+        <span className="card__value mono">{formatMoney(period.earnings)}</span>
+      </p>
+      <p className="quiet">
+        {period.deliveries} {period.deliveries === 1 ? 'delivery' : 'deliveries'} · Keep {formatMoney(period.cash_to_keep)}, hand in{' '}
+        {formatMoney(period.cash_to_hand_in)}
+      </p>
+    </div>
   );
 }

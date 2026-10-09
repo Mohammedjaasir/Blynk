@@ -78,7 +78,86 @@ describe('Rider requests (Ops)', () => {
 
     expect(await screen.findByText(/Sunil Silva is approved/)).toBeInTheDocument();
     expect(api.find('POST', '/admin/rider-applications/r1/approve')).toHaveLength(1);
+    // Company is the starting type (owner, 2026-10-09), sent explicitly.
+    expect(api.find('POST', '/admin/rider-applications/r1/approve')[0].body).toEqual({ pay_type: 'COMPANY' });
     expect(screen.getByText('No rider requests waiting')).toBeInTheDocument();
+  });
+
+  it('approves as a commission rider with an own %, showing the store default as the hint (owner, 2026-10-09)', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(OPERATIONS_STAFF, '/more/rider-requests', {
+      'GET /admin/rider-applications': () => ok(page([application()])),
+      'GET /admin/settings/rider-commission': () => ok({ default_percent: 80, updated_at: null }),
+      'POST /admin/rider-applications/:id/approve': () =>
+        ok({ application: application({ approval_status: 'APPROVED', pay_type: 'COMMISSION', commission_percent: 75 }) }),
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Approve' }));
+    const dialog = screen.getByRole('dialog', { name: 'Approve this rider?' });
+    const types = within(dialog).getByRole('group', { name: 'Rider type' });
+    expect(within(types).getByRole('button', { name: 'Company' })).toHaveAttribute('aria-pressed', 'true');
+    // No % field for a company rider.
+    expect(within(dialog).queryByLabelText(/Own commission %/)).toBeNull();
+
+    await user.click(within(types).getByRole('button', { name: 'Commission' }));
+    expect(within(types).getByRole('button', { name: 'Commission' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await within(dialog).findByText('Leave blank for the store default (80%).')).toBeInTheDocument();
+
+    // A bad % is refused before anything is sent.
+    const percent = within(dialog).getByLabelText(/Own commission %/);
+    await user.type(percent, '120');
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    expect(await within(dialog).findByText('The percentage can be at most 100.')).toBeInTheDocument();
+    expect(api.find('POST', '/admin/rider-applications/r1/approve')).toHaveLength(0);
+
+    await user.clear(percent);
+    await user.type(percent, '75');
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(api.find('POST', '/admin/rider-applications/r1/approve')).toHaveLength(1));
+    expect(api.find('POST', '/admin/rider-applications/r1/approve')[0].body).toEqual({
+      pay_type: 'COMMISSION',
+      commission_percent: 75,
+    });
+  });
+
+  it('a commission rider left blank gets the store default (null)', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(OPERATIONS_STAFF, '/more/rider-requests', {
+      'GET /admin/rider-applications': () => ok(page([application()])),
+      'GET /admin/settings/rider-commission': () => ok({ default_percent: 80, updated_at: null }),
+      'POST /admin/rider-applications/:id/approve': () => ok({ application: application({ approval_status: 'APPROVED' }) }),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Approve' }));
+    const dialog = screen.getByRole('dialog', { name: 'Approve this rider?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Commission' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(api.find('POST', '/admin/rider-applications/r1/approve')).toHaveLength(1));
+    expect(api.find('POST', '/admin/rider-applications/r1/approve')[0].body).toEqual({
+      pay_type: 'COMMISSION',
+      commission_percent: null,
+    });
+  });
+
+  it('approved requests show the rider type', async () => {
+    const user = userEvent.setup();
+    renderAs(OPERATIONS_STAFF, '/more/rider-requests', {
+      'GET /admin/rider-applications': (call) =>
+        ok(
+          page(
+            call.query.status === 'APPROVED'
+              ? [
+                  application({ id: 'a1', approval_status: 'APPROVED', pay_type: 'COMMISSION', commission_percent: 70 }),
+                  application({ id: 'a2', full_name: 'Kamal', approval_status: 'APPROVED', pay_type: 'COMPANY', commission_percent: null }),
+                ]
+              : []
+          )
+        ),
+    });
+    await user.click(await screen.findByRole('button', { name: 'Approved' }));
+    const list = await screen.findByRole('list', { name: 'Rider requests' });
+    const [first, second] = within(list).getAllByRole('listitem');
+    expect(first).toHaveTextContent('Commission · 70%');
+    expect(second).toHaveTextContent('Company');
   });
 
   it('needs a reason to reject, and sends it', async () => {

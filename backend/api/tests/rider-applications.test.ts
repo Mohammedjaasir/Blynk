@@ -374,9 +374,18 @@ describe('Rider applications and approval', () => {
             'reviewed_at',
             'reviewed_by_name',
             'rejection_reason',
+            // Migration 032 (owner, 2026-10-09): how the rider is paid once approved.
+            'pay_type',
+            'commission_percent',
           ].sort()
         );
-        expect(mine[0]).toMatchObject({ approval_status: 'PENDING', full_name: 'Applicant 5', vehicle_registration_number: 'WP-APP-5' });
+        expect(mine[0]).toMatchObject({
+          approval_status: 'PENDING',
+          full_name: 'Applicant 5',
+          vehicle_registration_number: 'WP-APP-5',
+          pay_type: 'COMPANY',
+          commission_percent: null,
+        });
         expect(res.body.data.pagination).toMatchObject({ page: 1, limit: 100, total: expect.any(Number), total_pages: expect.any(Number) });
 
         const count = await request(app).get('/api/v1/admin/rider-applications/count').set(auth(token));

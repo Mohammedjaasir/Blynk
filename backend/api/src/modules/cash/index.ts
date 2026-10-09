@@ -16,6 +16,22 @@ import { rangeBounds, STORE_ZONE } from '../reports/sales.service.js';
  * settled (the rider's collect-cod, or an admin marking it delivered) with
  * delivered_at. Staff record what each rider hands in (cash_handins); the
  * reconciliation compares the two per rider per Asia/Colombo day.
+ *
+ * Commission riders keep their share (migration 032; owner, 2026-10-09): a
+ * COMMISSION rider keeps what each delivery earned them out of the cash they
+ * collected and hands in the rest. The rule, per rider per day (the same
+ * scope as the reconciliation - deliveries settled that day):
+ *
+ *   kept_share      = sum over that day's delivered deliveries of
+ *                     min(deliveries.rider_earning_lkr, cod_collected_amount)
+ *   expected_handin = collected - kept_share
+ *   difference      = handed_in - expected_handin   (negative = short)
+ *
+ * rider_earning_lkr is the snapshot written at settlement, so a later change
+ * to the rider's pay never changes a past day. A COMPANY rider's earning is 0,
+ * so for them expected_handin = collected, exactly as before. The min() means
+ * a rider never keeps more than that door's cash (an order whose total is
+ * below the share); any remainder is still on the earnings report.
  */
 
 const money = (v: unknown) => Number(Number(v ?? 0).toFixed(2));
@@ -109,8 +125,9 @@ export async function listHandins(params: { date?: string; rider_id?: string }) 
 
 /**
  * Per rider for one day: cash collected (settled deliveries by delivered_at,
- * Colombo day), handed in (hand-ins dated that day) and the difference
- * (handed in - collected; negative = short). Riders with neither are left out.
+ * Colombo day), the commission share kept, what should be handed in, handed
+ * in (hand-ins dated that day) and the difference (handed in - expected
+ * hand-in; negative = short). Riders with neither are left out.
  */
 export async function reconciliation(date: string) {
   const { start, end } = rangeBounds({ from: date, to: date });
@@ -121,6 +138,7 @@ export async function reconciliation(date: string) {
         'rider_id',
         sql<number>`count(*)::int`.as('deliveries'),
         sql<string>`sum(cod_collected_amount)`.as('collected'),
+        sql<string>`coalesce(sum(least(coalesce(rider_earning_lkr, 0), cod_collected_amount)), 0)`.as('kept'),
       ])
       .where('assignment_status', '=', 'DELIVERED')
       .where('delivered_at', '>=', start)
@@ -139,7 +157,7 @@ export async function reconciliation(date: string) {
     ? await db
         .selectFrom('riders as r')
         .innerJoin('users as u', 'u.id', 'r.user_id')
-        .select(['r.id', 'u.full_name', 'u.phone'])
+        .select(['r.id', 'u.full_name', 'u.phone', 'r.pay_type'])
         .where('r.id', 'in', riderIds)
         .execute()
     : [];
@@ -150,15 +168,23 @@ export async function reconciliation(date: string) {
       const h = handed.find((x) => x.rider_id === id);
       const n = names.find((x) => x.id === id);
       const cash = money(c?.collected);
+      const kept = money(c?.kept);
+      const expected = money(cash - kept);
       const inHand = money(h?.handed_in);
-      const difference = money(inHand - cash);
+      const difference = money(inHand - expected);
       return {
         rider_id: id,
         rider_name: n?.full_name ?? null,
         rider_phone: publicPhone(n?.phone),
+        /** The rider's pay type now (each delivery's own snapshot decides kept_share). */
+        pay_type: n?.pay_type ?? 'COMPANY',
         deliveries: c?.deliveries ?? 0,
         handins: h?.handins ?? 0,
         collected: cash,
+        /** The commission rider's earned share they keep (0 for a company rider). */
+        kept_share: kept,
+        /** What should be handed in: collected - kept_share. */
+        expected_handin: expected,
         handed_in: inHand,
         difference,
         status: reconciliationStatus(difference),
@@ -167,6 +193,8 @@ export async function reconciliation(date: string) {
     .sort((a, b) => (a.rider_name ?? '').localeCompare(b.rider_name ?? '') || a.rider_id.localeCompare(b.rider_id));
 
   const collectedTotal = money(riders.reduce((s, r) => s + r.collected, 0));
+  const keptTotal = money(riders.reduce((s, r) => s + r.kept_share, 0));
+  const expectedTotal = money(collectedTotal - keptTotal);
   const handedTotal = money(riders.reduce((s, r) => s + r.handed_in, 0));
   return {
     date,
@@ -174,9 +202,11 @@ export async function reconciliation(date: string) {
     riders,
     totals: {
       collected: collectedTotal,
+      kept_share: keptTotal,
+      expected_handin: expectedTotal,
       handed_in: handedTotal,
-      difference: money(handedTotal - collectedTotal),
-      status: reconciliationStatus(handedTotal - collectedTotal),
+      difference: money(handedTotal - expectedTotal),
+      status: reconciliationStatus(handedTotal - expectedTotal),
     },
   };
 }

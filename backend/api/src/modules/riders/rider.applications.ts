@@ -2,7 +2,7 @@ import { Router, type Request } from 'express';
 import { sql, type Transaction } from 'kysely';
 import { z } from 'zod';
 import { db } from '../../database/connection.js';
-import type { Database, RiderApprovalStatus, UserRole } from '../../database/types.js';
+import type { Database, RiderApprovalStatus, RiderPayType, UserRole } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
@@ -13,6 +13,7 @@ import { authService } from '../auth/auth.service.js';
 import { authRateLimiter } from '../auth/auth.rate-limiter.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { notificationService } from '../notifications/notification.service.js';
+import { approvePaySchema, payValues, type ApprovePayInput } from './rider.pay.js';
 import { optionalRegistrationSchema, refineRegistration, storeId, vehicleTypeSchema } from './rider.profile.js';
 
 /**
@@ -120,6 +121,10 @@ export interface RiderApplication {
   reviewed_at: Date | null;
   reviewed_by_name: string | null;
   rejection_reason: string | null;
+  /** Migration 032 (owner, 2026-10-09): how the rider is paid once approved. */
+  pay_type: RiderPayType;
+  /** The rider's own share of the delivery charge; null = the store default. */
+  commission_percent: number | null;
 }
 
 type Trx = Transaction<Database>;
@@ -146,6 +151,8 @@ function applicationQuery(executor: Executor) {
       'r.reviewed_at',
       'rev.full_name as reviewed_by_name',
       'r.rejection_reason',
+      'r.pay_type',
+      'r.commission_percent',
     ])
     .where('u.role', 'in', APPLICANT_ROLES)
     // Applications only: riders made before migration 029 (and staff
@@ -153,7 +160,11 @@ function applicationQuery(executor: Executor) {
     .where('r.applied_at', 'is not', null);
 }
 
-const present = <T extends { phone: string }>(row: T) => ({ ...row, phone: publicPhone(row.phone) });
+const present = <T extends { phone: string; commission_percent: unknown }>(row: T) => ({
+  ...row,
+  phone: publicPhone(row.phone),
+  commission_percent: row.commission_percent === null ? null : Number(row.commission_percent),
+});
 
 const notFound = () => new AppError('Rider request not found.', 404, 'RIDER_APPLICATION_NOT_FOUND');
 const notPending = (status: string) =>
@@ -396,10 +407,16 @@ export class RiderApplicationService {
     return row;
   }
 
-  /** Approve: the rider becomes active and assignable and is sent an SMS. */
-  async approve(id: string, actor: AuditActor): Promise<RiderApplication> {
+  /**
+   * Approve: the rider becomes active and assignable and is sent an SMS.
+   * Rider pay (owner, 2026-10-09): the approver picks COMPANY or COMMISSION
+   * (and optionally the rider's own share); without a pay_type the rider is
+   * COMPANY, the column default.
+   */
+  async approve(id: string, actor: AuditActor, pay: ApprovePayInput = {}): Promise<RiderApplication> {
     return db.transaction().execute(async (trx) => {
       const row = await this.lockPending(trx, id);
+      const payFields = pay.pay_type ? payValues({ pay_type: pay.pay_type, commission_percent: pay.commission_percent }) : {};
       const { reviewed_at } = await trx
         .updateTable('riders')
         .set({
@@ -409,6 +426,7 @@ export class RiderApplicationService {
           rejection_reason: null,
           is_active: true,
           is_available: true,
+          ...payFields,
           updated_at: sql`now()`,
         })
         .where('id', '=', id)
@@ -437,7 +455,7 @@ export class RiderApplicationService {
         entityType: 'RIDER',
         entityId: id,
         oldValues: { approval_status: 'PENDING' },
-        newValues: { approval_status: 'APPROVED', user_id: row.user_id },
+        newValues: { approval_status: 'APPROVED', user_id: row.user_id, ...payFields },
       });
       logger.info({ riderId: id, by: actor.actorId }, 'Rider application approved');
       return present(await applicationQuery(trx).where('r.id', '=', id).executeTakeFirstOrThrow());
@@ -546,10 +564,11 @@ adminRiderApplicationsRouter.post(
   '/rider-applications/:id/approve',
   requireAuth,
   REVIEWERS,
-  validate({ params: applicationIdParamsSchema }),
+  // Body optional: { pay_type?, commission_percent? } (migration 032).
+  validate({ params: applicationIdParamsSchema, body: approvePaySchema }),
   async (req, res, next) => {
     try {
-      const application = await riderApplicationService.approve(req.params.id as string, actorOf(req));
+      const application = await riderApplicationService.approve(req.params.id as string, actorOf(req), req.body as ApprovePayInput);
       res.status(200).json({ success: true, data: { application } });
     } catch (err) {
       next(err);

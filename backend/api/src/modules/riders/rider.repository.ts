@@ -56,6 +56,10 @@ export class RiderRepository {
           .where((inner) => isOpenDelivery(inner))
           .as('open_deliveries'),
         sql<boolean>`(riders.is_active AND users.is_active AND users.staff_disabled_at IS NULL)`.as('is_active'),
+        // Rider pay (migration 032; owner, 2026-10-09). commission_percent
+        // null = the store default share.
+        'riders.pay_type',
+        sql<number | null>`riders.commission_percent::float8`.as('commission_percent'),
       ])
       // Rider applications (migration 029): a request still waiting, or
       // rejected, is never a rider - not even in the include_inactive list.

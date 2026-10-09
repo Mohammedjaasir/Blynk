@@ -118,6 +118,37 @@ export const checkoutSettings = {
   read: (): Promise<CheckoutSettings> => settingsService.getCheckoutSettings(),
 };
 
+/**
+ * Rider commission (owner, 2026-10-09): the share of the standard delivery
+ * fee a COMMISSION rider earns when they have no percentage of their own
+ * (riders.commission_percent, migration 032). system_configurations
+ * 'rider_commission' {"default_percent": 80}; a missing or malformed row
+ * means 80. Changing it affects deliveries settled afterwards only - each
+ * delivery snapshots the share it was paid at.
+ */
+export const RIDER_COMMISSION_KEY = 'rider_commission';
+export const DEFAULT_RIDER_COMMISSION_PERCENT = 80;
+
+export const commissionPercentSchema = z
+  .number({ required_error: 'The percentage is required', invalid_type_error: 'The percentage must be a number' })
+  .finite()
+  .min(0, 'The percentage cannot be below 0')
+  .max(100, 'The percentage can be at most 100')
+  .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'The percentage can have at most 2 decimals');
+
+export const updateRiderCommissionSchema = z
+  .object({ default_percent: commissionPercentSchema })
+  .strict();
+export type UpdateRiderCommissionInput = z.infer<typeof updateRiderCommissionSchema>;
+
+function commissionFrom(value: unknown): number | null {
+  if (value && typeof value === 'object') {
+    const p = (value as { default_percent?: unknown }).default_percent;
+    if (typeof p === 'number' && Number.isFinite(p) && p >= 0 && p <= 100) return p;
+  }
+  return null;
+}
+
 const hhmm = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
 
 /** The stored fee, or null when the row is missing or malformed. */
@@ -237,6 +268,46 @@ export class SettingsService {
       logger.info({ oldValues, newValues, actorId: actor.actorId }, 'Checkout settings changed');
     });
     return await this.getCheckoutSettings();
+  }
+
+  async getRiderCommission(): Promise<{ default_percent: number; updated_at: Date | null }> {
+    const row = await db
+      .selectFrom('system_configurations')
+      .select(['value', 'updated_at'])
+      .where('key', '=', RIDER_COMMISSION_KEY)
+      .executeTakeFirst();
+    const pct = row ? commissionFrom(row.value) : null;
+    return { default_percent: pct ?? DEFAULT_RIDER_COMMISSION_PERCENT, updated_at: pct === null ? null : row!.updated_at };
+  }
+
+  /** Audited (RIDER_COMMISSION_UPDATED); applies to deliveries settled afterwards. */
+  async setRiderCommission(input: UpdateRiderCommissionInput, actor: AuditActor) {
+    const pct = Math.round(input.default_percent * 100) / 100;
+    const value = JSON.stringify({ default_percent: pct });
+    return await db.transaction().execute(async (trx) => {
+      const before = await trx
+        .selectFrom('system_configurations')
+        .select('value')
+        .where('key', '=', RIDER_COMMISSION_KEY)
+        .forUpdate()
+        .executeTakeFirst();
+      const row = await trx
+        .insertInto('system_configurations')
+        .values({ key: RIDER_COMMISSION_KEY, value, description: "A commission rider's default share of the standard delivery fee, %" })
+        .onConflict((oc) => oc.column('key').doUpdateSet({ value, updated_at: new Date() }))
+        .returning(['updated_at'])
+        .executeTakeFirstOrThrow();
+      const previous = before ? commissionFrom(before.value) : null;
+      await writeAudit(trx, actor, {
+        action: 'RIDER_COMMISSION_UPDATED',
+        entityType: 'SYSTEM_CONFIGURATION',
+        entityId: SETTINGS_ENTITY_ID,
+        oldValues: { key: RIDER_COMMISSION_KEY, default_percent: previous },
+        newValues: { key: RIDER_COMMISSION_KEY, default_percent: pct },
+      });
+      logger.info({ previous, pct, actorId: actor.actorId }, 'Rider commission default changed');
+      return { default_percent: pct, updated_at: row.updated_at };
+    });
   }
 
   /**

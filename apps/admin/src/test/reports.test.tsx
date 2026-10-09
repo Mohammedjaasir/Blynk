@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from '../components/ui';
 import { HourChart, Sales } from '../pages/Sales';
 import { CustomerDetail, Customers } from '../pages/Customers';
-import { Cash, differenceText } from '../pages/Cash';
+import { Cash, differenceText, keepText } from '../pages/Cash';
 import { tokenStore } from '../api/client';
 import type { CashReconciliation, CustomerRow, SalesReport } from '../api/types';
 import { respond, stubFetch } from './fetchStub';
@@ -339,6 +339,32 @@ describe('Rider cash page', () => {
     const day = (within(dialog).getByLabelText(/^Day/) as HTMLInputElement).value;
     await user.click(within(dialog).getByRole('button', { name: 'Record' }));
     expect(api.sent('POST', '/admin/cash/handins')).toEqual([{ rider_id: 'r1', amount: 100, handin_date: day, note: 'Evening' }]);
+  });
+
+  it('a commission rider keeps their share: hand in and keep shown, short/over against the expected hand-in (owner, 2026-10-09)', async () => {
+    stubFetch((_m, path) =>
+      path.startsWith('/admin/cash/handins')
+        ? respond({ handins: [] })
+        : respond(
+            recon({
+              riders: [
+                { rider_id: 'r1', rider_name: 'Kamal', rider_phone: '+94779876543', deliveries: 4, handins: 1, collected: 2600, handed_in: 2280, difference: 0, status: 'BALANCED', pay_type: 'COMMISSION', kept_share: 320, expected_handin: 2280 },
+                { rider_id: 'r2', rider_name: 'Nimal', rider_phone: '+94779876544', deliveries: 2, handins: 1, collected: 900, handed_in: 850, difference: -50, status: 'SHORT', pay_type: 'COMPANY', kept_share: 0, expected_handin: 900 },
+              ],
+              totals: { collected: 3500, handed_in: 3130, difference: -50, status: 'SHORT', kept_share: 320, expected_handin: 3180 },
+            })
+          )
+    );
+    wrap(<Cash />);
+    const table = await screen.findByRole('table', { name: 'Cash by rider' });
+    const rows = within(table).getAllByRole('row');
+    expect(rows[1]).toHaveTextContent('Hand in LKR 2,280, keep LKR 320');
+    expect(within(rows[1]).getByText('Balanced')).toHaveClass('cash-diff--balanced');
+    expect(rows[2]).not.toHaveTextContent(/keep/);
+    expect(within(rows[2]).getByText('Short LKR 50')).toHaveClass('cash-diff--short');
+    expect(rows[3]).toHaveTextContent('Hand in LKR 3,180, keep LKR 320');
+    expect(keepText({ collected: 900, kept_share: 0, expected_handin: 900 })).toBeNull();
+    expect(keepText({ collected: 900 })).toBeNull();
   });
 
   it('says so when nobody handled cash that day', async () => {

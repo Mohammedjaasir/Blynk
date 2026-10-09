@@ -47,6 +47,11 @@ import type {
   RiderApplication,
   RiderApplicationPage,
   RiderApprovalStatus,
+  RiderCommissionSetting,
+  RiderEarningsRange,
+  RiderEarningsReport,
+  RiderPay,
+  RiderPayInput,
 } from './types';
 
 /**
@@ -242,6 +247,15 @@ export const settings = {
     new_customer_free_deliveries?: { enabled: boolean; count: number; since?: string };
   }) =>
     apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
+
+  /** Commission riders' default share of the standard delivery fee (owner, 2026-10-09). */
+  getRiderCommission: () => apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission'),
+
+  setRiderCommission: (defaultPercent: number) =>
+    apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission', {
+      method: 'PATCH',
+      body: { default_percent: defaultPercent },
+    }),
 };
 
 // ------------------------------------------------------------ promotions
@@ -376,6 +390,12 @@ export const riders = {
   /** The same riders, best first for one order (load, distance to the store, trip). */
   suggestions: (orderId: string) =>
     apiRequest<RiderSuggestions>(`/admin/riders/suggestions?order_id=${encodeURIComponent(orderId)}`),
+  /** Company or commission rider, and the rider's own % (owner, 2026-10-09). */
+  getPay: (riderId: string) => apiRequest<{ pay: RiderPay }>(`/admin/riders/${riderId}/pay`).then((d) => d.pay),
+  setPay: (riderId: string, input: RiderPayInput) =>
+    apiRequest<{ pay: RiderPay }>(`/admin/riders/${riderId}/pay`, { method: 'PATCH', body: { ...input } }).then(
+      (d) => d.pay
+    ),
 };
 
 // -------------------------------------------------------------- feedback
@@ -436,6 +456,15 @@ export const coupons = {
 /** Daily sales dashboard; ADMIN only. Days are Asia/Colombo. */
 export const reports = {
   sales: (range: SalesRange) => apiRequest<SalesReport>(`/admin/reports/sales?range=${range}`),
+  /** Per-rider delivery charges, rider/Blynk shares and margin (owner, 2026-10-09). */
+  riderEarnings: (range: RiderEarningsRange, custom?: { from: string; to: string }) => {
+    const query = new URLSearchParams({ range });
+    if (range === 'custom' && custom) {
+      query.set('from', custom.from);
+      query.set('to', custom.to);
+    }
+    return apiRequest<RiderEarningsReport>(`/admin/reports/rider-earnings?${query.toString()}`);
+  },
 };
 
 // -------------------------------------------------------------- customers
@@ -504,10 +533,12 @@ export const riderApplications = {
   list: (status: RiderApprovalStatus, page = 1, limit = 50) =>
     apiRequest<RiderApplicationPage>(`/admin/rider-applications?status=${status}&page=${page}&limit=${limit}`),
   pendingCount: () => apiRequest<{ pending: number }>('/admin/rider-applications/count').then((d) => d.pending),
-  approve: (id: string) =>
-    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/approve`, { method: 'POST' }).then(
-      (d) => d.application
-    ),
+  /** `pay` picks company or commission rider (owner, 2026-10-09); without it the API makes a company rider. */
+  approve: (id: string, pay?: RiderPayInput) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/approve`, {
+      method: 'POST',
+      ...(pay ? { body: { ...pay } } : {}),
+    }).then((d) => d.application),
   reject: (id: string, reason: string) =>
     apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/reject`, {
       method: 'POST',
