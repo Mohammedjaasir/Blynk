@@ -112,24 +112,6 @@ class SalePrice extends StatelessWidget {
   }
 }
 
-/// "Save LKR 91" - small, green, for an offer (owner, 2026-10-09).
-class SaveText extends StatelessWidget {
-  const SaveText(this.amount, {super.key, this.style});
-
-  final double amount;
-  final TextStyle? style;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      'Save ${formatLkr(amount)}',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: BlynkText.caption.merge(style).copyWith(color: BlynkColors.sale, fontWeight: FontWeight.w700),
-    );
-  }
-}
-
 /// The new price in Blynk green, then the old price struck through (owner,
 /// 2026-10-09). The struck price gives way first on a narrow line; the new
 /// price scales down rather than overflow at large text sizes.

@@ -31,8 +31,7 @@ import 'product_hero.dart';
 ///
 /// **Product offers (owner, 2026-10-09):** while [ProductModel.isOnOffer] the
 /// price line shows the offer price in Blynk green ([SalePrice]), then the
-/// regular price struck through ([StruckPrice]), and "Save LKR 91" sits
-/// beside the size ([SaveText]) - no tag
+/// regular price struck through ([StruckPrice]) - no tag, no saving line
 /// (owner, 2026-10-09: "it should cut the cost and show something like
 /// this"). Both come from the backend's real `offer_price`; a product with no
 /// offer renders exactly as before, in the same fixed-height boxes.
@@ -186,23 +185,11 @@ class ProductCard extends StatelessWidget {
             const SizedBox(height: rowGap),
             SizedBox(
               height: unitBox(context),
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      product.unit,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: BlynkType.productUnit,
-                    ),
-                  ),
-                  // "Save LKR 91" beside the size (owner, 2026-10-09).
-                  if (onOffer) ...[
-                    const SizedBox(width: BlynkSpace.s8),
-                    // The saving keeps two thirds of the row; the size shortens first.
-                    Flexible(flex: 2, child: SaveText(product.sellingPrice - product.effectivePrice)),
-                  ],
-                ],
+              child: Text(
+                product.unit,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: BlynkType.productUnit,
               ),
             ),
             const SizedBox(height: rowGap),

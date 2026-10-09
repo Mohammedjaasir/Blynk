@@ -441,7 +441,6 @@ class _ProductSummary extends StatelessWidget {
                     product.sellingPrice,
                     style: BlynkText.body.copyWith(color: BlynkColors.strike),
                   ),
-                  SaveText(product.sellingPrice - product.effectivePrice),
                 ],
               )
             else
