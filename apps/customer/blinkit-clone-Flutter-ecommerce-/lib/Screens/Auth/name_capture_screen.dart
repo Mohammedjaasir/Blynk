@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:ecom/Screens/Auth/birthday_prompt_screen.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
@@ -44,7 +45,9 @@ class _NameCaptureScreenState extends State<NameCaptureScreen> {
     try {
       await context.read<AuthProvider>().saveName(name);
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      // First sign-up only: one skippable birthday prompt, then the shop
+      // (owner, 2026-10-09). Nothing else ever leads to it.
+      Navigator.of(context).pushNamedAndRemoveUntil(BirthdayPromptScreen.route, (route) => false);
     } catch (e) {
       if (!mounted) return;
       setState(() {

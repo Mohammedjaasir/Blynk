@@ -426,6 +426,8 @@ export interface OrderDetail {
   /** Coupon discount (backend migration 018); total = subtotal + delivery fee - discount. */
   discount_amount?: number;
   coupon_code?: string | null;
+  /** Birthday gift (owner, 2026-10-09): when > 0 it is the whole discount_amount and coupon_code is null. */
+  birthday_discount_amount?: number;
   total_amount: number;
   placed_at: string;
   scheduled_for: string | null;
@@ -491,6 +493,50 @@ export interface RiderPayInput {
 export interface RiderCommissionSetting {
   default_percent: number;
   updated_at: string | null;
+}
+
+/** GET/PATCH /admin/settings/birthday-offer - X% off ONE order in the
+ * customer's birthday week, plus a birthday SMS (owner, 2026-10-09). */
+export interface BirthdayOfferSetting {
+  enabled: boolean;
+  percent: number;
+  sms_enabled: boolean;
+  /** May contain {percent}. */
+  sms_text: string;
+  /** sms_text with {percent} filled in - what customers receive. */
+  sms_preview: string;
+  sms_parts: number;
+  /** Days either side of the birthday (3). */
+  window_days: number;
+  updated_at: string | null;
+}
+
+export interface BirthdayOfferInput {
+  enabled?: boolean;
+  percent?: number;
+  sms_enabled?: boolean;
+  sms_text?: string;
+}
+
+/** One row of GET /admin/birthdays. */
+export interface BirthdayCustomer {
+  id: string;
+  full_name: string | null;
+  phone: string;
+  date_of_birth: string;
+  /** This occurrence of the birthday, YYYY-MM-DD. */
+  birthday: string;
+  /** Negative: the birthday was a few days ago, still in its gift week. */
+  days_until: number;
+  turning: number;
+  favourite_categories: { id: string; name: string }[];
+  favourites_note: string | null;
+  offer_used: boolean;
+}
+
+export interface BirthdaysResult {
+  today: string;
+  customers: BirthdayCustomer[];
 }
 
 export type RiderEarningsRange = 'today' | 'this_week' | 'custom';
@@ -661,6 +707,8 @@ export interface CustomerRow {
   sms_language: SmsLanguage | null;
   /** false = the customer turned "Offers by SMS" off. */
   sms_offers: boolean;
+  /** Optional profile (owner, 2026-10-09): YYYY-MM-DD, a calendar day. */
+  date_of_birth?: string | null;
 }
 
 /** GET /admin/customers/export: every customer, by name (ADMIN only). */
@@ -686,6 +734,8 @@ export interface CustomerOrderRow {
   discount_amount: number;
   total_amount: number;
   coupon_code: string | null;
+  /** Birthday gift (owner, 2026-10-09); 0 / absent when none. */
+  birthday_discount_amount?: number;
   placed_at: string;
   delivered_at: string | null;
   cancelled_at: string | null;
@@ -693,7 +743,12 @@ export interface CustomerOrderRow {
 }
 
 export interface CustomerDetail {
-  customer: CustomerRow & { last_login_at: string | null };
+  customer: CustomerRow & {
+    last_login_at: string | null;
+    /** Optional profile the customer saves in the app (owner, 2026-10-09). */
+    favourite_categories?: { id: string; name: string }[];
+    favourites_note?: string | null;
+  };
   orders: CustomerOrderRow[];
   pagination: Paginated<unknown>['pagination'];
 }

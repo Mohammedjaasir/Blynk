@@ -205,6 +205,14 @@ class OrderModel {
 
   /// The coupon code the order used, as the backend snapshotted it.
   final String? couponCode;
+
+  /// The birthday gift this order got (owner, 2026-10-09), 0 when none. When
+  /// it is above 0 it IS the [discountAmount] and there is no [couponCode]:
+  /// the gift and a coupon never stack.
+  final double birthdayDiscountAmount;
+
+  /// The discount was the birthday gift, not a coupon.
+  bool get hasBirthdayGift => birthdayDiscountAmount > 0;
   final double totalAmount;
   final String deliveryRecipientName;
   final String deliveryRecipientPhone;
@@ -247,6 +255,7 @@ class OrderModel {
     required this.deliveryFee,
     this.discountAmount = 0,
     this.couponCode,
+    this.birthdayDiscountAmount = 0,
     required this.totalAmount,
     required this.deliveryRecipientName,
     required this.deliveryRecipientPhone,
@@ -316,6 +325,9 @@ class OrderModel {
       discountAmount:
           double.tryParse((json['discount_amount'] ?? json['discountAmount'] ?? 0).toString()) ?? 0.0,
       couponCode: _optionalText(json['coupon_code'] ?? json['couponCode']),
+      birthdayDiscountAmount: double.tryParse(
+              (json['birthday_discount_amount'] ?? json['birthdayDiscountAmount'] ?? 0).toString()) ??
+          0.0,
       totalAmount:
           double.tryParse((json['total_amount'] ?? json['totalAmount'] ?? 0).toString()) ?? 0.0,
       deliveryRecipientName:

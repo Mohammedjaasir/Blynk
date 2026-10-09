@@ -61,11 +61,19 @@ class _CheckoutCouponFieldState extends State<CheckoutCouponField> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('${applied.code} applied', key: const Key('coupon-applied'), style: BlynkText.rowLabel),
+                      // The gift and a code never stack (owner, 2026-10-09):
+                      // when the server says the gift saves more, it is used
+                      // and the code is not.
                       Text(
-                        applied.isFreeDelivery
-                            ? 'Free delivery on this order'
-                            : 'You save ${formatLkr(applied.discountAmount)}',
-                        style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
+                        applied.birthdayWins
+                            ? "Your birthday gift saves more, so it's used instead of this code."
+                            : applied.isFreeDelivery
+                                ? 'Free delivery on this order'
+                                : 'You save ${formatLkr(applied.discountAmount)}',
+                        key: const Key('coupon-applied-note'),
+                        style: BlynkText.body.copyWith(
+                          color: applied.birthdayWins ? BlynkColors.ink2 : BlynkColors.positiveInk,
+                        ),
                       ),
                     ],
                   ),

@@ -11,6 +11,7 @@ import '../../../Services/Providers/address.provider.dart';
 import '../../../Services/Providers/cart.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
 import '../../../Services/Providers/product.provider.dart';
+import '../../../Services/Providers/store_info.provider.dart';
 import '../../../Services/Exceptions/api_exception.dart';
 import '../../../Services/app_errors.dart';
 import '../../../Services/ordering_hours.dart';
@@ -50,6 +51,11 @@ class CartScreenPaymentContainer extends StatelessWidget {
       // catalog data - this call submits the order, it doesn't assume the
       // client's estimate is what gets charged.
       final order = await orderProvider.placeOrder(cart: cart, addressId: address.id);
+      // The order took the birthday gift (owner, 2026-10-09): stop offering
+      // it at once rather than until the next checkout-info.
+      if (order != null && order.hasBirthdayGift && context.mounted) {
+        context.read<StoreInfoProvider?>()?.markBirthdayGiftUsed();
+      }
       if (order != null && context.mounted) {
         // The moment order updates matter: ask to allow notifications
         // (Android 13+; the system asks at most once or twice).

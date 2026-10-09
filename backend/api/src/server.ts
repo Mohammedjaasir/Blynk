@@ -39,7 +39,7 @@ async function bootstrap() {
   const { appointmentReminderJob } = await import('./modules/dental/appointment-reminders.js');
   if (env.NOTIFICATION_WORKER_ENABLED) {
     notificationWorker.start();
-    // Sibling tick: appointment reminders and rating prompts (safe to run in
+    // Sibling tick: appointment reminders, rating prompts and the birthday SMS (safe to run in
     // several processes - each appointment is claimed once).
     appointmentReminderJob.start();
   } else {

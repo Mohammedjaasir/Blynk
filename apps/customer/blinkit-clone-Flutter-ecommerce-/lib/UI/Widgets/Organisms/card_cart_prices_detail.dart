@@ -42,13 +42,19 @@ double cartEstimateTotal(CartProvider cart, double deliveryFee, {double discount
 /// Delivery fee row reads FREE with a short note of how many are left. The
 /// order's own `deliveryFee` stays authoritative.
 class CartPriceDetailWidget extends StatefulWidget {
-  const CartPriceDetailWidget({super.key, this.footer, this.showCoupon = false});
+  const CartPriceDetailWidget({super.key, this.footer, this.showCoupon = false, this.showBirthday = false});
 
   /// Optional content under the total (the desktop checkout CTA).
   final Widget? footer;
 
   /// Checkout: include an applied coupon's Discount line in the estimate.
   final bool showCoupon;
+
+  /// Checkout: include the birthday gift's estimated line while this
+  /// customer has one this week (owner, 2026-10-09). The server decides at
+  /// placeOrder; once a coupon has been previewed, its answer (which of the
+  /// two wins) is used instead of the estimate.
+  final bool showBirthday;
 
   @override
   State<CartPriceDetailWidget> createState() => _CartPriceDetailWidgetState();
@@ -77,8 +83,18 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
     final offer = context.watch<StoreInfoProvider?>()?.freeDelivery;
     final freeDelivery = offer != null && offer.applies;
     final coupon = widget.showCoupon ? context.watch<OrderProvider>().couponFor(cart) : null;
-    final discount = coupon?.discountAmount ?? 0;
-    final total = cartEstimateTotal(cart, deliveryFee, discount: discount);
+    final birthday = widget.showBirthday ? watchEligibleBirthdayOffer(context) : null;
+    // The gift and a coupon never stack (owner, 2026-10-09). A previewed
+    // coupon carries the server's own choice; without one, the gift is
+    // estimated from checkout-info's percent.
+    final birthdayWins = coupon != null && coupon.birthdayWins;
+    final discount = coupon == null || birthdayWins ? 0.0 : coupon.discountAmount;
+    final birthdayGift = birthdayWins
+        ? coupon.birthdayDiscountAmount
+        : coupon == null && birthday != null
+            ? birthday.estimateOn(subtotal)
+            : 0.0;
+    final total = cartEstimateTotal(cart, deliveryFee, discount: discount + birthdayGift);
 
     return Container(
       decoration: appCardDecoration(),
@@ -133,6 +149,30 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
               label: 'Delivery fee',
               amount: deliveryFee,
             ),
+          if (birthdayGift > 0) ...[
+            const SizedBox(height: BlynkSpace.s8),
+            Row(
+              key: const Key('summary-birthday-gift'),
+              children: [
+                const Icon(BlynkIcons.birthday, size: BlynkIcons.xs, color: BlynkColors.positiveInk),
+                const SizedBox(width: BlynkSpace.s4),
+                Expanded(
+                  child: Text(
+                    birthday != null ? 'Birthday gift (${birthday.percentLabel})' : 'Birthday gift',
+                    style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
+                  ),
+                ),
+                Semantics(
+                  label: 'minus ${formatLkr(birthdayGift)}',
+                  excludeSemantics: true,
+                  child: Text(
+                    '−${formatLkr(birthdayGift)}',
+                    style: BlynkType.price.copyWith(color: BlynkColors.positiveInk),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (coupon != null && discount > 0) ...[
             const SizedBox(height: BlynkSpace.s8),
             Row(

@@ -3008,3 +3008,45 @@ a.button {
 .packing-slip__combo td:nth-child(2) {
   padding-left: 14px;
 }
+
+/* Birthday offer (owner, 2026-10-09): who has a birthday this week. "Today"
+   is a Blynk-yellow tag; favourite categories are small read-only chips. */
+.birthday-row__used {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.birthday-when {
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.birthday-when--today {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--yellow);
+}
+
+.birthday-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.birthday-chip {
+  padding: 2px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.birthday-row__note {
+  font-style: italic;
+  overflow-wrap: anywhere;
+}

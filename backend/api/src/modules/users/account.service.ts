@@ -62,6 +62,10 @@ export async function deleteCustomerAccount(userId: string, actor: AuditActor): 
         email: null,
         phone: deletedPhonePlaceholder(),
         sms_offers_opted_out_at: now,
+        // Migration 034: the optional profile is personal too.
+        date_of_birth: null,
+        favourite_category_ids: [],
+        favourites_note: null,
         updated_at: now,
       })
       .where('id', '=', userId)

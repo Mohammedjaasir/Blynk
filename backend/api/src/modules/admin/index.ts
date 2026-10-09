@@ -8,6 +8,7 @@ import { adminDentalRouter } from '../dental/index.js';
 import { adminFeedbackRouter } from '../feedback/index.js';
 import { adminStaffRouter } from '../staff/index.js';
 import { adminSettingsRouter } from '../configuration/index.js';
+import { adminBirthdaysRouter } from '../birthday/index.js';
 import { adminCouponsRouter } from '../coupons/index.js';
 import { adminReportsRouter } from '../reports/index.js';
 import { smsOffersRouter } from '../sms-offers/index.js';
@@ -58,6 +59,10 @@ adminRouter.use(adminRiderPayRouter);
 
 // Store settings (delivery fee). ADMIN and OPERATIONS, guarded inside.
 adminRouter.use(adminSettingsRouter);
+
+// Birthdays this week (migration 034; owner, 2026-10-09): ADMIN and
+// OPERATIONS, guarded inside.
+adminRouter.use(adminBirthdaysRouter);
 
 // Coupons (migration 018), the sales dashboard and customer list: ADMIN
 // only, guarded inside each router.

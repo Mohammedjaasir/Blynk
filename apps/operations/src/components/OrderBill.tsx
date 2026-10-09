@@ -8,6 +8,8 @@ import { formatMoney } from '../lib/orders';
  */
 export function OrderBill({ order }: { order: OrderDetail }) {
   const discount = order.discount_amount ?? 0;
+  // A birthday gift is the whole discount, never with a coupon (owner, 2026-10-09).
+  const birthday = (order.birthday_discount_amount ?? 0) > 0;
   return (
     <dl className="order-bill" aria-label="Bill">
       {order.subtotal_amount != null ? (
@@ -24,7 +26,7 @@ export function OrderBill({ order }: { order: OrderDetail }) {
       ) : null}
       {discount > 0 ? (
         <div className="order-bill__row order-bill__row--discount">
-          <dt>Discount{order.coupon_code ? ` (${order.coupon_code})` : ''}</dt>
+          <dt>{birthday ? 'Birthday gift' : `Discount${order.coupon_code ? ` (${order.coupon_code})` : ''}`}</dt>
           <dd className="mono">−{formatMoney(discount)}</dd>
         </div>
       ) : null}

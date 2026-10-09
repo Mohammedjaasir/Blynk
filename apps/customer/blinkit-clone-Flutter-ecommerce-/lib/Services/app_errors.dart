@@ -305,6 +305,14 @@ class AppErrors {
       message: "You've sent 5 messages in the last hour. Please try again later.",
       retryable: false,
     ),
+    // PATCH /me favourite_category_ids (owner, 2026-10-09): a favourite
+    // category was switched off or deleted while the customer was choosing.
+    'UNKNOWN_CATEGORY': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'A favourite is no longer in the shop',
+      message: "One of your favourites isn't in the shop any more. Untick it and save again.",
+      retryable: false,
+    ),
   };
 
   /// Maps a caught error (an [ApiException], a [DioException], a timeout, a

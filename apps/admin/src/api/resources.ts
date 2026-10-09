@@ -18,6 +18,9 @@ import type {
   CustomerProduct,
   DeliveryFeeSetting,
   CheckoutSettings,
+  BirthdayOfferSetting,
+  BirthdayOfferInput,
+  BirthdaysResult,
   ImportResponse,
   ImportRow,
   ProductDeleteResult,
@@ -293,6 +296,15 @@ export const settings = {
       method: 'PATCH',
       body: { default_percent: defaultPercent },
     }),
+
+  /** Birthday-week gift and birthday SMS (owner, 2026-10-09). ADMIN and OPERATIONS. */
+  getBirthdayOffer: () => apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer'),
+
+  setBirthdayOffer: (body: BirthdayOfferInput) =>
+    apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer', { method: 'PATCH', body: { ...body } }),
+
+  /** Customers whose birthday week is now or within `days` days (0-31). */
+  getBirthdays: (days = 7) => apiRequest<BirthdaysResult>(`/admin/birthdays?days=${days}`),
 };
 
 // ------------------------------------------------------------ promotions

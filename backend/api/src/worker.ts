@@ -31,8 +31,9 @@ async function bootstrapWorker() {
   if (env.NOTIFICATION_WORKER_ENABLED) {
     notificationWorker.start();
     logger.info('Notification Outbox Worker daemon started successfully');
-    // Sibling tick: day-before appointment reminders and post-visit rating
-    // prompts, every APPOINTMENT_REMINDER_INTERVAL_MS (default 5 minutes).
+    // Sibling tick: day-before appointment reminders, post-visit rating
+    // prompts and the birthday SMS (owner, 2026-10-09), every
+    // APPOINTMENT_REMINDER_INTERVAL_MS (default 5 minutes).
     appointmentReminderJob.start();
   } else {
     logger.warn('NOTIFICATION_WORKER_ENABLED is set to false. Worker process will remain idle.');

@@ -13,11 +13,14 @@ export function OrderBill({
     delivery_fee: number;
     discount_amount?: number;
     coupon_code?: string | null;
+    birthday_discount_amount?: number;
     total_amount: number;
     payment_method?: 'COD' | 'ONLINE';
   };
 }) {
   const discount = order.discount_amount ?? 0;
+  // A birthday gift is the whole discount, never with a coupon (owner, 2026-10-09).
+  const birthday = (order.birthday_discount_amount ?? 0) > 0;
   return (
     <dl className="bill" aria-label="Bill">
       <div className="bill__row">
@@ -30,7 +33,7 @@ export function OrderBill({
       </div>
       {discount > 0 ? (
         <div className="bill__row bill__row--discount">
-          <dt>Discount{order.coupon_code ? ` (${order.coupon_code})` : ''}</dt>
+          <dt>{birthday ? 'Birthday gift' : `Discount${order.coupon_code ? ` (${order.coupon_code})` : ''}`}</dt>
           <dd className="mono">−{formatMoney(discount)}</dd>
         </div>
       ) : null}

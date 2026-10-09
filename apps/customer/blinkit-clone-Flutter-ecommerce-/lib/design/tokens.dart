@@ -211,6 +211,12 @@ abstract final class BlynkIcons {
   // everything here" banner and the combo pack fallback / cart line mark.
   static const IconData offer = Icons.local_offer_outlined;
   static const IconData combo = Icons.redeem_outlined;
+  // The birthday gift and Profile > About you (owner, 2026-10-09): the gift
+  // banner / Birthday gift line, the About you row, and the date-of-birth
+  // field's picker glyph.
+  static const IconData birthday = Icons.cake_outlined;
+  static const IconData aboutYou = Icons.badge_outlined;
+  static const IconData calendar = Icons.calendar_month_outlined;
 
   /// The icons that must read as different things from each other.
   static const List<IconData> distinct = <IconData>[

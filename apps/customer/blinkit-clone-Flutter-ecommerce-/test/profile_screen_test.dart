@@ -27,8 +27,10 @@ Future<void> _pump(WidgetTester tester, {AuthProvider? auth, double textScale = 
 /// screen). It is signed-in only, so the guest rows are unchanged.
 /// "Send feedback" (migration 013) is shown to guests too; tapping it as a
 /// guest goes to log in (feedback_screen_test.dart). "SMS & offers" works
-/// the same way (sms_preferences_screen_test.dart).
+/// the same way (sms_preferences_screen_test.dart). "About you" (owner,
+/// 2026-10-09) is the customer's own details, so signed-in only.
 const _signedInRows = [
+  'About you',
   'Your orders',
   'Address book',
   'SMS & offers',
@@ -62,7 +64,7 @@ void main() {
     expect(find.text('Log out'), findsNothing);
   });
 
-  testWidgets('a signed-in user sees exactly the eight real rows, in sentence case', (tester) async {
+  testWidgets('a signed-in user sees exactly the nine real rows, in sentence case', (tester) async {
     await _pump(tester, auth: SignedInAuth());
 
     for (final row in _signedInRows) {

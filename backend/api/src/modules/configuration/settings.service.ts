@@ -3,6 +3,7 @@ import { db } from '../../database/connection.js';
 import { DEFAULT_OPERATING_HOURS } from '../../utils/time.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
+import { smsParts } from '../sms-offers/sms-offers.service.js';
 
 /**
  * Store-wide settings and the public store facts (GET /store).
@@ -148,6 +149,88 @@ function commissionFrom(value: unknown): number | null {
   }
   return null;
 }
+
+/**
+ * Birthday offer (owner, 2026-10-09): X% off ONE order a customer places in
+ * their birthday week (birthday +-3 days, Asia/Colombo), and a "happy
+ * birthday" SMS on the day. Admin and Operations switch it on/off and set the
+ * % and the SMS text. system_configurations 'birthday_offer'
+ * {"enabled", "percent", "sms_enabled", "sms_text"}; no row (or a malformed
+ * one) means the defaults below - off until someone turns it on.
+ * `{percent}` in the SMS text becomes the % (e.g. "10").
+ */
+export const BIRTHDAY_OFFER_KEY = 'birthday_offer';
+export const BIRTHDAY_WINDOW_DAYS = 3;
+export const MAX_BIRTHDAY_PERCENT = 50;
+export const MAX_BIRTHDAY_SMS_TEXT = 300;
+export const DEFAULT_BIRTHDAY_SMS_TEXT = 'Happy birthday from Blynk! {percent}% off your order this week.';
+export const DEFAULT_BIRTHDAY_OFFER = {
+  enabled: false,
+  percent: 10,
+  sms_enabled: true,
+  sms_text: DEFAULT_BIRTHDAY_SMS_TEXT,
+} as const;
+
+export interface BirthdayOfferSetting {
+  enabled: boolean;
+  percent: number;
+  sms_enabled: boolean;
+  sms_text: string;
+}
+
+const twoDecimals = (v: number) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6;
+
+export const updateBirthdayOfferSchema = z
+  .object({
+    enabled: z.boolean({ invalid_type_error: 'enabled must be true or false' }).optional(),
+    percent: z
+      .number({ invalid_type_error: 'The percentage must be a number' })
+      .finite()
+      .gt(0, 'The percentage must be more than 0')
+      .max(MAX_BIRTHDAY_PERCENT, `The percentage can be at most ${MAX_BIRTHDAY_PERCENT}`)
+      .refine(twoDecimals, 'The percentage can have at most 2 decimals')
+      .optional(),
+    sms_enabled: z.boolean({ invalid_type_error: 'sms_enabled must be true or false' }).optional(),
+    sms_text: z
+      .string({ invalid_type_error: 'The SMS text must be text' })
+      .trim()
+      .min(1, 'Write the birthday SMS text')
+      .max(MAX_BIRTHDAY_SMS_TEXT, `The SMS text can be at most ${MAX_BIRTHDAY_SMS_TEXT} characters`)
+      .optional(),
+  })
+  .strict()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), 'Nothing to change');
+export type UpdateBirthdayOfferInput = z.infer<typeof updateBirthdayOfferSchema>;
+
+/** "10" for 10, "12.5" for 12.5. */
+export const formatPercent = (p: number) => String(Number(p.toFixed(2)));
+
+/** The SMS a customer gets: the text with {percent} filled in. */
+export function birthdaySmsText(setting: Pick<BirthdayOfferSetting, 'percent' | 'sms_text'>): string {
+  return setting.sms_text.replace(/\{percent\}/gi, formatPercent(setting.percent)).trim();
+}
+
+function birthdayOfferFrom(value: unknown): BirthdayOfferSetting {
+  const out: BirthdayOfferSetting = { ...DEFAULT_BIRTHDAY_OFFER };
+  if (value && typeof value === 'object') {
+    const v = value as Record<string, unknown>;
+    if (typeof v.enabled === 'boolean') out.enabled = v.enabled;
+    if (typeof v.percent === 'number' && Number.isFinite(v.percent) && v.percent > 0 && v.percent <= MAX_BIRTHDAY_PERCENT) {
+      out.percent = v.percent;
+    }
+    if (typeof v.sms_enabled === 'boolean') out.sms_enabled = v.sms_enabled;
+    if (typeof v.sms_text === 'string' && v.sms_text.trim()) out.sms_text = v.sms_text.trim();
+  }
+  return out;
+}
+
+/**
+ * The birthday offer as checkout and the SMS pass apply it. Tests may
+ * replace `read`, like checkoutSettings.
+ */
+export const birthdayOfferSettings = {
+  read: (): Promise<BirthdayOfferSetting> => settingsService.getBirthdayOfferSetting(),
+};
 
 const hhmm = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
 
@@ -308,6 +391,65 @@ export class SettingsService {
       logger.info({ previous, pct, actorId: actor.actorId }, 'Rider commission default changed');
       return { default_percent: pct, updated_at: row.updated_at };
     });
+  }
+
+  async getBirthdayOfferSetting(): Promise<BirthdayOfferSetting> {
+    return (await this.getBirthdayOffer()).setting;
+  }
+
+  /** Admin/Operations view: the setting plus the SMS exactly as it goes out. */
+  async getBirthdayOffer(): Promise<{ setting: BirthdayOfferSetting; updated_at: Date | null }> {
+    const row = await db
+      .selectFrom('system_configurations')
+      .select(['value', 'updated_at'])
+      .where('key', '=', BIRTHDAY_OFFER_KEY)
+      .executeTakeFirst();
+    return { setting: birthdayOfferFrom(row?.value), updated_at: row?.updated_at ?? null };
+  }
+
+  presentBirthdayOffer(view: { setting: BirthdayOfferSetting; updated_at: Date | null }) {
+    const preview = birthdaySmsText(view.setting);
+    return {
+      ...view.setting,
+      sms_preview: preview,
+      sms_parts: smsParts(preview),
+      window_days: BIRTHDAY_WINDOW_DAYS,
+      updated_at: view.updated_at,
+    };
+  }
+
+  /** Audited (BIRTHDAY_OFFER_UPDATED); only the fields sent change. */
+  async setBirthdayOffer(input: UpdateBirthdayOfferInput, actor: AuditActor) {
+    await db.transaction().execute(async (trx) => {
+      const before = await trx
+        .selectFrom('system_configurations')
+        .select('value')
+        .where('key', '=', BIRTHDAY_OFFER_KEY)
+        .forUpdate()
+        .executeTakeFirst();
+      const previous = birthdayOfferFrom(before?.value);
+      const next: BirthdayOfferSetting = {
+        enabled: input.enabled ?? previous.enabled,
+        percent: input.percent !== undefined ? Math.round(input.percent * 100) / 100 : previous.percent,
+        sms_enabled: input.sms_enabled ?? previous.sms_enabled,
+        sms_text: input.sms_text ?? previous.sms_text,
+      };
+      const value = JSON.stringify(next);
+      await trx
+        .insertInto('system_configurations')
+        .values({ key: BIRTHDAY_OFFER_KEY, value, description: 'Birthday offer: % off one order in the birthday week, and the birthday SMS' })
+        .onConflict((oc) => oc.column('key').doUpdateSet({ value, updated_at: new Date() }))
+        .execute();
+      await writeAudit(trx, actor, {
+        action: 'BIRTHDAY_OFFER_UPDATED',
+        entityType: 'SYSTEM_CONFIGURATION',
+        entityId: SETTINGS_ENTITY_ID,
+        oldValues: { key: BIRTHDAY_OFFER_KEY, ...(before ? previous : {}) },
+        newValues: { key: BIRTHDAY_OFFER_KEY, ...next },
+      });
+      logger.info({ previous, next, actorId: actor.actorId }, 'Birthday offer changed');
+    });
+    return this.presentBirthdayOffer(await this.getBirthdayOffer());
   }
 
   /**

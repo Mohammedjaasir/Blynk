@@ -164,13 +164,36 @@ export class AddressRepository {
     return await db
       .selectFrom('users')
       .selectAll()
+      // Migration 034: a DATE read as YYYY-MM-DD, never shifted by a time zone.
+      .select(sql<string | null>`date_of_birth::text`.as('date_of_birth'))
       .where('id', '=', id)
       .executeTakeFirst();
   }
 
+  /** Migration 034: the live (not deleted) categories among these ids, in display order. */
+  async findLiveCategories(ids: string[]) {
+    if (ids.length === 0) return [];
+    return await db
+      .selectFrom('categories')
+      .select(['id', 'name'])
+      .where('id', 'in', ids)
+      .where('deleted_at', 'is', null)
+      .orderBy('display_order')
+      .orderBy('name')
+      .execute();
+  }
+
   async updateUserProfile(
     id: string,
-    data: { full_name?: string; email?: string; sms_language?: 'si' | 'ta' | 'en'; sms_offers?: boolean }
+    data: {
+      full_name?: string;
+      email?: string;
+      sms_language?: 'si' | 'ta' | 'en';
+      sms_offers?: boolean;
+      date_of_birth?: string | null;
+      favourite_category_ids?: string[];
+      favourites_note?: string | null;
+    }
   ) {
     const [record] = await db
       .updateTable('users')
@@ -181,6 +204,12 @@ export class AddressRepository {
         // Keep the first opt-out time; turning offers back on clears it.
         ...(data.sms_offers === true ? { sms_offers_opted_out_at: null } : {}),
         ...(data.sms_offers === false ? { sms_offers_opted_out_at: sql<Date>`coalesce(sms_offers_opted_out_at, now())` } : {}),
+        // Migration 034: the optional profile.
+        ...(data.date_of_birth !== undefined ? { date_of_birth: data.date_of_birth } : {}),
+        ...(data.favourite_category_ids !== undefined
+          ? { favourite_category_ids: sql<string[]>`${data.favourite_category_ids}::uuid[]` }
+          : {}),
+        ...(data.favourites_note !== undefined ? { favourites_note: data.favourites_note } : {}),
         updated_at: new Date(),
       })
       .where('id', '=', id)

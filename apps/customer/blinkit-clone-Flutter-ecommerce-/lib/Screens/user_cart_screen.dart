@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/store_info.provider.dart';
 import '../UI/Widgets/Atoms/adaptive_sheet.dart';
+import '../UI/Widgets/Atoms/birthday_offer_banner.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Atoms/card_combo_cart.dart';
 import '../UI/Widgets/Atoms/card_product_cart_screen.dart';
@@ -160,9 +161,16 @@ class _CartHeader extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: BlynkSpace.s12),
-      child: Text(
-        '$count ${count == 1 ? 'item' : 'items'}',
-        style: BlynkText.body.copyWith(color: BlynkColors.ink2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '$count ${count == 1 ? 'item' : 'items'}',
+            style: BlynkText.body.copyWith(color: BlynkColors.ink2),
+          ),
+          // The birthday gift (owner, 2026-10-09), when it applies.
+          const BirthdayOfferBanner(padding: EdgeInsets.only(top: BlynkSpace.s12)),
+        ],
       ),
     );
   }

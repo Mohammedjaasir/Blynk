@@ -6,6 +6,13 @@ import { recordOrderPlaced } from './lifecycle/status-writer.js';
 import { DELIVERY_PUBLIC_SELECT } from './delivery.columns.js';
 import { evaluateCoupon, recordRedemption } from '../coupons/coupon.service.js';
 import { freeDeliveryStatus, type FreeDeliveryPolicy } from './free-delivery.js';
+import {
+  applyBirthday,
+  birthdayBeatsCoupon,
+  birthdayOfferStatus,
+  recordBirthdayRedemption,
+} from '../birthday/birthday.offer.js';
+import type { BirthdayOfferSetting } from '../configuration/settings.service.js';
 
 export type DBConnection = Transaction<Database> | typeof db;
 
@@ -26,6 +33,11 @@ export interface CreateOrderData {
   total_amount: number;
   /** Migration 018: re-checked under the coupon row lock inside the order transaction. */
   coupon_code?: string | null;
+  /**
+   * Migration 034 (owner, 2026-10-09): the birthday offer and the checkout
+   * clock; the gift is decided under the customer's row lock. Absent = none.
+   */
+  birthday_offer?: { setting: BirthdayOfferSetting; now: Date } | null;
   scheduled_for: Date | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
@@ -209,7 +221,17 @@ export class OrderRepository {
             lock: true,
           })
         : null;
-      const discountAmount = applied?.discount_amount ?? 0;
+      // 0c. Birthday gift (migration 034): decided under the customer's row
+      //     lock. It never stacks with a coupon - the larger one is used (a
+      //     tie keeps the coupon), and the one not used is not spent.
+      const birthdayStatus = data.birthday_offer?.setting.enabled
+        ? await birthdayOfferStatus(trx, data.customer_id, data.birthday_offer.setting, data.birthday_offer.now, true)
+        : null;
+      const birthdayCandidate = birthdayStatus ? applyBirthday(birthdayStatus, data.subtotal_amount) : null;
+      const birthday = birthdayBeatsCoupon(birthdayCandidate, applied?.discount_amount ?? null) ? birthdayCandidate : null;
+      const coupon = birthday ? null : applied;
+
+      const discountAmount = birthday?.discount_amount ?? coupon?.discount_amount ?? 0;
       const totalAmount = Number((data.subtotal_amount + deliveryFee - discountAmount).toFixed(2));
 
       // 1. Insert orders record
@@ -229,7 +251,8 @@ export class OrderRepository {
           // order goes out free - a commission rider earns their share of it.
           standard_delivery_fee: data.delivery_fee,
           discount_amount: discountAmount,
-          coupon_code: applied?.code ?? null,
+          birthday_discount_amount: birthday?.discount_amount ?? 0,
+          coupon_code: coupon?.code ?? null,
           total_amount: totalAmount,
           scheduled_for: data.scheduled_for,
           delivery_recipient_name: data.delivery_recipient_name,
@@ -291,7 +314,8 @@ export class OrderRepository {
         .returningAll()
         .execute();
 
-      if (applied) await recordRedemption(trx, applied, order.id, data.customer_id);
+      if (coupon) await recordRedemption(trx, coupon, order.id, data.customer_id);
+      if (birthday) await recordBirthdayRedemption(trx, birthday, order.id, data.customer_id);
 
       // 4. Record initial status in order_status_history (lifecycle PLACE_ORDER)
       await recordOrderPlaced(trx, order.id, data.customer_id);
@@ -304,6 +328,7 @@ export class OrderRepository {
         subtotal_amount: Number(Number(order.subtotal_amount).toFixed(2)),
         delivery_fee: Number(Number(order.delivery_fee).toFixed(2)),
         discount_amount: Number(Number(order.discount_amount).toFixed(2)),
+        birthday_discount_amount: Number(Number(order.birthday_discount_amount ?? 0).toFixed(2)),
         total_amount: Number(Number(order.total_amount).toFixed(2)),
         delivery_latitude: Number(order.delivery_latitude),
         delivery_longitude: Number(order.delivery_longitude),
@@ -380,6 +405,7 @@ export class OrderRepository {
       subtotal_amount: Number(Number(order.subtotal_amount).toFixed(2)),
       delivery_fee: Number(Number(order.delivery_fee).toFixed(2)),
       discount_amount: Number(Number(order.discount_amount).toFixed(2)),
+      birthday_discount_amount: Number(Number(order.birthday_discount_amount ?? 0).toFixed(2)),
       total_amount: Number(Number(order.total_amount).toFixed(2)),
       items: items.map((it) => ({
         ...it,
@@ -450,6 +476,7 @@ export class OrderRepository {
       subtotal_amount: Number(Number(o.subtotal_amount).toFixed(2)),
       delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
       discount_amount: Number(Number(o.discount_amount).toFixed(2)),
+      birthday_discount_amount: Number(Number(o.birthday_discount_amount ?? 0).toFixed(2)),
       total_amount: Number(Number(o.total_amount).toFixed(2)),
       items: items
         .filter((it) => it.order_id === o.id)
@@ -549,6 +576,7 @@ export class OrderRepository {
         subtotal_amount: Number(Number(o.subtotal_amount).toFixed(2)),
         delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
         discount_amount: Number(Number(o.discount_amount).toFixed(2)),
+        birthday_discount_amount: Number(Number(o.birthday_discount_amount ?? 0).toFixed(2)),
         total_amount: Number(Number(o.total_amount).toFixed(2)),
         items_summary: {
           total: summary?.total ?? 0,

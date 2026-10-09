@@ -115,6 +115,14 @@ export interface UsersTable {
   sms_language: SmsLanguage | null;
   /** Migration 027: set when the customer turns "Offers by SMS" off. */
   sms_offers_opted_out_at: Date | null;
+  /**
+   * Migration 034 (owner, 2026-10-09): the optional profile. A DATE with no
+   * time - read it as text (`date_of_birth::text`, YYYY-MM-DD) so no time
+   * zone ever shifts the day.
+   */
+  date_of_birth: ColumnType<Date | string | null, string | null | undefined, string | null>;
+  favourite_category_ids: ColumnType<string[], string[] | undefined, string[]>;
+  favourites_note: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 /** Migration 027: the languages an offer SMS can be written in. */
@@ -301,6 +309,11 @@ export interface OrdersTable {
   /** Migration 018: coupon discount snapshot; total = subtotal + delivery_fee - discount_amount. */
   discount_amount: ColumnType<number, number | string | undefined, number | string>;
   coupon_code: ColumnType<string | null, string | null | undefined, string | null>;
+  /**
+   * Migration 034: the part of discount_amount that is the birthday gift (0
+   * or all of it - the gift and a coupon never stack).
+   */
+  birthday_discount_amount: ColumnType<number, number | string | undefined, number | string>;
   scheduled_for: Date | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
@@ -769,6 +782,20 @@ export interface CouponRedemptionsTable {
   created_at: Generated<Date>;
 }
 
+/** Migration 034: an order that used the customer's birthday gift. */
+export interface BirthdayOfferRedemptionsTable {
+  id: Generated<string>;
+  customer_id: string;
+  order_id: string;
+  /** The year of the birthday the gift is for. */
+  offer_year: number;
+  percent: ColumnType<number, number | string, number | string>;
+  discount_amount: ColumnType<number, number | string, number | string>;
+  created_at: Generated<Date>;
+  /** Set when the order is cancelled: the gift can be used again. */
+  released_at: Date | null;
+}
+
 /** Migration 019. */
 export interface CashHandinsTable {
   id: Generated<string>;
@@ -821,6 +848,7 @@ export interface Database {
   order_delivery_codes: OrderDeliveryCodesTable;
   coupons: CouponsTable;
   coupon_redemptions: CouponRedemptionsTable;
+  birthday_offer_redemptions: BirthdayOfferRedemptionsTable;
   cash_handins: CashHandinsTable;
   device_tokens: DeviceTokensTable;
   stock_alerts: StockAlertsTable;

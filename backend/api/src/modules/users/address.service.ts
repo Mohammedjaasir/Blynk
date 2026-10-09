@@ -2,6 +2,10 @@ import { addressRepository } from './address.repository.js';
 import { CreateAddressInput, UpdateAddressInput, UpdateProfileInput } from './address.schema.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { assertWithinServiceZone } from '../orders/delivery-zone.js';
+import { db } from '../../database/connection.js';
+import { birthdayOfferSettings } from '../configuration/settings.service.js';
+import { birthdayOfferStatus, publicBirthdayStatus } from '../birthday/birthday.offer.js';
+import { orderingClock } from '../../utils/time.js';
 
 /**
  * Migration 024: the additional number exists so the rider has someone else
@@ -86,6 +90,12 @@ export class AddressService {
     if (!user) {
       throw new AppError('User not found.', 404, 'USER_NOT_FOUND');
     }
+    // Migration 034 (owner, 2026-10-09): the optional profile and where the
+    // customer stands with the birthday gift (the app's banner).
+    const [favourites, birthday] = await Promise.all([
+      addressRepository.findLiveCategories(user.favourite_category_ids ?? []),
+      birthdayOfferSettings.read().then((setting) => birthdayOfferStatus(db, userId, setting, orderingClock.now())),
+    ]);
     return {
       id: user.id,
       phone: user.phone,
@@ -96,23 +106,29 @@ export class AddressService {
       created_at: user.created_at,
       sms_language: user.sms_language,
       sms_offers: user.sms_offers_opted_out_at === null,
+      date_of_birth: (user.date_of_birth as string | null) ?? null,
+      favourite_category_ids: favourites.map((c) => c.id),
+      favourite_categories: favourites,
+      favourites_note: user.favourites_note ?? null,
+      birthday_offer: publicBirthdayStatus(birthday),
     };
   }
 
+  /** PATCH /me: only the fields sent change; answers with the full profile, like GET /me. */
   async updateProfile(userId: string, input: UpdateProfileInput) {
+    if (input.favourite_category_ids?.length) {
+      const live = await addressRepository.findLiveCategories(input.favourite_category_ids);
+      const known = new Set(live.map((c) => c.id));
+      const unknown = input.favourite_category_ids.filter((id) => !known.has(id));
+      if (unknown.length) {
+        throw new AppError('One or more of those categories no longer exist.', 400, 'UNKNOWN_CATEGORY', { category_ids: unknown });
+      }
+    }
     const updated = await addressRepository.updateUserProfile(userId, input);
     if (!updated) {
       throw new AppError('User not found.', 404, 'USER_NOT_FOUND');
     }
-    return {
-      id: updated.id,
-      phone: updated.phone,
-      email: updated.email,
-      full_name: updated.full_name,
-      role: updated.role,
-      sms_language: updated.sms_language,
-      sms_offers: updated.sms_offers_opted_out_at === null,
-    };
+    return await this.getProfile(userId);
   }
 }
 

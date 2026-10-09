@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Infrastructure/LocalStorage/store_info_storage.dart';
+import 'package:ecom/Models/birthday_offer_model.dart';
 import 'package:ecom/Services/store_info.dart';
 
 /// GET against the public store endpoint. Defaults to the app's ApiService;
@@ -17,8 +18,8 @@ Future<dynamic> _apiGet(String url) =>
 /// The live store facts from the public `GET /store`: the delivery fee and,
 /// since the checkout switches (owner, 2026-10-08), whether checkout offers a
 /// coupon field. The other facts stay in [StoreInfo]. This customer's own
-/// free-delivery offer comes from the signed-in `GET /orders/checkout-info`
-/// ([loadCheckoutInfo]).
+/// free-delivery offer and birthday gift come from the signed-in
+/// `GET /orders/checkout-info` ([loadCheckoutInfo]).
 ///
 /// Order of truth for [deliveryFee]: the server's answer this session, else
 /// the last good answer cached on the device, else
@@ -68,6 +69,33 @@ class StoreInfoProvider extends ChangeNotifier {
   /// (signed out, not loaded yet, or the request failed).
   FreeDeliveryOffer? get freeDelivery => _freeDelivery;
 
+  BirthdayOffer? _birthdayOffer;
+
+  /// This customer's birthday gift (owner, 2026-10-09), from
+  /// `birthday_offer` on `GET /orders/checkout-info` (or a fresher GET/PATCH
+  /// /me via [applyBirthdayOffer]); null when unknown or signed out.
+  BirthdayOffer? get birthdayOffer => _birthdayOffer;
+
+  /// Takes a fresher birthday status (Profile > About you saved a date of
+  /// birth, which may open the gift at once). Null is ignored: "not in this
+  /// answer" is not "no gift".
+  void applyBirthdayOffer(BirthdayOffer? offer) {
+    if (offer != null) _setBirthdayOffer(offer);
+  }
+
+  /// An order just used the birthday gift: stop offering it at once, without
+  /// waiting for the next checkout-info.
+  void markBirthdayGiftUsed() {
+    final offer = _birthdayOffer;
+    if (offer != null && offer.eligible) _setBirthdayOffer(offer.markedUsed());
+  }
+
+  void _setBirthdayOffer(BirthdayOffer? offer) {
+    if (_disposed || offer == _birthdayOffer) return;
+    _birthdayOffer = offer;
+    notifyListeners();
+  }
+
   /// The fee this customer's next order is estimated at: nothing while a
   /// free delivery applies, else the store's [deliveryFee]. Advisory only;
   /// the server decides again when the order is placed.
@@ -80,6 +108,7 @@ class StoreInfoProvider extends ChangeNotifier {
   Future<void> loadCheckoutInfo({required bool signedIn}) {
     if (!signedIn) {
       _setFreeDelivery(null);
+      _setBirthdayOffer(null);
       return Future.value();
     }
     return _loadingCheckoutInfo ??=
@@ -95,8 +124,10 @@ class StoreInfoProvider extends ChangeNotifier {
       if (data is Map && data['coupons_enabled'] is bool) {
         _setCouponsEnabled(data['coupons_enabled'] as bool);
       }
+      _setBirthdayOffer(BirthdayOffer.tryParse(data is Map ? data['birthday_offer'] : null));
     } catch (_) {
       _setFreeDelivery(null);
+      _setBirthdayOffer(null);
     }
   }
 
@@ -247,4 +278,12 @@ class FreeDeliveryOffer {
 
   @override
   int get hashCode => Object.hash(count, remaining, applies, since);
+}
+
+/// This customer's birthday gift while it applies to their next order
+/// (owner, 2026-10-09), rebuilding when it changes; null otherwise, signed
+/// out, or where no [StoreInfoProvider] is in the tree.
+BirthdayOffer? watchEligibleBirthdayOffer(BuildContext context) {
+  final offer = context.watch<StoreInfoProvider?>()?.birthdayOffer;
+  return offer != null && offer.eligible ? offer : null;
 }

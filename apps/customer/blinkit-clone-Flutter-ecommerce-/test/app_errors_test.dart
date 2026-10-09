@@ -252,6 +252,7 @@ void main() {
         'ORDER_ALREADY_CANCELLED',
         'STORE_UNAVAILABLE',
         'PHONE_TAKEN',
+        'UNKNOWN_CATEGORY',
       ])
         code: AppErrors.from(ApiException(400, 'x', code: code)),
     };

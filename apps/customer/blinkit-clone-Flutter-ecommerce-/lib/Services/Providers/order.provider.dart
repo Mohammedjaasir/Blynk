@@ -207,7 +207,7 @@ class OrderProvider extends ChangeNotifier {
         },
       );
       final data = (response is Map ? response['data'] : null) as Map?;
-      final preview = CouponPreview.tryParse(data?['coupon']);
+      final preview = CouponPreview.tryParse(data?['coupon'], envelope: data);
       if (preview == null) throw ApiException(500, 'Coupon was not returned by the server.');
       _coupon = preview;
       _couponCartKey = cartKey(cart);

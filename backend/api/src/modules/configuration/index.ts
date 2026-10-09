@@ -3,6 +3,7 @@ import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import {
   settingsService,
+  updateBirthdayOfferSchema,
   updateCheckoutSettingsSchema,
   updateDeliveryFeeSchema,
   updateRiderCommissionSchema,
@@ -123,6 +124,36 @@ adminSettingsRouter.patch(
     try {
       const input = updateRiderCommissionSchema.parse(req.body);
       res.json({ success: true, data: await settingsService.setRiderCommission(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Birthday offer (owner, 2026-10-09): on/off, % off one order in the birthday
+// week, and the birthday SMS text. Audited (BIRTHDAY_OFFER_UPDATED); applies
+// to orders placed and SMS queued afterwards.
+adminSettingsRouter.get(
+  '/settings/birthday-offer',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: settingsService.presentBirthdayOffer(await settingsService.getBirthdayOffer()) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/birthday-offer',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateBirthdayOfferSchema.parse(req.body);
+      res.json({ success: true, data: await settingsService.setBirthdayOffer(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

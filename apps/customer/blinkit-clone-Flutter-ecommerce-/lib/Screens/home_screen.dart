@@ -5,6 +5,7 @@ import '../Services/Providers/product.provider.dart';
 
 import '../UI/Widgets/Atoms/sliver_entrance.dart';
 import '../UI/Widgets/Atoms/app_skeleton.dart';
+import '../UI/Widgets/Atoms/birthday_offer_banner.dart';
 import '../UI/Widgets/Atoms/connectivity_banner.dart';
 import '../UI/Widgets/Organisms/dental_home_entry.dart';
 import '../UI/Widgets/Organisms/home_brand_tagline.dart';
@@ -153,6 +154,16 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                   ),
                   SliverEntrance(animation: _timeline.section(1), sliver: const HomeBrandTagline()),
+                  // The birthday gift (owner, 2026-10-09): only while the
+                  // server says this customer's next order gets it.
+                  SliverEntrance(
+                    animation: _timeline.section(2),
+                    sliver: const SliverToBoxAdapter(
+                      child: BirthdayOfferBanner(
+                        padding: EdgeInsets.fromLTRB(BlynkSpace.s16, BlynkSpace.s8, BlynkSpace.s16, BlynkSpace.s8),
+                      ),
+                    ),
+                  ),
                   // Renders only when GET /promotions returns a live
                   // promotion; otherwise it is absent, not placeheld.
                   SliverEntrance(animation: _timeline.section(2), sliver: const HomeScreenCarousel()),

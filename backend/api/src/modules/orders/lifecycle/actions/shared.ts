@@ -4,6 +4,7 @@ import { AppError } from '../../../../middleware/error.middleware.js';
 import { CLOSED_ORDER_STATUSES } from '../catalogue.js';
 import { issueDeliveryCode } from '../delivery-code.js';
 import { releaseRedemption } from '../../../coupons/coupon.service.js';
+import { releaseBirthdayRedemption } from '../../../birthday/birthday.offer.js';
 import { enqueueCustomerSms } from '../notify.js';
 import { setOrderStatus } from '../status-writer.js';
 import type { Actor, DeliveryRow, OrderRow, Trx } from '../types.js';
@@ -69,7 +70,7 @@ export async function closeDeliveryAsFailed(trx: Trx, delivery: DeliveryRow, rea
  * Tracked stock the order took (at sourcing or packing) goes back on the shelf in the same
  * transaction (catalogue stock: RESTORE_ORDER_STOCK; inventory plan I2), after
  * the order lock: order -> inventory rows. A coupon the order used is
- * released so the customer can use it again.
+ * released so the customer can use it again, and so is a birthday gift.
  */
 export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reason: string) {
   const updated = await setOrderStatus(trx, order, 'CANCELLED', actor, reason, {
@@ -80,6 +81,8 @@ export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reaso
   await restoreOrderStock(trx, order, actor, actor.role === 'CUSTOMER' ? 'customer' : 'store');
   // Coupon (migration 018): the customer gets the use back.
   await releaseRedemption(trx, order.id);
+  // Birthday gift (migration 034): a cancelled order did not use it.
+  await releaseBirthdayRedemption(trx, order.id);
   await enqueueCustomerSms(trx, order, 'ORDER_CANCELLED', `order_${order.id}_CANCELLED_SMS`, {
     order_number: order.order_number,
     reason,

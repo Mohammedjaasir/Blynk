@@ -5,7 +5,7 @@ import '../../../Models/order_model.dart';
 import '../../../app_design.dart' show appCardDecoration;
 import '../../../design/tokens.dart';
 
-/// The bill card: subtotal / delivery fee / any coupon discount / total, then the one payment
+/// The bill card: subtotal / delivery fee / any coupon discount or birthday gift / total, then the one payment
 /// line (`paymentLine`). Pure - it renders exactly what `OrderModel` holds.
 class OrderBillCard extends StatelessWidget {
   const OrderBillCard({super.key, required this.order});
@@ -31,7 +31,8 @@ class OrderBillCard extends StatelessWidget {
           _row('Subtotal', formatLkr(order.subtotalAmount)),
           const SizedBox(height: BlynkSpace.s8),
           _row('Delivery fee', formatLkr(order.deliveryFee)),
-          // Coupon (backend migration 018): the total already has it taken off.
+          // Coupon (backend migration 018) or the birthday gift (owner,
+          // 2026-10-09; never both): the total already has it taken off.
           if (order.discountAmount > 0) ...[
             const SizedBox(height: BlynkSpace.s8),
             Row(
@@ -40,13 +41,17 @@ class OrderBillCard extends StatelessWidget {
               children: [
                 Flexible(
                   child: Text(
-                    order.couponCode != null ? 'Discount (${order.couponCode})' : 'Discount',
+                    order.hasBirthdayGift
+                        ? 'Birthday gift'
+                        : order.couponCode != null
+                            ? 'Discount (${order.couponCode})'
+                            : 'Discount',
                     overflow: TextOverflow.ellipsis,
                     style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
                   ),
                 ),
                 Text(
-                  '−${formatLkr(order.discountAmount)}',
+                  '−${formatLkr(order.hasBirthdayGift ? order.birthdayDiscountAmount : order.discountAmount)}',
                   style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
                 ),
               ],

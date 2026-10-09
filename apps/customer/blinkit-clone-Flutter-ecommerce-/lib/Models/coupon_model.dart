@@ -13,6 +13,8 @@ class CouponPreview {
     required this.discountAmount,
     required this.total,
     this.description,
+    this.birthdayDiscountAmount = 0,
+    this.appliedDiscount = 'COUPON',
   });
 
   final String code;
@@ -25,12 +27,30 @@ class CouponPreview {
   final double discountAmount;
   final double total;
 
+  /// What the birthday gift would take off this cart instead (owner,
+  /// 2026-10-09); 0 when the customer has no gift this week.
+  final double birthdayDiscountAmount;
+
+  /// Which discount the order would actually get: 'COUPON' or 'BIRTHDAY'.
+  /// They never stack - the larger wins, and a tie keeps the coupon (the gift
+  /// stays for another order that week).
+  final String appliedDiscount;
+
   bool get isFreeDelivery => discountType == 'FREE_DELIVERY';
+
+  /// The birthday gift beats this code on this cart, so the code is not used.
+  bool get birthdayWins => appliedDiscount == 'BIRTHDAY' && birthdayDiscountAmount > 0;
 
   static double _num(Object? v) => double.tryParse('${v ?? 0}') ?? 0.0;
 
-  static CouponPreview? tryParse(Object? json) {
+  /// [json] is `data.coupon`; [envelope] is the whole `data`, which (since
+  /// the birthday gift) carries `birthday_discount_amount`,
+  /// `applied_discount` and the `total` that will really be charged.
+  static CouponPreview? tryParse(Object? json, {Object? envelope}) {
     if (json is! Map || json['code'] == null) return null;
+    final outer = envelope is Map ? envelope : const {};
+    Object? field(String key) => outer.containsKey(key) ? outer[key] : json[key];
+    final applied = field('applied_discount')?.toString().toUpperCase();
     return CouponPreview(
       code: json['code'].toString(),
       discountType: (json['discount_type'] ?? '').toString(),
@@ -38,7 +58,9 @@ class CouponPreview {
       subtotal: _num(json['subtotal']),
       deliveryFee: _num(json['delivery_fee']),
       discountAmount: _num(json['discount_amount']),
-      total: _num(json['total']),
+      total: _num(field('total')),
+      birthdayDiscountAmount: _num(field('birthday_discount_amount')),
+      appliedDiscount: applied == 'BIRTHDAY' ? 'BIRTHDAY' : 'COUPON',
     );
   }
 }

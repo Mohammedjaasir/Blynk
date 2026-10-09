@@ -24,6 +24,8 @@ import 'package:ecom/Screens/products_screen.dart';
 import 'package:ecom/Screens/user_address_screen.dart';
 import 'package:ecom/Screens/user_cart_screen.dart';
 import 'package:ecom/Screens/Auth/name_capture_screen.dart';
+import 'package:ecom/Screens/Auth/birthday_prompt_screen.dart';
+import 'package:ecom/Screens/about_you_screen.dart';
 
 class AppRouter {
   static Route<dynamic>? generateRoute(RouteSettings settings) {
@@ -43,6 +45,12 @@ class AppRouter {
         );
       case NameCaptureScreen.route:
         return MaterialPageRoute(settings: settings, builder: (_) => const NameCaptureScreen());
+      // The one birthday prompt after the name step on first sign-up, and
+      // Profile > About you (owner, 2026-10-09).
+      case BirthdayPromptScreen.route:
+        return MaterialPageRoute(settings: settings, builder: (_) => const BirthdayPromptScreen());
+      case AboutYouScreen.route:
+        return MaterialPageRoute(settings: settings, builder: (_) => const AboutYouScreen());
       case '/otp/verify':
         return MaterialPageRoute(
           settings: settings,

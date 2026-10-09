@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/store_info.provider.dart';
+import '../UI/Widgets/Atoms/birthday_offer_banner.dart';
 import '../UI/Widgets/Atoms/card_cancellation_policy.dart';
 import '../UI/Widgets/Atoms/combo_card.dart';
 import '../UI/Widgets/Atoms/image_well.dart';
@@ -61,6 +62,8 @@ class CheckoutScreen extends StatelessWidget {
                     BlynkSpace.s24,
                   ),
                   children: [
+                    // The birthday gift (owner, 2026-10-09), when it applies.
+                    const BirthdayOfferBanner(padding: EdgeInsets.only(bottom: BlynkSpace.s16)),
                     const BlynkSectionHeader(
                       title: 'Delivery address',
                       padding: EdgeInsets.only(bottom: BlynkSpace.s12),
@@ -83,7 +86,7 @@ class CheckoutScreen extends StatelessWidget {
                       const CheckoutCouponField(),
                       const SizedBox(height: BlynkSpace.s16),
                     ],
-                    CartPriceDetailWidget(showCoupon: couponsEnabled),
+                    CartPriceDetailWidget(showCoupon: couponsEnabled, showBirthday: true),
                     const CancellationPolicyCard(),
                   ],
                 ),

@@ -4,6 +4,7 @@ import { lockInventoryRows, recordStockMovement } from '../../../inventory/stock
 import { CATALOGUE, ITEM_WORK_STATES, packingBlockers } from '../catalogue.js';
 import { enqueueCustomerSms } from '../notify.js';
 import { recomputeOrderDiscount } from '../../../coupons/coupon.service.js';
+import { recomputeBirthdayDiscount } from '../../../birthday/birthday.offer.js';
 import { setOrderStatus, updateOrderFields } from '../status-writer.js';
 import type { ActionImpl, Actor, DeliveryRow, ItemRow, LockedState, OrderRow, Trx } from '../types.js';
 import { dispatch, invalidTransition } from './shared.js';
@@ -51,11 +52,21 @@ export const resolveItem: ActionImpl<OrderRow> = {
       .execute();
     const subtotal = Number(remaining.reduce((sum, it) => sum + Number(it.subtotal), 0).toFixed(2));
     // A coupon's discount follows the new subtotal (migration 018; coupons/coupon.service.ts).
-    const discount = order.coupon_code
-      ? await recomputeOrderDiscount(trx, order.id, subtotal, Number(order.delivery_fee))
-      : Number(order.discount_amount ?? 0);
+    // A birthday gift (migration 034) stays the same % of the new subtotal.
+    const birthday = Number(order.birthday_discount_amount ?? 0) > 0 ? await recomputeBirthdayDiscount(trx, order.id, subtotal) : null;
+    const discount =
+      birthday !== null
+        ? birthday
+        : order.coupon_code
+          ? await recomputeOrderDiscount(trx, order.id, subtotal, Number(order.delivery_fee))
+          : Number(order.discount_amount ?? 0);
     const total = Number((subtotal + Number(order.delivery_fee) - discount).toFixed(2));
-    const fields = { subtotal_amount: subtotal, discount_amount: discount, total_amount: total };
+    const fields = {
+      subtotal_amount: subtotal,
+      discount_amount: discount,
+      ...(birthday !== null ? { birthday_discount_amount: birthday } : {}),
+      total_amount: total,
+    };
 
     const note = `${itemStatus === 'SUBSTITUTED' ? 'Item substituted' : 'Item unavailable'}: ${item!.product_name_snapshot}`;
     const updated =

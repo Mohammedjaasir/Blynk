@@ -156,6 +156,8 @@ export class NotificationTemplates {
       // Rider applications (migration 029): the text is complete when queued.
       case 'RIDER_APPROVED':
       case 'RIDER_REJECTED':
+      // Birthday SMS (migration 034, birthday/birthday.sms.ts): complete when queued.
+      case 'BIRTHDAY_OFFER':
       case 'SMS_OFFER': {
         // Migration 027: the text is complete when queued (the customer's
         // language, opt-out line included), so it is sent exactly as written.

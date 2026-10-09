@@ -154,6 +154,9 @@ export interface OrderDetail {
   delivery_fee?: number;
   discount_amount?: number;
   coupon_code?: string | null;
+  /** The customer's birthday gift (owner, 2026-10-09): when > 0 it is the
+   * whole discount_amount and coupon_code is null. 0 / absent when none. */
+  birthday_discount_amount?: number;
   total_amount: number;
   placed_at: string;
   scheduled_for: string | null;
@@ -1034,6 +1037,50 @@ export interface CheckoutSettings {
    * The key name predates that decision. */
   new_customer_free_deliveries: { enabled: boolean; count: number; since: string };
   updated_at: string | null;
+}
+
+/** `GET|PATCH /admin/settings/birthday-offer` - X% off ONE order in the
+ * customer's birthday week, plus a birthday SMS (owner, 2026-10-09). */
+export interface BirthdayOfferSetting {
+  enabled: boolean;
+  percent: number;
+  sms_enabled: boolean;
+  /** May contain {percent}. */
+  sms_text: string;
+  /** sms_text with {percent} filled in - what customers receive. */
+  sms_preview: string;
+  sms_parts: number;
+  /** Days either side of the birthday (3). */
+  window_days: number;
+  updated_at: string | null;
+}
+
+export interface BirthdayOfferInput {
+  enabled?: boolean;
+  percent?: number;
+  sms_enabled?: boolean;
+  sms_text?: string;
+}
+
+/** One row of `GET /admin/birthdays`. */
+export interface BirthdayCustomer {
+  id: string;
+  full_name: string | null;
+  phone: string;
+  date_of_birth: string;
+  /** This occurrence of the birthday, YYYY-MM-DD. */
+  birthday: string;
+  /** Negative: the birthday was a few days ago, still in its gift week. */
+  days_until: number;
+  turning: number;
+  favourite_categories: { id: string; name: string }[];
+  favourites_note: string | null;
+  offer_used: boolean;
+}
+
+export interface BirthdaysResult {
+  today: string;
+  customers: BirthdayCustomer[];
 }
 
 /** One row of `GET /admin/inventory/low-stock` (TRACKED, active products). */

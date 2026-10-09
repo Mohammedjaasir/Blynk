@@ -2494,3 +2494,44 @@ body {
 .order-combo__items .order-items__row:last-child {
   border-bottom: 0;
 }
+
+/* ------------------------------------------------- birthdays (owner, 2026-10-09) */
+.customers-view {
+  margin-bottom: 16px;
+}
+
+.birthday-when {
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.birthday-when--today {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--yellow);
+}
+
+.birthday-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.birthday-chip {
+  padding: 2px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.customer-note {
+  margin: 6px 0 0;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}

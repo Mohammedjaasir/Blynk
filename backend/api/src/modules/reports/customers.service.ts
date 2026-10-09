@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { categoryNames, favouritesOf } from '../birthday/birthday.list.js';
 
 export type CustomerSort = 'recent' | 'spend' | 'orders' | 'name';
 
@@ -62,6 +63,8 @@ export async function listCustomers(params: { search?: string; sort: CustomerSor
     'u.created_at',
     'u.sms_language',
     sql<boolean>`(u.sms_offers_opted_out_at is null)`.as('sms_offers'),
+    // Migration 034: optional, YYYY-MM-DD.
+    sql<string | null>`u.date_of_birth::text`.as('date_of_birth'),
     sql<number>`coalesce(s.orders_count, 0)`.as('orders_count'),
     sql<number>`coalesce(s.delivered_count, 0)`.as('delivered_count'),
     sql<string>`coalesce(s.delivered_spend, 0)`.as('delivered_spend'),
@@ -147,6 +150,10 @@ export async function getCustomer(id: string, params: { page: number; limit: num
       'u.last_login_at',
       'u.sms_language',
       sql<boolean>`(u.sms_offers_opted_out_at is null)`.as('sms_offers'),
+      // Migration 034 (owner, 2026-10-09): the optional profile.
+      sql<string | null>`u.date_of_birth::text`.as('date_of_birth'),
+      'u.favourite_category_ids',
+      'u.favourites_note',
       sql<number>`coalesce(s.orders_count, 0)`.as('orders_count'),
       sql<number>`coalesce(s.delivered_count, 0)`.as('delivered_count'),
       sql<string>`coalesce(s.delivered_spend, 0)`.as('delivered_spend'),
@@ -167,6 +174,7 @@ export async function getCustomer(id: string, params: { page: number; limit: num
       'o.subtotal_amount',
       'o.delivery_fee',
       'o.discount_amount',
+      'o.birthday_discount_amount',
       'o.total_amount',
       'o.coupon_code',
       'o.placed_at',
@@ -187,9 +195,12 @@ export async function getCustomer(id: string, params: { page: number; limit: num
     .execute();
 
   const total = Number(customer.orders_count);
+  const { favourite_category_ids: favouriteIds, ...profile } = customer;
+  const names = await categoryNames(favouriteIds ?? []);
   return {
     customer: {
-      ...customer,
+      ...profile,
+      favourite_categories: favouritesOf(favouriteIds, names),
       orders_count: total,
       delivered_count: Number(customer.delivered_count),
       delivered_spend: money(customer.delivered_spend),
@@ -199,6 +210,7 @@ export async function getCustomer(id: string, params: { page: number; limit: num
       subtotal_amount: money(o.subtotal_amount),
       delivery_fee: money(o.delivery_fee),
       discount_amount: money(o.discount_amount),
+      birthday_discount_amount: money(o.birthday_discount_amount),
       total_amount: money(o.total_amount),
       item_count: Number(o.item_count ?? 0),
     })),

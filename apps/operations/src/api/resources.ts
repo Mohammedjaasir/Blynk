@@ -30,6 +30,9 @@ import type {
   DeliveryDetail,
   DeliveryFeeSetting,
   CheckoutSettings,
+  BirthdayOfferSetting,
+  BirthdayOfferInput,
+  BirthdaysResult,
   DeliverySummary,
   RiderDay,
   RiderProfile,
@@ -998,6 +1001,16 @@ export const settings = {
     update: (default_percent: number) =>
       apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission', { method: 'PATCH', body: { default_percent } }),
   },
+  /** Birthday offer: X% off one order in the birthday week, plus a birthday
+   * SMS (owner, 2026-10-09). PATCH sends only what changed. */
+  birthdayOffer: {
+    get: () => apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer'),
+    update: (body: BirthdayOfferInput) =>
+      apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer', { method: 'PATCH', body: { ...body } }),
+  },
+  /** Customers whose birthday week is now or within `days` days. */
+  birthdays: (days = 7) =>
+    apiRequest<BirthdaysResult>('/admin/birthdays', { query: { days: String(days) } }),
 };
 
 // ------------------------------------------------------------------ staff

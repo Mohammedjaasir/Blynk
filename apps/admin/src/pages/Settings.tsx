@@ -2,13 +2,15 @@ import { errorMessage } from '../lib/apiErrors';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { settings as settingsApi } from '../api/resources';
-import type { CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting } from '../api/types';
+import type { BirthdayOfferSetting, CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
+import { MAX_BIRTHDAY_SMS, fillPercent, parseBirthdayPercent, percentText } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
 import { parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
 import { formatMoney } from '../lib/orders';
 import { formatPercent, parsePercent } from '../lib/riderPay';
+import { partsLabel, smsParts } from '../lib/smsOffers';
 
 /**
  * Store settings: the delivery fee the customer app charges on new orders
@@ -17,7 +19,9 @@ import { formatPercent, parsePercent } from '../lib/riderPay';
  * /admin/settings/checkout; owner, 2026-10-08, every customer since a start
  * date: owner, 2026-10-09), and the default commission % commission riders
  * earn of the standard delivery fee (GET/PATCH
- * /admin/settings/rider-commission; owner, 2026-10-09).
+ * /admin/settings/rider-commission; owner, 2026-10-09), and the birthday
+ * offer - % off one order in the customer's birthday week plus a birthday SMS
+ * (GET/PATCH /admin/settings/birthday-offer; owner, 2026-10-09).
  */
 export function Settings() {
   return (
@@ -26,6 +30,7 @@ export function Settings() {
       <DeliveryFeeSettingPanel />
       <CheckoutSettingsPanel />
       <RiderCommissionPanel />
+      <BirthdayOfferPanel />
     </>
   );
 }
@@ -330,6 +335,157 @@ function RiderCommissionPanel() {
             A commission rider keeps this share out of the cash they collect and hands in the rest. Riders with their own %
             keep it; company riders earn no commission. Past deliveries keep what they earned. Change a rider's type under Rider earnings.
           </p>
+          <div className="form__actions">
+            <button type="submit" className="button" disabled={saving}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+/**
+ * X% off ONE order in the customer's birthday week (birthday +-3 days,
+ * Colombo time) and a birthday SMS on the day (owner, 2026-10-09). The gift
+ * never stacks with a coupon - the server uses the larger discount.
+ */
+function BirthdayOfferPanel() {
+  const toast = useToast();
+  const [current, setCurrent] = useState<BirthdayOfferSetting | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const [percent, setPercent] = useState('10');
+  const [smsEnabled, setSmsEnabled] = useState(true);
+  const [smsText, setSmsText] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [smsError, setSmsError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function show(setting: BirthdayOfferSetting) {
+    setCurrent(setting);
+    setEnabled(setting.enabled);
+    setPercent(percentText(setting.percent));
+    setSmsEnabled(setting.sms_enabled);
+    setSmsText(setting.sms_text);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .getBirthdayOffer()
+      .then((setting) => !cancelled && show(setting))
+      .catch((err) => !cancelled && setLoadError(errorMessage(err, 'Could not load the birthday offer.')));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const parsed = parseBirthdayPercent(percent);
+    setSmsError(null);
+    setSaveError(null);
+    if ('error' in parsed) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    const text = smsText.trim();
+    if (!text) {
+      setSmsError('Write the birthday SMS.');
+      return;
+    }
+    if (text.length > MAX_BIRTHDAY_SMS) {
+      setSmsError(`The SMS can be at most ${MAX_BIRTHDAY_SMS} characters.`);
+      return;
+    }
+    setSaving(true);
+    try {
+      show(await settingsApi.setBirthdayOffer({ enabled, percent: parsed.value, sms_enabled: smsEnabled, sms_text: text }));
+      toast.success('Birthday offer saved.');
+    } catch (err) {
+      const detail =
+        err instanceof ApiError && err.code === 'VALIDATION_ERROR'
+          ? (err.details as Array<{ message?: string }> | undefined)?.[0]?.message
+          : undefined;
+      setSaveError(detail ?? errorMessage(err, 'Could not save the birthday offer.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // While typing, {percent} is filled locally; once saved (nothing changed
+  // since), the preview and part count are the server's own.
+  const parsedPercent = parseBirthdayPercent(percent);
+  const shownPercent = 'value' in parsedPercent ? percentText(parsedPercent.value) : current ? percentText(current.percent) : '';
+  const unchanged =
+    !!current && smsText.trim() === current.sms_text.trim() && 'value' in parsedPercent && parsedPercent.value === current.percent;
+  const preview = unchanged && current ? current.sms_preview : fillPercent(smsText, shownPercent);
+  const parts = unchanged && current ? current.sms_parts : preview ? smsParts(preview) : 0;
+
+  return (
+    <section className="panel" aria-label="Birthday offer">
+      <h2 className="panel__title">Birthday offer</h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading the birthday offer" />
+      ) : (
+        <form className="form" onSubmit={save} noValidate>
+          <label className="toggle">
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+            <span>
+              Birthday offer
+              <em>
+                % off one order in the customer&apos;s birthday week ({current.window_days} days either side). Not with a coupon -
+                the bigger discount wins.
+              </em>
+            </span>
+          </label>
+          <Field label="Birthday discount (%)" hint="Off the items, not the delivery fee. More than 0, up to 50." error={error ?? undefined}>
+            <input className="input" inputMode="decimal" value={percent} onChange={(e) => setPercent(e.target.value)} />
+          </Field>
+          <label className="toggle">
+            <input type="checkbox" checked={smsEnabled} onChange={(e) => setSmsEnabled(e.target.checked)} />
+            <span>
+              Birthday SMS
+              <em>
+                Sent on the birthday from 8 AM, once a year, only while the offer is on and the customer gets offers by SMS.
+              </em>
+            </span>
+          </label>
+          <Field label="Birthday SMS text" error={smsError ?? undefined}>
+            <textarea
+              className="input"
+              rows={3}
+              maxLength={MAX_BIRTHDAY_SMS}
+              value={smsText}
+              disabled={!smsEnabled}
+              onChange={(e) => setSmsText(e.target.value)}
+            />
+          </Field>
+          <p className="form__note" data-testid="birthday-sms-count">
+            {smsText.length} / {MAX_BIRTHDAY_SMS} characters{preview ? ` · ${partsLabel(parts)}` : ''} · {'{percent}'} becomes the %
+          </p>
+          {preview ? (
+            <div className="preview">
+              <p className="preview__label">Customers receive</p>
+              <p className="sms-offers__preview" aria-label="Birthday SMS preview">
+                {preview}
+              </p>
+            </div>
+          ) : null}
+          {current.updated_at ? (
+            <p className="form__note">Changed {new Date(current.updated_at).toLocaleString()}.</p>
+          ) : null}
+          {saveError ? (
+            <p className="field__error" role="alert">
+              {saveError}
+            </p>
+          ) : null}
           <div className="form__actions">
             <button type="submit" className="button" disabled={saving}>
               {saving ? <Spinner label="Saving" /> : 'Save'}

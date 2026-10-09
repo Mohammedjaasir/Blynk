@@ -199,7 +199,12 @@ export function PackingSlip() {
           ) : null}
           {(order.discount_amount ?? 0) > 0 ? (
             <div className="packing-slip__discount">
-              <dt>Discount{order.coupon_code ? ` (${order.coupon_code})` : ''}</dt>
+              <dt>
+                {/* A birthday gift is the whole discount (owner, 2026-10-09). */}
+                {(order.birthday_discount_amount ?? 0) > 0
+                  ? 'Birthday gift'
+                  : `Discount${order.coupon_code ? ` (${order.coupon_code})` : ''}`}
+              </dt>
               <dd className="mono">−{formatMoney(order.discount_amount!)}</dd>
             </div>
           ) : null}

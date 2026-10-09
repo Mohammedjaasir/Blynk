@@ -14,7 +14,8 @@ import { toPublicDelivery } from './delivery.columns.js';
 import { db } from '../../database/connection.js';
 import { evaluateCoupon } from '../coupons/coupon.service.js';
 import type { ValidateCouponInput } from '../coupons/coupon.schema.js';
-import { checkoutSettings } from '../configuration/settings.service.js';
+import { birthdayOfferSettings, checkoutSettings } from '../configuration/settings.service.js';
+import { applyBirthday, birthdayBeatsCoupon, birthdayOfferStatus, publicBirthdayStatus } from '../birthday/birthday.offer.js';
 import { freeDeliveryStatus } from './free-delivery.js';
 import { effectivePrice } from '../catalog/catalog.offers.js';
 import { looseQuantities, priceComboLines } from '../catalog/catalog.combos.js';
@@ -224,6 +225,8 @@ export class OrderService {
     // Checkout switches (owner, 2026-10-08). With coupons off a code is
     // ignored, not refused, so an older app that still sends one can order.
     const settings = await checkoutSettings.read();
+    // Birthday gift (owner, 2026-10-09): decided inside the order transaction.
+    const birthdaySetting = await birthdayOfferSettings.read();
     if (input.coupon_code && !settings.coupons_enabled) {
       logger.info({ customerId }, 'Coupon code ignored: coupons are switched off');
     }
@@ -240,6 +243,7 @@ export class OrderService {
       free_delivery: settings.new_customer_free_deliveries,
       total_amount: totalAmount,
       coupon_code: settings.coupons_enabled ? input.coupon_code ?? null : null,
+      birthday_offer: birthdaySetting.enabled ? { setting: birthdaySetting, now } : null,
       scheduled_for: scheduledFor,
       delivery_recipient_name: address.recipient_name,
       delivery_recipient_phone: address.recipient_phone,
@@ -278,6 +282,15 @@ export class OrderService {
     const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
     const deliveryFee = free.applies ? 0 : await orderRepository.getDeliveryFee();
     const applied = await evaluateCoupon(db, { code: input.code, customerId, subtotal, deliveryFee });
+    // Birthday gift (owner, 2026-10-09): never stacked with a coupon - the
+    // larger is used (a tie keeps the coupon). discount_amount stays the
+    // coupon's own; total is what the order will actually charge.
+    const birthdaySetting = await birthdayOfferSettings.read();
+    const birthday = birthdaySetting.enabled
+      ? applyBirthday(await birthdayOfferStatus(db, customerId, birthdaySetting, orderingClock.now()), subtotal)
+      : null;
+    const birthdayWins = birthdayBeatsCoupon(birthday, applied.discount_amount);
+    const charged = birthdayWins ? birthday!.discount_amount : applied.discount_amount;
     return {
       code: applied.code,
       discount_type: applied.discount_type,
@@ -285,23 +298,32 @@ export class OrderService {
       subtotal,
       delivery_fee: deliveryFee,
       discount_amount: applied.discount_amount,
-      total: Number((subtotal + deliveryFee - applied.discount_amount).toFixed(2)),
+      birthday_discount_amount: birthday?.discount_amount ?? 0,
+      applied_discount: birthdayWins ? ('BIRTHDAY' as const) : ('COUPON' as const),
+      total: Number((subtotal + deliveryFee - charged).toFixed(2)),
     };
   }
 
   /**
    * GET /orders/checkout-info: what this customer's next order costs to
-   * deliver and whether to show a coupon field. Advisory - order placement
+   * deliver, whether to show a coupon field, and their birthday gift. Advisory - order placement
    * decides again under the customer's row lock.
    */
   async getCheckoutInfo(customerId: string) {
-    const [settings, standardFee] = await Promise.all([checkoutSettings.read(), orderRepository.getDeliveryFee()]);
+    const [settings, standardFee, birthdaySetting] = await Promise.all([
+      checkoutSettings.read(),
+      orderRepository.getDeliveryFee(),
+      birthdayOfferSettings.read(),
+    ]);
     const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
+    const birthday = await birthdayOfferStatus(db, customerId, birthdaySetting, orderingClock.now());
     return {
       delivery_fee_lkr: free.applies ? 0 : standardFee,
       standard_delivery_fee_lkr: standardFee,
       coupons_enabled: settings.coupons_enabled,
       free_delivery: free,
+      // Owner, 2026-10-09: eligible -> the next order gets `percent` off its items.
+      birthday_offer: publicBirthdayStatus(birthday),
     };
   }
 

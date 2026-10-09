@@ -9,6 +9,7 @@ import { notificationService } from '../notifications/notification.service.js';
 import { OUTBOX_PAUSE_LOCK_KEY } from '../notifications/outbox-pause.js';
 import { enqueuePush, PUSH_TYPES } from '../notifications/push/push.repository.js';
 import { isPushEnabled } from '../notifications/push/push.sender.js';
+import { runBirthdaySms } from '../birthday/birthday.sms.js';
 
 /**
  * Day-before appointment reminders and the post-visit "rate your visit" push
@@ -359,7 +360,7 @@ export class AppointmentReminderJob {
     if (this.running) await this.running;
   }
 
-  /** One pass of both jobs; overlapping ticks are skipped. */
+  /** One pass of each job (reminders, rating prompts, birthday SMS); overlapping ticks are skipped. */
   async tick(now: Date = new Date()): Promise<void> {
     if (this.running) return;
     this.running = (async () => {
@@ -372,6 +373,13 @@ export class AppointmentReminderJob {
         await runRatingPrompts({ now, yieldToPause: true });
       } catch (err) {
         logger.error({ err }, 'Rating prompt pass failed');
+      }
+      // Birthday SMS (owner, 2026-10-09): once per customer per year, on the
+      // day, 8 AM - 9 PM Colombo (birthday/birthday.sms.ts).
+      try {
+        await runBirthdaySms({ now, yieldToPause: true });
+      } catch (err) {
+        logger.error({ err }, 'Birthday SMS pass failed');
       }
     })();
     try {

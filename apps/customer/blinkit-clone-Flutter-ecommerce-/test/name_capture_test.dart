@@ -32,7 +32,7 @@ void main() {
     expect(named.needsName, isFalse);
   });
 
-  testWidgets('asks for the name, refuses one letter, saves it and opens the shop', timeout: const Timeout(Duration(minutes: 2)), (tester) async {
+  testWidgets('asks for the name, refuses one letter, saves it and opens the birthday prompt', timeout: const Timeout(Duration(minutes: 2)), (tester) async {
     final calls = <String>[];
     final auth = AuthProvider(request: ({methodType, url, body}) async {
       calls.add('$methodType $url ${body ?? ''}');
@@ -70,6 +70,8 @@ void main() {
     expect(calls.last, 'PATCH /me {full_name: Nimal Perera}');
     expect(auth.currentUser?.fullName, 'Nimal Perera');
     expect(auth.needsName, isFalse);
-    expect(find.text('route:/home'), findsOneWidget);
+    // First sign-up goes on to the one skippable birthday prompt (owner,
+    // 2026-10-09); birthday_prompt_test.dart covers it.
+    expect(find.text('route:/auth/birthday'), findsOneWidget);
   });
 }

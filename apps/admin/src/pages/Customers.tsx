@@ -1,12 +1,13 @@
 import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { customers as customersApi, orders as ordersApi } from '../api/resources';
-import type { CustomerDetail as Detail, CustomerOrderRow, CustomerRow, CustomerSort, OrderDetail } from '../api/types';
+import { customers as customersApi, orders as ordersApi, settings as settingsApi } from '../api/resources';
+import type { BirthdayCustomer, CustomerDetail as Detail, CustomerOrderRow, CustomerRow, CustomerSort, OrderDetail } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { OrderBill } from '../components/OrderBill';
 import { OrderItems } from '../components/OrderItems';
 import { Badge, EmptyState, Spinner } from '../components/ui';
+import { birthdayWhen, formatDayMonth, formatDayMonthYear } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
 import { buildCustomersXlsx, customerExportFilename } from '../lib/customerExport';
 import { downloadBlob } from '../lib/productImport';
@@ -15,7 +16,10 @@ import { STATUS_LABEL, formatClock, formatMoney, orderErrorMessage, shortNumber 
 
 /**
  * Customers (ADMIN only - the API refuses everyone else, and the rows carry
- * phone numbers). Spend is the total of delivered orders.
+ * phone numbers). Spend is the total of delivered orders. The optional
+ * profile customers save in the app - date of birth, favourite categories
+ * and a note - shows here, with a "Birthdays this week" view so the shop can
+ * plan a small extra for the bag (owner, 2026-10-09).
  */
 
 export const SORT_LABEL: Record<Exclude<CustomerSort, 'name'>, string> = {
@@ -25,9 +29,13 @@ export const SORT_LABEL: Record<Exclude<CustomerSort, 'name'>, string> = {
 };
 
 const PAGE_SIZE = 25;
+
+type View = 'all' | 'birthdays';
+const VIEW_LABEL: Record<View, string> = { all: 'All customers', birthdays: 'Birthdays this week' };
 const errorText = (err: unknown, fallback: string) => errorMessage(err, fallback);
 
 export function Customers() {
+  const [view, setView] = useState<View>('all');
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<CustomerSort>('recent');
@@ -83,94 +91,118 @@ export function Customers() {
         title="Customers"
         description="Search by name or phone. Spend counts delivered orders."
         actions={
-          <>
-            <button type="button" className="button button--ghost" disabled={exporting} onClick={() => void downloadExcel()}>
-              {exporting ? 'Preparing…' : 'Download Excel'}
-            </button>
-            <div className="segmented" role="group" aria-label="Sort">
-              {(Object.keys(SORT_LABEL) as Exclude<CustomerSort, 'name'>[]).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  className={option === sort ? 'segmented__item is-selected' : 'segmented__item'}
-                  aria-pressed={option === sort}
-                  onClick={() => {
-                    setPage(1);
-                    setSort(option);
-                  }}
-                >
-                  {SORT_LABEL[option]}
-                </button>
-              ))}
-            </div>
-          </>
+          view === 'birthdays' ? null : (
+            <>
+              <button type="button" className="button button--ghost" disabled={exporting} onClick={() => void downloadExcel()}>
+                {exporting ? 'Preparing…' : 'Download Excel'}
+              </button>
+              <div className="segmented" role="group" aria-label="Sort">
+                {(Object.keys(SORT_LABEL) as Exclude<CustomerSort, 'name'>[]).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={option === sort ? 'segmented__item is-selected' : 'segmented__item'}
+                    aria-pressed={option === sort}
+                    onClick={() => {
+                      setPage(1);
+                      setSort(option);
+                    }}
+                  >
+                    {SORT_LABEL[option]}
+                  </button>
+                ))}
+              </div>
+            </>
+          )
         }
       />
 
-      {exportError ? <p className="field__error" role="alert">{exportError}</p> : null}
+      <div className="segmented customers-view" role="group" aria-label="View">
+        {(Object.keys(VIEW_LABEL) as View[]).map((option) => (
+          <button
+            key={option}
+            type="button"
+            className={option === view ? 'segmented__item is-selected' : 'segmented__item'}
+            aria-pressed={option === view}
+            onClick={() => setView(option)}
+          >
+            {VIEW_LABEL[option]}
+          </button>
+        ))}
+      </div>
 
-      <form className="search-bar" role="search" onSubmit={submit}>
-        <input
-          className="input"
-          type="search"
-          aria-label="Search customers"
-          placeholder="Name or phone"
-          value={query}
-          maxLength={64}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <button type="submit" className="button button--ghost">
-          Search
-        </button>
-      </form>
-
-      {error ? <p className="field__error">{error}</p> : null}
-
-      {rows === null ? (
-        <Spinner label="Loading customers" />
-      ) : rows.length === 0 ? (
-        error ? null : <EmptyState title={search ? 'No customer matches' : 'No customers yet'} message={search ? `Nothing for “${search}”.` : undefined} />
+      {view === 'birthdays' ? (
+        <BirthdaysThisWeek />
       ) : (
         <>
-          <div className="table-wrap">
-            <table className="table" aria-label="Customers">
-              <thead>
-                <tr>
-                  <th scope="col">Customer</th>
-                  <th scope="col">Phone</th>
-                  <th scope="col" className="num">
-                    Orders
-                  </th>
-                  <th scope="col" className="num">
-                    Delivered spend
-                  </th>
-                  <th scope="col">Last order</th>
-                  <th scope="col">SMS language</th>
-                  <th scope="col">Offers</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <Link className="link cell__primary" to={`/customers/${c.id}`}>
-                        {c.full_name || 'Unnamed customer'}
-                      </Link>
-                    </td>
-                    <td className="cell__secondary mono">{c.phone}</td>
-                    <td className="num mono">{c.orders_count}</td>
-                    <td className="num mono">{formatMoney(c.delivered_spend)}</td>
-                    <td className="cell__secondary">{c.last_order_at ? formatDay(c.last_order_at) : 'Never'}</td>
-                    <td>{smsLanguageLabel(c.sms_language)}</td>
-                    <td>
-                      <Badge tone={c.sms_offers ? 'active' : 'inactive'}>{c.sms_offers ? 'On' : 'Off'}</Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pager page={page} totalPages={totalPages} total={total} onPage={setPage} />
+          {exportError ? <p className="field__error" role="alert">{exportError}</p> : null}
+
+          <form className="search-bar" role="search" onSubmit={submit}>
+            <input
+              className="input"
+              type="search"
+              aria-label="Search customers"
+              placeholder="Name or phone"
+              value={query}
+              maxLength={64}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button type="submit" className="button button--ghost">
+              Search
+            </button>
+          </form>
+
+          {error ? <p className="field__error">{error}</p> : null}
+
+          {rows === null ? (
+            <Spinner label="Loading customers" />
+          ) : rows.length === 0 ? (
+            error ? null : <EmptyState title={search ? 'No customer matches' : 'No customers yet'} message={search ? `Nothing for “${search}”.` : undefined} />
+          ) : (
+            <>
+              <div className="table-wrap">
+                <table className="table" aria-label="Customers">
+                  <thead>
+                    <tr>
+                      <th scope="col">Customer</th>
+                      <th scope="col">Phone</th>
+                      <th scope="col" className="num">
+                        Orders
+                      </th>
+                      <th scope="col" className="num">
+                        Delivered spend
+                      </th>
+                      <th scope="col">Last order</th>
+                      <th scope="col">Birthday</th>
+                      <th scope="col">SMS language</th>
+                      <th scope="col">Offers</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((c) => (
+                      <tr key={c.id}>
+                        <td>
+                          <Link className="link cell__primary" to={`/customers/${c.id}`}>
+                            {c.full_name || 'Unnamed customer'}
+                          </Link>
+                        </td>
+                        <td className="cell__secondary mono">{c.phone}</td>
+                        <td className="num mono">{c.orders_count}</td>
+                        <td className="num mono">{formatMoney(c.delivered_spend)}</td>
+                        <td className="cell__secondary">{c.last_order_at ? formatDay(c.last_order_at) : 'Never'}</td>
+                        <td className="cell__secondary">{c.date_of_birth ? formatDayMonthYear(c.date_of_birth) : '—'}</td>
+                        <td>{smsLanguageLabel(c.sms_language)}</td>
+                        <td>
+                          <Badge tone={c.sms_offers ? 'active' : 'inactive'}>{c.sms_offers ? 'On' : 'Off'}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pager page={page} totalPages={totalPages} total={total} onPage={setPage} />
+            </>
+          )}
         </>
       )}
     </>
@@ -254,7 +286,13 @@ export function CustomerDetail() {
               <span className="figure__value figure__value--sm">{c.sms_offers ? 'On' : 'Off'}</span>
               <span className="figure__label">Offers by SMS</span>
             </div>
+            <div className="figure">
+              <span className="figure__value figure__value--sm">{c.date_of_birth ? formatDayMonthYear(c.date_of_birth) : 'Not given'}</span>
+              <span className="figure__label">Date of birth</span>
+            </div>
           </div>
+
+          <CustomerLikes customer={c} />
 
           {data.orders.length === 0 ? (
             <EmptyState title="No orders yet" />
@@ -322,7 +360,13 @@ function OrderHistoryRow({ order, open, onToggle }: { order: CustomerOrderRow; o
         <td className="num mono">{order.item_count}</td>
         <td className="num mono">
           {formatMoney(order.total_amount)}
-          {order.discount_amount > 0 ? <span className="cell__secondary"> incl. −{formatMoney(order.discount_amount)}</span> : null}
+          {order.discount_amount > 0 ? (
+            <span className="cell__secondary">
+              {' '}
+              incl. −{formatMoney(order.discount_amount)}
+              {(order.birthday_discount_amount ?? 0) > 0 ? ' birthday gift' : ''}
+            </span>
+          ) : null}
         </td>
         <td>
           <button
@@ -372,6 +416,101 @@ function OrderDetailInline({ orderId }: { orderId: string }) {
         {detail.delivery?.rider_name ? ` · Rider: ${detail.delivery.rider_name}` : ''}
         {detail.cancellation_reason ? ` · Cancelled: ${detail.cancellation_reason}` : ''}
       </p>
+    </div>
+  );
+}
+
+/** Favourite categories and "anything else you love" from the customer's
+ * optional profile (owner, 2026-10-09). Nothing shows when both are empty. */
+function CustomerLikes({ customer }: { customer: Detail['customer'] }) {
+  const favourites = customer.favourite_categories ?? [];
+  const note = customer.favourites_note?.trim();
+  if (favourites.length === 0 && !note) return null;
+  return (
+    <section className="panel" aria-label="What they love">
+      <h2 className="panel__title">What they love</h2>
+      {favourites.length > 0 ? <CategoryChips categories={favourites} /> : null}
+      {note ? <p className="panel__body customer-note">“{note}”</p> : null}
+    </section>
+  );
+}
+
+function CategoryChips({ categories }: { categories: { id: string; name: string }[] }) {
+  return (
+    <ul className="birthday-chips" aria-label="Favourite categories">
+      {categories.map((cat) => (
+        <li key={cat.id} className="birthday-chip">
+          {cat.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Customers in (or about to be in) their birthday week - birthday +-3 days,
+ * Colombo time - and whether they have used the gift (owner, 2026-10-09). */
+function BirthdaysThisWeek() {
+  const [rows, setRows] = useState<BirthdayCustomer[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .getBirthdays(7)
+      .then((d) => !cancelled && setRows(d.customers))
+      .catch((err) => !cancelled && setError(errorText(err, 'Could not load the birthdays.')));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (error) return <p className="field__error">{error}</p>;
+  if (!rows) return <Spinner label="Loading birthdays" />;
+  if (rows.length === 0)
+    return <EmptyState title="No birthdays this week" message="Customers who save their date of birth in the app show up here." />;
+  return (
+    <div className="table-wrap">
+      <table className="table" aria-label="Birthdays this week">
+        <thead>
+          <tr>
+            <th scope="col">Customer</th>
+            <th scope="col">Phone</th>
+            <th scope="col">Birthday</th>
+            <th scope="col" className="num">
+              Turning
+            </th>
+            <th scope="col">Loves</th>
+            <th scope="col">Gift</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c) => (
+            <tr key={c.id}>
+              <td>
+                <Link className="link cell__primary" to={`/customers/${c.id}`}>
+                  {c.full_name || 'Unnamed customer'}
+                </Link>
+              </td>
+              <td className="cell__secondary mono">{c.phone}</td>
+              <td>
+                <span className={c.days_until === 0 ? 'birthday-when birthday-when--today' : 'birthday-when'}>
+                  {birthdayWhen(c.days_until)}
+                </span>
+                <span className="cell__secondary"> · {formatDayMonth(c.birthday)}</span>
+              </td>
+              <td className="num mono">{c.turning}</td>
+              <td>
+                {c.favourite_categories.length > 0 ? <CategoryChips categories={c.favourite_categories} /> : null}
+                {c.favourites_note ? <p className="cell__secondary customer-note">“{c.favourites_note}”</p> : null}
+                {c.favourite_categories.length === 0 && !c.favourites_note ? <span className="cell__secondary">—</span> : null}
+              </td>
+              <td>
+                {c.offer_used ? <Badge tone="muted">Gift used</Badge> : <Badge tone="offer">Not used yet</Badge>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

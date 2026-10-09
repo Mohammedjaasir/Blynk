@@ -37,6 +37,7 @@ import { Orders } from './pages/Orders';
 import { Riders } from './pages/Riders';
 import { RiderEarnings } from './pages/RiderEarnings';
 import { SmsOffers } from './pages/SmsOffers';
+import { BirthdayOffer } from './pages/BirthdayOffer';
 import { RiderRequests } from './pages/RiderRequests';
 import { StaffAccounts } from './pages/StaffAccounts';
 import { LaunchScreen } from './components/LaunchScreen';
@@ -150,6 +151,7 @@ export function AppRoutes() {
         <Route path="more/deliver" element={<DeliverMyself />} />
         <Route path="more/staff" element={<StaffAccounts />} />
         <Route path="more/sms-offers" element={<SmsOffers />} />
+        <Route path="more/birthday-offer" element={<BirthdayOffer />} />
         <Route path="more/rider-requests" element={<RiderRequests />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

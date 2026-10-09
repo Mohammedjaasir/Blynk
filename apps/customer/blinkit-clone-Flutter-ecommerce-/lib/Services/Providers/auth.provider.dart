@@ -64,8 +64,16 @@ class AuthProvider extends ChangeNotifier {
   Future<void> saveName(String name) async {
     final trimmed = name.trim();
     await _request(methodType: 'PATCH', url: '/me', body: {'full_name': trimmed});
+    await rememberName(trimmed);
+  }
+
+  /// Keeps the cached profile's name in step with a name already saved to
+  /// the account (here, or by Profile > About you, owner 2026-10-09), so the
+  /// Profile header shows it at once. No request.
+  Future<void> rememberName(String name) async {
+    final trimmed = name.trim();
     final user = _currentUser;
-    if (user != null) {
+    if (user != null && trimmed.isNotEmpty && user.fullName != trimmed) {
       final named = user.copyWithName(trimmed);
       _currentUser = named;
       await TokenStorage.saveUserCacheIf(stillValid: () => true, userJson: named.toJsonString());
