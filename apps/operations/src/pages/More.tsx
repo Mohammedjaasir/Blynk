@@ -4,8 +4,8 @@ import { riderApplications, settings } from '../api/resources';
 import type { CheckoutSettings, DeliveryFeeSetting } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
-import { Spinner } from '../components/ui';
-import { catalogErrorMessage, parseDeliveryFee, parseFreeDeliveryCount } from '../lib/catalog';
+import { ConfirmDialog, Spinner } from '../components/ui';
+import { catalogErrorMessage, formatColomboDate, parseDeliveryFee, parseFreeDeliveryCount } from '../lib/catalog';
 import { formatDateTime } from '../lib/inventory';
 
 /**
@@ -18,7 +18,8 @@ import { formatDateTime } from '../lib/inventory';
  * The "Delivery fee" setting (store-wide, `GET|PATCH
  * /admin/settings/delivery-fee`) lives here as the app's settings area, with
  * the checkout switches (`GET|PATCH /admin/settings/checkout`; owner,
- * 2026-10-08): coupon codes on/off and free deliveries for new customers.
+ * 2026-10-08): coupon codes on/off and free deliveries for every customer
+ * since a start date (owner, 2026-10-09).
  */
 export function More() {
   const { user, signOut } = useAuth();
@@ -186,7 +187,8 @@ function DeliveryFeeCard() {
   );
 }
 
-/** Coupon codes at checkout, and free deliveries for new customers. New
+/** Coupon codes at checkout, and free deliveries for every customer -
+ * existing ones too - counted from a start date (owner, 2026-10-09). New
  * orders follow the saved switches; placed orders keep their fee. */
 function CheckoutSettingsCard() {
   const [current, setCurrent] = useState<CheckoutSettings | null>(null);
@@ -197,6 +199,7 @@ function CheckoutSettingsCard() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
 
   function show(s: CheckoutSettings) {
     setCurrent(s);
@@ -237,6 +240,33 @@ function CheckoutSettingsCard() {
     }
   }
 
+  /** Start the count again from now (owner, 2026-10-09): orders placed
+   * before this moment stop using up anyone's free deliveries. Sends the
+   * saved switch and count, so only the start date changes. */
+  async function restartFromToday() {
+    if (!current) return;
+    setConfirmRestart(false);
+    setNotice(null);
+    setError(null);
+    setSaving(true);
+    try {
+      show(
+        await settings.checkout.update({
+          new_customer_free_deliveries: {
+            enabled: current.new_customer_free_deliveries.enabled,
+            count: current.new_customer_free_deliveries.count,
+            since: new Date().toISOString(),
+          },
+        })
+      );
+      setNotice('Free deliveries now count from today.');
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="card" aria-labelledby="checkout-settings-title">
       <h2 className="section-label" id="checkout-settings-title">
@@ -258,12 +288,12 @@ function CheckoutSettingsCard() {
           <label className="toggle">
             <input type="checkbox" checked={freeOn} onChange={(e) => setFreeOn(e.target.checked)} />
             <span>
-              <strong>Free deliveries for new customers</strong>
-              <em>Cancelled orders do not use one up.</em>
+              <strong>Free deliveries for every customer</strong>
+              <em>Existing customers too. Cancelled orders do not use one up.</em>
             </span>
           </label>
           <label className="field">
-            <span className="field__label">Free deliveries per new customer</span>
+            <span className="field__label">Free deliveries per customer</span>
             <input
               className="input"
               inputMode="numeric"
@@ -273,11 +303,33 @@ function CheckoutSettingsCard() {
               disabled={!freeOn}
             />
           </label>
+          <div className="checkout-since">
+            <p className="quiet">
+              Counting orders since <strong>{formatColomboDate(current.new_customer_free_deliveries.since)}</strong>
+            </p>
+            <button
+              type="button"
+              className="button button--ghost button--sm"
+              onClick={() => setConfirmRestart(true)}
+              disabled={saving}
+            >
+              Start again from today
+            </button>
+          </div>
           <button type="submit" className="button" disabled={saving}>
             {saving ? <Spinner label="Saving" /> : 'Save'}
           </button>
         </form>
       )}
+      {confirmRestart ? (
+        <ConfirmDialog
+          title="Start free deliveries again from today?"
+          message="Orders placed until now stop counting, so every customer gets their free deliveries again."
+          confirmLabel="Start again"
+          onConfirm={() => void restartFromToday()}
+          onCancel={() => setConfirmRestart(false)}
+        />
+      ) : null}
       {error ? <p className="field__error" role="alert">{error}</p> : null}
       {notice ? <p className="quiet quiet--ok" role="status">{notice}</p> : null}
       {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}

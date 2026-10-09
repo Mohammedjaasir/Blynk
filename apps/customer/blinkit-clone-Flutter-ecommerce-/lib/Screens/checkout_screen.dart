@@ -122,7 +122,7 @@ class CheckoutScreen extends StatelessWidget {
 }
 
 /// The cart lines, read-only. Every value is the [CartLine]'s own: the
-/// product's name and unit, its quantity, its `sellingPrice` and the line
+/// product's name and unit, its quantity, its `effectivePrice` and the line
 /// total the cart already holds. Nothing is re-priced or re-summed here.
 class _CheckoutItems extends StatelessWidget {
   const _CheckoutItems();

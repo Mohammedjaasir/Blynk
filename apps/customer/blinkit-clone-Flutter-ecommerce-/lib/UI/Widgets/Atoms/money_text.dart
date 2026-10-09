@@ -50,22 +50,25 @@ class MoneyText extends StatelessWidget {
   }
 }
 
-/// A struck-through original price, designed to sit next to [MoneyText]:
+/// A struck-through regular price, designed to sit next to [MoneyText]:
 /// [BlynkType.priceStruck] ([BlynkColors.strike] with a line-through), at the
 /// same [amount] formatting rules as [MoneyText].
 ///
-/// **It has no call site and must not get one until the backend really sends
-/// an original price.** Plan §3 rejects the reference mock's discount pills
-/// and struck prices outright because there is no data source for them, so
-/// rendering this from a computed or assumed "was" price would be fabricated
-/// commerce data. A guard asserts the call-site count stays at zero; delete
-/// the guard together with the first honest caller.
+/// **Only ever for a real offer.** Plan §3 rejected the reference mock's
+/// struck prices because there was no data source for them; since product
+/// offers (owner, 2026-10-09) the backend sends a real `offer_price`, so the
+/// one honest use is a product's regular `selling_price` beside its offer
+/// price while [ProductModel.isOnOffer]. A guard pins the callers to the
+/// product card and the product detail screen; never strike a "was" price
+/// computed or assumed on the client.
 class StruckPrice extends StatelessWidget {
-  const StruckPrice(this.amount, {super.key, this.style, this.compact = true});
+  const StruckPrice(this.amount, {super.key, this.style, this.compact = true, this.maxLines, this.overflow});
 
   final double amount;
   final TextStyle? style;
   final bool compact;
+  final int? maxLines;
+  final TextOverflow? overflow;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +78,8 @@ class StruckPrice extends StatelessWidget {
       excludeSemantics: true,
       child: Text(
         text,
+        maxLines: maxLines,
+        overflow: overflow,
         style: BlynkType.priceStruck.merge(style),
       ),
     );

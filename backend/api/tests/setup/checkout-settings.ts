@@ -7,5 +7,5 @@ import { checkoutSettings } from '../../src/modules/configuration/settings.servi
 // reader to test the switches themselves.
 checkoutSettings.read = async () => ({
   coupons_enabled: true,
-  new_customer_free_deliveries: { enabled: false, count: 0 },
+  new_customer_free_deliveries: { enabled: false, count: 0, since: '2026-10-08T18:30:00.000Z' },
 });

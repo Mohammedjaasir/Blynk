@@ -6,7 +6,15 @@ import type { Category } from '../../api/types';
 import { CENTRE_FOCAL, ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { Field, Spinner } from '../../components/ui';
-import { catalogErrorMessage } from '../../lib/catalog';
+import {
+  catalogErrorMessage,
+  colomboDay,
+  colomboTodayDay,
+  formatColomboDate,
+  offerEndForDay,
+  parseOfferPrice,
+  percentOff,
+} from '../../lib/catalog';
 import { replacedImages } from '../../lib/image';
 
 interface FormState {
@@ -28,7 +36,23 @@ interface FormState {
   custom_markup_percent: string;
   is_available: boolean;
   is_active: boolean;
+  /** Offer price in LKR as typed; '' = no offer (owner, 2026-10-09). */
+  offer_price: string;
+  /** The offer's last day (Colombo), YYYY-MM-DD; '' = no end date. */
+  offer_end_day: string;
 }
+
+/** The offer as the API last returned it - what "changed" is measured against. */
+interface SavedOffer {
+  price: string;
+  endDay: string;
+  endsAt: string | null;
+  active: boolean;
+}
+
+const NO_OFFER: SavedOffer = { price: '', endDay: '', endsAt: null, active: false };
+
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 const EMPTY: FormState = {
   category_id: '',
@@ -45,6 +69,8 @@ const EMPTY: FormState = {
   custom_markup_percent: '',
   is_available: true,
   is_active: true,
+  offer_price: '',
+  offer_end_day: '',
 };
 
 /**
@@ -70,6 +96,9 @@ export function ProductForm() {
   const [effectiveMarkup, setEffectiveMarkup] = useState<number | null>(null);
   /** The image the saved product points at - deleted only once a save replaces it. */
   const [savedImageUrl, setSavedImageUrl] = useState<string | null>(null);
+  /** The saved product's own selling price, for when no preview can be worked out. */
+  const [savedSellingPrice, setSavedSellingPrice] = useState<number | null>(null);
+  const [savedOffer, setSavedOffer] = useState<SavedOffer>(NO_OFFER);
 
   useEffect(() => {
     void catalog.categories
@@ -89,6 +118,17 @@ export function ProductForm() {
       .then((product) => {
         if (cancelled) return;
         setSavedImageUrl(product.image_url);
+        const offer: SavedOffer = {
+          price: product.offer_price === null || product.offer_price === undefined ? '' : String(product.offer_price),
+          // Shown back as the day it ends on in Colombo, whatever time it was stored at.
+          endDay: product.offer_ends_at ? colomboDay(product.offer_ends_at) : '',
+          endsAt: product.offer_ends_at ?? null,
+          active: product.offer_active === true,
+        };
+        setSavedOffer(offer);
+        setSavedSellingPrice(
+          product.calculated_selling_price === undefined ? null : Number(product.calculated_selling_price)
+        );
         setForm({
           category_id: product.category_id,
           name: product.name,
@@ -111,6 +151,8 @@ export function ProductForm() {
               : String(product.custom_markup_percent),
           is_available: product.is_available,
           is_active: product.is_active,
+          offer_price: offer.price,
+          offer_end_day: offer.endDay,
         });
         setEffectiveMarkup(product.effective_markup_percent ?? null);
       })
@@ -131,6 +173,20 @@ export function ProductForm() {
     return cost * (1 + markup / 100);
   }, [form.purchase_cost, form.custom_markup_percent, effectiveMarkup]);
 
+  /** The selling price the offer is measured against: the preview above, else
+   * the saved product's own price, rounded the way the backend rounds it. */
+  const sellingForOffer = previewPrice !== null ? round2(previewPrice) : savedSellingPrice;
+
+  const offerPriceChanged = form.offer_price.trim() !== savedOffer.price;
+  const offerEndChanged = form.offer_end_day !== savedOffer.endDay;
+  /** The stored offer's end has passed and the operator has not picked a new one. */
+  const offerEnded =
+    savedOffer.price !== '' &&
+    savedOffer.endsAt !== null &&
+    !offerEndChanged &&
+    new Date(savedOffer.endsAt).getTime() <= Date.now();
+  const offerParsed = form.offer_price.trim() === '' ? null : parseOfferPrice(form.offer_price, sellingForOffer);
+
   function validate(): boolean {
     const next: Record<string, string> = {};
     if (!form.category_id) next.category_id = 'Choose a category';
@@ -142,6 +198,15 @@ export function ProductForm() {
     if (form.custom_markup_percent.trim() !== '') {
       const markup = Number(form.custom_markup_percent);
       if (!Number.isFinite(markup) || markup < 0 || markup > 1000) next.custom_markup_percent = 'Markup must be between 0 and 1000';
+    }
+    // Offer (owner, 2026-10-09). An ended offer left as it is does not block
+    // an unrelated edit; anything the operator touches is checked.
+    if (offerParsed && 'error' in offerParsed && (offerPriceChanged || offerEndChanged || !offerEnded)) {
+      next.offer_price = offerParsed.error;
+    }
+    if (form.offer_end_day !== '') {
+      if (form.offer_price.trim() === '') next.offer_end_day = 'Enter an offer price first';
+      else if (offerEndChanged && form.offer_end_day < colomboTodayDay()) next.offer_end_day = 'Pick today or a later day';
     }
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -168,6 +233,15 @@ export function ProductForm() {
       is_available: form.is_available,
       is_active: form.is_active,
     };
+    // Offer fields go only when they changed (owner, 2026-10-09): resending
+    // an untouched end date the form only knows as a day could move it.
+    // An emptied price removes the offer, and the backend clears its end too.
+    if (form.offer_price.trim() === '') {
+      if (savedOffer.price !== '') payload.offer_price = null;
+    } else {
+      if (offerPriceChanged && offerParsed && 'value' in offerParsed) payload.offer_price = offerParsed.value;
+      if (offerEndChanged) payload.offer_ends_at = form.offer_end_day === '' ? null : offerEndForDay(form.offer_end_day);
+    }
 
     setSaving(true);
     try {
@@ -268,6 +342,64 @@ export function ProductForm() {
               ? 'Selling price is calculated by the backend when you save.'
               : `Preview selling price: LKR ${previewPrice.toFixed(2)} (the backend recalculates on save).`}
           </p>
+        </section>
+
+        <section className="form__section" aria-labelledby="offer-title">
+          <h2 className="form__section-title" id="offer-title">
+            Offer
+          </h2>
+          {offerEnded ? (
+            <p className="offer-summary">
+              <span className="offer-tag offer-tag--ended">Offer ended on {formatColomboDate(savedOffer.endsAt!)}</span>
+              Customers pay the selling price. Pick a new end date or remove the offer.
+            </p>
+          ) : savedOffer.active && !offerPriceChanged && !offerEndChanged ? (
+            <p className="offer-summary">
+              <span className="offer-tag">On offer now</span>
+            </p>
+          ) : null}
+          <div className="form__row">
+            <Field label="Offer price (LKR)" hint="Leave blank for no offer" error={errors.offer_price}>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={form.offer_price}
+                onChange={(event) => setForm({ ...form, offer_price: event.target.value })}
+              />
+            </Field>
+            <Field label="Offer ends" hint="Optional - the offer runs to the end of this day" error={errors.offer_end_day}>
+              <input
+                className="input"
+                type="date"
+                value={form.offer_end_day}
+                // No floor while showing a stored end that has passed: the
+                // browser would otherwise refuse to submit the whole form.
+                min={offerEnded ? undefined : colomboTodayDay()}
+                onChange={(event) => setForm({ ...form, offer_end_day: event.target.value })}
+              />
+            </Field>
+          </div>
+          {offerParsed && 'value' in offerParsed && sellingForOffer !== null ? (
+            <p className="form__note" role="status">
+              {`${percentOff(offerParsed.value, sellingForOffer)}% off - customers pay LKR ${offerParsed.value.toFixed(2)} instead of LKR ${sellingForOffer.toFixed(2)}${
+                form.offer_end_day ? ` until ${formatColomboDate(offerEndForDay(form.offer_end_day))}` : ''
+              }.`}
+            </p>
+          ) : null}
+          {form.offer_price.trim() === '' && savedOffer.price !== '' ? (
+            <p className="form__note">The offer is removed when you save.</p>
+          ) : null}
+          {form.offer_price !== '' || form.offer_end_day !== '' ? (
+            <div className="offer-actions">
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                onClick={() => setForm({ ...form, offer_price: '', offer_end_day: '' })}
+              >
+                Remove offer
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <section className="form__section">

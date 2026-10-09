@@ -271,6 +271,9 @@ describe('delivery fee setting', () => {
   });
 });
 
+// 9 Oct 2026 Colombo midnight, the backend default (owner, 2026-10-09).
+const SINCE = '2026-10-08T18:30:00.000Z';
+
 describe('checkout settings (owner, 2026-10-08)', () => {
   it('validates the free delivery count', () => {
     expect(parseFreeDeliveryCount('2')).toEqual({ count: 2 });
@@ -286,16 +289,19 @@ describe('checkout settings (owner, 2026-10-08)', () => {
     const api = mockApi((c) => {
       if (c.method === 'GET' && c.path === '/admin/settings/delivery-fee') return { data: { fee_lkr: 150, updated_at: null } };
       if (c.method === 'GET' && c.path === '/admin/settings/checkout') {
-        return { data: { coupons_enabled: false, new_customer_free_deliveries: { enabled: true, count: 2 }, updated_at: null } };
+        return { data: { coupons_enabled: false, new_customer_free_deliveries: { enabled: true, count: 2, since: SINCE }, updated_at: null } };
       }
-      if (c.method === 'PATCH' && c.path === '/admin/settings/checkout') return { data: { ...c.body, updated_at: '2026-10-08T05:00:00.000Z' } };
+      if (c.method === 'PATCH' && c.path === '/admin/settings/checkout') {
+        const free = { since: SINCE, ...c.body.new_customer_free_deliveries };
+        return { data: { ...c.body, new_customer_free_deliveries: free, updated_at: '2026-10-08T05:00:00.000Z' } };
+      }
     });
     renderPage(<Settings />);
 
     const panel = await screen.findByRole('region', { name: 'Checkout' });
     const coupons = await within(panel).findByRole('checkbox', { name: 'Coupon codes at checkout' });
-    const free = within(panel).getByRole('checkbox', { name: 'Free deliveries for new customers' });
-    const count = within(panel).getByLabelText(/Free deliveries per new customer/);
+    const free = within(panel).getByRole('checkbox', { name: 'Free deliveries for every customer' });
+    const count = within(panel).getByLabelText(/Free deliveries per customer/);
     expect(coupons).not.toBeChecked();
     expect(free).toBeChecked();
     expect(count).toHaveValue('2');
@@ -326,16 +332,48 @@ describe('checkout settings (owner, 2026-10-08)', () => {
     const user = userEvent.setup();
     const api = mockApi((c) => {
       if (c.method === 'GET' && c.path === '/admin/settings/checkout') {
-        return { data: { coupons_enabled: false, new_customer_free_deliveries: { enabled: true, count: 2 }, updated_at: null } };
+        return { data: { coupons_enabled: false, new_customer_free_deliveries: { enabled: true, count: 2, since: SINCE }, updated_at: null } };
       }
     });
     renderPage(<Settings />);
     const panel = await screen.findByRole('region', { name: 'Checkout' });
-    const count = await within(panel).findByLabelText(/Free deliveries per new customer/);
+    const count = await within(panel).findByLabelText(/Free deliveries per customer/);
     await user.clear(count);
     await user.type(count, '12');
     await user.click(within(panel).getByRole('button', { name: 'Save' }));
     expect(await within(panel).findByText('Enter a whole number from 0 to 10.')).toBeInTheDocument();
     expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(0);
+  });
+
+  it('shows the start date and "Start again from today" sends since = now after a confirm (owner, 2026-10-09)', async () => {
+    const user = userEvent.setup();
+    const api = mockApi((c) => {
+      if (c.method === 'GET' && c.path === '/admin/settings/checkout') {
+        return { data: { coupons_enabled: true, new_customer_free_deliveries: { enabled: true, count: 2, since: SINCE }, updated_at: null } };
+      }
+      if (c.method === 'PATCH' && c.path === '/admin/settings/checkout') {
+        return { data: { coupons_enabled: true, ...c.body, updated_at: '2026-10-20T05:00:00.000Z' } };
+      }
+    });
+    renderPage(<Settings />);
+    const panel = await screen.findByRole('region', { name: 'Checkout' });
+    expect(await within(panel).findByText(/Counting orders since 9 Oct 2026/)).toBeInTheDocument();
+
+    // Cancel sends nothing.
+    await user.click(within(panel).getByRole('button', { name: 'Start again from today' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Start free deliveries again' })).getByRole('button', { name: 'Cancel' }));
+    expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(0);
+
+    const before = Date.now();
+    await user.click(within(panel).getByRole('button', { name: 'Start again from today' }));
+    const dialog = screen.getByRole('dialog', { name: 'Start free deliveries again' });
+    expect(dialog).toHaveTextContent('Every customer gets 2 free deliveries again, counting orders from today.');
+    await user.click(within(dialog).getByRole('button', { name: 'Start again' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(1));
+    const body = api.find('PATCH', '/admin/settings/checkout')[0]!.body;
+    expect(body).toEqual({ new_customer_free_deliveries: { enabled: true, count: 2, since: expect.any(String) } });
+    const since = Date.parse(body.new_customer_free_deliveries.since);
+    expect(since).toBeGreaterThanOrEqual(before);
+    expect(since).toBeLessThanOrEqual(Date.now());
   });
 });

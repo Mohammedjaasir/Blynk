@@ -5,6 +5,7 @@ import type { AdminProduct, Category } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
+import { formatMoney } from '../lib/orders';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -185,6 +186,12 @@ export function Products() {
                 <td>{product.category_name ?? categoryName(product.category_id)}</td>
                 <td className="num">
                   LKR {Number(product.calculated_selling_price ?? 0).toFixed(2)}
+                  {/* Offer price, while it applies (owner, 2026-10-09). */}
+                  {product.offer_active && product.offer_price != null ? (
+                    <span className="cell__secondary">
+                      <Badge tone="offer">Offer {formatMoney(product.offer_price)}</Badge>
+                    </span>
+                  ) : null}
                 </td>
                 <td>
                   <Badge tone={product.is_active ? 'active' : 'inactive'}>

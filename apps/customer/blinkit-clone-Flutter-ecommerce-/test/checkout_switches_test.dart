@@ -12,8 +12,9 @@ import 'package:ecom/UI/Widgets/Organisms/card_cart_prices_detail.dart';
 import 'package:ecom/app_theme.dart';
 
 /// Checkout switches (owner, 2026-10-08): coupons on/off from GET /store,
-/// and this customer's new-customer free deliveries from
-/// GET /orders/checkout-info. The server decides both again at placeOrder
+/// and this customer's free deliveries from GET /orders/checkout-info - the
+/// first two for every customer, existing ones too, counted from `since`
+/// (owner, 2026-10-09). The server decides both again at placeOrder
 /// (backend/api/tests/checkout-settings.test.ts).
 
 Map<String, dynamic> _store({Object? coupons}) => {
@@ -21,11 +22,15 @@ Map<String, dynamic> _store({Object? coupons}) => {
       'data': {
         'delivery_fee_lkr': 100,
         if (coupons != null) 'coupons_enabled': coupons,
-        'new_customer_free_deliveries': {'enabled': true, 'count': 2},
+        'new_customer_free_deliveries': {
+          'enabled': true,
+          'count': 2,
+          'since': '2026-10-09T00:00:00.000Z',
+        },
       },
     };
 
-Map<String, dynamic> _checkoutInfo({int remaining = 2, bool applies = true}) => {
+Map<String, dynamic> _checkoutInfo({int remaining = 2, bool applies = true, Object? since}) => {
       'success': true,
       'data': {
         'delivery_fee_lkr': applies ? 0 : 100,
@@ -37,6 +42,7 @@ Map<String, dynamic> _checkoutInfo({int remaining = 2, bool applies = true}) => 
           'used': 2 - remaining,
           'remaining': remaining,
           'applies': applies,
+          if (since != null) 'since': since,
         },
       },
     };
@@ -126,7 +132,28 @@ void main() {
       expect(FreeDeliveryOffer.tryParse({'count': 2, 'remaining': 0, 'applies': true})!.applies, isFalse);
     });
 
-    testWidgets('the Order Summary shows FREE with the welcome note', (tester) async {
+    test('reads since when present; missing or garbage is null, not a failure', () {
+      final withSince = FreeDeliveryOffer.tryParse(
+          _checkoutInfo(remaining: 1, since: '2026-10-09T00:00:00.000Z')['data']['free_delivery']);
+      expect(withSince!.since, DateTime.utc(2026, 10, 9));
+      expect(withSince.remaining, 1);
+      expect(FreeDeliveryOffer.tryParse(_checkoutInfo()['data']['free_delivery'])!.since, isNull);
+      final garbage = FreeDeliveryOffer.tryParse(_checkoutInfo(since: 'soon')['data']['free_delivery']);
+      expect(garbage, isNotNull);
+      expect(garbage!.since, isNull);
+      expect(FreeDeliveryOffer.tryParse(_checkoutInfo(since: 42)['data']['free_delivery'])!.since, isNull);
+    });
+
+    test('the note counts what is left, for every customer (no welcome)', () {
+      String note(int remaining, int count) => freeDeliveryNote(
+          FreeDeliveryOffer(count: count, remaining: remaining, applies: remaining > 0));
+      expect(note(2, 2), 'Free delivery — 2 of 2 free deliveries left.');
+      expect(note(1, 2), 'Free delivery — 1 of 2 free deliveries left.');
+      expect(note(1, 1), 'Free delivery — 1 of 1 free delivery left.');
+      expect(note(2, 2), isNot(contains('welcome')));
+    });
+
+    testWidgets('the Order Summary shows FREE with how many are left', (tester) async {
       final store = _provider((url) async => url == '/store' ? _store() : _checkoutInfo(remaining: 1));
       await tester.runAsync(() async {
         await store.load();
@@ -135,7 +162,7 @@ void main() {
       await _pumpSummary(tester, store);
       expect(find.byKey(const Key('summary-free-delivery')), findsOneWidget);
       expect(find.text('FREE'), findsOneWidget);
-      expect(find.text('Free delivery — welcome to Blynk. 1 of 2 free deliveries left.'), findsOneWidget);
+      expect(find.text('Free delivery — 1 of 2 free deliveries left.'), findsOneWidget);
       expect(find.text('LKR 100'), findsNothing);
       // Subtotal and total are both the milk alone.
       expect(find.text('LKR 540'), findsNWidgets(2));

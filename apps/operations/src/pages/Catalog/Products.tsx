@@ -180,6 +180,10 @@ export function Products() {
                 <div className="cat-row__badges">
                   <Badge tone={product.is_active ? 'active' : 'inactive'}>{product.is_active ? 'Active' : 'Inactive'}</Badge>
                   {!product.is_available ? <Badge tone="muted">Unavailable</Badge> : null}
+                  {/* Only while the backend says the offer applies now (owner, 2026-10-09). */}
+                  {product.offer_active && product.offer_price != null ? (
+                    <span className="offer-tag">Offer LKR {Number(product.offer_price).toFixed(2)}</span>
+                  ) : null}
                 </div>
               </div>
               <div className="cat-row__actions">

@@ -15,7 +15,7 @@ export function Badge({
   tone,
   children,
 }: {
-  tone: 'active' | 'inactive' | 'muted';
+  tone: 'active' | 'inactive' | 'muted' | 'offer';
   children: ReactNode;
 }) {
   return (

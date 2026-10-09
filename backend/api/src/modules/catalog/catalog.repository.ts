@@ -1,11 +1,14 @@
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
+import { activeOfferWhere } from './catalog.offers.js';
 
 export interface ProductQueryParams {
   category_id?: string;
   category_slug?: string;
   search?: string;
   is_available?: boolean;
+  /** Migration 031: only products with an active offer. */
+  on_offer?: boolean;
   limit: number;
   offset: number;
 }
@@ -220,6 +223,9 @@ export class CatalogRepository {
         'calculated_selling_price',
         'is_available',
         'is_active',
+        // Migration 031: the offer, raw - catalog.offers decides if it is active.
+        'offer_price',
+        'offer_ends_at',
       ])
       .where('is_active', '=', true);
 
@@ -233,6 +239,10 @@ export class CatalogRepository {
 
     if (params.is_available !== undefined) {
       query = query.where('is_available', '=', params.is_available);
+    }
+
+    if (params.on_offer) {
+      query = query.where(activeOfferWhere);
     }
 
     if (params.search) {
@@ -273,6 +283,10 @@ export class CatalogRepository {
 
     if (params.is_available !== undefined) {
       query = query.where('is_available', '=', params.is_available);
+    }
+
+    if (params.on_offer) {
+      query = query.where(activeOfferWhere);
     }
 
     if (params.search) {
@@ -318,6 +332,9 @@ export class CatalogRepository {
         'calculated_selling_price',
         'is_available',
         'is_active',
+        // Migration 031: the offer, raw - catalog.offers decides if it is active.
+        'offer_price',
+        'offer_ends_at',
       ])
       .where('is_active', '=', true);
 
@@ -431,6 +448,8 @@ export class CatalogRepository {
     custom_markup_percent?: number | null;
     is_available?: boolean;
     is_active?: boolean;
+    offer_price?: number | null;
+    offer_ends_at?: string | null;
   }) {
     const [record] = await db
       .insertInto('products')
@@ -452,6 +471,8 @@ export class CatalogRepository {
         custom_markup_percent: data.custom_markup_percent ?? null,
         is_available: data.is_available ?? true,
         is_active: data.is_active ?? true,
+        offer_price: data.offer_price ?? null,
+        offer_ends_at: data.offer_ends_at ?? null,
       })
       .returningAll()
       .execute();
@@ -480,6 +501,8 @@ export class CatalogRepository {
       custom_markup_percent?: number | null;
       is_available?: boolean;
       is_active?: boolean;
+      offer_price?: number | null;
+      offer_ends_at?: string | null;
     }
   ) {
     const [record] = await db

@@ -213,22 +213,36 @@ describe('Delivery fee setting', () => {
 });
 
 describe('Checkout settings (owner, 2026-10-08)', () => {
-  const CHECKOUT = { coupons_enabled: false, new_customer_free_deliveries: { enabled: true, count: 2 }, updated_at: null };
+  const CHECKOUT = {
+    coupons_enabled: false,
+    // 9 Oct 2026, midnight in Colombo - the backend's default start (owner, 2026-10-09).
+    new_customer_free_deliveries: { enabled: true, count: 2, since: '2026-10-08T18:30:00.000Z' },
+    updated_at: null,
+  };
 
   it('shows both switches and saves them', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
       'GET /admin/settings/delivery-fee': () => ok({ fee_lkr: 250, updated_at: null }),
       'GET /admin/settings/checkout': () => ok(CHECKOUT),
-      'PATCH /admin/settings/checkout': (call) => ok({ ...call.body, updated_at: '2026-10-08T10:00:00Z' }),
+      'PATCH /admin/settings/checkout': (call) => {
+        const body = call.body as { new_customer_free_deliveries: object };
+        return ok({
+          ...CHECKOUT,
+          ...body,
+          new_customer_free_deliveries: { since: CHECKOUT.new_customer_free_deliveries.since, ...body.new_customer_free_deliveries },
+          updated_at: '2026-10-08T10:00:00Z',
+        });
+      },
     });
     const card = (await screen.findByRole('heading', { name: 'Checkout' })).closest('section') as HTMLElement;
     const coupons = await within(card).findByRole('checkbox', { name: /Coupon codes at checkout/ });
-    const free = within(card).getByRole('checkbox', { name: /Free deliveries for new customers/ });
-    const count = within(card).getByLabelText('Free deliveries per new customer');
+    const free = within(card).getByRole('checkbox', { name: /Free deliveries for every customer/ });
+    const count = within(card).getByLabelText('Free deliveries per customer');
     expect(coupons).not.toBeChecked();
     expect(free).toBeChecked();
     expect(count).toHaveValue('2');
+    expect(within(card).getByText(/Counting orders since/)).toHaveTextContent('Counting orders since 9 Oct 2026');
 
     await user.click(coupons);
     await user.clear(count);
@@ -253,6 +267,34 @@ describe('Checkout settings (owner, 2026-10-08)', () => {
     );
   });
 
+  it('starts the count again from today after a confirm (owner, 2026-10-09)', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
+      'GET /admin/settings/delivery-fee': () => ok({ fee_lkr: 250, updated_at: null }),
+      'GET /admin/settings/checkout': () => ok(CHECKOUT),
+      'PATCH /admin/settings/checkout': (call) => ok({ ...CHECKOUT, ...(call.body as object), updated_at: '2026-10-20T04:00:00Z' }),
+    });
+    const card = (await screen.findByRole('heading', { name: 'Checkout' })).closest('section') as HTMLElement;
+    await user.click(await within(card).findByRole('button', { name: 'Start again from today' }));
+
+    // Nothing is sent until the operator confirms; Cancel sends nothing.
+    const dialog = screen.getByRole('dialog', { name: 'Start free deliveries again from today?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(0);
+
+    const before = Date.now();
+    await user.click(within(card).getByRole('button', { name: 'Start again from today' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Start again' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(1));
+    const body = api.find('PATCH', '/admin/settings/checkout')[0]!.body as {
+      new_customer_free_deliveries: { enabled: boolean; count: number; since: string };
+    };
+    expect(Object.keys(body)).toEqual(['new_customer_free_deliveries']);
+    expect(body.new_customer_free_deliveries).toMatchObject({ enabled: true, count: 2 });
+    expect(new Date(body.new_customer_free_deliveries.since).getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(await within(card).findByText('Free deliveries now count from today.')).toBeInTheDocument();
+  });
+
   it('refuses a count above 10 before sending anything', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
@@ -260,7 +302,7 @@ describe('Checkout settings (owner, 2026-10-08)', () => {
       'GET /admin/settings/checkout': () => ok(CHECKOUT),
     });
     const card = (await screen.findByRole('heading', { name: 'Checkout' })).closest('section') as HTMLElement;
-    const count = await within(card).findByLabelText('Free deliveries per new customer');
+    const count = await within(card).findByLabelText('Free deliveries per customer');
     await user.clear(count);
     await user.type(count, '11');
     await user.click(within(card).getByRole('button', { name: 'Save' }));

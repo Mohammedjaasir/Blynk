@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'add_to_cart_button.dart';
 import 'image_well.dart';
 import 'money_text.dart';
+import 'offer_tag.dart';
 import '../../../Models/product_model.dart';
 import '../../../design/tokens.dart';
 import 'blynk_press.dart';
@@ -19,7 +20,7 @@ import 'product_hero.dart';
 /// ├─────────────────────┤
 /// │ Product Name        │  BlynkCardProduct.name, 2 lines, ellipsis
 /// │ Unit                │  BlynkType.productUnit
-/// │ LKR 605             │  MoneyText -> BlynkCardProduct.price
+/// │ LKR 605  LKR 650    │  MoneyText -> BlynkCardProduct.price (+ StruckPrice on offer)
 /// │              [ + ]  │  AddToCartButton (ADD -> stepper)
 /// └─────────────────────┘
 /// ```
@@ -29,11 +30,17 @@ import 'product_hero.dart';
 /// `BlynkCardProduct` token — the card declares no bare geometry number and no
 /// text size of its own.
 ///
+/// **Product offers (owner, 2026-10-09):** while [ProductModel.isOnOffer] the
+/// price line shows the offer price, then the regular price struck through
+/// ([StruckPrice]), and an [OfferTag] ("Offer −12%") sits on the image well's
+/// corner. Both come from the backend's real `offer_price`; a product with no
+/// offer renders exactly as before, in the same fixed-height boxes.
+///
 /// **Deliberately absent, because the backend has no field for any of them:**
-/// rating, review count, discount pill, struck original price, per-unit price,
-/// and the favourite/heart control (there is no wishlist backend). Each is
-/// omitted entirely rather than rendered as a placeholder or a zero —
-/// fabricated commerce data is the highest-priority defect in review.
+/// rating, review count, per-unit price, and the favourite/heart control
+/// (there is no wishlist backend). Each is omitted entirely rather than
+/// rendered as a placeholder or a zero — fabricated commerce data is the
+/// highest-priority defect in review.
 ///
 /// The price sits on its own line above a full-width control slot rather than
 /// sharing the mock's `LKR 605  [+]` row: the in-cart quantity stepper is
@@ -124,6 +131,7 @@ class ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     // Only ever read from the backend - never inferred or faked client-side.
     final isAvailable = product.isAvailable;
+    final onOffer = product.isOnOffer;
 
     // The press response wraps the whole card, ripple included, so the card
     // settles under the thumb before it opens. BlynkPress only observes the
@@ -146,15 +154,28 @@ class ProductCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              // The image is the one thing that travels to the detail screen.
-              child: ProductHero(
-                productId: product.id,
-                enabled: hero,
-                child: ProductImageWell(
-                  product: product,
-                  semantic: false,
-                  overlay: isAvailable ? null : const _UnavailableWash(),
-                ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // The image is the one thing that travels to the detail
+                  // screen; the offer tag stays on the card.
+                  ProductHero(
+                    productId: product.id,
+                    enabled: hero,
+                    child: ProductImageWell(
+                      product: product,
+                      semantic: false,
+                      overlay: isAvailable ? null : const _UnavailableWash(),
+                    ),
+                  ),
+                  if (onOffer)
+                    Positioned(
+                      top: BlynkSpace.s4,
+                      left: BlynkSpace.s4,
+                      right: BlynkSpace.s4,
+                      child: Align(alignment: Alignment.topLeft, child: OfferTag(product: product)),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: gap),
@@ -181,12 +202,42 @@ class ProductCard extends StatelessWidget {
             const SizedBox(height: rowGap),
             SizedBox(
               height: priceBox(context),
-              child: MoneyText(
-                product.sellingPrice,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: BlynkCardProduct.price,
-              ),
+              child: onOffer
+                  // The offer price leads; the regular price, struck
+                  // through, gives way first when the card is narrow.
+                  ? LayoutBuilder(
+                      builder: (context, constraints) => Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                            child: MoneyText(
+                              product.effectivePrice,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: BlynkCardProduct.price,
+                            ),
+                          ),
+                          Flexible(
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: BlynkSpace.s4),
+                              child: StruckPrice(
+                                product.sellingPrice,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : MoneyText(
+                      product.sellingPrice,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: BlynkCardProduct.price,
+                    ),
             ),
             SizedBox(
               height: controlSlot,

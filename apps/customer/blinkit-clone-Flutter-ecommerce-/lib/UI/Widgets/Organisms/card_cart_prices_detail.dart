@@ -19,7 +19,7 @@ import '../../../design/tokens.dart';
 /// how a summary and a bar end up disagreeing. Nothing else here is derived:
 /// the subtotal is the provider's, the fee is the live one from `GET /store`
 /// ([watchCheckoutDeliveryFee]: `system_configurations.delivery_fee`, or 0
-/// while this customer has a new-customer free delivery), and
+/// while this customer has a free delivery left), and
 /// once an order exists the backend's own `totalAmount` is authoritative — see
 /// `OrderProvider.placeOrder`.
 double cartEstimateTotal(CartProvider cart, double deliveryFee, {double discount = 0}) {
@@ -36,10 +36,11 @@ double cartEstimateTotal(CartProvider cart, double deliveryFee, {double discount
 /// exact cart (backend migration 018, [OrderProvider.couponFor]), shown on
 /// checkout only ([showCoupon]); the server re-checks it at placeOrder.
 ///
-/// New-customer free deliveries (owner, 2026-10-08): on mount it asks where
-/// this customer stands ([StoreInfoProvider.loadCheckoutInfo]); while a free
-/// delivery applies the Delivery fee row reads FREE with a short welcome
-/// note. The order's own `deliveryFee` stays authoritative.
+/// Free deliveries (owner, 2026-10-08; every customer since 2026-10-09): on
+/// mount it asks where this customer stands
+/// ([StoreInfoProvider.loadCheckoutInfo]); while a free delivery applies the
+/// Delivery fee row reads FREE with a short note of how many are left. The
+/// order's own `deliveryFee` stays authoritative.
 class CartPriceDetailWidget extends StatefulWidget {
   const CartPriceDetailWidget({super.key, this.footer, this.showCoupon = false});
 
@@ -172,12 +173,12 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
   }
 }
 
-/// The line under a FREE delivery fee, e.g. "Free delivery — welcome to
-/// Blynk. 1 of 2 free deliveries left." (the next order included).
+/// The line under a FREE delivery fee, e.g. "Free delivery — 1 of 2 free
+/// deliveries left." (the next order included). No "welcome": the free
+/// deliveries are for every customer, existing ones too (owner, 2026-10-09).
 String freeDeliveryNote(FreeDeliveryOffer offer) {
   final plural = offer.count == 1 ? 'delivery' : 'deliveries';
-  return 'Free delivery — welcome to Blynk. '
-      '${offer.remaining} of ${offer.count} free $plural left.';
+  return 'Free delivery — ${offer.remaining} of ${offer.count} free $plural left.';
 }
 
 class _SummaryRow extends StatelessWidget {

@@ -241,6 +241,13 @@ export interface ProductsTable {
    * for order history.
    */
   deleted_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  /**
+   * Migration 031 (owner, 2026-10-09): the reduced price while the product is
+   * on offer, and when the offer stops (null = until removed). Null price =
+   * no offer. Active rule: src/modules/catalog/catalog.offers.ts.
+   */
+  offer_price: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  offer_ends_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 export interface InventoryTable {
@@ -448,6 +455,9 @@ export interface ProductCatalogView {
   // product reads carry the crop anchor with the image they describe.
   image_focal_x: number;
   image_focal_y: number;
+  // Migration 031 appended the product offer (raw; may be ended).
+  offer_price: ColumnType<number | null, never, never>;
+  offer_ends_at: Date | null;
 }
 
 export interface SuppliersTable {

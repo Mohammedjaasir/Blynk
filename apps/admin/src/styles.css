@@ -388,6 +388,18 @@ body {
   background: var(--yellow);
 }
 
+/* A product on offer (owner, 2026-10-09): a price tag, not a status dot. */
+.status--offer {
+  margin-right: 0;
+  color: var(--green);
+}
+
+.status--offer .status__dot {
+  background: var(--green);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
 /* -------------------------------------------------------------- controls */
 .button {
   border: 1px solid transparent;

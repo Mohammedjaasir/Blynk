@@ -933,10 +933,15 @@ export const settings = {
     update: (fee_lkr: number) =>
       apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee', { method: 'PATCH', body: { fee_lkr } }),
   },
-  /** Coupon codes on/off and free deliveries for new customers (owner, 2026-10-08). */
+  /** Coupon codes on/off (owner, 2026-10-08) and free deliveries for every
+   * customer since a start date (owner, 2026-10-09). `since` is optional on
+   * PATCH: left out, the stored start date stays. */
   checkout: {
     get: () => apiRequest<CheckoutSettings>('/admin/settings/checkout'),
-    update: (body: Partial<Omit<CheckoutSettings, 'updated_at'>>) =>
+    update: (body: {
+      coupons_enabled?: boolean;
+      new_customer_free_deliveries?: { enabled: boolean; count: number; since?: string };
+    }) =>
       apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
   },
 };

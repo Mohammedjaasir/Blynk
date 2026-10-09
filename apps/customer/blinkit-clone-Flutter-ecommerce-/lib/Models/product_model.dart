@@ -32,7 +32,20 @@ class ProductModel {
   final int imageFocalX;
   final int imageFocalY;
 
+  /// The REGULAR price. While an offer runs the customer is charged
+  /// [effectivePrice] instead, and this is the one shown struck through.
   final double sellingPrice;
+
+  /// The reduced price while the product is on offer (owner, 2026-10-09:
+  /// e.g. Rice LKR 250 -> LKR 220). The backend sends it only while the
+  /// offer is active; null otherwise, and on a backend that predates offers.
+  final double? offerPrice;
+
+  /// When the offer ends, or null for an offer with no end date (and for no
+  /// offer at all). Lets a saved cart or a long-open screen drop an offer
+  /// that ended since the product was fetched.
+  final DateTime? offerEndsAt;
+
   final bool isAvailable;
 
   const ProductModel({
@@ -50,6 +63,8 @@ class ProductModel {
     this.imageFocalX = kFocalCentrePercent,
     this.imageFocalY = kFocalCentrePercent,
     required this.sellingPrice,
+    this.offerPrice,
+    this.offerEndsAt,
     required this.isAvailable,
   });
 
@@ -74,8 +89,49 @@ class ProductModel {
       sellingPrice:
           double.tryParse((json['selling_price'] ?? json['sellingPrice'] ?? 0).toString()) ??
               0.0,
+      offerPrice: _parseOfferPrice(json['offer_price'] ?? json['offerPrice']),
+      offerEndsAt: _parseDate(json['offer_ends_at'] ?? json['offerEndsAt']),
       isAvailable: json['is_available'] == true || json['isAvailable'] == true,
     );
+  }
+
+  /// A number or a numeric string (a Postgres numeric can arrive as one);
+  /// anything else, zero or below is "no offer".
+  static double? _parseOfferPrice(Object? raw) {
+    final double? value = switch (raw) {
+      num n => n.toDouble(),
+      String s => double.tryParse(s.trim()),
+      _ => null,
+    };
+    if (value == null || !value.isFinite || value <= 0) return null;
+    return value;
+  }
+
+  static DateTime? _parseDate(Object? raw) =>
+      raw is String ? DateTime.tryParse(raw.trim()) : null;
+
+  /// Whether the offer is running at [now] (the device clock by default): an
+  /// offer price below the regular price, and an end date (if any) not yet
+  /// passed. The server is authoritative at checkout either way.
+  bool isOnOfferAt(DateTime now) {
+    final offer = offerPrice;
+    if (offer == null || offer >= sellingPrice) return false;
+    final ends = offerEndsAt;
+    return ends == null || now.isBefore(ends);
+  }
+
+  bool get isOnOffer => isOnOfferAt(DateTime.now());
+
+  /// The price the customer pays now: [offerPrice] while [isOnOffer], else
+  /// [sellingPrice]. Every price shown as "the price" and every cart total
+  /// uses this.
+  double get effectivePrice => isOnOffer ? offerPrice! : sellingPrice;
+
+  /// The offer's saving as a whole percentage of [sellingPrice], rounded
+  /// (250 -> 220 is 12). 0 when not on offer.
+  int get offerPercentOff {
+    if (!isOnOffer || sellingPrice <= 0) return 0;
+    return ((sellingPrice - offerPrice!) / sellingPrice * 100).round();
   }
 
   /// The same snake_case shape [ProductModel.fromJson] reads, so a product
@@ -95,6 +151,8 @@ class ProductModel {
         'image_focal_x': imageFocalX,
         'image_focal_y': imageFocalY,
         'selling_price': sellingPrice,
+        'offer_price': offerPrice,
+        'offer_ends_at': offerEndsAt?.toIso8601String(),
         'is_available': isAvailable,
       };
 

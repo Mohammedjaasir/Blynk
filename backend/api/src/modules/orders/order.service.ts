@@ -16,6 +16,7 @@ import { evaluateCoupon } from '../coupons/coupon.service.js';
 import type { ValidateCouponInput } from '../coupons/coupon.schema.js';
 import { checkoutSettings } from '../configuration/settings.service.js';
 import { freeDeliveryStatus } from './free-delivery.js';
+import { activeOfferPrice } from '../catalog/catalog.offers.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -94,6 +95,8 @@ export function sanitizeCustomerOrder(order: any) {
 /**
  * Authoritative prices for a cart (order creation and the coupon preview):
  * every product must exist and be on sale; line totals use the pricing rules.
+ * A product on an active offer (migration 031; owner, 2026-10-09) is charged
+ * its offer price, and unit_selling_price snapshots what was charged.
  */
 export async function priceCart(items: CreateOrderInput['items']) {
   const productIds = items.map((it) => it.product_id);
@@ -128,7 +131,8 @@ export async function priceCart(items: CreateOrderInput['items']) {
       defaultMarkupPercent: defaultMarkup,
     });
 
-    const lineSubtotal = Number((priceResult.sellingPrice * item.quantity).toFixed(2));
+    const unitPrice = activeOfferPrice(prod, priceResult.sellingPrice) ?? priceResult.sellingPrice;
+    const lineSubtotal = Number((unitPrice * item.quantity).toFixed(2));
     subtotalAmount += lineSubtotal;
 
     return {
@@ -136,7 +140,7 @@ export async function priceCart(items: CreateOrderInput['items']) {
       product_name_snapshot: prod.name,
       sku_snapshot: prod.sku,
       unit_snapshot: prod.unit,
-      unit_selling_price: priceResult.sellingPrice,
+      unit_selling_price: unitPrice,
       estimated_unit_cost: Number(Number(prod.purchase_cost).toFixed(2)),
       markup_percentage_applied: priceResult.effectiveMarkupPercent,
       quantity: item.quantity,

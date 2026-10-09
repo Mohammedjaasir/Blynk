@@ -13,6 +13,7 @@ import { releaseStockAlertsNow } from '../notifications/push/push.events.js';
 import { db } from '../../database/connection.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { resolveGroupPlacement } from './catalog.groups.js';
+import { activeOfferPrice, assertOfferAllowed, publicOffer, sellingPriceFor } from './catalog.offers.js';
 
 export interface CustomerProductDto {
   id: string;
@@ -34,8 +35,26 @@ export interface CustomerProductDto {
    */
   image_focal_x: number;
   image_focal_y: number;
+  /** The regular price; the app strikes it through while an offer is on. */
   selling_price: number;
+  /**
+   * Migration 031 (owner, 2026-10-09): the price charged while the product
+   * is on offer. Both fields are null unless the offer is active right now.
+   */
+  offer_price: number | null;
+  offer_ends_at: string | null;
   is_available: boolean;
+}
+
+/** Admin/Operations: the offer as stored, plus whether it applies right now. */
+function adminOffer(product: { offer_price: unknown; offer_ends_at: Date | string | null; calculated_selling_price: unknown }) {
+  const selling = Number(Number(product.calculated_selling_price).toFixed(2));
+  const offerPrice = product.offer_price === null || product.offer_price === undefined ? null : Number(product.offer_price);
+  return {
+    offer_price: offerPrice,
+    offer_ends_at: product.offer_ends_at ? new Date(product.offer_ends_at).toISOString() : null,
+    offer_active: activeOfferPrice({ offer_price: offerPrice, offer_ends_at: product.offer_ends_at }, selling) !== null,
+  };
 }
 
 /**
@@ -243,6 +262,7 @@ export class CatalogService {
       category_slug: query.category_slug,
       search: query.search,
       is_available: query.is_available,
+      on_offer: query.on_offer,
       limit,
       offset,
     };
@@ -268,6 +288,7 @@ export class CatalogService {
       image_focal_x: clampFocal(p.image_focal_x),
       image_focal_y: clampFocal(p.image_focal_y),
       selling_price: Number(Number(p.calculated_selling_price).toFixed(2)),
+      ...publicOffer(p, Number(Number(p.calculated_selling_price).toFixed(2))),
       is_available: p.is_available,
     }));
 
@@ -305,6 +326,7 @@ export class CatalogService {
       image_focal_x: clampFocal(rawProduct.image_focal_x),
       image_focal_y: clampFocal(rawProduct.image_focal_y),
       selling_price: Number(Number(rawProduct.calculated_selling_price).toFixed(2)),
+      ...publicOffer(rawProduct, Number(Number(rawProduct.calculated_selling_price).toFixed(2))),
       is_available: rawProduct.is_available,
     };
   }
@@ -352,6 +374,7 @@ export class CatalogService {
         calculated_selling_price: Number(
           Number(product.calculated_selling_price).toFixed(2)
         ),
+        ...adminOffer(product),
       })),
       pagination: { page, limit },
     };
@@ -372,6 +395,7 @@ export class CatalogService {
         product.custom_markup_percent !== null ? Number(product.custom_markup_percent) : null,
       effective_markup_percent: Number(Number(product.effective_markup_percent).toFixed(2)),
       calculated_selling_price: Number(Number(product.calculated_selling_price).toFixed(2)),
+      ...adminOffer(product),
     };
   }
 
@@ -409,6 +433,17 @@ export class CatalogService {
       slug = await generateUniqueSlug(input.name, 'product', async (s) => !!(await catalogRepository.findProductBySlug(s)), 255);
     }
 
+    // 3b. Offer (migration 031): below the selling price, ending in the future.
+    const offerPrice = input.offer_price ?? null;
+    if (offerPrice !== null) {
+      assertOfferAllowed({
+        offerPrice,
+        sellingPrice: await sellingPriceFor(input.purchase_cost, input.custom_markup_percent ?? null),
+        endsAt: input.offer_ends_at ?? null,
+        endsAtChanged: true,
+      });
+    }
+
     // 4. Create record
     const created = await catalogRepository.createProduct({
       category_id: input.category_id,
@@ -428,6 +463,9 @@ export class CatalogService {
       custom_markup_percent: input.custom_markup_percent,
       is_available: input.is_available ?? true,
       is_active: input.is_active ?? true,
+      offer_price: offerPrice,
+      // No offer, no end date.
+      offer_ends_at: offerPrice === null ? null : input.offer_ends_at ?? null,
     });
 
     logger.info({ productId: created.id, sku: created.sku }, 'Product created by admin');
@@ -475,6 +513,38 @@ export class CatalogService {
       }
     }
 
+    // 5. Offer (migration 031; owner, 2026-10-09). Checked whenever the
+    // offer, the cost or the markup changes and an offer remains: the offer
+    // must stay below the selling price after this edit. Removing the offer
+    // (offer_price null) also clears its end date.
+    const offerPrice =
+      input.offer_price !== undefined
+        ? input.offer_price
+        : existing.offer_price === null
+          ? null
+          : Number(existing.offer_price);
+    const existingEnds = existing.offer_ends_at ? new Date(existing.offer_ends_at).toISOString() : null;
+    const requestedEnds = input.offer_ends_at !== undefined ? input.offer_ends_at : existingEnds;
+    const offerEnds = offerPrice === null ? null : requestedEnds;
+    const endsAtChanged =
+      input.offer_ends_at !== undefined &&
+      (input.offer_ends_at === null ? existingEnds !== null : new Date(input.offer_ends_at).toISOString() !== existingEnds);
+    const costTouched = input.purchase_cost !== undefined || input.custom_markup_percent !== undefined;
+    if (offerPrice !== null && (input.offer_price !== undefined || costTouched || endsAtChanged)) {
+      const sellingPrice = costTouched
+        ? await sellingPriceFor(
+            input.purchase_cost ?? Number(existing.purchase_cost),
+            input.custom_markup_percent !== undefined
+              ? input.custom_markup_percent
+              : existing.custom_markup_percent === null
+                ? null
+                : Number(existing.custom_markup_percent)
+          )
+        : Number(Number(existing.calculated_selling_price).toFixed(2));
+      assertOfferAllowed({ offerPrice, sellingPrice, endsAt: offerEnds, endsAtChanged });
+    }
+    const offerChanged = input.offer_price !== undefined || input.offer_ends_at !== undefined;
+
     await catalogRepository.updateProduct(id, {
       ...(input.category_id !== undefined ? { category_id: input.category_id } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
@@ -493,6 +563,7 @@ export class CatalogService {
         : {}),
       ...(input.is_available !== undefined ? { is_available: input.is_available } : {}),
       ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
+      ...(offerChanged ? { offer_price: offerPrice, offer_ends_at: offerEnds } : {}),
     });
 
     logger.info({ productId: id }, 'Product updated by admin');

@@ -688,6 +688,16 @@ export interface AdminProduct {
   effective_markup_percent?: number;
   calculated_selling_price?: number;
   selling_price?: number;
+  /**
+   * Offer price (owner, 2026-10-09): the reduced price customers pay, as
+   * stored, with an optional end. `offer_active` is the backend's word on
+   * whether it applies right now (set, not ended, below the selling price) -
+   * never worked out here. Optional so an API from before migration 031
+   * still reads as "no offer".
+   */
+  offer_price?: number | null;
+  offer_ends_at?: string | null;
+  offer_active?: boolean;
   is_available: boolean;
   is_active: boolean;
   updated_at?: string;
@@ -913,7 +923,10 @@ export interface DeliveryFeeSetting {
 /** `GET|PATCH /admin/settings/checkout` - checkout switches (owner, 2026-10-08). */
 export interface CheckoutSettings {
   coupons_enabled: boolean;
-  new_customer_free_deliveries: { enabled: boolean; count: number };
+  /** Every customer, existing ones too, gets `count` free deliveries,
+   * counting only orders placed on or after `since` (ISO; owner, 2026-10-09).
+   * The key name predates that decision. */
+  new_customer_free_deliveries: { enabled: boolean; count: number; since: string };
   updated_at: string | null;
 }
 

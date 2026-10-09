@@ -48,7 +48,7 @@ export function parseDeliveryFee(input: string): { value: number } | { error: st
 }
 
 /**
- * Free deliveries per new customer (owner, 2026-10-08): a whole number
+ * Free deliveries per customer (owner, 2026-10-08; every customer since 2026-10-09): a whole number
  * 0..MAX_FREE_DELIVERIES, as PATCH /admin/settings/checkout accepts.
  */
 export const MAX_FREE_DELIVERIES = 10;
@@ -58,6 +58,67 @@ export function parseFreeDeliveryCount(input: string): { value: number } | { err
     return { error: `Enter a whole number from 0 to ${MAX_FREE_DELIVERIES}.` };
   }
   return { value: Number(s) };
+}
+
+// ------------------------------------------------- Colombo calendar dates
+// Sri Lanka is UTC+05:30 all year (no daylight saving), the same fixed
+// offset `pages/Cash.tsx`'s `colomboToday` and `lib/dental.ts` rely on.
+const COLOMBO_OFFSET_MS = 330 * 60_000;
+
+const colomboDate = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'Asia/Colombo',
+});
+
+/** "9 Oct 2026" - the calendar day an instant falls on in Colombo. */
+export function formatColomboDate(iso: string): string {
+  const instant = new Date(iso);
+  return Number.isNaN(instant.getTime()) ? iso : colomboDate.format(instant);
+}
+
+/** The Colombo calendar day of an instant, as YYYY-MM-DD (a date input's value). */
+export function colomboDay(iso: string): string {
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return '';
+  return new Date(instant.getTime() + COLOMBO_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/** Today in Colombo, YYYY-MM-DD. */
+export function colomboTodayDay(now = new Date()): string {
+  return colomboDay(now.toISOString());
+}
+
+/**
+ * An offer's end for a picked day (owner, 2026-10-09): the last second of
+ * that day in Colombo, with the offset the API requires.
+ */
+export function offerEndForDay(day: string): string {
+  return `${day}T23:59:59+05:30`;
+}
+
+/**
+ * An offer price typed into the product form (owner, 2026-10-09): above
+ * zero, at most 2 decimals and strictly lower than the selling price the
+ * form shows (`sellingPrice` null = not known yet; the server checks again
+ * against the price it calculates).
+ */
+export function parseOfferPrice(input: string, sellingPrice: number | null): { value: number } | { error: string } {
+  const s = input.trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) return { error: 'Enter the offer price, like 220 or 219.50.' };
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return { error: 'Use at most 2 decimals.' };
+  const value = Number(s);
+  if (value <= 0) return { error: 'The offer price must be more than LKR 0.' };
+  if (sellingPrice !== null && value >= sellingPrice) {
+    return { error: `The offer price must be lower than the selling price (LKR ${sellingPrice.toFixed(2)}).` };
+  }
+  return { value };
+}
+
+/** Whole percent off, e.g. 250 -> 220 is 12% off. */
+export function percentOff(offer: number, selling: number): number {
+  return selling > 0 ? Math.round(((selling - offer) / selling) * 100) : 0;
 }
 
 /** The API's display_order range for promotions (promotion.schema.ts). */

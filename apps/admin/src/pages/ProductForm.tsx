@@ -4,16 +4,40 @@ import { categories as categoriesApi, products as productsApi } from '../api/res
 import type { Category } from '../api/types';
 import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
+import { ApiError } from '../api/client';
 import { Field, Spinner, useToast } from '../components/ui';
 import { errorMessage, splitServerErrors } from '../lib/apiErrors';
+import { colomboDate, formatDay } from '../lib/coupons';
 import { useImageCleanup } from '../lib/imageCleanup';
+import { formatMoney } from '../lib/orders';
 
 /** The API's limits (catalog.schema.ts, NUMERIC(5,2) and NUMERIC(10,2)). */
 export const MAX_MARKUP_PERCENT = 999.99;
 export const MAX_PURCHASE_COST = 99_999_999.99;
 
 /** Fields with an inline error slot; a server error on one shows there. */
-const INLINE_FIELDS = ['category_id', 'name', 'sku', 'unit', 'purchase_cost', 'custom_markup_percent'] as const;
+const INLINE_FIELDS = [
+  'category_id',
+  'name',
+  'sku',
+  'unit',
+  'purchase_cost',
+  'custom_markup_percent',
+  'offer_price',
+  'offer_ends_at',
+] as const;
+
+/**
+ * Offer end (owner, 2026-10-09): the owner picks a day and the offer runs to
+ * the end of that day in Colombo.
+ */
+export const offerEndOf = (date: string) => `${date}T23:59:59+05:30`;
+
+/** The offer as the backend stores it, for "what changed" on save. */
+interface StoredOffer {
+  price: number | null;
+  endsAt: string | null;
+}
 
 interface FormState {
   category_id: string;
@@ -26,6 +50,10 @@ interface FormState {
   image_url: string | null;
   purchase_cost: string;
   custom_markup_percent: string;
+  /** Offer price (owner, 2026-10-09); blank = no offer. */
+  offer_price: string;
+  /** YYYY-MM-DD in Colombo; blank = no end date. */
+  offer_ends_on: string;
   is_available: boolean;
   is_active: boolean;
 }
@@ -41,6 +69,8 @@ const EMPTY: FormState = {
   image_url: null,
   purchase_cost: '',
   custom_markup_percent: '',
+  offer_price: '',
+  offer_ends_on: '',
   is_available: true,
   is_active: true,
 };
@@ -64,6 +94,10 @@ export function ProductForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [effectiveMarkup, setEffectiveMarkup] = useState<number | null>(null);
+  // The saved selling price, for the offer check while the preview can't
+  // compute one.
+  const [savedPrice, setSavedPrice] = useState<number | null>(null);
+  const [storedOffer, setStoredOffer] = useState<StoredOffer>({ price: null, endsAt: null });
   // The image the saved product points at; replaced files are deleted only
   // after a successful save.
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -105,10 +139,17 @@ export function ProductForm() {
             product.custom_markup_percent === undefined
               ? ''
               : String(product.custom_markup_percent),
+          offer_price:
+            product.offer_price === null || product.offer_price === undefined
+              ? ''
+              : String(product.offer_price),
+          offer_ends_on: product.offer_ends_at ? colomboDate(product.offer_ends_at) : '',
           is_available: product.is_available,
           is_active: product.is_active,
         });
         setEffectiveMarkup(product.effective_markup_percent ?? null);
+        setSavedPrice(product.calculated_selling_price ?? null);
+        setStoredOffer({ price: product.offer_price ?? null, endsAt: product.offer_ends_at ?? null });
         setOriginalImage(product.image_url ?? null);
       })
       .catch((err) =>
@@ -137,6 +178,31 @@ export function ProductForm() {
     return cost * (1 + markup / 100);
   }, [form.purchase_cost, form.custom_markup_percent, effectiveMarkup]);
 
+  /** The selling price the offer must beat: the preview, else the saved one. */
+  const sellingPrice = useMemo(() => {
+    const price = previewPrice ?? savedPrice;
+    return price === null ? null : Math.round(price * 100) / 100;
+  }, [previewPrice, savedPrice]);
+
+  const storedOfferDay = storedOffer.endsAt ? colomboDate(storedOffer.endsAt) : '';
+  const offerChanged =
+    (form.offer_price.trim() === '' ? null : Number(form.offer_price)) !== storedOffer.price ||
+    form.offer_ends_on !== storedOfferDay;
+  /** The stored offer's end has passed. */
+  const storedOfferEnded =
+    storedOffer.price !== null &&
+    storedOffer.endsAt !== null &&
+    Date.parse(storedOffer.endsAt) <= Date.now();
+
+  /** "12% off - customers pay LKR 220 instead of LKR 250", while valid. */
+  const offerSummary = useMemo(() => {
+    const offer = Number(form.offer_price);
+    if (form.offer_price.trim() === '' || !Number.isFinite(offer) || offer <= 0) return null;
+    if (sellingPrice === null || offer >= sellingPrice) return null;
+    const percent = Math.round((1 - offer / sellingPrice) * 100);
+    return `${percent}% off - customers pay ${formatMoney(offer)} instead of ${formatMoney(sellingPrice)}`;
+  }, [form.offer_price, sellingPrice]);
+
   function validate(): boolean {
     const next: Record<string, string> = {};
     if (!form.category_id) next.category_id = 'Choose a category';
@@ -153,6 +219,21 @@ export function ProductForm() {
       const markup = Number(form.custom_markup_percent);
       if (!Number.isFinite(markup) || markup < 0 || markup > MAX_MARKUP_PERCENT) {
         next.custom_markup_percent = 'Markup must be between 0 and 999.99';
+      }
+    }
+    // Offer (owner, 2026-10-09). An ended offer left untouched is not
+    // re-checked: it is not sent, and the backend keeps it as stored.
+    if (form.offer_price.trim() !== '' && (offerChanged || !storedOfferEnded)) {
+      const offer = Number(form.offer_price);
+      if (!Number.isFinite(offer) || offer <= 0 || !/^\d+(\.\d{1,2})?$/.test(form.offer_price.trim())) {
+        next.offer_price = 'Enter a price above 0 with at most 2 decimals';
+      } else if (sellingPrice !== null && offer >= sellingPrice) {
+        next.offer_price = `The offer price must be lower than the selling price (${formatMoney(sellingPrice)}).`;
+      }
+      if (form.offer_ends_on && form.offer_ends_on !== storedOfferDay && form.offer_ends_on < colomboDate()) {
+        next.offer_ends_at = 'Pick today or a later day';
+      } else if (storedOfferEnded && form.offer_ends_on && form.offer_ends_on === storedOfferDay) {
+        next.offer_ends_at = 'This offer has ended. Pick a new end day or clear it.';
       }
     }
     setErrors(next);
@@ -181,6 +262,22 @@ export function ProductForm() {
       is_available: form.is_available,
       is_active: form.is_active,
     };
+    // Offer fields go only when they changed (owner, 2026-10-09): a cleared
+    // price removes the offer (the backend clears its end too), and an
+    // unchanged end is resent exactly as stored.
+    if (offerChanged) {
+      if (form.offer_price.trim() === '') {
+        if (storedOffer.price !== null) payload.offer_price = null;
+      } else {
+        payload.offer_price = Number(form.offer_price);
+        payload.offer_ends_at =
+          form.offer_ends_on === storedOfferDay
+            ? storedOffer.endsAt
+            : form.offer_ends_on
+              ? offerEndOf(form.offer_ends_on)
+              : null;
+      }
+    }
 
     setSaving(true);
     try {
@@ -195,6 +292,12 @@ export function ProductForm() {
       await images.afterSave([form.image_url]);
       navigate('/products');
     } catch (err) {
+      // The offer refusals carry their own codes; show them by their field.
+      if (err instanceof ApiError && (err.code === 'OFFER_PRICE_NOT_LOWER' || err.code === 'OFFER_END_IN_PAST')) {
+        setErrors({ [err.code === 'OFFER_PRICE_NOT_LOWER' ? 'offer_price' : 'offer_ends_at']: err.message });
+        setServerError(null);
+        return;
+      }
       const { inline, message } = splitServerErrors(err, INLINE_FIELDS, 'Could not save the product.');
       setErrors(inline);
       setServerError(message);
@@ -325,6 +428,64 @@ export function ProductForm() {
               ? 'Selling price is calculated by the backend when you save.'
               : `Preview selling price: LKR ${previewPrice.toFixed(2)} (the backend recalculates on save).`}
           </p>
+        </section>
+
+        <section className="form__section" aria-label="Offer">
+          <h2 className="form__section-title">Offer</h2>
+          <div className="form__row">
+            <Field
+              label="Offer price (LKR)"
+              hint="Optional. Customers pay this instead of the selling price"
+              error={errors.offer_price}
+            >
+              <input
+                className="input"
+                inputMode="decimal"
+                value={form.offer_price}
+                onChange={(event) => setForm({ ...form, offer_price: event.target.value })}
+              />
+            </Field>
+            <Field
+              label="Offer ends"
+              hint="Optional. The offer runs to the end of this day"
+              error={errors.offer_ends_at}
+            >
+              <input
+                className="input"
+                type="date"
+                value={form.offer_ends_on}
+                min={colomboDate()}
+                disabled={form.offer_price.trim() === ''}
+                onChange={(event) => setForm({ ...form, offer_ends_on: event.target.value })}
+              />
+            </Field>
+          </div>
+          {storedOfferEnded && !offerChanged && storedOffer.endsAt ? (
+            <p className="form__note" role="status">
+              Offer ended on {formatDay(storedOffer.endsAt)}. Customers pay the selling price.
+            </p>
+          ) : offerSummary ? (
+            <p className="form__note" role="status">
+              {offerSummary}
+              {form.offer_ends_on ? `, until ${formatDay(offerEndOf(form.offer_ends_on))}` : ''}.
+            </p>
+          ) : form.offer_price.trim() !== '' && sellingPrice === null ? (
+            <p className="form__note">The offer price must be lower than the selling price calculated on save.</p>
+          ) : null}
+          {form.offer_price.trim() === '' && storedOffer.price !== null ? (
+            <p className="form__note">The offer is removed when you save.</p>
+          ) : null}
+          {form.offer_price.trim() !== '' ? (
+            <div>
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                onClick={() => setForm({ ...form, offer_price: '', offer_ends_on: '' })}
+              >
+                Remove offer
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <section className="form__section">

@@ -236,7 +236,11 @@ export const settings = {
 
   getCheckout: () => apiRequest<CheckoutSettings>('/admin/settings/checkout'),
 
-  setCheckout: (body: Partial<Omit<CheckoutSettings, 'updated_at'>>) =>
+  /** `since` is optional: omitted keeps the stored start (owner, 2026-10-09). */
+  setCheckout: (body: {
+    coupons_enabled?: boolean;
+    new_customer_free_deliveries?: { enabled: boolean; count: number; since?: string };
+  }) =>
     apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
 };
 

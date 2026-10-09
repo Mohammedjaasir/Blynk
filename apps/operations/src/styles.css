@@ -2663,3 +2663,49 @@ a.button {
   background: #12151f; color: #fff; font-size: 14px; font-weight: 700; white-space: nowrap;
   box-shadow: 0 6px 20px rgba(18, 21, 31, 0.25); pointer-events: none;
 }
+
+/* Checkout card: the free-delivery start date and its reset (owner,
+   2026-10-09). */
+.checkout-since {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+/* Product offer price (owner, 2026-10-09). The badge is a Blynk-yellow tag
+   so an offer stands out in the list without reading as a warning. */
+.offer-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: var(--text-meta);
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.offer-tag--ended {
+  background: var(--canvas);
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+}
+
+.offer-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+}
+
+.offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

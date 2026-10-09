@@ -225,7 +225,7 @@ describe('Delivery fee setting and GET /store', () => {
       delivery_hours: { start: '08:00', end: '21:00', timezone: 'Asia/Colombo' },
       radius_km: expect.any(Number),
       coupons_enabled: expect.any(Boolean),
-      new_customer_free_deliveries: { enabled: expect.any(Boolean), count: expect.any(Number) },
+      new_customer_free_deliveries: { enabled: expect.any(Boolean), count: expect.any(Number), since: expect.any(String) },
     });
   });
 

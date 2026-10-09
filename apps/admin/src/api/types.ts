@@ -158,7 +158,12 @@ export interface DeliveryFeeSetting {
 /** GET/PATCH /admin/settings/checkout - checkout switches (owner, 2026-10-08). */
 export interface CheckoutSettings {
   coupons_enabled: boolean;
-  new_customer_free_deliveries: { enabled: boolean; count: number };
+  /**
+   * Free deliveries for every customer (owner, 2026-10-09): `count` free
+   * deliveries per customer, counting only orders placed on or after `since`
+   * (ISO). PATCH may omit `since` to keep the stored one.
+   */
+  new_customer_free_deliveries: { enabled: boolean; count: number; since: string };
   updated_at: string | null;
 }
 
@@ -218,6 +223,14 @@ export interface AdminProduct {
   effective_markup_percent?: number;
   calculated_selling_price?: number;
   selling_price?: number;
+  /**
+   * Offer price (owner, 2026-10-09): a reduced price customers pay, as
+   * stored, with an optional end (ISO). `offer_active` is true only while it
+   * applies now (set, not ended, below the selling price).
+   */
+  offer_price?: number | null;
+  offer_ends_at?: string | null;
+  offer_active?: boolean;
   is_available: boolean;
   is_active: boolean;
   updated_at?: string;

@@ -182,7 +182,7 @@ class _LinePrice extends StatelessWidget {
         ),
         if (line.quantity > 1)
           Text(
-            '${line.quantity} × ${formatLkr(line.product.sellingPrice)}',
+            '${line.quantity} × ${formatLkr(line.product.effectivePrice)}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: BlynkText.caption.copyWith(color: BlynkColors.ink2),

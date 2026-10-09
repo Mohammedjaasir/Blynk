@@ -64,7 +64,7 @@ class StoreInfoProvider extends ChangeNotifier {
   FreeDeliveryOffer? _freeDelivery;
   Future<void>? _loadingCheckoutInfo;
 
-  /// This customer's new-customer free deliveries, or null when unknown
+  /// This customer's free deliveries, or null when unknown
   /// (signed out, not loaded yet, or the request failed).
   FreeDeliveryOffer? get freeDelivery => _freeDelivery;
 
@@ -181,8 +181,8 @@ double watchDeliveryFee(BuildContext context) =>
     context.watch<StoreInfoProvider?>()?.deliveryFee ??
     StoreInfo.defaultDeliveryFee;
 
-/// The fee this customer's next order is estimated at (free while a
-/// new-customer free delivery applies), rebuilding when it changes. Falls back
+/// The fee this customer's next order is estimated at (free while one of
+/// their free deliveries applies), rebuilding when it changes. Falls back
 /// to [StoreInfo.defaultDeliveryFee] where no [StoreInfoProvider] is in the
 /// tree.
 double watchCheckoutDeliveryFee(BuildContext context) =>
@@ -194,17 +194,20 @@ double watchCheckoutDeliveryFee(BuildContext context) =>
 bool watchCouponsEnabled(BuildContext context) =>
     context.watch<StoreInfoProvider?>()?.couponsEnabled ?? false;
 
-/// One customer's new-customer free deliveries (owner, 2026-10-08), from
-/// `free_delivery` on `GET /orders/checkout-info`.
+/// One customer's free deliveries (owner, 2026-10-08), from `free_delivery`
+/// on `GET /orders/checkout-info`. Since 2026-10-09 (owner) every customer,
+/// existing ones too, gets the first [count] deliveries free, counted from
+/// [since].
 @immutable
 class FreeDeliveryOffer {
   const FreeDeliveryOffer({
     required this.count,
     required this.remaining,
     required this.applies,
+    this.since,
   });
 
-  /// Free deliveries every new customer gets.
+  /// Free deliveries every customer gets.
   final int count;
 
   /// How many this customer still has, the next order included.
@@ -212,6 +215,10 @@ class FreeDeliveryOffer {
 
   /// Whether the next order goes out with no delivery fee.
   final bool applies;
+
+  /// When the free deliveries started counting; null when the server omits
+  /// it (an older backend) or sends something unparseable.
+  final DateTime? since;
 
   /// Null for anything that is not a well-formed offer.
   static FreeDeliveryOffer? tryParse(Object? raw) {
@@ -221,10 +228,12 @@ class FreeDeliveryOffer {
     final applies = raw['applies'];
     if (count is! int || remaining is! int || applies is! bool) return null;
     if (count < 0 || remaining < 0) return null;
+    final since = raw['since'];
     return FreeDeliveryOffer(
       count: count,
       remaining: remaining,
       applies: applies && remaining > 0,
+      since: since is String ? DateTime.tryParse(since) : null,
     );
   }
 
@@ -233,8 +242,9 @@ class FreeDeliveryOffer {
       other is FreeDeliveryOffer &&
       other.count == count &&
       other.remaining == remaining &&
-      other.applies == applies;
+      other.applies == applies &&
+      other.since == since;
 
   @override
-  int get hashCode => Object.hash(count, remaining, applies);
+  int get hashCode => Object.hash(count, remaining, applies, since);
 }

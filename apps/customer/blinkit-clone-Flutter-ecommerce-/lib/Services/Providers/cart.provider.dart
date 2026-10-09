@@ -13,7 +13,10 @@ class CartLine {
 
   const CartLine({required this.product, required this.quantity});
 
-  double get lineTotal => product.sellingPrice * quantity;
+  /// At the product's offer price while its offer runs (owner, 2026-10-09),
+  /// else its regular price. A saved cart keeps the offer's end date, so a
+  /// line restored after the offer ended goes back to the regular price.
+  double get lineTotal => product.effectivePrice * quantity;
 }
 
 /// The saved-cart format version. A stored cart with any other version is

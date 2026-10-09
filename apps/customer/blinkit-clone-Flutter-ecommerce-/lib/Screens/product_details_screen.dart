@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../Models/order_format.dart';
 import '../Models/product_model.dart';
 import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/product.provider.dart';
@@ -18,6 +19,7 @@ import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Atoms/image_well.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
 import '../UI/Widgets/Atoms/notify_me_button.dart';
+import '../UI/Widgets/Atoms/offer_tag.dart';
 import '../UI/Widgets/Atoms/status_badge.dart';
 import '../design/tokens.dart';
 import 'package:ecom/UI/Widgets/Atoms/product_hero.dart';
@@ -38,18 +40,20 @@ import 'package:ecom/UI/Widgets/Atoms/blynk_crossfade.dart';
 /// Product name                      <- display, the type hierarchy's anchor
 /// Unit . Pack size
 /// LKR 540        [ Available ]      <- real selling_price, real is_available
+///                                      (on offer: offer price, struck regular
+///                                      price, "Offer −12%", end date if any)
 /// Product details (expandable)      <- only sections with real content
 /// ------------------------------------
 /// STICKY:   [      Add to cart      ]   flat signal, ink label
 /// ```
 ///
 /// **Deliberately absent, because the backend has no field for any of them:**
-/// a rating, a review count, a discount percentage, a struck original price, a
-/// per-unit ("per 100 g") price, nutrition, certification or trust badges and
+/// a rating, a review count, a per-unit ("per 100 g") price, nutrition, certification or trust badges and
 /// a favourite/wishlist control (there is no wishlist module). None of them is
 /// rendered as a placeholder, a zero or a "coming soon" — each is omitted
 /// entirely. If `description` is null the About section does not render at
-/// all. The share action carries the product's **name** only: there is no
+/// all. A struck regular price and an offer tag show only while the backend
+/// reports a real offer (`offer_price`, owner 2026-10-09). The share action carries the product's **name** only: there is no
 /// public product URL to link to, so none is invented.
 ///
 /// The page therefore breathes more than a typical commerce detail page. That
@@ -394,6 +398,8 @@ class _ProductSummary extends StatelessWidget {
       if (product.packSize != null && product.packSize!.trim().isNotEmpty)
         product.packSize!,
     ].where((s) => s.trim().isNotEmpty).join(' · ');
+    final onOffer = product.isOnOffer;
+    final offerEndsAt = product.offerEndsAt;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,10 +429,35 @@ class _ProductSummary extends StatelessWidget {
           spacing: BlynkSpace.s16,
           runSpacing: BlynkSpace.s12,
           children: [
-            MoneyText(product.sellingPrice, style: BlynkType.priceHero),
+            if (onOffer)
+              // The offer price leads, the regular price sits struck beside
+              // it (owner, 2026-10-09); together they wrap as one.
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: BlynkSpace.s8,
+                runSpacing: BlynkSpace.s4,
+                children: [
+                  MoneyText(product.effectivePrice, style: BlynkType.priceHero),
+                  StruckPrice(
+                    product.sellingPrice,
+                    style: BlynkText.body.copyWith(color: BlynkColors.strike),
+                  ),
+                  OfferTag(product: product),
+                ],
+              )
+            else
+              MoneyText(product.sellingPrice, style: BlynkType.priceHero),
             _AvailabilityBadge(isAvailable: product.isAvailable),
           ],
         ),
+        if (onOffer && offerEndsAt != null) ...[
+          const SizedBox(height: BlynkSpace.s8),
+          Text(
+            'Offer ends ${formatOrderTime(offerEndsAt)}',
+            key: const Key('product-offer-ends'),
+            style: BlynkText.caption.copyWith(color: BlynkColors.ink2),
+          ),
+        ],
         // Sold out: the customer can ask for one push when it is back.
         if (!product.isAvailable) ...[
           const SizedBox(height: BlynkSpace.s16),

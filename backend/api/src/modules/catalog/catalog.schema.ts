@@ -41,6 +41,14 @@ export const productQuerySchema = z.object({
       if (val === undefined) return undefined;
       return val === true || val === 'true' || val === '1';
     }),
+  // Migration 031: only products with an active offer (the app's "Offers" rail).
+  on_offer: z
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .optional()
+    .transform((val) => {
+      if (val === undefined) return undefined;
+      return val === true || val === 'true' || val === '1';
+    }),
 });
 
 export type ProductQueryInput = z.infer<typeof productQuerySchema>;
@@ -126,6 +134,21 @@ export const createProductSchema = z.object({
     .optional(),
   is_available: z.boolean().default(true).optional(),
   is_active: z.boolean().default(true).optional(),
+  // Migration 031 (owner, 2026-10-09): the product on offer at a reduced
+  // price; null removes the offer. That it is below the selling price, and a
+  // new end date in the future, is checked by the service (catalog.offers.ts).
+  offer_price: z
+    .number({ invalid_type_error: 'Offer price must be a number' })
+    .positive('Offer price must be above 0')
+    .max(99_999_999.99, 'Offer price cannot exceed 99,999,999.99')
+    .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'Offer price can have at most 2 decimals')
+    .nullable()
+    .optional(),
+  offer_ends_at: z
+    .string()
+    .datetime({ offset: true, message: 'Offer end must be a date and time, e.g. 2026-10-31T23:59:59+05:30' })
+    .nullable()
+    .optional(),
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;

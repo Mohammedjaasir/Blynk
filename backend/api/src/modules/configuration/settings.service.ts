@@ -32,18 +32,32 @@ export type UpdateDeliveryFeeInput = z.infer<typeof updateDeliveryFeeSchema>;
  * Operations. No migration: a missing row means the default below.
  *  - coupons_enabled {"enabled": bool}: "Coupon code is not needed", so off
  *    until someone turns it on.
- *  - new_customer_free_deliveries {"enabled": bool, "count": int}: a new
- *    customer's first `count` orders go out with no delivery fee.
+ *  - new_customer_free_deliveries {"enabled": bool, "count": int, "since":
+ *    ISO}: each customer's first `count` orders placed at/after `since` go
+ *    out with no delivery fee. Owner, 2026-10-09: this is for every customer,
+ *    existing ones too, so orders before `since` do not use one up; a row
+ *    without `since` counts from DEFAULT_FREE_DELIVERIES_SINCE. The key keeps
+ *    its old name so stored rows and older apps keep working.
  */
 export const COUPONS_ENABLED_KEY = 'coupons_enabled';
 export const FREE_DELIVERIES_KEY = 'new_customer_free_deliveries';
 export const DEFAULT_COUPONS_ENABLED = false;
-export const DEFAULT_FREE_DELIVERIES = { enabled: true, count: 2 } as const;
+/** Owner, 2026-10-09: midnight in Asia/Colombo on the day it went to everyone. */
+export const DEFAULT_FREE_DELIVERIES_SINCE = new Date('2026-10-09T00:00:00+05:30').toISOString();
+export const DEFAULT_FREE_DELIVERIES = { enabled: true, count: 2, since: DEFAULT_FREE_DELIVERIES_SINCE } as const;
 export const MAX_FREE_DELIVERIES = 10;
+/** A "since" may run this far ahead of the server clock (client clock skew). */
+const SINCE_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
+export interface FreeDeliveriesSetting {
+  enabled: boolean;
+  count: number;
+  since: string;
+}
 
 export interface CheckoutSettings {
   coupons_enabled: boolean;
-  new_customer_free_deliveries: { enabled: boolean; count: number };
+  new_customer_free_deliveries: FreeDeliveriesSetting;
 }
 
 export const updateCheckoutSettingsSchema = z
@@ -57,6 +71,12 @@ export const updateCheckoutSettingsSchema = z
           .int('count must be a whole number')
           .min(0, 'count cannot be negative')
           .max(MAX_FREE_DELIVERIES, `count can be at most ${MAX_FREE_DELIVERIES}`),
+        // Omitted keeps the stored start; "Start again from today" sends now.
+        since: z
+          .string({ invalid_type_error: 'since must be a date and time' })
+          .datetime({ offset: true, message: 'since must be a date and time, e.g. 2026-10-09T00:00:00+05:30' })
+          .refine((v) => Date.parse(v) <= Date.now() + SINCE_FUTURE_SKEW_MS, 'since cannot be in the future')
+          .optional(),
       })
       .strict()
       .optional(),
@@ -73,11 +93,16 @@ function couponsEnabledFrom(value: unknown): boolean | null {
   return null;
 }
 
-function freeDeliveriesFrom(value: unknown): { enabled: boolean; count: number } | null {
+function freeDeliveriesFrom(value: unknown): FreeDeliveriesSetting | null {
   if (value && typeof value === 'object') {
-    const { enabled, count } = value as { enabled?: unknown; count?: unknown };
+    const { enabled, count, since } = value as { enabled?: unknown; count?: unknown; since?: unknown };
     if (typeof enabled === 'boolean' && typeof count === 'number' && Number.isInteger(count) && count >= 0) {
-      return { enabled, count: Math.min(count, MAX_FREE_DELIVERIES) };
+      const sinceMs = typeof since === 'string' ? Date.parse(since) : NaN;
+      return {
+        enabled,
+        count: Math.min(count, MAX_FREE_DELIVERIES),
+        since: Number.isFinite(sinceMs) ? new Date(sinceMs).toISOString() : DEFAULT_FREE_DELIVERIES_SINCE,
+      };
     }
   }
   return null;
@@ -176,10 +201,16 @@ export class SettingsService {
         writes.push({ key: COUPONS_ENABLED_KEY, value: { enabled: input.coupons_enabled }, description: 'Whether customers can enter a coupon code at checkout' });
       }
       if (input.new_customer_free_deliveries !== undefined) {
+        // An omitted `since` keeps the stored one (or the default start).
+        const stored = before.find((r) => r.key === FREE_DELIVERIES_KEY);
+        const since =
+          input.new_customer_free_deliveries.since !== undefined
+            ? new Date(input.new_customer_free_deliveries.since).toISOString()
+            : ((stored ? freeDeliveriesFrom(stored.value) : null)?.since ?? DEFAULT_FREE_DELIVERIES_SINCE);
         writes.push({
           key: FREE_DELIVERIES_KEY,
-          value: input.new_customer_free_deliveries,
-          description: "How many of a new customer's first orders have no delivery fee",
+          value: { enabled: input.new_customer_free_deliveries.enabled, count: input.new_customer_free_deliveries.count, since },
+          description: "How many orders since `since` have no delivery fee, for every customer",
         });
       }
       for (const w of writes) {
@@ -213,7 +244,7 @@ export class SettingsService {
    * values with a real source: the fee (system_configurations), the active
    * dark store's name and radius (dark_stores), and the delivery window the
    * order scheduler uses (utils/time.ts DEFAULT_OPERATING_HOURS), plus the
-   * checkout switches (show a coupon field; the new-customer free deliveries).
+   * checkout switches (show a coupon field; the free deliveries and since when).
    */
   async getPublicStore() {
     const [fee, checkout, store] = await Promise.all([

@@ -2,8 +2,9 @@ import type { OrderStatus } from '../../database/types.js';
 import type { DBConnection } from './order.repository.js';
 
 /**
- * New-customer free deliveries (owner, 2026-10-08): while the switch is on, a
- * customer's first `count` orders carry no delivery fee.
+ * Free deliveries (owner, 2026-10-08; every customer since 2026-10-09): while
+ * the switch is on, a customer's first `count` orders since `since` carry no
+ * delivery fee.
  *
  * What uses one up: every earlier order except a CANCELLED or FAILED one. A
  * cancelled order never went out and a failed delivery was not delivered, so
@@ -12,9 +13,17 @@ import type { DBConnection } from './order.repository.js';
  */
 export const FREE_DELIVERY_NOT_USED_BY: OrderStatus[] = ['CANCELLED', 'FAILED'];
 
+/**
+ * Free deliveries for every customer (owner, 2026-10-09): every customer,
+ * existing ones included, gets `count` free deliveries counted from `since`.
+ * Orders placed before `since` never use one up. "Start again from today" in
+ * Admin/Operations moves `since` to now, giving everyone `count` again.
+ */
 export interface FreeDeliveryPolicy {
   enabled: boolean;
   count: number;
+  /** ISO timestamp; only orders created at/after it count as used. */
+  since: string;
 }
 
 export interface FreeDeliveryStatus extends FreeDeliveryPolicy {
@@ -38,7 +47,7 @@ export async function freeDeliveryStatus(
   lock = false
 ): Promise<FreeDeliveryStatus> {
   if (!policy.enabled || policy.count <= 0) {
-    return { enabled: policy.enabled, count: policy.count, used: 0, remaining: 0, applies: false };
+    return { enabled: policy.enabled, count: policy.count, since: policy.since, used: 0, remaining: 0, applies: false };
   }
   if (lock) {
     await executor.selectFrom('users').select('id').where('id', '=', customerId).forNoKeyUpdate().executeTakeFirst();
@@ -48,8 +57,9 @@ export async function freeDeliveryStatus(
     .select((eb) => eb.fn.countAll<string>().as('n'))
     .where('customer_id', '=', customerId)
     .where('order_status', 'not in', FREE_DELIVERY_NOT_USED_BY)
+    .where('created_at', '>=', new Date(policy.since))
     .executeTakeFirst();
   const used = Number(row?.n ?? 0);
   const remaining = Math.max(policy.count - used, 0);
-  return { enabled: true, count: policy.count, used, remaining, applies: remaining > 0 };
+  return { enabled: true, count: policy.count, since: policy.since, used, remaining, applies: remaining > 0 };
 }

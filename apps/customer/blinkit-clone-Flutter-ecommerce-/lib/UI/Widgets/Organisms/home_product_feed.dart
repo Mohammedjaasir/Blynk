@@ -20,6 +20,10 @@ import '../../../design/tokens.dart';
 /// One request for the whole catalogue ([ProductProvider.loadProducts] with no
 /// category), then, top to bottom:
 ///
+/// * an **"Offers" rail** of the products on offer right now (owner,
+///   2026-10-09; [ProductProvider.loadOffers], `GET /products?on_offer=true`),
+///   only when there is at least one - no heading, skeleton or gap otherwise,
+///   and nothing on a failure;
 /// * a **rail per category** that has at least [railMinimum] products, in
 ///   the categories' own order, each with "See all" opening that category's
 ///   page - swiped sideways on a phone, one full row of cards on a desktop
@@ -43,6 +47,7 @@ class HomeProductFeed extends StatefulWidget {
   static const int railMaximum = 12;
 
   static const String allProductsTitle = 'All products';
+  static const String offersTitle = 'Offers';
   static const Key retryKey = Key('home-products-retry');
 
   /// Category rails for [products], ordered like [categories]: categories
@@ -76,6 +81,7 @@ class _HomeProductFeedState extends State<HomeProductFeed> {
       final provider = context.read<ProductProvider>();
       provider.loadProducts();
       provider.loadCategories();
+      provider.loadOffers();
     });
   }
 
@@ -136,9 +142,36 @@ class _HomeProductFeedState extends State<HomeProductFeed> {
             if (products.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
             final rails = HomeProductFeed.railsFor(provider.categories, products);
+            final offers = provider.offerProducts.take(HomeProductFeed.railMaximum).toList();
             final desktop = width >= AppBreakpoints.desktop;
             final columns = BlynkProductGrid.columnsFor(width);
             return SliverMainAxisGroup(slivers: [
+              // Drawn only once offers have arrived, so a slow or failed
+              // request never leaves an empty heading or a skeleton gap.
+              if (offers.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: BlynkSectionHeader(
+                    key: const ValueKey('home-offers'),
+                    title: HomeProductFeed.offersTitle,
+                    padding: header,
+                  ),
+                ),
+                // These products are also in the grid below: no image flight.
+                if (desktop)
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: gutter),
+                    sliver: SliverGrid(
+                      gridDelegate: productGridDelegate(context, width),
+                      delegate: SliverChildListDelegate([
+                        for (final p in offers.take(columns)) ProductCard(product: p, hero: false),
+                      ]),
+                    ),
+                  )
+                else
+                  SliverToBoxAdapter(
+                    child: ProductRail(key: const ValueKey('home-offers-rail'), products: offers, heroes: false),
+                  ),
+              ],
               for (final rail in rails) ...[
                 SliverToBoxAdapter(
                   child: BlynkSectionHeader(

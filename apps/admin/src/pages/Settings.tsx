@@ -4,15 +4,17 @@ import { ApiError } from '../api/client';
 import { settings as settingsApi } from '../api/resources';
 import type { CheckoutSettings, DeliveryFeeSetting } from '../api/types';
 import { PageHeader } from '../components/Layout';
-import { Field, Spinner, useToast } from '../components/ui';
+import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
+import { formatDay } from '../lib/coupons';
 import { parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
 import { formatMoney } from '../lib/orders';
 
 /**
  * Store settings: the delivery fee the customer app charges on new orders
  * (GET/PATCH /admin/settings/delivery-fee) and the checkout switches - coupon
- * codes and free deliveries for new customers (GET/PATCH
- * /admin/settings/checkout; owner, 2026-10-08).
+ * codes and free deliveries for every customer (GET/PATCH
+ * /admin/settings/checkout; owner, 2026-10-08, every customer since a start
+ * date: owner, 2026-10-09).
  */
 export function Settings() {
   return (
@@ -114,6 +116,7 @@ function CheckoutSettingsPanel() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
 
   function show(setting: CheckoutSettings) {
     setCurrent(setting);
@@ -160,6 +163,32 @@ function CheckoutSettingsPanel() {
     }
   }
 
+  /**
+   * Every customer gets the free deliveries again, counting orders from now
+   * (owner, 2026-10-09). Uses the stored on/off and count, not unsaved edits.
+   */
+  async function restartFromToday() {
+    if (!current) return;
+    setConfirmRestart(false);
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await settingsApi.setCheckout({
+        new_customer_free_deliveries: {
+          enabled: current.new_customer_free_deliveries.enabled,
+          count: current.new_customer_free_deliveries.count,
+          since: new Date().toISOString(),
+        },
+      });
+      show(updated);
+      toast.success('Free deliveries now count orders from today.');
+    } catch (err) {
+      setError(errorMessage(err, 'Could not restart the free deliveries.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="panel" aria-label="Checkout">
       <h2 className="panel__title">Checkout</h2>
@@ -176,9 +205,9 @@ function CheckoutSettingsPanel() {
           <p className="form__note">When off, the app hides the coupon field and orders ignore any code.</p>
           <label className="toggle">
             <input type="checkbox" checked={freeOn} onChange={(e) => setFreeOn(e.target.checked)} />
-            <span>Free deliveries for new customers</span>
+            <span>Free deliveries for every customer</span>
           </label>
-          <Field label="Free deliveries per new customer" hint="0 to 10. Cancelled orders do not use one up." error={error ?? undefined}>
+          <Field label="Free deliveries per customer" hint="0 to 10. Cancelled orders do not use one up." error={error ?? undefined}>
             <input
               className="input"
               inputMode="numeric"
@@ -187,14 +216,39 @@ function CheckoutSettingsPanel() {
               onChange={(e) => setCount(e.target.value)}
             />
           </Field>
+          {Number.isFinite(Date.parse(current.new_customer_free_deliveries.since ?? '')) ? (
+            <p className="form__note">
+              Counting orders since {formatDay(current.new_customer_free_deliveries.since)}. Orders placed before then do not
+              use one up.
+            </p>
+          ) : null}
           <p className="form__note">Changes apply to orders placed from now on.</p>
           <div className="form__actions">
+            <button
+              type="button"
+              className="button button--ghost"
+              disabled={saving}
+              onClick={() => setConfirmRestart(true)}
+            >
+              Start again from today
+            </button>
             <button type="submit" className="button" disabled={saving}>
               {saving ? <Spinner label="Saving" /> : 'Save'}
             </button>
           </div>
         </form>
       )}
+      {confirmRestart && current ? (
+        <ConfirmDialog
+          title="Start free deliveries again"
+          message={`Every customer gets ${current.new_customer_free_deliveries.count} free ${
+            current.new_customer_free_deliveries.count === 1 ? 'delivery' : 'deliveries'
+          } again, counting orders from today. Orders placed before today will not use them up.`}
+          confirmLabel="Start again"
+          onConfirm={() => void restartFromToday()}
+          onCancel={() => setConfirmRestart(false)}
+        />
+      ) : null}
     </section>
   );
 }

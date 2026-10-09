@@ -339,6 +339,51 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
+  // Home's "Offers" rail (owner, 2026-10-09): products with an active offer,
+  // from GET /products?on_offer=true. Kept apart from the per-category lists
+  // so the offer request never counts as, or replaces, a category load.
+  List<ProductModel> _offerProducts = [];
+  bool _offersRequested = false;
+  bool _isLoadingOffers = false;
+
+  /// The most offers Home's rail asks for.
+  static const int offersLimit = 24;
+
+  /// Products on offer right now, in the backend's order. Empty until loaded,
+  /// on any failure and when nothing is on offer - Home then has no rail.
+  /// Filtered on [ProductModel.isOnOffer] too, so a backend that ignores
+  /// `on_offer` (it predates offers) yields nothing rather than everything.
+  List<ProductModel> get offerProducts =>
+      _offerProducts.where((p) => p.isOnOffer).toList();
+
+  /// GET /products?on_offer=true. Same rules as [loadPromotions]: once unless
+  /// [force], and a failure empties the list (no error is shown - the rail
+  /// simply is not there). A failed refresh keeps the offers already on
+  /// screen, like every other list here.
+  Future<void> loadOffers({bool force = false}) async {
+    if (_isLoadingOffers) return;
+    if (_offersRequested && !force) return;
+    final hadOffers = _offerProducts.isNotEmpty;
+    _offersRequested = true;
+    _isLoadingOffers = true;
+    try {
+      final response = await _request('/products', const {
+        'on_offer': 'true',
+        'limit': offersLimit,
+        'page': 1,
+      });
+      final data = (response is Map ? response['data'] : null) as Map?;
+      _offerProducts = ProductPage.fromJson(
+        (data ?? const {}).cast<String, dynamic>(),
+      ).products;
+    } catch (_) {
+      if (!hadOffers) _offerProducts = [];
+    } finally {
+      _isLoadingOffers = false;
+      notifyListeners();
+    }
+  }
+
   Future<void>? _refreshInFlight;
   DateTime? _lastRefreshAt;
 
@@ -371,6 +416,7 @@ class ProductProvider extends ChangeNotifier {
       loadCategories(force: true),
       if (_homeGroupsRequested) loadHomeGroups(force: true),
       loadPromotions(force: true),
+      if (_offersRequested) loadOffers(force: true),
       for (final key in _productsByCategory.keys.toList())
         loadProducts(categorySlug: key.isEmpty ? null : key, force: true),
     ]).whenComplete(() => _refreshInFlight = null);
@@ -390,6 +436,7 @@ class ProductProvider extends ChangeNotifier {
       _productsByCategory[key] = sync(_productsByCategory[key]!);
     }
     _searchResults = sync(_searchResults);
+    _offerProducts = sync(_offerProducts);
   }
 
   /// Fetches one product (GET /catalog/products/:id) so the details page

@@ -20,6 +20,8 @@ const people = customerFixtures(app, { idPrefix: 'c0c00029', phoneBase: '+947092
 const opsToken = generateAccessToken({ ...users.admin, role: 'OPERATIONS' });
 const KEYS = ['coupons_enabled', 'new_customer_free_deliveries'];
 const FEE = 100;
+// Owner, 2026-10-09: with no stored start, free deliveries count from Colombo midnight that day.
+const DEFAULT_SINCE = '2026-10-08T18:30:00.000Z';
 const COUPON = 'TSTCHKOFF';
 
 type Row = { key: string; value: unknown; description: string | null; created_at: Date; updated_at: Date };
@@ -77,32 +79,32 @@ describe('Checkout settings', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({
       coupons_enabled: false,
-      new_customer_free_deliveries: { enabled: true, count: 2 },
+      new_customer_free_deliveries: { enabled: true, count: 2, since: DEFAULT_SINCE },
       updated_at: null,
     });
     const store = await request(app).get('/api/v1/store');
     expect(store.body.data.coupons_enabled).toBe(false);
-    expect(store.body.data.new_customer_free_deliveries).toEqual({ enabled: true, count: 2 });
+    expect(store.body.data.new_customer_free_deliveries).toEqual({ enabled: true, count: 2, since: DEFAULT_SINCE });
   });
 
   it('Admin and Operations change each switch on its own, audited', async () => {
     const a = await patch({ coupons_enabled: true });
     expect(a.status).toBe(200);
-    expect(a.body.data).toMatchObject({ coupons_enabled: true, new_customer_free_deliveries: { enabled: true, count: 2 } });
+    expect(a.body.data).toMatchObject({ coupons_enabled: true, new_customer_free_deliveries: { enabled: true, count: 2, since: DEFAULT_SINCE } });
 
     const b = await patch({ new_customer_free_deliveries: { enabled: false, count: 3 } }, opsToken);
     expect(b.status).toBe(200);
-    expect(b.body.data).toMatchObject({ coupons_enabled: true, new_customer_free_deliveries: { enabled: false, count: 3 } });
+    expect(b.body.data).toMatchObject({ coupons_enabled: true, new_customer_free_deliveries: { enabled: false, count: 3, since: DEFAULT_SINCE } });
     expect(b.body.data.updated_at).not.toBeNull();
 
     const store = (await request(app).get('/api/v1/store')).body.data;
     expect(store.coupons_enabled).toBe(true);
-    expect(store.new_customer_free_deliveries).toEqual({ enabled: false, count: 3 });
+    expect(store.new_customer_free_deliveries).toEqual({ enabled: false, count: 3, since: DEFAULT_SINCE });
 
     const audit = (
       await pool.query("SELECT old_values, new_values FROM audit_logs WHERE action = 'CHECKOUT_SETTINGS_UPDATED' ORDER BY created_at DESC LIMIT 2")
     ).rows;
-    expect(audit[0].new_values).toEqual({ key: 'checkout', new_customer_free_deliveries: { enabled: false, count: 3 } });
+    expect(audit[0].new_values).toEqual({ key: 'checkout', new_customer_free_deliveries: { enabled: false, count: 3, since: DEFAULT_SINCE } });
     expect(audit[0].old_values).toEqual({ key: 'checkout', new_customer_free_deliveries: null });
     expect(audit[1].new_values).toEqual({ key: 'checkout', coupons_enabled: { enabled: true } });
   });
@@ -119,10 +121,23 @@ describe('Checkout settings', () => {
     expect((await request(app).get('/api/v1/admin/settings/checkout')).status).toBe(401);
     expect((await patch({ new_customer_free_deliveries: { enabled: true, count: 0 } })).status).toBe(200);
     expect((await patch({ new_customer_free_deliveries: { enabled: true, count: 10 } })).status).toBe(200);
+    expect((await patch({ new_customer_free_deliveries: { enabled: true, count: 2, since: 'today' } })).status).toBe(400);
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+    expect((await patch({ new_customer_free_deliveries: { enabled: true, count: 2, since: tomorrow } })).status).toBe(400);
+  });
+
+  it('"Start again from today" moves since; later edits without since keep it', async () => {
+    const now = new Date().toISOString();
+    const res = await patch({ new_customer_free_deliveries: { enabled: true, count: 2, since: now } }, opsToken);
+    expect(res.status).toBe(200);
+    expect(res.body.data.new_customer_free_deliveries).toEqual({ enabled: true, count: 2, since: now });
+    const kept = await patch({ new_customer_free_deliveries: { enabled: true, count: 3 } });
+    expect(kept.body.data.new_customer_free_deliveries).toEqual({ enabled: true, count: 3, since: now });
+    expect((await request(app).get('/api/v1/store')).body.data.new_customer_free_deliveries.since).toBe(now);
   });
 });
 
-describe('Free deliveries for new customers', () => {
+describe('Free deliveries for every customer', () => {
   beforeAll(deleteRows);
 
   it('the first two orders go out free; a cancelled one does not use one up', async () => {
@@ -133,7 +148,7 @@ describe('Free deliveries for new customers', () => {
       delivery_fee_lkr: 0,
       standard_delivery_fee_lkr: FEE,
       coupons_enabled: false,
-      free_delivery: { enabled: true, count: 2, used: 0, remaining: 2, applies: true },
+      free_delivery: { enabled: true, count: 2, since: DEFAULT_SINCE, used: 0, remaining: 2, applies: true },
     });
 
     const first = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));
@@ -161,6 +176,30 @@ describe('Free deliveries for new customers', () => {
     expect(info).toMatchObject({ delivery_fee_lkr: FEE, free_delivery: { enabled: false, remaining: 0, applies: false } });
     const order = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));
     expect(order.delivery_fee).toBe(FEE);
+    await deleteRows();
+  });
+
+  it('orders placed before since do not use a free delivery; orders after it do', async () => {
+    // An existing customer whose two orders were placed before 9 October 2026.
+    const me = await people.customer(6);
+    const info = async () => (await request(app).get('/api/v1/orders/checkout-info').set(auth(me.token))).body.data;
+    const old1 = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));
+    const old2 = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));
+    expect((await info()).free_delivery).toMatchObject({ used: 2, remaining: 0, applies: false });
+    await pool.query("UPDATE orders SET created_at = '2026-10-08T12:00:00+05:30' WHERE id = ANY($1)", [[old1.id, old2.id]]);
+    expect((await info()).free_delivery).toMatchObject({ since: DEFAULT_SINCE, used: 0, remaining: 2, applies: true });
+
+    const after = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));
+    expect(after.delivery_fee).toBe(0);
+    expect((await info()).free_delivery).toMatchObject({ used: 1, remaining: 1, applies: true });
+
+    // "Start again from today": everyone gets the full count again.
+    const since = new Date().toISOString();
+    expect((await patch({ new_customer_free_deliveries: { enabled: true, count: 2, since } })).status).toBe(200);
+    expect((await info()).free_delivery).toMatchObject({ since, used: 0, remaining: 2, applies: true });
+    const again = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));
+    expect(again.delivery_fee).toBe(0);
+    expect((await info()).free_delivery).toMatchObject({ used: 1, remaining: 1 });
     await deleteRows();
   });
 
