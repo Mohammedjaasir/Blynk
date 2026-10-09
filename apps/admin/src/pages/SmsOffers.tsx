@@ -11,7 +11,6 @@ import {
   LANGUAGE_LABEL,
   LAUNCH_LANGUAGES,
   MAX_OFFER_TEXT,
-  OPT_OUT_LINE,
   SMS_LANGUAGES,
   languageList,
   offerInput,
@@ -235,7 +234,7 @@ export function SmsOffers() {
   );
 }
 
-/** One language's text: counter, preview with the opt-out line, and a test send. */
+/** One language's text: counter, preview, and a test send. */
 function OfferText({
   language,
   value,
@@ -291,8 +290,6 @@ function OfferText({
           <p className="preview__label">Customers receive</p>
           <p className="sms-offers__preview" aria-label={`${name} preview`}>
             {value.trim()}
-            {'\n'}
-            {OPT_OUT_LINE[language]}
           </p>
         </div>
       ) : null}

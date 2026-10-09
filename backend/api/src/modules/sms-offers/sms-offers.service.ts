@@ -34,7 +34,8 @@ export const OPT_OUT_LINE: Record<SmsLanguage, string> = {
   ta: 'சலுகைகளை நிறுத்த: Blynk app > Profile > SMS & offers',
 };
 
-export const withOptOut = (text: string, language: SmsLanguage) => `${text.trim()}\n${OPT_OUT_LINE[language]}`;
+// The owner dropped the opt-out line (owner, 2026-10-09: "No need"): offers go out exactly as written.
+export const withOptOut = (text: string, _language: SmsLanguage) => text.trim();
 
 /**
  * The languages offers are written and sent in (SMS_OFFER_LANGUAGES; English

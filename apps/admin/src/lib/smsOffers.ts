@@ -36,7 +36,8 @@ export const OPT_OUT_LINE: Record<SmsLanguage, string> = {
 };
 
 /** The SMS exactly as a customer receives it. */
-export const withOptOut = (text: string, language: SmsLanguage) => `${text.trim()}\n${OPT_OUT_LINE[language]}`;
+// The owner dropped the opt-out line (owner, 2026-10-09: "No need"): offers go out exactly as written.
+export const withOptOut = (text: string, _language: SmsLanguage) => text.trim();
 
 // GSM 03.38: the basic set, and the extension set whose characters take two.
 const GSM_BASIC =

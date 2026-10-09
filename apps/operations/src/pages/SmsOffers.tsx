@@ -435,7 +435,7 @@ function OfferText({
         />
         <span id={countId} className="field__hint" data-testid={`sms-count-${language}`}>
           {value.length}/{MAX_OFFER_TEXT} characters
-          {text ? ` · ${partsText(smsParts(finalSms))} with the stop line` : ''}
+          {text ? ` · ${partsText(smsParts(finalSms))}` : ''}
         </span>
       </div>
       {finalSms ? (

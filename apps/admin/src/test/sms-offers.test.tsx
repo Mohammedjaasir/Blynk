@@ -7,7 +7,7 @@ import { SmsOffers } from '../pages/SmsOffers';
 import { AuthProvider } from '../auth/AuthContext';
 import { ApiError, tokenStore } from '../api/client';
 import type { SmsLanguage, SmsOffer, SmsOfferEstimate } from '../api/types';
-import { OPT_OUT_LINE, languageList, offerInput, offerParts, smsOfferErrorMessage, smsParts, withOptOut } from '../lib/smsOffers';
+import { languageList, offerInput, offerParts, smsOfferErrorMessage, smsParts, withOptOut } from '../lib/smsOffers';
 import { respond, stubFetch, type Handler } from './fetchStub';
 
 /**
@@ -124,15 +124,13 @@ describe('SMS parts (lib)', () => {
     expect(smsParts(`${'a'.repeat(70)}த`)).toBe(2);
   });
 
-  it('includes the opt-out line in what a recipient costs', () => {
-    expect(withOptOut('  Rice 10% off ', 'en')).toBe('Rice 10% off\nStop offers: Blynk app > Profile > SMS & offers');
+  it('sends the offer exactly as written (no opt-out line, owner 2026-10-09)', () => {
+    expect(withOptOut('  Rice 10% off ', 'en')).toBe('Rice 10% off');
     expect(offerParts('', 'ta')).toBe(0);
     expect(offerParts('Rice 10% off', 'en')).toBe(1);
-    // 112 + newline + the 47-character line = 160: still one; 113 makes it two.
-    expect(OPT_OUT_LINE.en).toHaveLength(47);
-    expect(offerParts('a'.repeat(112), 'en')).toBe(1);
-    expect(offerParts('a'.repeat(113), 'en')).toBe(2);
-    expect(offerParts('த'.repeat(10), 'ta')).toBe(smsParts(withOptOut('த'.repeat(10), 'ta')));
+    expect(offerParts('a'.repeat(160), 'en')).toBe(1);
+    expect(offerParts('a'.repeat(161), 'en')).toBe(2);
+    expect(offerParts('த'.repeat(10), 'ta')).toBe(smsParts('த'.repeat(10)));
   });
 
   it('sends only the languages that have text', () => {
@@ -329,18 +327,18 @@ describe('SMS offers page', () => {
     expect(api.sent('POST', '/admin/sms-offers/test')).toEqual([{ language: 'en', message: 'Hello' }]);
   });
 
-  it('counts characters and SMS parts and previews the opt-out line', async () => {
+  it('counts characters and SMS parts and previews the SMS', async () => {
     const user = userEvent.setup();
     stubOffers();
     await renderAll();
     expect(screen.getByTestId('count-en')).toHaveTextContent('0 / 480 characters');
     await user.click(textBox('English'));
-    await user.paste('a'.repeat(113));
-    expect(screen.getByTestId('count-en')).toHaveTextContent('113 / 480 characters · 2 SMS parts with the opt-out line');
+    await user.paste('a'.repeat(161));
+    expect(screen.getByTestId('count-en')).toHaveTextContent('161 / 480 characters · 2 SMS parts');
     await user.click(textBox('Tamil'));
     await user.paste('சலுகை');
-    expect(screen.getByTestId('count-ta')).toHaveTextContent('5 / 480 characters · 1 SMS part with the opt-out line');
-    expect(screen.getByLabelText('Tamil preview').textContent).toBe('சலுகை\nசலுகைகளை நிறுத்த: Blynk app > Profile > SMS & offers');
+    expect(screen.getByTestId('count-ta')).toHaveTextContent('5 / 480 characters · 1 SMS part');
+    expect(screen.getByLabelText('Tamil preview').textContent).toBe('சலுகை');
     expect(textBox('Sinhala')).toHaveAttribute('maxLength', '480');
   });
 

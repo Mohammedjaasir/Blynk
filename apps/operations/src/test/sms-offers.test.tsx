@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
 import type { SmsLanguage, SmsOffer, SmsOfferEstimate } from '../api/types';
-import { OPT_OUT_LINE, smsParts, withOptOut } from '../lib/sms';
+import { smsParts, withOptOut } from '../lib/sms';
 import { OPERATIONS_STAFF, fail, ok, renderAs, type Call } from './helpers';
 
 /**
@@ -99,25 +99,21 @@ describe('SMS parts counter', () => {
     expect(smsParts('€'.repeat(81))).toBe(2);
   });
 
-  it('shows the count and parts with the stop line while typing', async () => {
+  it('shows the count and parts while typing; the SMS is sent exactly as written', async () => {
     open();
     await screen.findByLabelText(/^Tamil text/, { selector: 'textarea' });
     const english = textBox(/^English text/);
     fireEvent.change(english, { target: { value: 'Rice 10% off' } });
-    expect(screen.getByTestId('sms-count-en')).toHaveTextContent('12/480 characters · 1 SMS with the stop line');
-    expect(screen.getByLabelText('English SMS preview')).toHaveTextContent(
-      'Rice 10% off Stop offers: Blynk app > Profile > SMS & offers'
-    );
-    expect(OPT_OUT_LINE.ta.endsWith('Blynk app > Profile > SMS & offers')).toBe(true);
-    expect(OPT_OUT_LINE.si.endsWith('Blynk app > Profile > SMS & offers')).toBe(true);
+    expect(screen.getByTestId('sms-count-en')).toHaveTextContent('12/480 characters · 1 SMS');
+    // No opt-out line (owner, 2026-10-09: "No need").
+    expect(screen.getByLabelText('English SMS preview').textContent).toBe('Rice 10% off');
 
-    // Tamil: the stop line itself is Unicode, so the text has less room.
-    const room = 70 - ('\n' + OPT_OUT_LINE.ta).length;
+    // Tamil is Unicode: 70 characters in one SMS, 71 makes two.
     const tamil = textBox(/^Tamil text/);
-    fireEvent.change(tamil, { target: { value: 'த'.repeat(room) } });
-    expect(screen.getByTestId('sms-count-ta')).toHaveTextContent(`${room}/480 characters · 1 SMS with`);
-    fireEvent.change(tamil, { target: { value: 'த'.repeat(room + 1) } });
-    expect(screen.getByTestId('sms-count-ta')).toHaveTextContent(`${room + 1}/480 characters · 2 SMS parts with`);
+    fireEvent.change(tamil, { target: { value: 'த'.repeat(70) } });
+    expect(screen.getByTestId('sms-count-ta')).toHaveTextContent('70/480 characters · 1 SMS');
+    fireEvent.change(tamil, { target: { value: 'த'.repeat(71) } });
+    expect(screen.getByTestId('sms-count-ta')).toHaveTextContent('71/480 characters · 2 SMS parts');
   });
 });
 
@@ -157,8 +153,8 @@ describe('More -> SMS offers', () => {
     });
     await waitFor(() => expect(sendButton()).toBeEnabled());
     expect(screen.queryByRole('alert')).toBeNull();
-    // 10 English at 1 SMS each, 5 Tamil at 2 (the Tamil stop line is long).
-    expect(screen.getByTestId('sms-parts-total')).toHaveTextContent('20');
+    // 10 English and 5 Tamil, 1 SMS each (no opt-out line since 2026-10-09).
+    expect(screen.getByTestId('sms-parts-total')).toHaveTextContent('15');
   });
 
   it('keeps Send disabled when nobody can get offers', async () => {

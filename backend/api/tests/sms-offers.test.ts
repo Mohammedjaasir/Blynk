@@ -4,7 +4,7 @@ import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { orderingClock } from '../src/utils/time.js';
 import { env } from '../src/config/env.js';
-import { OPT_OUT_LINE, enabledOfferLanguages, languageFor, smsParts } from '../src/modules/sms-offers/sms-offers.service.js';
+import { enabledOfferLanguages, languageFor, smsParts } from '../src/modules/sms-offers/sms-offers.service.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { tokens, auth } from './helpers/stock.js';
 import { customerFixtures } from './helpers/customers.js';
@@ -120,7 +120,7 @@ describe('sending an offer', () => {
     expect(e.opted_out).toBeGreaterThanOrEqual(1);
     expect(e.recipients).toBe(e.by_language.si + e.by_language.ta + e.by_language.en);
     expect(e.missing_languages).toEqual([]);
-    expect(e.parts_per_sms.ta).toBe(smsParts(`${TEXT.ta}\n${OPT_OUT_LINE.ta}`));
+    expect(e.parts_per_sms.ta).toBe(smsParts(TEXT.ta));
   });
 
   it('counts opted-out customers within the chosen audience only', async () => {
@@ -184,9 +184,9 @@ describe('sending an offer', () => {
     expect(estimate.body.data.estimate.sms_parts_total).toBe(offer.sms_parts_total);
 
     const [toTamil] = await offerSms(offer.id, tamil.id);
-    expect(toTamil.payload.text).toBe(`${TEXT.ta}\n${OPT_OUT_LINE.ta}`);
+    expect(toTamil.payload.text).toBe(TEXT.ta);
     const [toUnset] = await offerSms(offer.id, unset.id);
-    expect(toUnset.payload.text).toBe(`${TEXT.si}\n${OPT_OUT_LINE.si}`); // the fallback
+    expect(toUnset.payload.text).toBe(TEXT.si); // the fallback
     expect(await offerSms(offer.id, optedOut.id)).toHaveLength(0);
 
     const list = await request(app).get('/api/v1/admin/sms-offers').set(auth(tokens.admin)).expect(200);
@@ -213,8 +213,7 @@ describe('sending an offer', () => {
         .expect(201);
       offerIds.push(res.body.data.offer.id);
       const [toTamil] = await offerSms(res.body.data.offer.id, tamil.id);
-      expect(toTamil.payload.text).toBe(`${TEXT.en}
-${OPT_OUT_LINE.en}`);
+      expect(toTamil.payload.text).toBe(TEXT.en);
     } finally {
       env.SMS_OFFER_LANGUAGES = 'si,ta,en';
     }
@@ -230,7 +229,7 @@ ${OPT_OUT_LINE.en}`);
     const rows = (await pool.query(`SELECT recipient, payload FROM notifications WHERE idempotency_key LIKE 'sms-offer-test:%'`)).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0].recipient).toBe('+94770927009');
-    expect(rows[0].payload.text).toBe(`${TEXT.ta}\n${OPT_OUT_LINE.ta}`);
+    expect(rows[0].payload.text).toBe(TEXT.ta);
   });
 
   it('test SMS: refused outside 8 AM - 9 PM, and at most 5 per staff member an hour', async () => {
