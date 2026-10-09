@@ -511,12 +511,16 @@ export type DentalSpecialty = string;
 /** Quick picks in the Add/Edit doctor dialog - suggestions only, the
  * operator can type any other specialty. */
 export const DENTAL_SPECIALTY_SUGGESTIONS = [
-  'General dentist',
-  'Orthodontist',
-  'Periodontist',
-  'Endodontist',
-  'Oral surgeon',
-  'Pediatric dentist',
+  // Any kind of doctor, not only dentists (owner, 2026-10-10: "we can add
+  // other doctors also"). Staff can still type any specialty.
+  'General physician',
+  'Pediatrician',
+  'Gynecologist',
+  'Dentist',
+  'Eye specialist',
+  'ENT specialist',
+  'Skin specialist',
+  'Cardiologist',
 ] as const;
 
 /** GET/POST/PATCH /admin/dental/clinics - no hard delete, `is_active` toggle
@@ -662,6 +666,32 @@ export interface Category {
   offer_percent?: number | null;
   offer_ends_at?: string | null;
   offer_active?: boolean;
+}
+
+/**
+ * Arrange (owner, 2026-10-10): one row of a category's "Arrange products"
+ * list (`GET /admin/categories/:id/product-order`), in the order customers
+ * see them. `display_order` null = not arranged (A-Z after the arranged).
+ */
+export interface ArrangeProduct {
+  id: string;
+  name: string;
+  category_id: string;
+  category_name: string;
+  unit: string;
+  pack_size: string | null;
+  image_url: string | null;
+  image_focal_x: number;
+  image_focal_y: number;
+  selling_price: number;
+  is_active: boolean;
+  is_available: boolean;
+  display_order: number | null;
+}
+
+export interface CategoryProductOrder {
+  category: { id: string; name: string; parent_id: string | null };
+  products: ArrangeProduct[];
 }
 
 /** A category as listed inside a group (`GET /admin/category-groups`). */
@@ -1036,6 +1066,9 @@ export interface CheckoutSettings {
    * counting only orders placed on or after `since` (ISO; owner, 2026-10-09).
    * The key name predates that decision. */
   new_customer_free_deliveries: { enabled: boolean; count: number; since: string };
+  /** The customer app shows "Save LKR X" on offers (owner, 2026-10-10).
+   * Optional: a backend from before the switch leaves it out (= off). */
+  show_offer_savings?: boolean;
   updated_at: string | null;
 }
 
@@ -1354,4 +1387,51 @@ export interface RiderApplication {
 export interface RiderApplicationPage {
   applications: RiderApplication[];
   pagination: { page: number; limit: number; total: number; total_pages: number };
+}
+
+/** Rider trips (owner, 2026-10-10): how many orders one rider may carry at
+ * once (1 = no trips) and the max straight-line km between their drop-offs
+ * before staff must confirm. GET|PATCH /admin/settings/rider-trips. */
+export interface RiderTripsSetting {
+  max_active_deliveries: number;
+  max_dropoff_distance_km: number;
+  updated_at: string | null;
+}
+
+// ------------------------------------------------------------- coupons
+/** Coupon codes customers type at checkout (backend migration 018). Admin
+ * and Operations manage them (owner, 2026-10-10). */
+export type CouponType = 'FIXED' | 'PERCENT' | 'FREE_DELIVERY';
+
+export interface Coupon {
+  id: string;
+  code: string;
+  description: string | null;
+  discount_type: CouponType;
+  discount_value: number;
+  max_discount: number | null;
+  min_subtotal: number | null;
+  first_order_only: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
+  usage_limit: number | null;
+  per_customer_limit: number;
+  is_active: boolean;
+  usage_count: number;
+  created_at: string;
+}
+
+export interface CouponInput {
+  code?: string;
+  description?: string | null;
+  discount_type: CouponType;
+  discount_value?: number;
+  max_discount?: number | null;
+  min_subtotal?: number | null;
+  first_order_only?: boolean;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  usage_limit?: number | null;
+  per_customer_limit?: number;
+  is_active?: boolean;
 }

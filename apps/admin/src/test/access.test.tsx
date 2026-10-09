@@ -91,7 +91,7 @@ describe('Admin app access', () => {
       'Customers',
       'SMS offers',
       'Feedback',
-      'Dental doctors',
+      'Doctors',
       'Staff accounts',
       'Rider requests',
       'Settings',

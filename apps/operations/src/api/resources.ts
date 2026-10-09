@@ -1,6 +1,9 @@
 import { apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
+  Coupon,
+  CouponInput,
+  RiderTripsSetting,
   EarningsRange,
   MyEarnings,
   RiderCommissionSetting,
@@ -74,6 +77,7 @@ import type {
   SmsOfferEstimate,
   SmsOfferInput,
   SmsOfferTestResult,
+  CategoryProductOrder,
 } from './types';
 
 /**
@@ -723,6 +727,26 @@ export const catalog = {
 
     removeOffer: (id: string) =>
       apiRequest<{ category: Category }>(`/admin/categories/${id}/offer`, { method: 'DELETE' }).then((d) => d.category),
+
+    /** Arrange (owner, 2026-10-10): one set of siblings (all top level, or
+     * one category's sub-categories) in the new order; the server rewrites
+     * their display_order 10, 20, 30... Siblings left out keep their order
+     * after the listed ones. */
+    reorder: (ids: string[]) =>
+      apiRequest<{ categories: Array<Pick<Category, 'id' | 'name' | 'display_order'>> }>('/admin/categories/order', {
+        method: 'PUT',
+        body: { ids },
+      }).then((d) => d.categories),
+
+    /** The category's products (its sub-categories' too) in customer order. */
+    productOrder: (id: string) => apiRequest<CategoryProductOrder>(`/admin/categories/${id}/product-order`),
+
+    /** Listed products first (1..n); the category's others go back to A-Z after them. */
+    setProductOrder: (id: string, productIds: string[]) =>
+      apiRequest<CategoryProductOrder>(`/admin/categories/${id}/product-order`, {
+        method: 'PUT',
+        body: { product_ids: productIds },
+      }),
   },
 
   /** Combo packs (migration 033; owner, 2026-10-09). PATCH `items`, when
@@ -990,6 +1014,7 @@ export const settings = {
     get: () => apiRequest<CheckoutSettings>('/admin/settings/checkout'),
     update: (body: {
       coupons_enabled?: boolean;
+      show_offer_savings?: boolean;
       new_customer_free_deliveries?: { enabled: boolean; count: number; since?: string };
     }) =>
       apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
@@ -1000,6 +1025,14 @@ export const settings = {
     get: () => apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission'),
     update: (default_percent: number) =>
       apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission', { method: 'PATCH', body: { default_percent } }),
+  },
+  /** Rider trips (owner, 2026-10-10): orders one rider may carry at once
+   * (1 = no trips) and the max km between drop-offs before staff confirm.
+   * PATCH sends only what changed. */
+  riderTrips: {
+    get: () => apiRequest<RiderTripsSetting>('/admin/settings/rider-trips'),
+    update: (body: { max_active_deliveries?: number; max_dropoff_distance_km?: number }) =>
+      apiRequest<RiderTripsSetting>('/admin/settings/rider-trips', { method: 'PATCH', body: { ...body } }),
   },
   /** Birthday offer: X% off one order in the birthday week, plus a birthday
    * SMS (owner, 2026-10-09). PATCH sends only what changed. */
@@ -1095,4 +1128,17 @@ export const riderApplications = {
       method: 'POST',
       body: { reason },
     }).then((d) => d.application),
+};
+
+// ---------------------------------------------------------------- coupons
+/** Coupon codes customers type at checkout (backend migration 018). Admin
+ * and Operations (owner, 2026-10-10); every change is audited server-side. */
+export const coupons = {
+  list: () => apiRequest<{ coupons: Coupon[] }>('/admin/coupons').then((d) => d.coupons),
+  create: (input: CouponInput) =>
+    apiRequest<{ coupon: Coupon }>('/admin/coupons', { method: 'POST', body: { ...input } }).then((d) => d.coupon),
+  update: (id: string, input: Partial<CouponInput>) =>
+    apiRequest<{ coupon: Coupon }>(`/admin/coupons/${id}`, { method: 'PATCH', body: { ...input } }).then((d) => d.coupon),
+  /** Only a coupon nobody has used (409 COUPON_IN_USE otherwise). */
+  remove: (id: string) => apiRequest(`/admin/coupons/${id}`, { method: 'DELETE' }),
 };

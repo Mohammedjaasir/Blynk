@@ -4,6 +4,7 @@ import 'add_to_cart_button.dart';
 import 'image_well.dart';
 import 'money_text.dart';
 import '../../../Models/product_model.dart';
+import '../../../Services/Providers/store_info.provider.dart';
 import '../../../design/tokens.dart';
 import 'blynk_press.dart';
 import 'product_hero.dart';
@@ -31,9 +32,10 @@ import 'product_hero.dart';
 ///
 /// **Product offers (owner, 2026-10-09):** while [ProductModel.isOnOffer] the
 /// price line shows the offer price in Blynk green ([SalePrice]), then the
-/// regular price struck through ([StruckPrice]) - no tag, no saving line
-/// (owner, 2026-10-09: "it should cut the cost and show something like
-/// this"). Both come from the backend's real `offer_price`; a product with no
+/// regular price struck through ([StruckPrice]) - no tag (owner, 2026-10-09:
+/// "it should cut the cost and show something like this"). "Save LKR 91"
+/// sits beside the size ([SaveText]) only while the store's
+/// `show_offer_savings` switch is on (owner, 2026-10-10). Both come from the backend's real `offer_price`; a product with no
 /// offer renders exactly as before, in the same fixed-height boxes.
 ///
 /// **Deliberately absent, because the backend has no field for any of them:**
@@ -132,6 +134,9 @@ class ProductCard extends StatelessWidget {
     // Only ever read from the backend - never inferred or faked client-side.
     final isAvailable = product.isAvailable;
     final onOffer = product.isOnOffer;
+    // "Save LKR X" beside the size only while the store switch is on
+    // (owner, 2026-10-10); off, or no StoreInfoProvider, shows nothing.
+    final showSaving = onOffer && watchShowOfferSavings(context);
 
     // The press response wraps the whole card, ripple included, so the card
     // settles under the thumb before it opens. BlynkPress only observes the
@@ -185,11 +190,24 @@ class ProductCard extends StatelessWidget {
             const SizedBox(height: rowGap),
             SizedBox(
               height: unitBox(context),
-              child: Text(
-                product.unit,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: BlynkType.productUnit,
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      product.unit,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: BlynkType.productUnit,
+                    ),
+                  ),
+                  // "Save LKR 91" beside the size, behind the store's
+                  // show_offer_savings switch (owner, 2026-10-10).
+                  if (showSaving) ...[
+                    const SizedBox(width: BlynkSpace.s8),
+                    // The saving keeps two thirds of the row; the size shortens first.
+                    Flexible(flex: 2, child: SaveText(product.sellingPrice - product.effectivePrice)),
+                  ],
+                ],
               ),
             ),
             const SizedBox(height: rowGap),

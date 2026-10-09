@@ -262,6 +262,12 @@ export interface ProductsTable {
    */
   offer_price: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   offer_ends_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  /**
+   * Migration 035 (owner, 2026-10-10): the product's place in its category,
+   * 1..n, set by the Arrange products screen. NULL = not arranged (after the
+   * arranged ones, A-Z).
+   */
+  display_order: ColumnType<number | null, number | null | undefined, number | null>;
 }
 
 export interface InventoryTable {
@@ -536,6 +542,8 @@ export interface ProductCatalogView {
   // its parent); null when neither has one running.
   category_offer_percent: ColumnType<string | null, never, never>;
   category_offer_ends_at: Date | null;
+  /** Migration 035 (owner, 2026-10-10): products.display_order. */
+  display_order: number | null;
 }
 
 export interface SuppliersTable {

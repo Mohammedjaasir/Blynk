@@ -4,6 +4,7 @@ import { DEFAULT_OPERATING_HOURS } from '../../utils/time.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
+import { RIDER_BATCHING_KEY, getBatchingRules, type BatchingRules } from '../riders/batching.js';
 
 /**
  * Store-wide settings and the public store facts (GET /store).
@@ -41,6 +42,13 @@ export type UpdateDeliveryFeeInput = z.infer<typeof updateDeliveryFeeSchema>;
  *    its old name so stored rows and older apps keep working.
  */
 export const COUPONS_ENABLED_KEY = 'coupons_enabled';
+/**
+ * show_offer_savings {"enabled": bool} (owner, 2026-10-10): whether the
+ * customer app shows "Save LKR X" on offer products and combo packs. The
+ * owner removed the line, so off until someone turns it back on.
+ */
+export const SHOW_OFFER_SAVINGS_KEY = 'show_offer_savings';
+export const DEFAULT_SHOW_OFFER_SAVINGS = false;
 export const FREE_DELIVERIES_KEY = 'new_customer_free_deliveries';
 export const DEFAULT_COUPONS_ENABLED = false;
 /** Owner, 2026-10-09: midnight in Asia/Colombo on the day it went to everyone. */
@@ -59,6 +67,7 @@ export interface FreeDeliveriesSetting {
 export interface CheckoutSettings {
   coupons_enabled: boolean;
   new_customer_free_deliveries: FreeDeliveriesSetting;
+  show_offer_savings: boolean;
 }
 
 export const updateCheckoutSettingsSchema = z
@@ -81,11 +90,16 @@ export const updateCheckoutSettingsSchema = z
       })
       .strict()
       .optional(),
+    show_offer_savings: z.boolean({ invalid_type_error: 'show_offer_savings must be true or false' }).optional(),
   })
   .strict()
-  .refine((v) => v.coupons_enabled !== undefined || v.new_customer_free_deliveries !== undefined, 'Nothing to change');
+  .refine(
+    (v) => v.coupons_enabled !== undefined || v.new_customer_free_deliveries !== undefined || v.show_offer_savings !== undefined,
+    'Nothing to change',
+  );
 export type UpdateCheckoutSettingsInput = z.infer<typeof updateCheckoutSettingsSchema>;
 
+/** {"enabled": bool} rows (coupons_enabled, show_offer_savings). */
 function couponsEnabledFrom(value: unknown): boolean | null {
   if (value && typeof value === 'object') {
     const enabled = (value as { enabled?: unknown }).enabled;
@@ -149,6 +163,40 @@ function commissionFrom(value: unknown): number | null {
   }
   return null;
 }
+
+/**
+ * Rider trips (owner, 2026-10-10): "ops can control the 2 orders for one
+ * delivery if it's in the same route". The rules ASSIGN_RIDER already applies
+ * (riders/batching.ts, system_configurations 'rider_batching'): how many open
+ * deliveries one rider may hold (1 = no trips) and how far apart (straight
+ * line, km) two drop-offs may be before staff must confirm. Admin and
+ * Operations edit them here; audited (RIDER_TRIPS_UPDATED); they apply to
+ * assignments made afterwards - nothing already assigned is undone.
+ */
+export const MIN_TRIP_ORDERS = 1;
+export const MAX_TRIP_ORDERS = 5;
+export const MIN_DROPOFF_KM = 0.5;
+export const MAX_DROPOFF_KM = 10;
+
+export const updateRiderTripsSchema = z
+  .object({
+    max_active_deliveries: z
+      .number({ invalid_type_error: 'The number of orders must be a number' })
+      .int('The number of orders must be a whole number')
+      .min(MIN_TRIP_ORDERS, `A rider carries at least ${MIN_TRIP_ORDERS} order`)
+      .max(MAX_TRIP_ORDERS, `A rider can carry at most ${MAX_TRIP_ORDERS} orders at once`)
+      .optional(),
+    max_dropoff_distance_km: z
+      .number({ invalid_type_error: 'The distance must be a number' })
+      .finite()
+      .min(MIN_DROPOFF_KM, `The distance must be at least ${MIN_DROPOFF_KM} km`)
+      .max(MAX_DROPOFF_KM, `The distance can be at most ${MAX_DROPOFF_KM} km`)
+      .refine((v) => Math.abs(Math.round(v * 10) - v * 10) < 1e-6, 'The distance can have at most 1 decimal')
+      .optional(),
+  })
+  .strict()
+  .refine((v) => v.max_active_deliveries !== undefined || v.max_dropoff_distance_km !== undefined, 'Nothing to change');
+export type UpdateRiderTripsInput = z.infer<typeof updateRiderTripsSchema>;
 
 /**
  * Birthday offer (owner, 2026-10-09): X% off ONE order a customer places in
@@ -289,14 +337,16 @@ export class SettingsService {
     const rows = await db
       .selectFrom('system_configurations')
       .select(['key', 'value', 'updated_at'])
-      .where('key', 'in', [COUPONS_ENABLED_KEY, FREE_DELIVERIES_KEY])
+      .where('key', 'in', [COUPONS_ENABLED_KEY, FREE_DELIVERIES_KEY, SHOW_OFFER_SAVINGS_KEY])
       .execute();
     const coupons = rows.find((r) => r.key === COUPONS_ENABLED_KEY);
     const free = rows.find((r) => r.key === FREE_DELIVERIES_KEY);
+    const savings = rows.find((r) => r.key === SHOW_OFFER_SAVINGS_KEY);
     const stamps = rows.map((r) => r.updated_at).filter((d): d is Date => d instanceof Date);
     return {
       coupons_enabled: (coupons ? couponsEnabledFrom(coupons.value) : null) ?? DEFAULT_COUPONS_ENABLED,
       new_customer_free_deliveries: (free ? freeDeliveriesFrom(free.value) : null) ?? { ...DEFAULT_FREE_DELIVERIES },
+      show_offer_savings: (savings ? couponsEnabledFrom(savings.value) : null) ?? DEFAULT_SHOW_OFFER_SAVINGS,
       updated_at: stamps.length ? new Date(Math.max(...stamps.map((d) => d.getTime()))) : null,
     };
   }
@@ -307,12 +357,15 @@ export class SettingsService {
       const before = await trx
         .selectFrom('system_configurations')
         .select(['key', 'value'])
-        .where('key', 'in', [COUPONS_ENABLED_KEY, FREE_DELIVERIES_KEY])
+        .where('key', 'in', [COUPONS_ENABLED_KEY, FREE_DELIVERIES_KEY, SHOW_OFFER_SAVINGS_KEY])
         .forUpdate()
         .execute();
       const writes: Array<{ key: string; value: object; description: string }> = [];
       if (input.coupons_enabled !== undefined) {
         writes.push({ key: COUPONS_ENABLED_KEY, value: { enabled: input.coupons_enabled }, description: 'Whether customers can enter a coupon code at checkout' });
+      }
+      if (input.show_offer_savings !== undefined) {
+        writes.push({ key: SHOW_OFFER_SAVINGS_KEY, value: { enabled: input.show_offer_savings }, description: "Whether the customer app shows 'Save LKR' on offers" });
       }
       if (input.new_customer_free_deliveries !== undefined) {
         // An omitted `since` keeps the stored one (or the default start).
@@ -452,12 +505,58 @@ export class SettingsService {
     return this.presentBirthdayOffer(await this.getBirthdayOffer());
   }
 
+  /** Rider trips (owner, 2026-10-10): the rules ASSIGN_RIDER applies right now. */
+  async getRiderTrips(): Promise<BatchingRules & { updated_at: Date | null }> {
+    const [rules, row] = await Promise.all([
+      getBatchingRules(),
+      db.selectFrom('system_configurations').select('updated_at').where('key', '=', RIDER_BATCHING_KEY).executeTakeFirst(),
+    ]);
+    return { ...rules, updated_at: row?.updated_at ?? null };
+  }
+
+  /** Audited (RIDER_TRIPS_UPDATED); only the fields sent change. */
+  async setRiderTrips(input: UpdateRiderTripsInput, actor: AuditActor) {
+    await db.transaction().execute(async (trx) => {
+      const before = await trx
+        .selectFrom('system_configurations')
+        .select('value')
+        .where('key', '=', RIDER_BATCHING_KEY)
+        .forUpdate()
+        .executeTakeFirst();
+      // The rules as applied (defaults for a missing or malformed row).
+      const previous = await getBatchingRules(trx);
+      const next: BatchingRules = {
+        max_active_deliveries: input.max_active_deliveries ?? previous.max_active_deliveries,
+        max_dropoff_distance_km:
+          input.max_dropoff_distance_km !== undefined
+            ? Math.round(input.max_dropoff_distance_km * 10) / 10
+            : previous.max_dropoff_distance_km,
+      };
+      const value = JSON.stringify(next);
+      await trx
+        .insertInto('system_configurations')
+        .values({ key: RIDER_BATCHING_KEY, value, description: 'Rider trips: open deliveries per rider, and max km between drop-offs' })
+        .onConflict((oc) => oc.column('key').doUpdateSet({ value, updated_at: new Date() }))
+        .execute();
+      await writeAudit(trx, actor, {
+        action: 'RIDER_TRIPS_UPDATED',
+        entityType: 'SYSTEM_CONFIGURATION',
+        entityId: SETTINGS_ENTITY_ID,
+        oldValues: { key: RIDER_BATCHING_KEY, ...(before ? previous : {}) },
+        newValues: { key: RIDER_BATCHING_KEY, ...next },
+      });
+      logger.info({ previous, next, actorId: actor.actorId }, 'Rider trip rules changed');
+    });
+    return await this.getRiderTrips();
+  }
+
   /**
    * What the customer app and landing site may know about the store. Only
    * values with a real source: the fee (system_configurations), the active
    * dark store's name and radius (dark_stores), and the delivery window the
    * order scheduler uses (utils/time.ts DEFAULT_OPERATING_HOURS), plus the
-   * checkout switches (show a coupon field; the free deliveries and since when).
+   * checkout switches (show a coupon field; the free deliveries and since when;
+   * show "Save LKR" on offers).
    */
   async getPublicStore() {
     const [fee, checkout, store] = await Promise.all([
@@ -482,6 +581,8 @@ export class SettingsService {
       radius_km: store ? Number(store.radius_km) : null,
       coupons_enabled: checkout.coupons_enabled,
       new_customer_free_deliveries: checkout.new_customer_free_deliveries,
+      // Owner, 2026-10-10: the customer app shows "Save LKR X" only when on.
+      show_offer_savings: checkout.show_offer_savings,
     };
   }
 }

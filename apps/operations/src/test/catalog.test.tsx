@@ -98,7 +98,7 @@ describe('Catalog hub', () => {
       // fifth, widening the hub's own description each time - updated here
       // rather than left stale (same "keep the test honest" discipline F3
       // applied to its own placeholder-text assertion in routing.test.tsx).
-      await screen.findByText('Products, categories, Home promotions, combo packs, inventory and dental clinics.')
+      await screen.findByText('Products, categories, Home promotions, combo packs, inventory and doctors & clinics.')
     ).toBeInTheDocument();
     expect(screen.queryByText(/built by later tasks/)).not.toBeInTheDocument();
 
@@ -110,7 +110,7 @@ describe('Catalog hub', () => {
     expect(within(promotionsCard).getByText('1')).toBeInTheDocument();
     const inventoryCard = screen.getByText('Inventory').closest('a')!;
     expect(inventoryCard).toHaveAttribute('href', '/catalog/inventory');
-    const dentalCard = screen.getByText('Dental').closest('a')!;
+    const dentalCard = screen.getByText('Doctors').closest('a')!;
     await waitFor(() => expect(within(dentalCard).getByText('2')).toBeInTheDocument());
     expect(dentalCard).toHaveAttribute('href', '/catalog/dental');
 

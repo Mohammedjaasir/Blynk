@@ -3050,3 +3050,23 @@ a.button {
   font-style: italic;
   overflow-wrap: anywhere;
 }
+
+/* Coupons (owner, 2026-10-10): the "codes are switched off" notice with its
+   link to the checkout switch, and the discount line on each coupon card. */
+.coupon-off {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.coupon-off__text {
+  margin: 0;
+  font-weight: 700;
+}
+
+.coupon-row__discount {
+  margin: 2px 0;
+  font-weight: 800;
+}

@@ -275,6 +275,47 @@ describe('delivery fee setting', () => {
 const SINCE = '2026-10-08T18:30:00.000Z';
 
 describe('checkout settings (owner, 2026-10-08)', () => {
+  it("switches \"Show 'Save LKR' on offers\" (owner, 2026-10-10), sending it only when flipped", async () => {
+    const user = userEvent.setup();
+    const api = mockApi((c) => {
+      if (c.method === 'GET' && c.path === '/admin/settings/delivery-fee') return { data: { fee_lkr: 150, updated_at: null } };
+      if (c.method === 'GET' && c.path === '/admin/settings/checkout') {
+        return {
+          data: {
+            coupons_enabled: false,
+            new_customer_free_deliveries: { enabled: true, count: 2, since: SINCE },
+            show_offer_savings: false,
+            updated_at: null,
+          },
+        };
+      }
+      if (c.method === 'PATCH' && c.path === '/admin/settings/checkout') {
+        const free = { since: SINCE, ...c.body.new_customer_free_deliveries };
+        return { data: { show_offer_savings: false, ...c.body, new_customer_free_deliveries: free, updated_at: '2026-10-10T05:00:00.000Z' } };
+      }
+    });
+    renderPage(<Settings />);
+
+    const panel = await screen.findByRole('region', { name: 'Checkout' });
+    const savings = await within(panel).findByRole('checkbox', { name: "Show 'Save LKR' on offers" });
+    expect(savings).not.toBeChecked();
+    await user.click(savings);
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/checkout')[0]?.body).toEqual({
+        coupons_enabled: false,
+        new_customer_free_deliveries: { enabled: true, count: 2 },
+        show_offer_savings: true,
+      })
+    );
+    await waitFor(() => expect(savings).toBeChecked());
+
+    // Saved again unchanged: the switch is not resent.
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(2));
+    expect(api.find('PATCH', '/admin/settings/checkout')[1]!.body).not.toHaveProperty('show_offer_savings');
+  });
+
   it('validates the free delivery count', () => {
     expect(parseFreeDeliveryCount('2')).toEqual({ count: 2 });
     expect(parseFreeDeliveryCount(' 0 ')).toEqual({ count: 0 });

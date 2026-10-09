@@ -7,6 +7,7 @@ import {
   updateCheckoutSettingsSchema,
   updateDeliveryFeeSchema,
   updateRiderCommissionSchema,
+  updateRiderTripsSchema,
 } from './settings.service.js';
 
 export const configurationRouter = Router();
@@ -154,6 +155,38 @@ adminSettingsRouter.patch(
     try {
       const input = updateBirthdayOfferSchema.parse(req.body);
       res.json({ success: true, data: await settingsService.setBirthdayOffer(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Rider trips (owner, 2026-10-10): "ops can control the 2 orders for one
+// delivery if it's in the same route". How many orders one rider may carry at
+// once (1 = no trips) and the max straight-line km between their drop-offs
+// before staff must confirm (ASSIGN_RIDER, riders/batching.ts). Audited
+// (RIDER_TRIPS_UPDATED); applies to assignments made afterwards.
+adminSettingsRouter.get(
+  '/settings/rider-trips',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await settingsService.getRiderTrips() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/rider-trips',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateRiderTripsSchema.parse(req.body);
+      res.json({ success: true, data: await settingsService.setRiderTrips(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

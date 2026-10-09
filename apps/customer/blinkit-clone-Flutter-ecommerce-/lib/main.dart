@@ -18,6 +18,7 @@ import 'package:ecom/Services/global_error_handling.dart';
 import 'package:ecom/Services/push/push_notifications.dart';
 import 'package:ecom/Screens/config_problem_screen.dart';
 import 'package:ecom/Services/Providers/location.provider.dart';
+import 'package:ecom/Services/Providers/rider_route.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
 import 'package:ecom/Services/Providers/store_info.provider.dart';
@@ -149,6 +150,12 @@ List<SingleChildWidget> buildAppProviders() => [
       // provider tree disposes it.
       ChangeNotifierProvider<LocationProvider>(
         create: (_) => LocationProvider(),
+      ),
+      // The road route + "Arriving in ~N min" on the tracking map (owner,
+      // 2026-10-10): polled by OrderTrackingMap, rate-limited here and cached
+      // on the server.
+      ChangeNotifierProvider<RiderRouteProvider>(
+        create: (_) => RiderRouteProvider(),
       ),
     ];
 

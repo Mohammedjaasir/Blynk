@@ -642,6 +642,52 @@ export class OrderRepository {
       .where('orders.order_status', '=', 'OUT_FOR_DELIVERY')
       .executeTakeFirst();
   }
+
+  /**
+   * The road-route endpoint's input (owner, 2026-10-10): the same trackable
+   * window and ownership as the stream above, plus the order's delivery
+   * point. Null outside the window or for someone else's order.
+   */
+  async findRouteContextForCustomer(orderId: string, customerId: string, executor: DBConnection = db) {
+    return await executor
+      .selectFrom('orders')
+      .innerJoin('deliveries', 'deliveries.order_id', 'orders.id')
+      .select([
+        'orders.delivery_latitude',
+        'orders.delivery_longitude',
+        'deliveries.current_latitude',
+        'deliveries.current_longitude',
+        'deliveries.location_captured_at',
+      ])
+      .where('orders.id', '=', orderId)
+      .where('orders.customer_id', '=', customerId)
+      .where('deliveries.assignment_status', '=', 'PICKED_UP')
+      .where('orders.order_status', '=', 'OUT_FOR_DELIVERY')
+      .executeTakeFirst();
+  }
+
+  /**
+   * The rider's first name and phone for the customer's "Call rider" button
+   * (owner, 2026-10-10). Only the customer's OWN order, only while it is
+   * OUT_FOR_DELIVERY and its delivery is on the road (PICKED_UP) or at the
+   * door (ARRIVED_AT_CUSTOMER). Never another order's rider, never before
+   * pickup, never after delivery / failure / cancellation. These are users
+   * columns read by this one query, not deliveries columns, so the
+   * delivery.columns.ts allow-list is unchanged.
+   */
+  async findRiderContactForCustomer(orderId: string, customerId: string, executor: DBConnection = db) {
+    return await executor
+      .selectFrom('orders')
+      .innerJoin('deliveries', 'deliveries.order_id', 'orders.id')
+      .innerJoin('riders', 'riders.id', 'deliveries.rider_id')
+      .innerJoin('users', 'users.id', 'riders.user_id')
+      .select(['users.full_name', 'users.phone'])
+      .where('orders.id', '=', orderId)
+      .where('orders.customer_id', '=', customerId)
+      .where('orders.order_status', '=', 'OUT_FOR_DELIVERY')
+      .where('deliveries.assignment_status', 'in', ['PICKED_UP', 'ARRIVED_AT_CUSTOMER'])
+      .executeTakeFirst();
+  }
 }
 
 export const orderRepository = new OrderRepository();

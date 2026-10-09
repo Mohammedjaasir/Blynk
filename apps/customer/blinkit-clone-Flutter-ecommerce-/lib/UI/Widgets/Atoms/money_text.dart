@@ -112,6 +112,26 @@ class SalePrice extends StatelessWidget {
   }
 }
 
+/// "Save LKR 91" - small, green, for an offer (owner, 2026-10-09). Shown only
+/// while the store's `show_offer_savings` switch is on (owner, 2026-10-10);
+/// callers check [watchShowOfferSavings] before drawing it.
+class SaveText extends StatelessWidget {
+  const SaveText(this.amount, {super.key, this.style});
+
+  final double amount;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Save ${formatLkr(amount)}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: BlynkText.caption.merge(style).copyWith(color: BlynkColors.sale, fontWeight: FontWeight.w700),
+    );
+  }
+}
+
 /// The new price in Blynk green, then the old price struck through (owner,
 /// 2026-10-09). The struck price gives way first on a narrow line; the new
 /// price scales down rather than overflow at large text sizes.

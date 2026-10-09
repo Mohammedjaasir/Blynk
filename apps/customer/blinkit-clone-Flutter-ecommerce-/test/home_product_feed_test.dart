@@ -47,4 +47,44 @@ void main() {
     expect(HomeProductFeed.railsFor(const [], [_product('x', 'a')]), isEmpty);
     expect(HomeProductFeed.railsFor([_category('a', 1)], const []), isEmpty);
   });
+
+  // Arrange (owner, 2026-10-10): staff set the category order in Ops/Admin.
+  test('rails follow the arranged order: parents by display_order, each followed by its own sub-categories', () {
+    CategoryModel cat(String id, int order, {String? parent, String? name}) => CategoryModel.fromJson({
+          'id': id,
+          'name': name ?? 'Category $id',
+          'slug': 'cat-$id',
+          'display_order': order,
+          if (parent != null) 'parent_id': parent,
+        });
+    // Sub-categories are numbered within their parent (10, 20...), so a flat
+    // sort would put Milk (10) before Grocery (20).
+    final categories = [
+      cat('grocery', 20),
+      cat('eggs', 20, parent: 'dairy'),
+      cat('dairy', 10),
+      cat('milk', 10, parent: 'dairy'),
+      cat('snacks', 30),
+      cat('orphan', 5, parent: 'gone'),
+    ];
+    expect(HomeProductFeed.arrangedOrder(categories).map((c) => c.id),
+        ['orphan', 'dairy', 'milk', 'eggs', 'grocery', 'snacks']);
+
+    final products = [
+      for (final c in ['grocery', 'eggs', 'dairy', 'milk', 'snacks'])
+        for (var i = 0; i < 3; i++) _product('$c$i', c),
+    ];
+    final rails = HomeProductFeed.railsFor(categories, products);
+    expect(rails.map((r) => r.category.id), ['dairy', 'milk', 'eggs', 'grocery', 'snacks']);
+    // Products keep the API's (arranged) order inside a rail - no re-sort.
+    expect(rails.first.products.map((p) => p.id), ['dairy0', 'dairy1', 'dairy2']);
+  });
+
+  test('equal display_order falls back to name, like the API', () {
+    final categories = [
+      CategoryModel.fromJson({'id': 'z', 'name': 'Zebra', 'slug': 'z', 'display_order': 0}),
+      CategoryModel.fromJson({'id': 'a', 'name': 'apple', 'slug': 'a', 'display_order': 0}),
+    ];
+    expect(HomeProductFeed.arrangedOrder(categories).map((c) => c.id), ['a', 'z']);
+  });
 }

@@ -53,6 +53,7 @@ async function deliveredOrder(rider: { riderId: string; token: string }, free: b
   checkoutSettings.read = async () => ({
     coupons_enabled: true,
     new_customer_free_deliveries: { enabled: free, count: 10, since: startedAt.toISOString() },
+    show_offer_savings: false,
   });
   const order = await fx.placeOrder([{ product_id: productId, quantity: qty }]);
   orders.push(order.id);

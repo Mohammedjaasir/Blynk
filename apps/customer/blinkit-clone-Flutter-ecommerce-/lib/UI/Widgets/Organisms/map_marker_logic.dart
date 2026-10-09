@@ -1,6 +1,8 @@
 import 'map_provider.dart';
 import 'dart:math' as math;
 
+import '../../../Models/rider_heading.dart' show lerpAngle;
+
 /// Pure marker logic for the map adapter. No SDK, no widgets, no platform
 /// calls: everything here is unit-tested without a map.
 
@@ -42,6 +44,13 @@ MarkerDiff diffMarkers(Map<String, MapMarkerSpec> applied, Set<MapMarkerSpec> wa
 const String destinationMarkerHex = '#8E24AA'; // violet
 const String riderMarkerHex = '#1E88E5'; // azure
 const String markerStrokeHex = '#FFFFFF';
+
+/// The road route from the rider to the door (owner, 2026-10-10): Blynk ink
+/// (BlynkPalette.ink), wide enough to read under the bike, slightly
+/// translucent so street names show through.
+const String routeLineHex = '#1A1D2E';
+const double routeLineWidth = 4.5;
+const double routeLineOpacity = 0.85;
 
 /// A stale rider is the same azure dot, half faded.
 const double staleMarkerOpacity = 0.5;
@@ -164,6 +173,12 @@ class MarkerMotion {
   final Map<String, GeoPoint> _from = {};
   final Map<String, GeoPoint> _to = {};
 
+  // The bike turns with the road (owner, 2026-10-10): the heading is eased
+  // the short way round over the same glide, never snapped mid-move.
+  final Map<String, double> _shownHeading = {};
+  final Map<String, double> _fromHeading = {};
+  final Map<String, double> _toHeading = {};
+
   /// The ids currently gliding.
   Iterable<String> get moving => _to.keys;
 
@@ -174,9 +189,12 @@ class MarkerMotion {
   bool retarget(Set<MapMarkerSpec> wanted, {bool snapAll = false}) {
     _from.clear();
     _to.clear();
+    _fromHeading.clear();
+    _toHeading.clear();
     final ids = <String>{};
     for (final spec in wanted) {
       ids.add(spec.id);
+      _retargetHeading(spec, snap: snapAll);
       final prev = _shown[spec.id];
       if (prev == null || prev == spec.position) {
         _shown[spec.id] = spec.position;
@@ -190,7 +208,23 @@ class MarkerMotion {
       _to[spec.id] = spec.position;
     }
     _shown.removeWhere((id, _) => !ids.contains(id));
-    return _to.isNotEmpty;
+    _shownHeading.removeWhere((id, _) => !ids.contains(id));
+    return _to.isNotEmpty || _toHeading.isNotEmpty;
+  }
+
+  void _retargetHeading(MapMarkerSpec spec, {required bool snap}) {
+    final target = spec.heading;
+    final prev = _shownHeading[spec.id];
+    if (target == null) {
+      _shownHeading.remove(spec.id);
+      return;
+    }
+    if (prev == null || prev == target || snap) {
+      _shownHeading[spec.id] = target;
+      return;
+    }
+    _fromHeading[spec.id] = prev;
+    _toHeading[spec.id] = target;
   }
 
   /// Advances every gliding marker to [t] (0..1, already curved).
@@ -198,16 +232,26 @@ class MarkerMotion {
     for (final id in _to.keys) {
       _shown[id] = lerpGeo(_from[id]!, _to[id]!, t);
     }
+    for (final id in _toHeading.keys) {
+      _shownHeading[id] = lerpAngle(_fromHeading[id]!, _toHeading[id]!, t);
+    }
     if (t >= 1) {
       _from.clear();
       _to.clear();
+      _fromHeading.clear();
+      _toHeading.clear();
     }
   }
 
   /// [wanted], with every position replaced by where it is shown right now.
   Set<MapMarkerSpec> shownSpecs(Set<MapMarkerSpec> wanted) => {
         for (final spec in wanted)
-          MapMarkerSpec(id: spec.id, position: _shown[spec.id] ?? spec.position, tone: spec.tone),
+          MapMarkerSpec(
+            id: spec.id,
+            position: _shown[spec.id] ?? spec.position,
+            tone: spec.tone,
+            heading: spec.heading == null ? null : (_shownHeading[spec.id] ?? spec.heading),
+          ),
       };
 }
 

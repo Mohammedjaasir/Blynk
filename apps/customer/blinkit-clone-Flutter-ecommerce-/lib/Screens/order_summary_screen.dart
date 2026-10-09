@@ -22,6 +22,7 @@ import '../UI/Widgets/Organisms/order_status_header.dart';
 import '../UI/Widgets/Organisms/order_summary_screen_product_details_card.dart';
 import '../UI/Widgets/Organisms/order_timeline.dart';
 import '../UI/Widgets/Organisms/order_tracking_map.dart';
+import '../UI/Widgets/Organisms/rider_contact_card.dart';
 import '../app_responsive.dart';
 import '../design/tokens.dart';
 
@@ -42,6 +43,11 @@ bool isLiveTrackable(OrderModel order) =>
 /// True while the customer should see the proof-of-delivery code: the order
 /// is OUT_FOR_DELIVERY and the backend sent a `delivery_code`. Hidden in
 /// every other status, even if a stale code were present.
+/// The rider is at the door (owner, 2026-10-10): the live map is gone, but
+/// the customer can still call them while the backend sends the contact.
+bool showsRiderAtDoor(OrderModel order) =>
+    order.status == OrderStatus.outForDelivery && order.riderContact != null && !isLiveTrackable(order);
+
 bool showsDeliveryCode(OrderModel order) =>
     order.status == OrderStatus.outForDelivery && order.deliveryCode != null;
 
@@ -357,6 +363,13 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> with WidgetsBin
           key: const ValueKey('order-tracking'),
           order: order,
           mapBuilder: widget.mapBuilder,
+        ),
+        const SizedBox(height: _sectionGap),
+      ] else if (showsRiderAtDoor(order)) ...[
+        RiderContactCard(
+          key: const ValueKey('rider-at-door'),
+          headline: '${RiderContactCard.riderName(order.riderContact)} has arrived',
+          contact: order.riderContact,
         ),
         const SizedBox(height: _sectionGap),
       ],

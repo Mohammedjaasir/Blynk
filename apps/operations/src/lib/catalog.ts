@@ -116,6 +116,25 @@ export function parseOfferPrice(input: string, sellingPrice: number | null): { v
   return { value };
 }
 
+/**
+ * "LKR off" (owner, 2026-10-10): the operator types how much comes off the
+ * selling price the form shows (e.g. 50) and the offer price sent is
+ * selling price - amount, to 2 decimals. Only the resulting offer_price is
+ * stored, so a later cost or markup change keeps that stored price (as an
+ * offer typed as a new price does) - it is not re-derived from the amount.
+ */
+export function parseOfferAmountOff(input: string, sellingPrice: number | null): { value: number } | { error: string } {
+  const s = input.trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) return { error: 'Enter the amount off, like 50 or 49.50.' };
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return { error: 'Use at most 2 decimals.' };
+  const amount = Number(s);
+  if (amount <= 0) return { error: 'The amount off must be more than LKR 0.' };
+  if (sellingPrice === null) return { error: 'Enter a valid purchase cost first, so the selling price is known.' };
+  const value = Math.round((sellingPrice - amount) * 100) / 100;
+  if (value <= 0) return { error: 'The offer price must be more than LKR 0.' };
+  return { value };
+}
+
 /** Whole percent off, e.g. 250 -> 220 is 12% off. */
 export function percentOff(offer: number, selling: number): number {
   return selling > 0 ? Math.round(((selling - offer) / selling) * 100) : 0;

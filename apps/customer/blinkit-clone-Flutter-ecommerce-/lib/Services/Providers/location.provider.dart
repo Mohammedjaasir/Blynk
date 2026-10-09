@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:ecom/Infrastructure/HttpMethods/browser_streams.dart';
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Infrastructure/HttpMethods/token_storage.dart';
+import 'package:ecom/Models/rider_heading.dart';
 import 'package:ecom/Models/rider_location_model.dart';
 
 /// Yields raw SSE text chunks for one order's location stream. Injectable so
@@ -261,6 +262,12 @@ class LocationProvider extends ChangeNotifier {
   final Duration _minHealthy;
 
   RiderLocationPoint? _current;
+
+  /// Travel direction for the bike icon (owner, 2026-10-10): the bearing
+  /// from [_anchor] - the fix the heading was last taken from - to the
+  /// newest fix, once the rider is [kHeadingMinMoveMeters] away from it.
+  double? _heading;
+  RiderLocationPoint? _anchor;
   bool _closed = false;
   bool _unavailable = false;
   bool _disposed = false;
@@ -276,6 +283,12 @@ class LocationProvider extends ChangeNotifier {
   String? _orderId;
 
   RiderLocationPoint? get current => _current;
+
+  /// Degrees clockwise from north the rider is travelling, computed from
+  /// consecutive fixes (the rider app sends no GPS heading). Null until the
+  /// rider has moved [kHeadingMinMoveMeters]; unchanged by GPS jitter below
+  /// that. Reset with every watch.
+  double? get heading => _heading;
 
   /// Null until a point arrives (and again after a close). Aged against the
   /// injected clock, so the periodic tick below is enough to move
@@ -305,6 +318,7 @@ class LocationProvider extends ChangeNotifier {
     final gen = ++_generation;
     _stopAll();
     _current = null;
+    _clearHeading();
     _closed = false;
     _unavailable = false;
     _buffer = '';
@@ -324,6 +338,7 @@ class LocationProvider extends ChangeNotifier {
     _generation++;
     _stopAll();
     _current = null;
+    _clearHeading();
     _closed = false;
     _unavailable = false;
     _buffer = '';
@@ -341,6 +356,23 @@ class LocationProvider extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  void _clearHeading() {
+    _heading = null;
+    _anchor = null;
+  }
+
+  void _updateHeading(RiderLocationPoint point) {
+    final anchor = _anchor;
+    if (anchor == null) {
+      _anchor = point;
+      return;
+    }
+    final moved = headingDistanceMeters(anchor.latitude, anchor.longitude, point.latitude, point.longitude);
+    if (moved < kHeadingMinMoveMeters) return; // jitter: keep the heading and the anchor
+    _heading = bearingDegrees(anchor.latitude, anchor.longitude, point.latitude, point.longitude);
+    _anchor = point;
   }
 
   void _stopAll() {
@@ -400,6 +432,7 @@ class LocationProvider extends ChangeNotifier {
       // dropped too - it belongs to a stream we may no longer see.
       _unavailable = true;
       _current = null;
+    _clearHeading();
       _stopAll();
       _notify();
       return;
@@ -486,11 +519,13 @@ class LocationProvider extends ChangeNotifier {
       // marker backwards (or re-notify).
       if (cur != null && !point.capturedAt.isAfter(cur.capturedAt)) return false;
       _current = point;
+      _updateHeading(point);
       _notify();
     } else if (event == 'closed') {
       if (_isTerminalClose(dataLines.join('\n'))) {
         _closed = true;
         _current = null;
+    _clearHeading();
         _stopAll();
         _notify();
         return false;

@@ -1,5 +1,6 @@
 import { apiRequest, tokenStore } from './client';
 import type {
+  RiderTripsSetting,
   DentalDoctor,
   DentalDoctorInput,
   BoardOrder,
@@ -57,6 +58,7 @@ import type {
   RiderEarningsReport,
   RiderPay,
   RiderPayInput,
+  CategoryProductOrder,
 } from './types';
 
 /**
@@ -129,6 +131,26 @@ export const categories = {
     apiRequest<{ category: Category }>(`/admin/categories/${id}/offer`, { method: 'DELETE' }).then(
       (data) => data.category
     ),
+
+  /** Arrange (owner, 2026-10-10): one set of siblings (all top level, or
+   * one category's sub-categories) in the new order; the server rewrites
+   * their display_order 10, 20, 30... Siblings left out keep their order
+   * after the listed ones. */
+  reorder: (ids: string[]) =>
+    apiRequest<{ categories: Array<Pick<Category, 'id' | 'name' | 'display_order'>> }>('/admin/categories/order', {
+      method: 'PUT',
+      body: { ids },
+    }).then((d) => d.categories),
+
+  /** The category's products (its sub-categories' too) in customer order. */
+  productOrder: (id: string) => apiRequest<CategoryProductOrder>(`/admin/categories/${id}/product-order`),
+
+  /** Listed products first (1..n); the category's others go back to A-Z after them. */
+  setProductOrder: (id: string, productIds: string[]) =>
+    apiRequest<CategoryProductOrder>(`/admin/categories/${id}/product-order`, {
+      method: 'PUT',
+      body: { product_ids: productIds },
+    }),
 };
 
 // ------------------------------------------------------------ combo packs
@@ -284,6 +306,7 @@ export const settings = {
   /** `since` is optional: omitted keeps the stored start (owner, 2026-10-09). */
   setCheckout: (body: {
     coupons_enabled?: boolean;
+    show_offer_savings?: boolean;
     new_customer_free_deliveries?: { enabled: boolean; count: number; since?: string };
   }) =>
     apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
@@ -296,6 +319,13 @@ export const settings = {
       method: 'PATCH',
       body: { default_percent: defaultPercent },
     }),
+
+  /** Rider trips (owner, 2026-10-10): orders one rider may carry at once and
+   * the max km between drop-offs. PATCH sends only what changed. */
+  getRiderTrips: () => apiRequest<RiderTripsSetting>('/admin/settings/rider-trips'),
+
+  setRiderTrips: (body: { max_active_deliveries?: number; max_dropoff_distance_km?: number }) =>
+    apiRequest<RiderTripsSetting>('/admin/settings/rider-trips', { method: 'PATCH', body: { ...body } }),
 
   /** Birthday-week gift and birthday SMS (owner, 2026-10-09). ADMIN and OPERATIONS. */
   getBirthdayOffer: () => apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer'),
@@ -487,7 +517,7 @@ export const staff = {
 };
 
 // ---------------------------------------------------------------- coupons
-/** Coupon codes (backend migration 018). ADMIN only. */
+/** Coupon codes (backend migration 018). ADMIN and OPERATIONS (owner, 2026-10-10). */
 export const coupons = {
   list: () => apiRequest<{ coupons: Coupon[] }>('/admin/coupons').then((d) => d.coupons),
 

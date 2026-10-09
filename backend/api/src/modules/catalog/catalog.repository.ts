@@ -277,7 +277,10 @@ export class CatalogRepository {
       );
     }
 
+    // Migration 035 (owner, 2026-10-10): the staff-arranged order first
+    // (Arrange products), then the rest A-Z.
     return await query
+      .orderBy(sql`display_order`, sql`asc nulls last`)
       .orderBy('name', 'asc')
       .limit(params.limit)
       .offset(params.offset)

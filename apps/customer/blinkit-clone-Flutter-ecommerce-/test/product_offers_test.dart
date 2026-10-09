@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:ecom/Models/product_model.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
+import 'package:ecom/Services/Providers/store_info.provider.dart';
 import 'package:ecom/UI/Widgets/Atoms/card_product.dart';
 import 'package:ecom/UI/Widgets/Atoms/money_text.dart';
 import 'package:ecom/UI/Widgets/Atoms/offer_tag.dart';
@@ -53,7 +54,22 @@ ProductModel _product(String id, {Object? offer, Object? endsAt, Object? price =
 String _future() => DateTime.now().add(const Duration(days: 3)).toUtc().toIso8601String();
 String _past() => DateTime.now().subtract(const Duration(hours: 1)).toUtc().toIso8601String();
 
-Widget _host(WidgetTester tester, Widget child, {CartProvider? cart, ProductProvider? products}) {
+/// A StoreInfoProvider whose GET /store answered `show_offer_savings`
+/// (owner, 2026-10-10). [raw] is sent as-is, so a non-bool can be tried.
+Future<StoreInfoProvider> _store(Object? raw) async {
+  final store = StoreInfoProvider(
+    request: (_) async => {
+      'success': true,
+      'data': {'delivery_fee_lkr': 100, 'show_offer_savings': raw},
+    },
+    readCache: () async => null,
+    writeCache: (_) async {},
+  );
+  await store.load();
+  return store;
+}
+
+Widget _host(WidgetTester tester, Widget child, {CartProvider? cart, ProductProvider? products, StoreInfoProvider? store}) {
   tester.view.physicalSize = const Size(420, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -61,6 +77,7 @@ Widget _host(WidgetTester tester, Widget child, {CartProvider? cart, ProductProv
     providers: [
       ChangeNotifierProvider<CartProvider>.value(value: cart ?? CartProvider()),
       if (products != null) ChangeNotifierProvider<ProductProvider>.value(value: products),
+      if (store != null) ChangeNotifierProvider<StoreInfoProvider>.value(value: store),
     ],
     child: MaterialApp(theme: AppTheme.theme, home: Scaffold(body: child)),
   );
@@ -173,6 +190,50 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // The "Save LKR X" switch (owner, 2026-10-10): GET /store's
+    // show_offer_savings decides whether the saving sits beside the size.
+    testWidgets('savings switch off: no "Save LKR" on an offer', (tester) async {
+      final store = await _store(false);
+      expect(store.showOfferSavings, isFalse);
+      await tester.pumpWidget(_host(tester, _card(_product('r', offer: 220, endsAt: _future())), store: store));
+      expect(find.byType(SalePrice), findsOneWidget);
+      expect(find.byType(SaveText), findsNothing);
+      expect(find.textContaining('Save'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('savings switch on: "Save LKR 30" beside the size, price line unchanged', (tester) async {
+      final store = await _store(true);
+      expect(store.showOfferSavings, isTrue);
+      await tester.pumpWidget(_host(tester, _card(_product('r', offer: 220, endsAt: _future())), store: store));
+      expect(find.text('Save LKR 30'), findsOneWidget);
+      expect(tester.widget<Text>(find.text('Save LKR 30')).style?.color, BlynkColors.sale);
+      // Beside the size, on the same row.
+      expect(tester.getCenter(find.text('Save LKR 30')).dy, closeTo(tester.getCenter(find.text('1 kg')).dy, 2));
+      expect(tester.getTopLeft(find.text('1 kg')).dx, lessThan(tester.getTopLeft(find.text('Save LKR 30')).dx));
+      // Green new price first, old price struck after, as before.
+      expect(tester.getTopLeft(find.byType(SalePrice)).dx, lessThan(tester.getTopLeft(find.byType(StruckPrice)).dx));
+      expect(find.byType(OfferTag), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('savings switch on: nothing on a product with no offer', (tester) async {
+      final store = await _store(true);
+      for (final p in [_product('p'), _product('e', offer: 220, endsAt: _past())]) {
+        await tester.pumpWidget(_host(tester, _card(p), store: store));
+        expect(find.textContaining('Save'), findsNothing);
+      }
+    });
+
+    testWidgets('savings switch: a missing or non-bool value means off', (tester) async {
+      for (final raw in [null, 'true', 1]) {
+        final store = await _store(raw);
+        expect(store.showOfferSavings, isFalse, reason: '$raw');
+        await tester.pumpWidget(_host(tester, _card(_product('r', offer: 220, endsAt: _future())), store: store));
+        expect(find.textContaining('Save'), findsNothing, reason: '$raw');
+      }
+    });
+
     testWidgets('no offer, or an ended one: just the regular price, same card height', (tester) async {
       for (final p in [_product('p'), _product('e', offer: 220, endsAt: _past())]) {
         await tester.pumpWidget(_host(tester, _card(p)));
@@ -189,8 +250,13 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final product = _product('r', price: 12500, offer: 11999.5);
-      await tester.pumpWidget(ChangeNotifierProvider<CartProvider>.value(
-        value: CartProvider(),
+      // With the savings switch on (owner, 2026-10-10): the busiest card.
+      final store = await _store(true);
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<CartProvider>.value(value: CartProvider()),
+          ChangeNotifierProvider<StoreInfoProvider>.value(value: store),
+        ],
         child: MaterialApp(
           theme: AppTheme.theme,
           builder: (context, app) => MediaQuery(
@@ -202,6 +268,7 @@ void main() {
       ));
       expect(tester.takeException(), isNull);
       expect(find.byType(SalePrice), findsOneWidget);
+      expect(find.byType(SaveText), findsOneWidget);
     });
   });
 

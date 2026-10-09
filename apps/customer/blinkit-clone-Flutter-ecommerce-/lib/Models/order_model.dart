@@ -100,6 +100,25 @@ class OrderDeliveryInfo {
   }
 }
 
+/// The rider's first name and phone, for "Call rider" (owner, 2026-10-10).
+/// The backend sends `rider_contact` on the customer's OWN order detail only
+/// while it is out for delivery (on the road or at the door); null before
+/// pickup, after delivery, and in the order list.
+class RiderContact {
+  const RiderContact({required this.firstName, required this.phone});
+
+  /// Null when the rider has no name on file; the UI says "Your rider".
+  final String? firstName;
+  final String phone;
+
+  static RiderContact? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final phone = _optionalText(json['phone']);
+    if (phone == null) return null;
+    return RiderContact(firstName: _optionalText(json['first_name']), phone: phone);
+  }
+}
+
 class OrderItemModel {
   final String id;
   final String productId;
@@ -244,6 +263,9 @@ class OrderModel {
   /// (including in the order list, where it is absent).
   final String? deliveryCode;
 
+  /// `rider_contact` (owner, 2026-10-10): see [RiderContact].
+  final RiderContact? riderContact;
+
   const OrderModel({
     required this.id,
     required this.orderNumber,
@@ -277,6 +299,7 @@ class OrderModel {
     this.history = const [],
     this.delivery,
     this.deliveryCode,
+    this.riderContact,
   });
 
   // Pre-dispatch: the states an order sits in before a rider is on the way.
@@ -357,6 +380,7 @@ class OrderModel {
       history: rawHistory.map(OrderStatusEvent.tryParse).whereType<OrderStatusEvent>().toList(),
       delivery: OrderDeliveryInfo.tryParse(json['delivery']),
       deliveryCode: _optionalCode(json['delivery_code'] ?? json['deliveryCode']),
+      riderContact: RiderContact.tryParse(json['rider_contact']),
     );
   }
 

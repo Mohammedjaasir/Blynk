@@ -267,6 +267,34 @@ describe('Checkout settings (owner, 2026-10-08)', () => {
     );
   });
 
+  it("switches \"Show 'Save LKR' on offers\" (owner, 2026-10-10), sending it only when flipped", async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
+      'GET /admin/settings/delivery-fee': () => ok({ fee_lkr: 250, updated_at: null }),
+      'GET /admin/settings/checkout': () => ok({ ...CHECKOUT, show_offer_savings: false }),
+      'PATCH /admin/settings/checkout': (call) => ok({ ...CHECKOUT, ...(call.body as object), updated_at: '2026-10-10T04:00:00Z' }),
+    });
+    const card = (await screen.findByRole('heading', { name: 'Checkout' })).closest('section') as HTMLElement;
+    const savings = await within(card).findByRole('checkbox', { name: /Show 'Save LKR' on offers/ });
+    expect(savings).not.toBeChecked();
+    await user.click(savings);
+    await user.click(within(card).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/checkout')[0]?.body).toEqual({
+        coupons_enabled: false,
+        new_customer_free_deliveries: { enabled: true, count: 2 },
+        show_offer_savings: true,
+      })
+    );
+    expect(await within(card).findByText('Checkout settings saved.')).toBeInTheDocument();
+    expect(savings).toBeChecked();
+
+    // Saved again unchanged: the switch is not resent.
+    await user.click(within(card).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(2));
+    expect(api.find('PATCH', '/admin/settings/checkout')[1]!.body).not.toHaveProperty('show_offer_savings');
+  });
+
   it('starts the count again from today after a confirm (owner, 2026-10-09)', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {

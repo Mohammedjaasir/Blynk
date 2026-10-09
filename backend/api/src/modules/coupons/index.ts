@@ -17,14 +17,22 @@ const wrap = (fn: Handler) => (req: Request, res: Response, next: NextFunction) 
 };
 
 // ----------------------------------------------------------------------------
-// ADMIN COUPONS (mounted under /api/v1/admin). ADMIN only.
+// ADMIN COUPONS (mounted under /api/v1/admin). ADMIN and OPERATIONS (owner,
+// 2026-10-10: "make sure admin and ops can create a coupon code for
+// customers"). Every create, change and delete is audited (COUPON_CREATED,
+// COUPON_UPDATED, COUPON_DELETED) with who did it.
 // ----------------------------------------------------------------------------
 export const adminCouponsRouter = Router();
-const ADMIN_ONLY = [requireAuth, requireRoles('ADMIN')];
+const COUPON_STAFF = [requireAuth, requireRoles(['ADMIN', 'OPERATIONS'])];
+const actorOf = (req: Request) => ({
+  actorId: req.user!.id,
+  ipAddress: req.ip ?? null,
+  userAgent: req.get('user-agent') ?? null,
+});
 
 adminCouponsRouter.get(
   '/coupons',
-  ...ADMIN_ONLY,
+  ...COUPON_STAFF,
   wrap(async (_req, res) => {
     res.json({ success: true, data: { coupons: await couponService.list() } });
   })
@@ -32,30 +40,30 @@ adminCouponsRouter.get(
 
 adminCouponsRouter.post(
   '/coupons',
-  ...ADMIN_ONLY,
+  ...COUPON_STAFF,
   validate({ body: createCouponSchema }),
   wrap(async (req, res) => {
-    const coupon = await couponService.create(req.body as CreateCouponInput, req.user!.id);
+    const coupon = await couponService.create(req.body as CreateCouponInput, actorOf(req));
     res.status(201).json({ success: true, data: { coupon } });
   })
 );
 
 adminCouponsRouter.patch(
   '/coupons/:id',
-  ...ADMIN_ONLY,
+  ...COUPON_STAFF,
   validate({ params: couponIdParamsSchema, body: updateCouponSchema }),
   wrap(async (req, res) => {
-    const coupon = await couponService.update(req.params.id as string, req.body as UpdateCouponInput);
+    const coupon = await couponService.update(req.params.id as string, req.body as UpdateCouponInput, actorOf(req));
     res.json({ success: true, data: { coupon } });
   })
 );
 
 adminCouponsRouter.delete(
   '/coupons/:id',
-  ...ADMIN_ONLY,
+  ...COUPON_STAFF,
   validate({ params: couponIdParamsSchema }),
   wrap(async (req, res) => {
-    await couponService.remove(req.params.id as string);
+    await couponService.remove(req.params.id as string, actorOf(req));
     res.json({ success: true, data: { deleted: true } });
   })
 );

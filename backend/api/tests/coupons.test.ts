@@ -26,6 +26,11 @@ const FEE = 100;
 let seq = 0;
 
 async function purgeCoupons() {
+  // Coupon changes are audited (owner, 2026-10-10); this file's entries go too.
+  await pool.query(
+    "DELETE FROM audit_logs WHERE entity_type = 'COUPON' AND coalesce(new_values->>'code', old_values->>'code') LIKE $1",
+    [`${PREFIX}%`]
+  );
   const ids = (await pool.query('SELECT id FROM coupons WHERE code LIKE $1', [`${PREFIX}%`])).rows.map((r) => r.id);
   if (!ids.length) return;
   const orders = (await pool.query('SELECT order_id FROM coupon_redemptions WHERE coupon_id = ANY($1)', [ids])).rows.map((r) => r.order_id);
@@ -124,11 +129,40 @@ describe('Admin coupons', () => {
     }
   });
 
-  it('is ADMIN only', async () => {
-    for (const token of [opsToken, tokens.customer, tokens.staff]) {
+  it('Admin and Operations manage coupons (owner, 2026-10-10); nobody else', async () => {
+    for (const token of [tokens.customer, tokens.staff, tokens.rider]) {
       expect((await request(app).get('/api/v1/admin/coupons').set(auth(token))).status).toBe(403);
       expect((await request(app).post('/api/v1/admin/coupons').set(auth(token)).send({})).status).toBe(403);
     }
+    seq += 1;
+    const code = `${PREFIX}${seq}`;
+    const made = await request(app)
+      .post('/api/v1/admin/coupons')
+      .set(auth(opsToken))
+      .send({ code, discount_type: 'PERCENT', discount_value: 10, max_discount: 200, min_subtotal: 500, usage_limit: 50 });
+    expect(made.status, JSON.stringify(made.body)).toBe(201);
+    const id = made.body.data.coupon.id as string;
+    const list = await request(app).get('/api/v1/admin/coupons').set(auth(opsToken));
+    expect(list.status).toBe(200);
+    expect(list.body.data.coupons.some((c: { id: string }) => c.id === id)).toBe(true);
+    const off = await request(app).patch(`/api/v1/admin/coupons/${id}`).set(auth(opsToken)).send({ is_active: false });
+    expect(off.status).toBe(200);
+    expect(off.body.data.coupon.is_active).toBe(false);
+    expect((await request(app).delete(`/api/v1/admin/coupons/${id}`).set(auth(opsToken))).status).toBe(200);
+
+    const audit = (
+      await pool.query(
+        `SELECT action, actor_user_id, old_values, new_values FROM audit_logs
+          WHERE entity_type = 'COUPON' AND entity_id = $1 ORDER BY created_at, action`,
+        [id]
+      )
+    ).rows;
+    expect(audit.map((a) => a.action)).toEqual(['COUPON_CREATED', 'COUPON_UPDATED', 'COUPON_DELETED']);
+    expect(audit[0].new_values).toMatchObject({ code, discount_type: 'PERCENT', discount_value: 10, max_discount: 200, min_subtotal: 500, usage_limit: 50, is_active: true });
+    expect(audit[1].old_values).toEqual({ code, is_active: true });
+    expect(audit[1].new_values).toEqual({ code, is_active: false });
+    expect(audit[2].old_values).toMatchObject({ code, is_active: false });
+    expect(audit.every((a) => a.actor_user_id === 'a0000001-0000-0000-0000-000000000003')).toBe(true);
   });
 
   it('switches a coupon off and on, and deletes one nobody used', async () => {

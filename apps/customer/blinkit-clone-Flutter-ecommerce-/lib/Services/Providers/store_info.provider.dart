@@ -62,6 +62,13 @@ class StoreInfoProvider extends ChangeNotifier {
   /// look like it worked.
   bool get couponsEnabled => _couponsEnabled;
 
+  bool _showOfferSavings = false;
+
+  /// Whether product and combo cards show "Save LKR X" on an offer
+  /// (`show_offer_savings` on `GET /store`; owner, 2026-10-10). Hidden until
+  /// the server sends a real `true`: a missing or non-bool value means off.
+  bool get showOfferSavings => _showOfferSavings;
+
   FreeDeliveryOffer? _freeDelivery;
   Future<void>? _loadingCheckoutInfo;
 
@@ -137,6 +144,12 @@ class StoreInfoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _setShowOfferSavings(bool show) {
+    if (_disposed || show == _showOfferSavings) return;
+    _showOfferSavings = show;
+    notifyListeners();
+  }
+
   void _setCouponsEnabled(bool enabled) {
     if (_disposed || enabled == _couponsEnabled) return;
     _couponsEnabled = enabled;
@@ -181,7 +194,11 @@ class StoreInfoProvider extends ChangeNotifier {
     try {
       final response = await _request('/store');
       final data = response is Map ? response['data'] : null;
-      if (data is Map) _setCouponsEnabled(data['coupons_enabled'] == true);
+      if (data is Map) {
+        _setCouponsEnabled(data['coupons_enabled'] == true);
+        // The "Save LKR X" switch (owner, 2026-10-10): only a real bool true.
+        _setShowOfferSavings(data['show_offer_savings'] == true);
+      }
       final fee = parseFee(data is Map ? data['delivery_fee_lkr'] : null);
       if (fee == null) return;
       _hasServerFee = true;
@@ -224,6 +241,12 @@ double watchCheckoutDeliveryFee(BuildContext context) =>
 /// [StoreInfoProvider] is in the tree (unknown means hidden).
 bool watchCouponsEnabled(BuildContext context) =>
     context.watch<StoreInfoProvider?>()?.couponsEnabled ?? false;
+
+/// Whether offers show "Save LKR X" (owner, 2026-10-10), rebuilding when the
+/// switch changes; false where no [StoreInfoProvider] is in the tree (unknown
+/// means hidden).
+bool watchShowOfferSavings(BuildContext context) =>
+    context.watch<StoreInfoProvider?>()?.showOfferSavings ?? false;
 
 /// One customer's free deliveries (owner, 2026-10-08), from `free_delivery`
 /// on `GET /orders/checkout-info`. Since 2026-10-09 (owner) every customer,

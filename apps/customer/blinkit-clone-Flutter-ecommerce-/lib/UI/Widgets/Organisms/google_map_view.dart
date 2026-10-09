@@ -4,13 +4,14 @@
 //
 // Legacy `Marker`s only: no Map ID / cloudMapId, no style JSON (D12), so the
 // Android free path stays free and the map looks like standard Google Maps.
-// No ETA, route, navigation, geocoding or Places anywhere. This file reads no
-// API key: the Android SDK reads it from the manifest.
+// No navigation, geocoding or Places. The road route line comes from the
+// Blynk backend (owner, 2026-10-10 - reverses plan D.13); this file only
+// draws it. This file reads no API key: the Android SDK reads it from the
+// manifest.
 //
 // Real rendering has NOT been exercised on a device or emulator; widget tests
 // run against a fake platform (test/fixtures/fake_google_maps_platform.dart).
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -26,13 +27,16 @@ import 'package:google_maps_flutter/google_maps_flutter.dart'
         LatLng,
         LatLngBounds,
         Marker,
-        MarkerId;
+        MarkerId,
+        Polyline,
+        PolylineId;
 
 import 'package:ecom/design/tokens.dart';
 
 import 'map_marker_logic.dart';
 import 'map_provider.dart';
 import 'map_unavailable_card.dart';
+import 'rider_bike_icon.dart';
 
 /// Padding (logical px) around the two markers when the camera fits them.
 const double _fitPadding = 48;
@@ -79,9 +83,10 @@ bool _validCoordinate(GeoPoint p) =>
 /// cached per tone and device pixel ratio.
 ///
 ///  - destination: ink location-pin glyph;
-///  - riderLive: ink disc, white ring, white two-wheeler glyph;
-///  - riderStale: the same shape in ink2 at reduced opacity with a DASHED ring,
-///    so a stale rider is distinguishable without relying on colour.
+///  - riderLive: the top-down bike (rider_bike_icon.dart), facing north; the
+///    marker is rotated to the direction of travel (owner, 2026-10-10);
+///  - riderStale: the same bike, faded, so a stale rider is distinguishable
+///    without relying on colour.
 class GoogleMarkerIcons {
   const GoogleMarkerIcons._();
 
@@ -108,12 +113,13 @@ class GoogleMarkerIcons {
   }
 
   /// Anchor (fraction of the image) that sits on the coordinate. The pin's tip
-  /// is at 22/24 of the glyph box; the rider disc is centred.
+  /// is at 22/24 of the glyph box; the rider bike is centred (it turns about
+  /// its centre).
   static Offset anchorFor(MapMarkerTone tone) =>
       tone == MapMarkerTone.destination ? const Offset(0.5, 22 / 24) : const Offset(0.5, 0.5);
 
   static const double _pinSize = 40;
-  static const double _riderSize = 44;
+  static const double _riderSize = kRiderBikeLogicalSize;
 
   /// Renders one tone to a PNG-backed [BitmapDescriptor] at [pixelRatio].
   static Future<BitmapDescriptor> renderMarkerIcon(MapMarkerTone tone, double pixelRatio) async {
@@ -125,7 +131,8 @@ class GoogleMarkerIcons {
     if (tone == MapMarkerTone.destination) {
       _paintGlyph(canvas, Icons.location_on, const Size(_pinSize, _pinSize), BlynkColors.ink, _pinSize);
     } else {
-      _paintRider(canvas, stale: tone == MapMarkerTone.riderStale);
+      RiderBikePainter(stale: tone == MapMarkerTone.riderStale)
+          .paint(canvas, const Size(_riderSize, _riderSize));
     }
 
     final image = await recorder.endRecording().toImage(pixels, pixels);
@@ -152,39 +159,6 @@ class GoogleMarkerIcons {
     painter.paint(canvas, Offset((box.width - painter.width) / 2, (box.height - painter.height) / 2));
     painter.dispose();
   }
-
-  static void _paintRider(Canvas canvas, {required bool stale}) {
-    const centre = Offset(_riderSize / 2, _riderSize / 2);
-    const discRadius = 17.0;
-    const ringRadius = 20.0;
-
-    if (stale) {
-      // One layer so the ring and the disc fade together, not separately.
-      canvas.saveLayer(
-        Offset.zero & const Size(_riderSize, _riderSize),
-        Paint()..color = BlynkColors.paper.withValues(alpha: 0.7),
-      );
-    }
-    canvas.drawCircle(centre, discRadius, Paint()..color = stale ? BlynkColors.ink2 : BlynkColors.ink);
-
-    final ring = Paint()
-      ..color = BlynkColors.paper
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stale ? 2 : 3;
-    if (stale) {
-      const dashes = 16;
-      const sweep = 2 * math.pi / dashes;
-      final rect = Rect.fromCircle(center: centre, radius: ringRadius - 1);
-      for (var i = 0; i < dashes; i += 2) {
-        canvas.drawArc(rect, i * sweep, sweep, false, ring);
-      }
-    } else {
-      canvas.drawCircle(centre, ringRadius - 1.5, ring);
-    }
-
-    _paintGlyph(canvas, Icons.two_wheeler, const Size(_riderSize, _riderSize), BlynkColors.paper, 22);
-    if (stale) canvas.restore();
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +172,16 @@ class GoogleTrackingMapView extends TrackingMapView {
     required this.initialZoom,
     required this.markers,
     this.semanticsLabel,
+    this.route = const [],
+    this.interactive = false,
   }) : super.constructor();
+
+  /// The road from the rider to the door (owner, 2026-10-10); empty = none.
+  final List<GeoPoint> route;
+
+  /// True on the full-screen tracking map: pan and zoom are on. The inline
+  /// map stays read-only (every gesture off, pointers ignored).
+  final bool interactive;
 
   @override
   final GeoPoint initialCenter;
@@ -221,6 +204,8 @@ class GoogleTrackingMapView extends TrackingMapView {
         initialZoom: initialZoom,
         markers: markers,
         semanticsLabel: semanticsLabel,
+        route: route,
+        interactive: interactive,
       );
 }
 
@@ -230,11 +215,15 @@ class _TrackingBody extends StatefulWidget {
     required this.initialZoom,
     required this.markers,
     this.semanticsLabel,
+    this.route = const [],
+    this.interactive = false,
   });
   final GeoPoint initialCenter;
   final double initialZoom;
   final Set<MapMarkerSpec> markers;
   final String? semanticsLabel;
+  final List<GeoPoint> route;
+  final bool interactive;
 
   @override
   State<_TrackingBody> createState() => _TrackingBodyState();
@@ -363,6 +352,10 @@ class _TrackingBodyState extends State<_TrackingBody>
           position: LatLng(spec.position.latitude, spec.position.longitude),
           icon: icon,
           anchor: GoogleMarkerIcons.anchorFor(spec.tone),
+          // The bike turns with the road and lies flat on the map, so it
+          // keeps pointing along the street (owner, 2026-10-10).
+          rotation: spec.tone == MapMarkerTone.destination ? 0 : (spec.heading ?? 0),
+          flat: spec.tone != MapMarkerTone.destination,
           // The rider always draws above the destination.
           zIndexInt: spec.tone == MapMarkerTone.destination ? 1 : 2,
         ),
@@ -370,6 +363,21 @@ class _TrackingBodyState extends State<_TrackingBody>
     }
     _shownIcon.removeWhere((id, _) => !markers.any((m) => m.markerId.value == id));
     return markers;
+  }
+
+  /// The road line from the rider to the door, when the backend has one.
+  Set<Polyline> _polylines() {
+    final points = [for (final p in widget.route) if (_validCoordinate(p)) LatLng(p.latitude, p.longitude)];
+    if (points.length < 2) return const {};
+    return {
+      Polyline(
+        polylineId: const PolylineId('route'),
+        points: points,
+        color: BlynkColors.ink.withValues(alpha: routeLineOpacity),
+        width: routeLineWidth.round(),
+        zIndex: 0,
+      ),
+    };
   }
 
   void _onMapCreated(GoogleMapController controller) {
@@ -433,6 +441,7 @@ class _TrackingBodyState extends State<_TrackingBody>
       container: true,
       child: ExcludeSemantics(
         child: IgnorePointer(
+          ignoring: !widget.interactive,
           child: GoogleMap(
             initialCameraPosition: CameraPosition(
               target: LatLng(widget.initialCenter.latitude, widget.initialCenter.longitude),
@@ -440,9 +449,11 @@ class _TrackingBodyState extends State<_TrackingBody>
             ),
             onMapCreated: _onMapCreated,
             markers: _markers(),
-            // Read-only: every switch is off (the plugin defaults most to on).
-            scrollGesturesEnabled: false,
-            zoomGesturesEnabled: false,
+            polylines: _polylines(),
+            // Read-only inline: every switch is off (the plugin defaults most
+            // to on). The full-screen map (interactive) pans and zooms.
+            scrollGesturesEnabled: widget.interactive,
+            zoomGesturesEnabled: widget.interactive,
             rotateGesturesEnabled: false,
             tiltGesturesEnabled: false,
             zoomControlsEnabled: false,

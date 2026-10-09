@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { coupons as couponsApi } from '../api/resources';
+import { coupons as couponsApi, settings as settingsApi } from '../api/resources';
 import type { Coupon, CouponType } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
@@ -26,6 +27,10 @@ import { formatMoney } from '../lib/orders';
  * Coupon codes customers type at checkout (backend migration 018). The API
  * re-validates every code when an order is placed, under a lock, so the
  * limits here hold even when customers race for the last use.
+ *
+ * Owner, 2026-10-10: when "Coupon codes at checkout" is off (GET
+ * /admin/settings/checkout coupons_enabled false) the customer app hides the
+ * coupon field, so the page says so and links to that switch in Settings.
  */
 
 const errorText = errorMessage;
@@ -37,6 +42,8 @@ export function Coupons() {
   const [rows, setRows] = useState<Coupon[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  // null until known; a failed read shows no notice rather than a wrong one.
+  const [couponsEnabled, setCouponsEnabled] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +57,14 @@ export function Coupons() {
 
   useEffect(() => {
     void load();
+    let live = true;
+    settingsApi
+      .getCheckout()
+      .then((s) => live && setCouponsEnabled(s.coupons_enabled))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
   }, [load]);
 
   const replace = (c: Coupon) => setRows((current) => current?.map((r) => (r.id === c.id ? c : r)) ?? current);
@@ -94,6 +109,15 @@ export function Coupons() {
           </button>
         }
       />
+
+      {couponsEnabled === false ? (
+        <div className="ops-notice coupons-off" role="status">
+          <span>Customers can't enter codes until 'Coupon codes at checkout' is on.</span>
+          <Link className="coupons-off__link" to="/settings#checkout">
+            Open checkout settings
+          </Link>
+        </div>
+      ) : null}
 
       {error ? <p className="field__error">{error}</p> : null}
 

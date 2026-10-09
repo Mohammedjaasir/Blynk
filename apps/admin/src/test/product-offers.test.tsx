@@ -147,6 +147,66 @@ describe('product form offer section', () => {
   });
 });
 
+describe('product form offer as "LKR off" (owner, 2026-10-10)', () => {
+  it('sends selling price - amount and says what customers pay', async () => {
+    const user = userEvent.setup();
+    const api = renderForm(RICE);
+    await screen.findByLabelText(/Offer price \(LKR\)/);
+    await user.click(screen.getByRole('button', { name: 'LKR off' }));
+    expect(screen.getByRole('button', { name: 'LKR off' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByLabelText(/Offer price \(LKR\)/)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Amount off \(LKR\)/), '50');
+    expect(screen.getByText(/Customers pay LKR 200 \(was LKR 250\)/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Product list')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/products/p1')[0]?.body).toMatchObject({ offer_price: 200, offer_ends_at: null });
+  });
+
+  it('keeps 2 decimals: 250 - 49.5 = 200.5', async () => {
+    const user = userEvent.setup();
+    const api = renderForm(RICE);
+    await screen.findByLabelText(/Offer price \(LKR\)/);
+    await user.click(screen.getByRole('button', { name: 'LKR off' }));
+    await user.type(screen.getByLabelText(/Amount off \(LKR\)/), '49.5');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Product list')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/products/p1')[0]?.body).toMatchObject({ offer_price: 200.5 });
+  });
+
+  it('refuses an amount that leaves no price, or with 3 decimals, sending nothing', async () => {
+    const user = userEvent.setup();
+    const api = renderForm(RICE);
+    await screen.findByLabelText(/Offer price \(LKR\)/);
+    await user.click(screen.getByRole('button', { name: 'LKR off' }));
+    const amount = screen.getByLabelText(/Amount off \(LKR\)/);
+    await user.type(amount, '250');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Enter a price above 0 with at most 2 decimals')).toBeInTheDocument();
+    await user.clear(amount);
+    await user.type(amount, '5.555');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Enter an amount above 0 with at most 2 decimals')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/products/p1')).toHaveLength(0);
+  });
+
+  it('a stored offer opens as its price; LKR off shows it as the amount off, unchanged', async () => {
+    const user = userEvent.setup();
+    const api = renderForm({ ...RICE, offer_price: 220, offer_active: true });
+    expect(await screen.findByLabelText(/Offer price \(LKR\)/)).toHaveValue('220');
+    expect(screen.getByRole('button', { name: 'New price' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'LKR off' }));
+    expect(screen.getByLabelText(/Amount off \(LKR\)/)).toHaveValue('30');
+    expect(screen.getByText(/Customers pay LKR 220 \(was LKR 250\)/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'New price' }));
+    expect(screen.getByLabelText(/Offer price \(LKR\)/)).toHaveValue('220');
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Product list')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/products/p1')[0]?.body).not.toHaveProperty('offer_price');
+  });
+});
+
 describe('products list offer badge', () => {
   it('shows "Offer LKR 220" only while the offer is active', async () => {
     tokenStore.save('access', 'refresh');

@@ -65,11 +65,41 @@ class HomeProductFeed extends StatefulWidget {
     for (final p in products) {
       (byCategory[p.categoryId] ??= []).add(p);
     }
-    final ordered = [...categories]..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+    final ordered = arrangedOrder(categories);
     return [
       for (final c in ordered)
         if ((byCategory[c.id]?.length ?? 0) >= railMinimum)
           (category: c, products: byCategory[c.id]!.take(railMaximum).toList()),
+    ];
+  }
+
+  /// [categories] in the order Ops/Admin arranged them (owner, 2026-10-10):
+  /// top-level categories by display_order (then name, like the API), each
+  /// followed by its own sub-categories in their display_order - so
+  /// "Dairy & Eggs" > Milk, Eggs stay together. Sub-categories are numbered
+  /// within their parent (10, 20, 30...), so one flat sort would interleave
+  /// them with other top-level categories. A sub-category whose parent is
+  /// not in the list counts as top level.
+  static List<CategoryModel> arrangedOrder(List<CategoryModel> categories) {
+    int byOrder(CategoryModel a, CategoryModel b) {
+      final order = a.displayOrder.compareTo(b.displayOrder);
+      return order != 0 ? order : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    }
+
+    final ids = {for (final c in categories) c.id};
+    final top = [
+      for (final c in categories)
+        if (c.isTopLevel || !ids.contains(c.parentId)) c,
+    ]..sort(byOrder);
+    final children = <String, List<CategoryModel>>{};
+    for (final c in categories) {
+      if (!c.isTopLevel && ids.contains(c.parentId)) (children[c.parentId!] ??= []).add(c);
+    }
+    return [
+      for (final parent in top) ...[
+        parent,
+        ...((children[parent.id] ?? const <CategoryModel>[]).toList()..sort(byOrder)),
+      ],
     ];
   }
 

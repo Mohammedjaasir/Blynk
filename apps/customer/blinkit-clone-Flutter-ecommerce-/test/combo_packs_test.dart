@@ -10,6 +10,7 @@ import 'package:ecom/Services/Exceptions/api_exception.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
+import 'package:ecom/Services/Providers/store_info.provider.dart';
 import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/UI/Widgets/Atoms/money_text.dart';
 import 'package:ecom/Services/reorder.dart';
@@ -100,7 +101,22 @@ const _milk = ProductModel(
   isAvailable: true,
 );
 
-Widget _host(WidgetTester tester, Widget child, {CartProvider? cart, ProductProvider? products}) {
+/// A StoreInfoProvider whose GET /store answered `show_offer_savings`
+/// (owner, 2026-10-10): the combo "Save LKR" tag shows only while it is on.
+Future<StoreInfoProvider> _store({required bool showOfferSavings}) async {
+  final store = StoreInfoProvider(
+    request: (_) async => {
+      'success': true,
+      'data': {'delivery_fee_lkr': 100, 'show_offer_savings': showOfferSavings},
+    },
+    readCache: () async => null,
+    writeCache: (_) async {},
+  );
+  await store.load();
+  return store;
+}
+
+Widget _host(WidgetTester tester, Widget child, {CartProvider? cart, ProductProvider? products, StoreInfoProvider? store}) {
   tester.view.physicalSize = const Size(420, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -108,6 +124,7 @@ Widget _host(WidgetTester tester, Widget child, {CartProvider? cart, ProductProv
     providers: [
       ChangeNotifierProvider<CartProvider>.value(value: cart ?? CartProvider()),
       if (products != null) ChangeNotifierProvider<ProductProvider>.value(value: products),
+      if (store != null) ChangeNotifierProvider<StoreInfoProvider>.value(value: store),
     ],
     child: MaterialApp(theme: AppTheme.theme, home: Scaffold(body: child)),
   );
@@ -215,9 +232,10 @@ void main() {
   });
 
   group('ComboCard', () {
-    testWidgets('combo price, struck items total, Save tag, items summary, ADD', (tester) async {
+    testWidgets('combo price, struck items total, Save tag (switch on), items summary, ADD', (tester) async {
       final cart = CartProvider();
-      await tester.pumpWidget(_host(tester, _card(_combo()), cart: cart));
+      final store = await _store(showOfferSavings: true);
+      await tester.pumpWidget(_host(tester, _card(_combo()), cart: cart, store: store));
       await tester.pumpAndSettle();
 
       expect(find.text('Breakfast pack'), findsOneWidget);
@@ -235,6 +253,43 @@ void main() {
       expect(find.byKey(const ValueKey('combo-stepper/k1')), findsOneWidget);
     });
 
+    // The "Save LKR X" switch (owner, 2026-10-10): off, or no store answer,
+    // means no tag on the card or in the detail sheet.
+    testWidgets('savings switch off: no Save tag on the card or the detail', (tester) async {
+      final store = await _store(showOfferSavings: false);
+      await tester.pumpWidget(_host(tester, _card(_combo()), store: store));
+      await tester.pumpAndSettle();
+      expect(tester.widget<SalePrice>(find.byType(SalePrice)).amount, 900);
+      expect(find.byKey(const Key('combo-items-total')), findsOneWidget);
+      expect(find.byType(ComboSaveTag), findsNothing);
+      expect(find.textContaining('Save LKR'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('combo-card/k1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('combo-detail')), findsOneWidget);
+      expect(find.byType(ComboSaveTag), findsNothing);
+      expect(find.textContaining('Save LKR'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('no StoreInfoProvider in the tree: no Save tag', (tester) async {
+      await tester.pumpWidget(_host(tester, _card(_combo())));
+      await tester.pumpAndSettle();
+      expect(find.byType(ComboSaveTag), findsNothing);
+    });
+
+    testWidgets('savings switch on: the detail sheet shows the Save tag too', (tester) async {
+      final store = await _store(showOfferSavings: true);
+      await tester.pumpWidget(_host(tester, _card(_combo()), store: store));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('combo-card/k1')));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: find.byKey(const Key('combo-detail')), matching: find.text('Save LKR 120')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('sold out: a disabled Sold out pill, nothing is added', (tester) async {
       final cart = CartProvider();
       await tester.pumpWidget(_host(tester, _card(_combo(available: false)), cart: cart));
@@ -248,7 +303,9 @@ void main() {
 
     testWidgets('no struck price and no Save tag without a real saving', (tester) async {
       final combo = ComboModel.tryParse(_comboJson(price: 1020, itemsTotal: 1020, saving: 0))!;
-      await tester.pumpWidget(_host(tester, _card(combo)));
+      // Even with the savings switch on (owner, 2026-10-10).
+      final store = await _store(showOfferSavings: true);
+      await tester.pumpWidget(_host(tester, _card(combo), store: store));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('combo-items-total')), findsNothing);
       expect(find.byKey(const Key('combo-save-tag')), findsNothing);
@@ -338,6 +395,8 @@ void main() {
       final cart = CartProvider()
         ..addCombo(_combo())
         ..addCombo(_combo());
+      // The saving shows only with the Show 'Save LKR' switch on (owner, 2026-10-10).
+      final store = await _store(showOfferSavings: true);
       await tester.pumpWidget(_host(
         tester,
         Consumer<CartProvider>(
@@ -346,6 +405,7 @@ void main() {
           ]),
         ),
         cart: cart,
+        store: store,
       ));
       await tester.pumpAndSettle();
       expect(find.text('Breakfast pack'), findsOneWidget);
@@ -356,6 +416,21 @@ void main() {
       expect(find.text('2 × LKR 900'), findsOneWidget);
       expect(find.text('You save LKR 240'), findsOneWidget);
       expect(tester.takeException(), isNull);
+
+      // Switch off: no saving line in the cart either.
+      final off = await _store(showOfferSavings: false);
+      await tester.pumpWidget(_host(
+        tester,
+        Consumer<CartProvider>(
+          builder: (context, cart, _) => ListView(children: [
+            for (final line in cart.comboLines) CartComboCard(line: line),
+          ]),
+        ),
+        cart: cart,
+        store: off,
+      ));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('You save'), findsNothing);
 
       await tester.tap(find.byTooltip('Remove Breakfast pack'));
       await tester.pumpAndSettle();

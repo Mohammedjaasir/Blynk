@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Spinner, ToastProvider } from './components/ui';
 import { Cash } from './pages/Cash';
 import { Categories } from './pages/Categories';
+import { ArrangeProducts } from './pages/ArrangeProducts';
 import { Combos } from './pages/Combos';
 import { CategoryGroups } from './pages/CategoryGroups';
 import { Coupons } from './pages/Coupons';
@@ -78,6 +79,8 @@ export function AppRoutes() {
         <Route path="products/import" element={<AdminOnly><ProductImport /></AdminOnly>} />
         <Route path="products/:id" element={<AdminOnly><ProductForm /></AdminOnly>} />
         <Route path="categories" element={<AdminOnly><Categories /></AdminOnly>} />
+        {/* Arrange (owner, 2026-10-10): a category's product order. */}
+        <Route path="categories/:id/arrange" element={<AdminOnly><ArrangeProducts /></AdminOnly>} />
         <Route path="category-groups" element={<AdminOnly><CategoryGroups /></AdminOnly>} />
         <Route path="combos" element={<AdminOnly><Combos /></AdminOnly>} />
         <Route path="promotions" element={<AdminOnly><Promotions /></AdminOnly>} />

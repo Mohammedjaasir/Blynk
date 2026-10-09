@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Cash } from './pages/Cash';
 import { Catalog } from './pages/Catalog';
 import { Categories } from './pages/Catalog/Categories';
+import { ArrangeProducts } from './pages/Catalog/ArrangeProducts';
 import { CategoryGroups } from './pages/Catalog/CategoryGroups';
 import { Combos } from './pages/Catalog/Combos';
 import { ProductForm } from './pages/Catalog/ProductForm';
@@ -38,6 +39,7 @@ import { Riders } from './pages/Riders';
 import { RiderEarnings } from './pages/RiderEarnings';
 import { SmsOffers } from './pages/SmsOffers';
 import { BirthdayOffer } from './pages/BirthdayOffer';
+import { Coupons } from './pages/Coupons';
 import { RiderRequests } from './pages/RiderRequests';
 import { StaffAccounts } from './pages/StaffAccounts';
 import { LaunchScreen } from './components/LaunchScreen';
@@ -128,6 +130,8 @@ export function AppRoutes() {
         <Route path="catalog/products/import" element={<ProductImport />} />
         <Route path="catalog/products/:id" element={<ProductForm />} />
         <Route path="catalog/categories" element={<Categories />} />
+        {/* Arrange (owner, 2026-10-10): a category's product order. */}
+        <Route path="catalog/categories/:id/arrange" element={<ArrangeProducts />} />
         <Route path="catalog/category-groups" element={<CategoryGroups />} />
         <Route path="catalog/promotions" element={<Promotions />} />
         <Route path="catalog/combos" element={<Combos />} />
@@ -152,6 +156,8 @@ export function AppRoutes() {
         <Route path="more/staff" element={<StaffAccounts />} />
         <Route path="more/sms-offers" element={<SmsOffers />} />
         <Route path="more/birthday-offer" element={<BirthdayOffer />} />
+        {/* Coupon codes for customers (owner, 2026-10-10). */}
+        <Route path="more/coupons" element={<Coupons />} />
         <Route path="more/rider-requests" element={<RiderRequests />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

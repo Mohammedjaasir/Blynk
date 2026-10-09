@@ -109,6 +109,32 @@ export interface Category {
   offer_active?: boolean;
 }
 
+/**
+ * Arrange (owner, 2026-10-10): one row of a category's "Arrange products"
+ * list (`GET /admin/categories/:id/product-order`), in the order customers
+ * see them. `display_order` null = not arranged (A-Z after the arranged).
+ */
+export interface ArrangeProduct {
+  id: string;
+  name: string;
+  category_id: string;
+  category_name: string;
+  unit: string;
+  pack_size: string | null;
+  image_url: string | null;
+  image_focal_x: number;
+  image_focal_y: number;
+  selling_price: number;
+  is_active: boolean;
+  is_available: boolean;
+  display_order: number | null;
+}
+
+export interface CategoryProductOrder {
+  category: { id: string; name: string; parent_id: string | null };
+  products: ArrangeProduct[];
+}
+
 /** A category as listed inside a group (GET /admin/category-groups). */
 export interface GroupCategory {
   id: string;
@@ -172,6 +198,9 @@ export interface CheckoutSettings {
    * (ISO). PATCH may omit `since` to keep the stored one.
    */
   new_customer_free_deliveries: { enabled: boolean; count: number; since: string };
+  /** The customer app shows "Save LKR X" on offers (owner, 2026-10-10).
+   * Optional: a backend from before the switch leaves it out (= off). */
+  show_offer_savings?: boolean;
   updated_at: string | null;
 }
 
@@ -492,6 +521,15 @@ export interface RiderPayInput {
 /** GET/PATCH /admin/settings/rider-commission */
 export interface RiderCommissionSetting {
   default_percent: number;
+  updated_at: string | null;
+}
+
+/** Rider trips (owner, 2026-10-10): how many orders one rider may carry at
+ * once (1 = no trips) and the max straight-line km between their drop-offs
+ * before staff must confirm. GET|PATCH /admin/settings/rider-trips. */
+export interface RiderTripsSetting {
+  max_active_deliveries: number;
+  max_dropoff_distance_km: number;
   updated_at: string | null;
 }
 
@@ -896,12 +934,16 @@ export type DentalSpecialty = string;
 
 /** Quick picks in the Add/Edit doctor form - the specialty can be any text. */
 export const DENTAL_SPECIALTY_SUGGESTIONS = [
-  'General dentist',
-  'Orthodontist',
-  'Periodontist',
-  'Endodontist',
-  'Oral surgeon',
-  'Pediatric dentist',
+  // Any kind of doctor, not only dentists (owner, 2026-10-10: "we can add
+  // other doctors also"). Staff can still type any specialty.
+  'General physician',
+  'Pediatrician',
+  'Gynecologist',
+  'Dentist',
+  'Eye specialist',
+  'ENT specialist',
+  'Skin specialist',
+  'Cardiologist',
 ] as const;
 
 export interface DentalDoctor {

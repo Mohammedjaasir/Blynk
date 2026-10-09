@@ -1,13 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { riderApplications, settings } from '../api/resources';
-import type { CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting } from '../api/types';
+import type { CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting, RiderTripsSetting } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, Spinner } from '../components/ui';
 import { catalogErrorMessage, formatColomboDate, parseDeliveryFee, parseFreeDeliveryCount } from '../lib/catalog';
 import { formatDateTime } from '../lib/inventory';
 import { formatPercent, parseCommissionPercent } from '../lib/riderPay';
+import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
 
 /**
  * The More tab (plan §8: rider list, settings, sign-out). Sign-out is real,
@@ -23,11 +24,29 @@ import { formatPercent, parseCommissionPercent } from '../lib/riderPay';
  * since a start date (owner, 2026-10-09). The rider commission default
  * (`GET|PATCH /admin/settings/rider-commission`; owner, 2026-10-09) sits
  * beside them, and "Rider earnings" opens the per-rider earnings report.
+ * Owner, 2026-10-10: "Rider trips" (`GET|PATCH /admin/settings/rider-trips`)
+ * sets how many orders one rider may carry at once and how far apart their
+ * drop-offs may be, and "Coupons" opens the coupon codes (/more/coupons).
+ * /more#checkout-settings (the Coupons page's link) scrolls to Checkout.
  */
 export function More() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const [pendingRiders, setPendingRiders] = useState(0);
+
+  // /more#checkout-settings (owner, 2026-10-10): the Coupons page links here
+  // when coupon codes are off. The card loads after a moment, so retry briefly.
+  useEffect(() => {
+    if (!hash) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const el = document.getElementById(hash.slice(1));
+      if (el || ++tries > 20) window.clearInterval(timer);
+      el?.scrollIntoView?.({ block: 'start' });
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [hash]);
 
   useEffect(() => {
     let live = true;
@@ -47,7 +66,7 @@ export function More() {
 
   return (
     <div className="page">
-      <PageHeader title="More" description="Riders, rider requests, rider cash and earnings, staff, SMS offers, birthday offer, settings and sign-out." />
+      <PageHeader title="More" description="Riders, rider requests, rider cash and earnings, staff, SMS offers, birthday offer, coupons, settings and sign-out." />
       <section className="card">
         <p className="card__row">
           <span className="card__label">Signed in as</span>
@@ -106,11 +125,18 @@ export function More() {
             <span className="cat-hub__title">Birthday offer</span>
           </Link>
         </li>
+        <li>
+          {/* Coupon codes for customers (owner, 2026-10-10). */}
+          <Link className="cat-hub__card" to="/more/coupons">
+            <span className="cat-hub__title">Coupons</span>
+          </Link>
+        </li>
       </ul>
 
       <DeliveryFeeCard />
       <CheckoutSettingsCard />
       <RiderCommissionCard />
+      <RiderTripsCard />
 
       <section className="card">
         <button type="button" className="button button--ghost" onClick={() => void handleSignOut()}>
@@ -209,6 +235,7 @@ function CheckoutSettingsCard() {
   const [current, setCurrent] = useState<CheckoutSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [coupons, setCoupons] = useState(false);
+  const [savings, setSavings] = useState(false);
   const [freeOn, setFreeOn] = useState(true);
   const [count, setCount] = useState('2');
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +246,7 @@ function CheckoutSettingsCard() {
   function show(s: CheckoutSettings) {
     setCurrent(s);
     setCoupons(s.coupons_enabled);
+    setSavings(s.show_offer_savings === true);
     setFreeOn(s.new_customer_free_deliveries.enabled);
     setCount(String(s.new_customer_free_deliveries.count));
   }
@@ -245,6 +273,9 @@ function CheckoutSettingsCard() {
         await settings.checkout.update({
           coupons_enabled: coupons,
           new_customer_free_deliveries: { enabled: freeOn, count: parsed.value },
+          // Sent only when flipped, so saving the other switches works
+          // against a backend from before this one (owner, 2026-10-10).
+          ...(savings !== (current?.show_offer_savings === true) ? { show_offer_savings: savings } : {}),
         })
       );
       setNotice('Checkout settings saved.');
@@ -283,7 +314,7 @@ function CheckoutSettingsCard() {
   }
 
   return (
-    <section className="card" aria-labelledby="checkout-settings-title">
+    <section className="card" id="checkout-settings" aria-labelledby="checkout-settings-title">
       <h2 className="section-label" id="checkout-settings-title">
         Checkout
       </h2>
@@ -298,6 +329,13 @@ function CheckoutSettingsCard() {
             <span>
               <strong>Coupon codes at checkout</strong>
               <em>When off, the app hides the coupon field.</em>
+            </span>
+          </label>
+          <label className="toggle">
+            <input type="checkbox" checked={savings} onChange={(e) => setSavings(e.target.checked)} />
+            <span>
+              <strong>Show 'Save LKR' on offers</strong>
+              <em>The customer app shows how much an offer or combo saves, e.g. "Save LKR 50".</em>
             </span>
           </label>
           <label className="toggle">
@@ -432,6 +470,123 @@ function RiderCommissionCard() {
       {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}
       <p className="page__note">
         Commission riders earn this share of the standard delivery fee, unless they have their own. Company riders earn no commission.
+      </p>
+    </section>
+  );
+}
+
+/** Rider trips (owner, 2026-10-10: "ops can control the 2 orders for one
+ * delivery if it's in the same route"). Assigning a rider follows these:
+ * at most this many open orders per rider, and a second drop-off farther
+ * than the distance from one they already hold needs staff to confirm. */
+function RiderTripsCard() {
+  const [current, setCurrent] = useState<RiderTripsSetting | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [orders, setOrders] = useState<number | null>(null);
+  const [km, setKm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function show(s: RiderTripsSetting) {
+    setCurrent(s);
+    setOrders(s.max_active_deliveries);
+    setKm(String(Number(s.max_dropoff_distance_km.toFixed(1))));
+  }
+
+  useEffect(() => {
+    settings.riderTrips
+      .get()
+      .then(show)
+      .catch((err) => setLoadError(catalogErrorMessage(err)));
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!current) return;
+    setNotice(null);
+    if (orders === null || !(TRIP_ORDER_CHOICES as readonly number[]).includes(orders)) {
+      setError('Pick how many orders one rider can carry.');
+      return;
+    }
+    const parsed = parseDropoffKm(km);
+    if ('error' in parsed) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const saved = await settings.riderTrips.update({ max_active_deliveries: orders, max_dropoff_distance_km: parsed.value });
+      show(saved);
+      setNotice(`Rider trips saved: ${tripOrdersLabel(saved.max_active_deliveries)}, ${formatKm(saved.max_dropoff_distance_km)}.`);
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card" aria-labelledby="rider-trips-title">
+      <h2 className="section-label" id="rider-trips-title">
+        Rider trips
+      </h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading rider trips" />
+      ) : (
+        <form className="form" onSubmit={save} noValidate>
+          <p className="card__row">
+            <span className="card__label">Now</span>
+            <span className="card__value">
+              {tripOrdersLabel(current.max_active_deliveries)}, {formatKm(current.max_dropoff_distance_km)}
+            </span>
+          </p>
+          <div className="field">
+            <span className="field__label" id="trip-orders-label">
+              Orders one rider can carry at once
+            </span>
+            <div className="segmented" role="group" aria-labelledby="trip-orders-label">
+              {TRIP_ORDER_CHOICES.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={n === orders ? 'segmented__item is-selected' : 'segmented__item'}
+                  aria-pressed={n === orders}
+                  aria-label={tripOrdersLabel(n)}
+                  onClick={() => setOrders(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <span className="field__hint">1 = no trips: one order per rider.</span>
+          </div>
+          <label className="field">
+            <span className="field__label">Max distance between drop-offs (km)</span>
+            <input
+              className="input"
+              inputMode="decimal"
+              value={km}
+              onChange={(e) => setKm(e.target.value)}
+              aria-invalid={error ? true : undefined}
+            />
+            <span className="field__hint">
+              {MIN_DROPOFF_KM} to {MAX_DROPOFF_KM} km, straight line.
+            </span>
+          </label>
+          <button type="submit" className="button" disabled={saving}>
+            {saving ? <Spinner label="Saving" /> : 'Save'}
+          </button>
+        </form>
+      )}
+      {error ? <p className="field__error" role="alert">{error}</p> : null}
+      {notice ? <p className="quiet quiet--ok" role="status">{notice}</p> : null}
+      {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}
+      <p className="page__note">
+        A second order is refused for that rider if its drop-off is farther than this, unless staff confirm.
       </p>
     </section>
   );

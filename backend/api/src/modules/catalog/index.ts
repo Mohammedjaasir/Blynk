@@ -8,6 +8,7 @@ import { categoryGroupsController } from './catalog.groups.js';
 import { combosController } from './catalog.combos.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { idParamSchema } from './catalog.schema.js';
+import { arrangeController } from './catalog.arrange.js';
 
 // A malformed :id is a 400 VALIDATION_ERROR, never a Postgres uuid cast 500.
 const validId = validate({ params: idParamSchema });
@@ -41,6 +42,11 @@ productsRouter.delete('/:id/notify-me', requireAuth, requireShopper(), stockAler
 export const adminCatalogRouter = Router();
 adminCatalogRouter.get('/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.getCategoriesAdmin.bind(catalogController));
 adminCatalogRouter.post('/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createCategoryAdmin.bind(catalogController));
+// Arrange (owner, 2026-10-10): sibling categories' order, and the product
+// order inside a category. /categories/order before /categories/:id.
+adminCatalogRouter.put('/categories/order', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), arrangeController.reorderCategories);
+adminCatalogRouter.get('/categories/:id/product-order', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, arrangeController.getProductOrder);
+adminCatalogRouter.put('/categories/:id/product-order', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, arrangeController.setProductOrder);
 adminCatalogRouter.patch('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.updateCategoryAdmin.bind(catalogController));
 adminCatalogRouter.delete('/categories/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.deleteCategoryAdmin.bind(catalogController));
 // Category offer (migration 033; owner, 2026-10-09): % off the whole category.
@@ -90,3 +96,4 @@ export * from './catalog.events.js';
 export * from './catalog.stock-alerts.js';
 export * from './catalog.groups.js';
 export * from './catalog.combos.js';
+export * from './catalog.arrange.js';

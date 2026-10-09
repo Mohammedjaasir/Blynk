@@ -8,6 +8,7 @@ import '../Models/order_format.dart';
 import '../Models/product_model.dart';
 import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/product.provider.dart';
+import '../Services/Providers/store_info.provider.dart';
 import '../Services/app_errors.dart';
 import '../Services/share_links.dart';
 import '../UI/Widgets/Atoms/add_to_cart_button.dart';
@@ -441,6 +442,10 @@ class _ProductSummary extends StatelessWidget {
                     product.sellingPrice,
                     style: BlynkText.body.copyWith(color: BlynkColors.strike),
                   ),
+                  // "Save LKR X" only while the store's show_offer_savings
+                  // switch is on (owner, 2026-10-10).
+                  if (watchShowOfferSavings(context))
+                    SaveText(product.sellingPrice - product.effectivePrice),
                 ],
               )
             else

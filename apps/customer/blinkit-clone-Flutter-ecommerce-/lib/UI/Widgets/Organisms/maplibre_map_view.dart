@@ -23,9 +23,13 @@ import 'package:maplibre_gl/maplibre_gl.dart'
         CircleOptions,
         LatLng,
         LatLngBounds,
+        Line,
+        LineOptions,
         MapLibreMap,
         MapLibreMapController,
-        MinMaxZoomPreference;
+        MinMaxZoomPreference,
+        Symbol,
+        SymbolOptions;
 
 import 'package:ecom/app_colors.dart';
 import 'package:ecom/app_design.dart';
@@ -35,6 +39,7 @@ import 'map_provider.dart';
 import 'map_tile_config.dart';
 import 'map_unavailable_card.dart';
 import 'order_tracking_map.dart' show mapAttributionText;
+import 'rider_bike_icon.dart';
 import '../../../design/tokens.dart';
 
 /// Padding (logical px) around the two markers when the camera fits them.
@@ -65,6 +70,8 @@ class MapLibreTrackingMapView extends TrackingMapView {
     required this.initialCenter,
     required this.initialZoom,
     required this.markers,
+    this.route = const [],
+    this.interactive = false,
   }) : super.constructor();
 
   @override
@@ -74,23 +81,44 @@ class MapLibreTrackingMapView extends TrackingMapView {
   @override
   final Set<MapMarkerSpec> markers;
 
+  /// The road from the rider to the door (owner, 2026-10-10); empty = none.
+  final List<GeoPoint> route;
+
+  /// Accepted for the shared contract. This map already pans and zooms; the
+  /// order screen's inline preview blocks touches with its own tap layer.
+  final bool interactive;
+
   @override
   Widget build(BuildContext context) =>
-      _TrackingMapBody(initialCenter: initialCenter, initialZoom: initialZoom, markers: markers);
+      _TrackingMapBody(initialCenter: initialCenter, initialZoom: initialZoom, markers: markers, route: route);
 }
 
+/// The two rider images registered with the map style.
+const String _riderLiveImage = 'blynk-rider-live';
+const String _riderStaleImage = 'blynk-rider-stale';
+
+
 class _TrackingMapBody extends StatefulWidget {
-  const _TrackingMapBody({required this.initialCenter, required this.initialZoom, required this.markers});
+  const _TrackingMapBody({
+    required this.initialCenter,
+    required this.initialZoom,
+    required this.markers,
+    this.route = const [],
+  });
   final GeoPoint initialCenter;
   final double initialZoom;
   final Set<MapMarkerSpec> markers;
+  final List<GeoPoint> route;
 
   @override
   State<_TrackingMapBody> createState() => _TrackingMapBodyState();
 }
 
-/// Draws the markers as MapLibre circle annotations (no image assets: a plain
-/// coloured dot per tone, which also makes the stale fade a simple opacity).
+/// Draws the destination as a MapLibre circle annotation and the rider as a
+/// symbol: the bike image (rider_bike_icon.dart, drawn in code) rotated to
+/// the direction of travel, faded when stale (owner, 2026-10-10). The road
+/// route, when the backend has one, is a line annotation under both. If the
+/// bike image cannot be registered the rider falls back to the plain dot.
 ///
 /// Lifecycle rules, because the native map becomes usable asynchronously and
 /// can go away at any time:
@@ -131,7 +159,14 @@ class _TrackingMapBodyState extends State<_TrackingMapBody>
   bool _fitted = false;
 
   final Map<String, Circle> _circles = {};
+  final Map<String, Symbol> _symbols = {};
   final Map<String, MapMarkerSpec> _applied = {};
+  Line? _line;
+  List<GeoPoint> _appliedRoute = const [];
+
+  /// True once the bike images are registered with the current style.
+  bool _bikeReady = false;
+  double _bikeScale = 1;
 
   @override
   void initState() {
@@ -164,6 +199,7 @@ class _TrackingMapBodyState extends State<_TrackingMapBody>
         _move.forward(from: 0);
       }
     }
+    if (!listEquals(oldWidget.route, widget.route)) _scheduleApply();
   }
 
   @override
@@ -172,7 +208,9 @@ class _TrackingMapBodyState extends State<_TrackingMapBody>
     _move.dispose();
     _controller = null;
     _circles.clear();
+    _symbols.clear();
     _applied.clear();
+    _line = null;
     super.dispose();
   }
 
@@ -183,18 +221,56 @@ class _TrackingMapBodyState extends State<_TrackingMapBody>
     // earlier one so the diff re-adds everything.
     _controller = controller;
     _styleLoaded = false;
+    _forgetAnnotations();
+  }
+
+  void _forgetAnnotations() {
     _circles.clear();
+    _symbols.clear();
     _applied.clear();
+    _line = null;
+    _appliedRoute = const [];
+    _bikeReady = false;
   }
 
   void _onStyleLoaded() {
-    // A style (re)load rebuilds the native circle manager, so every circle
-    // added before it is gone: forget them so the diff re-adds the markers.
-    _circles.clear();
-    _applied.clear();
+    // A style (re)load rebuilds the native annotation managers and drops its
+    // images, so everything added before it is gone: forget it all so the
+    // diff re-adds the markers (and the bike image is registered again).
+    _forgetAnnotations();
     _styleLoaded = true;
+    _scheduleApply(); // the dot first, so the rider is never missing
+    unawaited(_registerBike());
+  }
+
+  /// Registers the live and stale bike images, then re-applies the markers.
+  /// The web plugin takes images at pixel ratio 1, so a device-ratio image is
+  /// scaled back down there; the Android plugin decodes it at the device
+  /// density. A failure keeps the plain rider dot.
+  Future<void> _registerBike() async {
+    final controller = _controller;
+    if (controller == null || _disposed) return;
+    final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+    try {
+      final live = await renderRiderBikePng(pixelRatio: ratio);
+      final stale = await renderRiderBikePng(pixelRatio: ratio, stale: true);
+      if (!_canApply || !identical(controller, _controller)) return;
+      await controller.addImage(_riderLiveImage, live);
+      await controller.addImage(_riderStaleImage, stale);
+      // The bike must never be hidden by a street label it overlaps.
+      await controller.setSymbolIconAllowOverlap(true);
+      await controller.setSymbolIconIgnorePlacement(true);
+      if (!_canApply || !identical(controller, _controller)) return;
+      _bikeScale = kIsWeb ? 1 / ratio : 1;
+      _bikeReady = true;
+    } catch (e) {
+      debugPrint('Rider bike icon could not be registered: $e');
+    }
     _scheduleApply();
   }
+
+  bool _isRider(MapMarkerSpec m) => m.tone != MapMarkerTone.destination;
+  bool _asSymbol(MapMarkerSpec m) => _bikeReady && _isRider(m);
 
   void _scheduleApply() {
     if (_canApply) unawaited(_drain());
@@ -229,34 +305,106 @@ class _TrackingMapBodyState extends State<_TrackingMapBody>
     );
   }
 
+  SymbolOptions _symbolFor(MapMarkerSpec marker) => SymbolOptions(
+        geometry: LatLng(marker.position.latitude, marker.position.longitude),
+        iconImage: marker.tone == MapMarkerTone.riderStale ? _riderStaleImage : _riderLiveImage,
+        iconSize: _bikeScale,
+        iconRotate: marker.heading ?? 0,
+        iconAnchor: 'center',
+        zIndex: 2,
+      );
+
+  Future<void> _removeMarker(MapLibreMapController controller, String id) async {
+    _applied.remove(id);
+    final circle = _circles.remove(id);
+    if (circle != null) await controller.removeCircle(circle);
+    final symbol = _symbols.remove(id);
+    if (symbol != null) await controller.removeSymbol(symbol);
+  }
+
+  Future<void> _addMarker(MapLibreMapController controller, MapMarkerSpec marker) async {
+    if (_asSymbol(marker)) {
+      final symbol = await controller.addSymbol(_symbolFor(marker));
+      if (!_canApply) return;
+      _symbols[marker.id] = symbol;
+    } else {
+      final circle = await controller.addCircle(_optionsFor(marker));
+      if (!_canApply) return;
+      _circles[marker.id] = circle;
+    }
+    _applied[marker.id] = marker;
+  }
+
   Future<void> _applyOnce() async {
     final controller = _controller;
     if (!_canApply || controller == null) return;
-    final diff = diffMarkers(_applied, _motion.shownSpecs(widget.markers));
     try {
+      // A rider drawn as a dot before the bike image was ready is swapped for
+      // the bike: removed here, re-added by the diff below.
+      if (_bikeReady) {
+        final dots = [
+          for (final id in _circles.keys)
+            if (_applied[id] != null && _isRider(_applied[id]!)) id,
+        ];
+        for (final id in dots) {
+          await _removeMarker(controller, id);
+          if (!_canApply) return;
+        }
+      }
+      final diff = diffMarkers(_applied, _motion.shownSpecs(widget.markers));
       for (final id in diff.removedIds) {
-        final circle = _circles.remove(id);
-        _applied.remove(id);
-        if (circle != null) await controller.removeCircle(circle);
+        await _removeMarker(controller, id);
         if (!_canApply) return;
       }
       for (final marker in diff.added) {
-        final circle = await controller.addCircle(_optionsFor(marker));
+        await _addMarker(controller, marker);
         if (!_canApply) return;
-        _circles[marker.id] = circle;
-        _applied[marker.id] = marker;
       }
       for (final marker in diff.updated) {
+        final symbol = _symbols[marker.id];
         final circle = _circles[marker.id];
-        if (circle == null) continue;
-        await controller.updateCircle(circle, _optionsFor(marker));
+        if (symbol != null) {
+          await controller.updateSymbol(symbol, _symbolFor(marker));
+        } else if (circle != null) {
+          await controller.updateCircle(circle, _optionsFor(marker));
+        } else {
+          continue;
+        }
         if (!_canApply) return;
         _applied[marker.id] = marker;
       }
+      await _applyRoute(controller);
+      if (!_canApply) return;
       await _fitOnce(controller);
     } catch (e) {
       debugPrint('Map marker update failed: $e');
     }
+  }
+
+  /// Draws, moves or removes the road line (owner, 2026-10-10).
+  Future<void> _applyRoute(MapLibreMapController controller) async {
+    final wanted = widget.route.length >= 2 ? widget.route : const <GeoPoint>[];
+    if (listEquals(wanted, _appliedRoute)) return;
+    final line = _line;
+    if (wanted.isEmpty) {
+      _line = null;
+      _appliedRoute = const [];
+      if (line != null) await controller.removeLine(line);
+      return;
+    }
+    final geometry = [for (final p in wanted) LatLng(p.latitude, p.longitude)];
+    if (line == null) {
+      _line = await controller.addLine(LineOptions(
+        geometry: geometry,
+        lineColor: routeLineHex,
+        lineWidth: routeLineWidth,
+        lineOpacity: routeLineOpacity,
+        lineJoin: 'round',
+      ));
+    } else {
+      await controller.updateLine(line, LineOptions(geometry: geometry));
+    }
+    _appliedRoute = wanted;
   }
 
   Future<void> _fitOnce(MapLibreMapController controller) async {
@@ -302,8 +450,8 @@ class _TrackingMapBodyState extends State<_TrackingMapBody>
       dragEnabled: false, // annotation dragging; panning the map stays on
       myLocationEnabled: false, // no location layer, no location permission
       logoEnabled: false,
-      // Only circles are used, so skip the other annotation managers.
-      annotationOrder: const [AnnotationType.circle],
+      // The route line under the destination dot under the rider's bike.
+      annotationOrder: const [AnnotationType.line, AnnotationType.circle, AnnotationType.symbol],
       annotationConsumeTapEvents: const [AnnotationType.circle],
       minMaxZoomPreference: const MinMaxZoomPreference(10, 18),
       // The package offers no switch to hide its native attribution button, so

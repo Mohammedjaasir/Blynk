@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../Models/combo_model.dart';
 import '../../../Models/order_format.dart';
 import '../../../Services/Providers/cart.provider.dart';
+import '../../../Services/Providers/store_info.provider.dart';
 import '../../../design/tokens.dart';
 import 'adaptive_sheet.dart';
 import 'blynk_button.dart';
@@ -17,7 +18,8 @@ import 'quantity_stepper.dart';
 /// Combo packs (owner, 2026-10-09): a fixed bundle of products at one price
 /// below what they cost on their own. Everything on these widgets is the
 /// backend's ComboPublic (GET /combos) - the struck items total and the
-/// "Save" tag only while [ComboModel.hasSaving], i.e. the backend's own
+/// "Save" tag only while [ComboModel.hasSaving] (and, since owner 2026-10-10,
+/// the store's `show_offer_savings` switch is on), i.e. the backend's own
 /// `items_total` and `saving` say the pack really is cheaper.
 ///
 /// ```
@@ -97,7 +99,9 @@ class ComboCard extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       ComboThumb(combo: combo, dimmed: soldOut),
-                      if (combo.hasSaving)
+                      // Only while the store's show_offer_savings switch is
+                      // on (owner, 2026-10-10).
+                      if (combo.hasSaving && watchShowOfferSavings(context))
                         Positioned(
                           top: BlynkSpace.s4,
                           left: BlynkSpace.s4,
@@ -255,7 +259,8 @@ class ComboPriceLine extends StatelessWidget {
 }
 
 /// "Save LKR 120" - the backend's `saving` for one pack. Positive tone: a
-/// saving is good news, not a warning.
+/// saving is good news, not a warning. Drawn only while the store's
+/// `show_offer_savings` switch is on (owner, 2026-10-10).
 class ComboSaveTag extends StatelessWidget {
   const ComboSaveTag({super.key, required this.combo});
 
@@ -411,7 +416,9 @@ class ComboDetail extends StatelessWidget {
             runSpacing: BlynkSpace.s4,
             children: [
               ComboPriceLine(combo: combo, style: BlynkType.priceHero),
-              if (combo.hasSaving) ComboSaveTag(combo: combo),
+              // Only while the store's show_offer_savings switch is on
+              // (owner, 2026-10-10).
+              if (combo.hasSaving && watchShowOfferSavings(context)) ComboSaveTag(combo: combo),
             ],
           ),
           if (ends != null) ...[

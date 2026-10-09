@@ -3,7 +3,10 @@
  *
  * The rider's live position (migration 006) reaches exactly one consumer: the
  * order's own customer, through the SSE stream (`findTrackableLocationForCustomer`)
- * - plan §D.6 has no admin, staff or rider location surface in this phase. The
+ * - plan §D.6 has no admin, staff or rider location surface in this phase.
+ * The same customer also gets the road route that STARTS at that position
+ * (GET /orders/:id/route, owner 2026-10-10) - same owner check, same
+ * trackable window, and it never returns these column names. The
  * rider's write (`RiderRepository.writeLocation`) names the location columns
  * itself.
  *

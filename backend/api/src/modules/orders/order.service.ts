@@ -63,6 +63,17 @@ export function sanitizeCustomerDelivery(delivery: any) {
 }
 
 /**
+ * What the customer sees of their rider while the order is on the road
+ * (owner, 2026-10-10): the FIRST name only (never the surname) and the phone
+ * to call. Null when there is no contact row (outside the window).
+ */
+export function toRiderContact(row: { full_name: string | null; phone: string } | null | undefined) {
+  if (!row) return null;
+  const firstName = (row.full_name ?? '').trim().split(/\s+/)[0] || null;
+  return { first_name: firstName, phone: row.phone };
+}
+
+/**
  * The customer's view of the order history: which status and when (D11).
  * Notes are written by staff and riders for each other; who made the change
  * is internal too.
@@ -362,7 +373,12 @@ export class OrderService {
     // rider, only while the order is on the road. Never in staff or rider
     // responses - it lives in its own table, which only this reads.
     const deliveryCode = order.order_status === 'OUT_FOR_DELIVERY' ? await findDeliveryCodeForCustomer(order.id) : null;
-    return { ...sanitizeCustomerOrder(order), delivery_code: deliveryCode };
+    // The rider's first name + phone for "Call rider" (owner, 2026-10-10):
+    // this endpoint only, and only while the order is on the road. The
+    // `delivery` block itself still never says which rider.
+    const contact =
+      order.order_status === 'OUT_FOR_DELIVERY' ? await orderRepository.findRiderContactForCustomer(order.id, customerId) : null;
+    return { ...sanitizeCustomerOrder(order), delivery_code: deliveryCode, rider_contact: toRiderContact(contact) };
   }
 
   /**

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError, deleteImagesQuietly } from '../../api/client';
 import { catalog } from '../../api/resources';
 import type { Category, CategoryGroup } from '../../api/types';
@@ -36,6 +37,13 @@ import { replacedImages } from '../../lib/image';
  * optionally until a day, saved on its own (PUT/DELETE
  * /admin/categories/:id/offer). The list shows an "x% off" tag while the
  * backend says the offer is running.
+ *
+ * Arrange (owner, 2026-10-10): "Arrange" switches the list into an order
+ * mode - Top / ↑ / ↓ on each top-level category, and on each sub-category
+ * within its parent. Every move is saved at once (PUT
+ * /admin/categories/order with that sibling set's new order; the server
+ * writes display_order 10, 20, 30...), then the list reloads. "Arrange
+ * products" on a category opens its product order screen.
  */
 export function Categories() {
   const [rows, setRows] = useState<Category[] | null>(null);
@@ -46,6 +54,8 @@ export function Categories() {
   // For the edit form's Group select. An API without category groups just
   // leaves this empty (the select then offers only "None").
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
+  const [arranging, setArranging] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -75,17 +85,56 @@ export function Categories() {
     }
   }
 
+  /** Moves `category` to `target` among its siblings and saves that order. */
+  async function moveCategory(category: Category, siblings: Category[], target: number) {
+    const from = siblings.findIndex((c) => c.id === category.id);
+    if (from < 0 || target < 0 || target >= siblings.length || target === from) return;
+    const next = siblings.filter((c) => c.id !== category.id);
+    next.splice(target, 0, category);
+    setMoving(true);
+    try {
+      await catalog.categories.reorder(next.map((c) => c.id));
+      await load();
+    } catch (err) {
+      setNotice(catalogErrorMessage(err));
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  const nested = rows ? nestedRows(rows) : [];
+  const topLevel = nested.filter((r) => r.parent === null).map((r) => r.category);
+  const siblingsOf = (parent: Category | null) =>
+    parent ? nested.filter((r) => r.parent?.id === parent.id).map((r) => r.category) : topLevel;
+
   return (
     <div className="page">
       <PageHeader
         title="Categories"
         description="Used by the customer Home, Categories and Search screens."
         actions={
-          <button type="button" className="button" onClick={() => setEditing('new')}>
-            Add category
-          </button>
+          <>
+            <button
+              type="button"
+              className={arranging ? 'button' : 'button button--ghost'}
+              aria-pressed={arranging}
+              onClick={() => setArranging((v) => !v)}
+            >
+              {arranging ? 'Done arranging' : 'Arrange'}
+            </button>
+            <button type="button" className="button" onClick={() => setEditing('new')}>
+              Add category
+            </button>
+          </>
         }
       />
+
+      {arranging ? (
+        <p className="page__note" role="status">
+          Customers see categories in this order. Move a category up or down, or to the top; sub-categories move
+          within their category. Each move is saved straight away.
+        </p>
+      ) : null}
 
       {notice ? (
         <p className="field__error" role="status">
@@ -101,7 +150,10 @@ export function Categories() {
         <Spinner label="Loading categories" />
       ) : (
         <ul className="cat-list">
-          {nestedRows(rows).map(({ category, parent }) => (
+          {nested.map(({ category, parent }) => {
+            const siblings = siblingsOf(parent);
+            const index = siblings.findIndex((c) => c.id === category.id);
+            return (
             <li key={category.id} className={`cat-row cat-row--flat${parent ? ' cat-row--child' : ''}`}>
               {/* The customer app draws this in a CIRCLE, so the row shows it
                   as one too: a picture that looks right in a square preview
@@ -127,6 +179,46 @@ export function Categories() {
                   <span className="cat-row__order">Order {category.display_order}</span>
                 </div>
               </div>
+              {arranging ? (
+                <div className="cat-row__actions">
+                  <div className="order-cell">
+                    <button
+                      type="button"
+                      className="button button--ghost button--sm"
+                      aria-label={`Move ${category.name} to the top`}
+                      disabled={moving || index <= 0}
+                      onClick={() => void moveCategory(category, siblings, 0)}
+                    >
+                      Top
+                    </button>
+                    <button
+                      type="button"
+                      className="button button--ghost button--sm"
+                      aria-label={`Move ${category.name} up`}
+                      disabled={moving || index <= 0}
+                      onClick={() => void moveCategory(category, siblings, index - 1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="button button--ghost button--sm"
+                      aria-label={`Move ${category.name} down`}
+                      disabled={moving || index < 0 || index >= siblings.length - 1}
+                      onClick={() => void moveCategory(category, siblings, index + 1)}
+                    >
+                      ↓
+                    </button>
+                  </div>
+                  <Link
+                    className="button button--ghost button--sm"
+                    to={`/catalog/categories/${category.id}/arrange`}
+                    aria-label={`Arrange products in ${category.name}`}
+                  >
+                    Arrange products
+                  </Link>
+                </div>
+              ) : (
               <div className="cat-row__actions">
                 <button type="button" className="button button--ghost button--sm" onClick={() => setEditing(category)}>
                   Edit
@@ -142,9 +234,18 @@ export function Categories() {
                 >
                   Delete
                 </button>
+                <Link
+                  className="button button--ghost button--sm"
+                  to={`/catalog/categories/${category.id}/arrange`}
+                  aria-label={`Arrange products in ${category.name}`}
+                >
+                  Arrange products
+                </Link>
               </div>
+              )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 

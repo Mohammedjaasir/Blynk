@@ -2,7 +2,8 @@ import { errorMessage } from '../lib/apiErrors';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { settings as settingsApi } from '../api/resources';
-import type { BirthdayOfferSetting, CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting } from '../api/types';
+import { useLocation } from 'react-router-dom';
+import type { BirthdayOfferSetting, CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting, RiderTripsSetting } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
 import { MAX_BIRTHDAY_SMS, fillPercent, parseBirthdayPercent, percentText } from '../lib/birthday';
@@ -10,6 +11,7 @@ import { formatDay } from '../lib/coupons';
 import { parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
 import { formatMoney } from '../lib/orders';
 import { formatPercent, parsePercent } from '../lib/riderPay';
+import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
 import { partsLabel, smsParts } from '../lib/smsOffers';
 
 /**
@@ -21,17 +23,150 @@ import { partsLabel, smsParts } from '../lib/smsOffers';
  * earn of the standard delivery fee (GET/PATCH
  * /admin/settings/rider-commission; owner, 2026-10-09), and the birthday
  * offer - % off one order in the customer's birthday week plus a birthday SMS
- * (GET/PATCH /admin/settings/birthday-offer; owner, 2026-10-09).
+ * (GET/PATCH /admin/settings/birthday-offer; owner, 2026-10-09), and rider
+ * trips - how many orders one rider may carry at once and how far apart their
+ * drop-offs may be (GET/PATCH /admin/settings/rider-trips; owner, 2026-10-10).
+ * /settings#checkout (the Coupons page's link) scrolls to Checkout.
  */
 export function Settings() {
+  const { hash } = useLocation();
+
+  // /settings#checkout (owner, 2026-10-10): the Coupons page links here when
+  // coupon codes are off. The panel loads after a moment, so retry briefly.
+  useEffect(() => {
+    if (!hash) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const el = document.getElementById(hash.slice(1));
+      if (el || ++tries > 20) window.clearInterval(timer);
+      el?.scrollIntoView?.({ block: 'start' });
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [hash]);
+
   return (
     <>
       <PageHeader title="Settings" description="Store-wide values the customer app uses." />
       <DeliveryFeeSettingPanel />
       <CheckoutSettingsPanel />
       <RiderCommissionPanel />
+      <RiderTripsPanel />
       <BirthdayOfferPanel />
     </>
+  );
+}
+
+/**
+ * Rider trips (owner, 2026-10-10: "ops can control the 2 orders for one
+ * delivery if it's in the same route"). Assigning a rider follows these: at
+ * most this many open orders per rider, and a second drop-off farther than
+ * the distance from one they already hold needs staff to confirm.
+ */
+function RiderTripsPanel() {
+  const toast = useToast();
+  const [current, setCurrent] = useState<RiderTripsSetting | null>(null);
+  const [orders, setOrders] = useState<number | null>(null);
+  const [km, setKm] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function show(setting: RiderTripsSetting) {
+    setCurrent(setting);
+    setOrders(setting.max_active_deliveries);
+    setKm(String(Number(setting.max_dropoff_distance_km.toFixed(1))));
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .getRiderTrips()
+      .then((setting) => !cancelled && show(setting))
+      .catch((err) => !cancelled && setLoadError(errorMessage(err, 'Could not load the rider trips.')));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (orders === null || !(TRIP_ORDER_CHOICES as readonly number[]).includes(orders)) {
+      setError('Pick how many orders one rider can carry.');
+      return;
+    }
+    const parsed = parseDropoffKm(km);
+    if ('error' in parsed) {
+      setError(parsed.error);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await settingsApi.setRiderTrips({ max_active_deliveries: orders, max_dropoff_distance_km: parsed.value });
+      show(updated);
+      toast.success(`Rider trips: ${tripOrdersLabel(updated.max_active_deliveries)}, ${formatKm(updated.max_dropoff_distance_km)}.`);
+    } catch (err) {
+      const detail =
+        err instanceof ApiError && err.code === 'VALIDATION_ERROR'
+          ? (err.details as Array<{ message?: string }> | undefined)?.[0]?.message
+          : undefined;
+      setError(detail ?? errorMessage(err, 'Could not save the rider trips.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-label="Rider trips">
+      <h2 className="panel__title">Rider trips</h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading the rider trips" />
+      ) : (
+        <form className="form" onSubmit={save} noValidate>
+          <p className="panel__body">
+            Now {tripOrdersLabel(current.max_active_deliveries)}, {formatKm(current.max_dropoff_distance_km)}
+            {current.updated_at ? ` (changed ${new Date(current.updated_at).toLocaleString()})` : ''}.
+          </p>
+          <div className="field">
+            <span className="field__label" id="trip-orders-label">
+              Orders one rider can carry at once
+            </span>
+            <div className="segmented" role="group" aria-labelledby="trip-orders-label">
+              {TRIP_ORDER_CHOICES.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={n === orders ? 'segmented__item is-selected' : 'segmented__item'}
+                  aria-pressed={n === orders}
+                  aria-label={tripOrdersLabel(n)}
+                  onClick={() => setOrders(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <span className="field__hint">1 = no trips: one order per rider.</span>
+          </div>
+          <Field
+            label="Max distance between drop-offs (km)"
+            hint={`${MIN_DROPOFF_KM} to ${MAX_DROPOFF_KM} km, straight line, up to 1 decimal.`}
+            error={error ?? undefined}
+          >
+            <input className="input" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} />
+          </Field>
+          <p className="form__note">
+            A second order is refused for that rider if its drop-off is farther than this, unless staff confirm.
+          </p>
+          <div className="form__actions">
+            <button type="submit" className="button" disabled={saving}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 
@@ -120,6 +255,7 @@ function CheckoutSettingsPanel() {
   const toast = useToast();
   const [current, setCurrent] = useState<CheckoutSettings | null>(null);
   const [coupons, setCoupons] = useState(false);
+  const [savings, setSavings] = useState(false);
   const [freeOn, setFreeOn] = useState(true);
   const [count, setCount] = useState('2');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -130,6 +266,7 @@ function CheckoutSettingsPanel() {
   function show(setting: CheckoutSettings) {
     setCurrent(setting);
     setCoupons(setting.coupons_enabled);
+    setSavings(setting.show_offer_savings === true);
     setFreeOn(setting.new_customer_free_deliveries.enabled);
     setCount(String(setting.new_customer_free_deliveries.count));
   }
@@ -158,6 +295,9 @@ function CheckoutSettingsPanel() {
       const updated = await settingsApi.setCheckout({
         coupons_enabled: coupons,
         new_customer_free_deliveries: { enabled: freeOn, count: parsed.count },
+        // Sent only when flipped, so saving the other switches works against
+        // a backend from before this one (owner, 2026-10-10).
+        ...(savings !== (current?.show_offer_savings === true) ? { show_offer_savings: savings } : {}),
       });
       show(updated);
       toast.success('Checkout settings saved.');
@@ -199,7 +339,7 @@ function CheckoutSettingsPanel() {
   }
 
   return (
-    <section className="panel" aria-label="Checkout">
+    <section className="panel" id="checkout" aria-label="Checkout">
       <h2 className="panel__title">Checkout</h2>
       {loadError ? (
         <p className="field__error">{loadError}</p>
@@ -212,6 +352,11 @@ function CheckoutSettingsPanel() {
             <span>Coupon codes at checkout</span>
           </label>
           <p className="form__note">When off, the app hides the coupon field and orders ignore any code.</p>
+          <label className="toggle">
+            <input type="checkbox" checked={savings} onChange={(e) => setSavings(e.target.checked)} />
+            <span>Show 'Save LKR' on offers</span>
+          </label>
+          <p className="form__note">The customer app shows how much an offer or combo saves, e.g. "Save LKR 50".</p>
           <label className="toggle">
             <input type="checkbox" checked={freeOn} onChange={(e) => setFreeOn(e.target.checked)} />
             <span>Free deliveries for every customer</span>

@@ -1,5 +1,6 @@
 import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { categories as categoriesApi, categoryGroups as groupsApi } from '../api/resources';
 import type { Category, CategoryGroup } from '../api/types';
@@ -17,6 +18,12 @@ import { colomboDate, formatDay } from '../lib/coupons';
  *
  * Sub-categories (one level): a category can sit inside a top-level one
  * ("Bread" in "Bakery"). The list shows each child right under its parent.
+ *
+ * Arrange (owner, 2026-10-10): "Arrange" switches the Actions column to
+ * Top / ↑ / ↓ - top-level categories among themselves, sub-categories
+ * within their parent. Each move is saved at once (PUT
+ * /admin/categories/order; the server writes display_order 10, 20, 30...)
+ * and the list reloads. "Arrange products" opens a category's product order.
  */
 export function Categories() {
   const toast = useToast();
@@ -29,6 +36,8 @@ export function Categories() {
   // For the edit form's Group select; without category groups on the API
   // the select just offers "None".
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
+  const [arranging, setArranging] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -60,17 +69,56 @@ export function Categories() {
     }
   }
 
+  /** Moves `category` to `target` among its siblings and saves that order. */
+  async function moveCategory(category: Category, siblings: Category[], target: number) {
+    const from = siblings.findIndex((c) => c.id === category.id);
+    if (from < 0 || target < 0 || target >= siblings.length || target === from) return;
+    const next = siblings.filter((c) => c.id !== category.id);
+    next.splice(target, 0, category);
+    setMoving(true);
+    try {
+      await categoriesApi.reorder(next.map((c) => c.id));
+      await load();
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not save the new order.'));
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  const nested = rows ? nestedRows(rows) : [];
+  const topLevel = nested.filter((r) => r.parent === null).map((r) => r.category);
+  const siblingsOf = (parent: Category | null) =>
+    parent ? nested.filter((r) => r.parent?.id === parent.id).map((r) => r.category) : topLevel;
+
   return (
     <>
       <PageHeader
         title="Categories"
         description="Used by the customer Home, Categories and Search screens."
         actions={
-          <button type="button" className="button" onClick={() => setEditing('new')}>
-            Add category
-          </button>
+          <>
+            <button
+              type="button"
+              className={arranging ? 'button' : 'button button--ghost'}
+              aria-pressed={arranging}
+              onClick={() => setArranging((v) => !v)}
+            >
+              {arranging ? 'Done arranging' : 'Arrange'}
+            </button>
+            <button type="button" className="button" onClick={() => setEditing('new')}>
+              Add category
+            </button>
+          </>
         }
       />
+
+      {arranging ? (
+        <p className="form__note" role="status">
+          Customers see categories in this order. Move a category up or down, or to the top; sub-categories move
+          within their category. Each move is saved straight away.
+        </p>
+      ) : null}
 
       {error ? <p className="field__error">{error}</p> : null}
 
@@ -90,7 +138,10 @@ export function Categories() {
             </tr>
           </thead>
           <tbody>
-            {nestedRows(rows).map(({ category, parent }) => (
+            {nested.map(({ category, parent }) => {
+              const siblings = siblingsOf(parent);
+              const index = siblings.findIndex((c) => c.id === category.id);
+              return (
               <tr key={category.id} className={parent ? 'row--child' : undefined}>
                 <td className="cell__primary">
                   {parent ? (
@@ -118,6 +169,44 @@ export function Categories() {
                   ) : null}
                 </td>
                 <td>
+                  {arranging ? (
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="button button--ghost button--sm"
+                        aria-label={`Move ${category.name} to the top`}
+                        disabled={moving || index <= 0}
+                        onClick={() => void moveCategory(category, siblings, 0)}
+                      >
+                        Top
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--ghost button--sm"
+                        aria-label={`Move ${category.name} up`}
+                        disabled={moving || index <= 0}
+                        onClick={() => void moveCategory(category, siblings, index - 1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--ghost button--sm"
+                        aria-label={`Move ${category.name} down`}
+                        disabled={moving || index < 0 || index >= siblings.length - 1}
+                        onClick={() => void moveCategory(category, siblings, index + 1)}
+                      >
+                        ↓
+                      </button>
+                      <Link
+                        className="button button--ghost button--sm"
+                        to={`/categories/${category.id}/arrange`}
+                        aria-label={`Arrange products in ${category.name}`}
+                      >
+                        Arrange products
+                      </Link>
+                    </div>
+                  ) : (
                   <div className="row-actions">
                     <button
                       type="button"
@@ -149,10 +238,19 @@ export function Categories() {
                     >
                       Delete
                     </button>
+                    <Link
+                      className="button button--ghost button--sm"
+                      to={`/categories/${category.id}/arrange`}
+                      aria-label={`Arrange products in ${category.name}`}
+                    >
+                      Arrange products
+                    </Link>
                   </div>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         </div>

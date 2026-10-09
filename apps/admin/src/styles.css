@@ -2535,3 +2535,17 @@ body {
   font-style: italic;
   overflow-wrap: anywhere;
 }
+
+/* Coupons (owner, 2026-10-10): the "codes are switched off" notice links to
+   the checkout switch in Settings. */
+.coupons-off {
+  flex-wrap: wrap;
+}
+
+.coupons-off__link {
+  color: var(--yellow);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}

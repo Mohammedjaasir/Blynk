@@ -58,8 +58,8 @@ export function Clinics() {
   return (
     <div className="page">
       <PageHeader
-        title="Dental clinics"
-        description="Locations offering dental appointments in the customer app."
+        title="Clinics"
+        description="Clinics where customers can channel a doctor in the customer app."
         actions={
           <button type="button" className="button" onClick={() => setEditing('new')}>
             Add clinic
@@ -80,7 +80,7 @@ export function Clinics() {
       {rows === null ? (
         <Spinner label="Loading clinics" />
       ) : rows.length === 0 ? (
-        <EmptyState title="No clinics yet" message="Add the first clinic to start offering dental appointments." />
+        <EmptyState title="No clinics yet" message="Add the first clinic to start offering doctor appointments." />
       ) : (
         <ul className="cat-list">
           {rows.map((clinic) => (

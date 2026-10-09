@@ -44,7 +44,7 @@ export function DentalDoctors() {
       setRows(await dentalDoctors.list());
       setError(null);
     } catch (err) {
-      setError(errorMessage(err, 'Could not load the dental doctors.'));
+      setError(errorMessage(err, 'Could not load the doctors.'));
       setRows([]);
     }
   }, []);
@@ -66,7 +66,7 @@ export function DentalDoctors() {
   return (
     <>
       <PageHeader
-        title="Dental doctors"
+        title="Doctors"
         description="Doctors customers can book in the Blynk app, at whichever clinics attach them (clinics are set up in the Operations app)."
         actions={
           <button type="button" className="button" onClick={() => setEditing('new')}>
@@ -83,7 +83,7 @@ export function DentalDoctors() {
         error ? null : <EmptyState title="No doctors yet" message="Add a doctor, then attach them to a clinic." />
       ) : (
         <div className="table-wrap">
-          <table className="table" aria-label="Dental doctors">
+          <table className="table" aria-label="Doctors">
             <thead>
               <tr>
                 <th scope="col">Doctor</th>

@@ -229,17 +229,17 @@ describe('Dental doctors', () => {
     await user.type(dialog.getByLabelText('Full name'), 'Dr. Nadia Farook');
     // In-app chips, never a native <select> (owner, 2026-10-09).
     expect(dialog.queryByRole('combobox')).not.toBeInTheDocument();
-    const chip = dialog.getByRole('button', { name: 'Orthodontist' });
+    const chip = dialog.getByRole('button', { name: 'Pediatrician' });
     await user.click(chip);
     expect(chip).toHaveAttribute('aria-pressed', 'true');
-    expect(dialog.getByLabelText('Specialty')).toHaveValue('Orthodontist');
+    expect(dialog.getByLabelText('Specialty')).toHaveValue('Pediatrician');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
       const call = api.find('POST', '/admin/dental/doctors')[0];
       expect(call?.body).toEqual({
         full_name: 'Dr. Nadia Farook',
-        specialty: 'Orthodontist',
+        specialty: 'Pediatrician',
         photo_url: null,
         bio: null,
         is_active: true,
@@ -275,11 +275,11 @@ describe('Dental doctors', () => {
     // The old enum code opens as its readable label, with its chip on.
     const input = dialog.getByLabelText('Specialty');
     expect(input).toHaveValue('Orthodontist');
-    expect(dialog.getByRole('button', { name: 'Orthodontist' })).toHaveAttribute('aria-pressed', 'true');
+    expect(dialog.getByRole('button', { name: 'Dentist' })).toHaveAttribute('aria-pressed', 'false');
 
     await user.clear(input);
     await user.type(input, '  Cosmetic dentist ');
-    expect(dialog.getByRole('button', { name: 'Orthodontist' })).toHaveAttribute('aria-pressed', 'false');
+    expect(dialog.getByRole('button', { name: 'Dentist' })).toHaveAttribute('aria-pressed', 'false');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
@@ -668,10 +668,10 @@ describe('End-to-end: standing up a bookable clinic', () => {
       await user.click(await screen.findByRole('button', { name: 'Add doctor' }));
       const dialog = within(screen.getByRole('dialog', { name: 'Doctor' }));
       await user.type(dialog.getByLabelText('Full name'), 'Dr. Nadia Farook');
-      await user.click(dialog.getByRole('button', { name: 'Orthodontist' }));
+      await user.click(dialog.getByRole('button', { name: 'Pediatrician' }));
       await user.click(dialog.getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(api.find('POST', '/admin/dental/doctors')).toHaveLength(1));
-      savedDoctor = doctor({ id: 'dr-e2e', full_name: 'Dr. Nadia Farook', specialty: 'Orthodontist' });
+      savedDoctor = doctor({ id: 'dr-e2e', full_name: 'Dr. Nadia Farook', specialty: 'Pediatrician' });
       cleanup();
     }
 
@@ -766,7 +766,7 @@ describe('End-to-end: standing up a bookable clinic', () => {
         clinic_doctor_id: savedClinicDoctorId,
         doctor_id: savedDoctor!.id,
         full_name: 'Dr. Nadia Farook',
-        specialty: 'Orthodontist',
+        specialty: 'Pediatrician',
         consultation_fee: 4200,
         pairing_is_active: true,
       });
@@ -777,7 +777,7 @@ describe('End-to-end: standing up a bookable clinic', () => {
       });
 
       expect(await screen.findByText('Dr. Nadia Farook')).toBeInTheDocument();
-      expect(screen.getByText('Orthodontist')).toBeInTheDocument();
+      expect(screen.getByText('Pediatrician')).toBeInTheDocument();
       expect(screen.getByText('LKR 4,200')).toBeInTheDocument();
       expect(screen.getByText('Active')).toBeInTheDocument();
     }

@@ -8,4 +8,5 @@ import { checkoutSettings } from '../../src/modules/configuration/settings.servi
 checkoutSettings.read = async () => ({
   coupons_enabled: true,
   new_customer_free_deliveries: { enabled: false, count: 0, since: '2026-10-08T18:30:00.000Z' },
+  show_offer_savings: false,
 });

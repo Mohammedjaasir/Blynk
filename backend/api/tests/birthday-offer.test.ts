@@ -66,6 +66,8 @@ afterAll(async () => {
   await fx.cleanup();
   await pool.query('DELETE FROM coupon_redemptions WHERE coupon_id IN (SELECT id FROM coupons WHERE code = $1)', [COUPON]);
   await pool.query('DELETE FROM coupons WHERE code = $1', [COUPON]);
+  // Coupon changes are audited (owner, 2026-10-10).
+  await pool.query("DELETE FROM audit_logs WHERE entity_type = 'COUPON' AND coalesce(new_values->>'code', old_values->>'code') = $1", [COUPON]);
   await deleteRow();
   if (saved) {
     await pool.query(

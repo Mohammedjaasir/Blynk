@@ -51,7 +51,7 @@ export function Doctors() {
   return (
     <div className="page">
       <PageHeader
-        title="Dental doctors"
+        title="Doctors"
         description="Doctors bookable through the customer app, at whichever clinics attach them."
         actions={
           <button type="button" className="button" onClick={() => setEditing('new')}>

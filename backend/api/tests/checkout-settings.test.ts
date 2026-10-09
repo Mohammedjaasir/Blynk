@@ -18,7 +18,7 @@ const app = createApp();
 const fx = stockFixtures(app, 'TST-CHK-');
 const people = customerFixtures(app, { idPrefix: 'c0c00029', phoneBase: '+947092900', name: 'Checkout Switch Customer' });
 const opsToken = generateAccessToken({ ...users.admin, role: 'OPERATIONS' });
-const KEYS = ['coupons_enabled', 'new_customer_free_deliveries'];
+const KEYS = ['coupons_enabled', 'new_customer_free_deliveries', 'show_offer_savings'];
 const FEE = 100;
 // Owner, 2026-10-09: with no stored start, free deliveries count from Colombo midnight that day.
 const DEFAULT_SINCE = '2026-10-08T18:30:00.000Z';
@@ -55,6 +55,8 @@ afterAll(async () => {
   checkoutSettings.read = pinned;
   await people.cleanup();
   await pool.query('DELETE FROM coupons WHERE code = $1', [COUPON]);
+  // Coupon changes are audited (owner, 2026-10-10).
+  await pool.query("DELETE FROM audit_logs WHERE entity_type = 'COUPON' AND coalesce(new_values->>'code', old_values->>'code') = $1", [COUPON]);
   await fx.cleanup();
   await deleteRows();
   for (const r of [...saved, ...(feeRow ? [feeRow] : [])]) {
@@ -80,10 +82,12 @@ describe('Checkout settings', () => {
     expect(res.body.data).toEqual({
       coupons_enabled: false,
       new_customer_free_deliveries: { enabled: true, count: 2, since: DEFAULT_SINCE },
+      show_offer_savings: false,
       updated_at: null,
     });
     const store = await request(app).get('/api/v1/store');
     expect(store.body.data.coupons_enabled).toBe(false);
+    expect(store.body.data.show_offer_savings).toBe(false);
     expect(store.body.data.new_customer_free_deliveries).toEqual({ enabled: true, count: 2, since: DEFAULT_SINCE });
   });
 
@@ -107,6 +111,30 @@ describe('Checkout settings', () => {
     expect(audit[0].new_values).toEqual({ key: 'checkout', new_customer_free_deliveries: { enabled: false, count: 3, since: DEFAULT_SINCE } });
     expect(audit[0].old_values).toEqual({ key: 'checkout', new_customer_free_deliveries: null });
     expect(audit[1].new_values).toEqual({ key: 'checkout', coupons_enabled: { enabled: true } });
+  });
+
+  it('"Show Save LKR on offers" (owner, 2026-10-10) is its own switch, audited, on GET /store', async () => {
+    const on = await patch({ show_offer_savings: true }, opsToken);
+    expect(on.status).toBe(200);
+    expect(on.body.data).toMatchObject({ show_offer_savings: true, coupons_enabled: false });
+    expect((await request(app).get('/api/v1/store')).body.data.show_offer_savings).toBe(true);
+    const row = (await pool.query("SELECT value FROM system_configurations WHERE key = 'show_offer_savings'")).rows[0];
+    expect(row.value).toEqual({ enabled: true });
+    const audit = (
+      await pool.query("SELECT old_values, new_values FROM audit_logs WHERE action = 'CHECKOUT_SETTINGS_UPDATED' ORDER BY created_at DESC LIMIT 1")
+    ).rows[0];
+    expect(audit).toEqual({
+      old_values: { key: 'checkout', show_offer_savings: null },
+      new_values: { key: 'checkout', show_offer_savings: { enabled: true } },
+    });
+
+    // Changing another switch keeps it.
+    expect((await patch({ coupons_enabled: true })).body.data.show_offer_savings).toBe(true);
+    const off = await patch({ show_offer_savings: false });
+    expect(off.body.data).toMatchObject({ show_offer_savings: false, coupons_enabled: true });
+    expect((await request(app).get('/api/v1/store')).body.data.show_offer_savings).toBe(false);
+    expect((await patch({ show_offer_savings: 'yes' })).status).toBe(400);
+    expect((await patch({ show_offer_savings: true }, tokens.staff)).status).toBe(403);
   });
 
   it('validates the body and the role', async () => {

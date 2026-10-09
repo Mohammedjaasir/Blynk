@@ -71,6 +71,8 @@ afterAll(async () => {
   await people.cleanup();
   await fx.cleanup();
   await pool.query('DELETE FROM coupons WHERE id = $1', [couponId]);
+  // Coupon changes are audited (owner, 2026-10-10).
+  await pool.query("DELETE FROM audit_logs WHERE entity_type = 'COUPON' AND coalesce(new_values->>'code', old_values->>'code') = $1", [CODE]);
 });
 
 describe('Sales ranges (Asia/Colombo)', () => {

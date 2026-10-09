@@ -3,6 +3,7 @@ import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireShopper } from '../../middleware/role.middleware.js';
 import { orderController } from './order.controller.js';
 import { streamOrderLocation } from './order.location.controller.js';
+import { getOrderRoute } from './order.route.controller.js';
 
 export const ordersRouter = Router();
 
@@ -18,9 +19,13 @@ ordersRouter.get('/', requireAuth, orderController.getCustomerOrders.bind(orderC
 ordersRouter.get('/:id', requireAuth, orderController.getCustomerOrderById.bind(orderController));
 ordersRouter.post('/:id/cancel', requireAuth, orderController.cancelOrder.bind(orderController));
 ordersRouter.get('/:id/location/stream', requireAuth, requireShopper(), streamOrderLocation);
+// Road route + driving time from the rider to the door (owner, 2026-10-10;
+// reverses plan D.13). Cached per order: see order.route.controller.ts.
+ordersRouter.get('/:id/route', requireAuth, requireShopper(), getOrderRoute);
 
 export * from './order.schema.js';
 export * from './order.repository.js';
 export * from './order.service.js';
 export * from './order.controller.js';
 export * from './order.location.controller.js';
+export * from './order.route.controller.js';

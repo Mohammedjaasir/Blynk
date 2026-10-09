@@ -72,7 +72,7 @@ export function Catalog() {
 
   return (
     <div className="page">
-      <PageHeader title="Catalog" description="Products, categories, Home promotions, combo packs, inventory and dental clinics." />
+      <PageHeader title="Catalog" description="Products, categories, Home promotions, combo packs, inventory and doctors & clinics." />
       <ul className="cat-hub">
         <li>
           <Link className="cat-hub__card" to="/catalog/products">
@@ -112,7 +112,7 @@ export function Catalog() {
         </li>
         <li>
           <Link className="cat-hub__card" to="/catalog/dental">
-            <span className="cat-hub__title">Dental</span>
+            <span className="cat-hub__title">Doctors</span>
             <span className="cat-hub__count">{dentalClinicCount === null ? '—' : dentalClinicCount}</span>
           </Link>
         </li>

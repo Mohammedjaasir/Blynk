@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../Models/order_format.dart';
 import '../../../Services/Providers/cart.provider.dart';
+import '../../../Services/Providers/store_info.provider.dart';
 import '../../../design/tokens.dart';
 import 'combo_card.dart';
 import 'money_text.dart';
@@ -125,7 +126,8 @@ class CartComboCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: BlynkText.caption.copyWith(color: BlynkColors.ink2),
                             ),
-                          if (combo.hasSaving)
+                          // Behind the Show 'Save LKR' switch (owner, 2026-10-10).
+                          if (combo.hasSaving && watchShowOfferSavings(context))
                             Text(
                               'You save ${formatLkr(line.savingTotal)}',
                               key: const Key('cart-combo-saving'),

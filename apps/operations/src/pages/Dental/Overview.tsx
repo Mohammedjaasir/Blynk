@@ -48,7 +48,7 @@ export function Overview() {
 
   return (
     <div className="page">
-      <PageHeader title="Dental" description="Clinics, doctors, appointments and bookable schedules for the customer app." />
+      <PageHeader title="Doctors" description="Clinics, doctors, appointments and bookable schedules for the customer app." />
       <ul className="cat-hub">
         <li>
           <Link className="cat-hub__card" to="/catalog/dental/appointments">

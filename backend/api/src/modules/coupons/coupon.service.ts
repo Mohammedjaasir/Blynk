@@ -4,6 +4,7 @@ import type { DBConnection } from '../orders/order.repository.js';
 import type { CouponsTable } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { computeDiscount } from './coupon.rules.js';
+import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import type { CreateCouponInput, UpdateCouponInput } from './coupon.schema.js';
 
 export type CouponRow = Selectable<CouponsTable>;
@@ -181,37 +182,49 @@ export class CouponService {
     return present(row);
   }
 
-  async create(input: CreateCouponInput, userId: string) {
+  async create(input: CreateCouponInput, actor: AuditActor) {
     const exists = await db.selectFrom('coupons').select('id').where('code', '=', input.code).executeTakeFirst();
     if (exists) throw new AppError('A coupon with this code already exists.', 409, 'COUPON_CODE_TAKEN', { code: input.code });
-    const row = await db
-      .insertInto('coupons')
-      .values({
-        code: input.code,
-        description: input.description ?? null,
-        discount_type: input.discount_type,
-        discount_value: input.discount_type === 'FREE_DELIVERY' ? 0 : input.discount_value ?? 0,
-        max_discount: input.discount_type === 'PERCENT' ? input.max_discount ?? null : null,
-        min_subtotal: input.min_subtotal ?? null,
-        first_order_only: input.first_order_only ?? false,
-        starts_at: input.starts_at ?? null,
-        ends_at: input.ends_at ?? null,
-        usage_limit: input.usage_limit ?? null,
-        per_customer_limit: input.per_customer_limit ?? 1,
-        is_active: input.is_active ?? true,
-        created_by_user_id: userId,
+    const id = await db
+      .transaction()
+      .execute(async (trx) => {
+        const row = await trx
+          .insertInto('coupons')
+          .values({
+            code: input.code,
+            description: input.description ?? null,
+            discount_type: input.discount_type,
+            discount_value: input.discount_type === 'FREE_DELIVERY' ? 0 : input.discount_value ?? 0,
+            max_discount: input.discount_type === 'PERCENT' ? input.max_discount ?? null : null,
+            min_subtotal: input.min_subtotal ?? null,
+            first_order_only: input.first_order_only ?? false,
+            starts_at: input.starts_at ?? null,
+            ends_at: input.ends_at ?? null,
+            usage_limit: input.usage_limit ?? null,
+            per_customer_limit: input.per_customer_limit ?? 1,
+            is_active: input.is_active ?? true,
+            created_by_user_id: actor.actorId,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        // Audited (owner, 2026-10-10): Admin and Operations both create codes.
+        await writeAudit(trx, actor, {
+          action: 'COUPON_CREATED',
+          entityType: 'COUPON',
+          entityId: row.id,
+          newValues: auditView(row),
+        });
+        return row.id;
       })
-      .returning('id')
-      .executeTakeFirstOrThrow()
       .catch((err: { code?: string }) => {
         // A concurrent create of the same code.
         if (err.code === '23505') throw new AppError('A coupon with this code already exists.', 409, 'COUPON_CODE_TAKEN');
         throw err;
       });
-    return this.get(row.id);
+    return this.get(id);
   }
 
-  async update(id: string, input: UpdateCouponInput) {
+  async update(id: string, input: UpdateCouponInput, actor: AuditActor) {
     const current = await this.get(id);
     const next: UpdateCouponInput = {
       ...input,
@@ -226,17 +239,30 @@ export class CouponService {
       ]);
     }
     if (Object.keys(next).length > 0) {
-      await db
-        .updateTable('coupons')
-        .set({ ...next, updated_at: new Date() })
-        .where('id', '=', id)
-        .execute();
+      await db.transaction().execute(async (trx) => {
+        const before = await trx.selectFrom('coupons').selectAll().where('id', '=', id).forUpdate().executeTakeFirstOrThrow();
+        const after = await trx
+          .updateTable('coupons')
+          .set({ ...next, updated_at: new Date() })
+          .where('id', '=', id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        // Audited (owner, 2026-10-10): only the fields that were sent.
+        const keys = Object.keys(next) as Array<keyof UpdateCouponInput>;
+        await writeAudit(trx, actor, {
+          action: 'COUPON_UPDATED',
+          entityType: 'COUPON',
+          entityId: id,
+          oldValues: { code: before.code, ...pick(auditView(before), keys) },
+          newValues: { code: after.code, ...pick(auditView(after), keys) },
+        });
+      });
     }
     return this.get(id);
   }
 
   /** Only a coupon nobody has used; otherwise switch it off. */
-  async remove(id: string) {
+  async remove(id: string, actor: AuditActor) {
     const current = await this.get(id);
     const used = await db.selectFrom('coupon_redemptions').select('id').where('coupon_id', '=', id).limit(1).executeTakeFirst();
     if (used) {
@@ -244,8 +270,38 @@ export class CouponService {
         code: current.code,
       });
     }
-    await db.deleteFrom('coupons').where('id', '=', id).execute();
+    await db.transaction().execute(async (trx) => {
+      const before = await trx.selectFrom('coupons').selectAll().where('id', '=', id).executeTakeFirst();
+      await trx.deleteFrom('coupons').where('id', '=', id).execute();
+      if (before) {
+        await writeAudit(trx, actor, { action: 'COUPON_DELETED', entityType: 'COUPON', entityId: id, oldValues: auditView(before) });
+      }
+    });
   }
+}
+
+/** The coupon's terms as the audit log keeps them (numbers, ISO dates). */
+function auditView(row: CouponRow): Record<string, unknown> {
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  const iso = (v: Date | null) => (v ? v.toISOString() : null);
+  return {
+    code: row.code,
+    description: row.description,
+    discount_type: row.discount_type,
+    discount_value: num(row.discount_value),
+    max_discount: num(row.max_discount),
+    min_subtotal: num(row.min_subtotal),
+    first_order_only: row.first_order_only,
+    starts_at: iso(row.starts_at),
+    ends_at: iso(row.ends_at),
+    usage_limit: row.usage_limit,
+    per_customer_limit: row.per_customer_limit,
+    is_active: row.is_active,
+  };
+}
+
+function pick(view: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  return Object.fromEntries(keys.filter((k) => k in view).map((k) => [k, view[k]]));
 }
 
 export const couponService = new CouponService();

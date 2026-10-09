@@ -166,6 +166,69 @@ describe('Product form - offer', () => {
   });
 });
 
+describe('Product form - offer as "LKR off" (owner, 2026-10-10)', () => {
+  it('sends selling price - amount and says what customers pay', async () => {
+    const user = userEvent.setup();
+    const { api } = openForm(product());
+    await screen.findByLabelText(/^Offer price \(LKR\)/);
+    await user.click(screen.getByRole('button', { name: 'LKR off' }));
+    expect(screen.getByRole('button', { name: 'LKR off' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByLabelText(/^Offer price \(LKR\)/)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/^Amount off \(LKR\)/), '50');
+    expect(screen.getByText('Customers pay LKR 200.00 (was LKR 250.00).')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => {
+      const call = api.find('PATCH', '/admin/products/p1')[0];
+      expect(call?.body).toMatchObject({ offer_price: 200 });
+    });
+  });
+
+  it('keeps 2 decimals: 250 - 49.5 = 200.50', async () => {
+    const user = userEvent.setup();
+    const { api } = openForm(product());
+    await screen.findByLabelText(/^Offer price \(LKR\)/);
+    await user.click(screen.getByRole('button', { name: 'LKR off' }));
+    await user.type(screen.getByLabelText(/^Amount off \(LKR\)/), '49.5');
+    expect(screen.getByText('Customers pay LKR 200.50 (was LKR 250.00).')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/products/p1')[0]?.body).toMatchObject({ offer_price: 200.5 }));
+  });
+
+  it('refuses an amount that leaves no price, sending nothing', async () => {
+    const user = userEvent.setup();
+    const { api } = openForm(product());
+    await screen.findByLabelText(/^Offer price \(LKR\)/);
+    await user.click(screen.getByRole('button', { name: 'LKR off' }));
+    await user.type(screen.getByLabelText(/^Amount off \(LKR\)/), '250');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('The offer price must be more than LKR 0.')).toBeInTheDocument();
+    await user.clear(screen.getByLabelText(/^Amount off \(LKR\)/));
+    await user.type(screen.getByLabelText(/^Amount off \(LKR\)/), '5.555');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Use at most 2 decimals.')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/products/p1')).toHaveLength(0);
+  });
+
+  it('a stored offer opens as its price; LKR off shows it as the amount off, unchanged', async () => {
+    const user = userEvent.setup();
+    const { api } = openForm(product({ offer_price: 220, offer_ends_at: null, offer_active: true }));
+    expect(await screen.findByLabelText(/^Offer price \(LKR\)/)).toHaveValue('220');
+    expect(screen.getByRole('button', { name: 'New price' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'LKR off' }));
+    expect(screen.getByLabelText(/^Amount off \(LKR\)/)).toHaveValue('30');
+    expect(screen.getByText('Customers pay LKR 220.00 (was LKR 250.00).')).toBeInTheDocument();
+    expect(screen.getByText('On offer now')).toBeInTheDocument();
+
+    // Back to "New price" carries the same offer across.
+    await user.click(screen.getByRole('button', { name: 'New price' }));
+    expect(screen.getByLabelText(/^Offer price \(LKR\)/)).toHaveValue('220');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/products/p1')).toHaveLength(1));
+    expect(api.find('PATCH', '/admin/products/p1')[0]!.body).not.toHaveProperty('offer_price');
+  });
+});
+
 describe('Products list - offer badge', () => {
   it('shows "Offer LKR x" only on products whose offer is active', async () => {
     renderAs(ADMIN_WITH_RIDER, '/catalog/products', {

@@ -41,20 +41,29 @@ enum MapMarkerTone { destination, riderLive, riderStale }
 /// id at a new position is the same marker moving, not a new marker.
 @immutable
 class MapMarkerSpec {
-  const MapMarkerSpec({required this.id, required this.position, required this.tone});
+  const MapMarkerSpec({required this.id, required this.position, required this.tone, this.heading});
   final String id;
   final GeoPoint position;
   final MapMarkerTone tone;
 
+  /// Rider markers only (owner, 2026-10-10): the direction of travel in
+  /// degrees clockwise from north; the bike icon is rotated to it. Null
+  /// points the icon north (no move seen yet).
+  final double? heading;
+
   @override
   bool operator ==(Object other) =>
-      other is MapMarkerSpec && other.id == id && other.position == position && other.tone == tone;
+      other is MapMarkerSpec &&
+      other.id == id &&
+      other.position == position &&
+      other.tone == tone &&
+      other.heading == heading;
 
   @override
-  int get hashCode => Object.hash(id, position, tone);
+  int get hashCode => Object.hash(id, position, tone, heading);
 
   @override
-  String toString() => 'MapMarkerSpec($id, $position, $tone)';
+  String toString() => 'MapMarkerSpec($id, $position, $tone${heading == null ? '' : ', heading $heading'})';
 }
 
 /// Builds a [TrackingMapView]. The default is the real map; OrderTrackingMap
@@ -78,6 +87,20 @@ typedef TrackingMapBuilder = TrackingMapView Function({
   String? semanticsLabel,
 });
 
+/// The order-tracking map's builder once it draws the road route too (owner,
+/// 2026-10-10). A separate typedef so every existing [TrackingMapBuilder]
+/// (the dental maps, older test fakes) keeps its exact signature: Dart
+/// function types would reject them if a parameter were added there.
+/// [route] is the road from the rider to the door (empty = no line);
+/// [interactive] is true on the full-screen map (pan / zoom).
+typedef RoutedTrackingMapBuilder = TrackingMapView Function({
+  required GeoPoint initialCenter,
+  required double initialZoom,
+  required Set<MapMarkerSpec> markers,
+  required List<GeoPoint> route,
+  required bool interactive,
+});
+
 /// A read-only map showing a fixed set of markers - the live delivery-tracking
 /// map. The concrete widget returned is GoogleTrackingMapView (or
 /// MapLibreTrackingMapView on rollback); callers never reference those classes
@@ -92,6 +115,8 @@ abstract class TrackingMapView extends StatelessWidget {
     required double initialZoom,
     required Set<MapMarkerSpec> markers,
     String? semanticsLabel,
+    List<GeoPoint> route = const [],
+    bool interactive = false,
   }) {
     switch (MapProviderConfig.kind) {
       case MapProviderKind.google:
@@ -101,6 +126,8 @@ abstract class TrackingMapView extends StatelessWidget {
           initialZoom: initialZoom,
           markers: markers,
           semanticsLabel: semanticsLabel,
+          route: route,
+          interactive: interactive,
         );
       case MapProviderKind.maplibre:
         // MapLibre draws no Semantics node of its own (task-F1 review-fix
@@ -108,7 +135,13 @@ abstract class TrackingMapView extends StatelessWidget {
         // threaded to it. A caller relying on a label with this adapter
         // must supply its own Semantics wrapper (ClinicLocationMap does).
         return MapLibreTrackingMapView(
-            key: key, initialCenter: initialCenter, initialZoom: initialZoom, markers: markers);
+          key: key,
+          initialCenter: initialCenter,
+          initialZoom: initialZoom,
+          markers: markers,
+          route: route,
+          interactive: interactive,
+        );
     }
   }
 

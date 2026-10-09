@@ -12,6 +12,7 @@ import {
   colomboTodayDay,
   formatColomboDate,
   offerEndForDay,
+  parseOfferAmountOff,
   parseOfferPrice,
   percentOff,
 } from '../../lib/catalog';
@@ -40,7 +41,20 @@ interface FormState {
   offer_price: string;
   /** The offer's last day (Colombo), YYYY-MM-DD; '' = no end date. */
   offer_end_day: string;
+  /**
+   * How the offer is typed (owner, 2026-10-10): 'price' = the new price,
+   * 'off' = LKR taken off the selling price. Only the price is ever sent.
+   */
+  offer_mode: OfferMode;
+  /** LKR off as typed, used when offer_mode is 'off'; '' = no offer. */
+  offer_off: string;
 }
+
+type OfferMode = 'price' | 'off';
+const OFFER_MODES: Array<{ value: OfferMode; label: string }> = [
+  { value: 'price', label: 'New price' },
+  { value: 'off', label: 'LKR off' },
+];
 
 /** The offer as the API last returned it - what "changed" is measured against. */
 interface SavedOffer {
@@ -71,6 +85,8 @@ const EMPTY: FormState = {
   is_active: true,
   offer_price: '',
   offer_end_day: '',
+  offer_mode: 'price',
+  offer_off: '',
 };
 
 /**
@@ -151,8 +167,12 @@ export function ProductForm() {
               : String(product.custom_markup_percent),
           is_available: product.is_available,
           is_active: product.is_active,
+          // A stored offer opens as its price; "LKR off" shows the same
+          // offer as an amount off the current selling price.
           offer_price: offer.price,
           offer_end_day: offer.endDay,
+          offer_mode: 'price',
+          offer_off: '',
         });
         setEffectiveMarkup(product.effective_markup_percent ?? null);
       })
@@ -177,7 +197,20 @@ export function ProductForm() {
    * the saved product's own price, rounded the way the backend rounds it. */
   const sellingForOffer = previewPrice !== null ? round2(previewPrice) : savedSellingPrice;
 
-  const offerPriceChanged = form.offer_price.trim() !== savedOffer.price;
+  /** What the operator typed in the active offer field; '' = no offer. */
+  const offerText = (form.offer_mode === 'off' ? form.offer_off : form.offer_price).trim();
+  const offerParsed =
+    offerText === ''
+      ? null
+      : form.offer_mode === 'off'
+        ? parseOfferAmountOff(form.offer_off, sellingForOffer)
+        : parseOfferPrice(form.offer_price, sellingForOffer);
+  const offerPriceChanged =
+    form.offer_mode === 'off'
+      ? offerText === ''
+        ? savedOffer.price !== ''
+        : !(offerParsed && 'value' in offerParsed && savedOffer.price !== '' && offerParsed.value === Number(savedOffer.price))
+      : form.offer_price.trim() !== savedOffer.price;
   const offerEndChanged = form.offer_end_day !== savedOffer.endDay;
   /** The stored offer's end has passed and the operator has not picked a new one. */
   const offerEnded =
@@ -185,7 +218,25 @@ export function ProductForm() {
     savedOffer.endsAt !== null &&
     !offerEndChanged &&
     new Date(savedOffer.endsAt).getTime() <= Date.now();
-  const offerParsed = form.offer_price.trim() === '' ? null : parseOfferPrice(form.offer_price, sellingForOffer);
+
+  /**
+   * Switching "New price | LKR off" carries a valid offer across, so the
+   * same offer shows both ways (250 selling, 200 offer <-> 50 off).
+   */
+  function setOfferMode(mode: OfferMode) {
+    if (mode === form.offer_mode) return;
+    const carried = offerParsed && 'value' in offerParsed ? offerParsed.value : null;
+    if (mode === 'off') {
+      const off = carried !== null && sellingForOffer !== null ? round2(sellingForOffer - carried) : null;
+      setForm({ ...form, offer_mode: 'off', offer_off: off !== null && off > 0 ? off.toFixed(2).replace(/\.00$/, '') : '' });
+    } else {
+      setForm({
+        ...form,
+        offer_mode: 'price',
+        offer_price: carried !== null ? (form.offer_mode === 'off' ? carried.toFixed(2).replace(/\.00$/, '') : form.offer_price) : '',
+      });
+    }
+  }
 
   function validate(): boolean {
     const next: Record<string, string> = {};
@@ -205,7 +256,7 @@ export function ProductForm() {
       next.offer_price = offerParsed.error;
     }
     if (form.offer_end_day !== '') {
-      if (form.offer_price.trim() === '') next.offer_end_day = 'Enter an offer price first';
+      if (offerText === '') next.offer_end_day = 'Enter an offer price first';
       else if (offerEndChanged && form.offer_end_day < colomboTodayDay()) next.offer_end_day = 'Pick today or a later day';
     }
     setErrors(next);
@@ -236,7 +287,10 @@ export function ProductForm() {
     // Offer fields go only when they changed (owner, 2026-10-09): resending
     // an untouched end date the form only knows as a day could move it.
     // An emptied price removes the offer, and the backend clears its end too.
-    if (form.offer_price.trim() === '') {
+    // In "LKR off" mode the price sent is selling price - amount (owner,
+    // 2026-10-10); the backend stores only that price, so a later cost or
+    // markup change keeps it, exactly like an offer typed as a price.
+    if (offerText === '') {
       if (savedOffer.price !== '') payload.offer_price = null;
     } else {
       if (offerPriceChanged && offerParsed && 'value' in offerParsed) payload.offer_price = offerParsed.value;
@@ -358,15 +412,39 @@ export function ProductForm() {
               <span className="offer-tag">On offer now</span>
             </p>
           ) : null}
+          <div className="segmented offer-mode" role="group" aria-label="Offer as">
+            {OFFER_MODES.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={option.value === form.offer_mode ? 'segmented__item is-selected' : 'segmented__item'}
+                aria-pressed={option.value === form.offer_mode}
+                onClick={() => setOfferMode(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <div className="form__row">
-            <Field label="Offer price (LKR)" hint="Leave blank for no offer" error={errors.offer_price}>
-              <input
-                className="input"
-                inputMode="decimal"
-                value={form.offer_price}
-                onChange={(event) => setForm({ ...form, offer_price: event.target.value })}
-              />
-            </Field>
+            {form.offer_mode === 'off' ? (
+              <Field label="Amount off (LKR)" hint="Taken off the selling price. Leave blank for no offer" error={errors.offer_price}>
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  value={form.offer_off}
+                  onChange={(event) => setForm({ ...form, offer_off: event.target.value })}
+                />
+              </Field>
+            ) : (
+              <Field label="Offer price (LKR)" hint="Leave blank for no offer" error={errors.offer_price}>
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  value={form.offer_price}
+                  onChange={(event) => setForm({ ...form, offer_price: event.target.value })}
+                />
+              </Field>
+            )}
             <Field label="Offer ends" hint="Optional - the offer runs to the end of this day" error={errors.offer_end_day}>
               <input
                 className="input"
@@ -379,22 +457,28 @@ export function ProductForm() {
               />
             </Field>
           </div>
-          {offerParsed && 'value' in offerParsed && sellingForOffer !== null ? (
+          {offerParsed && 'value' in offerParsed && sellingForOffer !== null && form.offer_mode === 'off' ? (
+            <p className="form__note" role="status">
+              {`Customers pay LKR ${offerParsed.value.toFixed(2)} (was LKR ${sellingForOffer.toFixed(2)})${
+                form.offer_end_day ? ` until ${formatColomboDate(offerEndForDay(form.offer_end_day))}` : ''
+              }.`}
+            </p>
+          ) : offerParsed && 'value' in offerParsed && sellingForOffer !== null ? (
             <p className="form__note" role="status">
               {`${percentOff(offerParsed.value, sellingForOffer)}% off - customers pay LKR ${offerParsed.value.toFixed(2)} instead of LKR ${sellingForOffer.toFixed(2)}${
                 form.offer_end_day ? ` until ${formatColomboDate(offerEndForDay(form.offer_end_day))}` : ''
               }.`}
             </p>
           ) : null}
-          {form.offer_price.trim() === '' && savedOffer.price !== '' ? (
+          {offerText === '' && savedOffer.price !== '' ? (
             <p className="form__note">The offer is removed when you save.</p>
           ) : null}
-          {form.offer_price !== '' || form.offer_end_day !== '' ? (
+          {offerText !== '' || form.offer_end_day !== '' ? (
             <div className="offer-actions">
               <button
                 type="button"
                 className="button button--ghost button--sm"
-                onClick={() => setForm({ ...form, offer_price: '', offer_end_day: '' })}
+                onClick={() => setForm({ ...form, offer_price: '', offer_off: '', offer_end_day: '' })}
               >
                 Remove offer
               </button>

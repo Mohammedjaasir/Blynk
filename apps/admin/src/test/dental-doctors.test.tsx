@@ -67,7 +67,7 @@ describe('Dental doctors', () => {
     );
     renderPage();
 
-    const table = await screen.findByRole('table', { name: 'Dental doctors' });
+    const table = await screen.findByRole('table', { name: 'Doctors' });
     expect(within(table).getByText('Dr. Nadia Farook')).toBeInTheDocument();
     expect(within(table).getByText('Orthodontist')).toBeInTheDocument();
     expect(within(table).getByText('★ 4.6 (12)')).toBeInTheDocument();
@@ -88,17 +88,17 @@ describe('Dental doctors', () => {
     const dialog = within(screen.getByRole('dialog', { name: 'Doctor' }));
     expect(dialog.queryByRole('combobox')).not.toBeInTheDocument();
     await user.type(dialog.getByLabelText('Full name'), 'Dr. Nadia Farook');
-    const chip = dialog.getByRole('button', { name: 'Oral surgeon' });
+    const chip = dialog.getByRole('button', { name: 'Cardiologist' });
     await user.click(chip);
     expect(chip).toHaveAttribute('aria-pressed', 'true');
-    expect(dialog.getByLabelText('Specialty')).toHaveValue('Oral surgeon');
+    expect(dialog.getByLabelText('Specialty')).toHaveValue('Cardiologist');
     await user.type(dialog.getByLabelText(/^Bio/), 'Twenty years in practice.');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(api.find('POST', '/admin/dental/doctors')).toHaveLength(1));
     expect(api.find('POST', '/admin/dental/doctors')[0].body).toEqual({
       full_name: 'Dr. Nadia Farook',
-      specialty: 'Oral surgeon',
+      specialty: 'Cardiologist',
       photo_url: null,
       bio: 'Twenty years in practice.',
       is_active: true,
@@ -133,11 +133,11 @@ describe('Dental doctors', () => {
     const dialog = within(screen.getByRole('dialog', { name: 'Doctor' }));
     const input = dialog.getByLabelText('Specialty');
     expect(input).toHaveValue('Orthodontist');
-    expect(dialog.getByRole('button', { name: 'Orthodontist' })).toHaveAttribute('aria-pressed', 'true');
+    expect(dialog.getByRole('button', { name: 'Dentist' })).toHaveAttribute('aria-pressed', 'false');
 
     await user.clear(input);
     await user.type(input, ' Prosthodontist ');
-    expect(dialog.getByRole('button', { name: 'Orthodontist' })).toHaveAttribute('aria-pressed', 'false');
+    expect(dialog.getByRole('button', { name: 'Dentist' })).toHaveAttribute('aria-pressed', 'false');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(api.find('PATCH', '/admin/dental/doctors/dr1')).toHaveLength(1));
