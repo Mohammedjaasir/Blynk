@@ -164,6 +164,64 @@ describe('Settings - Rider pay (owner, 2026-10-10)', () => {
     );
   });
 
+  it('saves distance pay as per-km tiers (owner, 2026-10-10), starting from the linear pay', async () => {
+    const user = userEvent.setup();
+    const initial = paySettings();
+    const api = settingsApi({
+      ...initial,
+      default_model: { ...initial.default_model, model: 'DISTANCE', distance_mode: 'LINEAR', km_tiers: [] },
+    });
+    renderPage(<Settings />);
+    const panel = await screen.findByRole('region', { name: 'Rider pay' });
+    const form = within(panel).getByRole('form', { name: 'Store default pay' });
+    expect(form).toHaveTextContent('Now LKR 50 + LKR 20/km');
+    expect(within(form).getByRole('button', { name: 'Base + per km' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(form).queryByRole('group', { name: 'Pay for each km' })).toBeNull();
+
+    await user.click(within(form).getByRole('button', { name: 'Per-km tiers' }));
+    expect(within(form).queryByLabelText(/Base LKR per delivery/)).toBeNull();
+    const editor = within(form).getByRole('group', { name: 'Pay for each km' });
+    // km 1 = base + per km, then per km: the same pay as before for whole km.
+    expect(within(editor).getByLabelText('km 1 (LKR)')).toHaveValue('70');
+    expect(within(editor).getByLabelText('km 2 (LKR)')).toHaveValue('20');
+    expect(within(editor).getByTestId('km-tier-examples')).toHaveTextContent('3 km = LKR 70 + 20 + 20 = LKR 110');
+    expect(form).toHaveTextContent('The minimum below still applies.');
+
+    await user.clear(within(editor).getByLabelText('km 1 (LKR)'));
+    await user.type(within(editor).getByLabelText('km 1 (LKR)'), '80');
+    await user.click(within(editor).getByRole('button', { name: '+ Add km' }));
+    await user.clear(within(editor).getByLabelText('km 3 (LKR)'));
+    await user.type(within(editor).getByLabelText('km 3 (LKR)'), '15');
+    await user.click(within(form).getByRole('button', { name: 'Save default pay' }));
+
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/rider-pay/model')[0]?.body).toEqual({
+        model: 'DISTANCE',
+        distance_mode: 'TIERS',
+        km_tiers: [
+          { km: 1, lkr: 80 },
+          { km: 2, lkr: 20 },
+          { km: 3, lkr: 15 },
+        ],
+        min_lkr: null,
+      })
+    );
+    expect(await within(form).findByText('Now By km: km 1 LKR 80, km 2 LKR 20, km 3+ LKR 15')).toBeInTheDocument();
+
+    // Back to base + per km: the linear numbers go out with the mode.
+    await user.click(within(form).getByRole('button', { name: 'Base + per km' }));
+    await user.click(within(form).getByRole('button', { name: 'Save default pay' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/rider-pay/model')[1]?.body).toEqual({
+        model: 'DISTANCE',
+        base_lkr: 50,
+        per_km_lkr: 20,
+        distance_mode: 'LINEAR',
+        min_lkr: null,
+      })
+    );
+  });
+
   it('saves each bonus section on its own (company riders, peak, daily target, long distance)', async () => {
     const user = userEvent.setup();
     const api = settingsApi();
@@ -562,6 +620,72 @@ describe('Rider earnings - pay controls (owner, 2026-10-10)', () => {
         pay_model: 'DISTANCE',
         base_lkr: 50,
         per_km_lkr: 30,
+        min_lkr: 100,
+      })
+    );
+  });
+
+  it("gives a rider their own per-km tiers (owner, 2026-10-10), starting from the store default's tiers", async () => {
+    const user = userEvent.setup();
+    const tierDefault = {
+      ...paySettings().default_model,
+      model: 'DISTANCE' as const,
+      distance_mode: 'TIERS' as const,
+      km_tiers: [
+        { km: 1, lkr: 100 },
+        { km: 2, lkr: 60 },
+      ],
+    };
+    const pay = {
+      rider_id: 'r1',
+      pay_type: 'COMMISSION',
+      commission_percent: null,
+      effective_percent: 80,
+      default_percent: 80,
+      pay_model: 'FIXED',
+      own: { fixed_lkr: 120, base_lkr: null, per_km_lkr: null, min_lkr: 100, distance_mode: null, km_tiers: null },
+      effective: { model: 'FIXED', percent: 80, fixed_lkr: 120, base_lkr: 50, per_km_lkr: 20, min_lkr: 100, distance_mode: 'TIERS', km_tiers: tierDefault.km_tiers },
+      default_model: tierDefault,
+    };
+    const api = earningsApi((c) => {
+      if (c.method === 'GET' && c.path === '/admin/settings/rider-pay') return ok(paySettings({ default_model: tierDefault }));
+      if (c.path === '/admin/reports/rider-earnings') return ok(report({ default_model: tierDefault }));
+      if (c.method === 'GET' && c.path === '/admin/riders/r1/pay') return ok({ pay });
+      if (c.method === 'PATCH' && c.path === '/admin/riders/r1/pay') return ok({ pay: { ...pay, pay_model: c.body.pay_model } });
+      return undefined;
+    });
+    renderPage(<RiderEarnings />);
+    const payTable = await screen.findByRole('table', { name: 'Rider pay' });
+    // The store default is described with its tiers.
+    const paySection = screen.getByRole('region', { name: 'Rider pay' });
+    await waitFor(() => expect(paySection).toHaveTextContent('earn the store default (By km: km 1 LKR 100, km 2+ LKR 60)'));
+
+    await user.click(within(payTable).getByRole('button', { name: 'Change pay for Kamal' }));
+    const dialog = screen.getByRole('dialog', { name: 'Change rider pay' });
+    await waitFor(() => expect(within(dialog).getByLabelText(/LKR per delivery/)).toHaveValue('120'));
+    await user.click(within(dialog).getByRole('button', { name: 'Distance' }));
+    expect(within(dialog).getByRole('button', { name: 'Per-km tiers' })).toHaveAttribute('aria-pressed', 'true');
+    const editor = within(dialog).getByRole('group', { name: 'Pay for each km' });
+    expect(within(editor).getByLabelText('km 1 (LKR)')).toHaveValue('100');
+    await user.clear(within(editor).getByLabelText('km 2 (LKR)'));
+    await user.type(within(editor).getByLabelText('km 2 (LKR)'), '1200');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(within(editor).getByText('km 2: At most LKR 1,000 per km.')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/riders/r1/pay')).toHaveLength(0);
+
+    await user.clear(within(editor).getByLabelText('km 2 (LKR)'));
+    await user.type(within(editor).getByLabelText('km 2 (LKR)'), '70');
+    expect(within(editor).getByTestId('km-tier-examples')).toHaveTextContent('3 km = LKR 100 + 70 + 70 = LKR 240');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/riders/r1/pay')[0]?.body).toEqual({
+        pay_type: 'COMMISSION',
+        pay_model: 'DISTANCE',
+        distance_mode: 'TIERS',
+        km_tiers: [
+          { km: 1, lkr: 100 },
+          { km: 2, lkr: 70 },
+        ],
         min_lkr: 100,
       })
     );

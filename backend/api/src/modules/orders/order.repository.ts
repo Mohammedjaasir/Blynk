@@ -13,6 +13,7 @@ import {
   recordBirthdayRedemption,
 } from '../birthday/birthday.offer.js';
 import type { BirthdayOfferSetting } from '../configuration/settings.service.js';
+import type { DeliveryFeeQuote } from './delivery-fee.js';
 // Refer a friend and Blynk Points (owner, 2026-10-10; migration 037).
 import { orderRewardColumns, pointsForOrder, recordOrderRewards, referralForOrder } from '../loyalty/order-rewards.js';
 import { AppError } from '../../middleware/error.middleware.js';
@@ -48,6 +49,12 @@ export interface CreateOrderData {
   subtotal_amount: number;
   /** The standard fee; 0 is charged instead when a free delivery applies. */
   delivery_fee: number;
+  /**
+   * How the standard fee was worked out (orders/delivery-fee.ts; owner,
+   * 2026-10-10): snapshotted as delivery_fee_mode / delivery_distance_km /
+   * delivery_distance_estimated (migration 040). Absent = not recorded.
+   */
+  delivery_fee_quote?: Pick<DeliveryFeeQuote, 'fee_mode' | 'distance_km' | 'distance_estimated'> | null;
   /**
    * New-customer free deliveries (owner, 2026-10-08), checked under the
    * customer's row lock inside the order transaction. Absent = no offer.
@@ -141,23 +148,6 @@ export class OrderRepository {
       .where('is_active', '=', true)
       .limit(1)
       .executeTakeFirst();
-  }
-
-  /**
-   * Retrieves default delivery fee configuration (default: 100.00 LKR).
-   */
-  async getDeliveryFee(executor: DBConnection = db): Promise<number> {
-    const config = await executor
-      .selectFrom('system_configurations')
-      .selectAll()
-      .where('key', '=', 'delivery_fee')
-      .executeTakeFirst();
-
-    if (config && typeof config.value === 'object' && config.value !== null) {
-      const val = (config.value as any).fee_lkr;
-      if (typeof val === 'number') return val;
-    }
-    return 100.0;
   }
 
   /**
@@ -309,6 +299,10 @@ export class OrderRepository {
           // Migration 032 (owner, 2026-10-09): the standard fee, even when this
           // order goes out free - a commission rider earns their share of it.
           standard_delivery_fee: data.delivery_fee,
+          // Migration 040 (owner, 2026-10-10): how that fee was worked out.
+          delivery_fee_mode: data.delivery_fee_quote?.fee_mode ?? null,
+          delivery_distance_km: data.delivery_fee_quote?.distance_km ?? null,
+          delivery_distance_estimated: data.delivery_fee_quote?.distance_estimated ?? null,
           discount_amount: discountAmount,
           birthday_discount_amount: birthday?.discount_amount ?? 0,
           ...orderRewardColumns(referral, points),

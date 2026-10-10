@@ -187,10 +187,33 @@ export interface CategoryDeleteResult {
   mode: 'HARD' | 'SOFT';
 }
 
+/** One per-km tier (owner, 2026-10-10): km 1..n in order; the last row repeats. */
+export interface KmTier {
+  km: number;
+  lkr: number;
+}
+
+/** FLAT: everyone pays fee_lkr; DISTANCE_TIERS: per-km tiers on the road distance (owner, 2026-10-10). */
+export type DeliveryFeeMode = 'FLAT' | 'DISTANCE_TIERS';
+
 /** GET/PATCH /admin/settings/delivery-fee */
 export interface DeliveryFeeSetting {
   fee_lkr: number;
+  /** Per-km tiers (owner, 2026-10-10). Optional: an API from before them leaves these out (= FLAT). */
+  fee_mode?: DeliveryFeeMode;
+  /** May be [] when never set. */
+  tiers?: KmTier[];
+  /** null = no cap. */
+  max_fee_lkr?: number | null;
   updated_at: string | null;
+}
+
+/** PATCH /admin/settings/delivery-fee - at least one field (owner, 2026-10-10). */
+export interface DeliveryFeeInput {
+  fee_lkr?: number;
+  fee_mode?: DeliveryFeeMode;
+  tiers?: KmTier[];
+  max_fee_lkr?: number | null;
 }
 
 /** GET/PATCH /admin/settings/checkout - checkout switches (owner, 2026-10-08). */
@@ -518,6 +541,8 @@ export type RiderPayType = 'COMPANY' | 'COMMISSION';
 
 /** PERCENT: % of the standard delivery fee; FIXED: LKR per delivery; DISTANCE: base + LKR per km. */
 export type PayModel = 'PERCENT' | 'FIXED' | 'DISTANCE';
+/** How DISTANCE pay counts the km (owner, 2026-10-10): LINEAR = base + LKR per km; TIERS = per-km tiers (base / per km ignored). */
+export type DistanceMode = 'LINEAR' | 'TIERS';
 /** +LKR per delivery, or +% of the delivery's base earning. */
 export type BoostMode = 'FIXED' | 'PERCENT';
 export type BonusKind = 'PEAK_BOOST' | 'RAIN_BOOST' | 'LONG_DISTANCE' | 'DAILY_TARGET';
@@ -532,6 +557,10 @@ export interface PayParams {
   per_km_lkr: number;
   /** Optional floor per delivery (any model); null = no floor. */
   min_lkr: number | null;
+  /** (owner, 2026-10-10) Optional: an API from before per-km tiers leaves these out (= LINEAR). */
+  distance_mode?: DistanceMode;
+  /** May be [] when never set. */
+  km_tiers?: KmTier[];
 }
 
 /** days 1=Mon..7=Sun; "HH:MM", start < end, end may be "24:00". */
@@ -599,6 +628,9 @@ export interface RiderPayModelInput {
   base_lkr?: number;
   per_km_lkr?: number;
   min_lkr?: number | null;
+  /** (owner, 2026-10-10) DISTANCE + TIERS needs km_tiers (sent or stored). */
+  distance_mode?: DistanceMode;
+  km_tiers?: KmTier[];
 }
 
 /** PATCH /admin/settings/rider-pay/bonuses - each section a complete object. */
@@ -624,7 +656,15 @@ export interface RiderPay {
   /** Rider's own model; null = follows the store default model (owner, 2026-10-10). */
   pay_model?: PayModel | null;
   /** null each = the store default value. */
-  own?: { fixed_lkr: number | null; base_lkr: number | null; per_km_lkr: number | null; min_lkr: number | null };
+  own?: {
+    fixed_lkr: number | null;
+    base_lkr: number | null;
+    per_km_lkr: number | null;
+    min_lkr: number | null;
+    /** (owner, 2026-10-10) null = the store default's; absent on an API from before per-km tiers. */
+    distance_mode?: DistanceMode | null;
+    km_tiers?: KmTier[] | null;
+  };
   /** What a new delivery pays this rider now; null for COMPANY. */
   effective?: PayParams | null;
   default_model?: PayParams;
@@ -640,6 +680,9 @@ export interface RiderPayInput {
   base_lkr?: number | null;
   per_km_lkr?: number | null;
   min_lkr?: number | null;
+  /** (owner, 2026-10-10) null = the store default's; kept only when pay_model is DISTANCE. */
+  distance_mode?: DistanceMode | null;
+  km_tiers?: KmTier[] | null;
 }
 
 /** A deduction (negative) or extra pay (positive) for a rider (owner, 2026-10-10). */

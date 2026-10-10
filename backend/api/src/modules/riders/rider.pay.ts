@@ -28,6 +28,8 @@ import {
   rainActive,
   rainBoostPatchSchema,
   RIDER_PAY_MODELS,
+  DISTANCE_MODES,
+  tiersNeeded,
   setBonusRules,
   setDefaultPayModel,
   setRainBoost,
@@ -36,6 +38,7 @@ import {
   type PayParams,
   type RainBoostPatch,
 } from './rider.pay-rules.js';
+import { kmTiersFrom, kmTiersSchema, type KmTier } from '../pricing/km-tiers.js';
 import { BONUS_KINDS, emptyTotals, riderLedger, sumTotals, type LedgerTotals } from './rider.pay-ledger.js';
 
 /*
@@ -117,6 +120,13 @@ const payFields = {
   base_lkr: lkrSchema('The base pay').nullable().optional(),
   per_km_lkr: lkrSchema('The pay per km', 1000).nullable().optional(),
   min_lkr: lkrSchema('The minimum').nullable().optional(),
+  // Per-km tiers (migration 040; owner, 2026-10-10): DISTANCE as base + per km
+  // (LINEAR) or by the tier table; each null = the store default's.
+  distance_mode: z
+    .enum(DISTANCE_MODES, { errorMap: () => ({ message: 'distance_mode must be LINEAR or TIERS' }) })
+    .nullable()
+    .optional(),
+  km_tiers: kmTiersSchema.nullable().optional(),
 };
 const payTypeSchema = z.enum(RIDER_PAY_TYPES, { errorMap: () => ({ message: 'pay_type must be COMPANY or COMMISSION' }) });
 
@@ -136,6 +146,8 @@ export function payValues(input: RiderPayInput) {
     pay_base_lkr: null as number | null,
     pay_per_km_lkr: null as number | null,
     pay_min_lkr: null as number | null,
+    pay_distance_mode: null as 'LINEAR' | 'TIERS' | null,
+    pay_km_tiers: null as string | null,
   };
   if (input.pay_type !== 'COMMISSION') return { pay_type: input.pay_type, ...none };
   const model: RiderPayModel | null =
@@ -149,6 +161,8 @@ export function payValues(input: RiderPayInput) {
     pay_base_lkr: model === 'DISTANCE' ? (input.base_lkr ?? null) : null,
     pay_per_km_lkr: model === 'DISTANCE' ? (input.per_km_lkr ?? null) : null,
     pay_min_lkr: input.min_lkr ?? null,
+    pay_distance_mode: model === 'DISTANCE' ? (input.distance_mode ?? null) : null,
+    pay_km_tiers: model === 'DISTANCE' && input.km_tiers ? JSON.stringify(input.km_tiers) : null,
   };
 }
 
@@ -162,13 +176,38 @@ export interface RiderPay {
   default_percent: number;
   /** Migration 038: the rider's own model; null = the store default model. */
   pay_model: RiderPayModel | null;
-  own: { fixed_lkr: number | null; base_lkr: number | null; per_km_lkr: number | null; min_lkr: number | null };
+  own: {
+    fixed_lkr: number | null;
+    base_lkr: number | null;
+    per_km_lkr: number | null;
+    min_lkr: number | null;
+    /** Migration 040 (owner, 2026-10-10): null = the store default's. */
+    distance_mode: 'LINEAR' | 'TIERS' | null;
+    km_tiers: KmTier[] | null;
+  };
   /** What a new delivery pays this rider now; null for COMPANY. */
   effective: PayParams | null;
   default_model: PayParams;
 }
 
-const RIDER_PAY_SELECT = ['id', 'pay_type', 'commission_percent', 'pay_model', 'pay_fixed_lkr', 'pay_base_lkr', 'pay_per_km_lkr', 'pay_min_lkr'] as const;
+const RIDER_PAY_SELECT = [
+  'id',
+  'pay_type',
+  'commission_percent',
+  'pay_model',
+  'pay_fixed_lkr',
+  'pay_base_lkr',
+  'pay_per_km_lkr',
+  'pay_min_lkr',
+  'pay_distance_mode',
+  'pay_km_tiers',
+] as const;
+
+/** A stored own tier table, or null (none / malformed = the store default's). */
+const ownTiers = (v: unknown): KmTier[] | null => {
+  const t = kmTiersFrom(v);
+  return t.length ? t : null;
+};
 
 export async function getRiderPay(riderId: string, executor: DBConnection = db): Promise<RiderPay> {
   const rider = await executor
@@ -192,6 +231,8 @@ export async function getRiderPay(riderId: string, executor: DBConnection = db):
       base_lkr: numOrNull(rider.pay_base_lkr),
       per_km_lkr: numOrNull(rider.pay_per_km_lkr),
       min_lkr: numOrNull(rider.pay_min_lkr),
+      distance_mode: rider.pay_distance_mode,
+      km_tiers: ownTiers(rider.pay_km_tiers),
     },
     effective: rider.pay_type === 'COMMISSION' ? effectivePayParams(rider, defModel) : null,
     default_model: defModel,
@@ -207,9 +248,12 @@ function payAudit(v: {
   pay_base_lkr: unknown;
   pay_per_km_lkr: unknown;
   pay_min_lkr: unknown;
+  pay_distance_mode?: unknown;
+  pay_km_tiers?: unknown;
 }) {
   const base = { pay_type: v.pay_type, commission_percent: numOrNull(v.commission_percent) };
   if (v.pay_model === null || (v.pay_model === 'PERCENT' && v.pay_min_lkr === null)) return base;
+  const tiers = typeof v.pay_km_tiers === 'string' ? JSON.parse(v.pay_km_tiers) : v.pay_km_tiers;
   return {
     ...base,
     pay_model: v.pay_model,
@@ -217,6 +261,10 @@ function payAudit(v: {
     base_lkr: numOrNull(v.pay_base_lkr),
     per_km_lkr: numOrNull(v.pay_per_km_lkr),
     min_lkr: numOrNull(v.pay_min_lkr),
+    // Per-km tiers (owner, 2026-10-10): only when set.
+    ...(v.pay_distance_mode || ownTiers(tiers)
+      ? { distance_mode: v.pay_distance_mode ?? null, km_tiers: ownTiers(tiers) }
+      : {}),
   };
 }
 
@@ -232,6 +280,13 @@ export async function setRiderPay(riderId: string, input: RiderPayInput, actor: 
       .executeTakeFirst();
     if (!before) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
     const values = payValues(input);
+    // Per-km tiers (owner, 2026-10-10): TIERS needs a table - the rider's own
+    // or the store default's.
+    if (values.pay_model === 'DISTANCE') {
+      const def = await getDefaultPayModel(trx);
+      const mode = values.pay_distance_mode ?? def.distance_mode;
+      if (mode === 'TIERS' && !values.pay_km_tiers && !def.km_tiers.length) throw tiersNeeded();
+    }
     await trx
       .updateTable('riders')
       .set({ ...values, updated_at: sql`now()` })
@@ -502,6 +557,8 @@ export async function earningsReport(query: EarningsQuery) {
           'r.pay_base_lkr',
           'r.pay_per_km_lkr',
           'r.pay_min_lkr',
+          'r.pay_distance_mode',
+          'r.pay_km_tiers',
         ])
         .where('r.id', 'in', ids)
         .execute()

@@ -10,6 +10,7 @@ import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/product.provider.dart';
 import '../Services/Providers/store_info.provider.dart';
 import '../Services/app_errors.dart';
+import '../Services/analytics/analytics.dart';
 import '../Services/share_links.dart';
 import '../UI/Widgets/Atoms/add_to_cart_button.dart';
 import '../UI/Widgets/Atoms/app_skeleton.dart';
@@ -81,6 +82,8 @@ class ProductDetailsScreen extends StatefulWidget {
 const double _twoColumnBreakpoint = 720;
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
+  bool _viewSent = false; // view_item once per page (owner, 2026-10-10)
+
   @override
   void initState() {
     super.initState();
@@ -126,6 +129,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             )
           : _DetailsSkeleton(wide: wide);
     } else {
+      if (!_viewSent) {
+        _viewSent = true;
+        Analytics.instance.viewItem(product);
+      }
       body = _DetailsBody(product: product, wide: wide);
       if (!wide) bottomBar = _BottomCtaBar(product: product);
     }
@@ -197,10 +204,13 @@ class _ShareAction extends StatelessWidget {
         icon: BlynkIcons.share,
         size: _CircularBack._size,
         semanticLabel: 'Share this product',
-        onPressed: () => Share.share(
-          ShareLinks.productShareText(product.name, product.id),
-          subject: product.name,
-        ),
+        onPressed: () {
+          Analytics.instance.share(contentType: 'product', itemId: product.id); // owner, 2026-10-10
+          Share.share(
+            ShareLinks.productShareText(product.name, product.id),
+            subject: product.name,
+          );
+        },
       ),
     );
   }

@@ -315,6 +315,14 @@ export interface OrdersTable {
    * is of this. Null only on rows written outside order creation.
    */
   standard_delivery_fee: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  /**
+   * Migration 040 (owner, 2026-10-10): how standard_delivery_fee was worked
+   * out - FLAT or DISTANCE_TIERS, and for tiers the road km hub -> address
+   * (estimated = straight line x 1.3, OSRM unavailable). NULL on older orders.
+   */
+  delivery_fee_mode: ColumnType<'FLAT' | 'DISTANCE_TIERS' | null, 'FLAT' | 'DISTANCE_TIERS' | null | undefined, 'FLAT' | 'DISTANCE_TIERS' | null>;
+  delivery_distance_km: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  delivery_distance_estimated: ColumnType<boolean | null, boolean | null | undefined, boolean | null>;
   total_amount: ColumnType<number, number | string, number | string>;
   /** Migration 018: coupon discount snapshot; total = subtotal + delivery_fee - discount_amount. */
   discount_amount: ColumnType<number, number | string | undefined, number | string>;
@@ -462,6 +470,13 @@ export interface RidersTable {
   pay_base_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   pay_per_km_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   pay_min_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  /**
+   * Migration 040 (owner, 2026-10-10): DISTANCE pay as base + per km (LINEAR)
+   * or per-km tiers (TIERS); null = the store default's. pay_km_tiers is the
+   * rider's own tier table [{km, lkr}], null = the store default's.
+   */
+  pay_distance_mode: ColumnType<'LINEAR' | 'TIERS' | null, 'LINEAR' | 'TIERS' | null | undefined, 'LINEAR' | 'TIERS' | null>;
+  pay_km_tiers: ColumnType<unknown | null, string | null | undefined, string | null>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }

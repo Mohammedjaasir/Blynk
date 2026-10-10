@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../Models/order_format.dart';
+import '../../../Services/Providers/address.provider.dart';
 import '../../../Services/Providers/cart.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
 import '../../../app_design.dart' show appCardDecoration;
@@ -36,7 +37,9 @@ class _CheckoutCouponFieldState extends State<CheckoutCouponField> {
     final orders = context.read<OrderProvider>();
     final cart = context.read<CartProvider>();
     FocusScope.of(context).unfocus();
-    final ok = await orders.applyCoupon(_controller.text, cart);
+    // The preview prices delivery for the selected address (owner, 2026-10-10).
+    final addressId = context.read<AddressProvider?>()?.defaultAddress?.id;
+    final ok = await orders.applyCoupon(_controller.text, cart, addressId: addressId);
     if (ok && mounted) _controller.clear();
   }
 

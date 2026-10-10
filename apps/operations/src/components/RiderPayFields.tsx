@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { settings } from '../api/resources';
-import type { PayModel, PayParams, RiderPay } from '../api/types';
+import type { DistanceMode, PayModel, PayParams, RiderPay } from '../api/types';
 import { formatMoney } from '../lib/orders';
 import {
   DEFAULT_PAY_PARAMS,
+  DISTANCE_MODE_OPTIONS,
   OWN_MODEL_LABEL,
   PAY_MODELS,
   PAY_TYPE_OPTIONS,
@@ -13,6 +14,7 @@ import {
   type PayDraft,
   type PayDraftErrors,
 } from '../lib/riderPay';
+import { KmTierEditor, TierModeChoice } from './KmTierEditor';
 import './rider-pay.css';
 
 /**
@@ -24,6 +26,8 @@ import './rider-pay.css';
  * "Store default" model, or has their own % of the delivery fee, fixed LKR
  * per delivery, or distance pay (base + LKR per km), each with an optional
  * minimum per delivery. The numbers start from the store default.
+ * Owner, 2026-10-10: distance pay is base + LKR per km, or per-km tiers
+ * (km 1, km 2, ... the last repeats; no cap, the minimum still applies).
  */
 export function RiderPayFields({
   draft,
@@ -129,6 +133,28 @@ export function RiderPayFields({
             </div>
           ) : null}
           {draft.model === 'DISTANCE' ? (
+            <div className="field">
+              <TierModeChoice<DistanceMode>
+                label="Distance pay"
+                options={DISTANCE_MODE_OPTIONS}
+                value={draft.distanceMode}
+                onPick={(mode) => onChange(fillDraftBlanks({ ...draft, distanceMode: mode }, defaults))}
+              />
+            </div>
+          ) : null}
+          {draft.model === 'DISTANCE' && draft.distanceMode === 'TIERS' ? (
+            <div className="field">
+              <KmTierEditor
+                label="Pay per km"
+                rows={draft.tiers}
+                onChange={(tiers) => set({ tiers })}
+                rowErrors={errors.tierRows}
+                note="Road distance, store to drop-off. No maximum; the minimum below still applies."
+              />
+              {errors.tiers && !errors.tierRows?.some(Boolean) ? <span className="field__error-text">{errors.tiers}</span> : null}
+            </div>
+          ) : null}
+          {draft.model === 'DISTANCE' && draft.distanceMode !== 'TIERS' ? (
             <div className="rpay-row">
               <div className="field">
                 <label className="field rpay-label">

@@ -1,0 +1,152 @@
+/*
+ * Per-km tier table editor (owner, 2026-10-10). Its own file, imported by
+ * KmTierEditor, so it never collides with other work in styles.css; only the
+ * app's own tokens (ink, Blynk yellow, line, radius).
+ */
+
+.km-tiers {
+  display: grid;
+  gap: 8px;
+}
+
+.km-tiers__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.km-tiers__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.km-tiers__row.is-invalid {
+  border-color: var(--danger);
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+
+/* "km 1" - an ink tag, so the rows read like a price list. */
+.km-tiers__km {
+  flex: none;
+  min-width: 56px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 800;
+  font-size: var(--text-meta);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.km-tiers__money {
+  flex: 1 1 120px;
+  min-width: 0;
+  max-width: 220px;
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.km-tiers__money:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--yellow);
+}
+
+.km-tiers__cur {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: var(--canvas);
+  border-right: 1px solid var(--line);
+  color: var(--ink-2);
+  font-weight: 700;
+  font-size: var(--text-meta);
+}
+
+.km-tiers__input.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 10px 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.km-tiers__repeat {
+  color: var(--ink-3);
+  font-size: var(--text-meta);
+  font-weight: 600;
+}
+
+.km-tiers__error {
+  flex-basis: 100%;
+}
+
+.km-tiers__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.km-tiers__btn {
+  min-height: 36px;
+}
+
+.km-tiers__btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The live example: a receipt-like box with a Blynk yellow edge. */
+.km-tiers__example {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  box-shadow: inset 4px 0 0 var(--yellow);
+}
+
+.km-tiers__example-title {
+  font-size: var(--text-label);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.km-tiers__example-line {
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* The mode choice above the table: full width, wraps on a phone. */
+.km-mode {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+}
+
+.km-mode .segmented__item {
+  flex: 1 1 auto;
+  min-height: 40px;
+}

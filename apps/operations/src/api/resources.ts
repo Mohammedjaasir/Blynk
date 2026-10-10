@@ -38,6 +38,7 @@ import type {
   CodSettlement,
   CustomerProduct,
   DeliveryDetail,
+  DeliveryFeeInput,
   DeliveryFeeSetting,
   CheckoutSettings,
   BirthdayOfferSetting,
@@ -1048,8 +1049,9 @@ export const inventory = {
 export const settings = {
   deliveryFee: {
     get: () => apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee'),
-    update: (fee_lkr: number) =>
-      apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee', { method: 'PATCH', body: { fee_lkr } }),
+    /** Owner, 2026-10-10: also the fee mode, the per-km tiers and the cap. */
+    update: (body: DeliveryFeeInput) =>
+      apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee', { method: 'PATCH', body: { ...body } }),
   },
   /** Coupon codes on/off (owner, 2026-10-08) and free deliveries for every
    * customer since a start date (owner, 2026-10-09). `since` is optional on

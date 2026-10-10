@@ -19,6 +19,8 @@ import type { ValidateCouponInput } from '../coupons/coupon.schema.js';
 import { birthdayOfferSettings, checkoutSettings } from '../configuration/settings.service.js';
 import { applyBirthday, birthdayBeatsCoupon, birthdayOfferStatus, publicBirthdayStatus } from '../birthday/birthday.offer.js';
 import { freeDeliveryStatus } from './free-delivery.js';
+// Per-km tier delivery fee (owner, 2026-10-10): the one place the fee is worked out.
+import { quoteDeliveryFee, type DeliveryFeeQuote } from './delivery-fee.js';
 import { effectivePrice } from '../catalog/catalog.offers.js';
 import { looseQuantities, priceComboLines } from '../catalog/catalog.combos.js';
 // Refer a friend and Blynk Points (owner, 2026-10-10; migration 037).
@@ -262,7 +264,13 @@ export class OrderService {
 
     // 5. Products & Authoritative Pricing
     const { items: orderItemsData, combos: orderCombos, subtotal: subtotalAmount } = await priceCart(input.items, input.combos ?? []);
-    const deliveryFee = await orderRepository.getDeliveryFee();
+    // The fee for THIS address (owner, 2026-10-10): flat, or per-km tiers on
+    // the road distance from the hub. Server authoritative; snapshotted below.
+    const feeQuote = await quoteDeliveryFee(
+      { lat: Number(address.latitude), lng: Number(address.longitude) },
+      { hub: store }
+    );
+    const deliveryFee = feeQuote.fee_lkr;
     // Checkout switches (owner, 2026-10-08). With coupons off a code is
     // ignored, not refused, so an older app that still sends one can order.
     const settings = await checkoutSettings.read();
@@ -281,6 +289,7 @@ export class OrderService {
       dark_store_id: store.id,
       subtotal_amount: subtotalAmount,
       delivery_fee: deliveryFee,
+      delivery_fee_quote: feeQuote,
       free_delivery: settings.new_customer_free_deliveries,
       total_amount: totalAmount,
       coupon_code: settings.coupons_enabled ? input.coupon_code ?? null : null,
@@ -323,7 +332,8 @@ export class OrderService {
         ? (await priceCart(input.items ?? [], input.combos ?? [])).subtotal
         : Number(input.subtotal!.toFixed(2));
     const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
-    const deliveryFee = free.applies ? 0 : await orderRepository.getDeliveryFee();
+    // Owner, 2026-10-10: the fee for the chosen address (address_id), as the order will charge it.
+    const deliveryFee = free.applies ? 0 : (await this.quoteForCustomer(customerId, input.address_id)).quote.fee_lkr;
     const applied = await evaluateCoupon(db, { code: input.code, customerId, subtotal, deliveryFee });
     // Birthday gift (owner, 2026-10-09): never stacked with a coupon - the
     // larger is used (a tie keeps the coupon). discount_amount stays the
@@ -354,21 +364,60 @@ export class OrderService {
   }
 
   /**
+   * The address a fee is quoted for (owner, 2026-10-10): the one asked for
+   * (404 ADDRESS_NOT_FOUND when it is not this customer's), else their default
+   * address, else their newest; null when they have none.
+   */
+  private async feeAddress(customerId: string, addressId?: string) {
+    if (addressId) {
+      const address = await orderRepository.findCustomerAddress(customerId, addressId);
+      if (!address) throw new AppError('Delivery address not found.', 404, 'ADDRESS_NOT_FOUND');
+      return address;
+    }
+    return (
+      (await db
+        .selectFrom('customer_addresses')
+        .selectAll()
+        .where('user_id', '=', customerId)
+        .where('is_deleted', '=', false)
+        .orderBy('is_default', 'desc')
+        .orderBy('updated_at', 'desc')
+        .limit(1)
+        .executeTakeFirst()) ?? null
+    );
+  }
+
+  /** The standard fee for this customer's address (see feeAddress). */
+  async quoteForCustomer(customerId: string, addressId?: string): Promise<{ quote: DeliveryFeeQuote; address_id: string | null }> {
+    const address = await this.feeAddress(customerId, addressId);
+    const quote = await quoteDeliveryFee(address ? { lat: Number(address.latitude), lng: Number(address.longitude) } : null);
+    return { quote, address_id: address?.id ?? null };
+  }
+
+  /**
    * GET /orders/checkout-info: what this customer's next order costs to
    * deliver, whether to show a coupon field, and their birthday gift. Advisory - order placement
    * decides again under the customer's row lock.
+   *
+   * Per-km tiers (owner, 2026-10-10): ?address_id= gives the fee for that
+   * address (the cart's chosen one); without it, the default address's.
    */
-  async getCheckoutInfo(customerId: string) {
-    const [settings, standardFee, birthdaySetting] = await Promise.all([
+  async getCheckoutInfo(customerId: string, addressId?: string) {
+    const [settings, fee, birthdaySetting] = await Promise.all([
       checkoutSettings.read(),
-      orderRepository.getDeliveryFee(),
+      this.quoteForCustomer(customerId, addressId),
       birthdayOfferSettings.read(),
     ]);
+    const standardFee = fee.quote.fee_lkr;
     const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
     const birthday = await birthdayOfferStatus(db, customerId, birthdaySetting, orderingClock.now());
     return {
       delivery_fee_lkr: free.applies ? 0 : standardFee,
       standard_delivery_fee_lkr: standardFee,
+      delivery_fee_mode: fee.quote.fee_mode,
+      delivery_distance_km: fee.quote.distance_km,
+      delivery_distance_estimated: fee.quote.distance_estimated,
+      delivery_fee_address_id: fee.address_id,
       coupons_enabled: settings.coupons_enabled,
       free_delivery: free,
       // Owner, 2026-10-09: eligible -> the next order gets `percent` off its items.

@@ -79,6 +79,8 @@ export const validateCouponSchema = z
     /** Migration 033: combo packs in the cart, priced like the order will price them. */
     combos: z.array(orderComboLineSchema).max(20).optional(),
     subtotal: z.coerce.number().min(0).max(10_000_000).optional(),
+    /** Per-km tiers (owner, 2026-10-10): the delivery fee is for this address (else the default one). */
+    address_id: z.string().uuid('address_id must be a valid UUID').optional(),
   })
   .refine((v) => (v.items?.length ?? 0) + (v.combos?.length ?? 0) > 0 || v.subtotal !== undefined, {
     message: 'Send the cart items or its subtotal',

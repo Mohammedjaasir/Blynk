@@ -3,7 +3,16 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { settings as settingsApi } from '../api/resources';
 import { useLocation } from 'react-router-dom';
-import type { BirthdayOfferSetting, CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting, RiderTripsSetting } from '../api/types';
+import type {
+  BirthdayOfferSetting,
+  CheckoutSettings,
+  DeliveryFeeInput,
+  DeliveryFeeMode,
+  DeliveryFeeSetting,
+  RiderCommissionSetting,
+  RiderTripsSetting,
+} from '../api/types';
+import { KmTierEditor, ModeChoice } from '../components/KmTierEditor';
 import { PageHeader } from '../components/Layout';
 import { StoreScheduleSettings } from '../components/StoreSchedulePanels';
 import { ReferralSettingsCard } from '../components/ReferralSettingsCard';
@@ -14,6 +23,7 @@ import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
 import { MAX_BIRTHDAY_SMS, fillPercent, parseBirthdayPercent, percentText } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
 import { parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
+import { parseFeeCap, parseTierDrafts, tiersSummary, tiersToDrafts, type TierErrors } from '../lib/kmTiers';
 import { formatMoney } from '../lib/orders';
 import { formatPercent, parsePercent } from '../lib/riderPay';
 import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
@@ -186,43 +196,94 @@ function RiderTripsPanel() {
   );
 }
 
+/** The fee mode picks (owner, 2026-10-10). */
+const FEE_MODE_OPTIONS: { value: DeliveryFeeMode; label: string }[] = [
+  { value: 'FLAT', label: 'Same fee for every order' },
+  { value: 'DISTANCE_TIERS', label: 'By distance (per km)' },
+];
+
+/** "LKR 150 per order" or "by distance: km 1 LKR 100, km 2+ LKR 60, at most LKR 400". */
+function feeText(setting: DeliveryFeeSetting): string {
+  if (setting.fee_mode !== 'DISTANCE_TIERS') return `${formatMoney(setting.fee_lkr)} per order`;
+  const cap = typeof setting.max_fee_lkr === 'number' ? `, at most ${formatMoney(setting.max_fee_lkr)}` : '';
+  return `by distance: ${tiersSummary(setting.tiers ?? [])}${cap}`;
+}
+
+/**
+ * Delivery fee (owner, 2026-10-10): the same fee for every order (FLAT, the
+ * old single fee) or by distance - per-km tiers on the road distance from the
+ * store to the delivery address, with an optional maximum. Against an API
+ * from before the tiers (no fee_mode in GET) the save sends only fee_lkr.
+ */
 function DeliveryFeeSettingPanel() {
   const toast = useToast();
   const [current, setCurrent] = useState<DeliveryFeeSetting | null>(null);
+  const [mode, setMode] = useState<DeliveryFeeMode>('FLAT');
   const [value, setValue] = useState('');
+  const [tierDrafts, setTierDrafts] = useState<string[]>([]);
+  const [cap, setCap] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tierErrors, setTierErrors] = useState<TierErrors | undefined>();
+  const [capError, setCapError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+
+  function show(setting: DeliveryFeeSetting) {
+    setCurrent(setting);
+    setMode(setting.fee_mode ?? 'FLAT');
+    setValue(String(setting.fee_lkr));
+    setTierDrafts(tiersToDrafts(setting.tiers));
+    setCap(typeof setting.max_fee_lkr === 'number' ? String(Number(setting.max_fee_lkr.toFixed(2))) : '');
+  }
 
   useEffect(() => {
     let cancelled = false;
     settingsApi
       .getDeliveryFee()
-      .then((setting) => {
-        if (cancelled) return;
-        setCurrent(setting);
-        setValue(String(setting.fee_lkr));
-      })
+      .then((setting) => !cancelled && show(setting))
       .catch((err) => !cancelled && setLoadError(errorMessage(err, 'Could not load the delivery fee.')));
     return () => {
       cancelled = true;
     };
   }, []);
 
+  function pickMode(next: DeliveryFeeMode) {
+    setMode(next);
+    setError(null);
+    // No stored tiers yet: km 1 starts at the flat fee (owner, 2026-10-10).
+    if (next === 'DISTANCE_TIERS' && tierDrafts.length === 0) {
+      const flat = parseDeliveryFee(value);
+      setTierDrafts(['fee' in flat ? String(flat.fee) : String(current?.fee_lkr ?? '')]);
+    }
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
-    const parsed = parseDeliveryFee(value);
-    if ('error' in parsed) {
-      setError(parsed.error);
-      return;
+    let body: number | DeliveryFeeInput;
+    if (mode === 'FLAT') {
+      const parsed = parseDeliveryFee(value);
+      if ('error' in parsed) {
+        setError(parsed.error);
+        return;
+      }
+      // An API from before the tiers knows only fee_lkr.
+      body = current?.fee_mode === undefined ? parsed.fee : { fee_mode: 'FLAT', fee_lkr: parsed.fee };
+    } else {
+      const read = parseTierDrafts(tierDrafts);
+      const capRead = parseFeeCap(cap);
+      setTierErrors('errors' in read ? read.errors : undefined);
+      setCapError('error' in capRead ? capRead.error : undefined);
+      if ('errors' in read || 'error' in capRead) return;
+      body = { fee_mode: 'DISTANCE_TIERS', tiers: read.tiers, max_fee_lkr: capRead.cap };
     }
     setSaving(true);
     setError(null);
+    setTierErrors(undefined);
+    setCapError(undefined);
     try {
-      const updated = await settingsApi.setDeliveryFee(parsed.fee);
-      setCurrent(updated);
-      setValue(String(updated.fee_lkr));
-      toast.success(`Delivery fee is now ${formatMoney(updated.fee_lkr)}.`);
+      const updated = await settingsApi.setDeliveryFee(body);
+      show(updated);
+      toast.success(`Delivery fee is now ${feeText(updated)}.`);
     } catch (err) {
       const detail =
         err instanceof ApiError && err.code === 'VALIDATION_ERROR'
@@ -234,6 +295,8 @@ function DeliveryFeeSettingPanel() {
     }
   }
 
+  const liveCap = parseFeeCap(cap);
+
   return (
     <section className="panel" aria-label="Delivery fee">
       <h2 className="panel__title">Delivery fee</h2>
@@ -244,17 +307,42 @@ function DeliveryFeeSettingPanel() {
       ) : (
         <form className="form" onSubmit={save} noValidate>
           <p className="panel__body">
-            Currently {formatMoney(current.fee_lkr)} per order
+            Currently {feeText(current)}
             {current.updated_at ? ` (changed ${new Date(current.updated_at).toLocaleString()})` : ''}.
           </p>
-          <Field label="Delivery fee (LKR)" hint="Between 0 and 1,000, up to 2 decimals." error={error ?? undefined}>
-            <input
-              className="input"
-              inputMode="decimal"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          </Field>
+          <ModeChoice label="Customers pay" value={mode} options={FEE_MODE_OPTIONS} onChange={pickMode} />
+          {mode === 'FLAT' ? (
+            <Field label="Delivery fee (LKR)" hint="Between 0 and 1,000, up to 2 decimals." error={error ?? undefined}>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+            </Field>
+          ) : (
+            <>
+              <KmTierEditor
+                label="Fee for each km"
+                drafts={tierDrafts}
+                onChange={setTierDrafts}
+                errors={tierErrors}
+                capLkr={'cap' in liveCap ? liveCap.cap : null}
+              />
+              <Field
+                label="Maximum fee (LKR, optional)"
+                hint="Blank = no maximum. Up to 10,000. A longer trip never costs more than this."
+                error={capError}
+              >
+                <input className="input rp-num" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} />
+              </Field>
+              <p className="form__note">
+                Distance is the road distance from the store to the delivery address. Free deliveries still cost the
+                customer nothing.
+              </p>
+              {error ? <p className="field__error">{error}</p> : null}
+            </>
+          )}
           <p className="form__note">Orders already placed keep the fee they were placed with.</p>
           <div className="form__actions">
             <button type="submit" className="button" disabled={saving}>

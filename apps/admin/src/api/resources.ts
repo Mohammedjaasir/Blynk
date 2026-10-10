@@ -24,6 +24,7 @@ import type {
   Combo,
   ComboInput,
   CustomerProduct,
+  DeliveryFeeInput,
   DeliveryFeeSetting,
   CheckoutSettings,
   BirthdayOfferSetting,
@@ -308,10 +309,11 @@ export const products = {
 export const settings = {
   getDeliveryFee: () => apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee'),
 
-  setDeliveryFee: (feeLkr: number) =>
+  /** A number = only the flat fee (the old body); an object = any of fee_lkr / fee_mode / tiers / max_fee_lkr (owner, 2026-10-10). */
+  setDeliveryFee: (input: number | DeliveryFeeInput) =>
     apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee', {
       method: 'PATCH',
-      body: { fee_lkr: feeLkr },
+      body: typeof input === 'number' ? { fee_lkr: input } : { ...input },
     }),
 
   getCheckout: () => apiRequest<CheckoutSettings>('/admin/settings/checkout'),

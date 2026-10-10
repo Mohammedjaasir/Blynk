@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { db } from '../../database/connection.js';
+import type { DBConnection } from '../orders/order.repository.js';
 import { orderingClock } from '../../utils/time.js';
 import { DateTime } from 'luxon';
 import { STORE_TIMEZONE, displayHours, storeStatusAt } from '../../utils/store-hours.js';
@@ -9,28 +10,64 @@ import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
 import { RIDER_BATCHING_KEY, getBatchingRules, type BatchingRules } from '../riders/batching.js';
+import { kmTiersFrom, kmTiersSchema, type KmTier } from '../pricing/km-tiers.js';
 
 /**
  * Store-wide settings and the public store facts (GET /store).
  *
  * The delivery fee lives in system_configurations.delivery_fee
- * ({"fee_lkr": 100}, migration 015). Placing an order snapshots it into
- * orders.delivery_fee (order.repository getDeliveryFee), so changing it only
- * affects orders placed afterwards.
+ * ({"fee_lkr": 100}, migration 015; per-km tiers since 2026-10-10, see
+ * DELIVERY_FEE_MODES). Placing an order snapshots it into orders.delivery_fee
+ * (orders/delivery-fee.ts quoteDeliveryFee), so changing it only affects
+ * orders placed afterwards.
  */
 
 export const DELIVERY_FEE_KEY = 'delivery_fee';
-/** order.repository.ts getDeliveryFee falls back to the same value. */
+/** A missing or malformed fee falls back to this (deliveryFeeSettingFrom). */
 export const DEFAULT_DELIVERY_FEE_LKR = 100;
 
-export const updateDeliveryFeeSchema = z.object({
-  fee_lkr: z
-    .number({ required_error: 'fee_lkr is required', invalid_type_error: 'fee_lkr must be a number' })
-    .finite()
-    .min(0, 'The delivery fee cannot be negative')
-    .max(1000, 'The delivery fee can be at most LKR 1000')
-    .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'The delivery fee can have at most 2 decimals'),
-});
+/**
+ * Fee mode (owner, 2026-10-10): FLAT = everyone pays fee_lkr (the default,
+ * as before); DISTANCE_TIERS = the per-km tier table on the road distance
+ * hub -> delivery address (pricing/km-tiers.ts, orders/delivery-fee.ts),
+ * optionally capped at max_fee_lkr. Same 'delivery_fee' row:
+ * {"fee_lkr", "fee_mode", "tiers": [{"km", "lkr"}], "max_fee_lkr"}; a row
+ * without fee_mode is FLAT.
+ */
+export const DELIVERY_FEE_MODES = ['FLAT', 'DISTANCE_TIERS'] as const;
+export type DeliveryFeeMode = (typeof DELIVERY_FEE_MODES)[number];
+export const MAX_DELIVERY_FEE_CAP_LKR = 10_000;
+
+export interface DeliveryFeeSetting {
+  fee_lkr: number;
+  fee_mode: DeliveryFeeMode;
+  tiers: KmTier[];
+  max_fee_lkr: number | null;
+}
+
+/** An older client sends just {fee_lkr}; the mode, tiers and cap then stay as stored. */
+export const updateDeliveryFeeSchema = z
+  .object({
+    fee_lkr: z
+      .number({ required_error: 'fee_lkr is required', invalid_type_error: 'fee_lkr must be a number' })
+      .finite()
+      .min(0, 'The delivery fee cannot be negative')
+      .max(1000, 'The delivery fee can be at most LKR 1000')
+      .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'The delivery fee can have at most 2 decimals')
+      .optional(),
+    fee_mode: z.enum(DELIVERY_FEE_MODES, { errorMap: () => ({ message: 'fee_mode must be FLAT or DISTANCE_TIERS' }) }).optional(),
+    tiers: kmTiersSchema.optional(),
+    max_fee_lkr: z
+      .number({ invalid_type_error: 'The maximum fee must be a number' })
+      .finite()
+      .min(0, 'The maximum fee cannot be negative')
+      .max(MAX_DELIVERY_FEE_CAP_LKR, `The maximum fee can be at most LKR ${MAX_DELIVERY_FEE_CAP_LKR}`)
+      .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'The maximum fee can have at most 2 decimals')
+      .nullable()
+      .optional(),
+  })
+  .strict()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: 'fee_lkr is required', path: ['fee_lkr'] });
 export type UpdateDeliveryFeeInput = z.infer<typeof updateDeliveryFeeSchema>;
 
 /**
@@ -293,21 +330,52 @@ function feeFrom(value: unknown): number | null {
   return null;
 }
 
+/**
+ * The fee setting as checkout applies it (owner, 2026-10-10). A row without
+ * fee_mode, or with DISTANCE_TIERS but no valid tier table, is FLAT - a
+ * malformed table never prices an order.
+ */
+export function deliveryFeeSettingFrom(value: unknown): DeliveryFeeSetting {
+  const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const tiers = kmTiersFrom(v.tiers);
+  const cap = v.max_fee_lkr;
+  return {
+    fee_lkr: feeFrom(value) ?? DEFAULT_DELIVERY_FEE_LKR,
+    fee_mode: v.fee_mode === 'DISTANCE_TIERS' && tiers.length ? 'DISTANCE_TIERS' : 'FLAT',
+    tiers,
+    max_fee_lkr: typeof cap === 'number' && Number.isFinite(cap) && cap >= 0 ? cap : null,
+  };
+}
+
+/** The 'delivery_fee' row as applied, plus when it last changed (null = no row). */
+export async function readDeliveryFeeSetting(executor: DBConnection = db): Promise<DeliveryFeeSetting & { updated_at: Date | null }> {
+  const row = await executor
+    .selectFrom('system_configurations')
+    .select(['value', 'updated_at'])
+    .where('key', '=', DELIVERY_FEE_KEY)
+    .executeTakeFirst();
+  return { ...deliveryFeeSettingFrom(row?.value), updated_at: row?.updated_at ?? null };
+}
+
+/** Audit shape for a fee row (null fields when there was no row). */
+function feeAudit(value: unknown) {
+  if (!value) return { fee_lkr: null };
+  const s = deliveryFeeSettingFrom(value);
+  return { fee_lkr: feeFrom(value), fee_mode: s.fee_mode, tiers: s.tiers, max_fee_lkr: s.max_fee_lkr };
+}
+
 export class SettingsService {
-  async getDeliveryFee(): Promise<{ fee_lkr: number; updated_at: Date | null }> {
-    const row = await db
-      .selectFrom('system_configurations')
-      .select(['value', 'updated_at'])
-      .where('key', '=', DELIVERY_FEE_KEY)
-      .executeTakeFirst();
-    const fee = row ? feeFrom(row.value) : null;
-    // Same fallback as order placement, so what is shown is what is charged.
-    return { fee_lkr: fee ?? DEFAULT_DELIVERY_FEE_LKR, updated_at: fee === null ? null : row!.updated_at };
+  async getDeliveryFee(): Promise<DeliveryFeeSetting & { updated_at: Date | null }> {
+    // Same reader as order placement, so what is shown is what is charged.
+    return await readDeliveryFeeSetting();
   }
 
+  /**
+   * Audited (DELIVERY_FEE_UPDATED); only the fields sent change. Switching to
+   * DISTANCE_TIERS needs a tier table (sent now or already stored). Orders
+   * already placed keep the fee snapshotted on them.
+   */
   async setDeliveryFee(input: UpdateDeliveryFeeInput, actor: AuditActor) {
-    const fee = Math.round(input.fee_lkr * 100) / 100;
-    const value = JSON.stringify({ fee_lkr: fee });
     return await db.transaction().execute(async (trx) => {
       const before = await trx
         .selectFrom('system_configurations')
@@ -315,23 +383,35 @@ export class SettingsService {
         .where('key', '=', DELIVERY_FEE_KEY)
         .forUpdate()
         .executeTakeFirst();
+      const previous = deliveryFeeSettingFrom(before?.value);
+      const storedMode = (before?.value as { fee_mode?: unknown } | undefined)?.fee_mode;
+      const next: DeliveryFeeSetting = {
+        fee_lkr: input.fee_lkr !== undefined ? Math.round(input.fee_lkr * 100) / 100 : previous.fee_lkr,
+        fee_mode: input.fee_mode ?? (storedMode === 'DISTANCE_TIERS' ? 'DISTANCE_TIERS' : previous.fee_mode),
+        tiers: input.tiers ?? previous.tiers,
+        max_fee_lkr:
+          input.max_fee_lkr === undefined ? previous.max_fee_lkr : input.max_fee_lkr === null ? null : Math.round(input.max_fee_lkr * 100) / 100,
+      };
+      if (next.fee_mode === 'DISTANCE_TIERS' && !next.tiers.length) {
+        throw new z.ZodError([{ code: 'custom', path: ['tiers'], message: 'Add the km amounts before charging by distance' }]);
+      }
+      const value = JSON.stringify(next);
       const row = await trx
         .insertInto('system_configurations')
-        .values({ key: DELIVERY_FEE_KEY, value, description: 'Standard flat delivery fee in LKR' })
+        .values({ key: DELIVERY_FEE_KEY, value, description: 'Delivery fee: flat fee_lkr, or per-km tiers by road distance (fee_mode)' })
         .onConflict((oc) => oc.column('key').doUpdateSet({ value, updated_at: new Date() }))
         .returning(['updated_at'])
         .executeTakeFirstOrThrow();
 
-      const previous = before ? feeFrom(before.value) : null;
       await writeAudit(trx, actor, {
         action: 'DELIVERY_FEE_UPDATED',
         entityType: 'SYSTEM_CONFIGURATION',
         entityId: SETTINGS_ENTITY_ID,
-        oldValues: { key: DELIVERY_FEE_KEY, fee_lkr: previous },
-        newValues: { key: DELIVERY_FEE_KEY, fee_lkr: fee },
+        oldValues: { key: DELIVERY_FEE_KEY, ...feeAudit(before?.value) },
+        newValues: { key: DELIVERY_FEE_KEY, ...feeAudit(next) },
       });
-      logger.info({ previous, fee, actorId: actor.actorId }, 'Delivery fee changed');
-      return { fee_lkr: fee, updated_at: row.updated_at };
+      logger.info({ previous, next, actorId: actor.actorId }, 'Delivery fee changed');
+      return { ...next, updated_at: row.updated_at };
     });
   }
 
@@ -579,8 +659,13 @@ export class SettingsService {
     const status = storeStatusAt(schedule, now);
     const today = DateTime.fromJSDate(now).setZone(STORE_TIMEZONE).toISODate()!;
     const in30 = DateTime.fromJSDate(now).setZone(STORE_TIMEZONE).plus({ days: 30 }).toISODate()!;
+    const byDistance = fee.fee_mode === 'DISTANCE_TIERS';
     return {
-      delivery_fee_lkr: fee.fee_lkr,
+      // Per-km tiers (owner, 2026-10-10): the tier table is never public - the
+      // app gets the fee for the customer's address from checkout-info.
+      delivery_fee_lkr: byDistance ? null : fee.fee_lkr,
+      delivery_fee_mode: fee.fee_mode,
+      delivery_fee_by_distance: byDistance,
       hub_name: store?.name ?? null,
       // Today's hours, or the next open day's when today is closed.
       delivery_hours: { ...displayHours(schedule, now), timezone: STORE_TIMEZONE },

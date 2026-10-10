@@ -175,6 +175,11 @@ describe('Free deliveries for every customer', () => {
     expect(await info()).toEqual({
       delivery_fee_lkr: 0,
       standard_delivery_fee_lkr: FEE,
+      // Per-km tiers (owner, 2026-10-10): flat here, quoted for the default address.
+      delivery_fee_mode: 'FLAT',
+      delivery_distance_km: null,
+      delivery_distance_estimated: null,
+      delivery_fee_address_id: me.addressId,
       coupons_enabled: false,
       free_delivery: { enabled: true, count: 2, since: DEFAULT_SINCE, used: 0, remaining: 2, applies: true },
       // Migration 034 (owner, 2026-10-09): no date of birth saved, so no gift.

@@ -8,6 +8,7 @@ import '../UI/Widgets/Organisms/bottom_cart_container.dart';
 import '../UI/Widgets/Organisms/products_screen_grid.dart';
 import '../UI/Widgets/Organisms/products_screen_sub_category_list.dart';
 import '../Services/Providers/product.provider.dart';
+import '../Services/analytics/analytics.dart';
 import '../design/tokens.dart';
 import 'package:ecom/UI/Widgets/Atoms/entrance_fade.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_crossfade.dart';
@@ -44,6 +45,7 @@ class ProductsScreen extends StatefulWidget {
 
 class _ProductsScreenState extends State<ProductsScreen> {
   late String _activeSlug;
+  String? _listSentFor; // view_item_list once per category shown (owner, 2026-10-10)
 
   @override
   void initState() {
@@ -110,6 +112,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
         final offerCategory = _offerCategory(productProvider, titleSlug);
 
         final products = productProvider.productsFor(_activeSlug);
+        if (products.isNotEmpty && _listSentFor != _activeSlug) {
+          _listSentFor = _activeSlug;
+          Analytics.instance.viewItemList(
+              listId: _activeSlug.isEmpty ? 'all_products' : 'category_$_activeSlug', listName: title, products: products);
+        }
         final isLoading = productProvider.isLoadingProducts(_activeSlug);
         // Per category: only this category's own failed first load shows here.
         final failure = productProvider.productsFailureFor(_activeSlug);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../Services/Providers/address.provider.dart';
 import '../../../Services/Providers/auth.provider.dart';
 import '../../../Services/Providers/store_info.provider.dart';
 import '../../../design/tokens.dart';
@@ -36,7 +37,12 @@ class _BirthdayOfferBannerState extends State<BirthdayOfferBanner> {
     _askedSignedIn = signedIn;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<StoreInfoProvider?>()?.loadCheckoutInfo(signedIn: signedIn);
+      // The selected address too, so this ask joins (not replaces) the
+      // cart's ask for that address's fee (owner, 2026-10-10).
+      context.read<StoreInfoProvider?>()?.loadCheckoutInfo(
+            signedIn: signedIn,
+            addressId: context.read<AddressProvider?>()?.defaultAddress?.id,
+          );
     });
   }
 

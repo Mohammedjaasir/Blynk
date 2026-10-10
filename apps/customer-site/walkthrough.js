@@ -118,6 +118,8 @@
     const last = at === steps.length - 1;
     next.hidden = last;
     open.hidden = !last || onComputer;
+    // GTM event, see analytics.js (owner, 2026-10-10).
+    if (window.blynkTrack) window.blynkTrack('install_guide_step', { platform: kind, step_number: at + 1, step_total: steps.length, step_title: step.title, from_computer: onComputer });
   }
 
   // kind: 'ios' | 'android' | 'desktop'

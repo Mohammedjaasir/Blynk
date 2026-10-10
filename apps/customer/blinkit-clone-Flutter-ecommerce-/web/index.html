@@ -18,6 +18,36 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <!-- Google Tag Manager (owner, 2026-10-10). The container ID and the consent
+       default are filled in when the site is built (Dockerfile build arguments
+       GTM_ID and CONSENT_DEFAULT; docs/06-deployment/google-tag-manager-and-ads-setup.md).
+       With no GTM_ID the build deletes this block and the noscript one, so the
+       page makes no tracking request at all. Left unfilled (local runs) it does nothing. -->
+  <!-- GTM-HEAD-START -->
+  <script>
+    (function (w, d, id, consent) {
+      if (!/^GTM-[A-Z0-9]{4,12}$/.test(id)) return; // no container: no tracking
+      w.dataLayer = w.dataLayer || [];
+      function gtag() { w.dataLayer.push(arguments); }
+      // Google Consent Mode v2 defaults. A browser that asks not to be tracked
+      // (Global Privacy Control or Do Not Track) is always 'denied'.
+      var optOut = navigator.globalPrivacyControl === true || navigator.doNotTrack === '1' || w.doNotTrack === '1';
+      var state = consent === 'denied' || optOut ? 'denied' : 'granted';
+      gtag('consent', 'default', {
+        ad_storage: state, ad_user_data: state, ad_personalization: state, analytics_storage: state,
+        functionality_storage: 'granted', security_storage: 'granted'
+      });
+      w.dataLayer.push({ site: 'app', consent_state: state });
+      // The shop was added to the Home Screen.
+      w.addEventListener('appinstalled', function () { w.dataLayer.push({ event: 'pwa_installed' }); });
+      w.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+      var s = d.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtm.js?id=' + id;
+      d.head.appendChild(s);
+    })(window, document, '__GTM_ID__', '__CONSENT_DEFAULT__');
+  </script>
+  <!-- GTM-HEAD-END -->
   <meta name="description" content="Blynk - order groceries for delivery.">
 
   <!-- iOS meta tags & icons -->
@@ -52,6 +82,9 @@
   <script src="flutter.js" defer></script>
 </head>
 <body>
+  <!-- GTM-BODY-START -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=__GTM_ID__" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- GTM-BODY-END -->
   <!-- Install helper (owner, 2026-10-08): in a phone browser - never inside
        the installed app - point at exactly what to tap to add Blynk to the
        Home Screen. Continues the walkthrough on blynk.lk. Closable; stays

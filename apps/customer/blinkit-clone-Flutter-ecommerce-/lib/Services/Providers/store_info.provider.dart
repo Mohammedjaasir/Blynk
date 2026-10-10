@@ -154,8 +154,43 @@ class StoreInfoProvider extends ChangeNotifier {
     return raw is bool ? raw : true;
   }
 
+  bool _storeFeeByDistance = false;
+
+  /// Whether the delivery fee depends on how far the delivery address is
+  /// (per-km tiers set by Ops/Admin; owner, 2026-10-10): checkout-info's
+  /// `delivery_fee_mode` when known, else GET /store's
+  /// `delivery_fee_by_distance`. The app never knows the tiers, only the fee
+  /// the server worked out for an address ([checkoutDeliveryFee]).
+  bool get deliveryFeeByDistance => _checkoutFee?.byDistance ?? _storeFeeByDistance;
+
+  CheckoutDeliveryFee? _checkoutFee;
+
+  /// The server's fee for one address (checkout-info's `delivery_fee_lkr`
+  /// and friends; owner, 2026-10-10), or null when unknown, signed out or
+  /// the last ask failed.
+  CheckoutDeliveryFee? get checkoutFee => _checkoutFee;
+
+  /// The address the [checkoutFee] is for (`delivery_fee_address_id`).
+  String? get deliveryFeeAddressId => _checkoutFee?.addressId;
+
+  /// "~2.4 km" while the fee goes by distance and the server measured the
+  /// address; null otherwise (owner, 2026-10-10).
+  String? get deliveryDistanceLabel => _checkoutFee?.distanceLabel;
+
+  void _setCheckoutFee(CheckoutDeliveryFee? fee) {
+    if (_disposed || fee == _checkoutFee) return;
+    _checkoutFee = fee;
+    notifyListeners();
+  }
+
   FreeDeliveryOffer? _freeDelivery;
   Future<void>? _loadingCheckoutInfo;
+
+  /// The address the running checkout-info ask is for, and a counter that
+  /// lets a newer ask (another address, or a sign-out) make an older answer
+  /// be dropped instead of shown (owner, 2026-10-10).
+  String? _loadingCheckoutInfoFor;
+  int _checkoutInfoGeneration = 0;
 
   /// This customer's free deliveries, or null when unknown
   /// (signed out, not loaded yet, or the request failed).
@@ -207,29 +242,54 @@ class StoreInfoProvider extends ChangeNotifier {
   }
 
   /// The fee this customer's next order is estimated at: nothing while a
-  /// free delivery applies, else the store's [deliveryFee]. Advisory only;
-  /// the server decides again when the order is placed.
+  /// free delivery applies, else the server's fee for the selected address
+  /// from checkout-info ([checkoutFee]; it can depend on the distance since
+  /// owner, 2026-10-10), else the store's [deliveryFee]. Advisory only; the
+  /// server decides again when the order is placed.
   double get checkoutDeliveryFee =>
-      (_freeDelivery?.applies ?? false) ? 0 : _deliveryFee;
+      (_freeDelivery?.applies ?? false) ? 0 : (_checkoutFee?.fee ?? _deliveryFee);
 
   /// Asks `GET /orders/checkout-info` where this customer stands. Pass
   /// [signedIn] false to forget a previous customer's offer without asking.
-  /// Never throws; a failure leaves the offer unknown (the full fee shows).
-  Future<void> loadCheckoutInfo({required bool signedIn}) {
+  /// [addressId] is the selected delivery address: the fee is worked out for
+  /// it (`?address_id=`; owner, 2026-10-10). A call while one for the same
+  /// address is running joins it; one for another address starts afresh and
+  /// the older answer is dropped. Never throws; a failure leaves the offer
+  /// and the address's fee unknown (the store's full fee shows).
+  Future<void> loadCheckoutInfo({required bool signedIn, String? addressId}) {
     if (!signedIn) {
+      _checkoutInfoGeneration++;
+      _loadingCheckoutInfo = null;
+      _loadingCheckoutInfoFor = null;
       _setFreeDelivery(null);
       _setBirthdayOffer(null);
       _setRewards(null, null);
+      _setCheckoutFee(null);
       return Future.value();
     }
-    return _loadingCheckoutInfo ??=
-        _fetchCheckoutInfo().whenComplete(() => _loadingCheckoutInfo = null);
+    final running = _loadingCheckoutInfo;
+    if (running != null && _loadingCheckoutInfoFor == addressId) return running;
+    final generation = ++_checkoutInfoGeneration;
+    _loadingCheckoutInfoFor = addressId;
+    return _loadingCheckoutInfo = _fetchCheckoutInfo(addressId, generation).whenComplete(() {
+      if (generation != _checkoutInfoGeneration) return;
+      _loadingCheckoutInfo = null;
+      _loadingCheckoutInfoFor = null;
+    });
   }
 
-  Future<void> _fetchCheckoutInfo() async {
+  /// The checkout-info path, with `?address_id=` when one is selected.
+  static String checkoutInfoUrl(String? addressId) => addressId == null || addressId.isEmpty
+      ? '/orders/checkout-info'
+      : '/orders/checkout-info?address_id=${Uri.encodeQueryComponent(addressId)}';
+
+  Future<void> _fetchCheckoutInfo(String? addressId, int generation) async {
     try {
-      final response = await _request('/orders/checkout-info');
+      final response = await _request(checkoutInfoUrl(addressId));
+      // A newer ask (another address, or a sign-out) owns the answer now.
+      if (generation != _checkoutInfoGeneration) return;
       final data = response is Map ? response['data'] : null;
+      _setCheckoutFee(CheckoutDeliveryFee.tryParse(data));
       _setFreeDelivery(
           FreeDeliveryOffer.tryParse(data is Map ? data['free_delivery'] : null));
       if (data is Map && data['coupons_enabled'] is bool) {
@@ -241,9 +301,11 @@ class StoreInfoProvider extends ChangeNotifier {
         CheckoutPoints.tryParse(data is Map ? data['points'] : null),
       );
     } catch (_) {
+      if (generation != _checkoutInfoGeneration) return;
       _setFreeDelivery(null);
       _setBirthdayOffer(null);
       _setRewards(null, null);
+      _setCheckoutFee(null);
     }
   }
 
@@ -262,6 +324,12 @@ class StoreInfoProvider extends ChangeNotifier {
   void _setDoctorsRequireSignIn(bool required) {
     if (_disposed || required == _doctorsRequireSignIn) return;
     _doctorsRequireSignIn = required;
+    notifyListeners();
+  }
+
+  void _setStoreFeeByDistance(bool byDistance) {
+    if (_disposed || byDistance == _storeFeeByDistance) return;
+    _storeFeeByDistance = byDistance;
     notifyListeners();
   }
 
@@ -321,6 +389,11 @@ class StoreInfoProvider extends ChangeNotifier {
         _setShowOfferSavings(data['show_offer_savings'] == true);
         // The doctors sign-in switch (owner, 2026-10-10): on unless a real false.
         _setDoctorsRequireSignIn(parseDoctorsRequireSignIn(data));
+        // Fee by distance (owner, 2026-10-10): `delivery_fee_lkr` is then
+        // null, so the cached/default fee stays as the fallback until
+        // checkout-info answers for an address.
+        _setStoreFeeByDistance(
+            data['delivery_fee_by_distance'] == true || data['delivery_fee_mode'] == 'DISTANCE_TIERS');
       }
       final fee = parseFee(data is Map ? data['delivery_fee_lkr'] : null);
       final feeNotified = fee != null && _set(fee);
@@ -449,6 +522,108 @@ class FreeDeliveryOffer {
   @override
   int get hashCode => Object.hash(count, remaining, applies, since);
 }
+
+/// The delivery fee the server worked out for one address, from
+/// `GET /orders/checkout-info` (owner, 2026-10-10). With per-km tiers the fee
+/// depends on the road distance from the store to that address; the tiers
+/// themselves are never sent to the app, so nothing here prices a km.
+@immutable
+class CheckoutDeliveryFee {
+  const CheckoutDeliveryFee({
+    required this.fee,
+    this.standardFee,
+    this.byDistance = false,
+    this.distanceKm,
+    this.distanceEstimated = false,
+    this.addressId,
+  });
+
+  /// What the order would be charged (`delivery_fee_lkr`; 0 while a free
+  /// delivery applies).
+  final double fee;
+
+  /// The fee before any free delivery (`standard_delivery_fee_lkr`).
+  final double? standardFee;
+
+  /// `delivery_fee_mode` is 'DISTANCE_TIERS'.
+  final bool byDistance;
+
+  /// Road km from the store to the address (`delivery_distance_km`); null
+  /// for a flat fee or when there is no address.
+  final double? distanceKm;
+
+  /// The km is a straight-line estimate (`delivery_distance_estimated`).
+  final bool distanceEstimated;
+
+  /// The address the fee is for (`delivery_fee_address_id`); null = none.
+  final String? addressId;
+
+  /// A checkout fee may be above [StoreInfoProvider.maxDeliveryFee] (a
+  /// far address, tiers adding up); this only rejects nonsense.
+  static const double maxFee = 100000;
+
+  /// Null when `delivery_fee_lkr` is missing or not a sane amount.
+  static CheckoutDeliveryFee? tryParse(Object? data) {
+    if (data is! Map) return null;
+    final fee = _amount(data['delivery_fee_lkr']);
+    if (fee == null) return null;
+    final km = _amount(data['delivery_distance_km']);
+    final addressId = data['delivery_fee_address_id'];
+    return CheckoutDeliveryFee(
+      fee: fee,
+      standardFee: _amount(data['standard_delivery_fee_lkr']),
+      byDistance: data['delivery_fee_mode'] == 'DISTANCE_TIERS',
+      distanceKm: km != null && km < 1000 ? km : null,
+      distanceEstimated: data['delivery_distance_estimated'] == true,
+      addressId: addressId is String && addressId.isNotEmpty ? addressId : null,
+    );
+  }
+
+  static double? _amount(Object? raw) {
+    final double? value = switch (raw) {
+      num n => n.toDouble(),
+      String s => double.tryParse(s.trim()),
+      _ => null,
+    };
+    if (value == null || !value.isFinite || value < 0 || value > maxFee) return null;
+    return value;
+  }
+
+  /// "~2.4 km" (a tilde whether measured or estimated: it is the road
+  /// distance, roughly) while the fee goes by distance; null otherwise.
+  String? get distanceLabel {
+    final km = distanceKm;
+    if (!byDistance || km == null) return null;
+    return formatApproxKm(km);
+  }
+
+  /// "~2.4 km", "~3 km"; anything under 0.1 km reads "~0.1 km".
+  static String formatApproxKm(double km) {
+    final tenths = (km * 10).round();
+    final shown = tenths < 1 ? 1 : tenths;
+    final text = shown % 10 == 0 ? '${shown ~/ 10}' : (shown / 10).toStringAsFixed(1);
+    return '~$text km';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is CheckoutDeliveryFee &&
+      other.fee == fee &&
+      other.standardFee == standardFee &&
+      other.byDistance == byDistance &&
+      other.distanceKm == distanceKm &&
+      other.distanceEstimated == distanceEstimated &&
+      other.addressId == addressId;
+
+  @override
+  int get hashCode => Object.hash(fee, standardFee, byDistance, distanceKm, distanceEstimated, addressId);
+}
+
+/// "~2.4 km" under the Delivery fee while it goes by distance (owner,
+/// 2026-10-10), rebuilding when it changes; null otherwise or where no
+/// [StoreInfoProvider] is in the tree.
+String? watchDeliveryDistanceLabel(BuildContext context) =>
+    context.watch<StoreInfoProvider?>()?.deliveryDistanceLabel;
 
 /// This customer's birthday gift while it applies to their next order
 /// (owner, 2026-10-09), rebuilding when it changes; null otherwise, signed

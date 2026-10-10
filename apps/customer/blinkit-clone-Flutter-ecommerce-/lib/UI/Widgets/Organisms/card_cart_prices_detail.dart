@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../Services/Providers/address.provider.dart';
 import '../../../Services/Providers/auth.provider.dart';
 import '../../../Services/Providers/cart.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
@@ -13,14 +14,16 @@ import '../Atoms/money_text.dart';
 import '../../../design/tokens.dart';
 
 /// The estimate the customer is shown before the order exists: the cart's own
-/// [CartProvider.subtotal] plus the store's flat delivery fee.
+/// [CartProvider.subtotal] plus the delivery fee.
 ///
 /// **This is the one place that combination is expressed.** It was written out
 /// at two call sites (this card and the cart's pinned checkout bar), which is
 /// how a summary and a bar end up disagreeing. Nothing else here is derived:
 /// the subtotal is the provider's, the fee is the live one from `GET /store`
-/// ([watchCheckoutDeliveryFee]: `system_configurations.delivery_fee`, or 0
-/// while this customer has a free delivery left), and
+/// ([watchCheckoutDeliveryFee]: checkout-info's fee for the selected
+/// address, which can go by distance (owner, 2026-10-10), else
+/// `system_configurations.delivery_fee`, or 0 while this customer has a free
+/// delivery left), and
 /// once an order exists the backend's own `totalAmount` is authoritative — see
 /// `OrderProvider.placeOrder`.
 double cartEstimateTotal(CartProvider cart, double deliveryFee, {double discount = 0}) {
@@ -28,7 +31,8 @@ double cartEstimateTotal(CartProvider cart, double deliveryFee, {double discount
   return total < 0 ? 0 : total;
 }
 
-/// Order Summary: subtotal from CartProvider plus the flat delivery fee.
+/// Order Summary: subtotal from CartProvider plus the delivery fee for the
+/// selected address ("~2.4 km" beside it while the fee goes by distance).
 ///
 /// These are the prices the customer saw while shopping. The backend
 /// re-prices the order and computes the real total when it's placed (see
@@ -62,20 +66,30 @@ class CartPriceDetailWidget extends StatefulWidget {
 }
 
 class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
-  @override
-  void initState() {
-    super.initState();
+  bool _asked = false;
+  String? _askedAddressId;
+
+  /// Asks checkout-info on mount and again whenever the selected delivery
+  /// address changes: the fee can depend on how far it is (owner,
+  /// 2026-10-10). A changed address the fee is already for needs no ask.
+  void _askIfNeeded(String? addressId) {
+    if (_asked && addressId == _askedAddressId) return;
+    final first = !_asked;
+    _asked = true;
+    _askedAddressId = addressId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final store = context.read<StoreInfoProvider?>();
       final auth = context.read<AuthProvider?>();
       if (store == null || auth == null) return;
-      store.loadCheckoutInfo(signedIn: auth.isAuthenticated);
+      if (!first && addressId != null && store.deliveryFeeAddressId == addressId) return;
+      store.loadCheckoutInfo(signedIn: auth.isAuthenticated, addressId: addressId);
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    _askIfNeeded(context.select<AddressProvider?, String?>((a) => a?.defaultAddress?.id));
     final footer = widget.footer;
     final cart = context.watch<CartProvider>();
     final subtotal = cart.subtotal;
@@ -160,6 +174,9 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
             _SummaryRow(
               label: 'Delivery fee',
               amount: deliveryFee,
+              // "~2.4 km" while the fee goes by distance (owner, 2026-10-10).
+              detail: watchDeliveryDistanceLabel(context),
+              detailKey: const Key('summary-delivery-distance'),
             ),
           if (birthdayGift > 0) ...[
             const SizedBox(height: BlynkSpace.s8),
@@ -275,20 +292,35 @@ class _DiscountRow extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.label, required this.amount});
+  const _SummaryRow({required this.label, required this.amount, this.detail, this.detailKey});
 
   final String label;
   final double amount;
 
+  /// A small caption after the label (the "~2.4 km" of a fee by distance).
+  final String? detail;
+  final Key? detailKey;
+
   @override
   Widget build(BuildContext context) {
+    final detail = this.detail;
+    final labelText = Text(
+      label,
+      style: BlynkText.body.copyWith(color: BlynkColors.ink2),
+    );
     return Row(
       children: [
         Expanded(
-          child: Text(
-            label,
-            style: BlynkText.body.copyWith(color: BlynkColors.ink2),
-          ),
+          child: detail == null
+              ? labelText
+              : Wrap(
+                  spacing: BlynkSpace.s4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    labelText,
+                    Text(detail, key: detailKey, style: BlynkText.caption.copyWith(color: BlynkColors.ink2)),
+                  ],
+                ),
         ),
         MoneyText(amount, style: BlynkType.price),
       ],

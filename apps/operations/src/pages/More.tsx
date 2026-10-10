@@ -1,12 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { riderApplications, settings } from '../api/resources';
-import type { CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting, RiderTripsSetting } from '../api/types';
+import type {
+  CheckoutSettings,
+  DeliveryFeeInput,
+  DeliveryFeeMode,
+  DeliveryFeeSetting,
+  RiderCommissionSetting,
+  RiderTripsSetting,
+} from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
+import { KmTierEditor, TierModeChoice } from '../components/KmTierEditor';
 import { ConfirmDialog, Spinner } from '../components/ui';
 import { catalogErrorMessage, formatColomboDate, parseDeliveryFee, parseFreeDeliveryCount } from '../lib/catalog';
 import { formatDateTime } from '../lib/inventory';
+import { parseMaxFee, parseTierRows, tierAmountText, tiersSummary, tiersToRows } from '../lib/kmTiers';
 import { formatPercent, parseCommissionPercent } from '../lib/riderPay';
 import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
 
@@ -179,40 +188,92 @@ export function More() {
 }
 
 /** Store-wide delivery fee. New orders use the saved value; placed orders
- * keep theirs (the server snapshots it on each order). */
+ * keep theirs (the server snapshots it on each order).
+ *
+ * Owner, 2026-10-10: the fee is either the same for every order (FLAT) or
+ * worked out by distance (DISTANCE_TIERS): a per-km tier table on the road
+ * distance from the store to the delivery address - every started km
+ * counts, the last km's amount repeats - with an optional maximum. */
+const FEE_MODES: ReadonlyArray<{ id: DeliveryFeeMode; text: string }> = [
+  { id: 'FLAT', text: 'Same fee for every order' },
+  { id: 'DISTANCE_TIERS', text: 'By distance (per km)' },
+];
+
 function DeliveryFeeCard() {
   const [current, setCurrent] = useState<DeliveryFeeSetting | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [mode, setMode] = useState<DeliveryFeeMode>('FLAT');
   const [value, setValue] = useState('');
+  const [rows, setRows] = useState<string[]>([]);
+  const [cap, setCap] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [rowErrors, setRowErrors] = useState<(string | undefined)[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  function show(fee: DeliveryFeeSetting) {
+    setCurrent(fee);
+    setMode(fee.fee_mode ?? 'FLAT');
+    setValue(String(fee.fee_lkr));
+    setRows(tiersToRows(fee.tiers));
+    setCap(typeof fee.max_fee_lkr === 'number' ? String(Number(fee.max_fee_lkr.toFixed(2))) : '');
+  }
 
   useEffect(() => {
     settings.deliveryFee
       .get()
-      .then((fee) => {
-        setCurrent(fee);
-        setValue(String(fee.fee_lkr));
-      })
+      .then(show)
       .catch((err) => setLoadError(catalogErrorMessage(err)));
   }, []);
+
+  function pickMode(next: DeliveryFeeMode) {
+    setMode(next);
+    setError(null);
+    setRowErrors([]);
+    setNotice(null);
+    // No tiers stored yet: start km 1 at the current flat fee (owner, 2026-10-10).
+    if (next === 'DISTANCE_TIERS' && rows.length === 0) {
+      setRows([value.trim() || (current ? String(current.fee_lkr) : '')]);
+    }
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
     setNotice(null);
-    const parsed = parseDeliveryFee(value);
-    if ('error' in parsed) {
-      setError(parsed.error);
-      return;
+    let body: DeliveryFeeInput;
+    if (mode === 'FLAT') {
+      const parsed = parseDeliveryFee(value);
+      if ('error' in parsed) {
+        setError(parsed.error);
+        return;
+      }
+      body = { fee_mode: 'FLAT', fee_lkr: parsed.value };
+    } else {
+      const parsed = parseTierRows(rows);
+      if ('error' in parsed) {
+        setRowErrors(parsed.rowErrors);
+        setError(parsed.error);
+        return;
+      }
+      const max = parseMaxFee(cap);
+      if ('error' in max) {
+        setRowErrors([]);
+        setError(`Maximum fee: ${max.error}`);
+        return;
+      }
+      body = { fee_mode: 'DISTANCE_TIERS', tiers: parsed.tiers, max_fee_lkr: max.value };
     }
     setError(null);
+    setRowErrors([]);
     setSaving(true);
     try {
-      const saved = await settings.deliveryFee.update(parsed.value);
-      setCurrent(saved);
-      setValue(String(saved.fee_lkr));
-      setNotice(`Delivery fee saved: LKR ${Number(saved.fee_lkr).toFixed(2)}.`);
+      const saved = await settings.deliveryFee.update(body);
+      show(saved);
+      setNotice(
+        (saved.fee_mode ?? 'FLAT') === 'DISTANCE_TIERS'
+          ? `Delivery fee saved: by distance, ${feeTiersText(saved)}.`
+          : `Delivery fee saved: LKR ${Number(saved.fee_lkr).toFixed(2)}.`
+      );
     } catch (err) {
       setError(catalogErrorMessage(err));
     } finally {
@@ -220,43 +281,111 @@ function DeliveryFeeCard() {
     }
   }
 
+  const loading = !current && !loadError;
+  const parsedCap = parseMaxFee(cap);
+  const capValue = 'value' in parsedCap ? parsedCap.value : null;
+  const currentByDistance = (current?.fee_mode ?? 'FLAT') === 'DISTANCE_TIERS';
+
   return (
     <section className="card" aria-labelledby="delivery-fee-title">
       <h2 className="section-label" id="delivery-fee-title">
         Delivery fee
       </h2>
       {current ? (
-        <p className="card__row">
-          <span className="card__label">Current fee</span>
-          <span className="card__value mono">LKR {Number(current.fee_lkr).toFixed(2)}</span>
-        </p>
+        <>
+          <p className="card__row">
+            <span className="card__label">Current fee</span>
+            <span className="card__value mono">
+              {currentByDistance ? 'By distance' : `LKR ${Number(current.fee_lkr).toFixed(2)}`}
+            </span>
+          </p>
+          {currentByDistance ? (
+            <p className="quiet" data-testid="fee-tiers-now">
+              {feeTiersText(current)}
+            </p>
+          ) : null}
+        </>
       ) : loadError ? (
         <p className="field__error">{loadError}</p>
       ) : (
         <Spinner label="Loading delivery fee" />
       )}
       {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}
-      <form className="fee-form" onSubmit={save} noValidate>
-        <label className="field">
-          <span className="field__label">New fee (LKR)</span>
-          <input
-            className="input"
-            inputMode="decimal"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            aria-invalid={error ? true : undefined}
-            disabled={!current && !loadError}
+      <form className="form" onSubmit={save} noValidate>
+        <div className="field">
+          <TierModeChoice<DeliveryFeeMode>
+            label="How the fee is worked out"
+            options={FEE_MODES}
+            value={mode}
+            onPick={pickMode}
+            disabled={loading}
           />
-        </label>
-        <button type="submit" className="button" disabled={saving || (!current && !loadError)}>
-          {saving ? <Spinner label="Saving" /> : 'Save'}
-        </button>
+          <span className="field__hint">
+            {mode === 'FLAT'
+              ? 'Every order pays the same fee.'
+              : 'Worked out from the road distance, store to the delivery address. Free deliveries still apply.'}
+          </span>
+        </div>
+        {mode === 'FLAT' ? (
+          <div className="fee-form">
+            <label className="field">
+              <span className="field__label">New fee (LKR)</span>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                aria-invalid={error ? true : undefined}
+                disabled={loading}
+              />
+            </label>
+            <button type="submit" className="button" disabled={saving || loading}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </div>
+        ) : (
+          <>
+            <KmTierEditor
+              label="Price per km"
+              rows={rows}
+              onChange={(next) => {
+                setRows(next);
+                setRowErrors([]);
+              }}
+              rowErrors={rowErrors}
+              cap={capValue}
+              disabled={loading}
+            />
+            <div className="field">
+              <label className="field">
+                <span className="field__label">Maximum fee (LKR, optional)</span>
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  value={cap}
+                  onChange={(e) => setCap(e.target.value)}
+                  disabled={loading}
+                />
+              </label>
+              <span className="field__hint">Blank = no maximum. A long trip never costs the customer more than this.</span>
+            </div>
+            <button type="submit" className="button" disabled={saving || loading}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </>
+        )}
       </form>
       {error ? <p className="field__error" role="alert">{error}</p> : null}
       {notice ? <p className="quiet quiet--ok" role="status">{notice}</p> : null}
       <p className="page__note">Orders already placed keep the fee they were placed with.</p>
     </section>
   );
+}
+
+/** "km 1 LKR 100, km 2 LKR 60, km 3+ LKR 50 · max LKR 250" for a by-distance fee. */
+function feeTiersText(fee: DeliveryFeeSetting): string {
+  const text = tiersSummary(fee.tiers ?? []);
+  return typeof fee.max_fee_lkr === 'number' ? `${text} · max LKR ${tierAmountText(fee.max_fee_lkr)}` : text;
 }
 
 /** Coupon codes at checkout, and free deliveries for every customer -

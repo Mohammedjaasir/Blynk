@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:provider/provider.dart';
 
 import '../../../Models/promotion_model.dart';
+import '../../../Services/analytics/analytics.dart';
 import '../../../Services/Providers/product.provider.dart';
 import '../../../app_responsive.dart';
 import '../../../design/contrast.dart';
@@ -563,6 +564,7 @@ class _PromoSlide extends StatelessWidget {
   /// Reuses the app's existing routes. A promotion with no usable
   /// destination has no button at all, so nothing invents a screen.
   void _onCtaPressed(BuildContext context) {
+    Analytics.instance.selectPromotion(promotion); // owner, 2026-10-10
     switch (promotion.ctaDestinationType) {
       case 'CATEGORY':
         Navigator.of(context)

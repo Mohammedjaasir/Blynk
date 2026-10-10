@@ -271,6 +271,124 @@ describe('delivery fee setting', () => {
   });
 });
 
+describe('delivery fee by distance - per-km tiers (owner, 2026-10-10)', () => {
+  /** A stateful fake of GET/PATCH /admin/settings/delivery-fee with the new shape. */
+  function feeApi(initial: Record<string, unknown> = {}) {
+    let state: Record<string, any> = { fee_lkr: 150, fee_mode: 'FLAT', tiers: [], max_fee_lkr: null, updated_at: null, ...initial };
+    return mockApi((c) => {
+      if (c.method === 'GET' && c.path === '/admin/settings/delivery-fee') return { data: state };
+      if (c.method === 'PATCH' && c.path === '/admin/settings/delivery-fee') {
+        state = { ...state, ...c.body, updated_at: '2026-10-10T05:00:00.000Z' };
+        return { data: state };
+      }
+    });
+  }
+
+  it('switches to "By distance (per km)", prefills km 1 with the flat fee, shows live examples and saves tiers with a cap', async () => {
+    const user = userEvent.setup();
+    const api = feeApi();
+    renderPage(<Settings />);
+    const panel = await screen.findByRole('region', { name: 'Delivery fee' });
+    await within(panel).findByLabelText(/Delivery fee \(LKR\)/);
+    expect(within(panel).getByRole('button', { name: 'Same fee for every order' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(within(panel).getByRole('button', { name: 'By distance (per km)' }));
+    expect(within(panel).queryByLabelText(/Delivery fee \(LKR\)/)).toBeNull();
+    const editor = within(panel).getByRole('group', { name: 'Fee for each km' });
+    expect(within(editor).getByLabelText('km 1 (LKR)')).toHaveValue('150');
+    expect(within(editor).getByRole('button', { name: 'Remove last km' })).toBeDisabled();
+    expect(editor).toHaveTextContent('Every started km counts: 2.3 km = km 1 + km 2 + km 3');
+    expect(within(editor).getByTestId('km-tier-examples')).toHaveTextContent('3 km = LKR 150 + 150 + 150 = LKR 450');
+
+    const km1 = within(editor).getByLabelText('km 1 (LKR)');
+    await user.clear(km1);
+    await user.type(km1, '100');
+    await user.click(within(editor).getByRole('button', { name: '+ Add km' }));
+    // A new km starts at the last row's amount.
+    expect(within(editor).getByLabelText('km 2 (LKR)')).toHaveValue('100');
+    await user.clear(within(editor).getByLabelText('km 2 (LKR)'));
+    await user.type(within(editor).getByLabelText('km 2 (LKR)'), '60');
+    await user.click(within(editor).getByRole('button', { name: '+ Add km' }));
+    await user.clear(within(editor).getByLabelText('km 3 (LKR)'));
+    await user.type(within(editor).getByLabelText('km 3 (LKR)'), '50');
+
+    const examples = within(editor).getByTestId('km-tier-examples');
+    expect(examples).toHaveTextContent('1 km = LKR 100');
+    expect(examples).toHaveTextContent('3 km = LKR 100 + 60 + 50 = LKR 210');
+    expect(examples).toHaveTextContent('5 km = LKR 100 + 60 + 50 + 50 + 50 = LKR 310');
+
+    const cap = within(panel).getByLabelText(/Maximum fee/);
+    await user.type(cap, '250');
+    expect(examples).toHaveTextContent('5 km = LKR 100 + 60 + 50 + 50 + 50 = LKR 310, capped at LKR 250');
+
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/delivery-fee')[0]?.body).toEqual({
+        fee_mode: 'DISTANCE_TIERS',
+        tiers: [
+          { km: 1, lkr: 100 },
+          { km: 2, lkr: 60 },
+          { km: 3, lkr: 50 },
+        ],
+        max_fee_lkr: 250,
+      })
+    );
+    expect(
+      await within(panel).findByText(/Currently by distance: km 1 LKR 100, km 2 LKR 60, km 3\+ LKR 50, at most LKR 250/)
+    ).toBeInTheDocument();
+  });
+
+  it('loads stored tiers, checks amounts and the cap client side, and goes back to one fee for every order', async () => {
+    const user = userEvent.setup();
+    const api = feeApi({
+      fee_mode: 'DISTANCE_TIERS',
+      tiers: [
+        { km: 1, lkr: 100 },
+        { km: 2, lkr: 60 },
+      ],
+      max_fee_lkr: null,
+    });
+    renderPage(<Settings />);
+    const panel = await screen.findByRole('region', { name: 'Delivery fee' });
+    const editor = await within(panel).findByRole('group', { name: 'Fee for each km' });
+    expect(panel).toHaveTextContent('Currently by distance: km 1 LKR 100, km 2+ LKR 60');
+    expect(within(panel).getByRole('button', { name: 'By distance (per km)' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(editor).getByLabelText('km 2 (LKR)')).toHaveValue('60');
+    expect(within(panel).getByLabelText(/Maximum fee/)).toHaveValue('');
+
+    await user.clear(within(editor).getByLabelText('km 2 (LKR)'));
+    await user.type(within(editor).getByLabelText('km 2 (LKR)'), '1500');
+    await user.type(within(panel).getByLabelText(/Maximum fee/), '20000');
+    expect(within(editor).getByTestId('km-tier-examples')).toHaveTextContent('Enter an amount for every km to see examples.');
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    expect(within(editor).getByText('km 2: At most LKR 1,000 per km.')).toBeInTheDocument();
+    expect(within(panel).getByText('The maximum fee must be LKR 10,000 or less.')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/settings/delivery-fee')).toHaveLength(0);
+
+    // Remove the bad km; blank cap = no maximum.
+    await user.click(within(editor).getByRole('button', { name: 'Remove last km' }));
+    await user.clear(within(panel).getByLabelText(/Maximum fee/));
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/delivery-fee')[0]?.body).toEqual({
+        fee_mode: 'DISTANCE_TIERS',
+        tiers: [{ km: 1, lkr: 100 }],
+        max_fee_lkr: null,
+      })
+    );
+
+    // Back to the flat fee: fee_mode FLAT with fee_lkr.
+    await user.click(within(panel).getByRole('button', { name: 'Same fee for every order' }));
+    const input = within(panel).getByLabelText(/Delivery fee \(LKR\)/);
+    expect(input).toHaveValue('150');
+    await user.clear(input);
+    await user.type(input, '175');
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/delivery-fee')[1]?.body).toEqual({ fee_mode: 'FLAT', fee_lkr: 175 }));
+    expect(await within(panel).findByText(/Currently LKR 175 per order/)).toBeInTheDocument();
+  });
+});
+
 // 9 Oct 2026 Colombo midnight, the backend default (owner, 2026-10-09).
 const SINCE = '2026-10-08T18:30:00.000Z';
 

@@ -11,6 +11,10 @@ import {
   orderItemParamsSchema,
 } from './order.schema.js';
 import { validateCouponSchema } from '../coupons/coupon.schema.js';
+import { z } from 'zod';
+
+/** GET /orders/checkout-info?address_id= (owner, 2026-10-10). */
+const checkoutInfoQuerySchema = z.object({ address_id: z.string().uuid('address_id must be a valid UUID').optional() });
 import { availableSlots } from '../configuration/store-schedule.js';
 
 export class OrderController {
@@ -49,7 +53,9 @@ export class OrderController {
 
   async getCheckoutInfo(req: Request, res: Response, next: NextFunction) {
     try {
-      res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id) });
+      // Per-km tiers (owner, 2026-10-10): the fee for the cart's chosen address.
+      const { address_id } = checkoutInfoQuerySchema.parse(req.query);
+      res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id, address_id) });
     } catch (err) {
       next(err);
     }

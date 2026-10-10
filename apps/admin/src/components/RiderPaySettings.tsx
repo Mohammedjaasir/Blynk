@@ -5,6 +5,7 @@ import { errorMessage } from '../lib/apiErrors';
 import { formatMoney } from '../lib/orders';
 import {
   BOOST_MODE_LABEL,
+  DISTANCE_MODE_OPTIONS,
   MAX_DAILY_TIERS,
   MAX_PAY_LKR,
   MAX_PEAK_WINDOWS,
@@ -15,6 +16,7 @@ import {
   boostText,
   colomboTime,
   describePay,
+  linearTierDrafts,
   modelDraftFrom,
   modelDraftToInput,
   numberText,
@@ -26,6 +28,7 @@ import {
   type PayDraftErrors,
   type RainAutoOff,
 } from '../lib/riderPay';
+import { KmTierEditor, ModeChoice } from './KmTierEditor';
 import { Switch } from './Switch';
 import { Field, Spinner, useToast } from './ui';
 import './riderDocuments.css';
@@ -38,8 +41,8 @@ import './riderPay.css';
  * - Rain boost: the big switch, +LKR or +% per delivery, auto-off after
  *   1 / 2 / 3 hours or until turned off (PATCH .../rider-pay/rain-boost).
  * - Store default pay: % of the delivery fee, fixed LKR per delivery or
- *   distance (base + LKR per km), with an optional minimum per delivery
- *   (PATCH .../rider-pay/model). The % here IS the old default commission -
+ *   distance (base + LKR per km, or per-km tiers - owner, 2026-10-10), with
+ *   an optional minimum per delivery (PATCH .../rider-pay/model). The % here IS the old default commission -
  *   the separate "Rider commission" card is gone so there is one % control.
  * - Bonus rules: company riders too?, peak boost windows, daily targets (up
  *   to 5 tiers) and long distance (PATCH .../rider-pay/bonuses, one section
@@ -310,14 +313,40 @@ function DefaultModelBlock({ initial, onSaved }: { initial: RiderPaySettingsData
         </Field>
       ) : null}
       {draft.model === 'DISTANCE' ? (
-        <div className="rp-inline">
-          <Field label="Base LKR per delivery" error={errors.base}>
-            <input className="input rp-num" inputMode="decimal" value={draft.base} onChange={(e) => set({ base: e.target.value })} />
-          </Field>
-          <Field label="LKR per km" hint="Road distance, store to drop-off." error={errors.perKm}>
-            <input className="input rp-num" inputMode="decimal" value={draft.perKm} onChange={(e) => set({ perKm: e.target.value })} />
-          </Field>
-        </div>
+        <>
+          {/* Base + per km, or per-km tiers (owner, 2026-10-10). */}
+          <ModeChoice
+            label="Distance pay"
+            value={draft.distanceMode ?? 'LINEAR'}
+            options={DISTANCE_MODE_OPTIONS}
+            onChange={(mode) =>
+              set({
+                distanceMode: mode,
+                tiers: draft.tiers?.some((t) => t.trim() !== '') ? draft.tiers : linearTierDrafts(draft.base, draft.perKm),
+              })
+            }
+          />
+          {draft.distanceMode === 'TIERS' ? (
+            <>
+              <KmTierEditor
+                label="Pay for each km"
+                drafts={draft.tiers ?? ['']}
+                onChange={(tiers) => set({ tiers })}
+                errors={errors.tiers}
+              />
+              <p className="form__note">Road distance, store to drop-off. The minimum below still applies.</p>
+            </>
+          ) : (
+            <div className="rp-inline">
+              <Field label="Base LKR per delivery" error={errors.base}>
+                <input className="input rp-num" inputMode="decimal" value={draft.base} onChange={(e) => set({ base: e.target.value })} />
+              </Field>
+              <Field label="LKR per km" hint="Road distance, store to drop-off." error={errors.perKm}>
+                <input className="input rp-num" inputMode="decimal" value={draft.perKm} onChange={(e) => set({ perKm: e.target.value })} />
+              </Field>
+            </div>
+          )}
+        </>
       ) : null}
       <Field label="Minimum per delivery (LKR, optional)" hint="Blank = no minimum." error={errors.min}>
         <input className="input rp-num" inputMode="decimal" value={draft.min} onChange={(e) => set({ min: e.target.value })} />

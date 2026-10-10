@@ -12,6 +12,7 @@ import {
 import type { DBConnection } from '../orders/order.repository.js';
 import type { DeliveryRow, OrderRow } from '../orders/lifecycle/types.js';
 import { haversineM, roadDistanceM } from '../routing/index.js';
+import { kmTiersFrom, kmTiersSchema, priceByKmTiers, type KmTier } from '../pricing/km-tiers.js';
 
 /*
  * Rider pay controls (migration 038; owner, 2026-10-10): "give the option in
@@ -26,7 +27,10 @@ import { haversineM, roadDistanceM } from '../routing/index.js';
  *     FIXED    : fixed_lkr
  *     DISTANCE : base_lkr + per_km_lkr x road km (store -> drop-off, OSRM;
  *                when OSRM is unavailable: straight line x 1.3, marked
- *                estimated)
+ *                estimated) - distance_mode LINEAR
+ *                or, distance_mode TIERS (migration 040; owner, 2026-10-10):
+ *                the per-km tier table on the same road km - every started
+ *                km counts, the last row repeats (pricing/km-tiers.ts)
  *     then the optional floor: base = max(base, min_lkr)
  *   per-delivery bonuses (each rule on/off; for COMMISSION riders, and for
  *   COMPANY riders too only when bonus_rules.company_riders is on)
@@ -47,6 +51,9 @@ import { haversineM, roadDistanceM } from '../routing/index.js';
  */
 
 export const RIDER_PAY_MODELS = ['PERCENT', 'FIXED', 'DISTANCE'] as const satisfies readonly RiderPayModel[];
+/** How DISTANCE pays (migration 040; owner, 2026-10-10): base + per km, or per-km tiers. */
+export const DISTANCE_MODES = ['LINEAR', 'TIERS'] as const;
+export type DistanceMode = (typeof DISTANCE_MODES)[number];
 export const BOOST_MODES = ['FIXED', 'PERCENT'] as const;
 export type BoostMode = (typeof BOOST_MODES)[number];
 export const PER_DELIVERY_BONUS_KINDS = ['PEAK_BOOST', 'RAIN_BOOST', 'LONG_DISTANCE'] as const satisfies readonly RiderBonusKind[];
@@ -65,6 +72,9 @@ export interface PayParams {
   base_lkr: number;
   per_km_lkr: number;
   min_lkr: number | null;
+  /** DISTANCE only (owner, 2026-10-10): LINEAR = base_lkr + per_km_lkr x km; TIERS = km_tiers. */
+  distance_mode: DistanceMode;
+  km_tiers: KmTier[];
 }
 
 export interface PeakWindow {
@@ -94,6 +104,8 @@ export const DEFAULT_PAY_MODEL: Omit<PayParams, 'percent'> = {
   base_lkr: 50,
   per_km_lkr: 20,
   min_lkr: null,
+  distance_mode: 'LINEAR',
+  km_tiers: [],
 };
 export const DEFAULT_BONUS_RULES: BonusRules = {
   company_riders: false,
@@ -192,6 +204,9 @@ export const payModelPatchSchema = z
     base_lkr: lkrSchema('The base pay').optional(),
     per_km_lkr: lkrSchema('The pay per km', 1000).optional(),
     min_lkr: lkrSchema('The minimum').nullable().optional(),
+    // Per-km tiers (owner, 2026-10-10).
+    distance_mode: z.enum(DISTANCE_MODES, { errorMap: () => ({ message: 'distance_mode must be LINEAR or TIERS' }) }).optional(),
+    km_tiers: kmTiersSchema.optional(),
   })
   .strict();
 export type PayModelPatch = z.infer<typeof payModelPatchSchema>;
@@ -251,8 +266,19 @@ function payModelFrom(value: unknown): Omit<PayParams, 'percent'> {
     base_lkr: n(v.base_lkr, DEFAULT_PAY_MODEL.base_lkr),
     per_km_lkr: n(v.per_km_lkr, DEFAULT_PAY_MODEL.per_km_lkr),
     min_lkr: typeof v.min_lkr === 'number' && Number.isFinite(v.min_lkr) && v.min_lkr >= 0 ? v.min_lkr : null,
+    ...distanceFrom(v.distance_mode, v.km_tiers),
   };
 }
+
+/** TIERS only with a valid table; anything else is LINEAR, so a bad row never pays nonsense. */
+function distanceFrom(mode: unknown, tiers: unknown): { distance_mode: DistanceMode; km_tiers: KmTier[] } {
+  const km_tiers = kmTiersFrom(tiers);
+  return { distance_mode: mode === 'TIERS' && km_tiers.length ? 'TIERS' : 'LINEAR', km_tiers };
+}
+
+/** 400 when TIERS would be saved with no tier table to pay by. */
+export const tiersNeeded = () =>
+  new z.ZodError([{ code: 'custom', path: ['km_tiers'], message: 'Add the km amounts before paying by per-km tiers' }]);
 
 function rainFrom(value: unknown): RainBoostState {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
@@ -333,7 +359,10 @@ export async function setDefaultPayModel(input: PayModelPatch, actor: AuditActor
       base_lkr: input.base_lkr ?? before.base_lkr,
       per_km_lkr: input.per_km_lkr ?? before.per_km_lkr,
       min_lkr: input.min_lkr === undefined ? before.min_lkr : input.min_lkr,
+      distance_mode: input.distance_mode ?? before.distance_mode,
+      km_tiers: input.km_tiers ?? before.km_tiers,
     };
+    if (next.distance_mode === 'TIERS' && !next.km_tiers.length) throw tiersNeeded();
     const { percent, ...stored } = next;
     await upsert(trx, RIDER_PAY_MODEL_KEY, stored, 'The store default rider pay model (migration 038)');
     if (input.percent !== undefined) {
@@ -418,10 +447,16 @@ export interface RiderPayColumns {
   pay_base_lkr: unknown;
   pay_per_km_lkr: unknown;
   pay_min_lkr: unknown;
+  /** Migration 040 (owner, 2026-10-10); null = the store default's. */
+  pay_distance_mode?: DistanceMode | null;
+  pay_km_tiers?: unknown;
 }
 
 /** What a COMMISSION rider is paid on: own model/numbers over the store default's. */
 export function effectivePayParams(rider: Omit<RiderPayColumns, 'pay_type'>, def: PayParams): PayParams {
+  const ownTiers = kmTiersFrom(rider.pay_km_tiers);
+  const tiers = ownTiers.length ? ownTiers : def.km_tiers;
+  const mode = rider.pay_distance_mode ?? def.distance_mode;
   return {
     model: rider.pay_model ?? def.model,
     percent: num(rider.commission_percent) ?? def.percent,
@@ -429,14 +464,22 @@ export function effectivePayParams(rider: Omit<RiderPayColumns, 'pay_type'>, def
     base_lkr: num(rider.pay_base_lkr) ?? def.base_lkr,
     per_km_lkr: num(rider.pay_per_km_lkr) ?? def.per_km_lkr,
     min_lkr: num(rider.pay_min_lkr) ?? def.min_lkr,
+    // TIERS with no table anywhere pays LINEAR (setRiderPay refuses to save that).
+    distance_mode: mode === 'TIERS' && tiers.length ? 'TIERS' : 'LINEAR',
+    km_tiers: tiers,
   };
 }
 
-/** The model's pay for one delivery, with the floor. DISTANCE without a distance pays base_lkr. */
+/**
+ * The model's pay for one delivery, with the floor. DISTANCE without a
+ * distance pays base_lkr (LINEAR) or the km-1 amount (TIERS).
+ */
 export function basePay(p: PayParams, input: { standardFee: number; distanceKm: number | null }): number {
   let v: number;
   if (p.model === 'FIXED') v = p.fixed_lkr;
-  else if (p.model === 'DISTANCE') v = p.base_lkr + p.per_km_lkr * (input.distanceKm ?? 0);
+  else if (p.model === 'DISTANCE' && p.distance_mode === 'TIERS' && p.km_tiers.length) {
+    v = priceByKmTiers(p.km_tiers, input.distanceKm ?? 0).total;
+  } else if (p.model === 'DISTANCE') v = p.base_lkr + p.per_km_lkr * (input.distanceKm ?? 0);
   else v = Math.round(input.standardFee * p.percent) / 100;
   if (p.min_lkr !== null) v = Math.max(v, p.min_lkr);
   return round2(v);
@@ -540,7 +583,17 @@ export async function computePaySnapshot(
 ): Promise<PaySnapshot> {
   const rider = await executor
     .selectFrom('riders')
-    .select(['pay_type', 'commission_percent', 'pay_model', 'pay_fixed_lkr', 'pay_base_lkr', 'pay_per_km_lkr', 'pay_min_lkr'])
+    .select([
+      'pay_type',
+      'commission_percent',
+      'pay_model',
+      'pay_fixed_lkr',
+      'pay_base_lkr',
+      'pay_per_km_lkr',
+      'pay_min_lkr',
+      'pay_distance_mode',
+      'pay_km_tiers',
+    ])
     .where('id', '=', delivery.rider_id)
     .executeTakeFirst();
   const payType: RiderPayType = rider?.pay_type === 'COMMISSION' ? 'COMMISSION' : 'COMPANY';
@@ -569,7 +622,14 @@ export async function computePaySnapshot(
     inputs = { model: params.model, standard_fee: fee, min_lkr: params.min_lkr };
     if (params.model === 'PERCENT') inputs.percent = params.percent;
     if (params.model === 'FIXED') inputs.fixed_lkr = params.fixed_lkr;
-    if (params.model === 'DISTANCE') Object.assign(inputs, { base_lkr: params.base_lkr, per_km_lkr: params.per_km_lkr });
+    if (params.model === 'DISTANCE' && params.distance_mode === 'TIERS') {
+      // Per-km tiers (owner, 2026-10-10): the table and the km it charged.
+      Object.assign(inputs, {
+        distance_mode: 'TIERS',
+        km_tiers: params.km_tiers,
+        km_counted: km === null ? null : priceByKmTiers(params.km_tiers, km).km_counted,
+      });
+    } else if (params.model === 'DISTANCE') Object.assign(inputs, { base_lkr: params.base_lkr, per_km_lkr: params.per_km_lkr });
   }
   return {
     columns: {

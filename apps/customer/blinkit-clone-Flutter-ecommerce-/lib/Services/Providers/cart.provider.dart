@@ -7,6 +7,7 @@ import 'package:ecom/Infrastructure/LocalStorage/cart_storage.dart';
 import 'package:ecom/Models/combo_model.dart';
 import 'package:ecom/Models/product_model.dart';
 import 'package:ecom/Services/Validation/app_validators.dart';
+import 'package:ecom/Services/analytics/analytics.dart';
 
 class CartLine {
   final ProductModel product;
@@ -258,6 +259,7 @@ class CartProvider extends ChangeNotifier {
     if (current >= AppValidators.quantityMax) return;
     _products[product.id] = product;
     _quantities[product.id] = current + 1;
+    Analytics.instance.addToCart(product); // owner, 2026-10-10
     _changed();
   }
 
@@ -270,6 +272,7 @@ class CartProvider extends ChangeNotifier {
     final added = next - current;
     _products[product.id] = product;
     if (added > 0) _quantities[product.id] = next;
+    Analytics.instance.addToCart(product, quantity: added); // owner, 2026-10-10
     _changed();
     return added;
   }
@@ -281,10 +284,13 @@ class CartProvider extends ChangeNotifier {
       return;
     }
     _quantities[product.id] = current - 1;
+    Analytics.instance.removeFromCart(product); // owner, 2026-10-10
     _changed();
   }
 
   void remove(String productId) {
+    final gone = _products[productId];
+    if (gone != null) Analytics.instance.removeFromCart(gone, quantity: _quantities[productId] ?? 0); // owner, 2026-10-10
     _quantities.remove(productId);
     _products.remove(productId);
     _changed();
@@ -300,6 +306,7 @@ class CartProvider extends ChangeNotifier {
     if (current == 0 && _comboQuantities.length >= kComboLinesMax) return;
     _combos[combo.id] = combo;
     _comboQuantities[combo.id] = current + 1;
+    Analytics.instance.addComboToCart(combo); // owner, 2026-10-10
     _changed();
   }
 
@@ -310,11 +317,14 @@ class CartProvider extends ChangeNotifier {
       return;
     }
     _comboQuantities[combo.id] = current - 1;
+    Analytics.instance.removeComboFromCart(combo); // owner, 2026-10-10
     _changed();
   }
 
   void removeCombo(String comboId) {
     if (!_comboQuantities.containsKey(comboId)) return;
+    final gone = _combos[comboId];
+    if (gone != null) Analytics.instance.removeComboFromCart(gone, quantity: _comboQuantities[comboId]!); // owner, 2026-10-10
     _comboQuantities.remove(comboId);
     _combos.remove(comboId);
     _changed();

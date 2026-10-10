@@ -14,6 +14,8 @@ import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/connectivity_hint.dart';
 import 'package:ecom/Services/Providers/dental.provider.dart';
 import 'package:ecom/Services/app_config.dart';
+import 'package:ecom/Services/analytics/analytics.dart';
+import 'package:ecom/Services/analytics/analytics_route_observer.dart';
 import 'package:ecom/Services/global_error_handling.dart';
 import 'package:ecom/Services/push/push_notifications.dart';
 import 'package:ecom/Screens/config_problem_screen.dart';
@@ -122,7 +124,9 @@ List<SingleChildWidget> buildAppProviders() => [
         create: (_) => ConnectivityHint()..attach(),
       ),
       ChangeNotifierProvider<AuthProvider>(
-        create: (_) => AuthProvider()..restoreSession(),
+        // Website tracking follows the signed-in customer as a hashed id
+        // (owner, 2026-10-10).
+        create: (_) => Analytics.instance.followCustomer(AuthProvider()..restoreSession(), (a) => a.currentUser?.id),
       ),
       ChangeNotifierProvider<ProductProvider>(
         create: (_) => ProductProvider(),
@@ -182,6 +186,8 @@ class MainApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       navigatorKey: rootNavigatorKey,
+      // Web page views for the hash routes (owner, 2026-10-10).
+      navigatorObservers: [AnalyticsRouteObserver()],
       builder: (context, child) => SessionEndListener(
         navigatorKey: rootNavigatorKey,
         messengerKey: rootScaffoldMessengerKey,

@@ -221,6 +221,9 @@ describe('Delivery fee setting and GET /store', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({
       delivery_fee_lkr: expect.any(Number),
+      // Per-km tiers (owner, 2026-10-10): FLAT here; the tier table is never public.
+      delivery_fee_mode: 'FLAT',
+      delivery_fee_by_distance: false,
       hub_name: expect.any(String),
       delivery_hours: { start: '08:00', end: '21:00', timezone: 'Asia/Colombo' },
       radius_km: expect.any(Number),
@@ -260,8 +263,9 @@ describe('Delivery fee setting and GET /store', () => {
     const audit = (
       await pool.query("SELECT old_values, new_values FROM audit_logs WHERE action = 'DELIVERY_FEE_UPDATED' ORDER BY created_at DESC LIMIT 1")
     ).rows[0];
-    expect(audit.new_values).toEqual({ key: 'delivery_fee', fee_lkr: 150.5 });
-    expect(audit.old_values).toEqual({ key: 'delivery_fee', fee_lkr: before });
+    // Owner, 2026-10-10: the audit also carries the fee mode, tiers and cap.
+    expect(audit.new_values).toEqual({ key: 'delivery_fee', fee_lkr: 150.5, fee_mode: 'FLAT', tiers: [], max_fee_lkr: null });
+    expect(audit.old_values).toMatchObject({ key: 'delivery_fee', fee_lkr: before });
   });
 
   it('validates the amount and the role', async () => {

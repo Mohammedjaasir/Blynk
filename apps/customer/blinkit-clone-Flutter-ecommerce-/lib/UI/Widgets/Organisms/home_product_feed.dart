@@ -12,6 +12,7 @@ import 'products_screen_grid.dart';
 import '../../../Models/category_model.dart';
 import '../../../Models/product_model.dart';
 import '../../../Services/Providers/product.provider.dart';
+import '../../../Services/analytics/analytics.dart';
 import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
 
@@ -108,6 +109,8 @@ class HomeProductFeed extends StatefulWidget {
 }
 
 class _HomeProductFeedState extends State<HomeProductFeed> {
+  bool _listSent = false; // view_item_list once per Home (owner, 2026-10-10)
+
   @override
   void initState() {
     super.initState();
@@ -126,6 +129,10 @@ class _HomeProductFeedState extends State<HomeProductFeed> {
     return Consumer<ProductProvider>(
       builder: (context, provider, _) {
         final products = provider.productsFor('');
+        if (products.isNotEmpty && !_listSent) {
+          _listSent = true;
+          Analytics.instance.viewItemList(listId: 'home', listName: 'Home', products: products);
+        }
         final loading = provider.isLoadingProducts('');
         final failure = provider.productsFailureFor('');
 

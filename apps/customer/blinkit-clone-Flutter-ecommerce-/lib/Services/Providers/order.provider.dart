@@ -9,6 +9,7 @@ import 'package:ecom/Models/order_model.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/app_errors.dart';
+import 'package:ecom/Services/analytics/analytics.dart';
 
 /// A request against the orders API. Defaults to the app's single
 /// ApiService; injectable only so tests can replay captured real backend
@@ -256,8 +257,10 @@ class OrderProvider extends ChangeNotifier {
   bool couponIsStale(CartProvider cart) => _coupon != null && _couponCartKey != cartKey(cart);
 
   /// POST /orders/validate-coupon with the cart's lines. True when the code
-  /// applies; otherwise [couponError] says why in plain words.
-  Future<bool> applyCoupon(String rawCode, CartProvider cart) async {
+  /// applies; otherwise [couponError] says why in plain words. [addressId]
+  /// (the selected delivery address) goes along when known, so the preview's
+  /// delivery fee is that address's (owner, 2026-10-10).
+  Future<bool> applyCoupon(String rawCode, CartProvider cart, {String? addressId}) async {
     final code = normaliseCouponCode(rawCode);
     if (!couponCodePattern.hasMatch(code)) {
       _couponError = code.isEmpty ? 'Enter a code.' : 'Codes are 4 to 20 letters or numbers.';
@@ -275,6 +278,7 @@ class OrderProvider extends ChangeNotifier {
         body: {
           'code': code,
           ...orderLines(cart),
+          if (addressId != null && addressId.isNotEmpty) 'address_id': addressId,
         },
       );
       final data = (response is Map ? response['data'] : null) as Map?;
@@ -503,6 +507,8 @@ class OrderProvider extends ChangeNotifier {
       [cartKey(cart), addressId, coupon?.code ?? '', notes, deliverySlotStart ?? '', if (_usePoints) 'points']
           .join('|'),
     );
+    // Website tracking, once per checkout attempt (owner, 2026-10-10).
+    Analytics.instance.addShippingInfo(cart, attemptKey: idempotencyKey, coupon: coupon?.code, scheduled: deliverySlotStart != null);
 
     try {
       final response = await _request(
@@ -535,6 +541,7 @@ class OrderProvider extends ChangeNotifier {
       // The list on screen does not have this order yet: the next selection of
       // the Orders tab must fetch, not be throttled.
       _lastLoadStartedAt = null;
+      Analytics.instance.purchase(placed, lines: cart.lines, combos: cart.comboLines); // owner, 2026-10-10
       cart.clear();
       _coupon = null;
       _couponCartKey = null;

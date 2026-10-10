@@ -24,6 +24,9 @@ dependencies:
   # Web build only (conditional import): the browser's fetch streaming and
   # EventSource for live updates. Already in the lock file via dio's web adapter.
   web: ^1.1.0
+  # Website tracking (owner, 2026-10-10): the GTM user_id is a SHA-256 of the
+  # customer id, never the phone or name. Already in the lock file.
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

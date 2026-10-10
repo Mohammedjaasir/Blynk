@@ -1,14 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { settings } from '../api/resources';
-import type { BoostMode, DailyTargetTier, PayModel, PeakWindow, RiderPaySettings } from '../api/types';
+import type { BoostMode, DailyTargetTier, DistanceMode, PayModel, PeakWindow, RiderPayModelInput, RiderPaySettings } from '../api/types';
 import { PageHeader } from '../components/Layout';
+import { KmTierEditor, TierModeChoice } from '../components/KmTierEditor';
 import { Switch } from '../components/RiderDocuments';
 import { Spinner } from '../components/ui';
 import '../components/rider-pay.css';
 import { catalogErrorMessage } from '../lib/catalog';
+import { linearToRows, parseTierRows, tiersToRows } from '../lib/kmTiers';
 import { formatMoney } from '../lib/orders';
 import {
   BOOST_MODE_LABEL,
+  DISTANCE_MODE_OPTIONS,
   MAX_DAILY_TIERS,
   MAX_PAY_LKR,
   MAX_PEAK_WINDOWS,
@@ -20,6 +23,7 @@ import {
   boostText,
   colomboClock,
   describePay,
+  distanceModeOf,
   numberText,
   parseAmount,
   parseBoost,
@@ -40,7 +44,8 @@ import { TIME_OPTIONS } from '../lib/storeSchedule';
  * - Rain boost: one prominent switch with the amount and an auto-off (1 h /
  *   2 h / 3 h / until staff turn it off).
  * - Store default pay: % of the delivery fee, fixed LKR per delivery, or
- *   distance (base + LKR per km), with an optional minimum per delivery.
+ *   distance (base + LKR per km, or per-km tiers - owner, 2026-10-10), with
+ *   an optional minimum per delivery.
  *   Riders on "Store default" follow it; a rider's own model is set in
  *   Riders -> Change pay.
  * - Bonuses: company riders switch, peak boost (time windows), daily
@@ -269,6 +274,10 @@ function DefaultModelCard({ data, onSaved }: CardProps) {
   const [base, setBase] = useState(numberText(def.base_lkr));
   const [perKm, setPerKm] = useState(numberText(def.per_km_lkr));
   const [min, setMin] = useState(numberText(def.min_lkr));
+  // Owner, 2026-10-10: distance pay by base + per km, or per-km tiers.
+  const [distanceMode, setDistanceMode] = useState<DistanceMode>(distanceModeOf(def));
+  const [tierRows, setTierRows] = useState<string[]>(tiersToRows(def.km_tiers));
+  const [tierErrors, setTierErrors] = useState<(string | undefined)[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -276,8 +285,8 @@ function DefaultModelCard({ data, onSaved }: CardProps) {
   async function save(event: FormEvent) {
     event.preventDefault();
     setNotice(null);
-    const body: { model: PayModel; percent?: number; fixed_lkr?: number; base_lkr?: number; per_km_lkr?: number; min_lkr: number | null } =
-      { model, min_lkr: null };
+    setTierErrors([]);
+    const body: RiderPayModelInput = { model, min_lkr: null };
     if (model === 'PERCENT') {
       const p = parseCommissionPercent(percent);
       if ('error' in p) return setError(p.error);
@@ -286,11 +295,20 @@ function DefaultModelCard({ data, onSaved }: CardProps) {
       const f = parseAmount(fixed, { max: MAX_PAY_LKR, what: 'the LKR per delivery' });
       if ('error' in f) return setError(f.error);
       body.fixed_lkr = f.value ?? 0;
+    } else if (distanceMode === 'TIERS') {
+      const t = parseTierRows(tierRows);
+      if ('error' in t) {
+        setTierErrors(t.rowErrors);
+        return setError(t.error);
+      }
+      body.distance_mode = 'TIERS';
+      body.km_tiers = t.tiers;
     } else {
       const b = parseAmount(base, { max: MAX_PAY_LKR, what: 'the base LKR' });
       if ('error' in b) return setError(b.error);
       const k = parseAmount(perKm, { max: MAX_PER_KM_LKR, what: 'the LKR per km' });
       if ('error' in k) return setError(k.error);
+      body.distance_mode = 'LINEAR';
       body.base_lkr = b.value ?? 0;
       body.per_km_lkr = k.value ?? 0;
     }
@@ -342,6 +360,31 @@ function DefaultModelCard({ data, onSaved }: CardProps) {
           </div>
         ) : null}
         {model === 'DISTANCE' ? (
+          <TierModeChoice<DistanceMode>
+            label="Distance pay"
+            options={DISTANCE_MODE_OPTIONS}
+            value={distanceMode}
+            onPick={(next) => {
+              setDistanceMode(next);
+              setTierErrors([]);
+              // No tiers stored yet: start with rows that pay what base + per km pays.
+              if (next === 'TIERS' && tierRows.length === 0) setTierRows(linearToRows(Number(base) || 0, Number(perKm) || 0));
+            }}
+          />
+        ) : null}
+        {model === 'DISTANCE' && distanceMode === 'TIERS' ? (
+          <KmTierEditor
+            label="Pay per km"
+            rows={tierRows}
+            onChange={(next) => {
+              setTierRows(next);
+              setTierErrors([]);
+            }}
+            rowErrors={tierErrors}
+            note="Road distance, store to drop-off. No maximum; the minimum below still applies."
+          />
+        ) : null}
+        {model === 'DISTANCE' && distanceMode === 'LINEAR' ? (
           <div className="rpay-row">
             <label className="field">
               <span className="field__label">Base LKR per delivery</span>

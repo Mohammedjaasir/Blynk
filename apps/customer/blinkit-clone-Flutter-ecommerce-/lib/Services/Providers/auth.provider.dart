@@ -9,6 +9,7 @@ import 'package:ecom/Infrastructure/HttpMethods/token_storage.dart';
 import 'package:ecom/Models/user_model.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
 import 'package:ecom/Services/app_errors.dart';
+import 'package:ecom/Services/analytics/analytics.dart';
 import 'package:ecom/Infrastructure/HttpMethods/auth_response_parsing.dart';
 import 'package:ecom/constants.dart';
 
@@ -65,6 +66,8 @@ class AuthProvider extends ChangeNotifier {
     final trimmed = name.trim();
     await _request(methodType: 'PATCH', url: '/me', body: {'full_name': trimmed});
     await rememberName(trimmed);
+    // Only the name capture after a first sign-in calls this (owner, 2026-10-10).
+    Analytics.instance.signUp();
   }
 
   /// Keeps the cached profile's name in step with a name already saved to
@@ -189,6 +192,8 @@ class AuthProvider extends ChangeNotifier {
           _isVerifyingOtp = false;
           _errorMessage = null;
           notifyListeners();
+          // A customer with no name yet is new: sign_up follows the name (owner, 2026-10-10).
+          Analytics.instance.signedIn(newCustomer: needsName);
           return true;
         }
       }

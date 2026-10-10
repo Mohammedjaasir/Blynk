@@ -2,12 +2,14 @@ import type {
   AdjustmentReason,
   BonusKind,
   BoostMode,
+  DistanceMode,
   PayModel,
   PayParams,
   RiderPay,
   RiderPayInput,
   RiderPayType,
 } from '../api/types';
+import { linearToRows, parseTierRows, tiersSummary, tiersToRows } from './kmTiers';
 import { formatMoney } from './orders';
 
 /**
@@ -66,7 +68,7 @@ export function parseCommissionPercent(input: string): { value: number } | { err
 // Rider pay controls (owner, 2026-10-10: "give the option in ops and admin to
 // control the rider app charges"). A commission rider's base pay per delivery
 // is one of three models - % of the delivery fee, a fixed LKR, or distance
-// (base + LKR per km) - with an optional minimum, plus automatic boosts
+// (base + LKR per km, or per-km tiers - owner, 2026-10-10) - with an optional minimum, plus automatic boosts
 // (peak, rain, daily target, long distance). Deductions and extra pay are
 // adjustments, kept from that day's cash. Fresh implementation for Ops (not
 // an import from Admin - common.md rule 2).
@@ -135,13 +137,29 @@ export const MAX_DAILY_TIERS = 5;
 export const numberText = (value: number | null | undefined) =>
   typeof value === 'number' && Number.isFinite(value) ? String(Number(value.toFixed(2))) : '';
 
-/** "80% of the delivery fee", "LKR 80 per delivery", "LKR 50 + LKR 20 per km"; " · min LKR 100" when set. */
+/** Distance pay choices (owner, 2026-10-10). */
+export const DISTANCE_MODE_OPTIONS: ReadonlyArray<{ id: DistanceMode; text: string }> = [
+  { id: 'LINEAR', text: 'Base + per km' },
+  { id: 'TIERS', text: 'Per-km tiers' },
+];
+
+/** A DISTANCE model's way of paying; an API from before per-km tiers has none (LINEAR). */
+export const distanceModeOf = (params: Pick<PayParams, 'distance_mode'> | null | undefined): DistanceMode =>
+  params?.distance_mode === 'TIERS' ? 'TIERS' : 'LINEAR';
+
+/**
+ * "80% of the delivery fee", "LKR 80 per delivery", "LKR 50 + LKR 20 per km",
+ * or per-km tiers "Per km: km 1 LKR 100, km 2 LKR 60, km 3+ LKR 50" (owner,
+ * 2026-10-10); " · min LKR 100" when set.
+ */
 export function describePay(params: PayParams): string {
   const base =
     params.model === 'FIXED'
       ? `${formatMoney(params.fixed_lkr)} per delivery`
       : params.model === 'DISTANCE'
-        ? `${formatMoney(params.base_lkr)} + ${formatMoney(params.per_km_lkr)} per km`
+        ? distanceModeOf(params) === 'TIERS'
+          ? `Per km: ${tiersSummary(params.km_tiers ?? [])}`
+          : `${formatMoney(params.base_lkr)} + ${formatMoney(params.per_km_lkr)} per km`
         : `${formatPercent(params.percent)} of the delivery fee`;
   return typeof params.min_lkr === 'number' && params.min_lkr > 0 ? `${base} · min ${formatMoney(params.min_lkr)}` : base;
 }
@@ -215,13 +233,33 @@ export interface PayDraft {
   base: string;
   perKm: string;
   min: string;
+  /** DISTANCE only (owner, 2026-10-10): base + per km, or per-km tiers. */
+  distanceMode: DistanceMode;
+  /** One LKR text per km row, km 1 first (TIERS). */
+  tiers: string[];
 }
 
-export type PayDraftErrors = Partial<Record<'percent' | 'fixed' | 'base' | 'perKm' | 'min', string>>;
+export type PayDraftErrors = Partial<Record<'percent' | 'fixed' | 'base' | 'perKm' | 'min' | 'tiers', string>> & {
+  /** Per km row (TIERS). */
+  tierRows?: (string | undefined)[];
+};
 
 /** A new rider (approve): Company - the backend's own default - with numbers ready from the store default. */
 export function newPayDraft(defaults: PayParams | null): PayDraft {
-  return fillDraftBlanks({ payType: 'COMPANY', model: 'DEFAULT', percent: '', fixed: '', base: '', perKm: '', min: '' }, defaults);
+  return fillDraftBlanks(
+    {
+      payType: 'COMPANY',
+      model: 'DEFAULT',
+      percent: '',
+      fixed: '',
+      base: '',
+      perKm: '',
+      min: '',
+      distanceMode: distanceModeOf(defaults),
+      tiers: [],
+    },
+    defaults
+  );
 }
 
 /**
@@ -245,21 +283,35 @@ export function payDraftFrom(
       base: numberText(own?.base_lkr),
       perKm: numberText(own?.per_km_lkr),
       min: model === 'DEFAULT' ? '' : numberText(own?.min_lkr),
+      // Owner, 2026-10-10: null = the store default's way and tiers.
+      distanceMode: own?.distance_mode ?? distanceModeOf(defaults),
+      tiers: tiersToRows(own?.km_tiers),
     },
     defaults
   );
 }
 
-/** Fills blank number boxes from the store default (it may load after the dialog opens). The minimum stays blank. */
+/**
+ * Fills blank number boxes from the store default (it may load after the
+ * dialog opens). The minimum stays blank. No km rows yet: the store
+ * default's tiers, else rows that pay what base + per km pays.
+ */
 export function fillDraftBlanks(draft: PayDraft, defaults: PayParams | null): PayDraft {
-  if (!defaults) return draft;
-  return {
-    ...draft,
-    percent: draft.percent || numberText(defaults.percent),
-    fixed: draft.fixed || numberText(defaults.fixed_lkr),
-    base: draft.base || numberText(defaults.base_lkr),
-    perKm: draft.perKm || numberText(defaults.per_km_lkr),
-  };
+  const filled = defaults
+    ? {
+        ...draft,
+        percent: draft.percent || numberText(defaults.percent),
+        fixed: draft.fixed || numberText(defaults.fixed_lkr),
+        base: draft.base || numberText(defaults.base_lkr),
+        perKm: draft.perKm || numberText(defaults.per_km_lkr),
+      }
+    : { ...draft };
+  if (filled.tiers.length === 0 && (defaults || filled.base || filled.perKm)) {
+    filled.tiers = defaults?.km_tiers?.length
+      ? tiersToRows(defaults.km_tiers)
+      : linearToRows(Number(filled.base) || 0, Number(filled.perKm) || 0);
+  }
+  return filled;
 }
 
 /**
@@ -283,7 +335,16 @@ export function payDraftToInput(draft: PayDraft): { input: RiderPayInput } | { e
     const f = parseAmount(draft.fixed, { max: MAX_PAY_LKR, what: 'the LKR per delivery' });
     if ('error' in f) errors.fixed = f.error;
     else input.fixed_lkr = f.value;
+  } else if (draft.distanceMode === 'TIERS') {
+    // Owner, 2026-10-10: per-km tiers (no cap; the minimum still applies).
+    input.distance_mode = 'TIERS';
+    const t = parseTierRows(draft.tiers);
+    if ('error' in t) {
+      errors.tiers = t.error;
+      errors.tierRows = t.rowErrors;
+    } else input.km_tiers = t.tiers;
   } else {
+    input.distance_mode = 'LINEAR';
     const b = parseAmount(draft.base, { max: MAX_PAY_LKR, what: 'the base LKR' });
     if ('error' in b) errors.base = b.error;
     else input.base_lkr = b.value;

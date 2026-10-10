@@ -160,12 +160,15 @@ describe('Low-stock threshold', () => {
   });
 });
 
+/** The API's reply since per-km tiers (owner, 2026-10-10). */
+const FLAT_FEE = { fee_lkr: 250, fee_mode: 'FLAT', tiers: [], max_fee_lkr: null, updated_at: null };
+
 describe('Delivery fee setting', () => {
   it('shows the current fee and saves a valid new one', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
-      'GET /admin/settings/delivery-fee': () => ok({ fee_lkr: 250, updated_at: null }),
-      'PATCH /admin/settings/delivery-fee': (call) => ok({ fee_lkr: call.body.fee_lkr, updated_at: '2026-09-30T10:00:00Z' }),
+      'GET /admin/settings/delivery-fee': () => ok({ ...FLAT_FEE }),
+      'PATCH /admin/settings/delivery-fee': (call) => ok({ ...FLAT_FEE, ...call.body, updated_at: '2026-09-30T10:00:00Z' }),
     });
     expect(await screen.findByText('LKR 250.00')).toBeInTheDocument();
     expect(screen.getByText('Orders already placed keep the fee they were placed with.')).toBeInTheDocument();
@@ -174,7 +177,9 @@ describe('Delivery fee setting', () => {
     await user.clear(input);
     await user.type(input, '199.50');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(api.find('PATCH', '/admin/settings/delivery-fee')[0]?.body).toEqual({ fee_lkr: 199.5 }));
+    await waitFor(() =>
+      expect(api.find('PATCH', '/admin/settings/delivery-fee')[0]?.body).toEqual({ fee_mode: 'FLAT', fee_lkr: 199.5 })
+    );
     expect(await screen.findByText('Delivery fee saved: LKR 199.50.')).toBeInTheDocument();
     expect(screen.getByText('LKR 199.50')).toBeInTheDocument();
   });
@@ -209,6 +214,118 @@ describe('Delivery fee setting', () => {
     await screen.findByText('LKR 250.00');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByText('fee_lkr must be at most 1000')).toBeInTheDocument();
+  });
+});
+
+describe('Delivery fee by distance - per-km tiers (owner, 2026-10-10)', () => {
+  it('switches to by distance: km 1 starts at the flat fee, rows add and remove, live example with a cap, saves the tiers', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
+      'GET /admin/settings/delivery-fee': () => ok({ ...FLAT_FEE }),
+      'PATCH /admin/settings/delivery-fee': (call) => ok({ ...FLAT_FEE, ...call.body, updated_at: '2026-10-10T10:00:00Z' }),
+    });
+    await screen.findByText('LKR 250.00');
+    const feeCard = (await screen.findByRole('heading', { name: 'Delivery fee' })).closest('section') as HTMLElement;
+    const modes = within(feeCard).getByRole('group', { name: 'How the fee is worked out' });
+    expect(within(modes).getByRole('button', { name: 'Same fee for every order' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(modes).getByRole('button', { name: 'By distance (per km)' }));
+    expect(within(modes).getByRole('button', { name: 'By distance (per km)' })).toHaveAttribute('aria-pressed', 'true');
+
+    // No tiers stored yet: km 1 starts at the current flat fee.
+    const km1 = within(feeCard).getByLabelText('km 1 amount (LKR)');
+    expect(km1).toHaveValue('250');
+    expect(within(feeCard).getByRole('button', { name: /Remove km 1/ })).toBeDisabled();
+    await user.clear(km1);
+    await user.type(km1, '100');
+    await user.click(within(feeCard).getByRole('button', { name: /Add km 2/ }));
+    const km2 = within(feeCard).getByLabelText('km 2 amount (LKR)');
+    expect(km2).toHaveValue('100'); // a new row starts at the last row's amount
+    await user.clear(km2);
+    await user.type(km2, '60');
+    await user.click(within(feeCard).getByRole('button', { name: /Add km 3/ }));
+    const km3 = within(feeCard).getByLabelText('km 3 amount (LKR)');
+    await user.clear(km3);
+    await user.type(km3, '50');
+    await user.click(within(feeCard).getByRole('button', { name: /Add km 4/ }));
+    expect(within(feeCard).getByLabelText('km 4 amount (LKR)')).toBeInTheDocument();
+    await user.click(within(feeCard).getByRole('button', { name: 'Remove km 4' }));
+    expect(within(feeCard).queryByLabelText('km 4 amount (LKR)')).not.toBeInTheDocument();
+
+    expect(within(feeCard).getByText(/Every started km counts: 2.3 km = km 1 \+ km 2 \+ km 3/)).toBeInTheDocument();
+    const example = within(feeCard).getByTestId('km-tier-example');
+    expect(example).toHaveTextContent('1 km = LKR 100');
+    expect(example).toHaveTextContent('3 km = LKR 100 + 60 + 50 = LKR 210');
+    expect(example).toHaveTextContent('5 km = LKR 100 + 60 + 50 + 50 + 50 = LKR 310');
+
+    await user.type(within(feeCard).getByLabelText('Maximum fee (LKR, optional)'), '250');
+    expect(example).toHaveTextContent('5 km = LKR 100 + 60 + 50 + 50 + 50 = LKR 310, capped at LKR 250');
+
+    await user.click(within(feeCard).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/delivery-fee')).toHaveLength(1));
+    expect(api.find('PATCH', '/admin/settings/delivery-fee')[0].body).toEqual({
+      fee_mode: 'DISTANCE_TIERS',
+      tiers: [
+        { km: 1, lkr: 100 },
+        { km: 2, lkr: 60 },
+        { km: 3, lkr: 50 },
+      ],
+      max_fee_lkr: 250,
+    });
+    expect(
+      await within(feeCard).findByText('Delivery fee saved: by distance, km 1 LKR 100, km 2 LKR 60, km 3+ LKR 50 · max LKR 250.')
+    ).toBeInTheDocument();
+    expect(within(feeCard).getByText('By distance')).toBeInTheDocument();
+    expect(within(feeCard).getByTestId('fee-tiers-now')).toHaveTextContent('km 1 LKR 100, km 2 LKR 60, km 3+ LKR 50 · max LKR 250');
+  });
+
+  it('shows stored tiers, refuses bad amounts and a bad cap before sending, and can go back to one fee', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/more', {
+      'GET /admin/settings/delivery-fee': () =>
+        ok({
+          ...FLAT_FEE,
+          fee_mode: 'DISTANCE_TIERS',
+          tiers: [
+            { km: 1, lkr: 100 },
+            { km: 2, lkr: 60 },
+          ],
+        }),
+      'PATCH /admin/settings/delivery-fee': (call) => ok({ ...FLAT_FEE, ...call.body }),
+    });
+    const feeCard = (await screen.findByRole('heading', { name: 'Delivery fee' })).closest('section') as HTMLElement;
+    expect(await within(feeCard).findByTestId('fee-tiers-now')).toHaveTextContent('km 1 LKR 100, km 2+ LKR 60');
+    const modes = within(feeCard).getByRole('group', { name: 'How the fee is worked out' });
+    expect(within(modes).getByRole('button', { name: 'By distance (per km)' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(feeCard).getByLabelText('km 1 amount (LKR)')).toHaveValue('100');
+    expect(within(feeCard).getByTestId('km-tier-example')).toHaveTextContent('3 km = LKR 100 + 60 + 60 = LKR 220');
+
+    const km2 = within(feeCard).getByLabelText('km 2 amount (LKR)');
+    await user.clear(km2);
+    await user.type(km2, '1500');
+    await user.click(within(feeCard).getByRole('button', { name: 'Save' }));
+    expect(await within(feeCard).findByText('km 2: Enter at most 1,000.')).toBeInTheDocument();
+    expect(km2).toHaveAttribute('aria-invalid', 'true');
+    expect(within(feeCard).getByTestId('km-tier-example')).toHaveTextContent('Fill in every km to see an example.');
+
+    await user.clear(km2);
+    await user.type(km2, '10.555');
+    await user.click(within(feeCard).getByRole('button', { name: 'Save' }));
+    expect(await within(feeCard).findByText('km 2: Use at most 2 decimals.')).toBeInTheDocument();
+
+    await user.clear(km2);
+    await user.type(km2, '62.5');
+    expect(within(feeCard).getByTestId('km-tier-example')).toHaveTextContent('3 km = LKR 100 + 62.50 + 62.50 = LKR 225');
+    await user.type(within(feeCard).getByLabelText('Maximum fee (LKR, optional)'), '20000');
+    await user.click(within(feeCard).getByRole('button', { name: 'Save' }));
+    expect(await within(feeCard).findByText('Maximum fee: Enter at most 10,000.')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/settings/delivery-fee')).toHaveLength(0);
+
+    await user.click(within(modes).getByRole('button', { name: 'Same fee for every order' }));
+    expect(within(feeCard).getByLabelText('New fee (LKR)')).toHaveValue('250');
+    await user.click(within(feeCard).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/delivery-fee')).toHaveLength(1));
+    expect(api.find('PATCH', '/admin/settings/delivery-fee')[0].body).toEqual({ fee_mode: 'FLAT', fee_lkr: 250 });
+    expect(await within(feeCard).findByText('Delivery fee saved: LKR 250.00.')).toBeInTheDocument();
   });
 });
 

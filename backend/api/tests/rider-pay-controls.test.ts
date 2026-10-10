@@ -11,6 +11,7 @@ import {
   deliveryBonuses,
   DEFAULT_BONUS_RULES,
   DEFAULT_RAIN_BOOST,
+  effectivePayParams,
   inPeakWindow,
   payDistance,
   rainActive,
@@ -120,7 +121,17 @@ afterAll(async () => {
 });
 
 describe('The pure rules', () => {
-  const p = (over: Partial<PayParams>): PayParams => ({ model: 'PERCENT', percent: 80, fixed_lkr: 80, base_lkr: 50, per_km_lkr: 20, min_lkr: null, ...over });
+  const p = (over: Partial<PayParams>): PayParams => ({
+    model: 'PERCENT',
+    percent: 80,
+    fixed_lkr: 80,
+    base_lkr: 50,
+    per_km_lkr: 20,
+    min_lkr: null,
+    distance_mode: 'LINEAR',
+    km_tiers: [],
+    ...over,
+  });
 
   it('base pay per model, with the floor', () => {
     expect(basePay(p({}), { standardFee: 120, distanceKm: null })).toBe(96);
@@ -175,7 +186,8 @@ describe('Store-wide rider pay settings', () => {
     const res = await settings(opsToken);
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({
-      default_model: { model: 'PERCENT', percent: 80, fixed_lkr: 80, base_lkr: 50, per_km_lkr: 20, min_lkr: null },
+      // distance_mode / km_tiers: per-km tiers (migration 040; owner, 2026-10-10).
+      default_model: { model: 'PERCENT', percent: 80, fixed_lkr: 80, base_lkr: 50, per_km_lkr: 20, min_lkr: null, distance_mode: 'LINEAR', km_tiers: [] },
       bonus_rules: DEFAULT_BONUS_RULES,
       rain_boost: { ...DEFAULT_RAIN_BOOST, active: false },
     });
@@ -184,7 +196,16 @@ describe('Store-wide rider pay settings', () => {
   it('Operations changes the default model (the % is the rider commission row); audited', async () => {
     const res = await patch('/model', { model: 'FIXED', fixed_lkr: 70, percent: 75, min_lkr: 40 }, opsToken);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.data.default_model).toEqual({ model: 'FIXED', percent: 75, fixed_lkr: 70, base_lkr: 50, per_km_lkr: 20, min_lkr: 40 });
+    expect(res.body.data.default_model).toEqual({
+      model: 'FIXED',
+      percent: 75,
+      fixed_lkr: 70,
+      base_lkr: 50,
+      per_km_lkr: 20,
+      min_lkr: 40,
+      distance_mode: 'LINEAR',
+      km_tiers: [],
+    });
     const commission = await request(app).get('/api/v1/admin/settings/rider-commission').set(auth(tokens.admin));
     expect(commission.body.data.default_percent).toBe(75);
     const audit = (
@@ -575,5 +596,146 @@ describe('Distance is only measured when needed', () => {
   it('a FIXED rider with long distance off makes no OSRM call', async () => {
     await deliveredOrder(fixedRider);
     expect(roadCalls).toBe(0);
+  });
+});
+
+// ============================================================================
+// Per-km tiers for DISTANCE pay (migration 040; owner, 2026-10-10): "1st km
+// LKR 100, then an additional amount for the 2nd km, another for the 3rd".
+// ============================================================================
+describe('Per-km tiers for DISTANCE pay', () => {
+  const TIERS = [
+    { km: 1, lkr: 100 },
+    { km: 2, lkr: 60 },
+    { km: 3, lkr: 50 },
+  ];
+  const tiered: PayParams = {
+    model: 'DISTANCE',
+    percent: 80,
+    fixed_lkr: 80,
+    base_lkr: 50,
+    per_km_lkr: 20,
+    min_lkr: null,
+    distance_mode: 'TIERS',
+    km_tiers: TIERS,
+  };
+  const noOwn = { pay_model: null, commission_percent: null, pay_fixed_lkr: null, pay_base_lkr: null, pay_per_km_lkr: null, pay_min_lkr: null };
+
+  it('pure: every started km counts, the last row repeats, then the floor', () => {
+    expect(basePay(tiered, { standardFee: 0, distanceKm: 2.3 })).toBe(210);
+    expect(basePay(tiered, { standardFee: 0, distanceKm: 3 })).toBe(210);
+    // 7.25 km -> 8 km: 100 + 60 + 50 x 6.
+    expect(basePay(tiered, { standardFee: 0, distanceKm: 7.25 })).toBe(460);
+    expect(basePay(tiered, { standardFee: 0, distanceKm: null })).toBe(100);
+    expect(basePay({ ...tiered, min_lkr: 500 }, { standardFee: 0, distanceKm: 7.25 })).toBe(500);
+    // LINEAR is unchanged: 50 + 20 x 2.3.
+    expect(basePay({ ...tiered, distance_mode: 'LINEAR' }, { standardFee: 0, distanceKm: 2.3 })).toBe(96);
+
+    // A rider's own table and mode over the default's; TIERS with no table pays LINEAR.
+    const own = [{ km: 1, lkr: 70 }];
+    expect(effectivePayParams({ ...noOwn, pay_model: 'DISTANCE', pay_distance_mode: null, pay_km_tiers: own }, tiered)).toMatchObject({
+      distance_mode: 'TIERS',
+      km_tiers: own,
+    });
+    expect(effectivePayParams({ ...noOwn, pay_distance_mode: 'LINEAR', pay_km_tiers: null }, tiered)).toMatchObject({
+      distance_mode: 'LINEAR',
+      km_tiers: TIERS,
+    });
+    expect(
+      effectivePayParams({ ...noOwn, pay_distance_mode: 'TIERS', pay_km_tiers: null }, { ...tiered, distance_mode: 'LINEAR', km_tiers: [] })
+    ).toMatchObject({ distance_mode: 'LINEAR' });
+  });
+
+  it('store default: TIERS needs a table; saved and audited; LINEAR keeps base + per km', async () => {
+    expect((await patch('/model', { model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: [] })).status).toBe(400);
+    const stored = (await settings()).body.data.default_model;
+    if (!stored.km_tiers.length) {
+      expect((await patch('/model', { model: 'DISTANCE', distance_mode: 'TIERS' })).status).toBe(400);
+    }
+    for (const km_tiers of [[{ km: 2, lkr: 10 }], [{ km: 1, lkr: -1 }], [{ km: 1, lkr: 1.234 }], Array.from({ length: 11 }, (_, i) => ({ km: i + 1, lkr: 1 }))]) {
+      expect((await patch('/model', { model: 'DISTANCE', distance_mode: 'TIERS', km_tiers })).status, JSON.stringify(km_tiers)).toBe(400);
+    }
+    expect((await patch('/model', { model: 'DISTANCE', distance_mode: 'STEPS', km_tiers: TIERS })).status).toBe(400);
+
+    const res = await patch('/model', { model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: TIERS, min_lkr: null }, opsToken);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.default_model).toMatchObject({ model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: TIERS, min_lkr: null });
+    const audit = (
+      await pool.query(
+        "SELECT new_values FROM audit_logs WHERE action = 'RIDER_PAY_MODEL_UPDATED' AND created_at >= $1 ORDER BY created_at DESC LIMIT 1",
+        [startedAt]
+      )
+    ).rows[0];
+    expect(audit.new_values).toMatchObject({ key: 'rider_pay_model', model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: TIERS });
+
+    // Back to base + per km keeps the table for next time.
+    const linear = await patch('/model', { model: 'DISTANCE', distance_mode: 'LINEAR', base_lkr: 30, per_km_lkr: 15 });
+    expect(linear.body.data.default_model).toMatchObject({ distance_mode: 'LINEAR', base_lkr: 30, per_km_lkr: 15, km_tiers: TIERS });
+    expect((await patch('/model', { model: 'DISTANCE', distance_mode: 'TIERS' })).body.data.default_model).toMatchObject({ distance_mode: 'TIERS' });
+  });
+
+  it("a rider's own tiers, or the store default's; audited; validated", async () => {
+    const own = [
+      { km: 1, lkr: 120 },
+      { km: 2, lkr: 40 },
+    ];
+    let res = await setPay(distRider.riderId, { pay_type: 'COMMISSION', pay_model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: own }, opsToken);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.pay).toMatchObject({
+      pay_model: 'DISTANCE',
+      own: { distance_mode: 'TIERS', km_tiers: own, base_lkr: null, per_km_lkr: null },
+      effective: { model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: own },
+    });
+    const audit = (
+      await pool.query("SELECT new_values FROM audit_logs WHERE action = 'RIDER_PAY_UPDATED' AND entity_id = $1 ORDER BY created_at DESC LIMIT 1", [distRider.riderId])
+    ).rows[0];
+    expect(audit.new_values).toMatchObject({ pay_model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: own });
+
+    // Mode and table null: the store default's (TIERS with [100, 60, 50]).
+    res = await setPay(distRider.riderId, { pay_type: 'COMMISSION', pay_model: 'DISTANCE', distance_mode: null, km_tiers: null });
+    expect(res.body.data.pay).toMatchObject({
+      own: { distance_mode: null, km_tiers: null },
+      effective: { distance_mode: 'TIERS', km_tiers: TIERS },
+    });
+    // Another model drops the tier fields.
+    res = await setPay(companyRider.riderId, { pay_type: 'COMMISSION', pay_model: 'FIXED', fixed_lkr: 60, distance_mode: 'TIERS', km_tiers: own });
+    expect(res.body.data.pay.own).toMatchObject({ distance_mode: null, km_tiers: null, fixed_lkr: 60 });
+    const stored = (await pool.query('SELECT pay_distance_mode, pay_km_tiers FROM riders WHERE id = $1', [companyRider.riderId])).rows[0];
+    expect(stored).toEqual({ pay_distance_mode: null, pay_km_tiers: null });
+
+    for (const body of [
+      { pay_type: 'COMMISSION', pay_model: 'DISTANCE', distance_mode: 'STEPS' },
+      { pay_type: 'COMMISSION', pay_model: 'DISTANCE', km_tiers: [{ km: 1, lkr: 10 }, { km: 3, lkr: 10 }] },
+      { pay_type: 'COMMISSION', pay_model: 'DISTANCE', km_tiers: [] },
+    ]) {
+      expect((await setPay(distRider.riderId, body)).status, JSON.stringify(body)).toBe(400);
+    }
+    // Put the company rider back on COMPANY pay.
+    expect((await setPay(companyRider.riderId, { pay_type: 'COMPANY' })).status).toBe(200);
+  });
+
+  it('TIERS with no table anywhere is refused for a rider', async () => {
+    expect((await patch('/model', { model: 'FIXED', distance_mode: 'LINEAR', km_tiers: TIERS })).status).toBe(200);
+    // Clear the default table directly (the API never stores TIERS without one).
+    await pool.query(`UPDATE system_configurations SET value = value - 'km_tiers' WHERE key = 'rider_pay_model'`);
+    expect((await setPay(distRider.riderId, { pay_type: 'COMMISSION', pay_model: 'DISTANCE', distance_mode: 'TIERS' })).status).toBe(400);
+    expect((await patch('/model', { model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: TIERS })).status).toBe(200);
+  });
+
+  it('settlement pays by the tiers on the road km and snapshots the table and the km counted', async () => {
+    expect((await setPay(distRider.riderId, { pay_type: 'COMMISSION', pay_model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: TIERS })).status).toBe(200);
+    payDistance.roadMetres = async () => 7250;
+    const d = await deliveredOrder(distRider);
+    const snap = await delivery(d.deliveryId);
+    expect(snap).toMatchObject({
+      rider_pay_type: 'COMMISSION',
+      rider_pay_model: 'DISTANCE',
+      rider_pay_inputs: { model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: TIERS, km_counted: 8, min_lkr: null },
+      km: 7.25,
+      estimated: false,
+      base: 460,
+    });
+    expect(snap.rider_pay_inputs).not.toHaveProperty('base_lkr');
+    expect(snap.rider_pay_inputs).not.toHaveProperty('per_km_lkr');
   });
 });

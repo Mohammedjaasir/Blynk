@@ -3,16 +3,19 @@ import { settings as settingsApi } from '../api/resources';
 import type { PayModel, PayParams, RiderPay, RiderPayType } from '../api/types';
 import {
   DEFAULT_PAY_PARAMS,
+  DISTANCE_MODE_OPTIONS,
   OWN_MODEL_LABEL,
   PAY_MODELS,
   PAY_TYPE_LABEL,
   describePay,
   fillDraftBlanks,
   formatPercent,
+  linearTierDrafts,
   type PayDraft,
   type PayDraftErrors,
 } from '../lib/riderPay';
 import { formatMoney } from '../lib/orders';
+import { KmTierEditor, ModeChoice } from './KmTierEditor';
 import { Field } from './ui';
 import './riderPay.css';
 
@@ -25,7 +28,8 @@ import './riderPay.css';
  * Rider pay controls (owner, 2026-10-10): a commission rider follows the
  * "Store default" model, or has their own % of the delivery fee, fixed LKR
  * per delivery, or distance pay (base + LKR per km), each with an optional
- * minimum per delivery. The numbers start from the store default.
+ * minimum per delivery. The numbers start from the store default. Distance
+ * pay can use per-km tiers instead (owner, 2026-10-10).
  */
 export function RiderPayFields({
   draft,
@@ -114,14 +118,40 @@ export function RiderPayFields({
             </Field>
           ) : null}
           {draft.model === 'DISTANCE' ? (
-            <div className="form__row">
-              <Field label="Base LKR per delivery" error={errors.base}>
-                <input className="input" inputMode="decimal" value={draft.base} onChange={(e) => set({ base: e.target.value })} />
-              </Field>
-              <Field label="LKR per km" hint="Road distance, store to drop-off." error={errors.perKm}>
-                <input className="input" inputMode="decimal" value={draft.perKm} onChange={(e) => set({ perKm: e.target.value })} />
-              </Field>
-            </div>
+            <>
+              {/* Base + per km, or per-km tiers (owner, 2026-10-10). */}
+              <ModeChoice
+                label="Distance pay"
+                value={draft.distanceMode ?? 'LINEAR'}
+                options={DISTANCE_MODE_OPTIONS}
+                onChange={(mode) =>
+                  set({
+                    distanceMode: mode,
+                    tiers: draft.tiers?.some((t) => t.trim() !== '') ? draft.tiers : linearTierDrafts(draft.base, draft.perKm),
+                  })
+                }
+              />
+              {draft.distanceMode === 'TIERS' ? (
+                <>
+                  <KmTierEditor
+                    label="Pay for each km"
+                    drafts={draft.tiers ?? ['']}
+                    onChange={(tiers) => set({ tiers })}
+                    errors={errors.tiers}
+                  />
+                  <p className="form__note">Road distance, store to drop-off. The minimum below still applies.</p>
+                </>
+              ) : (
+                <div className="form__row">
+                  <Field label="Base LKR per delivery" error={errors.base}>
+                    <input className="input" inputMode="decimal" value={draft.base} onChange={(e) => set({ base: e.target.value })} />
+                  </Field>
+                  <Field label="LKR per km" hint="Road distance, store to drop-off." error={errors.perKm}>
+                    <input className="input" inputMode="decimal" value={draft.perKm} onChange={(e) => set({ perKm: e.target.value })} />
+                  </Field>
+                </div>
+              )}
+            </>
           ) : null}
           {draft.model !== 'DEFAULT' ? (
             <Field label="Minimum per delivery (LKR, optional)" hint={minHint} error={errors.min}>

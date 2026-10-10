@@ -7,6 +7,7 @@ import '../Infrastructure/LocalStorage/recent_searches_storage.dart';
 import '../Models/category_model.dart';
 import '../Services/Providers/product.provider.dart';
 import '../Services/Validation/app_validators.dart';
+import '../Services/analytics/analytics.dart';
 import '../UI/Widgets/Atoms/app_skeleton.dart';
 import '../UI/Widgets/Atoms/app_state_views.dart';
 import '../UI/Widgets/Atoms/card_product.dart';
@@ -54,6 +55,15 @@ class _SearchScreenState extends State<SearchScreen> {
   Timer? _debounceTimer;
   List<String> _recent = const [];
   String? _categorySlug;
+  // The last term sent as a `search` event (owner, 2026-10-10): a finished
+  // search counts once, not once per pause in typing.
+  String? _trackedQuery;
+
+  void _track(String query) {
+    if (query == _trackedQuery) return;
+    _trackedQuery = query;
+    Analytics.instance.search(query);
+  }
 
   String get _query => _controller.text.trim();
 
@@ -86,6 +96,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _products.lastQuery == query &&
         _products.searchResults.isNotEmpty) {
       RecentSearchesStorage.save(addRecentSearch(_recent, query));
+      _track(query);
     }
     _scrollController
       ..removeListener(_onScroll)
@@ -129,6 +140,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _remember(String query) {
+    _track(query);
     final next = addRecentSearch(_recent, query);
     setState(() => _recent = next);
     RecentSearchesStorage.save(next);

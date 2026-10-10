@@ -7,6 +7,7 @@ import '../Models/referral_model.dart';
 import '../Services/Providers/auth.provider.dart';
 import '../Services/Providers/rewards.provider.dart';
 import '../Services/share_links.dart';
+import '../Services/analytics/analytics.dart';
 import '../UI/Widgets/Atoms/app_state_views.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Atoms/blynk_text_field.dart';
@@ -172,7 +173,10 @@ class _CodeCard extends StatelessWidget {
             label: 'Share your code',
             leadingIcon: BlynkIcons.share,
             expand: true,
-            onPressed: () => Share.share(ShareLinks.referralShareText(code), subject: 'Join me on Blynk'),
+            onPressed: () {
+              Analytics.instance.share(contentType: 'referral'); // owner, 2026-10-10; never the code
+              Share.share(ShareLinks.referralShareText(code), subject: 'Join me on Blynk');
+            },
           ),
           const SizedBox(height: BlynkSpace.s8),
           BlynkButton.tertiary(
