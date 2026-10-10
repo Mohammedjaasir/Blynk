@@ -224,3 +224,12 @@ export const MAX_HOLIDAY_REASON = 100;
 export const MAX_HOLIDAYS = 60;
 /** Close-now reopen times may be at most 60 days out (backend rule). */
 export const REOPEN_DAYS = 60;
+
+/**
+ * (owner, 2026-10-10) "Send offer/birthday texts on closed days" - the
+ * explanation under the switch, for each position.
+ */
+export const SMS_ON_CLOSED_DAYS_HINT = {
+  on: 'On: offers, test texts and birthday texts still go out on a closed weekday (8 AM to 9 PM), on a holiday and while the store is closed now.',
+  off: "Off: no offer, test or birthday texts on a closed weekday, a holiday or while the store is closed now. A birthday text then goes out on the next open day, if it is still the customer's birthday week.",
+} as const;

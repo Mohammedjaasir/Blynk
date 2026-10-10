@@ -23,6 +23,7 @@ const REFERRAL: ReferralSetting = {
   friend_amount_lkr: 200,
   inviter_amount_lkr: 200,
   monthly_cap: 10,
+  friend_unused_to_credit: true,
   updated_at: null,
 };
 
@@ -90,8 +91,8 @@ describe('Referral and points helpers', () => {
     expect(parseAdjustPoints('1.5')).toHaveProperty('error');
     expect(parseReason('ok')).toHaveProperty('error');
     expect(parseReason('  Goodwill  ')).toEqual({ value: 'Goodwill' });
-    expect(readReferralForm({ enabled: true, mode: 'FREE_DELIVERY', friend: 'x', inviter: '', cap: '5' })).toEqual({
-      value: { enabled: true, mode: 'FREE_DELIVERY', friend_amount_lkr: 0, inviter_amount_lkr: 0, monthly_cap: 5 },
+    expect(readReferralForm({ enabled: true, mode: 'FREE_DELIVERY', friend: 'x', inviter: '', cap: '5', friendUnusedToCredit: false })).toEqual({
+      value: { enabled: true, mode: 'FREE_DELIVERY', friend_amount_lkr: 0, inviter_amount_lkr: 0, monthly_cap: 5, friend_unused_to_credit: false },
     });
   });
 
@@ -141,6 +142,21 @@ describe('Refer a friend screen', () => {
     );
     expect(await within(card).findByText('Refer a friend saved.')).toBeInTheDocument();
     expect(within(card).getByText(/Last changed/)).toBeInTheDocument();
+  });
+
+  it('"Unused friend reward becomes a credit" (owner, 2026-10-10): on by default, explained, and switching it off sends only that', async () => {
+    const user = userEvent.setup();
+    const { api } = open({
+      'PATCH /admin/settings/referrals': (call) => ok({ ...REFERRAL, ...(call.body as object), updated_at: '2026-10-10T04:00:00Z' }),
+    });
+    const card = (await screen.findByRole('heading', { name: 'Refer a friend', level: 2 })).closest('section') as HTMLElement;
+    const toggle = await within(card).findByRole('checkbox', { name: /^Unused friend reward becomes a credit/ });
+    expect(toggle).toBeChecked();
+    expect(within(card).getByText(/Off: the unused reward lapses/)).toBeInTheDocument();
+    await user.click(toggle);
+    await user.click(within(card).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/referrals')[0]?.body).toEqual({ friend_unused_to_credit: false }));
+    await waitFor(() => expect(within(card).getByRole('checkbox', { name: /^Unused friend reward becomes a credit/ })).not.toBeChecked());
   });
 
   it('free delivery hides the amounts; a bad cap is refused before sending', async () => {

@@ -35,6 +35,7 @@ const REFERRAL: ReferralSetting = {
   friend_amount_lkr: 200,
   inviter_amount_lkr: 200,
   monthly_cap: 10,
+  friend_unused_to_credit: true,
   updated_at: null,
 };
 
@@ -84,6 +85,21 @@ describe('Settings -> Refer a friend', () => {
     await user.click(within(panel).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.find('PATCH', '/admin/settings/referrals')[0]?.body).toEqual({ enabled: true, friend_amount_lkr: 250 }));
     expect(await screen.findByText('Refer a friend saved.')).toBeInTheDocument();
+  });
+
+  it('"Unused friend reward becomes a credit" (owner, 2026-10-10): on by default, explained, and switching it off sends only that', async () => {
+    const user = userEvent.setup();
+    const api = settingsApi((c) =>
+      c.method === 'PATCH' && c.path === '/admin/settings/referrals' ? ok({ ...REFERRAL, ...c.body }) : undefined
+    );
+    renderPage(<Settings />, '/settings');
+    const panel = await screen.findByRole('region', { name: 'Refer a friend' });
+    const toggle = await within(panel).findByRole('checkbox', { name: /^Unused friend reward becomes a credit/ });
+    expect(toggle).toBeChecked();
+    expect(within(panel).getByText(/Off: the unused reward lapses/)).toBeInTheDocument();
+    await user.click(toggle);
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/referrals')[0]?.body).toEqual({ friend_unused_to_credit: false }));
   });
 
   it('switching to free delivery sends only the mode; a bad amount is refused', async () => {

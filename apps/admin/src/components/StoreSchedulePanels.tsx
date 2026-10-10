@@ -17,6 +17,7 @@ import {
   REOPEN_DAYS,
   SLOT_LENGTHS,
   SLOT_LENGTH_LABEL,
+  SMS_ON_CLOSED_DAYS_HINT,
   colomboDateKey,
   colomboToIso,
   dateKeyLabel,
@@ -34,8 +35,9 @@ import { ConfirmDialog, Field, Spinner, useToast } from './ui';
  * Store schedule settings (owner, 2026-10-10: "make sure the timing will be
  * decided by ops and admin"): whether the store is open right now (with a
  * close-now switch), the regular opening hours, holidays, and scheduled
- * delivery slots. One GET /admin/settings/store-schedule feeds all four
- * panels; every PATCH returns the whole schedule, which replaces it.
+ * delivery slots - plus "Send offer/birthday texts on closed days" (owner,
+ * 2026-10-10). One GET /admin/settings/store-schedule feeds all the panels;
+ * every PATCH returns the whole schedule, which replaces it.
  */
 export function StoreScheduleSettings() {
   const [schedule, setSchedule] = useState<StoreSchedule | null>(null);
@@ -66,6 +68,7 @@ export function StoreScheduleSettings() {
       <OpeningHoursPanel schedule={schedule} onSaved={setSchedule} />
       <HolidaysPanel schedule={schedule} onSaved={setSchedule} />
       <DeliverySlotsPanel schedule={schedule} onSaved={setSchedule} />
+      <ClosedDaySmsPanel schedule={schedule} onSaved={setSchedule} />
     </>
   );
 }
@@ -771,6 +774,67 @@ function DeliverySlotsPanel({ schedule, onSaved }: PanelProps) {
         <div className="form__actions">
           <button type="submit" className="button" disabled={saving}>
             {saving ? <Spinner label="Saving" /> : 'Save slots'}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+// ------------------------------------------------------ texts on closed days
+
+/**
+ * "Send offer/birthday texts on closed days" (owner, 2026-10-10: "give all
+ * the options to control to ops and admin"). On (the default) keeps the old
+ * rule; off holds offer, test and birthday SMS while the store is closed.
+ */
+function ClosedDaySmsPanel({ schedule, onSaved }: PanelProps) {
+  const toast = useToast();
+  const stored = schedule.sms?.sms_on_closed_days ?? true;
+  const [on, setOn] = useState(stored);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setOn(stored), [stored]);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (on === stored) {
+      toast.success('Nothing changed.');
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      onSaved(await settingsApi.setStoreSms({ sms_on_closed_days: on }));
+      toast.success(on ? 'Texts go out on closed days too.' : 'No texts on closed days.');
+    } catch (err) {
+      setError(errorMessage(err, 'Could not save the text setting.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" id="closed-day-sms" aria-label="Texts on closed days">
+      <h2 className="panel__title">Texts on closed days</h2>
+      <form className="form" onSubmit={save} noValidate>
+        <label className="toggle">
+          <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} />
+          <span>
+            Send offer/birthday texts on closed days
+            <em>{on ? SMS_ON_CLOSED_DAYS_HINT.on : SMS_ON_CLOSED_DAYS_HINT.off}</em>
+          </span>
+        </label>
+        {schedule.sms?.updated_at ? <p className="form__note">Changed {new Date(schedule.sms.updated_at).toLocaleString()}.</p> : null}
+        {error ? (
+          <p className="field__error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="form__actions">
+          <button type="submit" className="button" disabled={saving}>
+            {saving ? <Spinner label="Saving" /> : 'Save'}
           </button>
         </div>
       </form>

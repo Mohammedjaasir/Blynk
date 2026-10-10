@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { referralPoints, type ReferralMode, type ReferralSetting } from '../api/referralPoints';
 import { errorMessage } from '../lib/apiErrors';
 import {
+  FRIEND_UNUSED_TO_CREDIT_HINT,
   MAX_REFERRAL_LKR,
   REFERRAL_MODE_LABEL,
   REFERRAL_RULES,
@@ -17,7 +18,8 @@ const MODES: ReferralMode[] = ['LKR_OFF', 'FREE_DELIVERY'];
 
 /**
  * Settings -> Refer a friend (owner, 2026-10-10): the switch, the reward
- * (LKR off for each side, or free delivery) and the monthly cap per inviter.
+ * (LKR off for each side, or free delivery), the monthly cap per inviter and
+ * whether an unused friend reward becomes a credit (owner, 2026-10-10).
  * Operations has the same controls under More. PATCH sends only what changed.
  */
 export function ReferralSettingsCard() {
@@ -29,6 +31,7 @@ export function ReferralSettingsCard() {
   const [friend, setFriend] = useState('200');
   const [inviter, setInviter] = useState('200');
   const [cap, setCap] = useState('10');
+  const [friendUnusedToCredit, setFriendUnusedToCredit] = useState(true);
   const [fieldError, setFieldError] = useState<{ field: 'friend' | 'inviter' | 'cap'; message: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -40,6 +43,7 @@ export function ReferralSettingsCard() {
     setFriend(numberText(s.friend_amount_lkr));
     setInviter(numberText(s.inviter_amount_lkr));
     setCap(String(s.monthly_cap));
+    setFriendUnusedToCredit(s.friend_unused_to_credit);
   }
 
   useEffect(() => {
@@ -57,7 +61,7 @@ export function ReferralSettingsCard() {
     event.preventDefault();
     if (!current) return;
     setSaveError(null);
-    const read = readReferralForm({ enabled, mode, friend, inviter, cap });
+    const read = readReferralForm({ enabled, mode, friend, inviter, cap, friendUnusedToCredit });
     if ('error' in read) {
       setFieldError({ field: read.field, message: read.error });
       return;
@@ -84,7 +88,7 @@ export function ReferralSettingsCard() {
     }
   }
 
-  const preview = readReferralForm({ enabled, mode, friend, inviter, cap });
+  const preview = readReferralForm({ enabled, mode, friend, inviter, cap, friendUnusedToCredit });
   const errorFor = (field: 'friend' | 'inviter' | 'cap') => (fieldError?.field === field ? fieldError.message : undefined);
 
   return (
@@ -133,6 +137,17 @@ export function ReferralSettingsCard() {
           >
             <input className="input" inputMode="numeric" value={cap} onChange={(e) => setCap(e.target.value)} />
           </Field>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={friendUnusedToCredit}
+              onChange={(e) => setFriendUnusedToCredit(e.target.checked)}
+            />
+            <span>
+              Unused friend reward becomes a credit
+              <em>{FRIEND_UNUSED_TO_CREDIT_HINT}</em>
+            </span>
+          </label>
           {'value' in preview ? (
             <p className="form__note" data-testid="referral-summary">
               {referralSummary(preview.value)}

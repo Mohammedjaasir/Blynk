@@ -40,6 +40,10 @@ import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.
  *  - store_holidays {"holidays": [{"date": "YYYY-MM-DD", "reason"}]}        default none
  *  - delivery_slots {"enabled", "slot_minutes", "days_ahead", "max_orders_per_slot", "min_lead_minutes"}
  *                   default off
+ *  - store_sms      {"sms_on_closed_days": bool}  (owner, 2026-10-10) default
+ *                   true: offer/test/birthday SMS still go out on a closed
+ *                   weekday (8 AM - 9 PM), a holiday or while closed now;
+ *                   false: only while the store is open (smsAllowedAt)
  *
  * Everything that used the hard-coded 8 AM - 9 PM (order placement, the SMS
  * sending windows, GET /store) reads them through storeSchedule.read(), cached
@@ -50,7 +54,8 @@ export const STORE_HOURS_KEY = 'store_hours';
 export const STORE_CLOSURE_KEY = 'store_closure';
 export const STORE_HOLIDAYS_KEY = 'store_holidays';
 export const DELIVERY_SLOTS_KEY = 'delivery_slots';
-const KEYS = [STORE_HOURS_KEY, STORE_CLOSURE_KEY, STORE_HOLIDAYS_KEY, DELIVERY_SLOTS_KEY] as const;
+export const STORE_SMS_KEY = 'store_sms';
+const KEYS = [STORE_HOURS_KEY, STORE_CLOSURE_KEY, STORE_HOLIDAYS_KEY, DELIVERY_SLOTS_KEY, STORE_SMS_KEY] as const;
 
 export const MAX_HOLIDAYS = 60;
 export const MAX_CLOSURE_DAYS = 60;
@@ -134,7 +139,22 @@ export function slotsFrom(value: unknown): SlotSettings {
   };
 }
 
+/** (owner, 2026-10-10) "Send offer/birthday texts on closed days". */
+export interface StoreSmsSettings {
+  sms_on_closed_days: boolean;
+}
+
+export const DEFAULT_STORE_SMS: StoreSmsSettings = { sms_on_closed_days: true };
+
+export function storeSmsFrom(value: unknown): StoreSmsSettings {
+  const v = obj(value);
+  return {
+    sms_on_closed_days: typeof v?.sms_on_closed_days === 'boolean' ? v.sms_on_closed_days : DEFAULT_STORE_SMS.sms_on_closed_days,
+  };
+}
+
 export interface StoredSchedule extends ScheduleState {
+  sms: StoreSmsSettings;
   updated_at: Record<(typeof KEYS)[number], Date | null>;
 }
 
@@ -150,11 +170,13 @@ async function loadSchedule(executor: DBConnection = db): Promise<StoredSchedule
     closure: closureFrom(row(STORE_CLOSURE_KEY)?.value),
     holidays: holidaysFrom(row(STORE_HOLIDAYS_KEY)?.value),
     slots: slotsFrom(row(DELIVERY_SLOTS_KEY)?.value),
+    sms: storeSmsFrom(row(STORE_SMS_KEY)?.value),
     updated_at: {
       store_hours: row(STORE_HOURS_KEY)?.updated_at ?? null,
       store_closure: row(STORE_CLOSURE_KEY)?.updated_at ?? null,
       store_holidays: row(STORE_HOLIDAYS_KEY)?.updated_at ?? null,
       delivery_slots: row(DELIVERY_SLOTS_KEY)?.updated_at ?? null,
+      store_sms: row(STORE_SMS_KEY)?.updated_at ?? null,
     },
   };
 }
@@ -186,7 +208,8 @@ export const DEFAULT_STORED_SCHEDULE: StoredSchedule = {
   closure: DEFAULT_CLOSURE,
   holidays: [],
   slots: DEFAULT_SLOT_SETTINGS,
-  updated_at: { store_hours: null, store_closure: null, store_holidays: null, delivery_slots: null },
+  sms: DEFAULT_STORE_SMS,
+  updated_at: { store_hours: null, store_closure: null, store_holidays: null, delivery_slots: null, store_sms: null },
 };
 
 // ---------------------------------------------------------------------------
@@ -292,6 +315,16 @@ export const updateDeliverySlotsSchema = z
   .refine((v) => Object.values(v).some((x) => x !== undefined), 'Nothing to change');
 export type UpdateDeliverySlotsInput = z.infer<typeof updateDeliverySlotsSchema>;
 
+export const updateStoreSmsSchema = z
+  .object({
+    sms_on_closed_days: z.boolean({
+      required_error: 'sms_on_closed_days is required',
+      invalid_type_error: 'sms_on_closed_days must be true or false',
+    }),
+  })
+  .strict();
+export type UpdateStoreSmsInput = z.infer<typeof updateStoreSmsSchema>;
+
 // ---------------------------------------------------------------------------
 // Presenting and changing
 // ---------------------------------------------------------------------------
@@ -305,6 +338,7 @@ export function presentSchedule(s: StoredSchedule, now: Date = orderingClock.now
     closure: { ...s.closure, updated_at: s.updated_at.store_closure },
     holidays: s.holidays.filter((h) => h.date >= today),
     delivery_slots: { ...s.slots, updated_at: s.updated_at.delivery_slots },
+    sms: { ...s.sms, updated_at: s.updated_at.store_sms },
     status: storeStatusAt(s, now),
   };
 }
@@ -422,6 +456,18 @@ export const storeScheduleService = {
         newValues: next,
       };
     });
+  },
+
+  /** (owner, 2026-10-10) "Send offer/birthday texts on closed days" on/off. */
+  async setSms(input: UpdateStoreSmsInput, actor: AuditActor) {
+    const next: StoreSmsSettings = { sms_on_closed_days: input.sms_on_closed_days };
+    return change(STORE_SMS_KEY, actor, async (_trx, before) => ({
+      value: next,
+      description: 'Offer/birthday SMS on closed days (closed weekday, holiday, closed now)',
+      action: 'STORE_SMS_UPDATED',
+      oldValues: before.sms,
+      newValues: next,
+    }));
   },
 };
 

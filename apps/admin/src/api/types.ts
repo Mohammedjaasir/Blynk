@@ -1030,7 +1030,18 @@ export interface StoreSchedule {
   closure: StoreClosure;
   holidays: StoreHoliday[];
   delivery_slots: DeliverySlotSettings & { updated_at: string | null };
+  /**
+   * (owner, 2026-10-10) "Send offer/birthday texts on closed days". true
+   * (default): offer, test and birthday SMS still go out on a closed weekday
+   * (8 AM - 9 PM), a holiday or while closed now; false: only while the store
+   * is open. Missing from a server older than this = true.
+   */
+  sms?: StoreSmsSettings & { updated_at: string | null };
   status: StoreStatus;
+}
+
+export interface StoreSmsSettings {
+  sms_on_closed_days: boolean;
 }
 
 export type StoreHoursInput =

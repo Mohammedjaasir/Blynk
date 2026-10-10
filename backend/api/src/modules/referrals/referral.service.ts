@@ -22,7 +22,7 @@ import {
 
 export const referralSettings = programSettings<ReferralProgramSetting>({
   key: REFERRAL_PROGRAM_KEY,
-  description: 'Refer a friend: on/off, reward type and amounts, rewards per inviter per month',
+  description: 'Refer a friend: on/off, reward type and amounts, rewards per inviter per month, unused friend reward to credit',
   auditAction: 'REFERRAL_PROGRAM_UPDATED',
   parse: referralProgramFrom,
 });
@@ -299,7 +299,8 @@ export async function referralModeForOrder(executor: DBConnection, orderId: stri
  * inviter is over this month's cap. A friend whose first order could not
  * take their reward (it already went out free, or a bigger coupon/gift won)
  * gets it now as a credit for their next order, so neither side loses it
- * ("one extra free delivery each").
+ * ("one extra free delivery each") - only while `friend_unused_to_credit` is
+ * on (owner, 2026-10-10: Admin/Operations switch); off, it lapses.
  */
 export async function completeReferralOnDelivery(
   trx: DBConnection,
@@ -356,7 +357,8 @@ export async function completeReferralOnDelivery(
         .execute();
     }
   }
-  if (setting.enabled) {
+  // (owner, 2026-10-10) "Unused friend reward becomes a credit" switch.
+  if (setting.enabled && setting.friend_unused_to_credit) {
     const friendReward = await trx
       .selectFrom('referral_rewards')
       .select('id')

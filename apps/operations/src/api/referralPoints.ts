@@ -19,6 +19,12 @@ export interface ReferralSetting {
   inviter_amount_lkr: number;
   /** Most inviter rewards per inviter per month. */
   monthly_cap: number;
+  /**
+   * (owner, 2026-10-10) The friend's first order could not use their reward
+   * (already free delivery, or a bigger coupon/birthday gift won): true = it
+   * becomes a credit once that order is delivered; false = it lapses.
+   */
+  friend_unused_to_credit: boolean;
   updated_at: string | null;
 }
 

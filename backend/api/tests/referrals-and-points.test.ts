@@ -131,7 +131,9 @@ describe('Rules', () => {
   });
 
   it('a stored setting that is missing or damaged reads as the switched-off default', () => {
-    expect(referralProgramFrom(undefined)).toEqual({ enabled: false, mode: 'LKR_OFF', friend_amount_lkr: 200, inviter_amount_lkr: 200, monthly_cap: 10 });
+    expect(referralProgramFrom(undefined)).toEqual({ enabled: false, mode: 'LKR_OFF', friend_amount_lkr: 200, inviter_amount_lkr: 200, monthly_cap: 10, friend_unused_to_credit: true });
+    expect(referralProgramFrom({ friend_unused_to_credit: 'no' }).friend_unused_to_credit).toBe(true);
+    expect(referralProgramFrom({ friend_unused_to_credit: false }).friend_unused_to_credit).toBe(false);
     expect(referralProgramFrom({ enabled: 'yes', mode: 'X', monthly_cap: -1 }).enabled).toBe(false);
     expect(pointsProgramFrom(null)).toEqual(DEFAULT_POINTS_PROGRAM);
   });
@@ -160,7 +162,7 @@ describe('Program settings', () => {
     await pool.query('DELETE FROM system_configurations WHERE key = ANY($1)', [KEYS]);
     const r = await request(app).get('/api/v1/admin/settings/referrals').set(auth(opsToken));
     expect(r.status).toBe(200);
-    expect(r.body.data).toEqual({ enabled: false, mode: 'LKR_OFF', friend_amount_lkr: 200, inviter_amount_lkr: 200, monthly_cap: 10, updated_at: null });
+    expect(r.body.data).toEqual({ enabled: false, mode: 'LKR_OFF', friend_amount_lkr: 200, inviter_amount_lkr: 200, monthly_cap: 10, friend_unused_to_credit: true, updated_at: null });
     const p = await request(app).get('/api/v1/admin/settings/points').set(auth(opsToken));
     expect(p.body.data).toMatchObject({ ...DEFAULT_POINTS_PROGRAM, updated_at: null });
 
@@ -183,6 +185,7 @@ describe('Program settings', () => {
     expect((await patchReferrals({ friend_amount_lkr: 10.555 })).status).toBe(400);
     expect((await patchReferrals({ monthly_cap: 0 })).status).toBe(400);
     expect((await patchReferrals({ other: 1 })).status).toBe(400);
+    expect((await patchReferrals({ friend_unused_to_credit: 'no' })).status).toBe(400);
     expect((await patchPoints({ earn_points: 1.5 })).status).toBe(400);
     expect((await patchPoints({ lkr_per_point: 0 })).status).toBe(400);
     expect((await patchPoints({ max_redeem_percent: 101 })).status).toBe(400);
@@ -373,6 +376,27 @@ describe('Refer a friend', () => {
     const filtered = await request(app).get('/api/v1/admin/referrals?status=CAPPED').set(auth(tokens.admin));
     expect(filtered.body.data.referrals.every((r: { status: string }) => r.status === 'CAPPED')).toBe(true);
     expect((await request(app).get('/api/v1/admin/referrals?status=NOPE').set(auth(tokens.admin))).status).toBe(400);
+  });
+
+  it('"Unused friend reward becomes a credit" switched off (owner, 2026-10-10): the unused friend reward lapses; the inviter is still rewarded', async () => {
+    const off = await patchReferrals({ friend_unused_to_credit: false }, opsToken);
+    expect(off.status, JSON.stringify(off.body)).toBe(200);
+    expect(off.body.data).toMatchObject({ enabled: true, friend_unused_to_credit: false, friend_amount_lkr: 150 });
+    const audit = (await pool.query(`SELECT new_values FROM audit_logs WHERE action = 'REFERRAL_PROGRAM_UPDATED' AND created_at >= $1 ORDER BY created_at DESC LIMIT 1`, [testStart])).rows[0];
+    expect(audit.new_values).toMatchObject({ key: 'referral_program', friend_unused_to_credit: false });
+
+    const inviter2 = await people.customer(11);
+    const code2 = (await referralOf(inviter2.token)).code;
+    const friend = await people.customer(12);
+    expect((await applyCode(friend.token, code2)).status).toBe(201);
+    const order = await expectCreated(await friend.placeOrder([{ product_id: productId, quantity: 3 }], { coupon_code: BIG }));
+    expect(order.referral_discount_amount).toBe(0); // the bigger coupon won
+    await deliver(order.id);
+    expect((await referralRow(friend.id)).status).toBe('REWARDED');
+    expect((await referralOf(friend.token)).credits).toEqual([]); // lapsed
+    expect((await referralOf(inviter2.token)).credits).toEqual([{ side: 'INVITER', mode: 'LKR_OFF', amount_lkr: 100 }]);
+
+    expect((await patchReferrals({ friend_unused_to_credit: true })).status).toBe(200);
   });
 });
 

@@ -70,6 +70,10 @@ export function referralSummary(s: Pick<ReferralSetting, 'mode' | 'friend_amount
   return `Friend: ${lkr(s.friend_amount_lkr)} off their first order · Inviter: ${lkr(s.inviter_amount_lkr)} off their next order`;
 }
 
+/** (owner, 2026-10-10) The one-line explanation beside the "Unused friend reward becomes a credit" switch. */
+export const FRIEND_UNUSED_TO_CREDIT_HINT =
+  "If the friend's first order could not use their reward (it already had free delivery, or a bigger coupon or birthday gift won), they get it as a credit when that order is delivered. Off: the unused reward lapses.";
+
 /** The rules shown under the settings, in the order a customer meets them. */
 export const REFERRAL_RULES = [
   "The friend's reward applies on their first order.",
@@ -136,6 +140,8 @@ export function readReferralForm(form: {
   friend: string;
   inviter: string;
   cap: string;
+  /** (owner, 2026-10-10) "Unused friend reward becomes a credit". */
+  friendUnusedToCredit: boolean;
 }): { value: Omit<ReferralSetting, 'updated_at'> } | { error: string; field: 'friend' | 'inviter' | 'cap' } {
   const cap = parseNumber(form.cap, 'the monthly cap', 1, MAX_REFERRAL_CAP, 0);
   if ('error' in cap) return { error: cap.error, field: 'cap' };
@@ -149,7 +155,16 @@ export function readReferralForm(form: {
     friend = f.value;
     inviter = i.value;
   }
-  return { value: { enabled: form.enabled, mode: form.mode, friend_amount_lkr: friend, inviter_amount_lkr: inviter, monthly_cap: cap.value } };
+  return {
+    value: {
+      enabled: form.enabled,
+      mode: form.mode,
+      friend_amount_lkr: friend,
+      inviter_amount_lkr: inviter,
+      monthly_cap: cap.value,
+      friend_unused_to_credit: form.friendUnusedToCredit,
+    },
+  };
 }
 
 export type PointsFormField = 'earn_points' | 'earn_per_lkr' | 'lkr_per_point' | 'min_redeem_points' | 'max_redeem_percent' | 'expiry_months';

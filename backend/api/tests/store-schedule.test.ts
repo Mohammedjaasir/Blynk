@@ -12,6 +12,7 @@ import {
   storeClosedMessage,
   storeStatusAt,
   uniformWeek,
+  smsAllowedAt,
   withinSmsWindow,
   type ScheduleState,
 } from '../src/utils/store-hours.js';
@@ -100,6 +101,25 @@ describe('Store timing rules (pure)', () => {
     expect(withinSmsWindow(hours, at('2026-10-11T16:00:00Z'))).toBe(false); // Sun 9:30 PM
   });
 
+  it('"Send offer/birthday texts on closed days" (owner, 2026-10-10): on = the window above; off = only while open', () => {
+    const days = { ...uniformWeek('10:00', '18:00'), sun: { closed: true, open: '10:00', close: '18:00' } };
+    const s = state({ hours: { same_every_day: false, days }, holidays: [{ date: '2026-10-07', reason: 'Poya' }] });
+    const closedNow = state({ ...s, closure: { closed: true, reason: 'Rain', reopens_at: null, closed_at: null } });
+    const SUN_9AM = at('2026-10-11T03:30:00Z');
+    const WED_HOLIDAY = at('2026-10-07T06:30:00Z');
+    const TUE_1030 = at('2026-10-06T05:00:00Z');
+    // On (default): closed weekday 8 AM - 9 PM, holiday and close-now do not stop it.
+    expect(smsAllowedAt(s, SUN_9AM, true)).toBe(true);
+    expect(smsAllowedAt(s, WED_HOLIDAY, true)).toBe(true);
+    expect(smsAllowedAt(closedNow, TUE_1030, true)).toBe(true);
+    // Off: none of those; inside today's hours on an open day still fine.
+    expect(smsAllowedAt(s, SUN_9AM, false)).toBe(false);
+    expect(smsAllowedAt(s, WED_HOLIDAY, false)).toBe(false);
+    expect(smsAllowedAt(closedNow, TUE_1030, false)).toBe(false);
+    expect(smsAllowedAt(s, TUE_1030, false)).toBe(true);
+    expect(smsAllowedAt(s, at('2026-10-06T03:30:00Z'), false)).toBe(false); // Tue 9 AM, before opening
+  });
+
   it('labels slot ranges with an en dash', () => {
     expect(rangeLabel(at('2026-10-06T10:30:00Z'), at('2026-10-06T12:30:00Z'))).toBe('4–6 PM');
     expect(rangeLabel(at('2026-10-06T05:30:00Z'), at('2026-10-06T07:30:00Z'))).toBe('11 AM–1 PM');
@@ -132,8 +152,9 @@ describe('Store timing rules (pure)', () => {
 const app = createApp();
 const fx = stockFixtures(app, 'TST-SCH-');
 const opsToken = generateAccessToken({ ...users.admin, role: 'OPERATIONS' });
-const KEYS = ['store_hours', 'store_closure', 'store_holidays', 'delivery_slots'];
-const ACTIONS = ['STORE_HOURS_UPDATED', 'STORE_CLOSED_NOW', 'STORE_REOPENED', 'STORE_HOLIDAYS_UPDATED', 'DELIVERY_SLOTS_UPDATED'];
+// store_sms (owner, 2026-10-10) and the birthday SMS job's day marker too.
+const KEYS = ['store_hours', 'store_closure', 'store_holidays', 'delivery_slots', 'store_sms', 'birthday_sms_days'];
+const ACTIONS = ['STORE_HOURS_UPDATED', 'STORE_CLOSED_NOW', 'STORE_REOPENED', 'STORE_HOLIDAYS_UPDATED', 'DELIVERY_SLOTS_UPDATED', 'STORE_SMS_UPDATED'];
 type Row = { key: string; value: unknown; description: string | null; created_at: Date; updated_at: Date };
 let saved: Row[] = [];
 let testStart: Date;
@@ -189,6 +210,7 @@ describe('Store timing settings (Admin and Operations)', () => {
     expect(res.body.data.holidays).toEqual([]);
     expect(res.body.data.delivery_slots).toMatchObject({ enabled: false, slot_minutes: 120, days_ahead: 1, max_orders_per_slot: 10, min_lead_minutes: 60 });
     expect(res.body.data.status).toMatchObject({ is_open_now: true, closed_kind: 'OPEN' });
+    expect(res.body.data.sms).toEqual({ sms_on_closed_days: true, updated_at: null });
     expect((await request(app).get('/api/v1/admin/settings/store-schedule').set(auth(tokens.staff))).status).toBe(403);
     expect((await patch('store-hours', { same_every_day: true, open: '09:00', close: '20:00' }, tokens.customer)).status).toBe(403);
   });
@@ -279,6 +301,51 @@ describe('Store timing settings (Admin and Operations)', () => {
     const refused = await order();
     expect(refused.status).toBe(422);
     expect(refused.body.error.message).toBe('Blynk is closed today (Poya). We open again at 8 AM tomorrow.');
+  });
+
+  it('"Send offer/birthday texts on closed days" switch (owner, 2026-10-10): validated, audited, and the SMS windows follow', async () => {
+    expect((await patch('store-sms', {})).status).toBe(400);
+    expect((await patch('store-sms', { sms_on_closed_days: 'no' })).status).toBe(400);
+    expect((await patch('store-sms', { sms_on_closed_days: false, extra: 1 })).status).toBe(400);
+    expect((await patch('store-sms', { sms_on_closed_days: false }, tokens.customer)).status).toBe(403);
+    expect((await patch('store-sms', { sms_on_closed_days: false }, tokens.staff)).status).toBe(403);
+
+    // Today (Tue) is a holiday: on (default), offers and birthday texts still go out.
+    expect((await patch('store-holidays', { holidays: [{ date: '2026-10-06', reason: 'Poya' }] })).status).toBe(200);
+    await expect(assertSmsSendingWindow()).resolves.toBeUndefined();
+
+    const off = await patch('store-sms', { sms_on_closed_days: false }, opsToken);
+    expect(off.status).toBe(200);
+    expect(off.body.data.sms).toMatchObject({ sms_on_closed_days: false });
+    expect(off.body.data.sms.updated_at).not.toBeNull();
+    expect((await request(app).get('/api/v1/admin/settings/store-schedule').set(auth(tokens.admin))).body.data.sms.sms_on_closed_days).toBe(false);
+    await expect(assertSmsSendingWindow()).rejects.toMatchObject({
+      code: 'OUTSIDE_SENDING_HOURS',
+      message: 'Offers are not sent while today is a holiday ("Send offer/birthday texts on closed days" is off in Opening hours).',
+    });
+    const ON_SETTING = { enabled: true, percent: 10, sms_enabled: true, sms_text: 'x' };
+    expect(await runBirthdaySms({ now: at(TUE_NOON), userIds: [], setting: ON_SETTING })).toEqual([]);
+    expect((await pool.query("SELECT 1 FROM system_configurations WHERE key = 'birthday_sms_days'")).rowCount).toBe(0); // blocked before anything
+
+    // No holiday, but closed now: still refused while off.
+    expect((await patch('store-holidays', { holidays: [] })).status).toBe(200);
+    await expect(assertSmsSendingWindow()).resolves.toBeUndefined();
+    expect((await patch('store-closure', { closed: true, reason: 'Rain' })).status).toBe(200);
+    await expect(assertSmsSendingWindow()).rejects.toMatchObject({ message: expect.stringContaining('the store is closed now') });
+    expect((await patch('store-closure', { closed: false })).status).toBe(200);
+
+    // A closed weekday: off refuses all day; on falls back to 8 AM - 9 PM.
+    const days = { ...uniformWeek('08:00', '21:00'), tue: { closed: true, open: '08:00', close: '21:00' } };
+    expect((await patch('store-hours', { same_every_day: false, days })).status).toBe(200);
+    await expect(assertSmsSendingWindow()).rejects.toMatchObject({ message: expect.stringContaining('the store is closed today') });
+    expect((await patch('store-sms', { sms_on_closed_days: true })).status).toBe(200);
+    await expect(assertSmsSendingWindow()).resolves.toBeUndefined();
+
+    const audit = (await pool.query("SELECT old_values, new_values FROM audit_logs WHERE action = 'STORE_SMS_UPDATED' AND created_at >= $1 ORDER BY created_at", [testStart])).rows;
+    expect(audit.slice(-2).map((a) => [a.old_values, a.new_values])).toEqual([
+      [{ key: 'store_sms', sms_on_closed_days: true }, { key: 'store_sms', sms_on_closed_days: false }],
+      [{ key: 'store_sms', sms_on_closed_days: false }, { key: 'store_sms', sms_on_closed_days: true }],
+    ]);
   });
 });
 

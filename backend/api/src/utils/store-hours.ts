@@ -165,6 +165,18 @@ export function withinSmsWindow(hours: WeeklyHours, at: Date): boolean {
   return withinWeeklyHours(day.closed ? DEFAULT_WEEKLY_HOURS : hours, at);
 }
 
+/**
+ * (owner, 2026-10-10) "Send offer/birthday texts on closed days" - a switch
+ * Ops and Admin control (store_sms row, default on = the rule above).
+ * On: withinSmsWindow (closed weekday -> 8 AM - 9 PM; holidays and "close
+ * now" do not stop messages). Off: only while the store is actually open -
+ * inside today's hours, not a closed weekday, not a holiday, not closed now.
+ */
+export function smsAllowedAt(state: ScheduleState, at: Date, smsOnClosedDays: boolean): boolean {
+  if (smsOnClosedDays) return withinSmsWindow(state.hours, at);
+  return storeStatusAt(state, at).is_open_now;
+}
+
 export type ClosedKind = 'OPEN' | 'OUTSIDE_HOURS' | 'CLOSED_DAY' | 'HOLIDAY' | 'CLOSED_NOW';
 
 export interface StoreStatus {

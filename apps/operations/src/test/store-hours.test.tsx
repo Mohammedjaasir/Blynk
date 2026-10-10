@@ -46,6 +46,8 @@ function open(initial = schedule(), handlers: Parameters<typeof renderAs>[2] = {
     'PATCH /admin/settings/store-holidays': (call: Call) => ok({ ...initial, holidays: call.body.holidays }),
     'PATCH /admin/settings/delivery-slots': (call: Call) =>
       ok({ ...initial, delivery_slots: { ...initial.delivery_slots, ...call.body, updated_at: new Date().toISOString() } }),
+    'PATCH /admin/settings/store-sms': (call: Call) =>
+      ok({ ...initial, sms: { sms_on_closed_days: call.body.sms_on_closed_days, updated_at: new Date().toISOString() } }),
     ...handlers,
   });
 }
@@ -286,5 +288,31 @@ describe('Opening hours page', () => {
     expect(within(box).getByRole('group', { name: 'Minimum lead time' })).toHaveTextContent('No minimum');
     await user.click(within(box).getByRole('button', { name: 'More minimum lead time' }));
     expect(within(box).getByRole('group', { name: 'Minimum lead time' })).toHaveTextContent('15 min');
+  });
+
+  it('texts on closed days (owner, 2026-10-10): on by default, explained; switching off sends only that', async () => {
+    const user = userEvent.setup();
+    const { api } = open();
+    const box = await card('Send offer/birthday texts on closed days');
+    const toggle = within(box).getByRole('switch', { name: 'Send offer/birthday texts on closed days' });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(box).toHaveTextContent('still go out on a closed weekday');
+    await user.click(toggle);
+    expect(box).toHaveTextContent('A birthday text then goes out on the next open day');
+    await user.click(within(box).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/store-sms')).toHaveLength(1));
+    expect(api.find('PATCH', '/admin/settings/store-sms')[0].body).toEqual({ sms_on_closed_days: false });
+    expect(await within(box).findByText('Saved. No texts on closed days.')).toBeInTheDocument();
+    expect(within(box).getByText(/Last changed/)).toBeInTheDocument();
+  });
+
+  it('texts on closed days: a saved "off" shows off; Save with no change sends nothing', async () => {
+    const user = userEvent.setup();
+    const { api } = open(schedule({ sms: { sms_on_closed_days: false, updated_at: null } }));
+    const box = await card('Send offer/birthday texts on closed days');
+    expect(within(box).getByRole('switch', { name: 'Send offer/birthday texts on closed days' })).toHaveAttribute('aria-checked', 'false');
+    await user.click(within(box).getByRole('button', { name: 'Save' }));
+    expect(await within(box).findByText('Nothing changed.')).toBeInTheDocument();
+    expect(api.find('PATCH', '/admin/settings/store-sms')).toHaveLength(0);
   });
 });

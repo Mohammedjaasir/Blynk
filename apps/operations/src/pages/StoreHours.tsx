@@ -19,6 +19,7 @@ import {
   MAX_REOPEN_DAYS,
   MIN_ORDERS_PER_SLOT,
   SLOT_MINUTE_CHOICES,
+  SMS_ON_CLOSED_DAYS_HINT,
   TIME_OPTIONS,
   buildHoursBody,
   daysAheadLabel,
@@ -33,8 +34,9 @@ import {
 /**
  * More -> Opening hours (owner, 2026-10-10: "make sure the timing will be
  * decided by ops and admin"). One read of GET /admin/settings/store-schedule
- * feeds four cards - close the store now, opening hours, holidays and
- * delivery slots - and each card's PATCH returns the whole schedule, so the
+ * feeds the cards - close the store now, opening hours, holidays, delivery
+ * slots and "Send offer/birthday texts on closed days" (owner, 2026-10-10) -
+ * and each card's PATCH returns the whole schedule, so the
  * status line at the top is always the server's own. Times are picked from
  * styled 15-minute lists, chips and steppers, never a bare native time input
  * (owner dislikes those).
@@ -71,6 +73,7 @@ export function StoreHours() {
           <HoursCard schedule={schedule} onSaved={setSchedule} />
           <HolidaysCard schedule={schedule} onSaved={setSchedule} />
           <DeliverySlotsCard schedule={schedule} onSaved={setSchedule} />
+          <ClosedDaySmsCard schedule={schedule} onSaved={setSchedule} />
         </>
       )}
     </div>
@@ -737,6 +740,60 @@ function DeliverySlotsCard({ schedule, onSaved }: CardProps) {
         </button>
       </form>
       <Feedback error={error} notice={notice} updatedAt={s.updated_at} />
+    </section>
+  );
+}
+
+// ------------------------------------------------------ texts on closed days
+/**
+ * "Send offer/birthday texts on closed days" (owner, 2026-10-10: "give all
+ * the options to control to ops and admin"). On (the default) keeps the old
+ * rule; off holds offer, test and birthday SMS while the store is closed.
+ */
+function ClosedDaySmsCard({ schedule, onSaved }: CardProps) {
+  const stored = schedule.sms?.sms_on_closed_days ?? true;
+  const [on, setOn] = useState(stored);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setNotice(null);
+    if (on === stored) {
+      setNotice('Nothing changed.');
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const saved = await settings.storeSchedule.updateSms({ sms_on_closed_days: on });
+      onSaved(saved);
+      const now = saved.sms?.sms_on_closed_days ?? on;
+      setOn(now);
+      setNotice(now ? 'Saved. Texts go out on closed days too.' : 'Saved. No texts on closed days.');
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card" aria-labelledby="closed-sms-title">
+      <div className="settings-head">
+        <h2 className="section-label" id="closed-sms-title">
+          Send offer/birthday texts on closed days
+        </h2>
+        <Switch label="Send offer/birthday texts on closed days" checked={on} onToggle={() => setOn((v) => !v)} />
+      </div>
+      <p className="quiet">{on ? SMS_ON_CLOSED_DAYS_HINT.on : SMS_ON_CLOSED_DAYS_HINT.off}</p>
+      <form className="form" onSubmit={save} noValidate>
+        <button type="submit" className="button" disabled={saving}>
+          {saving ? <Spinner label="Saving" /> : 'Save'}
+        </button>
+      </form>
+      <Feedback error={error} notice={notice} updatedAt={schedule.sms?.updated_at ?? null} />
     </section>
   );
 }

@@ -6,7 +6,7 @@ import type { Database, SmsLanguage, SmsOfferAudience } from '../../database/typ
 import { AppError } from '../../middleware/error.middleware.js';
 import { isPlaceholderPhone, normalizeSriLankanPhone } from '../../utils/phone.js';
 import { orderingClock } from '../../utils/time.js';
-import { DAY_KEYS, DEFAULT_WEEKLY_HOURS, dayKeyOf, hhmmLabel, withinSmsWindow } from '../../utils/store-hours.js';
+import { DAY_KEYS, DEFAULT_WEEKLY_HOURS, dayKeyOf, hhmmLabel, smsAllowedAt, storeStatusAt } from '../../utils/store-hours.js';
 import { DateTime } from 'luxon';
 import { storeSchedule } from '../configuration/store-schedule.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
@@ -204,13 +204,34 @@ const LANGUAGE_NAME: Record<SmsLanguage, string> = { si: 'Sinhala', ta: 'Tamil',
 
 /**
  * Offers and test SMS go out only inside today's opening hours, as set by Ops
- * and Admin (owner, 2026-10-10; before that a fixed 8 AM - 9 PM). On a weekday
- * marked closed, the default 8 AM - 9 PM window applies (withinSmsWindow).
+ * and Admin (owner, 2026-10-10; before that a fixed 8 AM - 9 PM). With "Send
+ * offer/birthday texts on closed days" on (the default), a weekday marked
+ * closed uses the default 8 AM - 9 PM window and holidays / "close now" do not
+ * stop them (withinSmsWindow); switched off (owner, 2026-10-10), nothing goes
+ * out on a closed weekday, a holiday or while the store is closed now.
  */
 export async function assertSmsSendingWindow(now: Date = orderingClock.now()) {
-  const { hours } = await storeSchedule.read();
-  if (withinSmsWindow(hours, now)) return;
-  const day = hours.days[dayKeyOf(DateTime.fromJSDate(now).setZone('Asia/Colombo'))];
+  const schedule = await storeSchedule.read();
+  const onClosedDays = schedule.sms.sms_on_closed_days;
+  if (smsAllowedAt(schedule, now, onClosedDays)) return;
+  const day = schedule.hours.days[dayKeyOf(DateTime.fromJSDate(now).setZone('Asia/Colombo'))];
+  if (!onClosedDays) {
+    const status = storeStatusAt(schedule, now);
+    if (status.closed_kind !== 'OUTSIDE_HOURS') {
+      const why =
+        status.closed_kind === 'CLOSED_NOW'
+          ? 'the store is closed now'
+          : status.closed_kind === 'HOLIDAY'
+            ? 'today is a holiday'
+            : 'the store is closed today';
+      throw new AppError(
+        `Offers are not sent while ${why} ("Send offer/birthday texts on closed days" is off in Opening hours).`,
+        422,
+        'OUTSIDE_SENDING_HOURS',
+        { closed_kind: status.closed_kind }
+      );
+    }
+  }
   const window = day.closed ? DEFAULT_WEEKLY_HOURS.days[DAY_KEYS[0]] : day;
   throw new AppError(
     `Offers can be sent from ${hhmmLabel(window.open)} to ${hhmmLabel(window.close)} only.`,

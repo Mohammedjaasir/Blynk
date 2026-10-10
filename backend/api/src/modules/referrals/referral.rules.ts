@@ -14,7 +14,9 @@ import { num, round2, twoDecimals } from '../loyalty/program-settings.js';
  *   checkout). When the friend's first order is DELIVERED the inviter gets a
  *   credit, used automatically on their next order. If the friend's first
  *   order could not take their reward (it already went out free, or a bigger
- *   coupon/gift won), the friend gets it then as a credit too.
+ *   coupon/gift won), the friend gets it then as a credit too - unless
+ *   Admin/Operations switched `friend_unused_to_credit` off (owner,
+ *   2026-10-10), then that unused friend reward lapses.
  * - Reward type is chosen by Admin/Operations: LKR_OFF (an amount off the
  *   items - the friend's and the inviter's amounts set separately) or
  *   FREE_DELIVERY (one delivery fee off, each).
@@ -40,6 +42,13 @@ export interface ReferralProgramSetting {
   inviter_amount_lkr: number;
   /** Inviter rewards per inviter per calendar month. */
   monthly_cap: number;
+  /**
+   * (owner, 2026-10-10) When the friend's first order could not use their
+   * reward (it already went out free, or a bigger coupon/birthday gift won):
+   * true = they get it as a credit when that order is delivered; false = the
+   * unused friend reward lapses.
+   */
+  friend_unused_to_credit: boolean;
 }
 
 export const DEFAULT_REFERRAL_PROGRAM: ReferralProgramSetting = {
@@ -48,6 +57,7 @@ export const DEFAULT_REFERRAL_PROGRAM: ReferralProgramSetting = {
   friend_amount_lkr: 200,
   inviter_amount_lkr: 200,
   monthly_cap: 10,
+  friend_unused_to_credit: true,
 };
 
 export function referralProgramFrom(value: unknown): ReferralProgramSetting {
@@ -59,6 +69,7 @@ export function referralProgramFrom(value: unknown): ReferralProgramSetting {
     friend_amount_lkr: num(v.friend_amount_lkr, d.friend_amount_lkr, 0, MAX_REFERRAL_AMOUNT_LKR),
     inviter_amount_lkr: num(v.inviter_amount_lkr, d.inviter_amount_lkr, 0, MAX_REFERRAL_AMOUNT_LKR),
     monthly_cap: Math.trunc(num(v.monthly_cap, d.monthly_cap, 1, MAX_REFERRAL_MONTHLY_CAP)),
+    friend_unused_to_credit: typeof v.friend_unused_to_credit === 'boolean' ? v.friend_unused_to_credit : d.friend_unused_to_credit,
   };
 }
 
@@ -81,6 +92,7 @@ export const updateReferralProgramSchema = z
       .min(1, 'monthly_cap must be at least 1')
       .max(MAX_REFERRAL_MONTHLY_CAP, `monthly_cap can be at most ${MAX_REFERRAL_MONTHLY_CAP}`)
       .optional(),
+    friend_unused_to_credit: z.boolean({ invalid_type_error: 'friend_unused_to_credit must be true or false' }).optional(),
   })
   .strict()
   .refine((v) => Object.values(v).some((x) => x !== undefined), { message: 'Send at least one setting to change' });

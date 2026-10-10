@@ -14,7 +14,9 @@ import {
   monthDayCodes,
   parseIsoDate,
 } from '../src/modules/birthday/birthday.rules.js';
-import { birthdaySmsKey, runBirthdaySms } from '../src/modules/birthday/birthday.sms.js';
+import { BIRTHDAY_SMS_DAYS_KEY, birthdayDaysToText, birthdaySmsKey, runBirthdaySms } from '../src/modules/birthday/birthday.sms.js';
+import { DEFAULT_STORED_SCHEDULE, storeSchedule, type StoredSchedule } from '../src/modules/configuration/store-schedule.js';
+import { uniformWeek } from '../src/utils/store-hours.js';
 import { stockFixtures, tokens, auth, users } from './helpers/stock.js';
 import { customerFixtures, expectCreated } from './helpers/customers.js';
 
@@ -34,6 +36,8 @@ const TODAY_DOB = '1990-10-06'; // birthday on the pinned checkout day
 
 type Row = { key: string; value: unknown; description: string | null; created_at: Date; updated_at: Date };
 let saved: Row | undefined;
+/** The birthday SMS job's day marker (owner, 2026-10-10), restored afterwards. */
+let savedDays: Row | undefined;
 let testStart: Date;
 let productId = '';
 let product2Id = '';
@@ -51,7 +55,8 @@ beforeAll(async () => {
   await fx.setup();
   testStart = (await pool.query('SELECT now() AS t')).rows[0].t;
   saved = (await pool.query('SELECT key, value, description, created_at, updated_at FROM system_configurations WHERE key = $1', [KEY])).rows[0];
-  productId = (await fx.product({ tracked: false })).productId;
+  savedDays = (await pool.query('SELECT key, value, description, created_at, updated_at FROM system_configurations WHERE key = $1', [BIRTHDAY_SMS_DAYS_KEY])).rows[0];
+  productId =(await fx.product({ tracked: false })).productId;
   product2Id = (await fx.product({ tracked: false })).productId;
   categoryId = (await pool.query('SELECT id FROM categories WHERE deleted_at IS NULL ORDER BY display_order LIMIT 1')).rows[0].id;
   const res = await request(app)
@@ -76,6 +81,13 @@ afterAll(async () => {
     );
   }
   await pool.query(`DELETE FROM audit_logs WHERE action = 'BIRTHDAY_OFFER_UPDATED' AND created_at >= $1`, [testStart]);
+  await pool.query('DELETE FROM system_configurations WHERE key = $1', [BIRTHDAY_SMS_DAYS_KEY]);
+  if (savedDays) {
+    await pool.query(
+      `INSERT INTO system_configurations (key, value, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`,
+      [savedDays.key, JSON.stringify(savedDays.value), savedDays.description, savedDays.created_at, savedDays.updated_at]
+    );
+  }
 });
 
 // ----------------------------------------------------------------------------
@@ -421,6 +433,95 @@ describe('Birthday SMS', () => {
       [d.id, order.id]
     );
     expect(await runBirthdaySms({ now: MORNING, setting: ON, userIds: [d.id] })).toEqual([]);
+  });
+});
+
+// ----------------------------------------------------------------------------
+describe('Birthday SMS on closed days (owner, 2026-10-10)', () => {
+  const ON: BirthdayOfferSetting = { ...DEFAULT_BIRTHDAY_OFFER, enabled: true, percent: 12 };
+  const pinnedRead = storeSchedule.read;
+  // Saturdays closed; holidays and "close now" set per step.
+  const satClosed = { same_every_day: false, days: { ...uniformWeek('08:00', '21:00'), sat: { closed: true, open: '08:00', close: '21:00' } } };
+  const schedule = (over: Partial<StoredSchedule>, smsOnClosedDays: boolean): StoredSchedule => ({
+    ...DEFAULT_STORED_SCHEDULE,
+    hours: satClosed,
+    ...over,
+    sms: { sms_on_closed_days: smsOnClosedDays },
+  });
+  const use = (s: StoredSchedule) => {
+    storeSchedule.read = async () => s;
+  };
+  const clearMarker = () => pool.query('DELETE FROM system_configurations WHERE key = $1', [BIRTHDAY_SMS_DAYS_KEY]);
+  const keysOf = async (id: string) =>
+    (await pool.query("SELECT idempotency_key FROM notifications WHERE user_id = $1 AND notification_type = 'BIRTHDAY_OFFER'", [id])).rows.map((r) => r.idempotency_key);
+
+  afterAll(async () => {
+    storeSchedule.read = pinnedRead;
+    await clearMarker();
+  });
+
+  it('which birthdays a run covers: today, plus missed days back to the previous open day, at most the birthday week', () => {
+    const today = colomboDay(new Date('2026-10-12T04:00:00Z'));
+    const iso = (days: ReturnType<typeof birthdayDaysToText>) => days.map((d) => isoDay(d));
+    expect(iso(birthdayDaysToText(today, '2026-10-09', false))).toEqual(['2026-10-12']); // switch on: never catches up
+    expect(iso(birthdayDaysToText(today, null, true))).toEqual(['2026-10-12']);
+    expect(iso(birthdayDaysToText(today, '2026-10-11', true))).toEqual(['2026-10-12']);
+    expect(iso(birthdayDaysToText(today, '2026-10-09', true))).toEqual(['2026-10-12', '2026-10-11', '2026-10-10']);
+    expect(iso(birthdayDaysToText(today, '2026-09-30', true))).toEqual(['2026-10-12', '2026-10-11', '2026-10-10', '2026-10-09']);
+  });
+
+  it('switch on (default): a closed Saturday still gets its birthday SMS from 8 AM', async () => {
+    await clearMarker();
+    const p = await people.customer(30);
+    expect((await patchMe(p.token, { date_of_birth: '1991-10-10' })).status).toBe(200);
+    use(schedule({}, true));
+    expect(await runBirthdaySms({ now: new Date('2026-10-10T03:00:00Z'), setting: ON, userIds: [p.id] })).toEqual([p.id]); // Sat 8:30 AM
+    expect(await keysOf(p.id)).toEqual([birthdaySmsKey(2026, p.id)]);
+  });
+
+  it('switch off: nothing on a closed weekday, a holiday or while closed now; caught up the next open day, once', async () => {
+    await clearMarker();
+    const p = await people.customer(31);
+    expect((await patchMe(p.token, { date_of_birth: '1991-10-10' })).status).toBe(200); // Saturday 10 October
+    const holiday = [{ date: '2026-10-11', reason: 'Poya' }];
+    const rain = { closed: true, reason: 'Rain', reopens_at: null, closed_at: null };
+    const run = (iso: string) => runBirthdaySms({ now: new Date(iso), setting: ON, userIds: [p.id] });
+
+    use(schedule({ holidays: holiday }, false));
+    expect(await run('2026-10-09T03:00:00Z')).toEqual([]); // Fri, open: not their birthday yet (Friday recorded as open)
+    expect(await run('2026-10-10T03:00:00Z')).toEqual([]); // Sat: closed weekday
+    expect(await run('2026-10-11T03:00:00Z')).toEqual([]); // Sun: holiday
+    use(schedule({ holidays: holiday, closure: rain }, false));
+    expect(await run('2026-10-12T03:00:00Z')).toEqual([]); // Mon: closed now
+    use(schedule({ holidays: holiday }, false));
+    expect(await run('2026-10-12T02:00:00Z')).toEqual([]); // Mon 7:30 AM: before opening
+    expect(await keysOf(p.id)).toEqual([]);
+
+    expect(await run('2026-10-12T04:00:00Z')).toEqual([p.id]); // Mon 9:30 AM, reopened: still in their birthday week
+    expect(await keysOf(p.id)).toEqual([birthdaySmsKey(2026, p.id)]);
+    expect(await run('2026-10-12T08:00:00Z')).toEqual([]); // never twice
+    expect(await run('2026-10-13T04:00:00Z')).toEqual([]);
+    expect(await keysOf(p.id)).toHaveLength(1);
+  });
+
+  it('switch off: a birthday past its week is not caught up; a 31 December birthday caught up in January keeps its year', async () => {
+    await clearMarker();
+    const late = await people.customer(32);
+    const nye = await people.customer(33);
+    expect((await patchMe(late.token, { date_of_birth: '1991-12-27' })).status).toBe(200);
+    expect((await patchMe(nye.token, { date_of_birth: '1991-12-31' })).status).toBe(200);
+    const ids = [late.id, nye.id];
+    const run = (iso: string) => runBirthdaySms({ now: new Date(iso), setting: ON, userIds: ids });
+    // Holidays 27 December 2026 - 1 January 2027; Saturdays (26 Dec, 2 Jan) closed too.
+    const holidays = ['2026-12-27', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-01'].map((date) => ({ date, reason: 'Season' }));
+    use(schedule({ holidays }, false));
+    expect(await run('2026-12-25T04:00:00Z')).toEqual([]); // Fri 25 Dec: the last open day
+    expect(await run('2026-12-26T04:00:00Z')).toEqual([]); // Sat
+    expect(await run('2026-12-31T04:00:00Z')).toEqual([]); // holiday
+    expect(await run('2027-01-02T04:00:00Z')).toEqual([]); // Sat
+    expect(await run('2027-01-03T04:00:00Z')).toEqual([nye.id]); // Sun 3 Jan: open again
+    expect(await keysOf(nye.id)).toEqual([birthdaySmsKey(2026, nye.id)]); // the 2026 birthday's SMS
+    expect(await keysOf(late.id)).toEqual([]); // 27 Dec + 3 days ended on 30 Dec
   });
 });
 

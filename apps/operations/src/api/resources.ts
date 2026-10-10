@@ -39,6 +39,7 @@ import type {
   StoreHoliday,
   StoreHoursInput,
   StoreSchedule,
+  StoreSmsSettings,
   BirthdayOfferInput,
   BirthdaysResult,
   DeliverySummary,
@@ -1061,6 +1062,9 @@ export const settings = {
       apiRequest<StoreSchedule>('/admin/settings/store-holidays', { method: 'PATCH', body: { holidays } }),
     updateDeliverySlots: (body: Partial<DeliverySlotSettings>) =>
       apiRequest<StoreSchedule>('/admin/settings/delivery-slots', { method: 'PATCH', body: { ...body } }),
+    /** (owner, 2026-10-10) "Send offer/birthday texts on closed days". */
+    updateSms: (body: StoreSmsSettings) =>
+      apiRequest<StoreSchedule>('/admin/settings/store-sms', { method: 'PATCH', body: { ...body } }),
   },
 };
 

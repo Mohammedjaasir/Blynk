@@ -6,6 +6,7 @@ import { orderingClock } from '../src/utils/time.js';
 import { env } from '../src/config/env.js';
 import { enabledOfferLanguages, languageFor, smsParts } from '../src/modules/sms-offers/sms-offers.service.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
+import { DEFAULT_STORED_SCHEDULE, storeSchedule } from '../src/modules/configuration/store-schedule.js';
 import { tokens, auth } from './helpers/stock.js';
 import { customerFixtures } from './helpers/customers.js';
 
@@ -162,6 +163,32 @@ describe('sending an offer', () => {
       expect(res.body.error.code).toBe('OUTSIDE_SENDING_HOURS');
     } finally {
       orderingClock.now = pinned;
+    }
+  });
+
+  it('"Send offer/birthday texts on closed days" switched off (owner, 2026-10-10): no offer or test SMS on a holiday', async () => {
+    // The checkout clock is Tue 6 October, noon; make it a holiday. (Switch on
+    // = holidays do not stop offers: tests/store-schedule.test.ts.)
+    const pinnedRead = storeSchedule.read;
+    const holiday = { ...DEFAULT_STORED_SCHEDULE, holidays: [{ date: '2026-10-06', reason: 'Poya' }] };
+    try {
+      storeSchedule.read = async () => ({ ...holiday, sms: { sms_on_closed_days: false } });
+      const offer = await request(app)
+        .post('/api/v1/admin/sms-offers')
+        .set(auth(opsToken))
+        .send({ audience: 'ALL', fallback_language: 'si', messages: TEXT })
+        .expect(422);
+      expect(offer.body.error).toMatchObject({ code: 'OUTSIDE_SENDING_HOURS', details: { closed_kind: 'HOLIDAY' } });
+      expect(offer.body.error.message).toContain('today is a holiday');
+      const test = await request(app)
+        .post('/api/v1/admin/sms-offers/test')
+        .set(auth(tokens.admin))
+        .send({ language: 'en', message: TEXT.en, phone: TEST_PHONE })
+        .expect(422);
+      expect(test.body.error.code).toBe('OUTSIDE_SENDING_HOURS');
+      expect((await pool.query(`SELECT 1 FROM notifications WHERE idempotency_key LIKE 'sms-offer-test:%'`)).rowCount).toBe(0);
+    } finally {
+      storeSchedule.read = pinnedRead;
     }
   });
 

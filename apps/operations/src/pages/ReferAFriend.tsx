@@ -6,6 +6,7 @@ import { catalogErrorMessage } from '../lib/catalog';
 import { formatDateTime } from '../lib/inventory';
 import { shortNumber } from '../lib/orders';
 import {
+  FRIEND_UNUSED_TO_CREDIT_HINT,
   MAX_REFERRAL_LKR,
   REFERRAL_MODE_LABEL,
   REFERRAL_RULES,
@@ -46,6 +47,7 @@ function ReferralSettingsCard() {
   const [friend, setFriend] = useState('200');
   const [inviter, setInviter] = useState('200');
   const [cap, setCap] = useState('10');
+  const [friendUnusedToCredit, setFriendUnusedToCredit] = useState(true);
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,6 +59,7 @@ function ReferralSettingsCard() {
     setFriend(numberText(s.friend_amount_lkr));
     setInviter(numberText(s.inviter_amount_lkr));
     setCap(String(s.monthly_cap));
+    setFriendUnusedToCredit(s.friend_unused_to_credit);
   }
 
   useEffect(() => {
@@ -70,7 +73,7 @@ function ReferralSettingsCard() {
     event.preventDefault();
     if (!current) return;
     setNotice(null);
-    const read = readReferralForm({ enabled, mode, friend, inviter, cap });
+    const read = readReferralForm({ enabled, mode, friend, inviter, cap, friendUnusedToCredit });
     if ('error' in read) {
       setError({ message: read.error, field: read.field });
       return;
@@ -87,6 +90,7 @@ function ReferralSettingsCard() {
         friend_amount_lkr: current.friend_amount_lkr,
         inviter_amount_lkr: current.inviter_amount_lkr,
         monthly_cap: current.monthly_cap,
+        friend_unused_to_credit: current.friend_unused_to_credit,
       },
       next
     );
@@ -106,7 +110,7 @@ function ReferralSettingsCard() {
     }
   }
 
-  const preview = readReferralForm({ enabled, mode, friend, inviter, cap });
+  const preview = readReferralForm({ enabled, mode, friend, inviter, cap, friendUnusedToCredit });
 
   return (
     <section className="card" aria-labelledby="referral-settings-title">
@@ -172,6 +176,18 @@ function ReferralSettingsCard() {
               aria-invalid={error?.field === 'cap' ? true : undefined}
             />
             <span className="field__hint">The most inviter rewards one customer can earn in a month (1 to 1,000).</span>
+          </label>
+          {/* (owner, 2026-10-10) "give all the options to control to ops and admin". */}
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={friendUnusedToCredit}
+              onChange={(e) => setFriendUnusedToCredit(e.target.checked)}
+            />
+            <span>
+              <strong>Unused friend reward becomes a credit</strong>
+              <em>{FRIEND_UNUSED_TO_CREDIT_HINT}</em>
+            </span>
           </label>
           {'value' in preview ? (
             <p className="quiet" data-testid="referral-summary">

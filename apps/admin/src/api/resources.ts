@@ -6,6 +6,7 @@ import type {
   StoreHoliday,
   StoreHoursInput,
   StoreSchedule,
+  StoreSmsSettings,
   DentalDoctor,
   DentalDoctorInput,
   BoardOrder,
@@ -354,6 +355,10 @@ export const settings = {
 
   setDeliverySlots: (body: Partial<DeliverySlotSettings>) =>
     apiRequest<StoreSchedule>('/admin/settings/delivery-slots', { method: 'PATCH', body: { ...body } }),
+
+  /** (owner, 2026-10-10) "Send offer/birthday texts on closed days". */
+  setStoreSms: (body: StoreSmsSettings) =>
+    apiRequest<StoreSchedule>('/admin/settings/store-sms', { method: 'PATCH', body: { ...body } }),
 
   /** Customers whose birthday week is now or within `days` days (0-31). */
   getBirthdays: (days = 7) => apiRequest<BirthdaysResult>(`/admin/birthdays?days=${days}`),

@@ -15,6 +15,7 @@ import {
   updateStoreClosureSchema,
   updateStoreHolidaysSchema,
   updateStoreHoursSchema,
+  updateStoreSmsSchema,
 } from './store-schedule.js';
 
 export const configurationRouter = Router();
@@ -206,7 +207,9 @@ adminSettingsRouter.patch(
 // scheduled delivery slots. One GET for the whole screen; each PATCH answers
 // with the whole schedule again. Each change is audited (STORE_HOURS_UPDATED,
 // STORE_CLOSED_NOW / STORE_REOPENED, STORE_HOLIDAYS_UPDATED,
-// DELIVERY_SLOTS_UPDATED) and applies at once (the in-process cache is dropped).
+// DELIVERY_SLOTS_UPDATED, STORE_SMS_UPDATED) and applies at once (the
+// in-process cache is dropped). /settings/store-sms is the "Send offer/birthday
+// texts on closed days" switch (owner, 2026-10-10).
 adminSettingsRouter.get(
   '/settings/store-schedule',
   requireAuth,
@@ -225,6 +228,7 @@ const scheduleEdits = [
   ['/settings/store-closure', updateStoreClosureSchema, storeScheduleService.setClosure],
   ['/settings/store-holidays', updateStoreHolidaysSchema, storeScheduleService.setHolidays],
   ['/settings/delivery-slots', updateDeliverySlotsSchema, storeScheduleService.setSlots],
+  ['/settings/store-sms', updateStoreSmsSchema, storeScheduleService.setSms],
 ] as const;
 
 for (const [path, schema, apply] of scheduleEdits) {
