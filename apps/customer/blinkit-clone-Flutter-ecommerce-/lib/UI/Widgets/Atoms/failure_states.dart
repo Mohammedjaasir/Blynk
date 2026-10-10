@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../Services/app_errors.dart';
 import '../../../design/tokens.dart';
 import 'app_state_views.dart';
+import 'doctors_sign_in_prompt.dart';
 import 'offline_banner.dart';
 
 /// A loading, error or empty state that is still one item of a scrollable, kept
@@ -52,6 +53,10 @@ class FailureState extends StatelessWidget {
     final retry = failure.retryable ? onRetry : null;
     final Widget view = failure.isOffline
         ? AppStateView.offline(retry, actionKey: retryKey)
+        // A guest refused by the doctors section (owner, 2026-10-10): its
+        // own prompt, whose login comes back to this screen.
+        : failure.isDoctorsSignIn
+            ? const DoctorsSignInPrompt()
         : failure.needsLogin
             // Asking again cannot help; logging in can.
             ? AppStateView.empty(

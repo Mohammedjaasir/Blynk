@@ -4,6 +4,7 @@ import { orderingClock } from '../../utils/time.js';
 import { DateTime } from 'luxon';
 import { STORE_TIMEZONE, displayHours, storeStatusAt } from '../../utils/store-hours.js';
 import { storeSchedule } from './store-schedule.js';
+import { doctorsAccess } from './doctors-access.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
@@ -561,7 +562,7 @@ export class SettingsService {
    * show "Save LKR" on offers).
    */
   async getPublicStore() {
-    const [fee, checkout, schedule, store] = await Promise.all([
+    const [fee, checkout, schedule, store, doctors] = await Promise.all([
       this.getDeliveryFee(),
       this.getCheckoutSettings(),
       storeSchedule.read(),
@@ -572,6 +573,7 @@ export class SettingsService {
         .orderBy('created_at', 'asc')
         .limit(1)
         .executeTakeFirst(),
+      doctorsAccess.read(),
     ]);
     const now = orderingClock.now();
     const status = storeStatusAt(schedule, now);
@@ -592,6 +594,8 @@ export class SettingsService {
       ...status,
       upcoming_holidays: schedule.holidays.filter((h) => h.date >= today && h.date <= in30),
       delivery_slots_enabled: schedule.slots.enabled,
+      // Owner, 2026-10-10: guests must sign in before the app shows doctors.
+      doctors_require_sign_in: doctors.require_sign_in,
     };
   }
 }

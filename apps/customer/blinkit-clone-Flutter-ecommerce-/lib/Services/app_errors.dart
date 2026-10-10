@@ -41,6 +41,11 @@ class CustomerError {
   bool get isTimeout => kind == CustomerErrorKind.timeout;
   bool get isNotFound => kind == CustomerErrorKind.notFound;
 
+  /// The doctors section refused a guest (401 SIGN_IN_REQUIRED, owner,
+  /// 2026-10-10): shown as the "Sign in to see doctors" prompt, whose login
+  /// returns to the doctors.
+  bool get isDoctorsSignIn => identical(this, AppErrors.doctorsSignInRequired);
+
   @override
   String toString() => 'CustomerError(${kind.name})';
 }
@@ -73,6 +78,16 @@ class AppErrors {
     kind: CustomerErrorKind.unauthorized,
     title: 'Log in needed',
     message: 'Log in to continue.',
+    retryable: false,
+    needsLogin: true,
+  );
+
+  /// "Doctors need sign-in" is on and this is a guest (owner, 2026-10-10:
+  /// "they must add their phone number and get registered").
+  static const CustomerError doctorsSignInRequired = CustomerError(
+    kind: CustomerErrorKind.unauthorized,
+    title: 'Sign in to see doctors',
+    message: 'Use your phone number to log in or create an account.',
     retryable: false,
     needsLogin: true,
   );
@@ -166,6 +181,9 @@ class AppErrors {
       retryable: false,
     ),
     'DELIVERY_OUTSIDE_RADIUS': outsideDeliveryArea,
+    // The dental discovery routes while "Doctors need sign-in" is on and no
+    // one is signed in (owner, 2026-10-10).
+    'SIGN_IN_REQUIRED': doctorsSignInRequired,
     // Ops/Admin decide the hours and can close the store at any time, so
     // this copy names no hours; place order shows the server's own sentence
     // (which says when it reopens) and this is only its fallback

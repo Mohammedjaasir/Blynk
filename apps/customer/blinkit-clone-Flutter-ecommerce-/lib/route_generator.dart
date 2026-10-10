@@ -12,6 +12,7 @@ import 'package:ecom/Screens/dental_clinics_screen.dart';
 import 'package:ecom/Screens/dental_doctor_profile_screen.dart';
 import 'package:ecom/Screens/dental_my_appointments_screen.dart';
 import 'package:ecom/Screens/dental_slot_picker_screen.dart';
+import 'package:ecom/UI/Widgets/Organisms/dental_sign_in_gate.dart';
 import 'package:ecom/Screens/not_found_screen.dart';
 import 'package:ecom/Screens/search_screen.dart';
 import 'package:ecom/Screens/session_gate.dart';
@@ -147,10 +148,13 @@ class AppRouter {
       case '/points':
         return MaterialPageRoute(settings: settings, builder: (_) => const PointsHistoryScreen());
       // --- Dental clinic appointments (task F5) ---------------------------
+      // The clinic list, a clinic, a doctor and booking are behind
+      // DentalSignInGate: a guest sees "Sign in to see doctors" while
+      // "Doctors need sign-in" is on (owner, 2026-10-10).
       case '/dental/clinics':
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => const DentalClinicsScreen(),
+          builder: (_) => DentalSignInGate(destination: settings, child: const DentalClinicsScreen()),
         );
       // Bare clinic id, mirroring '/order's argument style exactly. The
       // route string itself is '/dental/clinic' (singular) - the exact
@@ -163,7 +167,7 @@ class AppRouter {
         if (clinicId is! String || clinicId.trim().isEmpty) return _notFound(settings);
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => DentalClinicDetailScreen(clinicId: clinicId),
+          builder: (_) => DentalSignInGate(destination: settings, child: DentalClinicDetailScreen(clinicId: clinicId)),
         );
       // {doctorId, clinicId} map, exactly what dental_clinic_detail_screen.dart's
       // doctor row and DentalDoctorProfileScreen's constructor already agree on.
@@ -172,9 +176,12 @@ class AppRouter {
         if (args == null) return _notFound(settings);
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => DentalDoctorProfileScreen(
-            doctorId: args.doctorId,
-            clinicId: args.clinicId,
+          builder: (_) => DentalSignInGate(
+            destination: settings,
+            child: DentalDoctorProfileScreen(
+              doctorId: args.doctorId,
+              clinicId: args.clinicId,
+            ),
           ),
         );
       // Same {doctorId, clinicId} shape - dental_doctor_profile_screen.dart's
@@ -185,9 +192,12 @@ class AppRouter {
         if (args == null) return _notFound(settings);
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => DentalSlotPickerScreen(
-            doctorId: args.doctorId,
-            clinicId: args.clinicId,
+          builder: (_) => DentalSignInGate(
+            destination: settings,
+            child: DentalSlotPickerScreen(
+              doctorId: args.doctorId,
+              clinicId: args.clinicId,
+            ),
           ),
         );
       case '/dental/appointments':

@@ -237,6 +237,8 @@ describe('Delivery fee setting and GET /store', () => {
       today_hours: { open: '08:00', close: '21:00' },
       upcoming_holidays: [],
       delivery_slots_enabled: false,
+      // Doctors need sign-in (owner, 2026-10-10): pinned off by tests/setup/doctors-access.ts.
+      doctors_require_sign_in: false,
     });
   });
 

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:ecom/Services/Providers/profile.provider.dart';
 import 'package:ecom/Services/Providers/store_info.provider.dart';
+import 'package:ecom/Services/post_login_destination.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/UI/Widgets/Organisms/date_of_birth_picker.dart';
 import 'package:ecom/design/tokens.dart';
@@ -43,7 +44,9 @@ class _BirthdayPromptScreenState extends State<BirthdayPromptScreen> {
     super.dispose();
   }
 
-  void _home() => Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+  /// The end of sign-up: the shop, then the screen that asked for the login,
+  /// e.g. the doctors (owner, 2026-10-10).
+  void _home() => PostLoginDestination.goHome(Navigator.of(context));
 
   Future<void> _save() async {
     final date = _dateOfBirth;

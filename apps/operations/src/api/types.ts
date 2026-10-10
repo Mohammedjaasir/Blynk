@@ -1523,3 +1523,12 @@ export type StoreHoursInput =
   | { same_every_day: false; days: Record<DayKey, DayHours> };
 
 export type StoreClosureInput = { closed: true; reason: string; reopens_at?: string | null } | { closed: false };
+/** Doctors need sign-in (owner, 2026-10-10): when on (the default), a guest
+ * must log in or create an account with their phone number before the
+ * customer app shows clinics and doctors. GET|PATCH
+ * /admin/settings/doctors-access. */
+export interface DoctorsAccessSetting {
+  require_sign_in: boolean;
+  updated_at: string | null;
+}
+

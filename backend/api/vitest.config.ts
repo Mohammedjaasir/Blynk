@@ -16,7 +16,8 @@ export default defineConfig(({ mode }) => {
       // Pins the checkout clock inside ordering hours (8 AM - 9 PM Colombo).
       // Pins the checkout switches to coupons on, no free deliveries.
       // Pins the store timing to the defaults (store-schedule.ts).
-      setupFiles: ['./tests/setup/ordering-clock.ts', './tests/setup/checkout-settings.ts', './tests/setup/store-schedule.ts'],
+      // Pins "Doctors need sign-in" off so pre-existing suites browse doctors as guests.
+      setupFiles: ['./tests/setup/ordering-clock.ts', './tests/setup/checkout-settings.ts', './tests/setup/store-schedule.ts', './tests/setup/doctors-access.ts'],
     },
   };
 });

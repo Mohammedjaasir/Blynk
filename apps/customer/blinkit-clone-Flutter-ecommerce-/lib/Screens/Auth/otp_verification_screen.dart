@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:ecom/Infrastructure/LocalStorage/guest_choice_storage.dart';
 import 'package:ecom/Services/Providers/auth.provider.dart';
 import 'package:ecom/Services/app_errors.dart';
+import 'package:ecom/Services/post_login_destination.dart';
 import 'package:ecom/design/tokens.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_text_field.dart';
@@ -97,10 +98,13 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
 
       if (!context.mounted) return;
       // A new customer (no name on the account) is asked for it first.
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        authProvider.needsName ? NameCaptureScreen.route : '/home',
-        (route) => false,
-      );
+      if (authProvider.needsName) {
+        Navigator.of(context).pushNamedAndRemoveUntil(NameCaptureScreen.route, (route) => false);
+      } else {
+        // The shop, then the screen that asked for the login, e.g. the
+        // doctors (owner, 2026-10-10).
+        PostLoginDestination.goHome(Navigator.of(context));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {

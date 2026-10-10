@@ -138,6 +138,22 @@ class StoreInfoProvider extends ChangeNotifier {
   /// the server sends a real `true`: a missing or non-bool value means off.
   bool get showOfferSavings => _showOfferSavings;
 
+  bool _doctorsRequireSignIn = true;
+
+  /// Whether a guest must log in (or create an account) with their phone
+  /// number before the doctors section shows anything
+  /// (`doctors_require_sign_in` on `GET /store`; owner, 2026-10-10). On until
+  /// the server sends a real `false`: a missing or non-bool value means on,
+  /// so an older backend or a bad answer never opens the doctors to guests.
+  bool get doctorsRequireSignIn => _doctorsRequireSignIn;
+
+  /// The `doctors_require_sign_in` value of one `GET /store` `data` map:
+  /// only a real bool counts, anything else is on (owner, 2026-10-10).
+  static bool parseDoctorsRequireSignIn(Object? data) {
+    final raw = data is Map ? data['doctors_require_sign_in'] : null;
+    return raw is bool ? raw : true;
+  }
+
   FreeDeliveryOffer? _freeDelivery;
   Future<void>? _loadingCheckoutInfo;
 
@@ -243,6 +259,12 @@ class StoreInfoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _setDoctorsRequireSignIn(bool required) {
+    if (_disposed || required == _doctorsRequireSignIn) return;
+    _doctorsRequireSignIn = required;
+    notifyListeners();
+  }
+
   void _setCouponsEnabled(bool enabled) {
     if (_disposed || enabled == _couponsEnabled) return;
     _couponsEnabled = enabled;
@@ -297,6 +319,8 @@ class StoreInfoProvider extends ChangeNotifier {
         _setCouponsEnabled(data['coupons_enabled'] == true);
         // The "Save LKR X" switch (owner, 2026-10-10): only a real bool true.
         _setShowOfferSavings(data['show_offer_savings'] == true);
+        // The doctors sign-in switch (owner, 2026-10-10): on unless a real false.
+        _setDoctorsRequireSignIn(parseDoctorsRequireSignIn(data));
       }
       final fee = parseFee(data is Map ? data['delivery_fee_lkr'] : null);
       final feeNotified = fee != null && _set(fee);
@@ -349,6 +373,12 @@ bool watchCouponsEnabled(BuildContext context) =>
 /// means hidden).
 bool watchShowOfferSavings(BuildContext context) =>
     context.watch<StoreInfoProvider?>()?.showOfferSavings ?? false;
+
+/// Whether a guest must sign in before the doctors section shows anything
+/// (owner, 2026-10-10), rebuilding when the switch changes; true where no
+/// [StoreInfoProvider] is in the tree (unknown means sign in first).
+bool watchDoctorsRequireSignIn(BuildContext context) =>
+    context.watch<StoreInfoProvider?>()?.doctorsRequireSignIn ?? true;
 
 /// The live store hours label ("8 AM – 9 PM") for a widget, rebuilding when
 /// it changes; the fallback constant where no [StoreInfoProvider] is in the

@@ -8,6 +8,7 @@ import 'package:ecom/Screens/dental_clinics_screen.dart';
 import 'package:ecom/Screens/dental_doctor_profile_screen.dart';
 import 'package:ecom/Screens/dental_my_appointments_screen.dart';
 import 'package:ecom/Screens/dental_slot_picker_screen.dart';
+import 'package:ecom/UI/Widgets/Organisms/dental_sign_in_gate.dart';
 import 'package:ecom/Screens/not_found_screen.dart';
 import 'package:ecom/route_generator.dart';
 
@@ -32,19 +33,30 @@ Future<Widget> _build(WidgetTester tester, String? name, {Object? arguments}) as
   return built;
 }
 
+/// The doctors routes are behind DentalSignInGate (owner, 2026-10-10: a
+/// guest signs in first while "Doctors need sign-in" is on); the screen is
+/// its child, and its login comes back to this same route.
+Widget _gated(Widget page, String name, {Object? arguments}) {
+  expect(page, isA<DentalSignInGate>(), reason: name);
+  final gate = page as DentalSignInGate;
+  expect(gate.destination.name, name);
+  expect(gate.destination.arguments, arguments);
+  return gate.child;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
 
   group('/dental/clinics', () {
     testWidgets('opens the clinics list, no argument needed', (tester) async {
-      expect(await _build(tester, '/dental/clinics'), isA<DentalClinicsScreen>());
+      expect(_gated(await _build(tester, '/dental/clinics'), '/dental/clinics'), isA<DentalClinicsScreen>());
     });
   });
 
   group('/dental/clinic', () {
     testWidgets('a non-empty clinic id opens the clinic detail page', (tester) async {
-      final page = await _build(tester, '/dental/clinic', arguments: 'c1');
+      final page = _gated(await _build(tester, '/dental/clinic', arguments: 'c1'), '/dental/clinic', arguments: 'c1');
       expect(page, isA<DentalClinicDetailScreen>());
       expect((page as DentalClinicDetailScreen).clinicId, 'c1');
     });
@@ -58,8 +70,8 @@ void main() {
 
   group('/dental/doctor', () {
     testWidgets('a {doctorId, clinicId} map opens the doctor profile with both ids', (tester) async {
-      final page = await _build(
-        tester,
+      final page = _gated(
+        await _build(tester, '/dental/doctor', arguments: {'doctorId': 'd1', 'clinicId': 'c1'}),
         '/dental/doctor',
         arguments: {'doctorId': 'd1', 'clinicId': 'c1'},
       );
@@ -86,8 +98,8 @@ void main() {
 
   group('/dental/book', () {
     testWidgets('the same {doctorId, clinicId} shape opens the slot picker with both ids', (tester) async {
-      final page = await _build(
-        tester,
+      final page = _gated(
+        await _build(tester, '/dental/book', arguments: {'doctorId': 'd1', 'clinicId': 'c1'}),
         '/dental/book',
         arguments: {'doctorId': 'd1', 'clinicId': 'c1'},
       );

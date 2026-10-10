@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { dental } from '../../api/resources';
+import { dental, settings } from '../../api/resources';
+import type { DoctorsAccessSetting } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
+import { Spinner } from '../../components/ui';
+import { catalogErrorMessage } from '../../lib/catalog';
+import { formatDateTime } from '../../lib/inventory';
 
 /**
  * Dental hub (task F8, plan §15-19) - the entry point Catalog's own hub
@@ -69,6 +73,81 @@ export function Overview() {
           </Link>
         </li>
       </ul>
+      <DoctorsSignInCard />
     </div>
+  );
+}
+
+/**
+ * "Doctors need sign-in" (owner, 2026-10-10: "For the doctor thing, they
+ * must add their phone number and get registered. Otherwise it should not
+ * show the doctor things."). On by default; flipping the switch saves at
+ * once (PATCH /admin/settings/doctors-access, audited) and the customer app
+ * follows within about a minute.
+ */
+export function DoctorsSignInCard() {
+  const [current, setCurrent] = useState<DoctorsAccessSetting | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    settings.doctorsAccess
+      .get()
+      .then(setCurrent)
+      .catch((err) => setLoadError(catalogErrorMessage(err)));
+  }, []);
+
+  async function change(requireSignIn: boolean) {
+    setNotice(null);
+    setError(null);
+    setSaving(true);
+    try {
+      const saved = await settings.doctorsAccess.update(requireSignIn);
+      setCurrent(saved);
+      setNotice(
+        saved.require_sign_in
+          ? 'Saved. Customers must sign in to see doctors.'
+          : 'Saved. Anyone can see doctors without signing in.'
+      );
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card" aria-labelledby="doctors-sign-in-title">
+      <h2 className="section-label" id="doctors-sign-in-title">
+        Who can see doctors
+      </h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading the doctors sign-in setting" />
+      ) : (
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={current.require_sign_in}
+            disabled={saving}
+            onChange={(e) => void change(e.target.checked)}
+          />
+          <span>
+            <strong>Doctors need sign-in</strong>
+            <em>
+              When on, customers must log in or create an account with their phone number before the app shows
+              clinics and doctors. When off, anyone can see doctors; booking always needs sign-in.
+            </em>
+          </span>
+        </label>
+      )}
+      {saving ? <Spinner label="Saving" /> : null}
+      {error ? <p className="field__error" role="alert">{error}</p> : null}
+      {notice ? <p className="quiet quiet--ok" role="status">{notice}</p> : null}
+      {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}
+    </section>
   );
 }

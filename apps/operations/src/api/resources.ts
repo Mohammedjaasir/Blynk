@@ -1,6 +1,7 @@
 import { apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
+  DoctorsAccessSetting,
   Coupon,
   CouponInput,
   RiderTripsSetting,
@@ -1081,6 +1082,13 @@ export const staff = {
 
   update: (id: string, input: UpdateStaffInput) =>
     apiRequest<{ staff: StaffAccount }>(`/admin/staff/${id}`, { method: 'PATCH', body: { ...input } }).then(
+  /** Doctors need sign-in (owner, 2026-10-10): guests must log in before
+   * the customer app shows doctors. */
+  doctorsAccess: {
+    get: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
+    update: (require_sign_in: boolean) =>
+      apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { require_sign_in } }),
+  },
       (d) => d.staff
     ),
 };

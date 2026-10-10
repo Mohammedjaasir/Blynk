@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import { dentalDoctors } from '../api/resources';
 import { DENTAL_SPECIALTY_SUGGESTIONS, type DentalDoctor } from '../api/types';
 import { PageHeader } from '../components/Layout';
+import { DoctorsSignInCard } from '../components/DoctorsSignInCard';
 import { Badge, EmptyState, Field, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 
@@ -74,6 +75,8 @@ export function DentalDoctors() {
           </button>
         }
       />
+
+      <DoctorsSignInCard />
 
       {error ? <p className="field__error">{error}</p> : null}
 

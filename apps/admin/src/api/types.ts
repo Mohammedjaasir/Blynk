@@ -682,6 +682,15 @@ export interface Coupon {
   code: string;
   description: string | null;
   discount_type: CouponType;
+/** Doctors need sign-in (owner, 2026-10-10): when on (the default), a guest
+ * must log in or create an account with their phone number before the
+ * customer app shows clinics and doctors. GET|PATCH
+ * /admin/settings/doctors-access. */
+export interface DoctorsAccessSetting {
+  require_sign_in: boolean;
+  updated_at: string | null;
+}
+
   discount_value: number;
   max_discount: number | null;
   min_subtotal: number | null;

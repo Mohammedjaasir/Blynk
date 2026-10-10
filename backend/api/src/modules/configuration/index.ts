@@ -17,6 +17,7 @@ import {
   updateStoreHoursSchema,
   updateStoreSmsSchema,
 } from './store-schedule.js';
+import { doctorsAccessService, updateDoctorsAccessSchema } from './doctors-access.js';
 
 export const configurationRouter = Router();
 
@@ -241,3 +242,34 @@ for (const [path, schema, apply] of scheduleEdits) {
     }
   });
 }
+
+// Doctors need sign-in (owner, 2026-10-10: "If they want to go to the doctors
+// section, they must log in or create an account"). On by default; when off,
+// guests may browse clinics and doctors again. Audited
+// (DOCTORS_ACCESS_UPDATED); applies to the next request.
+adminSettingsRouter.get(
+  '/settings/doctors-access',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await doctorsAccessService.get() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/doctors-access',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateDoctorsAccessSchema.parse(req.body);
+      res.json({ success: true, data: await doctorsAccessService.set(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);

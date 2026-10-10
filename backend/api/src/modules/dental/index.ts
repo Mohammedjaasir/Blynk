@@ -5,20 +5,26 @@ import { dentalController } from './dental.controller.js';
 import { appointmentController } from './appointment.controller.js';
 import { dentalAdminController } from './dental-admin.controller.js';
 import { doctorRatingController } from './doctor-rating.controller.js';
+import { requireDoctorsSignIn } from '../configuration/doctors-access.js';
 
 // ----------------------------------------------------------------------------
-// 1. CLINICS ROUTER (/api/v1/dental/clinics) - all public, no auth needed
-//    to browse (matches the grocery catalog's public-read pattern).
+// 1. CLINICS ROUTER (/api/v1/dental/clinics) - public to browse only when
+//    Admin/Operations switch "Doctors need sign-in" off; by default a guest
+//    gets 401 SIGN_IN_REQUIRED (owner, 2026-10-10: "If they want to go to the
+//    doctors section, they must log in or create an account").
 // ----------------------------------------------------------------------------
 export const dentalClinicsRouter = Router();
+dentalClinicsRouter.use(requireDoctorsSignIn());
 dentalClinicsRouter.get('/', dentalController.listClinics.bind(dentalController));
 dentalClinicsRouter.get('/:id', dentalController.getClinicById.bind(dentalController));
 dentalClinicsRouter.get('/:id/doctors', dentalController.listClinicDoctors.bind(dentalController));
 
 // ----------------------------------------------------------------------------
-// 2. DOCTORS ROUTER (/api/v1/dental/doctors) - all public.
+// 2. DOCTORS ROUTER (/api/v1/dental/doctors) - same sign-in rule as clinics
+//    (owner, 2026-10-10).
 // ----------------------------------------------------------------------------
 export const dentalDoctorsRouter = Router();
+dentalDoctorsRouter.use(requireDoctorsSignIn());
 dentalDoctorsRouter.get('/:id', dentalController.getDoctorById.bind(dentalController));
 dentalDoctorsRouter.get('/:id/availability', dentalController.getDoctorAvailability.bind(dentalController));
 dentalDoctorsRouter.get('/:id/slots', dentalController.getDoctorSlots.bind(dentalController));

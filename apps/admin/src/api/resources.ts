@@ -1,5 +1,6 @@
 import { apiRequest, tokenStore } from './client';
 import type {
+  DoctorsAccessSetting,
   RiderTripsSetting,
   DeliverySlotSettings,
   StoreClosureInput,
@@ -352,6 +353,13 @@ export const settings = {
   /** The full list replaces the stored one. */
   setStoreHolidays: (holidays: StoreHoliday[]) =>
     apiRequest<StoreSchedule>('/admin/settings/store-holidays', { method: 'PATCH', body: { holidays } }),
+  /** Doctors need sign-in (owner, 2026-10-10): guests must log in before
+   * the customer app shows doctors. */
+  getDoctorsAccess: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
+
+  setDoctorsAccess: (require_sign_in: boolean) =>
+    apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { require_sign_in } }),
+
 
   setDeliverySlots: (body: Partial<DeliverySlotSettings>) =>
     apiRequest<StoreSchedule>('/admin/settings/delivery-slots', { method: 'PATCH', body: { ...body } }),
