@@ -231,3 +231,75 @@ export async function uploadImage(
 export async function deleteImage(url: string): Promise<void> {
   await apiRequest('/admin/media', { method: 'DELETE', body: { url } });
 }
+
+// ------------------------------------------------------- private files
+/** A private file (rider document page) that hangs this long fails as a timeout. */
+export const PRIVATE_FILE_TIMEOUT_MS = 30_000;
+
+/**
+ * Rider documents (owner, 2026-10-10): a private file the API serves only
+ * with the staff token - there is no public URL. Same base URL, Authorization
+ * header and refresh-on-401 as apiRequest, plus a timeout. The caller turns
+ * the Blob into an object URL and revokes it when done; nothing is cached or
+ * stored (the API also sends Cache-Control: no-store).
+ */
+export async function fetchPrivateFile(path: string, signal?: AbortSignal): Promise<Blob> {
+  let response = await sendForFile(path, signal);
+
+  if (response.status === 401) {
+    const outcome = tokenStore.refresh ? await refreshSession() : 'refused';
+    if (outcome === 'ok') {
+      response = await sendForFile(path, signal);
+    } else if (outcome === 'refused') {
+      tokenStore.clear();
+      notifySessionEnded();
+    } else {
+      throw new ApiError(
+        outcome === 'unreachable' ? 'Could not reach the Blynk API.' : 'Could not renew your session right now. Try again in a moment.',
+        outcome === 'unreachable' ? 0 : 503,
+        outcome === 'unreachable' ? 'NETWORK' : 'REFRESH_UNAVAILABLE'
+      );
+    }
+  }
+
+  if (!response.ok) {
+    let error: { message?: string; code?: string; details?: unknown } = {};
+    try {
+      const text = await response.text();
+      error = ((text ? (JSON.parse(text) as Json) : {}).error ?? {}) as typeof error;
+    } catch {
+      /* not JSON - keep the generic message */
+    }
+    throw new ApiError(error.message ?? 'Could not load the file.', response.status, error.code, error.details);
+  }
+
+  return response.blob();
+}
+
+async function sendForFile(path: string, signal?: AbortSignal): Promise<Response> {
+  const headers: Record<string, string> = {};
+  const token = tokenStore.access;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let timedOut = false;
+  const timer = controller
+    ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, PRIVATE_FILE_TIMEOUT_MS)
+    : null;
+  const forward = () => controller?.abort();
+  signal?.addEventListener('abort', forward);
+  try {
+    return await fetch(`${BASE_URL}${path}`, { method: 'GET', headers, cache: 'no-store', signal: controller?.signal });
+  } catch {
+    if (signal?.aborted) throw new ApiError('Cancelled.', 0, 'ABORTED');
+    throw timedOut
+      ? new ApiError('The file took too long to load. Try again.', 0, 'TIMEOUT')
+      : new ApiError('Could not reach the Blynk API.', 0, 'NETWORK');
+  } finally {
+    if (timer) clearTimeout(timer);
+    signal?.removeEventListener('abort', forward);
+  }
+}

@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { riders as ridersApi, settings } from '../api/resources';
-import type { RiderOption, RiderPay, RiderPayType } from '../api/types';
+import { riderDocuments, riders as ridersApi } from '../api/resources';
+import type { PayParams, RiderDocumentAlert, RiderOption, RiderPay } from '../api/types';
 import { PageHeader } from '../components/Layout';
-import { RiderPayFields } from '../components/RiderPayFields';
+import { RiderPayFields, useRiderPayDefaults } from '../components/RiderPayFields';
+import { RiderAdjustSheet } from '../components/RiderAdjustments';
+import { RiderDocumentsSheet } from '../components/RiderDocuments';
 import { EmptyState, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
-import { parseOwnPercent, payLabel } from '../lib/riderPay';
+import {
+  describePay,
+  payDraftFrom,
+  payDraftToInput,
+  payModelLabel,
+  type PayDraft,
+  type PayDraftErrors,
+} from '../lib/riderPay';
 
 /**
  * Rider roster (task F7, plan §14). Reuses `riders.listActive()`
@@ -19,13 +28,37 @@ import { parseOwnPercent, payLabel } from '../lib/riderPay';
  * `PATCH /admin/riders/:id/pay`. That is the only change this screen makes:
  * the backend still has no create/activate/deactivate rider endpoint, so no
  * such control is offered (rider accounts come in through Rider requests).
+ *
+ * Rider documents (owner, 2026-10-10): "Documents" opens the rider's
+ * vehicle book, revenue licence, insurance and driving licence (verify /
+ * reject again, e.g. a renewed insurance), and each row shows an
+ * "Insurance expired" / "Insurance expiring soon" badge (or a softer
+ * "Documents expiring" one) from `GET /admin/rider-documents/alerts`,
+ * matched on riders.id - the same id this list's rows carry.
+ *
+ * Rider pay controls (owner, 2026-10-10): Change pay also picks a commission
+ * rider's model - the store default, or their own % / fixed LKR / distance
+ * pay with an optional minimum - and "Adjust pay" records a deduction or
+ * extra pay with a reason (kept from that day's cash).
  */
 export function Riders() {
   const [rows, setRows] = useState<RiderOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [defaultPercent, setDefaultPercent] = useState<number | null>(null);
+  const { defaultPercent, defaultModel, learn } = useRiderPayDefaults();
   const [editing, setEditing] = useState<RiderOption | null>(null);
+  const [adjusting, setAdjusting] = useState<RiderOption | null>(null);
+  const [alerts, setAlerts] = useState<RiderDocumentAlert[]>([]);
+  const [docsFor, setDocsFor] = useState<RiderOption | null>(null);
+
+  // Expiry badges (owner, 2026-10-10). A failure only hides the badges.
+  function loadAlerts() {
+    riderDocuments
+      .alerts()
+      .then((d) => setAlerts(d.alerts ?? []))
+      .catch(() => undefined);
+  }
+  useEffect(loadAlerts, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,11 +72,7 @@ export function Riders() {
         setError(errorMessage(err, 'Could not load riders.'));
         setRows([]);
       });
-    // The store default % labels commission riders without their own %.
-    settings.riderCommission
-      .get()
-      .then((s) => !cancelled && setDefaultPercent(s.default_percent))
-      .catch(() => undefined);
+    // The store default (useRiderPayDefaults) labels riders without their own pay.
     return () => {
       cancelled = true;
     };
@@ -51,13 +80,23 @@ export function Riders() {
 
   function saved(rider: RiderOption, pay: RiderPay) {
     setEditing(null);
-    setDefaultPercent(pay.default_percent);
+    learn(pay);
     setRows((list) =>
       (list ?? []).map((r) =>
-        r.id === rider.id ? { ...r, pay_type: pay.pay_type, commission_percent: pay.commission_percent } : r
+        r.id === rider.id
+          ? { ...r, pay_type: pay.pay_type, commission_percent: pay.commission_percent, pay_model: pay.pay_model ?? null }
+          : r
       )
     );
-    setNotice(`${rider.full_name ?? rider.phone ?? 'The rider'} is now ${payLabel(pay.pay_type, pay.commission_percent, pay.default_percent)}.`);
+    setNotice(
+      `${rider.full_name ?? rider.phone ?? 'The rider'} is now ${payModelLabel(
+        pay.pay_type,
+        pay.commission_percent,
+        pay.default_percent,
+        pay.pay_model,
+        pay.default_model ?? defaultModel
+      )}.`
+    );
   }
 
   return (
@@ -103,11 +142,20 @@ export function Riders() {
                 </p>
                 <p className="cat-row__meta">
                   <span className={`pay-tag pay-tag--${(r.pay_type ?? 'COMPANY').toLowerCase()}`}>
-                    {payLabel(r.pay_type, r.commission_percent, defaultPercent)}
+                    {payModelLabel(r.pay_type, r.commission_percent, defaultPercent, r.pay_model, defaultModel)}
                   </span>
                 </p>
+                <DocumentBadges alerts={alerts.filter((a) => a.rider_id === r.id)} />
               </div>
               <div className="cat-row__actions">
+                <button
+                  type="button"
+                  className="button button--sm button--ghost"
+                  aria-label={`Documents for ${r.full_name ?? r.phone ?? 'rider'}`}
+                  onClick={() => setDocsFor(r)}
+                >
+                  Documents
+                </button>
                 <button
                   type="button"
                   className="button button--sm button--ghost"
@@ -115,6 +163,15 @@ export function Riders() {
                   onClick={() => setEditing(r)}
                 >
                   Change pay
+                </button>
+                {/* Deductions / extra pay with a reason (owner, 2026-10-10). */}
+                <button
+                  type="button"
+                  className="button button--sm button--ghost"
+                  aria-label={`Adjust pay for ${r.full_name ?? r.phone ?? 'rider'}`}
+                  onClick={() => setAdjusting(r)}
+                >
+                  Adjust pay
                 </button>
               </div>
             </li>
@@ -125,11 +182,50 @@ export function Riders() {
       {editing ? (
         <RiderPayDialog rider={editing} onClose={() => setEditing(null)} onSaved={(pay) => saved(editing, pay)} />
       ) : null}
+      {adjusting ? (
+        <RiderAdjustSheet
+          riderId={adjusting.id}
+          name={adjusting.full_name ?? adjusting.phone ?? 'Rider'}
+          onClose={() => setAdjusting(null)}
+        />
+      ) : null}
+      {docsFor ? (
+        <RiderDocumentsSheet
+          riderId={docsFor.id}
+          name={docsFor.full_name ?? docsFor.phone ?? 'Rider'}
+          onClose={() => setDocsFor(null)}
+          onChanged={loadAlerts}
+        />
+      ) : null}
     </div>
   );
 }
 
-/** Change a rider's type and own % (owner, 2026-10-09). Loads the current
+/** Insurance first and loudest; any other expiring document gets a softer
+ * badge (owner, 2026-10-10). */
+function DocumentBadges({ alerts }: { alerts: RiderDocumentAlert[] }) {
+  if (alerts.length === 0) return null;
+  const insurance = alerts.filter((a) => a.is_insurance);
+  const others = alerts.filter((a) => !a.is_insurance);
+  const insuranceExpired = insurance.some((a) => a.expiry_state === 'EXPIRED');
+  return (
+    <p className="rdoc-badges">
+      {insurance.length > 0 ? (
+        <span className={`rdoc-badge ${insuranceExpired ? 'rdoc-badge--bad' : 'rdoc-badge--warn'}`}>
+          {insuranceExpired ? 'Insurance expired' : 'Insurance expiring soon'}
+        </span>
+      ) : null}
+      {others.length > 0 ? (
+        <span className="rdoc-badge rdoc-badge--soft" title={others.map((a) => a.label).join(', ')}>
+          {others.some((a) => a.expiry_state === 'EXPIRED') ? 'Documents expired' : 'Documents expiring'}
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
+/** Change a rider's type and own % (owner, 2026-10-09) - and, for a
+ * commission rider, their pay model (owner, 2026-10-10). Loads the current
  * pay first so the dialog never guesses. */
 function RiderPayDialog({
   rider,
@@ -140,13 +236,17 @@ function RiderPayDialog({
   onClose(): void;
   onSaved(pay: RiderPay): void;
 }) {
+  const { defaults: storeDefaults } = useRiderPayDefaults();
   const [pay, setPay] = useState<RiderPay | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [payType, setPayType] = useState<RiderPayType>(rider.pay_type ?? 'COMPANY');
-  const [percent, setPercent] = useState('');
-  const [percentError, setPercentError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<PayDraft | null>(null);
+  const [errors, setErrors] = useState<PayDraftErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // The pay's own default_model (new API) wins over the separately loaded store default.
+  const defaults: PayParams | null =
+    pay?.default_model ?? (pay && storeDefaults ? { ...storeDefaults, percent: pay.default_percent } : storeDefaults);
 
   useEffect(() => {
     let live = true;
@@ -155,8 +255,7 @@ function RiderPayDialog({
       .then((p) => {
         if (!live) return;
         setPay(p);
-        setPayType(p.pay_type);
-        setPercent(p.commission_percent != null ? String(p.commission_percent) : '');
+        setDraft(payDraftFrom(p, p.default_model ?? null));
       })
       .catch((err) => live && setLoadError(errorMessage(err, 'Could not load this rider’s pay.')));
     return () => {
@@ -165,23 +264,21 @@ function RiderPayDialog({
   }, [rider.id]);
 
   async function save() {
-    let own: number | null = null;
-    if (payType === 'COMMISSION') {
-      const parsed = parseOwnPercent(percent);
-      if ('error' in parsed) {
-        setPercentError(parsed.error);
-        return;
-      }
-      own = parsed.value;
+    if (!draft) return;
+    const built = payDraftToInput(draft);
+    if ('errors' in built) {
+      setErrors(built.errors);
+      return;
     }
-    setPercentError(null);
+    setErrors({});
     setFormError(null);
     setSaving(true);
     try {
+      // COMPANY keeps sending commission_percent: null, as it always has.
       onSaved(
         await ridersApi.updatePay(
           rider.id,
-          payType === 'COMMISSION' ? { pay_type: 'COMMISSION', commission_percent: own } : { pay_type: 'COMPANY', commission_percent: null }
+          built.input.pay_type === 'COMPANY' ? { pay_type: 'COMPANY', commission_percent: null } : built.input
         )
       );
     } catch (err) {
@@ -200,20 +297,25 @@ function RiderPayDialog({
           <p className="field__error" role="alert">
             {loadError}
           </p>
-        ) : !pay ? (
+        ) : !pay || !draft ? (
           <Spinner label="Loading pay" />
         ) : (
-          <RiderPayFields
-            payType={payType}
-            onPayType={(next) => {
-              setPayType(next);
-              setPercentError(null);
-            }}
-            percent={percent}
-            onPercent={setPercent}
-            defaultPercent={pay.default_percent}
-            error={percentError}
-          />
+          <>
+            {pay.effective ? (
+              <p className="quiet" data-testid="pay-now">
+                Now: {describePay(pay.effective)}
+              </p>
+            ) : null}
+            <RiderPayFields
+              draft={draft}
+              onChange={(next) => {
+                setDraft(next);
+                setErrors({});
+              }}
+              defaults={defaults}
+              errors={errors}
+            />
+          </>
         )}
         {formError ? (
           <p className="field__error" role="alert">

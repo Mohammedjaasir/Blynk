@@ -8,6 +8,8 @@ import { PageHeader } from '../components/Layout';
 import { StoreScheduleSettings } from '../components/StoreSchedulePanels';
 import { ReferralSettingsCard } from '../components/ReferralSettingsCard';
 import { PointsSettingsCard } from '../components/PointsSettingsCard';
+import { RiderDocumentsSettingsCard } from '../components/RiderDocumentsSettingsCard';
+import { RiderPaySettings } from '../components/RiderPaySettings';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
 import { MAX_BIRTHDAY_SMS, fillPercent, parseBirthdayPercent, percentText } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
@@ -55,8 +57,13 @@ export function Settings() {
       <StoreScheduleSettings />
       <DeliveryFeeSettingPanel />
       <CheckoutSettingsPanel />
-      <RiderCommissionPanel />
+      {/* Rider pay (owner, 2026-10-10): default pay model, bonuses and the rain
+          boost. Its % is the default commission, so the old commission card
+          only shows against an API without the pay controls. */}
+      <RiderPaySettings fallback={<RiderCommissionPanel />} />
       <RiderTripsPanel />
+      {/* Rider documents riders upload at sign-up (owner, 2026-10-10). */}
+      <RiderDocumentsSettingsCard />
       <BirthdayOfferPanel />
       {/* Refer a friend and Blynk Points (owner, 2026-10-10). */}
       <ReferralSettingsCard />
@@ -419,7 +426,9 @@ function CheckoutSettingsPanel() {
 /**
  * Commission riders earn this % of the STANDARD delivery fee on each delivery
  * unless they have their own % (owner, 2026-10-09). Company riders are
- * salaried and earn no commission.
+ * salaried and earn no commission. Since the rider pay controls (owner,
+ * 2026-10-10) this card is only the fallback for an older API; the Rider pay
+ * card edits the same %.
  */
 function RiderCommissionPanel() {
   const toast = useToast();

@@ -5,6 +5,12 @@ import { riderController } from './rider.controller.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { ownRiderProfileSchema, riderProfileService, type OwnRiderProfileInput } from './rider.profile.js';
 import { riderApplicationsPublicRouter } from './rider.applications.js';
+import { riderApplicantDocumentsRouter } from './rider.documents.js';
+import { assertPrivateRoot } from './rider.documents.files.js';
+
+// Rider documents are private (owner, 2026-10-10): refuse to start if their
+// directory sits inside the public /uploads folder.
+assertPrivateRoot();
 
 export const ridersRouter = Router();
 
@@ -15,6 +21,9 @@ ridersRouter.get('/status', (_req, res) => {
 // Rider applications (migration 029): POST /riders/applications, public -
 // the applicant proves the phone with an SMS code in the body.
 ridersRouter.use(riderApplicationsPublicRouter);
+// Rider documents (migration 039): applicant session, uploads and own pages
+// under /riders/applications/... (an applicant token, not a sign-in).
+ridersRouter.use(riderApplicantDocumentsRouter);
 
 // Backward-compatible test route
 ridersRouter.get('/orders', requireAuth, requireRoles('RIDER'), (_req, res) => {

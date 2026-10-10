@@ -17,7 +17,8 @@ export default defineConfig(({ mode }) => {
       // Pins the checkout switches to coupons on, no free deliveries.
       // Pins the store timing to the defaults (store-schedule.ts).
       // Pins "Doctors need sign-in" off so pre-existing suites browse doctors as guests.
-      setupFiles: ['./tests/setup/ordering-clock.ts', './tests/setup/checkout-settings.ts', './tests/setup/store-schedule.ts', './tests/setup/doctors-access.ts'],
+      setupFiles: ['./tests/setup/ordering-clock.ts', './tests/setup/checkout-settings.ts', './tests/setup/store-schedule.ts', './tests/setup/doctors-access.ts', './tests/setup/rider-documents.ts'],
+      // (rider-documents.ts, owner 2026-10-10: pins "no rider documents required" for pre-existing suites.)
     },
   };
 });

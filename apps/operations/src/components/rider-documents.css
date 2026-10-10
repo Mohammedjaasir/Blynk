@@ -1,0 +1,669 @@
+/*
+ * Rider documents (owner, 2026-10-10): thumbnails, the full-screen viewer,
+ * the calendar date picker and the Settings -> Rider documents cards. Kept
+ * in its own file (imported by the components that use it) so it never
+ * collides with other work in styles.css; it uses only the app's own
+ * tokens (--ink, --yellow, --line, radius scale) from styles.css.
+ */
+
+/* ------------------------------------------------------------- thumbnails */
+.rdoc-grid {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.rdoc-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rdoc-thumb {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+  overflow: hidden;
+  cursor: zoom-in;
+  color: var(--ink-2);
+  font: inherit;
+}
+
+.rdoc-thumb:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.rdoc-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rdoc-thumb--missing {
+  cursor: default;
+  border-style: dashed;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+.rdoc-tile[data-state='missing'] .rdoc-thumb--missing {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: #fff5f4;
+}
+
+.rdoc-thumb__pdf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  background: var(--ink);
+  color: var(--yellow);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.rdoc-thumb__note {
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}
+
+.rdoc-thumb__loading {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--canvas) 25%, var(--line) 50%, var(--canvas) 75%);
+  background-size: 200% 100%;
+  animation: rdoc-shimmer 1.2s linear infinite;
+}
+
+@keyframes rdoc-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rdoc-thumb__loading {
+    animation: none;
+  }
+}
+
+.rdoc-thumb__pages {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(18, 21, 31, 0.78);
+  color: #fff;
+  font-size: var(--text-label);
+  font-weight: 800;
+}
+
+.rdoc-tile__label {
+  margin: 2px 0 0;
+  font-weight: 800;
+  font-size: var(--text-meta);
+  line-height: 1.25;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.rdoc-required {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: var(--text-label);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rdoc-tile__expiry {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+}
+
+.rdoc-blocking {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: #fff7d6;
+  border: 1px solid #f0dd8f;
+  color: var(--ink);
+  font-size: var(--text-meta);
+  font-weight: 600;
+}
+
+.rdoc-override {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-lg);
+  background: #fff5f4;
+}
+
+.rdoc-override__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 800;
+}
+
+.rdoc-override__warn {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+/* ----------------------------------------------------------------- viewer */
+.rdoc-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: #0d0f15;
+  color: #fff;
+}
+
+.rdoc-viewer__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
+}
+
+.rdoc-viewer__heading {
+  min-width: 0;
+}
+
+.rdoc-viewer__title {
+  margin: 0;
+  font-weight: 800;
+  font-size: var(--text-body);
+}
+
+.rdoc-viewer__sub {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--text-meta);
+}
+
+.rdoc-viewer__pages {
+  align-self: center;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: transparent;
+}
+
+.rdoc-viewer__pages .segmented__item {
+  color: #fff;
+}
+
+.rdoc-viewer__pages .segmented__item.is-selected {
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+.rdoc-viewer__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.rdoc-viewer__note {
+  margin: 0;
+  padding: 0 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.rdoc-viewer__pdf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--yellow);
+  text-align: center;
+}
+
+.rdoc-viewer__pdf p {
+  margin: 0;
+  color: #fff;
+}
+
+.rdoc-viewer__pdf .button {
+  text-decoration: none;
+}
+
+.rdoc-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  cursor: zoom-in;
+}
+
+.rdoc-stage.is-zoomed {
+  cursor: grab;
+}
+
+.rdoc-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  transition: transform 0.08s linear;
+  -webkit-user-drag: none;
+}
+
+.rdoc-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(18, 21, 31, 0.8);
+}
+
+.rdoc-zoom__value {
+  min-width: 46px;
+  text-align: center;
+  font-size: var(--text-meta);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.rdoc-round {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.rdoc-round:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.rdoc-round:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.rdoc-round--light {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.rdoc-viewer__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 55vh;
+  overflow: auto;
+  padding: 14px 16px calc(env(safe-area-inset-bottom, 0px) + 14px);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.rdoc-viewer__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.rdoc-viewer__meta {
+  margin: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+}
+
+.rdoc-viewer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.rdoc-viewer__actions .button {
+  min-height: 44px;
+}
+
+.rdoc-verify {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.rdoc-reject {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rdoc-reject .field__label {
+  margin: 0;
+}
+
+/* ------------------------------------------------------------ date picker */
+.rdoc-date {
+  position: relative;
+}
+
+.rdoc-date__button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rdoc-date__button.is-empty {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+.rdoc-date__button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+/* Opens in place under its field (not floating), so a scrolling panel such
+   as the viewer's review sheet never clips it on a small phone. */
+.rdoc-cal {
+  width: min(340px, 100%);
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 12px 32px rgba(18, 21, 31, 0.22);
+}
+
+.rdoc-cal__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rdoc-cal__title {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  font-weight: 800;
+}
+
+.rdoc-cal__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.rdoc-cal__grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.rdoc-cal__weekday {
+  padding: 4px 0;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: var(--text-label);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.rdoc-cal__day {
+  height: 38px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.rdoc-cal__day:hover:not(:disabled) {
+  background: var(--canvas);
+}
+
+.rdoc-cal__day.is-today {
+  border-color: var(--ink);
+}
+
+.rdoc-cal__day.is-selected {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--yellow);
+}
+
+.rdoc-cal__day:disabled {
+  color: var(--line-strong);
+  cursor: default;
+}
+
+.rdoc-cal__day:focus-visible,
+.rdoc-cal__nav:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.rdoc-cal__foot {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rdoc-cal__foot .button {
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------------ sheet */
+.rdoc-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rdoc-sheet .rdoc-grid {
+  margin: 0;
+}
+
+/* ------------------------------------------------------- riders badges */
+.rdoc-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.rdoc-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: var(--text-label);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.rdoc-badge--bad {
+  background: var(--danger);
+  color: #fff;
+}
+
+.rdoc-badge--warn {
+  background: #ffefc2;
+  color: #7a4b00;
+  border: 1px solid #f0c75e;
+}
+
+.rdoc-badge--soft {
+  background: var(--canvas);
+  color: var(--ink-2);
+  border: 1px solid var(--line-strong);
+}
+
+/* -------------------------------------------------------------- settings */
+.rdoc-settings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rdoc-type {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.rdoc-type.is-off {
+  background: var(--canvas);
+}
+
+.rdoc-type.is-off .rdoc-type__body {
+  opacity: 0.55;
+}
+
+.rdoc-type__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rdoc-type__name {
+  margin: 0;
+  font-weight: 800;
+}
+
+.rdoc-type__tag {
+  margin-left: 6px;
+  color: var(--ink-3);
+  font-size: var(--text-label);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rdoc-type__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rdoc-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+
+.rdoc-switch-row em {
+  display: block;
+  font-style: normal;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.rdoc-add {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.rdoc-add .field {
+  flex: 1;
+}
+
+.rdoc-type__label-field {
+  flex: 1;
+  min-width: 0;
+}

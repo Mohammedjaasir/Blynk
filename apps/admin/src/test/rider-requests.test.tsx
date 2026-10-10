@@ -113,10 +113,19 @@ describe('Rider requests', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Commission' }));
     expect(within(dialog).getByRole('button', { name: 'Commission' })).toHaveAttribute('aria-pressed', 'true');
+    // Rider pay controls (owner, 2026-10-10): the old "blank % = the default"
+    // is now an explicit "Store default" choice (the default may be a fixed or
+    // distance pay), picked first. The own % box shows once "% of fee" is
+    // chosen, prefilled with the default %.
+    expect(within(dialog).getByRole('button', { name: 'Store default' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(dialog).queryByLabelText(/Own commission/)).toBeNull();
+    expect(await within(dialog).findByText(/Follows the store default: 80% of delivery fee/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '% of fee' }));
     const own = within(dialog).getByLabelText(/Own commission/);
-    expect(await within(dialog).findByText(/Leave blank to use the default 80%/)).toBeInTheDocument();
+    expect(own).toHaveValue('80');
 
     // A bad % is refused before calling the API.
+    await user.clear(own);
     await user.type(own, '120');
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
     expect(within(dialog).getByText('Enter a percentage from 0 to 100.')).toBeInTheDocument();
@@ -126,18 +135,77 @@ describe('Rider requests', () => {
     await user.type(own, '75');
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
     await waitFor(() =>
-      expect(api.find('POST', '/admin/rider-applications/r1/approve')[0]?.body).toEqual({ pay_type: 'COMMISSION', commission_percent: 75 })
+      expect(api.find('POST', '/admin/rider-applications/r1/approve')[0]?.body).toEqual({
+        pay_type: 'COMMISSION',
+        pay_model: 'PERCENT',
+        commission_percent: 75,
+        min_lkr: null,
+      })
     );
 
-    // Blank own % = the store default (null).
+    // "Store default" = no own model (null).
     const again = within(await screen.findByRole('table', { name: 'Rider requests' })).getAllByRole('row');
     await user.click(within(again[2]).getByRole('button', { name: 'Approve' }));
     dialog = screen.getByRole('dialog', { name: 'Approve this rider?' });
     await user.click(within(dialog).getByRole('button', { name: 'Commission' }));
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
     await waitFor(() =>
-      expect(api.find('POST', '/admin/rider-applications/r2/approve')[0]?.body).toEqual({ pay_type: 'COMMISSION', commission_percent: null })
+      expect(api.find('POST', '/admin/rider-applications/r2/approve')[0]?.body).toEqual({
+        pay_type: 'COMMISSION',
+        pay_model: null,
+        commission_percent: null,
+      })
     );
+  });
+
+  it('approves a commission rider on their own distance pay with a minimum (owner, 2026-10-10)', async () => {
+    const user = userEvent.setup();
+    const api = mockApi((c) => {
+      if (c.path === '/admin/settings/rider-pay') {
+        return ok({
+          default_model: { model: 'FIXED', percent: 80, fixed_lkr: 90, base_lkr: 50, per_km_lkr: 20, min_lkr: null },
+          bonus_rules: {
+            company_riders: false,
+            peak: { enabled: false, mode: 'FIXED', amount: 30, windows: [] },
+            daily_target: { enabled: false, tiers: [] },
+            long_distance: { enabled: false, over_km: 5, amount_lkr: 50 },
+          },
+          rain_boost: { on: false, mode: 'FIXED', amount: 30, auto_off_at: null, turned_on_at: null, active: false },
+        });
+      }
+      if (c.method === 'GET' && c.path === '/admin/rider-applications') return ok(page([application()]));
+      if (c.method === 'POST') return ok({ application: application({ approval_status: 'APPROVED' }) });
+      return undefined;
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Approve' }));
+    const dialog = screen.getByRole('dialog', { name: 'Approve this rider?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Commission' }));
+    expect(await within(dialog).findByText(/Follows the store default: LKR 90 per delivery/)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Distance' }));
+    const base = within(dialog).getByLabelText(/Base LKR per delivery/);
+    const perKm = within(dialog).getByLabelText(/LKR per km/);
+    expect(base).toHaveValue('50');
+    expect(perKm).toHaveValue('20');
+    await user.clear(base);
+    await user.type(base, '60');
+    await user.clear(perKm);
+    await user.type(perKm, '25');
+    await user.type(within(dialog).getByLabelText(/Minimum per delivery/), '150');
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() =>
+      expect(api.find('POST', '/admin/rider-applications/r1/approve')[0]?.body).toEqual({
+        pay_type: 'COMMISSION',
+        pay_model: 'DISTANCE',
+        base_lkr: 60,
+        per_km_lkr: 25,
+        min_lkr: 150,
+      })
+    );
+    expect(api.find('GET', '/admin/settings/rider-commission')).toHaveLength(0);
   });
 
   it("shows each approved rider's type and % on the Approved tab", async () => {

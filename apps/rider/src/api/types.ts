@@ -182,6 +182,71 @@ export interface EarningsTotals {
   cash_collected: number;
   cash_to_keep: number;
   cash_to_hand_in: number;
+  /*
+   * Staff-controlled pay (owner, 2026-10-10): `earnings` is now the total incl.
+   * bonuses and adjustments. All optional - an older API leaves them out.
+   */
+  /** Sum of each delivery's base pay (pay model + floor). */
+  base_earnings?: number;
+  /** Peak + rain + long-distance bonuses on those deliveries. */
+  delivery_bonuses?: number;
+  /** Daily-target bonuses. */
+  day_bonuses?: number;
+  /** delivery_bonuses + day_bonuses. */
+  bonuses?: number;
+  /** Positive staff adjustments (extra pay). */
+  additions?: number;
+  /** Negative staff adjustments, as a positive number. */
+  deductions?: number;
+  /** additions - deductions (signed). */
+  adjustments?: number;
+  /** What Blynk still owes the rider (extras the day's cash could not cover). */
+  payable_to_rider?: number;
+}
+
+/** Rider pay models and bonuses (owner, 2026-10-10). */
+export type PayModel = 'PERCENT' | 'FIXED' | 'DISTANCE';
+/** +LKR per delivery, or +% of the delivery's base earning. */
+export type BoostMode = 'FIXED' | 'PERCENT';
+export type BonusKind = 'PEAK_BOOST' | 'RAIN_BOOST' | 'LONG_DISTANCE' | 'DAILY_TARGET';
+export type AdjustmentReason = 'CASH_SHORT' | 'DAMAGED_ITEM' | 'LATE' | 'BONUS' | 'OTHER';
+
+/** A rider's effective pay model (owner, 2026-10-10). */
+export interface PayParams {
+  model: PayModel;
+  /** PERCENT: % of the order's standard delivery fee. */
+  percent: number;
+  /** FIXED: LKR per delivery. */
+  fixed_lkr: number;
+  /** DISTANCE: base LKR per delivery. */
+  base_lkr: number;
+  /** DISTANCE: + LKR per km of road distance store -> drop-off. */
+  per_km_lkr: number;
+  /** Optional floor per delivery (any model); null = no floor. */
+  min_lkr: number | null;
+}
+
+/** Today's bonuses grouped by kind, only non-zero (owner, 2026-10-10). */
+export interface EarningsBonusLine {
+  kind: BonusKind;
+  amount_lkr: number;
+  count: number;
+}
+
+/** A staff adjustment: negative = deduction, positive = extra pay (owner, 2026-10-10). */
+export interface EarningsAdjustmentLine {
+  id: string;
+  amount_lkr: number;
+  reason: AdjustmentReason;
+  note: string | null;
+}
+
+/** Boosts running now (owner, 2026-10-10). */
+export interface RiderBoosts {
+  /** Automatic bonuses apply to this rider (COMMISSION, or COMPANY when staff switch that on). */
+  applies: boolean;
+  rain: { active: boolean; mode: BoostMode; amount: number; until: string | null };
+  peak: { active_now: boolean; mode: BoostMode; amount: number };
 }
 
 export interface RiderEarnings {
@@ -189,7 +254,17 @@ export interface RiderEarnings {
   pay_type: RiderPayType;
   /** Effective share for COMMISSION riders, e.g. 80; null for COMPANY riders. */
   commission_percent: number | null;
-  today: EarningsTotals & { date: string };
+  today: EarningsTotals & {
+    date: string;
+    /** Grouped by kind, only non-zero (owner, 2026-10-10; absent on an older API). */
+    bonus_lines?: EarningsBonusLine[];
+    /** Today's staff adjustments (owner, 2026-10-10; absent on an older API). */
+    adjustment_lines?: EarningsAdjustmentLine[];
+  };
   /** Monday to Sunday. */
   week: EarningsTotals & { starts_on: string };
+  /** Effective pay model, null for COMPANY riders (owner, 2026-10-10; absent on an older API). */
+  pay_model?: PayParams | null;
+  /** Boosts running now (owner, 2026-10-10; absent on an older API). */
+  boosts?: RiderBoosts;
 }

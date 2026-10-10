@@ -377,6 +377,13 @@ describe('Rider applications and approval', () => {
             // Migration 032 (owner, 2026-10-09): how the rider is paid once approved.
             'pay_type',
             'commission_percent',
+            // Migration 038 (owner, 2026-10-10): the rider's own pay model (null = store default).
+            'pay_model',
+            // Migration 039 (owner, 2026-10-10): the request's documents and review summary.
+            'documents',
+            'document_requirements',
+            'documents_blocking',
+            'documents_verified',
           ].sort()
         );
         expect(mine[0]).toMatchObject({

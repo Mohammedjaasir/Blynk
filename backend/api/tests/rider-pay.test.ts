@@ -134,12 +134,16 @@ describe("A rider's pay", () => {
   it('existing and new riders are COMPANY until set', async () => {
     const res = await request(app).get(`/api/v1/admin/riders/${commission.riderId}/pay`).set(auth(opsToken));
     expect(res.status).toBe(200);
-    expect(res.body.data.pay).toEqual({
+    expect(res.body.data.pay).toMatchObject({
       rider_id: commission.riderId,
       pay_type: 'COMPANY',
       commission_percent: null,
       effective_percent: null,
       default_percent: 75,
+      // Pay controls (migration 038; owner, 2026-10-10): own model and the default model.
+      pay_model: null,
+      effective: null,
+      default_model: { model: 'PERCENT', percent: 75 },
     });
   });
 

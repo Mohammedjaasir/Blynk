@@ -30,6 +30,12 @@ const envSchema = z.object({
   // origin clients use to fetch what's stored there.
   MEDIA_ROOT: z.string().default('uploads'),
   PUBLIC_BASE_URL: z.string().default('http://localhost:4000'),
+  // Rider documents (migration 039; owner, 2026-10-10): identity and vehicle
+  // documents are PRIVATE. This directory is never served statically - only
+  // through authenticated endpoints - and must not sit inside MEDIA_ROOT.
+  // Resolved against the working directory (/app in the Docker image), so
+  // production needs a persistent volume at /app/private/rider-documents.
+  RIDER_DOCUMENTS_ROOT: z.string().default('private/rider-documents'),
   // The customer web app (PWA): where a tapped web push opens (2026-10-08).
   WEB_APP_URL: z.string().url().default('https://blynk.lk/app/'),
 

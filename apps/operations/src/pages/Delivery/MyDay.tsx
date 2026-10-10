@@ -7,7 +7,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { deliveryErrorMessage } from '../../lib/delivery';
 import { errorCode } from '../../lib/errors';
 import { formatClock, formatMoney, shortNumber } from '../../lib/orders';
-import { formatPercent } from '../../lib/riderPay';
+import { boostText, colomboClock, describePay, formatPercent, signedMoney } from '../../lib/riderPay';
 
 const OUTCOME: Record<RiderDayDelivery['outcome'], { label: string; tone: string }> = {
   DELIVERED: { label: 'Delivered', tone: 'done' },
@@ -26,6 +26,10 @@ const OUTCOME: Record<RiderDayDelivery['outcome'], { label: string; tone: string
  * A COMMISSION rider (owner, 2026-10-09) also sees what they earned and how
  * much of the collected cash to keep and hand in, from GET /riders/me/earnings.
  * Company riders are salaried, so nothing extra shows for them.
+ *
+ * Rider pay controls (owner, 2026-10-10): the pay line names the rider's
+ * model, a rain boost shows while it is on, and each period adds its bonuses,
+ * deductions / extra pay and what Blynk owes when the cash fell short.
  */
 export function MyDay() {
   const { refreshRiderCapability } = useAuth();
@@ -157,12 +161,22 @@ function Totals({ heading, note, totals }: { heading: string; note?: string; tot
 /** Commission pay (owner, 2026-10-09): the rider keeps their share out of the cash. */
 function Earnings({ earnings }: { earnings: MyEarnings }) {
   const percent = earnings.commission_percent;
+  const rain = earnings.boosts?.applies && earnings.boosts.rain.active ? earnings.boosts.rain : null;
   return (
     <section className="section" aria-labelledby="day-earnings">
       <h2 className="section-label" id="day-earnings">
         Your earnings
-        {percent != null ? <span className="day__note"> · {formatPercent(percent)} of the delivery fee</span> : null}
+        {earnings.pay_model ? (
+          <span className="day__note"> · {describePay(earnings.pay_model)}</span>
+        ) : percent != null ? (
+          <span className="day__note"> · {formatPercent(percent)} of the delivery fee</span>
+        ) : null}
       </h2>
+      {rain ? (
+        <p className="quiet quiet--ok" role="status">
+          Rain boost {boostText(rain.mode, rain.amount)} per delivery{rain.until ? ` until ${colomboClock(rain.until)}` : ''}
+        </p>
+      ) : null}
       <EarningsLine label="Today" period={earnings.today} />
       <EarningsLine label="This week" period={earnings.week} />
     </section>
@@ -180,6 +194,20 @@ function EarningsLine({ label, period }: { label: string; period: MyEarningsPeri
         {period.deliveries} {period.deliveries === 1 ? 'delivery' : 'deliveries'} · Keep {formatMoney(period.cash_to_keep)}, hand in{' '}
         {formatMoney(period.cash_to_hand_in)}
       </p>
+      {(period.bonuses ?? 0) > 0 || (period.deductions ?? 0) > 0 || (period.additions ?? 0) > 0 ? (
+        <p className="quiet">
+          {[
+            (period.bonuses ?? 0) > 0 ? `Bonuses ${signedMoney(period.bonuses ?? 0)}` : null,
+            (period.deductions ?? 0) > 0 ? `Deductions ${signedMoney(-(period.deductions ?? 0))}` : null,
+            (period.additions ?? 0) > 0 ? `Extra pay ${signedMoney(period.additions ?? 0)}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      ) : null}
+      {(period.payable_to_rider ?? 0) > 0 ? (
+        <p className="quiet">Blynk owes you {formatMoney(period.payable_to_rider ?? 0)}</p>
+      ) : null}
     </div>
   );
 }

@@ -60,6 +60,8 @@ export class RiderRepository {
         // null = the store default share.
         'riders.pay_type',
         sql<number | null>`riders.commission_percent::float8`.as('commission_percent'),
+        // Pay controls (migration 038; owner, 2026-10-10): own model, null = store default.
+        'riders.pay_model',
       ])
       // Rider applications (migration 029): a request still waiting, or
       // rejected, is never a rider - not even in the include_inactive list.

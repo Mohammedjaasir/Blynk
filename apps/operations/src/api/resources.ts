@@ -11,6 +11,12 @@ import type {
   RiderEarningsReport,
   RiderPay,
   RiderPayInput,
+  RiderPaySettings,
+  RiderPayModelInput,
+  RiderPayBonusesInput,
+  RainBoostInput,
+  RiderAdjustment,
+  RiderAdjustmentInput,
   RiderApplication,
   RiderApplicationPage,
   RiderApprovalStatus,
@@ -85,6 +91,15 @@ import type {
   SmsOfferInput,
   SmsOfferTestResult,
   CategoryProductOrder,
+} from './types';
+// Rider documents (owner, 2026-10-10).
+import type {
+  RiderDocumentAlert,
+  RiderDocumentRejectReason,
+  RiderDocumentSettings,
+  RiderDocumentsForRider,
+  RiderDocumentTypeInput,
+  StaffRiderDocument,
 } from './types';
 
 /**
@@ -359,6 +374,28 @@ export const riders = {
   /** `PATCH /admin/riders/:id/pay` - `commission_percent` null = store default. */
   updatePay: (id: string, input: RiderPayInput) =>
     apiRequest<{ pay: RiderPay }>(`/admin/riders/${id}/pay`, { method: 'PATCH', body: { ...input } }).then((d) => d.pay),
+
+  /** `POST /admin/riders/:id/adjustments` - a deduction (negative amount) or
+   * extra pay (positive) settled against that day's cash (owner, 2026-10-10). */
+  addAdjustment: (id: string, input: RiderAdjustmentInput) =>
+    apiRequest<{ adjustment: RiderAdjustment }>(`/admin/riders/${id}/adjustments`, { method: 'POST', body: { ...input } }).then(
+      (d) => d.adjustment
+    ),
+
+  /** `GET /admin/rider-adjustments?rider_id=&from=&to=` - newest first; from/to default today. */
+  adjustments: (query: { rider_id?: string; from?: string; to?: string } = {}) =>
+    apiRequest<{ adjustments: RiderAdjustment[] }>('/admin/rider-adjustments', { query }).then((d) => d.adjustments),
+
+  /** `PATCH /admin/rider-adjustments/:id` - any of the POST fields. */
+  updateAdjustment: (adjustmentId: string, input: Partial<RiderAdjustmentInput>) =>
+    apiRequest<{ adjustment: RiderAdjustment }>(`/admin/rider-adjustments/${adjustmentId}`, {
+      method: 'PATCH',
+      body: { ...input },
+    }).then((d) => d.adjustment),
+
+  /** `DELETE /admin/rider-adjustments/:id`. */
+  removeAdjustment: (adjustmentId: string) =>
+    apiRequest<{ deleted: true }>(`/admin/rider-adjustments/${adjustmentId}`, { method: 'DELETE' }),
 
   /** `GET /admin/reports/rider-earnings` - per rider delivery share and margin. `from`/`to` only for custom. */
   earnings: (range: EarningsRange, from?: string, to?: string) =>
@@ -1033,6 +1070,19 @@ export const settings = {
     update: (default_percent: number) =>
       apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission', { method: 'PATCH', body: { default_percent } }),
   },
+  /** Rider pay controls (owner, 2026-10-10): the store default pay model,
+   * automatic bonus rules and the rain boost. Every PATCH returns the whole
+   * settings object. */
+  riderPay: {
+    get: () => apiRequest<RiderPaySettings>('/admin/settings/rider-pay'),
+    updateModel: (body: RiderPayModelInput) =>
+      apiRequest<RiderPaySettings>('/admin/settings/rider-pay/model', { method: 'PATCH', body: { ...body } }),
+    /** Each section sent is a complete object. */
+    updateBonuses: (body: RiderPayBonusesInput) =>
+      apiRequest<RiderPaySettings>('/admin/settings/rider-pay/bonuses', { method: 'PATCH', body: { ...body } }),
+    updateRainBoost: (body: RainBoostInput) =>
+      apiRequest<RiderPaySettings>('/admin/settings/rider-pay/rain-boost', { method: 'PATCH', body: { ...body } }),
+  },
   /** Rider trips (owner, 2026-10-10): orders one rider may carry at once
    * (1 = no trips) and the max km between drop-offs before staff confirm.
    * PATCH sends only what changed. */
@@ -1040,6 +1090,13 @@ export const settings = {
     get: () => apiRequest<RiderTripsSetting>('/admin/settings/rider-trips'),
     update: (body: { max_active_deliveries?: number; max_dropoff_distance_km?: number }) =>
       apiRequest<RiderTripsSetting>('/admin/settings/rider-trips', { method: 'PATCH', body: { ...body } }),
+  },
+  /** Doctors need sign-in (owner, 2026-10-10): guests must log in before
+   * the customer app shows doctors. */
+  doctorsAccess: {
+    get: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
+    update: (require_sign_in: boolean) =>
+      apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { require_sign_in } }),
   },
   /** Birthday offer: X% off one order in the birthday week, plus a birthday
    * SMS (owner, 2026-10-09). PATCH sends only what changed. */
@@ -1082,13 +1139,6 @@ export const staff = {
 
   update: (id: string, input: UpdateStaffInput) =>
     apiRequest<{ staff: StaffAccount }>(`/admin/staff/${id}`, { method: 'PATCH', body: { ...input } }).then(
-  /** Doctors need sign-in (owner, 2026-10-10): guests must log in before
-   * the customer app shows doctors. */
-  doctorsAccess: {
-    get: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
-    update: (require_sign_in: boolean) =>
-      apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { require_sign_in } }),
-  },
       (d) => d.staff
     ),
 };
@@ -1158,6 +1208,48 @@ export const riderApplications = {
       method: 'POST',
       body: { reason },
     }).then((d) => d.application),
+  /** Approve although required documents are not verified (owner, 2026-10-10).
+   * ADMIN only - OPERATIONS gets 403 OVERRIDE_ADMIN_ONLY; audited server-side. */
+  approveOverride: (id: string, pay: RiderPayInput, reason: string) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/approve`, {
+      method: 'POST',
+      body: { ...pay, override_documents: true, override_reason: reason },
+    }).then((d) => d.application),
+  /** Deletes a PENDING/REJECTED request with its documents; the account stays (owner, 2026-10-10). */
+  remove: (id: string) =>
+    apiRequest<{ deleted: true; documents_removed: number }>(`/admin/rider-applications/${id}`, { method: 'DELETE' }),
+};
+
+// -------------------------------------------------------- rider documents
+/** Rider documents (backend migration 039; owner, 2026-10-10). The page
+ * files themselves are private - fetched with `fetchPrivateFile` (client.ts)
+ * via `riderDocumentPagePath`, never a public URL. */
+export const riderDocumentPagePath = (documentId: string, page: number) =>
+  `/admin/rider-documents/${documentId}/pages/${page}`;
+
+export const riderDocuments = {
+  forRider: (riderId: string) => apiRequest<RiderDocumentsForRider>(`/admin/riders/${riderId}/documents`),
+  verify: (documentId: string, expiryDate?: string | null) =>
+    apiRequest<{ document: StaffRiderDocument }>(`/admin/rider-documents/${documentId}/verify`, {
+      method: 'POST',
+      body: expiryDate !== undefined ? { expiry_date: expiryDate } : {},
+    }).then((d) => d.document),
+  reject: (documentId: string, reason: RiderDocumentRejectReason, note?: string) =>
+    apiRequest<{ document: StaffRiderDocument }>(`/admin/rider-documents/${documentId}/reject`, {
+      method: 'POST',
+      body: note ? { reason, note } : { reason },
+    }).then((d) => d.document),
+  alerts: (days = 30) =>
+    apiRequest<{ warning_days: number; alerts: RiderDocumentAlert[] }>('/admin/rider-documents/alerts', { query: { days } }),
+  settings: {
+    get: () =>
+      apiRequest<{ settings: RiderDocumentSettings }>('/admin/settings/rider-documents').then((d) => d.settings),
+    update: (documents: RiderDocumentTypeInput[]) =>
+      apiRequest<{ settings: RiderDocumentSettings }>('/admin/settings/rider-documents', {
+        method: 'PUT',
+        body: { documents },
+      }).then((d) => d.settings),
+  },
 };
 
 // ---------------------------------------------------------------- coupons

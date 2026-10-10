@@ -216,6 +216,9 @@ export interface RiderOption {
   pay_type?: RiderPayType;
   /** The rider's own commission %, or null for the store default. */
   commission_percent?: number | null;
+  /** The rider's own pay model, or null when they follow the store default
+   * model (owner, 2026-10-10). Missing on APIs from before rider pay models. */
+  pay_model?: PayModel | null;
 }
 
 /** One order a rider already carries (`GET /admin/riders/suggestions`). */
@@ -1208,8 +1211,14 @@ export interface RiderReconciliation {
   pay_type: RiderPayType;
   /** The commission share a COMMISSION rider keeps out of the cash; 0 for company riders (owner, 2026-10-09). */
   kept_share: number;
-  /** collected - kept_share: what the rider should hand in. */
+  /** collected - kept_share - day_bonuses - adjustments, never below 0: what the rider should hand in. */
   expected_handin: number;
+  /** Daily-target bonuses earned that day (owner, 2026-10-10). Optional: older APIs lack it. */
+  day_bonuses?: number;
+  /** That day's pay adjustments, signed: negative = deduction (owner, 2026-10-10). */
+  adjustments?: number;
+  /** What Blynk owes the rider because the day's cash could not cover their pay (owner, 2026-10-10). */
+  payable_to_rider?: number;
 }
 
 /** GET /admin/cash/reconciliation - one Sri Lanka day. */
@@ -1225,6 +1234,10 @@ export interface CashReconciliation {
     /** handed_in - expected_handin. */
     difference: number;
     status: ReconciliationStatus;
+    /** Owner, 2026-10-10 - optional: older APIs lack them. */
+    day_bonuses?: number;
+    adjustments?: number;
+    payable_to_rider?: number;
   };
 }
 
@@ -1237,6 +1250,113 @@ export interface CashReconciliation {
  */
 export type RiderPayType = 'COMPANY' | 'COMMISSION';
 
+// Rider pay controls (owner, 2026-10-10: "give the option in ops and admin to
+// control the rider app charges") - pay model per store and rider, bonuses,
+// rain boost and adjustments. See the rider-pay API contract.
+/** % of the delivery fee, fixed LKR per delivery, or base + per km. */
+export type PayModel = 'PERCENT' | 'FIXED' | 'DISTANCE';
+/** +LKR per delivery, or +% of the delivery's base earning. */
+export type BoostMode = 'FIXED' | 'PERCENT';
+export type BonusKind = 'PEAK_BOOST' | 'RAIN_BOOST' | 'LONG_DISTANCE' | 'DAILY_TARGET';
+export type AdjustmentReason = 'CASH_SHORT' | 'DAMAGED_ITEM' | 'LATE' | 'BONUS' | 'OTHER';
+
+/** A complete pay model (the store default or a rider's effective one). */
+export interface PayParams {
+  model: PayModel;
+  /** PERCENT: % of the order's standard delivery fee (0..100). */
+  percent: number;
+  /** FIXED: LKR per delivery. */
+  fixed_lkr: number;
+  /** DISTANCE: base LKR per delivery... */
+  base_lkr: number;
+  /** ...plus LKR per km of road distance store -> drop-off. */
+  per_km_lkr: number;
+  /** Optional floor per delivery (any model); null = no floor. */
+  min_lkr: number | null;
+}
+
+/** days 1=Mon..7=Sun; "HH:MM", start < end, end may be "24:00". */
+export interface PeakWindow {
+  days: number[];
+  start: string;
+  end: string;
+}
+
+export interface PeakBoostRule {
+  enabled: boolean;
+  mode: BoostMode;
+  amount: number;
+  /** Up to 10 windows. */
+  windows: PeakWindow[];
+}
+
+export interface DailyTargetTier {
+  deliveries: number;
+  amount_lkr: number;
+}
+
+export interface DailyTargetRule {
+  enabled: boolean;
+  /** Up to 5 tiers, deliveries unique 1..100. */
+  tiers: DailyTargetTier[];
+}
+
+export interface LongDistanceRule {
+  enabled: boolean;
+  /** 0.5..50 km. */
+  over_km: number;
+  amount_lkr: number;
+}
+
+export interface BonusRules {
+  /** false: automatic bonuses are for COMMISSION riders only; true: COMPANY riders get them too. */
+  company_riders: boolean;
+  peak: PeakBoostRule;
+  daily_target: DailyTargetRule;
+  long_distance: LongDistanceRule;
+}
+
+export interface RainBoost {
+  on: boolean;
+  mode: BoostMode;
+  amount: number;
+  /** ISO; the boost stops by itself at this time. */
+  auto_off_at: string | null;
+  turned_on_at: string | null;
+  /** on && (auto_off_at null || now < auto_off_at). */
+  active: boolean;
+}
+
+/** `GET /admin/settings/rider-pay` (and every rider-pay PATCH's reply). */
+export interface RiderPaySettings {
+  /** default_model.percent is the same value as the rider-commission setting. */
+  default_model: PayParams;
+  bonus_rules: BonusRules;
+  rain_boost: RainBoost;
+}
+
+/** Body of `PATCH /admin/settings/rider-pay/model` (omitted = keep). */
+export interface RiderPayModelInput {
+  model: PayModel;
+  percent?: number;
+  fixed_lkr?: number;
+  base_lkr?: number;
+  per_km_lkr?: number;
+  min_lkr?: number | null;
+}
+
+/** Body of `PATCH /admin/settings/rider-pay/bonuses`: each section sent complete. */
+export type RiderPayBonusesInput = Partial<BonusRules>;
+
+/** Body of `PATCH /admin/settings/rider-pay/rain-boost` (turning off clears auto_off_at). */
+export interface RainBoostInput {
+  on: boolean;
+  mode?: BoostMode;
+  amount?: number;
+  /** In the future, within 7 days; null = until staff turn it off. */
+  auto_off_at?: string | null;
+}
+
 /** `GET|PATCH /admin/riders/:id/pay` -> `data.pay`. */
 export interface RiderPay {
   rider_id: string;
@@ -1246,12 +1366,54 @@ export interface RiderPay {
   /** The % actually used: a number for COMMISSION, null for COMPANY. */
   effective_percent: number | null;
   default_percent: number;
+  /** The rider's own model; null = follows the store default model (owner,
+   * 2026-10-10). This and the fields below are optional: an API from before
+   * rider pay models leaves them out. */
+  pay_model?: PayModel | null;
+  /** null each = the store default value. */
+  own?: { fixed_lkr: number | null; base_lkr: number | null; per_km_lkr: number | null; min_lkr: number | null };
+  /** What a new delivery pays this rider now; null for COMPANY. */
+  effective?: PayParams | null;
+  default_model?: PayParams;
 }
 
-/** Body of `PATCH /admin/riders/:id/pay` and the optional approve body. */
+/** Body of `PATCH /admin/riders/:id/pay` and the optional approve body (the
+ * approve body takes the same pay fields - owner, 2026-10-10). */
 export interface RiderPayInput {
   pay_type: RiderPayType;
   commission_percent?: number | null;
+  /** Owner, 2026-10-10: null = follow the store default model. */
+  pay_model?: PayModel | null;
+  fixed_lkr?: number | null;
+  base_lkr?: number | null;
+  per_km_lkr?: number | null;
+  min_lkr?: number | null;
+}
+
+/** A deduction (negative) or extra pay (positive) for a rider (owner, 2026-10-10). */
+export interface RiderAdjustment {
+  id: string;
+  rider_id: string;
+  rider_name: string | null;
+  /** Signed: negative = deduction, positive = extra pay; never 0. */
+  amount_lkr: number;
+  reason: AdjustmentReason;
+  note: string | null;
+  /** YYYY-MM-DD (Asia/Colombo) - the day's cash it settles against. */
+  adjustment_date: string;
+  created_by_user_id: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Body of `POST /admin/riders/:id/adjustments` (any of these for its PATCH). */
+export interface RiderAdjustmentInput {
+  amount_lkr: number;
+  reason: AdjustmentReason;
+  note?: string | null;
+  /** Default today; not in the future, at most 400 days back. */
+  adjustment_date?: string;
 }
 
 /** `GET|PATCH /admin/settings/rider-commission`. */
@@ -1277,6 +1439,24 @@ export interface RiderEarningsFigures {
   product_cost: number;
   product_margin: number;
   coupon_discount: number;
+  // Owner, 2026-10-10 - optional: an API from before rider pay models lacks them.
+  /** Sum of each delivery's base pay (model + floor). */
+  base_earnings?: number;
+  /** Peak + rain + long-distance bonuses on those deliveries. */
+  delivery_bonuses?: number;
+  /** Daily-target bonuses. */
+  day_bonuses?: number;
+  /** Positive adjustments. */
+  additions?: number;
+  /** Negative adjustments, as a positive number. */
+  deductions?: number;
+  /** additions - deductions (signed). */
+  adjustments?: number;
+  /** base_earnings + delivery_bonuses + day_bonuses + adjustments. */
+  total_earnings?: number;
+  bonus_breakdown?: Record<BonusKind, number>;
+  /** What Blynk still owes (earnings + extras the day's cash could not cover). */
+  payable_to_rider?: number;
 }
 
 export interface RiderEarningsRow extends RiderEarningsFigures {
@@ -1286,6 +1466,8 @@ export interface RiderEarningsRow extends RiderEarningsFigures {
   pay_type: RiderPayType;
   commission_percent: number | null;
   effective_percent: number | null;
+  /** Effective model now; null for COMPANY (owner, 2026-10-10). */
+  pay_model?: PayModel | null;
 }
 
 /** `GET /admin/reports/rider-earnings`. */
@@ -1294,15 +1476,44 @@ export interface RiderEarningsReport {
   default_percent: number;
   riders: RiderEarningsRow[];
   totals: RiderEarningsFigures;
+  /** The range's adjustments (owner, 2026-10-10). */
+  adjustments?: RiderAdjustment[];
+  /** The store default pay model (owner, 2026-10-10). */
+  default_model?: PayParams;
 }
 
 export interface MyEarningsPeriod {
   deliveries: number;
   delivery_charges: number;
+  /** The total, incl. bonuses and adjustments (owner, 2026-10-10). */
   earnings: number;
   cash_collected: number;
   cash_to_keep: number;
   cash_to_hand_in: number;
+  // Owner, 2026-10-10 - optional: older APIs lack them.
+  base_earnings?: number;
+  delivery_bonuses?: number;
+  day_bonuses?: number;
+  /** delivery_bonuses + day_bonuses. */
+  bonuses?: number;
+  additions?: number;
+  deductions?: number;
+  adjustments?: number;
+  payable_to_rider?: number;
+}
+
+/** Owner, 2026-10-10: today's bonuses grouped by kind (only non-zero). */
+export interface MyBonusLine {
+  kind: BonusKind;
+  amount_lkr: number;
+  count: number;
+}
+
+export interface MyAdjustmentLine {
+  id: string;
+  amount_lkr: number;
+  reason: AdjustmentReason;
+  note: string | null;
 }
 
 /** `GET /riders/me/earnings` - the signed-in user's own rider profile. */
@@ -1311,8 +1522,16 @@ export interface MyEarnings {
   pay_type: RiderPayType;
   /** Effective %, null for COMPANY. */
   commission_percent: number | null;
-  today: MyEarningsPeriod & { date: string };
+  today: MyEarningsPeriod & { date: string; bonus_lines?: MyBonusLine[]; adjustment_lines?: MyAdjustmentLine[] };
   week: MyEarningsPeriod & { starts_on: string };
+  /** Effective model (null for COMPANY) - owner, 2026-10-10; optional for older APIs. */
+  pay_model?: PayParams | null;
+  boosts?: {
+    /** Automatic bonuses apply to this rider. */
+    applies: boolean;
+    rain: { active: boolean; mode: BoostMode; amount: number; until: string | null };
+    peak: { active_now: boolean; mode: BoostMode; amount: number };
+  };
 }
 
 // -------------------------------------------------------------- sms offers
@@ -1392,11 +1611,123 @@ export interface RiderApplication {
   /** Set on approval (owner, 2026-10-09). */
   pay_type?: RiderPayType;
   commission_percent?: number | null;
+  /** The rider's own pay model once approved; null = the store default (owner, 2026-10-10). */
+  pay_model?: PayModel | null;
+  /** Rider documents (owner, 2026-10-10). Optional only for APIs from before migration 039. */
+  documents?: StaffRiderDocument[];
+  document_requirements?: RiderDocumentRequirement[];
+  documents_blocking?: RiderDocumentBlocking[];
+  /** true = every REQUIRED document is verified and not expired: Approve allowed. */
+  documents_verified?: boolean;
 }
 
 export interface RiderApplicationPage {
   applications: RiderApplication[];
   pagination: { page: number; limit: number; total: number; total_pages: number };
+}
+
+// ---------------------------------------------------------- rider documents
+// Rider documents (backend migration 039; owner, 2026-10-10): vehicle book
+// (CR), revenue licence, insurance certificate, driving licence (+ custom
+// ones). Ops and Admin verify them before approving a rider.
+export type RiderDocumentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+/** EXPIRING = within 30 days (Colombo date). */
+export type RiderDocumentExpiryState = 'EXPIRED' | 'EXPIRING' | 'OK';
+export type RiderDocumentRejectReason = 'BLURRY' | 'EXPIRED' | 'NAME_MISMATCH' | 'WRONG_DOCUMENT' | 'OTHER';
+
+export interface RiderDocumentPage {
+  index: number;
+  content_type: string;
+  bytes: number;
+  uploaded_at: string;
+}
+
+export interface StaffRiderDocument {
+  id: string;
+  rider_id: string | null;
+  doc_type: string;
+  label: string;
+  custom: boolean;
+  /** 0 = front, 1 = back. */
+  pages: RiderDocumentPage[];
+  pages_needed: 1 | 2;
+  expiry_date: string | null;
+  expiry_state: RiderDocumentExpiryState | null;
+  status: RiderDocumentStatus;
+  reject_reason: RiderDocumentRejectReason | null;
+  reject_reason_label: string | null;
+  reject_note: string | null;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
+  updated_at: string;
+}
+
+export interface RiderDocumentRequirement {
+  key: string;
+  label: string;
+  /** Required for THIS rider's vehicle type. */
+  required: boolean;
+  needs_expiry: boolean;
+  needs_back: boolean;
+  document_id: string | null;
+  status: RiderDocumentStatus | 'MISSING';
+  expiry_state: RiderDocumentExpiryState | null;
+}
+
+export interface RiderDocumentBlocking {
+  key: string;
+  label: string;
+  status: RiderDocumentStatus | 'MISSING';
+  expiry_state: RiderDocumentExpiryState | null;
+}
+
+/** `GET /admin/riders/:riderId/documents`. */
+export interface RiderDocumentsForRider {
+  rider: { id: string; full_name: string | null; vehicle_type: string; approval_status: RiderApprovalStatus };
+  documents: StaffRiderDocument[];
+  requirements: RiderDocumentRequirement[];
+  blocking: RiderDocumentBlocking[];
+  all_required_verified: boolean;
+}
+
+/** One row of `GET /admin/rider-documents/alerts` (approved riders only). */
+export interface RiderDocumentAlert {
+  document_id: string;
+  rider_id: string;
+  full_name: string | null;
+  phone: string | null;
+  doc_type: string;
+  label: string;
+  is_insurance: boolean;
+  status: RiderDocumentStatus;
+  expiry_date: string | null;
+  expiry_state: 'EXPIRED' | 'EXPIRING';
+}
+
+/** A document type in Settings -> Rider documents. */
+export interface RiderDocumentType {
+  key: string;
+  label: string;
+  builtin: boolean;
+  enabled: boolean;
+  required_for: VehicleType[];
+  needs_expiry: boolean;
+  needs_back: boolean;
+}
+
+export interface RiderDocumentSettings {
+  documents: RiderDocumentType[];
+  updated_at: string | null;
+}
+
+/** `PUT /admin/settings/rider-documents` - a new custom document has no key. */
+export interface RiderDocumentTypeInput {
+  key?: string;
+  label?: string;
+  enabled: boolean;
+  required_for: VehicleType[];
+  needs_expiry: boolean;
+  needs_back: boolean;
 }
 
 /** Rider trips (owner, 2026-10-10): how many orders one rider may carry at
@@ -1405,6 +1736,15 @@ export interface RiderApplicationPage {
 export interface RiderTripsSetting {
   max_active_deliveries: number;
   max_dropoff_distance_km: number;
+  updated_at: string | null;
+}
+
+/** Doctors need sign-in (owner, 2026-10-10): when on (the default), a guest
+ * must log in or create an account with their phone number before the
+ * customer app shows clinics and doctors. GET|PATCH
+ * /admin/settings/doctors-access. */
+export interface DoctorsAccessSetting {
+  require_sign_in: boolean;
   updated_at: string | null;
 }
 
@@ -1523,12 +1863,3 @@ export type StoreHoursInput =
   | { same_every_day: false; days: Record<DayKey, DayHours> };
 
 export type StoreClosureInput = { closed: true; reason: string; reopens_at?: string | null } | { closed: false };
-/** Doctors need sign-in (owner, 2026-10-10): when on (the default), a guest
- * must log in or create an account with their phone number before the
- * customer app shows clinics and doctors. GET|PATCH
- * /admin/settings/doctors-access. */
-export interface DoctorsAccessSetting {
-  require_sign_in: boolean;
-  updated_at: string | null;
-}
-

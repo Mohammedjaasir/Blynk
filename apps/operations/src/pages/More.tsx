@@ -102,6 +102,12 @@ export function More() {
           </Link>
         </li>
         <li>
+          {/* Rider pay model, rain/peak boosts, daily targets (owner, 2026-10-10). */}
+          <Link className="cat-hub__card" to="/more/rider-pay">
+            <span className="cat-hub__title">Rider pay</span>
+          </Link>
+        </li>
+        <li>
           <Link className="cat-hub__card" to="/more/deliver">
             <span className="cat-hub__title">Deliver orders myself</span>
           </Link>
@@ -114,6 +120,12 @@ export function More() {
                 {pendingRiders}
               </span>
             ) : null}
+          </Link>
+        </li>
+        <li>
+          {/* Which documents riders upload and must have verified (owner, 2026-10-10). */}
+          <Link className="cat-hub__card" to="/more/rider-documents">
+            <span className="cat-hub__title">Rider documents</span>
           </Link>
         </li>
         <li>
@@ -489,6 +501,8 @@ function RiderCommissionCard() {
       {current?.updated_at ? <p className="quiet">Last changed {formatDateTime(current.updated_at)}</p> : null}
       <p className="page__note">
         Commission riders earn this share of the standard delivery fee, unless they have their own. Company riders earn no commission.
+        {/* Owner, 2026-10-10: fixed / distance pay, boosts and bonuses live on Rider pay. */}{' '}
+        Fixed or distance pay, boosts and bonuses are under Rider pay above.
       </p>
     </section>
   );

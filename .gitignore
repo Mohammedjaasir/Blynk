@@ -62,6 +62,8 @@ graphify-out/
 # disk by the API; the database only holds the URL.
 backend/api/uploads/
 uploads/
+# Rider documents (migration 039, owner 2026-10-10): private identity documents.
+backend/api/private/
 *.tsbuildinfo
 
 # Agent tooling caches and generated media. These are local scratch, not

@@ -66,6 +66,12 @@ ENV MAP_TILES_DIR=/app/map-tiles
 # mounted at /app/uploads inherits this ownership on first use.
 RUN mkdir -p /app/uploads && chown node:node /app/uploads
 
+# Rider documents (migration 039; owner, 2026-10-10): PRIVATE identity and
+# vehicle documents, never served statically. Mount a persistent volume at
+# /app/private/rider-documents (RIDER_DOCUMENTS_ROOT) so they survive redeploys.
+ENV RIDER_DOCUMENTS_ROOT=/app/private/rider-documents
+RUN mkdir -p /app/private/rider-documents && chown -R node:node /app/private && chmod 700 /app/private /app/private/rider-documents
+
 # Security: Run as unprivileged standard non-root user (node:node, uid/gid 1000)
 USER node
 

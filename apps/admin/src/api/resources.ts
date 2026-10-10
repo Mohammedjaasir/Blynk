@@ -65,6 +65,12 @@ import type {
   RiderEarningsReport,
   RiderPay,
   RiderPayInput,
+  RiderPaySettings,
+  RiderPayModelInput,
+  RiderPayBonusesInput,
+  RainBoostInput,
+  RiderAdjustment,
+  RiderAdjustmentInput,
   CategoryProductOrder,
 } from './types';
 
@@ -327,12 +333,32 @@ export const settings = {
       body: { default_percent: defaultPercent },
     }),
 
+  /**
+   * Rider pay controls (owner, 2026-10-10): the store default pay model,
+   * automatic bonus rules and the rain boost. Every PATCH returns the whole
+   * settings object.
+   */
+  getRiderPay: () => apiRequest<RiderPaySettings>('/admin/settings/rider-pay'),
+  setRiderPayModel: (body: RiderPayModelInput) =>
+    apiRequest<RiderPaySettings>('/admin/settings/rider-pay/model', { method: 'PATCH', body: { ...body } }),
+  setRiderPayBonuses: (body: RiderPayBonusesInput) =>
+    apiRequest<RiderPaySettings>('/admin/settings/rider-pay/bonuses', { method: 'PATCH', body: { ...body } }),
+  setRainBoost: (body: RainBoostInput) =>
+    apiRequest<RiderPaySettings>('/admin/settings/rider-pay/rain-boost', { method: 'PATCH', body: { ...body } }),
+
   /** Rider trips (owner, 2026-10-10): orders one rider may carry at once and
    * the max km between drop-offs. PATCH sends only what changed. */
   getRiderTrips: () => apiRequest<RiderTripsSetting>('/admin/settings/rider-trips'),
 
   setRiderTrips: (body: { max_active_deliveries?: number; max_dropoff_distance_km?: number }) =>
     apiRequest<RiderTripsSetting>('/admin/settings/rider-trips', { method: 'PATCH', body: { ...body } }),
+
+  /** Doctors need sign-in (owner, 2026-10-10): guests must log in before
+   * the customer app shows doctors. */
+  getDoctorsAccess: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
+
+  setDoctorsAccess: (require_sign_in: boolean) =>
+    apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { require_sign_in } }),
 
   /** Birthday-week gift and birthday SMS (owner, 2026-10-09). ADMIN and OPERATIONS. */
   getBirthdayOffer: () => apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer'),
@@ -353,13 +379,6 @@ export const settings = {
   /** The full list replaces the stored one. */
   setStoreHolidays: (holidays: StoreHoliday[]) =>
     apiRequest<StoreSchedule>('/admin/settings/store-holidays', { method: 'PATCH', body: { holidays } }),
-  /** Doctors need sign-in (owner, 2026-10-10): guests must log in before
-   * the customer app shows doctors. */
-  getDoctorsAccess: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
-
-  setDoctorsAccess: (require_sign_in: boolean) =>
-    apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { require_sign_in } }),
-
 
   setDeliverySlots: (body: Partial<DeliverySlotSettings>) =>
     apiRequest<StoreSchedule>('/admin/settings/delivery-slots', { method: 'PATCH', body: { ...body } }),
@@ -510,6 +529,36 @@ export const riders = {
     apiRequest<{ pay: RiderPay }>(`/admin/riders/${riderId}/pay`, { method: 'PATCH', body: { ...input } }).then(
       (d) => d.pay
     ),
+};
+
+/**
+ * Deductions and extra pay for a rider (owner, 2026-10-10). Amounts are
+ * signed: negative = deduction, positive = extra pay. Each settles against
+ * that day's cash.
+ */
+export const riderAdjustments = {
+  /** `from`/`to` default to today on the server; newest first. */
+  list: (filter: { rider_id?: string; from?: string; to?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (filter.rider_id) query.set('rider_id', filter.rider_id);
+    if (filter.from) query.set('from', filter.from);
+    if (filter.to) query.set('to', filter.to);
+    const qs = query.toString();
+    return apiRequest<{ adjustments: RiderAdjustment[] }>(`/admin/rider-adjustments${qs ? `?${qs}` : ''}`).then(
+      (d) => d.adjustments
+    );
+  },
+  create: (riderId: string, input: RiderAdjustmentInput) =>
+    apiRequest<{ adjustment: RiderAdjustment }>(`/admin/riders/${riderId}/adjustments`, {
+      method: 'POST',
+      body: { ...input },
+    }).then((d) => d.adjustment),
+  update: (id: string, input: Partial<RiderAdjustmentInput>) =>
+    apiRequest<{ adjustment: RiderAdjustment }>(`/admin/rider-adjustments/${id}`, {
+      method: 'PATCH',
+      body: { ...input },
+    }).then((d) => d.adjustment),
+  remove: (id: string) => apiRequest<{ deleted: boolean }>(`/admin/rider-adjustments/${id}`, { method: 'DELETE' }),
 };
 
 // -------------------------------------------------------------- feedback

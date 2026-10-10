@@ -43,6 +43,10 @@ export type DeliveryAssignmentStatus =
 export type RiderApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 /** Migration 032 (owner, 2026-10-09): salaried company rider, or a share of each delivery charge. */
 export type RiderPayType = 'COMPANY' | 'COMMISSION';
+/** Migration 038 (owner, 2026-10-10): how a COMMISSION rider's delivery pay is worked out. */
+export type RiderPayModel = 'PERCENT' | 'FIXED' | 'DISTANCE';
+export type RiderBonusKind = 'PEAK_BOOST' | 'RAIN_BOOST' | 'LONG_DISTANCE' | 'DAILY_TARGET';
+export type RiderAdjustmentReason = 'CASH_SHORT' | 'DAMAGED_ITEM' | 'LATE' | 'BONUS' | 'OTHER';
 export type NotificationChannel = 'SMS' | 'WHATSAPP' | 'IN_APP' | 'EMAIL' | 'PUSH';
 export type NotificationStatus = 'QUEUED' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'FAILED';
 
@@ -449,6 +453,15 @@ export interface RidersTable {
   pay_type: Generated<RiderPayType>;
   /** Migration 032: this rider's own share of the delivery charge, 0..100; null = the store default. */
   commission_percent: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  /**
+   * Migration 038 (owner, 2026-10-10): this rider's own pay model (null =
+   * the store default) and own numbers (each null = the store default's).
+   */
+  pay_model: ColumnType<RiderPayModel | null, RiderPayModel | null | undefined, RiderPayModel | null>;
+  pay_fixed_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  pay_base_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  pay_per_km_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  pay_min_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
@@ -479,6 +492,18 @@ export interface DeliveriesTable {
   rider_pay_type: ColumnType<RiderPayType | null, RiderPayType | null | undefined, RiderPayType | null>;
   rider_commission_percent: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   rider_earning_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  /**
+   * Migration 038 (owner, 2026-10-10): the rest of the settlement snapshot -
+   * the model and numbers applied, the store -> drop-off distance (estimated
+   * = straight line x 1.3 when OSRM was down), the base pay and the
+   * per-delivery bonuses. rider_earning_lkr = base + bonus.
+   */
+  rider_pay_model: ColumnType<RiderPayModel | null, RiderPayModel | null | undefined, RiderPayModel | null>;
+  rider_pay_inputs: ColumnType<unknown | null, string | null | undefined, string | null>;
+  rider_distance_km: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  rider_distance_estimated: ColumnType<boolean | null, boolean | null | undefined, boolean | null>;
+  rider_base_earning_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
+  rider_bonus_lkr: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
@@ -503,6 +528,34 @@ export interface NotificationsTable {
   error_message: string | null;
   sent_at: Date | null;
   failed_at: Date | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+/** Migration 038 (owner, 2026-10-10): one bonus a rider earned. */
+export interface RiderEarningLinesTable {
+  id: Generated<string>;
+  rider_id: string;
+  /** Set for per-delivery bonuses; null for DAILY_TARGET (per day). */
+  delivery_id: string | null;
+  earning_date: ColumnType<string, string, string>;
+  kind: RiderBonusKind;
+  amount_lkr: ColumnType<number, number | string, number | string>;
+  detail: ColumnType<unknown | null, string | null | undefined, string | null>;
+  dedupe_key: string;
+  created_at: Generated<Date>;
+}
+
+/** Migration 038 (owner, 2026-10-10): a staff +/- entry on a rider's pay. */
+export interface RiderPayAdjustmentsTable {
+  id: Generated<string>;
+  rider_id: string;
+  /** Signed: negative = deduction, positive = extra pay. */
+  amount_lkr: ColumnType<number, number | string, number | string>;
+  reason: RiderAdjustmentReason;
+  note: string | null;
+  adjustment_date: ColumnType<string, string, string>;
+  created_by_user_id: string | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
@@ -848,9 +901,13 @@ export interface Database {
   order_status_history: OrderStatusHistoryTable;
   payments: PaymentsTable;
   riders: RidersTable;
+  /** Migration 039 (owner, 2026-10-10). */
+  rider_documents: RiderDocumentsTable;
   deliveries: DeliveriesTable;
   notifications: NotificationsTable;
   audit_logs: AuditLogsTable;
+  rider_earning_lines: RiderEarningLinesTable;
+  rider_pay_adjustments: RiderPayAdjustmentsTable;
   dental_clinics: DentalClinicsTable;
   doctors: DoctorsTable;
   clinic_doctors: ClinicDoctorsTable;
@@ -872,6 +929,36 @@ export interface Database {
   referrals: ReferralsTable;
   referral_rewards: ReferralRewardsTable;
   points_ledger: PointsLedgerTable;
+}
+
+/**
+ * Migration 039 (owner, 2026-10-10): a rider applicant's identity / vehicle
+ * document. rider_id is NULL (and draft_phone set) until the application is
+ * sent. Files live in private storage (RIDER_DOCUMENTS_ROOT).
+ */
+export type RiderDocumentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+export interface RiderDocumentImage {
+  key: string;
+  content_type: string;
+  bytes: number;
+  uploaded_at: string;
+}
+export interface RiderDocumentsTable {
+  id: Generated<string>;
+  rider_id: string | null;
+  draft_phone: string | null;
+  doc_type: string;
+  custom_name: string | null;
+  images: ColumnType<RiderDocumentImage[], string | undefined, string>;
+  /** DATE: read as 'YYYY-MM-DD' text by the service (to_char). */
+  expiry_date: ColumnType<Date | null, string | null | undefined, string | null>;
+  status: Generated<RiderDocumentStatus>;
+  reject_reason: string | null;
+  reject_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: Date | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
 }
 
 /** Migration 037 (owner, 2026-10-10): a customer's personal referral code. */

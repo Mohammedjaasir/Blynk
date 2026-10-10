@@ -63,15 +63,16 @@ describe('Riders', () => {
     expect(await screen.findByText('No active riders')).toBeInTheDocument();
   });
 
-  it('offers no create/activate/deactivate control - only "Change pay" per rider (owner, 2026-10-09)', async () => {
+  it('offers no create/activate/deactivate control - only "Change pay", "Adjust pay" and "Documents" per rider (owner, 2026-10-09/10)', async () => {
     renderAs(ADMIN_WITH_RIDER, '/more/riders', { 'GET /admin/riders': () => ok({ riders: RIDERS }) });
     await screen.findByText('Farhan Mohamed');
 
-    // The only buttons are each rider's pay control (PATCH /admin/riders/:id/pay);
-    // the backend still has no rider create/activate/deactivate endpoint.
+    // The only buttons are each rider's pay control (PATCH /admin/riders/:id/pay)
+    // , their documents and pay adjustments (owner, 2026-10-10); the backend
+    // still has no rider create/activate/deactivate endpoint.
     const buttons = screen.queryAllByRole('button');
-    expect(buttons).toHaveLength(RIDERS.length);
-    for (const b of buttons) expect(b).toHaveTextContent('Change pay');
+    expect(buttons).toHaveLength(RIDERS.length * 3);
+    for (const b of buttons) expect(b.textContent).toMatch(/^(Change pay|Adjust pay|Documents)$/);
     for (const forbidden of [/add/i, /new rider/i, /create/i, /edit/i, /activate/i, /deactivate/i, /delete/i, /remove/i]) {
       expect(screen.queryByRole('button', { name: forbidden })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: forbidden })).not.toBeInTheDocument();
@@ -125,12 +126,23 @@ describe('Riders', () => {
     const commission = await within(dialog).findByRole('button', { name: 'Commission' });
     expect(within(dialog).getByRole('button', { name: 'Company' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(commission);
-    expect(within(dialog).getByText('Leave blank for the store default (80%).')).toBeInTheDocument();
-    await user.type(within(dialog).getByLabelText(/Own commission %/), '85');
+    // A new commission rider starts on the store default model (owner, 2026-10-10).
+    const model = within(dialog).getByRole('group', { name: 'Pay per delivery' });
+    expect(within(model).getByRole('button', { name: 'Store default' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(model).getByRole('button', { name: '% of fee' }));
+    const percent = within(dialog).getByLabelText(/Own commission %/);
+    expect(percent).toHaveValue('80'); // prefilled from the store default
+    await user.clear(percent);
+    await user.type(percent, '85');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(api.find('PATCH', '/admin/riders/r1/pay')).toHaveLength(1));
-    expect(api.find('PATCH', '/admin/riders/r1/pay')[0].body).toEqual({ pay_type: 'COMMISSION', commission_percent: 85 });
+    expect(api.find('PATCH', '/admin/riders/r1/pay')[0].body).toEqual({
+      pay_type: 'COMMISSION',
+      pay_model: 'PERCENT',
+      commission_percent: 85,
+      min_lkr: null,
+    });
     expect(await screen.findByText('Farhan Mohamed is now Commission · 85%.')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByText('Commission · 85%')).toBeInTheDocument();

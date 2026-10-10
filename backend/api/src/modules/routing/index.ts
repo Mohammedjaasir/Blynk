@@ -75,6 +75,30 @@ export async function fetchRoute(
   };
 }
 
+/**
+ * Road distance only, in metres (rider pay, migration 038; owner,
+ * 2026-10-10). Same OSRM route service without the geometry, and a short
+ * timeout because it runs inside the settlement transaction. Throws on any
+ * trouble; the caller falls back to a straight-line estimate.
+ */
+export async function roadDistanceM(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  osrmUrl: string | undefined = env.OSRM_URL,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = 2500,
+): Promise<number> {
+  if (!osrmUrl) throw new AppError('Route drawing is not configured on this server.', 503, 'ROUTING_UNAVAILABLE');
+  const url = `${osrmUrl.replace(/\/+$/, '')}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+  const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+  const body = (await response.json().catch(() => null)) as { code?: string; routes?: { distance?: number }[] } | null;
+  const distance = body?.routes?.[0]?.distance;
+  if (!response.ok || body?.code !== 'Ok' || typeof distance !== 'number' || !Number.isFinite(distance)) {
+    throw new AppError('No road route was found between these points.', 404, 'ROUTE_NOT_FOUND');
+  }
+  return distance;
+}
+
 export const routingRouter = Router();
 
 routingRouter.get('/route', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
@@ -146,7 +170,7 @@ export interface StopOrderResult {
 }
 
 /** Great-circle distance in metres. */
-function haversineM(a: LatLngPoint, b: LatLngPoint): number {
+export function haversineM(a: LatLngPoint, b: LatLngPoint): number {
   const R = 6371000;
   const rad = (d: number) => (d * Math.PI) / 180;
   const dLat = rad(b.lat - a.lat);

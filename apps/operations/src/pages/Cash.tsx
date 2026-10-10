@@ -6,6 +6,8 @@ import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, EmptyState, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
 import { formatMoney } from '../lib/orders';
+import { signedMoney } from '../lib/riderPay';
+import '../components/rider-pay.css';
 
 /**
  * Rider cash (More -> Cash; backend migration 019). Riders collect cash on
@@ -19,6 +21,12 @@ import { formatMoney } from '../lib/orders';
  * keep LKR Y" and short/over is measured against what they should hand in
  * (`expected_handin`), not everything collected. Company riders keep
  * nothing, so their rows read as before.
+ *
+ * Rider pay controls (owner, 2026-10-10): daily-target bonuses and pay
+ * adjustments are kept from (or added to) the day's cash too - a row shows
+ * them when non-zero, and "Blynk owes rider" (`payable_to_rider`) when the
+ * day's cash could not cover the rider's pay. Optional fields: an older API
+ * leaves them out and rows read as before.
  */
 
 /** Today in Sri Lanka (UTC+05:30 all year), YYYY-MM-DD. */
@@ -121,6 +129,31 @@ export function Cash() {
                         <span className="mono">{formatMoney(r.kept_share)}</span>
                       </p>
                     ) : null}
+                    {(r.day_bonuses ?? 0) > 0 || (r.adjustments ?? 0) !== 0 ? (
+                      <p className="cat-row__meta">
+                        {(r.day_bonuses ?? 0) > 0 ? (
+                          <>
+                            Day bonuses <span className="mono">{formatMoney(r.day_bonuses ?? 0)}</span>
+                          </>
+                        ) : null}
+                        {(r.day_bonuses ?? 0) > 0 && (r.adjustments ?? 0) !== 0 ? ' · ' : null}
+                        {(r.adjustments ?? 0) !== 0 ? (
+                          <>
+                            Adjustments <span className="mono">{signedMoney(r.adjustments ?? 0)}</span>
+                          </>
+                        ) : null}
+                        {r.kept_share > 0 ? null : (
+                          <>
+                            {' · '}Hand in <span className="mono">{formatMoney(r.expected_handin)}</span>
+                          </>
+                        )}
+                      </p>
+                    ) : null}
+                    {(r.payable_to_rider ?? 0) > 0 ? (
+                      <p className="cat-row__meta rpay-owed">
+                        Blynk owes rider <span className="mono">{formatMoney(r.payable_to_rider ?? 0)}</span>
+                      </p>
+                    ) : null}
                     <p className={`cash-diff cash-diff--${r.status.toLowerCase()}`}>{differenceText(r.difference, r.status)}</p>
                   </div>
                   <button
@@ -154,6 +187,24 @@ export function Cash() {
                     <span className="card__value mono">{formatMoney(data.totals.expected_handin)}</span>
                   </p>
                 </>
+              ) : null}
+              {(data.totals.day_bonuses ?? 0) > 0 ? (
+                <p className="card__row">
+                  <span className="card__label">Day bonuses</span>
+                  <span className="card__value mono">{formatMoney(data.totals.day_bonuses ?? 0)}</span>
+                </p>
+              ) : null}
+              {(data.totals.adjustments ?? 0) !== 0 ? (
+                <p className="card__row">
+                  <span className="card__label">Adjustments</span>
+                  <span className="card__value mono">{signedMoney(data.totals.adjustments ?? 0)}</span>
+                </p>
+              ) : null}
+              {(data.totals.payable_to_rider ?? 0) > 0 ? (
+                <p className="card__row">
+                  <span className="card__label">Blynk owes riders</span>
+                  <span className="card__value mono rpay-owed">{formatMoney(data.totals.payable_to_rider ?? 0)}</span>
+                </p>
               ) : null}
               <p className="card__row">
                 <span className="card__label">Difference</span>

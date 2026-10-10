@@ -34,6 +34,11 @@ function application(overrides: Partial<RiderApplication> = {}): RiderApplicatio
     reviewed_at: null,
     reviewed_by_name: null,
     rejection_reason: null,
+    // Rider documents (owner, 2026-10-10): nothing blocks approval here.
+    documents: [],
+    document_requirements: [],
+    documents_blocking: [],
+    documents_verified: true,
     ...overrides,
   };
 }
@@ -101,10 +106,14 @@ describe('Rider requests (Ops)', () => {
 
     await user.click(within(types).getByRole('button', { name: 'Commission' }));
     expect(within(types).getByRole('button', { name: 'Commission' })).toHaveAttribute('aria-pressed', 'true');
-    expect(await within(dialog).findByText('Leave blank for the store default (80%).')).toBeInTheDocument();
+    // Store default first, naming it (owner, 2026-10-10); then an own %.
+    expect(await within(dialog).findByText(/Follows the store default: 80% of the delivery fee/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '% of fee' }));
+    expect(within(dialog).getByText(/Store default 80%/)).toBeInTheDocument();
 
     // A bad % is refused before anything is sent.
     const percent = within(dialog).getByLabelText(/Own commission %/);
+    await user.clear(percent);
     await user.type(percent, '120');
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
     expect(await within(dialog).findByText('The percentage can be at most 100.')).toBeInTheDocument();
@@ -116,7 +125,9 @@ describe('Rider requests (Ops)', () => {
     await waitFor(() => expect(api.find('POST', '/admin/rider-applications/r1/approve')).toHaveLength(1));
     expect(api.find('POST', '/admin/rider-applications/r1/approve')[0].body).toEqual({
       pay_type: 'COMMISSION',
+      pay_model: 'PERCENT',
       commission_percent: 75,
+      min_lkr: null,
     });
   });
 

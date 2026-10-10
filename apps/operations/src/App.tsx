@@ -40,6 +40,7 @@ import { PackingSlip } from './pages/PackingSlip';
 import { Orders } from './pages/Orders';
 import { Riders } from './pages/Riders';
 import { RiderEarnings } from './pages/RiderEarnings';
+import { RiderPay } from './pages/RiderPay';
 import { SmsOffers } from './pages/SmsOffers';
 import { BirthdayOffer } from './pages/BirthdayOffer';
 import { StoreHours } from './pages/StoreHours';
@@ -47,6 +48,7 @@ import { Coupons } from './pages/Coupons';
 import { ReferAFriend } from './pages/ReferAFriend';
 import { BlynkPoints } from './pages/BlynkPoints';
 import { RiderRequests } from './pages/RiderRequests';
+import { RiderDocumentSettings } from './pages/RiderDocumentSettings';
 import { StaffAccounts } from './pages/StaffAccounts';
 import { LaunchScreen } from './components/LaunchScreen';
 import { AndroidBackButton } from './components/AndroidBackButton';
@@ -162,6 +164,8 @@ export function AppRoutes() {
         <Route path="more" element={<More />} />
         <Route path="more/riders" element={<Riders />} />
         <Route path="more/earnings" element={<RiderEarnings />} />
+        {/* Rider pay model, boosts and bonuses (owner, 2026-10-10). */}
+        <Route path="more/rider-pay" element={<RiderPay />} />
         <Route path="more/cash" element={<Cash />} />
         <Route path="more/deliver" element={<DeliverMyself />} />
         <Route path="more/staff" element={<StaffAccounts />} />
@@ -175,6 +179,8 @@ export function AppRoutes() {
         <Route path="more/refer-a-friend" element={<ReferAFriend />} />
         <Route path="more/points" element={<BlynkPoints />} />
         <Route path="more/rider-requests" element={<RiderRequests />} />
+        {/* Which documents riders upload and must have verified (owner, 2026-10-10). */}
+        <Route path="more/rider-documents" element={<RiderDocumentSettings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -8,7 +8,8 @@ import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { publicPhone } from '../../utils/phone.js';
-import { rangeBounds, STORE_ZONE } from '../reports/sales.service.js';
+import { STORE_ZONE } from '../reports/sales.service.js';
+import { dayCash, riderLedger } from '../riders/rider.pay-ledger.js';
 
 /*
  * Rider cash reconciliation (migration 019). Riders collect COD cash - the
@@ -32,6 +33,19 @@ import { rangeBounds, STORE_ZONE } from '../reports/sales.service.js';
  * so for them expected_handin = collected, exactly as before. The min() means
  * a rider never keeps more than that door's cash (an order whose total is
  * below the share); any remainder is still on the earnings report.
+ *
+ * Bonuses and adjustments (migration 038; owner, 2026-10-10): per-delivery
+ * bonuses are inside rider_earning_lkr, so they are kept like the share. The
+ * day's daily-target bonuses and staff adjustments (dated that day) settle
+ * against the same day's cash (riders/rider.pay-ledger.ts):
+ *
+ *   raw              = collected - kept_share - day_bonuses - adjustments
+ *   expected_handin  = max(0, raw)
+ *   payable_to_rider = max(0, -raw)   (Blynk owes the rider; paid separately)
+ *
+ * A deduction (negative adjustment) raises what the rider hands in that day;
+ * extra pay or a daily target lowers it; a rider with only an adjustment that
+ * day appears too. This applies to COMPANY riders as well.
  */
 
 const money = (v: unknown) => Number(Number(v ?? 0).toFixed(2));
@@ -130,21 +144,8 @@ export async function listHandins(params: { date?: string; rider_id?: string }) 
  * hand-in; negative = short). Riders with neither are left out.
  */
 export async function reconciliation(date: string) {
-  const { start, end } = rangeBounds({ from: date, to: date });
-  const [collected, handed] = await Promise.all([
-    db
-      .selectFrom('deliveries')
-      .select([
-        'rider_id',
-        sql<number>`count(*)::int`.as('deliveries'),
-        sql<string>`sum(cod_collected_amount)`.as('collected'),
-        sql<string>`coalesce(sum(least(coalesce(rider_earning_lkr, 0), cod_collected_amount)), 0)`.as('kept'),
-      ])
-      .where('assignment_status', '=', 'DELIVERED')
-      .where('delivered_at', '>=', start)
-      .where('delivered_at', '<', end)
-      .groupBy('rider_id')
-      .execute(),
+  const [ledger, handed] = await Promise.all([
+    riderLedger({ from: date, to: date }),
     db
       .selectFrom('cash_handins')
       .select(['rider_id', sql<number>`count(*)::int`.as('handins'), sql<string>`sum(amount)`.as('handed_in')])
@@ -152,7 +153,7 @@ export async function reconciliation(date: string) {
       .groupBy('rider_id')
       .execute(),
   ]);
-  const riderIds = [...new Set([...collected.map((c) => c.rider_id), ...handed.map((h) => h.rider_id)])];
+  const riderIds = [...new Set([...ledger.keys(), ...handed.map((h) => h.rider_id)])];
   const names = riderIds.length
     ? await db
         .selectFrom('riders as r')
@@ -164,12 +165,14 @@ export async function reconciliation(date: string) {
 
   const riders = riderIds
     .map((id) => {
-      const c = collected.find((x) => x.rider_id === id);
+      const c = ledger.get(id);
       const h = handed.find((x) => x.rider_id === id);
       const n = names.find((x) => x.id === id);
-      const cash = money(c?.collected);
-      const kept = money(c?.kept);
-      const expected = money(cash - kept);
+      const cash = money(c?.cash_collected);
+      const kept = money(c?.cash_kept);
+      const dayBonuses = money(c?.day_bonuses);
+      const adjustments = money(c?.adjustments);
+      const { expected_handin: expected, payable_to_rider } = dayCash({ collected: cash, kept, day_bonuses: dayBonuses, adjustments });
       const inHand = money(h?.handed_in);
       const difference = money(inHand - expected);
       return {
@@ -181,10 +184,16 @@ export async function reconciliation(date: string) {
         deliveries: c?.deliveries ?? 0,
         handins: h?.handins ?? 0,
         collected: cash,
-        /** The commission rider's earned share they keep (0 for a company rider). */
+        /** The rider's earned per-delivery share they keep (0 for a company rider without bonuses). */
         kept_share: kept,
-        /** What should be handed in: collected - kept_share. */
+        /** Daily-target bonuses of the day, kept from the day's cash (migration 038). */
+        day_bonuses: dayBonuses,
+        /** Staff adjustments dated that day, signed (negative = deduction). */
+        adjustments,
+        /** What should be handed in: max(0, collected - kept_share - day_bonuses - adjustments). */
         expected_handin: expected,
+        /** What the day's cash could not cover: Blynk owes the rider. */
+        payable_to_rider,
         handed_in: inHand,
         difference,
         status: reconciliationStatus(difference),
@@ -192,18 +201,21 @@ export async function reconciliation(date: string) {
     })
     .sort((a, b) => (a.rider_name ?? '').localeCompare(b.rider_name ?? '') || a.rider_id.localeCompare(b.rider_id));
 
-  const collectedTotal = money(riders.reduce((s, r) => s + r.collected, 0));
-  const keptTotal = money(riders.reduce((s, r) => s + r.kept_share, 0));
-  const expectedTotal = money(collectedTotal - keptTotal);
-  const handedTotal = money(riders.reduce((s, r) => s + r.handed_in, 0));
+  const total = (k: 'collected' | 'kept_share' | 'day_bonuses' | 'adjustments' | 'expected_handin' | 'payable_to_rider' | 'handed_in') =>
+    money(riders.reduce((s, r) => s + r[k], 0));
+  const expectedTotal = total('expected_handin');
+  const handedTotal = total('handed_in');
   return {
     date,
     timezone: STORE_ZONE,
     riders,
     totals: {
-      collected: collectedTotal,
-      kept_share: keptTotal,
+      collected: total('collected'),
+      kept_share: total('kept_share'),
+      day_bonuses: total('day_bonuses'),
+      adjustments: total('adjustments'),
       expected_handin: expectedTotal,
+      payable_to_rider: total('payable_to_rider'),
       handed_in: handedTotal,
       difference: money(handedTotal - expectedTotal),
       status: reconciliationStatus(handedTotal - expectedTotal),

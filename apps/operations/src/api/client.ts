@@ -154,6 +154,41 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return (payload.data ?? payload) as T;
 }
 
+/**
+ * A private file as a Blob (owner, 2026-10-10: rider documents - vehicle
+ * book, revenue licence, insurance, driving licence). Those pages have no
+ * public URL: they are only served to a signed-in ADMIN/OPERATIONS caller,
+ * so they are fetched exactly like `apiRequest` fetches JSON - same base
+ * URL, Authorization header, timeout, and the same single-flight refresh on
+ * a 401 - and handed back as a Blob for the caller to turn into an object
+ * URL (and revoke on unmount). Nothing here caches the bytes.
+ */
+export async function fetchPrivateFile(path: string, options: { signal?: AbortSignal } = {}): Promise<Blob> {
+  let response = await send(path, { signal: options.signal }, true);
+  if (response.status === 401 && tokenStore.refresh) {
+    const outcome = await refreshSession();
+    if (outcome === 'refreshed') response = await send(path, { signal: options.signal }, true);
+    else if (outcome !== 'refused') throw connectionError(outcome);
+  }
+  if (response.status === 401) endSession('expired');
+
+  if (!response.ok) {
+    let error: { message?: string; code?: string; details?: unknown } = {};
+    try {
+      const text = await response.text();
+      error = ((text ? (JSON.parse(text) as Json) : {}).error ?? {}) as typeof error;
+    } catch {
+      // A non-JSON error body is still an error to report cleanly.
+    }
+    throw new ApiError(error.message ?? 'Could not load the file.', response.status, error.code, error.details);
+  }
+  try {
+    return await response.blob();
+  } catch {
+    throw new ApiError('Could not reach the Blynk API.', 0, 'NETWORK');
+  }
+}
+
 async function send(
   path: string,
   { method = 'GET', body, query, signal }: RequestOptions,

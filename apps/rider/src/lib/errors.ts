@@ -35,6 +35,12 @@ export const MESSAGES: Record<string, string> = {
   PHONE_IN_USE: 'This number is already used by another Blynk account. Apply with a different number.',
   STAFF_CAN_DELIVER: 'This number is an Operations account. Use "Deliver orders myself" in the Ops app instead.',
   PHONE_SIGN_IN_REQUIRED: 'Riders sign in with their phone number and an SMS code.',
+  // Rider documents (owner, 2026-10-10).
+  APPLICANT_SESSION_EXPIRED: 'For your safety, check your number again with a new code. Your uploaded documents are kept.',
+  APPLICANT_SESSION_REQUIRED: 'Check your number with an SMS code first.',
+  FILE_TOO_LARGE: 'That file is larger than 8 MB. Take the photo again.',
+  DOCUMENT_PAGE_ORDER: 'Add the front of the document first.',
+  DOCUMENT_TYPE_NOT_FOUND: 'This document is no longer asked for. Go back and open the application again.',
 };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

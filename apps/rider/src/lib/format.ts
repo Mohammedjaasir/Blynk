@@ -81,6 +81,22 @@ function clock(hour: number, minute: number) {
 }
 
 /**
+ * "6:30 PM" in store time (Asia/Colombo), prefixed with the day when it is not
+ * today ("tomorrow 6:30 AM", "Sat 12 Oct 6:30 PM"); null for an unreadable
+ * date. Used for "Rain boost ... until 6:30 PM" (owner, 2026-10-10).
+ */
+export function formatUntil(iso: string, now: Date = new Date()): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const { hour, minute } = partsOf(date);
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  const clockText = `${h12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`;
+  const offset = colomboDayOffset(date, now);
+  if (offset === 0) return clockText;
+  return `${offset === 1 ? 'tomorrow' : formatSlotDay(date, now)} ${clockText}`;
+}
+
+/**
  * '8 AM', '4–6 PM', '11 AM–1 PM', '8:30–9:30 AM' (en dash; the meridiem is
  * written once when both ends share it) (owner, 2026-10-10).
  */

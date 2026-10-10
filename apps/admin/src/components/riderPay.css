@@ -1,0 +1,164 @@
+/* Rider pay controls (owner, 2026-10-10): store default model, bonus rules,
+   rain boost, the pay dialog and pay adjustments. Built on the site's
+   segmented control, rd-choice chips and rd-switch. */
+
+.segmented--wrap {
+  display: flex;
+  flex-wrap: wrap;
+  width: auto;
+  max-width: 100%;
+}
+
+.segmented--wrap .segmented__item {
+  flex: 1 1 auto;
+}
+
+.rd-date__day:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------ settings */
+.rp-settings {
+  display: grid;
+  gap: 14px;
+}
+
+.rp-explain {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rp-block {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.rp-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rp-block__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.rp-block__status {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* The rain boost is the one switch staff reach for in a hurry: make it loud. */
+.rp-rain {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  background: var(--surface);
+}
+
+.rp-rain.is-on {
+  background: #fffbe0;
+  border-color: var(--ink);
+  box-shadow: inset 6px 0 0 var(--yellow);
+}
+
+.rp-rain__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.rp-rain__state {
+  font-weight: 800;
+}
+
+.rp-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.rp-inline .field {
+  min-width: 140px;
+}
+
+.rp-window,
+.rp-tier {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rp-window:first-child,
+.rp-tier:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.rp-time {
+  width: 84px;
+}
+
+.rp-num {
+  width: 110px;
+}
+
+.rp-list {
+  display: grid;
+}
+
+.rp-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------ earnings */
+.rp-amount--minus {
+  color: var(--danger);
+}
+
+.rp-amount--plus {
+  color: #1d7a3e;
+}
+
+.rp-owes {
+  font-weight: 800;
+  color: #1d7a3e;
+}
+
+.rp-adjustments {
+  max-width: none;
+}
+
+.rp-adjustment__actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+@media (max-width: 600px) {
+  .rp-inline .field {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+}

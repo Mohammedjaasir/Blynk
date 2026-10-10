@@ -6,6 +6,7 @@ import { ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../componen
 import { errorMessage } from '../lib/apiErrors';
 import { colomboDate } from '../lib/coupons';
 import { formatMoney } from '../lib/orders';
+import '../components/riderPay.css';
 
 /**
  * Rider cash (backend migration 019). Riders collect cash on delivery;
@@ -17,6 +18,10 @@ import { formatMoney } from '../lib/orders';
  * of the delivery fees out of the cash and hands in the rest, so the API
  * measures short/over against `expected_handin` (collected - kept_share).
  * Company riders keep nothing and look as before.
+ *
+ * Rider pay controls (owner, 2026-10-10): daily-target bonuses and pay
+ * adjustments settle against the day's cash too; when the cash cannot cover
+ * them the row says what Blynk owes the rider (payable_to_rider).
  */
 
 const errorText = errorMessage;
@@ -58,6 +63,52 @@ export function keepText(row: { collected: number; kept_share?: number; expected
   if (!(kept > 0)) return null;
   const handIn = row.expected_handin ?? row.collected - kept;
   return `Hand in ${formatMoney(handIn)}, keep ${formatMoney(kept)}`;
+}
+
+/**
+ * Rider pay controls (owner, 2026-10-10): the day's daily-target bonuses and
+ * adjustments settle against that day's cash - "Day bonus LKR 100 · Deduction
+ * LKR 200" - or null when there are none. An older API sends neither.
+ */
+export function payExtrasText(row: { day_bonuses?: number; adjustments?: number }): string | null {
+  const parts: string[] = [];
+  if ((row.day_bonuses ?? 0) > 0) parts.push(`Day bonus ${formatMoney(row.day_bonuses ?? 0)}`);
+  const adj = row.adjustments ?? 0;
+  if (adj > 0) parts.push(`Extra pay ${formatMoney(adj)}`);
+  if (adj < 0) parts.push(`Deduction ${formatMoney(-adj)}`);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+/** "Blynk owes rider LKR 300" when the day's cash could not cover their pay; null otherwise. */
+export function owesText(row: { payable_to_rider?: number }): string | null {
+  return (row.payable_to_rider ?? 0) > 0 ? `Blynk owes rider ${formatMoney(row.payable_to_rider ?? 0)}` : null;
+}
+
+/**
+ * The lines under "Collected": keep/hand-in, then bonuses and adjustments,
+ * then what Blynk owes. With no share kept but extras, the hand-in still
+ * differs from the cash collected, so it is spelled out.
+ */
+function CashNotes({
+  row,
+}: {
+  row: { collected: number; kept_share?: number; expected_handin?: number; day_bonuses?: number; adjustments?: number; payable_to_rider?: number };
+}) {
+  const keep = keepText(row);
+  const extras = payExtrasText(row);
+  const owes = owesText(row);
+  const handIn =
+    !keep && extras && typeof row.expected_handin === 'number' && row.expected_handin !== row.collected
+      ? `Hand in ${formatMoney(row.expected_handin)}`
+      : null;
+  return (
+    <>
+      {keep ? <div className="cell__secondary">{keep}</div> : null}
+      {handIn ? <div className="cell__secondary">{handIn}</div> : null}
+      {extras ? <div className="cell__secondary">{extras}</div> : null}
+      {owes ? <div className="cell__secondary rp-owes">{owes}</div> : null}
+    </>
+  );
 }
 
 export function differenceText(difference: number, status: ReconciliationStatus): string {
@@ -157,7 +208,7 @@ export function Cash() {
                     <td className="num mono">{r.deliveries}</td>
                     <td className="num mono">
                       {formatMoney(r.collected)}
-                      {keepText(r) ? <div className="cell__secondary">{keepText(r)}</div> : null}
+                      <CashNotes row={r} />
                     </td>
                     <td className="num mono">{formatMoney(r.handed_in)}</td>
                     <td>
@@ -182,7 +233,7 @@ export function Cash() {
                   <td />
                   <td className="num mono">
                     {formatMoney(data.totals.collected)}
-                    {keepText(data.totals) ? <div className="cell__secondary">{keepText(data.totals)}</div> : null}
+                    <CashNotes row={data.totals} />
                   </td>
                   <td className="num mono">{formatMoney(data.totals.handed_in)}</td>
                   <td>

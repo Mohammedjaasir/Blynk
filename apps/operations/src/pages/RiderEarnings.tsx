@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { riders as ridersApi } from '../api/resources';
-import type { EarningsRange, RiderEarningsFigures, RiderEarningsReport, RiderEarningsRow } from '../api/types';
+import type { EarningsRange, RiderAdjustment, RiderEarningsFigures, RiderEarningsReport, RiderEarningsRow } from '../api/types';
 import { PageHeader } from '../components/Layout';
+import { RiderAdjustSheet } from '../components/RiderAdjustments';
 import { EmptyState, Spinner } from '../components/ui';
+import '../components/rider-pay.css';
 import { formatColomboDate } from '../lib/catalog';
 import { errorMessage } from '../lib/errors';
 import { formatMoney } from '../lib/orders';
-import { formatPercent } from '../lib/riderPay';
+import { formatDay } from '../lib/riderDocuments';
+import {
+  ADJUSTMENT_REASON_LABEL,
+  BONUS_KINDS,
+  BONUS_KIND_LABEL,
+  PAY_MODEL_LABEL,
+  describePay,
+  formatPercent,
+  signedMoney,
+} from '../lib/riderPay';
 import { colomboToday } from './Cash';
 
 /**
@@ -17,6 +28,13 @@ import { colomboToday } from './Cash';
  * delivery charges and the product margin. Company riders are salaried
  * (owner, 2026-10-09): their rider share is always 0 and Blynk keeps the
  * whole delivery charge.
+ *
+ * Rider pay controls (owner, 2026-10-10): each rider (and the totals) also
+ * shows the base pay, bonuses (by kind), deductions and extra pay, the total
+ * earnings and what Blynk still owes the rider (`payable_to_rider`), plus the
+ * range's adjustments with reason and note. "Adjust pay" opens the same
+ * sheet as Riders. The new figures are optional - an older API leaves them
+ * out and the cards read as before.
  */
 
 const RANGES: { value: EarningsRange; label: string }[] = [
@@ -34,6 +52,8 @@ export function RiderEarnings() {
   const [to, setTo] = useState(() => colomboToday());
   const [report, setReport] = useState<RiderEarningsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [adjusting, setAdjusting] = useState<{ id: string; name: string } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const customInvalid = range === 'custom' && (!from || !to || from > to);
 
@@ -53,7 +73,8 @@ export function RiderEarnings() {
       live = false;
     };
     // `from`/`to` only change while the custom range shows its date inputs.
-  }, [range, from, to, customInvalid]);
+    // `reloadKey` refreshes after an adjustment (owner, 2026-10-10).
+  }, [range, from, to, customInvalid, reloadKey]);
 
   return (
     <div className="page">
@@ -116,6 +137,9 @@ export function RiderEarnings() {
               ? dayLabel(report.range.from)
               : `${dayLabel(report.range.from)} – ${dayLabel(report.range.to)}`}
             {' · '}Store default commission {formatPercent(report.default_percent)}
+            {report.default_model && report.default_model.model !== 'PERCENT'
+              ? ` · Store default pay ${describePay(report.default_model)}`
+              : ''}
           </p>
           <Totals totals={report.totals} />
           {report.riders.length === 0 ? (
@@ -123,11 +147,25 @@ export function RiderEarnings() {
           ) : (
             <ul className="earnings-list" aria-label="Earnings by rider">
               {report.riders.map((r) => (
-                <RiderCard key={r.rider_id} row={r} />
+                <RiderCard
+                  key={r.rider_id}
+                  row={r}
+                  onAdjust={() => setAdjusting({ id: r.rider_id, name: r.rider_name ?? r.rider_phone ?? 'Rider' })}
+                />
               ))}
             </ul>
           )}
+          {report.adjustments && report.adjustments.length > 0 ? <AdjustmentsList adjustments={report.adjustments} /> : null}
         </>
+      ) : null}
+
+      {adjusting ? (
+        <RiderAdjustSheet
+          riderId={adjusting.id}
+          name={adjusting.name}
+          onClose={() => setAdjusting(null)}
+          onChanged={() => setReloadKey((k) => k + 1)}
+        />
       ) : null}
     </div>
   );
@@ -161,20 +199,57 @@ function Totals({ totals }: { totals: RiderEarningsFigures }) {
           <dt className="figure__label">Customers paid for delivery</dt>
           <dd className="figure__value">{formatMoney(totals.customer_delivery_fees)}</dd>
         </div>
+        {/* Rider pay controls (owner, 2026-10-10) - only from an API that sends them. */}
+        {totals.total_earnings !== undefined ? (
+          <>
+            <div className="figure">
+              <dt className="figure__label">Base pay</dt>
+              <dd className="figure__value">{formatMoney(totals.base_earnings ?? 0)}</dd>
+            </div>
+            <div className="figure">
+              <dt className="figure__label">Bonuses</dt>
+              <dd className="figure__value">{formatMoney((totals.delivery_bonuses ?? 0) + (totals.day_bonuses ?? 0))}</dd>
+            </div>
+            <div className="figure">
+              <dt className="figure__label">Deductions</dt>
+              <dd className="figure__value">{signedMoney(-(totals.deductions ?? 0))}</dd>
+            </div>
+            <div className="figure">
+              <dt className="figure__label">Extra pay</dt>
+              <dd className="figure__value">{signedMoney(totals.additions ?? 0)}</dd>
+            </div>
+            <div className="figure">
+              <dt className="figure__label">Total earnings</dt>
+              <dd className="figure__value">{formatMoney(totals.total_earnings)}</dd>
+            </div>
+            {(totals.payable_to_rider ?? 0) > 0 ? (
+              <div className="figure">
+                <dt className="figure__label">Blynk owes riders</dt>
+                <dd className="figure__value rpay-owed">{formatMoney(totals.payable_to_rider ?? 0)}</dd>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </dl>
     </section>
   );
 }
 
-function RiderCard({ row }: { row: RiderEarningsRow }) {
+function RiderCard({ row, onAdjust }: { row: RiderEarningsRow; onAdjust(): void }) {
   const company = row.pay_type === 'COMPANY';
   const name = row.rider_name ?? row.rider_phone ?? 'Rider';
+  const bonuses = (row.delivery_bonuses ?? 0) + (row.day_bonuses ?? 0);
+  const breakdown = BONUS_KINDS.filter((k) => (row.bonus_breakdown?.[k] ?? 0) > 0);
   return (
     <li className="card earnings-card" aria-label={name}>
       <div className="earnings-card__head">
         <p className="cat-row__title">{name}</p>
         <span className={`pay-tag pay-tag--${row.pay_type.toLowerCase()}`}>
-          {company ? 'Company rider' : `Commission · ${formatPercent(row.effective_percent ?? 0)}`}
+          {company
+            ? 'Company rider'
+            : row.pay_model === 'FIXED' || row.pay_model === 'DISTANCE'
+              ? `Commission · ${PAY_MODEL_LABEL[row.pay_model]}`
+              : `Commission · ${formatPercent(row.effective_percent ?? 0)}`}
         </span>
       </div>
       <p className="card__row">
@@ -197,12 +272,93 @@ function RiderCard({ row }: { row: RiderEarningsRow }) {
         <span className="card__label">Product margin</span>
         <span className="card__value mono">{formatMoney(row.product_margin)}</span>
       </p>
+      {row.total_earnings !== undefined ? (
+        <div className="rpay-card-pay" aria-label={`Pay for ${name}`}>
+          <p className="card__row">
+            <span className="card__label">Base pay</span>
+            <span className="card__value mono">{formatMoney(row.base_earnings ?? 0)}</span>
+          </p>
+          {bonuses > 0 ? (
+            <>
+              <p className="card__row">
+                <span className="card__label">Bonuses</span>
+                <span className="card__value mono">{signedMoney(bonuses)}</span>
+              </p>
+              {breakdown.length ? (
+                <ul className="rpay-breakdown" aria-label={`Bonuses for ${name}`}>
+                  {breakdown.map((k) => (
+                    <li key={k}>
+                      {BONUS_KIND_LABEL[k]} {formatMoney(row.bonus_breakdown?.[k] ?? 0)}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : null}
+          {(row.deductions ?? 0) > 0 ? (
+            <p className="card__row">
+              <span className="card__label">Deductions</span>
+              <span className="card__value mono rpay-minus">{signedMoney(-(row.deductions ?? 0))}</span>
+            </p>
+          ) : null}
+          {(row.additions ?? 0) > 0 ? (
+            <p className="card__row">
+              <span className="card__label">Extra pay</span>
+              <span className="card__value mono rpay-plus">{signedMoney(row.additions ?? 0)}</span>
+            </p>
+          ) : null}
+          <p className="card__row">
+            <span className="card__label">Total earnings</span>
+            <span className="card__value mono">{formatMoney(row.total_earnings)}</span>
+          </p>
+          {(row.payable_to_rider ?? 0) > 0 ? (
+            <p className="card__row">
+              <span className="card__label">Blynk owes rider</span>
+              <span className="card__value mono rpay-owed">{formatMoney(row.payable_to_rider ?? 0)}</span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {!company && row.cash_kept > 0 ? (
         <p className="quiet">
           Cash: keeps {formatMoney(row.cash_kept)}, hands in {formatMoney(row.cash_to_hand_in)} of{' '}
           {formatMoney(row.cash_collected)} collected.
         </p>
       ) : null}
+      <div className="cat-row__actions">
+        <button type="button" className="button button--sm button--ghost" aria-label={`Adjust pay for ${name}`} onClick={onAdjust}>
+          Adjust pay
+        </button>
+      </div>
     </li>
+  );
+}
+
+/** The range's deductions and extra pay, newest first (owner, 2026-10-10). */
+function AdjustmentsList({ adjustments }: { adjustments: RiderAdjustment[] }) {
+  return (
+    <section className="card" aria-labelledby="earnings-adjustments-title">
+      <h2 className="section-label" id="earnings-adjustments-title">
+        Adjustments
+      </h2>
+      <ul className="rpay-adjustments" aria-label="Adjustments in this range">
+        {adjustments.map((a) => (
+          <li key={a.id} className="rpay-adjustment">
+            <div className="rpay-adjustment__main">
+              <p className="rpay-adjustment__line">
+                {a.rider_name ?? 'Rider'}{' '}
+                <span className={a.amount_lkr < 0 ? 'mono rpay-minus' : 'mono rpay-plus'}>{signedMoney(a.amount_lkr)}</span>{' '}
+                <span className="pay-tag pay-tag--company">{ADJUSTMENT_REASON_LABEL[a.reason] ?? a.reason}</span>
+              </p>
+              <p className="cat-row__meta">
+                {formatDay(a.adjustment_date)}
+                {a.created_by_name ? ` · by ${a.created_by_name}` : ''}
+              </p>
+              {a.note ? <p className="cat-row__meta">“{a.note}”</p> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

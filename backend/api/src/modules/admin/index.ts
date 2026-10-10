@@ -19,6 +19,8 @@ import { inventoryController } from '../inventory/index.js';
 import { purchaseList } from '../inventory/purchase-list.js';
 import { listRiderSuggestions, listRidersForAssignment } from '../riders/rider.controller.js';
 import { adminRiderApplicationsRouter } from '../riders/rider.applications.js';
+import { adminRiderDocumentsRouter } from '../riders/rider.documents.js';
+import { adminRiderDocumentSettingsRouter } from '../riders/rider.documents.settings.js';
 import { adminRiderPayRouter } from '../riders/rider.pay.js';
 import { metrics } from '../../utils/metrics.js';
 import { checkDatabaseConnection, pool } from '../../database/connection.js';
@@ -54,6 +56,11 @@ adminRouter.use(adminStaffRouter);
 
 // Rider requests (migration 029): ADMIN and OPERATIONS review applications.
 adminRouter.use(adminRiderApplicationsRouter);
+
+// Rider documents (migration 039; owner, 2026-10-10): review, private pages,
+// expiry alerts and the "Rider documents" settings. ADMIN and OPERATIONS.
+adminRouter.use(adminRiderDocumentsRouter);
+adminRouter.use(adminRiderDocumentSettingsRouter);
 
 // Rider pay (migration 032; owner, 2026-10-09): a rider's type and share, and
 // the rider earnings report. ADMIN and OPERATIONS, guarded inside.

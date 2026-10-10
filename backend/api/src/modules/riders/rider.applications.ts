@@ -2,7 +2,7 @@ import { Router, type Request } from 'express';
 import { sql, type Transaction } from 'kysely';
 import { z } from 'zod';
 import { db } from '../../database/connection.js';
-import type { Database, RiderApprovalStatus, RiderPayType, UserRole } from '../../database/types.js';
+import type { Database, RiderApprovalStatus, RiderPayModel, RiderPayType, UserRole } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
@@ -15,6 +15,8 @@ import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { notificationService } from '../notifications/notification.service.js';
 import { approvePaySchema, payValues, type ApprovePayInput } from './rider.pay.js';
 import { optionalRegistrationSchema, refineRegistration, storeId, vehicleTypeSchema } from './rider.profile.js';
+import { requireApplicant, riderDocumentService } from './rider.documents.js';
+import { riderDocumentStore } from './rider.documents.files.js';
 
 /**
  * Rider applications (migration 029, owner 2026-10-07).
@@ -81,6 +83,53 @@ export const riderApplicationSchema = z.object({
 }).superRefine(refineRegistration);
 export type RiderApplicationInput = z.infer<typeof riderApplicationSchema>;
 
+/**
+ * Rider documents (migration 039; owner, 2026-10-10): the Rider app proves
+ * the phone once (POST /riders/applications/session -> applicant token),
+ * uploads the documents, then sends the details to POST
+ * /riders/applications/submit with that token instead of phone + SMS code.
+ */
+export const riderApplicationSessionSchema = z
+  .object({
+    full_name: z
+      .string({ required_error: 'Full name is required.' })
+      .trim()
+      .min(2, 'Full name must be at least 2 characters.')
+      .max(128, 'Full name must be at most 128 characters.'),
+    vehicle_type: vehicleTypeSchema,
+    vehicle_registration_number: optionalRegistrationSchema,
+    emergency_contact_phone: z
+      .union([z.literal(''), z.null(), slPhone('Emergency contact must be a Sri Lankan mobile number, e.g. 077 123 4567')])
+      .optional()
+      .transform((v) => (v ? v : null)),
+  })
+  .superRefine(refineRegistration);
+export type RiderApplicationDetails = z.infer<typeof riderApplicationSessionSchema>;
+
+/**
+ * Approve body: the rider pay fields (rider.pay.ts) plus, for an ADMIN only,
+ * "Approve anyway" when a required document is not verified (owner,
+ * 2026-10-10) - with a reason, audited. OPERATIONS cannot override.
+ */
+export const approveApplicationSchema = approvePaySchema
+  .removeDefault()
+  .extend({
+    override_documents: z.boolean({ invalid_type_error: 'override_documents must be true or false' }).optional(),
+    override_reason: z.string().trim().max(500, 'Reason must be at most 500 characters.').optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.override_documents && (!v.override_reason || v.override_reason.length < 3)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['override_reason'],
+        message: 'Say why the rider is approved without verified documents.',
+      });
+    }
+  })
+  .default({});
+export type ApproveApplicationInput = z.infer<typeof approveApplicationSchema>;
+
 export const applicationStatuses = ['PENDING', 'APPROVED', 'REJECTED'] as const;
 
 export const listApplicationsQuerySchema = z.object({
@@ -125,6 +174,8 @@ export interface RiderApplication {
   pay_type: RiderPayType;
   /** The rider's own share of the delivery charge; null = the store default. */
   commission_percent: number | null;
+  /** Migration 038 (owner, 2026-10-10): the rider's own pay model; null = the store default. */
+  pay_model: RiderPayModel | null;
 }
 
 type Trx = Transaction<Database>;
@@ -153,6 +204,7 @@ function applicationQuery(executor: Executor) {
       'r.rejection_reason',
       'r.pay_type',
       'r.commission_percent',
+      'r.pay_model',
     ])
     .where('u.role', 'in', APPLICANT_ROLES)
     // Applications only: riders made before migration 029 (and staff
@@ -190,7 +242,12 @@ export class RiderApplicationService {
    * answers to sign-in); everything else happens in one transaction that
    * also consumes the code - a refusal (409) leaves the code unused.
    */
-  async apply(input: RiderApplicationInput, meta: { ipAddress?: string | null; userAgent?: string | null }) {
+  async apply(
+    input: RiderApplicationDetails & { phone: string; otp?: string },
+    meta: { ipAddress?: string | null; userAgent?: string | null },
+    /** 'session': the phone was proved by an applicant token (rider.documents.ts), no code here. */
+    proof: 'otp' | 'session' = 'otp'
+  ) {
     authRateLimiter.checkLimit(
       `rider_apply_phone:${input.phone}`,
       5,
@@ -204,10 +261,12 @@ export class RiderApplicationService {
       'Too many applications from this device. Please wait before retrying.'
     );
 
-    const otpId = await authService.checkOtp(input.phone, input.otp);
+    const otpId = proof === 'otp' ? await authService.checkOtp(input.phone, input.otp ?? '') : null;
+    const consume = (trx: Trx) => (otpId ? authService.consumeOtp(trx, input.phone, otpId) : Promise.resolve());
+    let replacedDocuments: string[] = [];
 
     try {
-      return await db.transaction().execute(async (trx) => {
+      const result = await db.transaction().execute(async (trx) => {
         const user = await trx
           .selectFrom('users')
           .select(['id', 'role'])
@@ -246,7 +305,7 @@ export class RiderApplicationService {
         if (user && !rider) {
           // A customer applies with the number they already shop with: the
           // account stays CUSTOMER (and keeps shopping) until approved.
-          await authService.consumeOtp(trx, input.phone, otpId);
+          await consume(trx);
           await trx
             .updateTable('users')
             .set({ full_name: input.full_name, phone_verified_at: sql`COALESCE(phone_verified_at, now())`, updated_at: sql`now()` })
@@ -275,7 +334,7 @@ export class RiderApplicationService {
             throw new AppError('This number is already an approved rider. Sign in instead.', 409, 'ALREADY_APPROVED');
           }
           // REJECTED: apply again with the new details.
-          await authService.consumeOtp(trx, input.phone, otpId);
+          await consume(trx);
           await trx
             .updateTable('users')
             .set({ full_name: input.full_name, phone_verified_at: sql`COALESCE(phone_verified_at, now())`, updated_at: sql`now()` })
@@ -300,7 +359,7 @@ export class RiderApplicationService {
           riderId = rider.id;
           reapplied = true;
         } else {
-          await authService.consumeOtp(trx, input.phone, otpId);
+          await consume(trx);
           const created = await trx
             .insertInto('users')
             .values({
@@ -331,6 +390,12 @@ export class RiderApplicationService {
           riderId = rider.id;
         }
 
+        // Rider documents (migration 039; owner, 2026-10-10): the drafts move
+        // onto this application, and it is refused (DOCUMENTS_REQUIRED, the
+        // whole transaction - and the SMS code - rolled back) unless every
+        // required document for this vehicle is there.
+        replacedDocuments = await riderDocumentService.attachDraftsAndCheck(trx, input.phone, riderId, input.vehicle_type);
+
         await writeAudit(
           trx,
           { actorId: userId, ipAddress: meta.ipAddress, userAgent: meta.userAgent },
@@ -344,6 +409,8 @@ export class RiderApplicationService {
         logger.info({ riderId, reapplied }, 'Rider application received');
         return { application: { status: 'PENDING' as const, full_name: input.full_name, phone: input.phone } };
       });
+      await riderDocumentStore.removeDocumentsQuietly(replacedDocuments);
+      return result;
     } catch (err) {
       // Two applications for one new number at once meet at users.phone.
       const pg = err as { code?: string; constraint?: string };
@@ -375,8 +442,20 @@ export class RiderApplicationService {
       .limit(limit)
       .offset((page - 1) * limit)
       .execute();
+    // Rider documents (migration 039; owner, 2026-10-10): each request's
+    // documents and whether every required one is verified (Approve button).
+    const docs = await riderDocumentService.summariesFor(rows.map((r) => ({ id: r.id, vehicle_type: r.vehicle_type })));
     return {
-      applications: rows.map(present),
+      applications: rows.map((r) => {
+        const d = docs.get(r.id)!;
+        return {
+          ...present(r),
+          documents: d.documents,
+          document_requirements: d.requirements,
+          documents_blocking: d.blocking,
+          documents_verified: d.all_required_verified,
+        };
+      }),
       pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
   }
@@ -413,10 +492,43 @@ export class RiderApplicationService {
    * (and optionally the rider's own share); without a pay_type the rider is
    * COMPANY, the column default.
    */
-  async approve(id: string, actor: AuditActor, pay: ApprovePayInput = {}): Promise<RiderApplication> {
+  async approve(
+    id: string,
+    actor: AuditActor,
+    body: ApproveApplicationInput = {},
+    actorRole: UserRole = 'ADMIN'
+  ): Promise<RiderApplication> {
+    const { override_documents, override_reason, ...pay } = body as ApproveApplicationInput & ApprovePayInput;
     return db.transaction().execute(async (trx) => {
       const row = await this.lockPending(trx, id);
-      const payFields = pay.pay_type ? payValues({ pay_type: pay.pay_type, commission_percent: pay.commission_percent }) : {};
+      // Rider documents (owner, 2026-10-10): every required document must be
+      // verified and not expired. Only an ADMIN may "approve anyway", with a
+      // reason - recorded on the approval's audit entry and an entry of its own.
+      const { vehicle_type } = await trx.selectFrom('riders').select('vehicle_type').where('id', '=', id).executeTakeFirstOrThrow();
+      const blocking = await riderDocumentService.blockingForApproval(trx, id, vehicle_type);
+      let documentsOverride: { reason: string; blocking: typeof blocking } | null = null;
+      if (blocking.length) {
+        if (!override_documents) {
+          throw new AppError(
+            `Verify these documents first: ${blocking.map((b) => b.label).join(', ')}.`,
+            409,
+            'DOCUMENTS_NOT_VERIFIED',
+            { blocking }
+          );
+        }
+        if (actorRole !== 'ADMIN') {
+          throw new AppError('Only an Admin can approve a rider whose documents are not all verified.', 403, 'OVERRIDE_ADMIN_ONLY');
+        }
+        documentsOverride = { reason: override_reason as string, blocking };
+        await writeAudit(trx, actor, {
+          action: 'RIDER_APPROVAL_DOCUMENTS_OVERRIDDEN',
+          entityType: 'RIDER',
+          entityId: id,
+          newValues: { reason: override_reason, blocking },
+        });
+      }
+      // Pay controls (migration 038; owner, 2026-10-10): the approver may pick the rider's own model too.
+      const payFields = pay.pay_type ? payValues({ ...pay, pay_type: pay.pay_type }) : {};
       const { reviewed_at } = await trx
         .updateTable('riders')
         .set({
@@ -455,7 +567,12 @@ export class RiderApplicationService {
         entityType: 'RIDER',
         entityId: id,
         oldValues: { approval_status: 'PENDING' },
-        newValues: { approval_status: 'APPROVED', user_id: row.user_id, ...payFields },
+        newValues: {
+          approval_status: 'APPROVED',
+          user_id: row.user_id,
+          ...payFields,
+          ...(documentsOverride ? { documents_override: documentsOverride } : {}),
+        },
       });
       logger.info({ riderId: id, by: actor.actorId }, 'Rider application approved');
       return present(await applicationQuery(trx).where('r.id', '=', id).executeTakeFirstOrThrow());
@@ -506,6 +623,50 @@ export class RiderApplicationService {
 
 export const riderApplicationService = new RiderApplicationService();
 
+/**
+ * DELETE /admin/rider-applications/:id (owner, 2026-10-10: deleting an
+ * application deletes its documents). A waiting or rejected request is
+ * removed - its riders row, its documents and their private files. The
+ * account itself stays (it still shops). An approved rider is not deleted
+ * here.
+ */
+export async function deleteRiderApplication(id: string, actor: AuditActor) {
+  const documentIds = await db.transaction().execute(async (trx) => {
+    const row = await trx
+      .selectFrom('riders as r')
+      .innerJoin('users as u', 'u.id', 'r.user_id')
+      .select(['r.id', 'r.user_id', 'r.approval_status', 'r.vehicle_type', 'u.role'])
+      .where('r.id', '=', id)
+      .where('r.applied_at', 'is not', null)
+      .forUpdate()
+      .executeTakeFirst();
+    if (!row || !APPLICANT_ROLES.includes(row.role)) throw notFound();
+    if (row.approval_status === 'APPROVED') {
+      throw new AppError('An approved rider is not deleted here.', 409, 'APPLICATION_APPROVED');
+    }
+    const ids = await riderDocumentService.idsForRider(trx, id);
+    try {
+      await trx.deleteFrom('riders').where('id', '=', id).execute();
+    } catch (err) {
+      if ((err as { code?: string }).code === '23503') {
+        throw new AppError('This rider has deliveries or cash records and cannot be deleted.', 409, 'RIDER_IN_USE');
+      }
+      throw err;
+    }
+    await writeAudit(trx, actor, {
+      action: 'RIDER_APPLICATION_DELETED',
+      entityType: 'RIDER',
+      entityId: id,
+      oldValues: { approval_status: row.approval_status, user_id: row.user_id, vehicle_type: row.vehicle_type },
+      newValues: { documents_removed: ids.length },
+    });
+    return ids;
+  });
+  await riderDocumentStore.removeDocumentsQuietly(documentIds);
+  logger.info({ riderId: id, by: actor.actorId, documents: documentIds.length }, 'Rider application deleted');
+  return { deleted: true as const, documents_removed: documentIds.length };
+}
+
 // ----------------------------------------------------------------------------
 // Routes
 // ----------------------------------------------------------------------------
@@ -532,6 +693,25 @@ riderApplicationsPublicRouter.post('/applications', validate({ body: riderApplic
     next(err);
   }
 });
+
+/** With an applicant token (rider.documents.ts): POST /riders/applications/submit. */
+riderApplicationsPublicRouter.post(
+  '/applications/submit',
+  requireApplicant,
+  validate({ body: riderApplicationSessionSchema }),
+  async (req, res, next) => {
+    try {
+      const result = await riderApplicationService.apply(
+        { ...(req.body as RiderApplicationDetails), phone: res.locals.applicantPhone as string },
+        { ipAddress: clientIp(req), userAgent: req.get('user-agent') ?? null },
+        'session'
+      );
+      res.status(201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 /** Review: mounted under /admin (ADMIN and OPERATIONS). */
 export const adminRiderApplicationsRouter = Router();
@@ -564,11 +744,17 @@ adminRiderApplicationsRouter.post(
   '/rider-applications/:id/approve',
   requireAuth,
   REVIEWERS,
-  // Body optional: { pay_type?, commission_percent? } (migration 032).
-  validate({ params: applicationIdParamsSchema, body: approvePaySchema }),
+  // Body optional: { pay_type?, commission_percent? } (migration 032),
+  // { override_documents?, override_reason? } (ADMIN only, migration 039).
+  validate({ params: applicationIdParamsSchema, body: approveApplicationSchema }),
   async (req, res, next) => {
     try {
-      const application = await riderApplicationService.approve(req.params.id as string, actorOf(req), req.body as ApprovePayInput);
+      const application = await riderApplicationService.approve(
+        req.params.id as string,
+        actorOf(req),
+        req.body as ApproveApplicationInput,
+        req.user!.role
+      );
       res.status(200).json({ success: true, data: { application } });
     } catch (err) {
       next(err);
@@ -585,6 +771,20 @@ adminRiderApplicationsRouter.post(
     try {
       const application = await riderApplicationService.reject(req.params.id as string, req.body.reason, actorOf(req));
       res.status(200).json({ success: true, data: { application } });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminRiderApplicationsRouter.delete(
+  '/rider-applications/:id',
+  requireAuth,
+  REVIEWERS,
+  validate({ params: applicationIdParamsSchema }),
+  async (req, res, next) => {
+    try {
+      res.status(200).json({ success: true, data: await deleteRiderApplication(req.params.id as string, actorOf(req)) });
     } catch (err) {
       next(err);
     }

@@ -1,5 +1,5 @@
 import { enqueueCustomerSms } from './notify.js';
-import { riderPaySnapshot } from '../../riders/rider.pay.js';
+import { awardDailyTargets, computePaySnapshot, recordDeliveryBonusLines } from '../../riders/rider.pay-rules.js';
 import { setOrderStatus } from './status-writer.js';
 import { onOrderDeliveredRewards } from '../../loyalty/order-rewards.js';
 import type { Actor, DeliveryRow, OrderRow, Trx } from './types.js';
@@ -29,14 +29,19 @@ export async function settleCod(
   const now = new Date();
   // Rider pay (migration 032; owner, 2026-10-09): what this delivery earned,
   // with the rider's pay type and share as they are now - a snapshot, so a
-  // later change never rewrites it.
-  const pay = await riderPaySnapshot(trx, delivery, order);
+  // later change never rewrites it. Pay controls (migration 038; owner,
+  // 2026-10-10): the model (PERCENT / FIXED / DISTANCE + floor), the distance
+  // and the per-delivery bonuses join the snapshot; bonus lines and any
+  // daily-target tier reached are recorded in the same transaction.
+  const pay = await computePaySnapshot(trx, delivery, order, now);
 
   await trx
     .updateTable('deliveries')
-    .set({ assignment_status: 'DELIVERED', cod_collected_amount: amount, delivered_at: now, updated_at: now, ...pay })
+    .set({ assignment_status: 'DELIVERED', cod_collected_amount: amount, delivered_at: now, updated_at: now, ...pay.columns })
     .where('id', '=', delivery.id)
     .execute();
+  await recordDeliveryBonusLines(trx, delivery.rider_id, delivery.id, now, pay.lines);
+  await awardDailyTargets(trx, delivery.rider_id, pay.columns.rider_pay_type, now);
 
   await trx
     .updateTable('payments')

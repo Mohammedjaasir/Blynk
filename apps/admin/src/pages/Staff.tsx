@@ -5,6 +5,7 @@ import { staff as staffApi } from '../api/resources';
 import type { CreatableRole, StaffAccount, StaffRole, VehicleType } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
+import { DocumentAlertBadge, RiderDocumentsPanel, useRiderDocumentAlerts } from '../components/RiderDocuments';
 
 /**
  * Staff accounts (backend migration 014). Admins create the sign-ins for
@@ -115,6 +116,9 @@ export function Staff() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<'ALL' | CreatableRole>('ALL');
+  // Rider documents (owner, 2026-10-10): expiring-insurance badge and the Documents panel for riders.
+  const docAlerts = useRiderDocumentAlerts();
+  const [docsFor, setDocsFor] = useState<StaffAccount | null>(null);
   const filterId = useId();
   const visible = rows?.filter((r) => roleFilter === 'ALL' || r.role === roleFilter) ?? null;
 
@@ -248,6 +252,11 @@ export function Staff() {
                   <td>
                     <span className="cell__primary">{account.full_name || '-'}</span>
                     <span className="cell__secondary"> Added {dateFormat.format(new Date(account.created_at))}</span>
+                    {account.rider && docAlerts.byRider.get(account.rider.id) ? (
+                      <div className="rd-row-badges">
+                        <DocumentAlertBadge alerts={docAlerts.byRider.get(account.rider.id)} />
+                      </div>
+                    ) : null}
                   </td>
                   <td className="cell__secondary">{account.email ?? '-'}</td>
                   <td className="cell__secondary">{account.phone ?? '—'}</td>
@@ -308,6 +317,11 @@ export function Staff() {
                             onClick={() => setDialog({ kind: 'rider', account })}
                           >
                             Edit rider
+                          </button>
+                        ) : null}
+                        {account.role === 'RIDER' && account.rider ? (
+                          <button type="button" className="button button--ghost button--sm" onClick={() => setDocsFor(account)}>
+                            Documents
                           </button>
                         ) : null}
                         <button
@@ -417,6 +431,15 @@ export function Staff() {
           destructive={!dialog.account.disabled}
           onCancel={() => setDialog(null)}
           onConfirm={() => void toggleDisabled(dialog.account)}
+        />
+      ) : null}
+
+      {docsFor?.rider ? (
+        <RiderDocumentsPanel
+          riderId={docsFor.rider.id}
+          riderName={docsFor.full_name}
+          onClose={() => setDocsFor(null)}
+          onChanged={docAlerts.reload}
         />
       ) : null}
     </>

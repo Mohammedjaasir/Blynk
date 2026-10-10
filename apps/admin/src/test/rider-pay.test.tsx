@@ -289,11 +289,24 @@ describe('Rider earnings page (owner, 2026-10-09)', () => {
     const dialog = screen.getByRole('dialog', { name: 'Change rider pay' });
     expect(within(dialog).getByRole('button', { name: 'Company' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(within(dialog).getByRole('button', { name: 'Commission' }));
-    await user.type(within(dialog).getByLabelText(/Own commission/), '75');
+    // Rider pay controls (owner, 2026-10-10): Commission starts on "Store
+    // default"; an own % is the "% of fee" choice, prefilled with the default.
+    await user.click(within(dialog).getByRole('button', { name: '% of fee' }));
+    const own = within(dialog).getByLabelText(/Own commission/);
+    expect(own).toHaveValue('80');
+    await user.clear(own);
+    await user.type(own, '75');
     const reportsBefore = mock.find('GET', '/admin/reports/rider-earnings').length;
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(mock.find('PATCH', '/admin/riders/r1/pay')[0]?.body).toEqual({ pay_type: 'COMMISSION', commission_percent: 75 }));
+    await waitFor(() =>
+      expect(mock.find('PATCH', '/admin/riders/r1/pay')[0]?.body).toEqual({
+        pay_type: 'COMMISSION',
+        pay_model: 'PERCENT',
+        commission_percent: 75,
+        min_lkr: null,
+      })
+    );
     expect(await screen.findByText('Kamal is now Commission · 75%.')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Change rider pay' })).toBeNull();
     expect(within(screen.getByRole('table', { name: 'Rider pay' })).getAllByRole('row')[1]).toHaveTextContent('Commission · 75%');

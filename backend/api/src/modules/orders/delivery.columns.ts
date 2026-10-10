@@ -31,7 +31,18 @@ export const DELIVERY_LOCATION_COLUMNS = [
  * 2026-10-09). Private: read only by the earnings report and cash
  * reconciliation queries, never returned on a delivery payload.
  */
-export const DELIVERY_PAY_COLUMNS = ['rider_pay_type', 'rider_commission_percent', 'rider_earning_lkr'] as const;
+export const DELIVERY_PAY_COLUMNS = [
+  'rider_pay_type',
+  'rider_commission_percent',
+  'rider_earning_lkr',
+  // Migration 038 (owner, 2026-10-10): the rest of the pay snapshot.
+  'rider_pay_model',
+  'rider_pay_inputs',
+  'rider_distance_km',
+  'rider_distance_estimated',
+  'rider_base_earning_lkr',
+  'rider_bonus_lkr',
+] as const;
 
 /** Columns safe to return to staff (admin/packing) and, after sanitising, customers. */
 export const DELIVERY_PUBLIC_COLUMNS = [

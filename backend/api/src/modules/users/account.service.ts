@@ -3,6 +3,8 @@ import { db } from '../../database/connection.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import type { OrderStatus } from '../../database/types.js';
+import { riderDocumentService } from '../riders/rider.documents.js';
+import { riderDocumentStore } from '../riders/rider.documents.files.js';
 
 /**
  * Orders in these states are finished; anything else (PLACED, PACKED,
@@ -27,10 +29,13 @@ function deletedPhonePlaceholder(): string {
  * are kept for accounting; addresses, device tokens and sessions are removed.
  */
 export async function deleteCustomerAccount(userId: string, actor: AuditActor): Promise<{ deleted: true }> {
-  return db.transaction().execute(async (trx) => {
+  // Rider documents (migration 039; owner, 2026-10-10): removed with the
+  // account; their private files go once the deletion is committed.
+  let riderDocumentIds: string[] = [];
+  const result = await db.transaction().execute(async (trx) => {
     const user = await trx
       .selectFrom('users')
-      .select(['id', 'role', 'is_active'])
+      .select(['id', 'role', 'is_active', 'phone'])
       .where('id', '=', userId)
       .forUpdate()
       .executeTakeFirst();
@@ -52,6 +57,8 @@ export async function deleteCustomerAccount(userId: string, actor: AuditActor): 
         open_orders: Number(open.n),
       });
     }
+
+    riderDocumentIds = await riderDocumentService.deleteForUser(trx, userId, user.phone);
 
     const now = new Date();
     await trx
@@ -92,9 +99,12 @@ export async function deleteCustomerAccount(userId: string, actor: AuditActor): 
         is_active: false,
         addresses_removed: Number(addresses.numDeletedRows),
         devices_removed: Number(devices.numDeletedRows),
+        rider_documents_removed: riderDocumentIds.length,
       },
     });
 
     return { deleted: true as const };
   });
+  await riderDocumentStore.removeDocumentsQuietly(riderDocumentIds);
+  return result;
 }

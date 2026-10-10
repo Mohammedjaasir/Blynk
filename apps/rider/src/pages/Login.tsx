@@ -15,8 +15,8 @@ export interface LoginState {
 
 type Outcome =
   | { kind: 'not-found' }
-  | { kind: 'pending' }
-  | { kind: 'rejected'; reason: string | null }
+  | { kind: 'pending'; otp?: string }
+  | { kind: 'rejected'; reason: string | null; otp?: string }
   | null;
 
 /**
@@ -55,17 +55,21 @@ export function Login() {
     resend.clear();
   }
 
-  /** The answers that end this sign-in attempt: no code can change them. */
-  function settle(err: unknown): boolean {
+  /**
+   * The answers that end this sign-in attempt: no code can change them.
+   * `usedOtp`: a refused sign-in does not spend the code, so it can still
+   * open the application and its documents (owner, 2026-10-10).
+   */
+  function settle(err: unknown, usedOtp?: string): boolean {
     const code = errorCode(err);
     if (code === 'RIDER_PENDING_APPROVAL') {
       backToPhone();
-      setOutcome({ kind: 'pending' });
+      setOutcome({ kind: 'pending', otp: usedOtp });
       return true;
     }
     if (code === 'RIDER_APPLICATION_REJECTED') {
       backToPhone();
-      setOutcome({ kind: 'rejected', reason: rejectionReason(err) });
+      setOutcome({ kind: 'rejected', reason: rejectionReason(err), otp: usedOtp });
       return true;
     }
     return false;
@@ -117,7 +121,7 @@ export function Login() {
       await verifyOtp(phone.trim(), otp.trim());
       navigate('/', { replace: true });
     } catch (err) {
-      if (settle(err)) return;
+      if (settle(err, otp.trim())) return;
       if (err instanceof ApiError && err.code === 'ACCOUNT_NOT_FOUND') {
         // No rider uses this number: another code can't help; applying can.
         backToPhone();
@@ -140,6 +144,8 @@ export function Login() {
   }
 
   const apply = () => navigate('/apply', { state: { phone: phone.trim() } });
+  /** Rider documents (owner, 2026-10-10): the application, each document's review, re-upload. */
+  const openApplication = (code: string) => navigate('/apply', { state: { phone: phone.trim(), otp: code, resume: true } });
 
   function startOver() {
     setOutcome(null);
@@ -150,6 +156,11 @@ export function Login() {
   if (outcome?.kind === 'pending') {
     body = (
       <PendingNotice>
+        {outcome.otp ? (
+          <button type="button" className="primary" onClick={() => openApplication(outcome.otp as string)}>
+            See my documents
+          </button>
+        ) : null}
         <button type="button" className="secondary" onClick={startOver}>
           Back to sign in
         </button>
@@ -158,7 +169,11 @@ export function Login() {
   } else if (outcome?.kind === 'rejected') {
     body = (
       <RejectedNotice reason={outcome.reason}>
-        <button type="button" className="primary" onClick={apply}>
+        <button
+          type="button"
+          className="primary"
+          onClick={() => (outcome.otp ? openApplication(outcome.otp) : apply())}
+        >
           Apply again
         </button>
         <button type="button" className="text-button" onClick={startOver}>
