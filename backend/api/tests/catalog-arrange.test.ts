@@ -14,6 +14,8 @@ import { tokens, auth, users } from './helpers/stock.js';
  *   GET /catalog/categories follows it.
  * - GET/PUT /admin/categories/:id/product-order: listed products 1..n, the
  *   rest NULL (A-Z after); the customer product list follows it.
+ * - The home's category groups follow the category order too: Arrange beats
+ *   a group's own order (owner, 2026-10-10).
  *
  * Every category and product the file creates is hard-deleted again with its
  * audit rows; top-level categories' display_order is put back as found.
@@ -24,6 +26,7 @@ const customerToken = tokens.customer;
 const stamp = Date.now();
 const PREFIX = 'T-ARR-';
 const createdCategories: string[] = [];
+const createdGroups: string[] = [];
 let topLevelBefore: Array<{ id: string; display_order: number; updated_at: string }> = [];
 
 type Category = { id: string; name: string; parent_id: string | null; display_order: number };
@@ -78,10 +81,11 @@ afterAll(async () => {
     await pool.query('UPDATE categories SET parent_id = NULL WHERE id = ANY($1)', [createdCategories]);
     await pool.query('DELETE FROM categories WHERE id = ANY($1)', [createdCategories]);
   }
+  if (createdGroups.length) await pool.query('DELETE FROM category_groups WHERE id = ANY($1)', [createdGroups]);
   await pool.query(
     `DELETE FROM audit_logs WHERE entity_id = ANY($1::uuid[])
         OR (action = 'CATEGORIES_REORDERED' AND created_at > to_timestamp($2::double precision / 1000))`,
-    [[...products, ...createdCategories], stamp]
+    [[...products, ...createdCategories, ...createdGroups], stamp]
   );
 });
 
@@ -148,6 +152,54 @@ describe('Arrange: category order', () => {
     expect(customer.status).toBe(403);
     const none = await request(app).put('/api/v1/admin/categories/order').send({ ids: [child.id] });
     expect(none.status).toBe(401);
+  });
+});
+
+describe('Arrange: home category groups follow it (owner, 2026-10-10)', () => {
+  it("orders the tiles inside a group by Arrange, not by the group's own list", async () => {
+    const created = await request(app)
+      .post('/api/v1/admin/category-groups')
+      .set(auth(tokens.admin))
+      .send({ name: `ARR group ${stamp}` });
+    expect(created.status).toBe(201);
+    const groupId = created.body.data.group.id as string;
+    createdGroups.push(groupId);
+
+    const a = await newCategory('grp-a');
+    const b = await newCategory('grp-b');
+    const c = await newCategory('grp-c');
+    // The group's own list: a, b, c.
+    const set = await request(app)
+      .put(`/api/v1/admin/category-groups/${groupId}/categories`)
+      .set(auth(tokens.admin))
+      .send({ category_ids: [a.id, b.id, c.id] });
+    expect(set.status).toBe(200);
+
+    const tiles = async () => {
+      const res = await request(app).get('/api/v1/catalog/home-groups');
+      expect(res.status).toBe(200);
+      const group = (res.body.data.groups as Array<{ id: string | null; categories: Array<{ id: string }> }>).find(
+        (g) => g.id === groupId
+      )!;
+      return group.categories.map((x) => x.id);
+    };
+    expect(await tiles()).toEqual([a.id, b.id, c.id]);
+
+    // Arrange puts c first, then a, b: the home group follows.
+    expect((await putOrder([c.id, a.id, b.id], opsToken)).status).toBe(200);
+    expect(await tiles()).toEqual([c.id, a.id, b.id]);
+
+    // The group's stored list position is untouched (kept for compatibility)...
+    const stored = await pool.query('SELECT id, group_sort_order FROM categories WHERE id = ANY($1)', [[a.id, b.id, c.id]]);
+    const pos = Object.fromEntries(stored.rows.map((r) => [r.id, r.group_sort_order]));
+    expect([pos[a.id], pos[b.id], pos[c.id]]).toEqual([0, 1, 2]);
+
+    // ...and the staff Category groups page lists the members the same way.
+    const staff = await request(app).get('/api/v1/admin/category-groups').set(auth(tokens.admin));
+    const members = (staff.body.data.groups as Array<{ id: string; categories: Array<{ id: string }> }>)
+      .find((g) => g.id === groupId)!
+      .categories.map((x) => x.id);
+    expect(members).toEqual([c.id, a.id, b.id]);
   });
 });
 

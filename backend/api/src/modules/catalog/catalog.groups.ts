@@ -14,10 +14,17 @@ import { activeCategoryOffer } from './catalog.offers.js';
  * The home shows headings ("Grocery & Kitchen", "Snacks & Drinks", ...) each
  * over a grid of category tiles. Staff (ADMIN, OPERATIONS) create, rename,
  * switch on/off, reorder and delete groups, and choose which categories sit
- * in each group and in what order.
+ * in each group.
+ *
+ * Tile order inside a group (owner, 2026-10-10): "Arrange" on the Categories
+ * page decides it - categories.display_order, then name - the same order the
+ * customer category list and the "More" group use. The group's own position
+ * column (group_sort_order) is still written for compatibility, but no list
+ * orders by it any more, so there is one place to arrange categories.
  *
  * - Public GET /catalog/home-groups: active groups in order, each with its
- *   active, live, top-level (migration 026) categories in order; empty
+ *   active, live, top-level (migration 026) categories in Arrange order
+ *   (display_order, name); empty
  *   groups are left out. Categories with no group close the list as "More"
  *   (id null), only if there are any. Sub-categories are reached through
  *   their parent.
@@ -117,7 +124,6 @@ export async function listHomeGroups(): Promise<HomeGroup[]> {
         'categories.display_order',
         'categories.image_focal_x',
         'categories.image_focal_y',
-        'categories.group_sort_order',
         'categories.offer_percent',
         'categories.offer_ends_at',
         // A group_id pointing at a deleted group counts as no group.
@@ -127,7 +133,7 @@ export async function listHomeGroups(): Promise<HomeGroup[]> {
       .where('categories.deleted_at', 'is', null)
       // Migration 026: sub-categories are reached through their parent.
       .where('categories.parent_id', 'is', null)
-      .orderBy('categories.group_sort_order', 'asc')
+      // Arrange decides the tile order inside groups too (owner, 2026-10-10).
       .orderBy('categories.display_order', 'asc')
       .orderBy('categories.name', 'asc')
       .execute(),
@@ -160,8 +166,7 @@ export async function listHomeGroups(): Promise<HomeGroup[]> {
   }
   const ungrouped = byGroup.get(null);
   if (ungrouped && ungrouped.length) {
-    // Ungrouped tiles keep the plain category order (display_order, name).
-    ungrouped.sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name));
+    // Ungrouped tiles are already in the plain category order (display_order, name).
     result.push({ id: null, name: MORE_GROUP_NAME, sort_order: result.length, categories: ungrouped });
   }
   return result;
@@ -183,9 +188,11 @@ async function groupCategories(executor: Executor, groupIds: string[] | null) {
       'categories.is_active',
       'g.id as group_id',
       'categories.group_sort_order',
+      'categories.display_order',
     ])
     .where('categories.deleted_at', 'is', null)
-    .orderBy('categories.group_sort_order', 'asc')
+    // The staff view lists members in the order customers see them: Arrange
+    // order (owner, 2026-10-10), not the group's own position.
     .orderBy('categories.display_order', 'asc')
     .orderBy('categories.name', 'asc');
   if (groupIds) q = q.where('g.id', 'in', groupIds.length ? groupIds : [SETTINGS_ENTITY_ID]);
@@ -383,9 +390,10 @@ export async function reorderGroups(groupIds: string[], actor: AuditActor) {
 }
 
 /**
- * Sets a group's exact membership and order. Listed categories move here (from
- * another group too) at their list position; members left out become
- * unassigned.
+ * Sets a group's exact membership. Listed categories move here (from another
+ * group too); members left out become unassigned. The list position is still
+ * stored in group_sort_order for compatibility, but tiles show in Arrange
+ * order (display_order, name; owner, 2026-10-10).
  */
 export async function setGroupCategories(groupId: string, categoryIds: string[], actor: AuditActor) {
   return await db.transaction().execute(async (trx) => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { catalog } from '../../api/resources';
 import type { CategoryGroup, CategoryGroupsOverview, GroupCategory } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
@@ -22,9 +23,13 @@ function swapped<T>(items: T[], index: number, direction: -1 | 1): T[] {
  *
  * Every change is one call and then a fresh `GET /admin/category-groups`, so
  * the screen always shows what the server stored (groups in `sort_order`,
- * categories in `group_sort_order`, unassigned last). Membership changes
- * always send the group's full new list to `PUT /:id/categories`, which sets
- * both who is in the group and their order.
+ * categories in Arrange order, unassigned last). Membership changes always
+ * send the group's full new list to `PUT /:id/categories`.
+ *
+ * Arrange overrides groups (owner, 2026-10-10): the tiles inside a group show
+ * in the order set on Categories -> Arrange, so this page has no per-group
+ * category order any more (it would only contradict Arrange) - just a note
+ * pointing there. The groups' own order among themselves stays here.
  */
 export function CategoryGroups() {
   const [data, setData] = useState<CategoryGroupsOverview | null>(null);
@@ -102,6 +107,11 @@ export function CategoryGroups() {
         </p>
       ) : null}
       {error ? <p className="field__error">{error}</p> : null}
+
+      <p className="page__note" role="note">
+        Order follows Categories → Arrange. The categories inside each group show in that order on the customer
+        Home; <Link to="/catalog/categories">arrange them there</Link>.
+      </p>
 
       {data === null ? (
         <Spinner label="Loading category groups" />
@@ -184,7 +194,7 @@ export function CategoryGroups() {
                     <p className="cat-row__meta">No categories yet.</p>
                   ) : (
                     <ol className="cat-group__members">
-                      {group.categories.map((category, ci) => {
+                      {group.categories.map((category) => {
                         const ids = group.categories.map((c) => c.id);
                         return (
                           <li key={category.id} className="cat-group__member">
@@ -192,25 +202,8 @@ export function CategoryGroups() {
                               {category.name}
                               {category.is_active ? null : <span className="cat-row__order"> (inactive)</span>}
                             </span>
+                            {/* No ↑/↓ here (owner, 2026-10-10): Arrange decides the order. */}
                             <div className="order-cell">
-                              <button
-                                type="button"
-                                className="button button--ghost button--sm"
-                                aria-label={`Move ${category.name} up in ${group.name}`}
-                                disabled={busy || ci === 0}
-                                onClick={() => setMembers(group, swapped(ids, ci, -1))}
-                              >
-                                ↑
-                              </button>
-                              <button
-                                type="button"
-                                className="button button--ghost button--sm"
-                                aria-label={`Move ${category.name} down in ${group.name}`}
-                                disabled={busy || ci === ids.length - 1}
-                                onClick={() => setMembers(group, swapped(ids, ci, 1))}
-                              >
-                                ↓
-                              </button>
                               <button
                                 type="button"
                                 className="button button--ghost button--sm"

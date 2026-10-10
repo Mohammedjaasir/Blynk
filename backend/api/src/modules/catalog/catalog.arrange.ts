@@ -15,9 +15,9 @@ import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.
  *    order, in one transaction. A live sibling the list leaves out (say one
  *    added on another screen meanwhile) is kept, after the listed ones in its
  *    current order, so no two siblings share a position afterwards. The
- *    customer GET /categories and the home's "More" group already order by
- *    display_order, name; inside a home group, the group's own order
- *    (group_sort_order) still comes first.
+ *    customer GET /categories and every home group (GET /catalog/home-groups,
+ *    "More" included) order by display_order, name: Arrange overrides the
+ *    category groups' own order (owner, 2026-10-10).
  *
  * 2. PRODUCT ORDER - GET/PUT /admin/categories/:id/product-order. The scope is
  *    the category and its live sub-categories (the products a customer sees

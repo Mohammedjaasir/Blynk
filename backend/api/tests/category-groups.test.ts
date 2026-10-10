@@ -11,6 +11,8 @@ import { tokens, auth, users } from './helpers/stock.js';
  * Category groups on the customer home (migration 025): the public
  * GET /catalog/home-groups, staff CRUD / reorder / membership, the Group field
  * on the category form, the audit trail and the catalog_changed NOTIFY.
+ * Tiles inside a group follow Arrange (display_order, name), not the group's
+ * own list position (owner, 2026-10-10).
  *
  * Every group and category the file creates is hard-deleted again, with its
  * audit rows, and any group that existed before keeps its exact row
@@ -131,17 +133,20 @@ describe('Category groups: staff management', () => {
     expect(missing.body.error.code).toBe('CATEGORY_GROUP_NOT_FOUND');
   });
 
-  it('sets membership and order, moving categories between groups', async () => {
+  it('sets membership, moving categories between groups; members list in Arrange order', async () => {
     const g1 = await newGroup('members-1');
     const g2 = await newGroup('members-2');
-    const c1 = await newCategory('m1');
-    const c2 = await newCategory('m2');
-    const c3 = await newCategory('m3');
+    // Arrange order (display_order): c2, c3, c1.
+    const c1 = await newCategory('m1', { display_order: 30 });
+    const c2 = await newCategory('m2', { display_order: 10 });
+    const c3 = await newCategory('m3', { display_order: 20 });
 
     const set = await setMembers(g1.id, [c2.id, c1.id, c3.id]);
     expect(set.status).toBe(200);
-    expect(set.body.data.group.categories.map((c: { id: string }) => c.id)).toEqual([c2.id, c1.id, c3.id]);
-    expect(set.body.data.group.categories.map((c: { group_sort_order: number }) => c.group_sort_order)).toEqual([0, 1, 2]);
+    // Owner, 2026-10-10: Arrange decides the order, not the list sent here...
+    expect(set.body.data.group.categories.map((c: { id: string }) => c.id)).toEqual([c2.id, c3.id, c1.id]);
+    // ...though the list position is still stored for compatibility.
+    expect(set.body.data.group.categories.map((c: { group_sort_order: number }) => c.group_sort_order)).toEqual([0, 2, 1]);
 
     // c3 moves to g2; c1 is dropped from g1 (unassigned).
     expect((await setMembers(g2.id, [c3.id])).status).toBe(200);
@@ -252,13 +257,13 @@ describe('Category form: Group field', () => {
 });
 
 describe('GET /catalog/home-groups (public)', () => {
-  it('returns active groups in order with active categories in order, then "More"', async () => {
+  it('returns active groups in order with active categories in Arrange order, then "More"', async () => {
     const g1 = await newGroup('home-1');
     const g2 = await newGroup('home-2');
     const off = await newGroup('home-off', { is_active: false });
     const empty = await newGroup('home-empty');
-    const v = await newCategory('veg', { image_url: 'https://example.com/veg.png', image_focal_x: 20, image_focal_y: 80 });
-    const d = await newCategory('dairy');
+    const v = await newCategory('veg', { image_url: 'https://example.com/veg.png', image_focal_x: 20, image_focal_y: 80, display_order: 5 });
+    const d = await newCategory('dairy', { display_order: 10 });
     const hidden = await newCategory('hidden', { is_active: false });
     const s = await newCategory('snacks');
     const offCat = await newCategory('offcat');
@@ -280,14 +285,16 @@ describe('GET /catalog/home-groups (public)', () => {
 
     const first = groups.find((g) => g.id === g1.id)!;
     expect(first.name).toBe(`CG group home-1 ${stamp}`);
-    expect(first.categories.map((c) => c.id)).toEqual([d.id, v.id]);
-    expect(first.categories[1]).toEqual({
+    // The group's list says dairy first; Arrange (display_order) puts veg first
+    // and wins (owner, 2026-10-10).
+    expect(first.categories.map((c) => c.id)).toEqual([v.id, d.id]);
+    expect(first.categories[0]).toEqual({
       id: v.id,
       name: `CG veg ${stamp}`,
       slug: `test-cat-cg-veg-${stamp}`,
       description: null,
       image_url: 'https://example.com/veg.png',
-      display_order: 0,
+      display_order: 5,
       image_focal_x: 20,
       image_focal_y: 80,
       parent_id: null,

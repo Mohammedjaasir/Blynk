@@ -1,5 +1,6 @@
 import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { categoryGroups as groupsApi } from '../api/resources';
 import type { CategoryGroup, CategoryGroupsOverview, GroupCategory } from '../api/types';
 import { PageHeader } from '../components/Layout';
@@ -22,8 +23,12 @@ function swapped<T>(items: T[], index: number, direction: -1 | 1): T[] {
  *
  * Every change is one call followed by a fresh GET, so the page always shows
  * what the server stored. Membership changes send the group's full new list
- * to PUT /admin/category-groups/:id/categories, which sets both who is in
- * the group and their order.
+ * to PUT /admin/category-groups/:id/categories.
+ *
+ * Arrange overrides groups (owner, 2026-10-10): the categories inside a group
+ * show in the order set on Categories -> Arrange (the server lists them that
+ * way), so this page has no per-group category order any more - just a note
+ * pointing there. The groups' own order among themselves stays here.
  */
 export function CategoryGroups() {
   const toast = useToast();
@@ -94,6 +99,11 @@ export function CategoryGroups() {
       />
 
       {error ? <p className="field__error">{error}</p> : null}
+
+      <p className="form__note" role="note">
+        Order follows Categories → Arrange. The categories inside each group show in that order on the customer
+        Home; <Link to="/categories">arrange them there</Link>.
+      </p>
 
       {data === null ? (
         <Spinner label="Loading category groups" />
@@ -183,7 +193,7 @@ export function CategoryGroups() {
                           </tr>
                         </thead>
                         <tbody>
-                          {group.categories.map((category, ci) => (
+                          {group.categories.map((category) => (
                             <tr key={category.id}>
                               <td>
                                 <span className="cell__primary">{category.name}</span>
@@ -195,25 +205,8 @@ export function CategoryGroups() {
                                 </Badge>
                               </td>
                               <td>
+                                {/* No ↑/↓ here (owner, 2026-10-10): Arrange decides the order. */}
                                 <div className="row-actions">
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--sm"
-                                    aria-label={`Move ${category.name} up in ${group.name}`}
-                                    disabled={busy || ci === 0}
-                                    onClick={() => setMembers(group, swapped(ids, ci, -1))}
-                                  >
-                                    ↑
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--sm"
-                                    aria-label={`Move ${category.name} down in ${group.name}`}
-                                    disabled={busy || ci === ids.length - 1}
-                                    onClick={() => setMembers(group, swapped(ids, ci, 1))}
-                                  >
-                                    ↓
-                                  </button>
                                   <button
                                     type="button"
                                     className="button button--ghost button--sm"

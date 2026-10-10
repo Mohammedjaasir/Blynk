@@ -708,7 +708,11 @@ export interface GroupCategory {
   image_url: string | null;
   is_active: boolean;
   group_id: string | null;
+  /** The group's stored list position; kept for compatibility, no longer the
+   * display order (owner, 2026-10-10). */
   group_sort_order: number;
+  /** Arrange order (Categories -> Arrange), which the group lists by. Absent on an older API. */
+  display_order?: number;
 }
 
 /** A titled row of category tiles on the customer Home, e.g. "Grocery & Kitchen". */
@@ -719,7 +723,7 @@ export interface CategoryGroup {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  /** Ordered by `group_sort_order`. */
+  /** In Arrange order (`display_order`, name; owner, 2026-10-10). */
   categories: GroupCategory[];
 }
 

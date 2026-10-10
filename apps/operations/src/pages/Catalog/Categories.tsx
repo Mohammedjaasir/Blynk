@@ -44,12 +44,21 @@ import { replacedImages } from '../../lib/image';
  * /admin/categories/order with that sibling set's new order; the server
  * writes display_order 10, 20, 30...), then the list reloads. "Arrange
  * products" on a category opens its product order screen.
+ *
+ * "+ Add sidebar item" (owner, 2026-10-10) on each top-level row opens the
+ * Add category form with "Inside category" already set to that row, so
+ * Bakery's sidebar items (Bread, Cakes...) take one tap each. Sub-categories
+ * are one level only, so sub-category rows don't get the button.
  */
+export const SIDEBAR_ITEM_HINT = "Shows in this category's left sidebar in the app";
+
 export function Categories() {
   const [rows, setRows] = useState<Category[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<Category | 'new' | null>(null);
+  // "+ Add sidebar item": the parent preselected in the Add category form.
+  const [newParentId, setNewParentId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Category | null>(null);
   // For the edit form's Group select. An API without category groups just
   // leaves this empty (the select then offers only "None").
@@ -122,7 +131,14 @@ export function Categories() {
             >
               {arranging ? 'Done arranging' : 'Arrange'}
             </button>
-            <button type="button" className="button" onClick={() => setEditing('new')}>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setNewParentId(null);
+                setEditing('new');
+              }}
+            >
               Add category
             </button>
           </>
@@ -234,6 +250,21 @@ export function Categories() {
                 >
                   Delete
                 </button>
+                {/* Top-level rows only: sub-categories are one level deep (owner, 2026-10-10). */}
+                {!parent && !category.parent_id ? (
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    title={SIDEBAR_ITEM_HINT}
+                    aria-label={`+ Add sidebar item to ${category.name}`}
+                    onClick={() => {
+                      setNewParentId(category.id);
+                      setEditing('new');
+                    }}
+                  >
+                    + Add sidebar item
+                  </button>
+                ) : null}
                 <Link
                   className="button button--ghost button--sm"
                   to={`/catalog/categories/${category.id}/arrange`}
@@ -254,6 +285,7 @@ export function Categories() {
       {editing ? (
         <CategoryDialog
           category={editing === 'new' ? null : editing}
+          initialParentId={editing === 'new' ? newParentId : null}
           groups={groups}
           categories={rows ?? []}
           onClose={() => setEditing(null)}
@@ -383,6 +415,7 @@ export function nestedRows(rows: Category[]): Array<{ category: Category; parent
 
 function CategoryDialog({
   category,
+  initialParentId: presetParentId = null,
   groups,
   categories,
   onClose,
@@ -390,6 +423,8 @@ function CategoryDialog({
   onOfferChanged,
 }: {
   category: Category | null;
+  /** New category only: the "Inside category" to start with ("+ Add sidebar item"). */
+  initialParentId?: string | null;
   groups: CategoryGroup[];
   /** Every category, for the "Inside category" select. */
   categories: Category[];
@@ -410,11 +445,13 @@ function CategoryDialog({
   const initialGroupId = category?.group_id ?? '';
   const [groupId, setGroupId] = useState(initialGroupId);
   const initialParentId = category?.parent_id ?? '';
-  const [parentId, setParentId] = useState(initialParentId);
+  // A preset parent counts as a change from "top level", so it is sent.
+  const [parentId, setParentId] = useState(category ? initialParentId : presetParentId ?? '');
   // One level only: a parent must be top level and not this category, and a
   // category that already has sub-categories stays top level.
   const parentOptions = categories.filter((c) => !c.parent_id && c.id !== category?.id);
   const hasChildren = category ? categories.some((c) => c.parent_id === category.id) : false;
+  const presetParent = !category && presetParentId ? categories.find((c) => c.id === presetParentId) ?? null : null;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -465,7 +502,10 @@ function CategoryDialog({
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-label="Category">
       <form className="modal__panel" onSubmit={submit}>
-        <h2 className="modal__title">{category ? 'Edit category' : 'Add category'}</h2>
+        <h2 className="modal__title">
+          {category ? 'Edit category' : presetParent ? `Add sidebar item to ${presetParent.name}` : 'Add category'}
+        </h2>
+        {presetParent ? <p className="field__hint">{SIDEBAR_ITEM_HINT}.</p> : null}
         <Field label="Name">
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>

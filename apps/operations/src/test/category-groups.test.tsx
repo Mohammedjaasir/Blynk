@@ -161,15 +161,17 @@ describe('Category groups', () => {
     expect(api.calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 
-  it('reorders categories inside a group with the full list', async () => {
-    const user = userEvent.setup();
-    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/category-groups', {
-      'GET /admin/category-groups': () => ok(overview()),
-      'PUT /admin/category-groups/:id/categories': () => ok({ group: group('g1', 'Grocery', []) }),
-    });
-    await user.click(await screen.findByRole('button', { name: 'Move Dairy up in Grocery' }));
-    await waitFor(() => expect(api.find('PUT', '/admin/category-groups/g1/categories')).toHaveLength(1));
-    expect(api.find('PUT', '/admin/category-groups/g1/categories')[0].body).toEqual({ category_ids: ['c2', 'c1'] });
+  it('has no order control for categories inside a group: order follows Categories → Arrange (owner, 2026-10-10)', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/catalog/category-groups', { 'GET /admin/category-groups': () => ok(overview()) });
+    await screen.findByRole('button', { name: 'Move Grocery up' });
+    // Groups still move among themselves; their categories don't.
+    expect(screen.queryByRole('button', { name: /^Move Dairy (up|down) in Grocery$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Move Vegetables (up|down) in Grocery$/ })).toBeNull();
+    // Membership editing stays.
+    expect(screen.getByRole('button', { name: 'Remove Dairy from Grocery' })).toBeInTheDocument();
+    const note = screen.getByRole('note');
+    expect(note).toHaveTextContent('Order follows Categories → Arrange');
+    expect(within(note).getByRole('link', { name: 'arrange them there' })).toHaveAttribute('href', '/catalog/categories');
   });
 
   it('removes a category from a group', async () => {
@@ -338,6 +340,36 @@ describe('Category form Inside category select (sub-categories)', () => {
     await user.click(dialog.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.find('PATCH', '/admin/categories/c2')).toHaveLength(2));
     expect(api.find('PATCH', '/admin/categories/c2')[1].body).toMatchObject({ parent_id: null });
+  });
+
+  it('"+ Add sidebar item" shows only on top-level rows, with its hint (owner, 2026-10-10)', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/catalog/categories', routes());
+    await screen.findByText('Dairy');
+    const buttons = screen.getAllByRole('button', { name: /^\+ Add sidebar item to / });
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['+ Add sidebar item to Bakery', '+ Add sidebar item to Dairy']);
+    expect(buttons[0]).toHaveTextContent('+ Add sidebar item');
+    expect(buttons[0]).toHaveAttribute('title', "Shows in this category's left sidebar in the app");
+    expect(screen.queryByRole('button', { name: '+ Add sidebar item to Bread' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '+ Add sidebar item to Cakes' })).toBeNull();
+  });
+
+  it('"+ Add sidebar item" opens Add category with Inside category preselected and sends parent_id', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(OPERATIONS_STAFF, '/catalog/categories', routes());
+    await user.click(await screen.findByRole('button', { name: '+ Add sidebar item to Bakery' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Category' }));
+    expect(dialog.getByRole('heading', { name: 'Add sidebar item to Bakery' })).toBeInTheDocument();
+    expect(dialog.getByLabelText(/^Inside category/)).toHaveValue('c1');
+    await user.type(dialog.getByLabelText('Name'), 'Buns');
+    await user.click(dialog.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('POST', '/admin/categories')).toHaveLength(1));
+    expect(api.find('POST', '/admin/categories')[0].body).toMatchObject({ name: 'Buns', parent_id: 'c1' });
+
+    // The plain "Add category" afterwards starts at top level again.
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+    const plain = within(screen.getByRole('dialog', { name: 'Category' }));
+    expect(plain.getByRole('heading', { name: 'Add category' })).toBeInTheDocument();
+    expect(plain.getByLabelText(/^Inside category/)).toHaveValue('');
   });
 
   it('keeps a category with sub-categories top level, and creates a child', async () => {
