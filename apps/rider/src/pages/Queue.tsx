@@ -6,7 +6,7 @@ import { Banner } from '../components/Banner';
 import { Header } from '../components/Header';
 import { nextAction, splitQueue, statusLabel, statusTone } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
-import { formatMoney, shortOrderNumber } from '../lib/format';
+import { formatMoney, formatScheduledSlot, shortOrderNumber } from '../lib/format';
 import { syncTrackingFromList } from '../lib/tracker-session';
 import { formatAway, formatByRoad, isTripStop, orderTrip, useRiderPosition, useRoadOrder, type TripStop } from '../lib/trip';
 import { useLoad } from '../lib/useLoad';
@@ -91,6 +91,10 @@ export function Queue() {
                         <span className="row__where">
                           <span className="row__place">{d.delivery_address_line1}</span>
                           <span className={`row__status tone--${statusTone(d)}`}>{statusLabel(d)}</span>
+                          {/* Scheduled slot, when the customer picked one (owner, 2026-10-10). */}
+                          {formatScheduledSlot(d.scheduled_for, d.scheduled_until) ? (
+                            <span className="row__slot">{formatScheduledSlot(d.scheduled_for, d.scheduled_until)}</span>
+                          ) : null}
                         </span>
                         <span className="row__amount">{formatMoney(d.total_amount)}</span>
                       </Link>
@@ -134,6 +138,7 @@ export function Queue() {
 
 function NowSlip({ delivery: d }: { delivery: DeliverySummary }) {
   const number = shortOrderNumber(d.order_number);
+  const slot = formatScheduledSlot(d.scheduled_for, d.scheduled_until);
   return (
     <section className="slip" aria-labelledby="now-heading">
       <div className="slip__top">
@@ -149,6 +154,8 @@ function NowSlip({ delivery: d }: { delivery: DeliverySummary }) {
         <span>{d.delivery_recipient_name}</span>
         <span>{d.delivery_city}</span>
       </p>
+      {/* Scheduled slot, when the customer picked one (owner, 2026-10-10). */}
+      {slot ? <p className="slot">{slot}</p> : null}
       {owesCash(d) ? (
         <p className="slip__cash">
           <span className="slip__cash-label">Cash to collect</span>
@@ -201,6 +208,10 @@ function TripView({ stops }: { stops: TripStop[] }) {
                 {s.distanceM !== null ? <span>{formatAway(s.distanceM)}</span> : <span>{d.delivery_city}</span>}
                 {s.roadMin !== null ? <span>{formatByRoad(s.roadMin)}</span> : null}
               </p>
+              {/* Scheduled slot, when the customer picked one (owner, 2026-10-10). */}
+              {formatScheduledSlot(d.scheduled_for, d.scheduled_until) ? (
+                <p className="slot">{formatScheduledSlot(d.scheduled_for, d.scheduled_until)}</p>
+              ) : null}
               {owesCash(d) ? (
                 <p className="slip__cash">
                   <span className="slip__cash-label">Cash to collect</span>

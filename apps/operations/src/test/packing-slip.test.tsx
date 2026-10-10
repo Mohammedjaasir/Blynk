@@ -116,4 +116,17 @@ describe('Packing slip', () => {
     expect(screen.queryByRole('button', { name: 'Print' })).not.toBeInTheDocument();
     expect(screen.getByText(/Printing isn't available inside the Android app/)).toBeInTheDocument();
   });
+
+  it('shows the booked delivery slot with a full date (paper outlives "Tomorrow"); none for an ASAP order', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/orders/o1/slip', {
+      'GET /admin/orders/:id': () =>
+        ok({ order: order({ scheduled_for: '2026-10-11T02:30:00Z', scheduled_until: '2026-10-11T04:30:00Z' }) }),
+    });
+    const slip = await screen.findByRole('article', { name: 'Packing slip' });
+    expect(within(slip).getByRole('region', { name: 'Delivery slot' })).toHaveTextContent('Scheduled: Sun 11 Oct, 8–10 AM');
+    cleanup();
+    renderAs(ADMIN_WITH_RIDER, '/orders/o1/slip', { 'GET /admin/orders/:id': () => ok({ order: order() }) });
+    const plain = await screen.findByRole('article', { name: 'Packing slip' });
+    expect(within(plain).queryByRole('region', { name: 'Delivery slot' })).not.toBeInTheDocument();
+  });
 });

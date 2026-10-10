@@ -29,6 +29,8 @@ import { mapTilesRouter } from './modules/map-tiles/index.js';
 import { routingRouter } from './modules/routing/index.js';
 import { dentalRouter } from './modules/dental/index.js';
 import { feedbackRouter } from './modules/feedback/index.js';
+// Your usuals, refer a friend, Blynk Points (owner, 2026-10-10; migration 037).
+import { rewardsMeRouter } from './modules/loyalty/index.js';
 
 export function createApp(): Express {
   const app = express();
@@ -124,6 +126,7 @@ export function createApp(): Express {
   const apiRouter = express.Router();
   apiRouter.use('/auth', authRouter);
   apiRouter.use('/me', meRouter);
+  apiRouter.use('/me', rewardsMeRouter);
   apiRouter.use('/users', usersRouter);
   apiRouter.use('/categories', categoriesRouter);
   apiRouter.use('/products', productsRouter);

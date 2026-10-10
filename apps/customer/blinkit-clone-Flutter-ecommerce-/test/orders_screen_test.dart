@@ -276,7 +276,7 @@ void main() {
         _order(id: 'o1', number: 'BL-20260919-0001', status: 'PLACED', scheduledFor: iso),
       ]);
       expect(find.byIcon(Icons.schedule), findsOneWidget);
-      expect(find.text('Scheduled · ${formatScheduled(DateTime.parse(iso))}'), findsOneWidget);
+      expect(find.text('Scheduled: ${formatSlotWindow(DateTime.parse(iso), null)}'), findsOneWidget);
     });
 
     testWidgets('an out-for-delivery scheduled order shows no schedule notice', (tester) async {
@@ -285,7 +285,7 @@ void main() {
         _order(id: 'o1', number: 'BL-20260919-0001', status: 'OUT_FOR_DELIVERY', scheduledFor: iso),
       ]);
       expect(find.byIcon(Icons.schedule), findsNothing);
-      expect(find.textContaining('Scheduled ·'), findsNothing);
+      expect(find.textContaining('Scheduled:'), findsNothing);
     });
 
     testWidgets('error state shows the mapped message and a retry button that calls loadOrders', (tester) async {

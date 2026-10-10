@@ -1,11 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 
-/// When customers may place an order: 8 AM - 9 PM Sri Lanka time, every day
-/// (owner, 2026-10-06). Mirrors `isWithinOrderingHours` in the backend
-/// `utils/time.ts`, which refuses other times with STORE_CLOSED; this copy
-/// only lets the cart say so before the customer taps Place order.
+import 'Providers/store_info.provider.dart';
+
+/// The FALLBACK ordering hours: the store's default 8 AM - 9 PM Sri Lanka
+/// time. Ops/Admin now decide the hours, closures and holidays, and GET
+/// /store's status (StoreInfoProvider.isOpenAt) is what screens follow; this
+/// clock is used only until /store answers or when it cannot be reached
+/// (owner, 2026-10-10). [clock] is still the app's one "now" for store time.
 ///
 /// Sri Lanka time is worked out from UTC (UTC+5:30, no daylight saving), so a
 /// phone set to another time zone still gets the right answer.
@@ -17,6 +21,10 @@ abstract final class OrderingHours {
   /// The clock read for "now". Tests pin it (test/flutter_test_config.dart).
   @visibleForTesting
   static DateTime Function() clock = DateTime.now;
+
+  /// The app's "now" for store time, read through [clock] so tests can pin
+  /// it (owner, 2026-10-10).
+  static DateTime now() => clock();
 
   static DateTime _sriLanka(DateTime at) => at.toUtc().add(_sriLankaOffset);
 
@@ -44,7 +52,10 @@ abstract final class OrderingHours {
 }
 
 /// Rebuilds [builder] with whether ordering is open, and again the moment
-/// that changes (8:00 AM / 9:00 PM) while the screen stays open.
+/// that changes while the screen stays open. Open/closed comes from the
+/// store's live status (StoreInfoProvider) when it is in the tree, else the
+/// fallback clock; when the moment comes it also asks GET /store again, so a
+/// closure staff set or lifted shows promptly (owner, 2026-10-10).
 class OrderingHoursBuilder extends StatefulWidget {
   const OrderingHoursBuilder({super.key, required this.builder});
 
@@ -56,20 +67,23 @@ class OrderingHoursBuilder extends StatefulWidget {
 
 class _OrderingHoursBuilderState extends State<OrderingHoursBuilder> {
   Timer? _timer;
+  DateTime? _target;
 
-  @override
-  void initState() {
-    super.initState();
-    _schedule();
-  }
-
-  void _schedule() {
+  void _schedule(StoreInfoProvider? store, DateTime now) {
+    final next = store != null ? store.nextChangeAfter(now) : now.add(OrderingHours.untilChange(now));
+    if (next == _target && _timer != null) return;
     _timer?.cancel();
+    _timer = null;
+    _target = next;
+    if (next == null) return;
     // A second past the boundary, so the check lands on the new side of it.
-    _timer = Timer(OrderingHours.untilChange() + const Duration(seconds: 1), () {
+    final wait = next.difference(now) + const Duration(seconds: 1);
+    _timer = Timer(wait.isNegative ? const Duration(seconds: 1) : wait, () {
       if (!mounted) return;
+      _timer = null;
+      _target = null;
       setState(() {});
-      _schedule();
+      context.read<StoreInfoProvider?>()?.refresh(force: true);
     });
   }
 
@@ -80,5 +94,10 @@ class _OrderingHoursBuilderState extends State<OrderingHoursBuilder> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(context, OrderingHours.isOpen());
+  Widget build(BuildContext context) {
+    final store = context.watch<StoreInfoProvider?>();
+    final now = OrderingHours.now();
+    _schedule(store, now);
+    return widget.builder(context, store?.isOpenAt(now) ?? OrderingHours.isOpen(now));
+  }
 }

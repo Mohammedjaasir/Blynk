@@ -227,6 +227,16 @@ describe('Delivery fee setting and GET /store', () => {
       coupons_enabled: expect.any(Boolean),
       new_customer_free_deliveries: { enabled: expect.any(Boolean), count: expect.any(Number), since: expect.any(String) },
       show_offer_savings: expect.any(Boolean),
+      // Store timing (owner, 2026-10-10): defaults pinned by tests/setup/store-schedule.ts.
+      hours: { same_every_day: true, days: expect.objectContaining({ mon: { closed: false, open: '08:00', close: '21:00' } }) },
+      is_open_now: true,
+      closed_kind: 'OPEN',
+      closed_reason: null,
+      reopens_at: null,
+      next_open_at: null,
+      today_hours: { open: '08:00', close: '21:00' },
+      upcoming_holidays: [],
+      delivery_slots_enabled: false,
     });
   });
 

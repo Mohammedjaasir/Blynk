@@ -8,6 +8,7 @@ import { ArrangeProducts } from './pages/ArrangeProducts';
 import { Combos } from './pages/Combos';
 import { CategoryGroups } from './pages/CategoryGroups';
 import { Coupons } from './pages/Coupons';
+import { Referrals } from './pages/Referrals';
 import { CustomerDetail, Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
 import { DentalDoctors } from './pages/DentalDoctors';
@@ -19,6 +20,8 @@ import { ProductImport } from './pages/ProductImport';
 import { Products } from './pages/Products';
 import { Promotions } from './pages/Promotions';
 import { Sales } from './pages/Sales';
+import { OrderMap } from './pages/OrderMap';
+import { PurchaseList } from './pages/PurchaseList';
 import { Settings } from './pages/Settings';
 import { RiderEarnings } from './pages/RiderEarnings';
 import { RiderRequests } from './pages/RiderRequests';
@@ -85,9 +88,14 @@ export function AppRoutes() {
         <Route path="combos" element={<AdminOnly><Combos /></AdminOnly>} />
         <Route path="promotions" element={<AdminOnly><Promotions /></AdminOnly>} />
         <Route path="sales" element={<AdminOnly><Sales /></AdminOnly>} />
+        {/* Delivery heat map and purchase list (owner, 2026-10-10). */}
+        <Route path="order-map" element={<AdminOnly><OrderMap /></AdminOnly>} />
+        <Route path="purchase-list" element={<AdminOnly><PurchaseList /></AdminOnly>} />
         <Route path="cash" element={<AdminOnly><Cash /></AdminOnly>} />
         <Route path="rider-earnings" element={<AdminOnly><RiderEarnings /></AdminOnly>} />
         <Route path="coupons" element={<AdminOnly><Coupons /></AdminOnly>} />
+        {/* Refer a friend: every referral (owner, 2026-10-10). */}
+        <Route path="referrals" element={<AdminOnly><Referrals /></AdminOnly>} />
         <Route path="customers" element={<AdminOnly><Customers /></AdminOnly>} />
         <Route path="customers/:id" element={<AdminOnly><CustomerDetail /></AdminOnly>} />
         <Route path="sms-offers" element={<AdminOnly><SmsOffers /></AdminOnly>} />

@@ -13,8 +13,10 @@ import { adminCouponsRouter } from '../coupons/index.js';
 import { adminReportsRouter } from '../reports/index.js';
 import { smsOffersRouter } from '../sms-offers/index.js';
 import { adminCashRouter } from '../cash/index.js';
+import { adminRewardsRouter } from '../loyalty/index.js';
 import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
+import { purchaseList } from '../inventory/purchase-list.js';
 import { listRiderSuggestions, listRidersForAssignment } from '../riders/rider.controller.js';
 import { adminRiderApplicationsRouter } from '../riders/rider.applications.js';
 import { adminRiderPayRouter } from '../riders/rider.pay.js';
@@ -73,6 +75,11 @@ adminRouter.use(smsOffersRouter);
 // Rider cash hand-ins and reconciliation (migration 019): ADMIN and
 // OPERATIONS, guarded inside.
 adminRouter.use(adminCashRouter);
+
+// Refer a friend and Blynk Points (owner, 2026-10-10; migration 037):
+// settings, the referrals list and a customer's points. ADMIN and
+// OPERATIONS, guarded inside.
+adminRouter.use(adminRewardsRouter);
 
 // Store Operations & Fulfillment Queue (Guarded by ADMIN and PACKING_STAFF)
 adminRouter.get(
@@ -170,6 +177,22 @@ adminRouter.get(
   requireAuth,
   requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
   inventoryController.listLowStock.bind(inventoryController)
+);
+
+// Purchase list (owner, 2026-10-10): a supplier order from what is running
+// low, with suggested quantities and estimated cost. Same roles as the
+// low-stock alert (Inventory staff restock too). Before /inventory/:productId.
+adminRouter.get(
+  '/inventory/purchase-list',
+  requireAuth,
+  requireRoles(['ADMIN', 'PACKING_STAFF', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await purchaseList() });
+    } catch (err) {
+      next(err);
+    }
+  }
 );
 
 adminRouter.get(

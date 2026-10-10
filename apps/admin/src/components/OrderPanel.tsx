@@ -15,6 +15,7 @@ import {
   type OrderAction,
 } from '../lib/orders';
 import type { UserRole } from '../api/types';
+import { scheduledLabel } from '../lib/schedule';
 import { Spinner } from './ui';
 import { OrderBill } from './OrderBill';
 import { OrderItems } from './OrderItems';
@@ -85,6 +86,14 @@ export function OrderPanel({
       </header>
 
       {error ? <p className="ops-notice" role="status">{error}</p> : null}
+      {/* The booked delivery slot (owner, 2026-10-10). */}
+      {(detail?.scheduled_for ?? order.scheduled_for) ? (
+        <p className="order-panel__scheduled ticket__scheduled">
+          {detail?.scheduled_for
+            ? scheduledLabel(detail.scheduled_for, detail.scheduled_until)
+            : scheduledLabel(order.scheduled_for!, order.scheduled_until)}
+        </p>
+      ) : null}
       {!detail && !error ? <Spinner label="Loading the order" /> : null}
 
       {detail ? (

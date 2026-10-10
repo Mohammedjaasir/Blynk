@@ -179,6 +179,9 @@ describe('Free deliveries for every customer', () => {
       free_delivery: { enabled: true, count: 2, since: DEFAULT_SINCE, used: 0, remaining: 2, applies: true },
       // Migration 034 (owner, 2026-10-09): no date of birth saved, so no gift.
       birthday_offer: expect.objectContaining({ has_birthday: false, eligible: false }),
+      // Migration 037 (owner, 2026-10-10): refer a friend and Blynk Points, both off by default.
+      referral_reward: { available: false, side: null, mode: null, amount_lkr: 0 },
+      points: expect.objectContaining({ enabled: false, balance: 0 }),
     });
 
     const first = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));

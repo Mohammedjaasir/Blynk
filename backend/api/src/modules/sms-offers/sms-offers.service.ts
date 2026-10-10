@@ -5,7 +5,10 @@ import { env } from '../../config/env.js';
 import type { Database, SmsLanguage, SmsOfferAudience } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { isPlaceholderPhone, normalizeSriLankanPhone } from '../../utils/phone.js';
-import { isWithinOrderingHours, orderingClock } from '../../utils/time.js';
+import { orderingClock } from '../../utils/time.js';
+import { DAY_KEYS, DEFAULT_WEEKLY_HOURS, dayKeyOf, hhmmLabel, withinSmsWindow } from '../../utils/store-hours.js';
+import { DateTime } from 'luxon';
+import { storeSchedule } from '../configuration/store-schedule.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 
 /**
@@ -15,7 +18,7 @@ import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
  * customer gets the version in the language they picked in the app, or the
  * offer's fallback language if they never picked one. Customers who turned
  * "Offers by SMS" off get nothing. Every SMS ends with a line saying how to
- * turn offers off. Offers go out only 8 AM - 9 PM (the ordering hours), and
+ * turn offers off. Offers go out only inside the opening hours Ops and Admin set (owner, 2026-10-10), and
  * each recipient's SMS is a row in the notifications outbox, so the worker
  * sends it with the usual retries.
  */
@@ -199,14 +202,29 @@ export async function estimateOffer(
 
 const LANGUAGE_NAME: Record<SmsLanguage, string> = { si: 'Sinhala', ta: 'Tamil', en: 'English' };
 
+/**
+ * Offers and test SMS go out only inside today's opening hours, as set by Ops
+ * and Admin (owner, 2026-10-10; before that a fixed 8 AM - 9 PM). On a weekday
+ * marked closed, the default 8 AM - 9 PM window applies (withinSmsWindow).
+ */
+export async function assertSmsSendingWindow(now: Date = orderingClock.now()) {
+  const { hours } = await storeSchedule.read();
+  if (withinSmsWindow(hours, now)) return;
+  const day = hours.days[dayKeyOf(DateTime.fromJSDate(now).setZone('Asia/Colombo'))];
+  const window = day.closed ? DEFAULT_WEEKLY_HOURS.days[DAY_KEYS[0]] : day;
+  throw new AppError(
+    `Offers can be sent from ${hhmmLabel(window.open)} to ${hhmmLabel(window.close)} only.`,
+    422,
+    'OUTSIDE_SENDING_HOURS'
+  );
+}
+
 /** Sends an offer to its audience: one outbox SMS per customer. */
 export async function sendOffer(
   actor: AuditActor,
   input: { audience: SmsOfferAudience; fallback_language: SmsLanguage; messages: OfferMessages }
 ) {
-  if (!isWithinOrderingHours(orderingClock.now())) {
-    throw new AppError('Offers can be sent from 8 AM to 9 PM only.', 422, 'OUTSIDE_SENDING_HOURS');
-  }
+  await assertSmsSendingWindow();
   const estimate = await estimateOffer(input.audience, input.fallback_language, input.messages);
   if (estimate.missing_languages.length) {
     const names = estimate.missing_languages.map((l) => LANGUAGE_NAME[l]).join(' and ');
@@ -294,9 +312,7 @@ export const MAX_TESTS_PER_HOUR = 5;
  */
 export async function sendTestOffer(actor: AuditActor, language: SmsLanguage, message: string, toPhone?: string) {
   // Same sending window as real offers: a test at 11 PM still wakes someone.
-  if (!isWithinOrderingHours(orderingClock.now())) {
-    throw new AppError('Offers can be sent from 8 AM to 9 PM only.', 422, 'OUTSIDE_SENDING_HOURS');
-  }
+  await assertSmsSendingWindow();
   const recent = await db
     .selectFrom('notifications')
     .select(sql<string>`count(*)`.as('n'))

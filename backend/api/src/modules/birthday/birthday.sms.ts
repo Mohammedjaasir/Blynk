@@ -2,7 +2,8 @@ import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { logger } from '../../utils/logger.js';
 import { normalizeSriLankanPhone } from '../../utils/phone.js';
-import { isWithinOrderingHours } from '../../utils/time.js';
+import { withinSmsWindow } from '../../utils/store-hours.js';
+import { storeSchedule } from '../configuration/store-schedule.js';
 import { OUTBOX_PAUSE_LOCK_KEY } from '../notifications/outbox-pause.js';
 import { birthdayOfferSettings, birthdaySmsText, type BirthdayOfferSetting } from '../configuration/settings.service.js';
 import { birthdayOfferStatus } from './birthday.offer.js';
@@ -13,8 +14,8 @@ import { colomboDay, monthDayCodes } from './birthday.rules.js';
  * your order this week." on the customer's birthday, once a year.
  *
  * Runs from the appointment reminder job's tick (dental/appointment-
- * reminders.ts, every few minutes in the worker). The first tick from 8 AM
- * Colombo on the day queues it, never outside 8 AM - 9 PM. Only when the
+ * reminders.ts, every few minutes in the worker). The first tick from opening time
+ * Colombo on the day queues it, never outside the opening hours (Ops/Admin set them, owner 2026-10-10). Only when the
  * birthday offer AND its SMS are switched on, and only to active customers
  * who have not turned "Offers by SMS" off and have not already used this
  * birthday's gift (the SMS would promise a discount they cannot get).
@@ -54,7 +55,8 @@ export interface BirthdaySmsOptions {
 /** One pass: queues today's birthday SMS. Returns the customers queued. */
 export async function runBirthdaySms(opts: BirthdaySmsOptions = {}): Promise<string[]> {
   const now = opts.now ?? new Date();
-  if (!isWithinOrderingHours(now)) return [];
+  // Sending window = the opening hours set by Ops and Admin (owner, 2026-10-10).
+  if (!withinSmsWindow((await storeSchedule.read()).hours, now)) return [];
   const setting = opts.setting ?? (await birthdayOfferSettings.read());
   if (!setting.enabled || !setting.sms_enabled) return [];
 

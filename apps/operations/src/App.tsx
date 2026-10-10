@@ -29,6 +29,9 @@ import { RunningLow as InventoryRunningLow } from './pages/Inventory/RunningLow'
 import { Stock as InventoryStock } from './pages/Inventory/Stock';
 import { StockDetail as InventoryStockDetail } from './pages/Inventory/StockDetail';
 import { Suppliers as InventorySuppliers } from './pages/Inventory/Suppliers';
+import { PurchaseList as InventoryPurchaseList } from './pages/Inventory/PurchaseList';
+import { SalesDashboard } from './pages/SalesDashboard';
+import { OrderMap } from './pages/OrderMap';
 import { Login } from './pages/Login';
 import { Welcome, hasSeenIntro } from './pages/Welcome';
 import { More } from './pages/More';
@@ -39,7 +42,10 @@ import { Riders } from './pages/Riders';
 import { RiderEarnings } from './pages/RiderEarnings';
 import { SmsOffers } from './pages/SmsOffers';
 import { BirthdayOffer } from './pages/BirthdayOffer';
+import { StoreHours } from './pages/StoreHours';
 import { Coupons } from './pages/Coupons';
+import { ReferAFriend } from './pages/ReferAFriend';
+import { BlynkPoints } from './pages/BlynkPoints';
 import { RiderRequests } from './pages/RiderRequests';
 import { StaffAccounts } from './pages/StaffAccounts';
 import { LaunchScreen } from './components/LaunchScreen';
@@ -118,6 +124,9 @@ export function AppRoutes() {
         }
       >
         <Route index element={<Home />} />
+        {/* Sales dashboard and delivery heat map (owner, 2026-10-10). */}
+        <Route path="dashboard" element={<SalesDashboard />} />
+        <Route path="dashboard/map" element={<OrderMap />} />
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="orders/:id/slip" element={<PackingSlip />} />
@@ -138,6 +147,8 @@ export function AppRoutes() {
         <Route path="catalog/inventory" element={<InventoryOverview />} />
         <Route path="catalog/inventory/stock" element={<InventoryStock />} />
         <Route path="catalog/inventory/low-stock" element={<InventoryRunningLow />} />
+        {/* Purchase list from low stock (owner, 2026-10-10). */}
+        <Route path="catalog/inventory/purchase-list" element={<InventoryPurchaseList />} />
         <Route path="catalog/inventory/stock/:productId" element={<InventoryStockDetail />} />
         <Route path="catalog/inventory/ledger" element={<InventoryLedger />} />
         <Route path="catalog/inventory/suppliers" element={<InventorySuppliers />} />
@@ -156,8 +167,13 @@ export function AppRoutes() {
         <Route path="more/staff" element={<StaffAccounts />} />
         <Route path="more/sms-offers" element={<SmsOffers />} />
         <Route path="more/birthday-offer" element={<BirthdayOffer />} />
+        {/* Opening hours, close-now, holidays, delivery slots (owner, 2026-10-10). */}
+        <Route path="more/opening-hours" element={<StoreHours />} />
         {/* Coupon codes for customers (owner, 2026-10-10). */}
         <Route path="more/coupons" element={<Coupons />} />
+        {/* Refer a friend and Blynk Points (owner, 2026-10-10). */}
+        <Route path="more/refer-a-friend" element={<ReferAFriend />} />
+        <Route path="more/points" element={<BlynkPoints />} />
         <Route path="more/rider-requests" element={<RiderRequests />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

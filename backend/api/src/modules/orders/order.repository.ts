@@ -13,6 +13,30 @@ import {
   recordBirthdayRedemption,
 } from '../birthday/birthday.offer.js';
 import type { BirthdayOfferSetting } from '../configuration/settings.service.js';
+// Refer a friend and Blynk Points (owner, 2026-10-10; migration 037).
+import { orderRewardColumns, pointsForOrder, recordOrderRewards, referralForOrder } from '../loyalty/order-rewards.js';
+import { AppError } from '../../middleware/error.middleware.js';
+
+/**
+ * Refuses (409 SLOT_FULL) when the slot starting at `start` already holds
+ * `max` non-cancelled orders. Serialised per slot by pg_advisory_xact_lock,
+ * released when the order transaction ends (owner, 2026-10-10).
+ */
+export async function assertSlotHasRoom(trx: Transaction<Database>, start: Date, max: number, label: string) {
+  await sql`SELECT pg_advisory_xact_lock(hashtext(${'delivery_slot:' + start.toISOString()}))`.execute(trx);
+  const row = await trx
+    .selectFrom('orders')
+    .select(sql<number>`count(*)::int`.as('n'))
+    .where('scheduled_for', '=', start)
+    .where('scheduled_until', 'is not', null)
+    .where('order_status', '!=', 'CANCELLED')
+    .executeTakeFirstOrThrow();
+  if (Number(row.n) >= max) {
+    throw new AppError(`The delivery slot ${label} is full. Please pick another slot.`, 409, 'SLOT_FULL', {
+      slot_start: start.toISOString(),
+    });
+  }
+}
 
 export type DBConnection = Transaction<Database> | typeof db;
 
@@ -38,7 +62,16 @@ export interface CreateOrderData {
    * clock; the gift is decided under the customer's row lock. Absent = none.
    */
   birthday_offer?: { setting: BirthdayOfferSetting; now: Date } | null;
+  /** Migration 037 (owner, 2026-10-10): the customer turned "Use points" on. */
+  use_points?: boolean;
   scheduled_for: Date | null;
+  /**
+   * Scheduled delivery slot (owner, 2026-10-10): its end (migration 036) and
+   * capacity. With a slot, scheduled_for is its start; the count of orders
+   * already in it is re-checked under a per-slot lock, so racing checkouts
+   * cannot overbook it.
+   */
+  delivery_slot?: { until: Date; max_orders: number; label: string } | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
   delivery_alternate_phone: string | null;
@@ -203,6 +236,12 @@ export class OrderRepository {
    */
   async createOrderAtomic(data: CreateOrderData) {
     return await db.transaction().execute(async (trx) => {
+      // 0. Delivery slot (owner, 2026-10-10): one transaction-scoped advisory
+      //    lock per slot start, then count the non-cancelled orders in it.
+      if (data.delivery_slot && data.scheduled_for) {
+        await assertSlotHasRoom(trx, data.scheduled_for, data.delivery_slot.max_orders, data.delivery_slot.label);
+      }
+
       // 0a. New-customer free delivery: counted under the customer's row lock,
       //     so two racing checkouts cannot both take the last one.
       const free = data.free_delivery
@@ -228,10 +267,30 @@ export class OrderRepository {
         ? await birthdayOfferStatus(trx, data.customer_id, data.birthday_offer.setting, data.birthday_offer.now, true)
         : null;
       const birthdayCandidate = birthdayStatus ? applyBirthday(birthdayStatus, data.subtotal_amount) : null;
-      const birthday = birthdayBeatsCoupon(birthdayCandidate, applied?.discount_amount ?? null) ? birthdayCandidate : null;
-      const coupon = birthday ? null : applied;
+      const birthdayOverCoupon = birthdayBeatsCoupon(birthdayCandidate, applied?.discount_amount ?? null) ? birthdayCandidate : null;
+      const couponOverBirthday = birthdayOverCoupon ? null : applied;
+      // 0d. Referral reward (migration 037; owner, 2026-10-10): no stacking -
+      //     used only when strictly larger than the coupon/gift chosen above.
+      const referral = await referralForOrder(trx, {
+        customerId: data.customer_id,
+        subtotal: data.subtotal_amount,
+        deliveryFee,
+        otherDiscount: birthdayOverCoupon?.discount_amount ?? couponOverBirthday?.discount_amount ?? null,
+      });
+      const birthday = referral ? null : birthdayOverCoupon;
+      const coupon = referral ? null : couponOverBirthday;
+      const offerDiscount = referral?.discount_amount ?? birthday?.discount_amount ?? coupon?.discount_amount ?? 0;
+      // 0e. Blynk Points (migration 037): a payment after every discount, so
+      //     they combine with any of the above; part of discount_amount.
+      const rewardsNow = new Date();
+      const points = await pointsForOrder(trx, {
+        customerId: data.customer_id,
+        due: data.subtotal_amount + deliveryFee - offerDiscount,
+        use: data.use_points,
+        now: rewardsNow,
+      });
 
-      const discountAmount = birthday?.discount_amount ?? coupon?.discount_amount ?? 0;
+      const discountAmount = Number((offerDiscount + (points?.discount_amount ?? 0)).toFixed(2));
       const totalAmount = Number((data.subtotal_amount + deliveryFee - discountAmount).toFixed(2));
 
       // 1. Insert orders record
@@ -252,9 +311,11 @@ export class OrderRepository {
           standard_delivery_fee: data.delivery_fee,
           discount_amount: discountAmount,
           birthday_discount_amount: birthday?.discount_amount ?? 0,
+          ...orderRewardColumns(referral, points),
           coupon_code: coupon?.code ?? null,
           total_amount: totalAmount,
           scheduled_for: data.scheduled_for,
+          scheduled_until: data.delivery_slot?.until ?? null,
           delivery_recipient_name: data.delivery_recipient_name,
           delivery_recipient_phone: data.delivery_recipient_phone,
           delivery_alternate_phone: data.delivery_alternate_phone,
@@ -316,6 +377,7 @@ export class OrderRepository {
 
       if (coupon) await recordRedemption(trx, coupon, order.id, data.customer_id);
       if (birthday) await recordBirthdayRedemption(trx, birthday, order.id, data.customer_id);
+      await recordOrderRewards(trx, { orderId: order.id, customerId: data.customer_id, referral, points, now: rewardsNow });
 
       // 4. Record initial status in order_status_history (lifecycle PLACE_ORDER)
       await recordOrderPlaced(trx, order.id, data.customer_id);
@@ -329,6 +391,8 @@ export class OrderRepository {
         delivery_fee: Number(Number(order.delivery_fee).toFixed(2)),
         discount_amount: Number(Number(order.discount_amount).toFixed(2)),
         birthday_discount_amount: Number(Number(order.birthday_discount_amount ?? 0).toFixed(2)),
+        referral_discount_amount: Number(Number(order.referral_discount_amount ?? 0).toFixed(2)),
+        points_discount_amount: Number(Number(order.points_discount_amount ?? 0).toFixed(2)),
         total_amount: Number(Number(order.total_amount).toFixed(2)),
         delivery_latitude: Number(order.delivery_latitude),
         delivery_longitude: Number(order.delivery_longitude),
@@ -406,6 +470,8 @@ export class OrderRepository {
       delivery_fee: Number(Number(order.delivery_fee).toFixed(2)),
       discount_amount: Number(Number(order.discount_amount).toFixed(2)),
       birthday_discount_amount: Number(Number(order.birthday_discount_amount ?? 0).toFixed(2)),
+      referral_discount_amount: Number(Number(order.referral_discount_amount ?? 0).toFixed(2)),
+      points_discount_amount: Number(Number(order.points_discount_amount ?? 0).toFixed(2)),
       total_amount: Number(Number(order.total_amount).toFixed(2)),
       items: items.map((it) => ({
         ...it,
@@ -477,6 +543,8 @@ export class OrderRepository {
       delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
       discount_amount: Number(Number(o.discount_amount).toFixed(2)),
       birthday_discount_amount: Number(Number(o.birthday_discount_amount ?? 0).toFixed(2)),
+      referral_discount_amount: Number(Number(o.referral_discount_amount ?? 0).toFixed(2)),
+      points_discount_amount: Number(Number(o.points_discount_amount ?? 0).toFixed(2)),
       total_amount: Number(Number(o.total_amount).toFixed(2)),
       items: items
         .filter((it) => it.order_id === o.id)
@@ -577,6 +645,8 @@ export class OrderRepository {
         delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
         discount_amount: Number(Number(o.discount_amount).toFixed(2)),
         birthday_discount_amount: Number(Number(o.birthday_discount_amount ?? 0).toFixed(2)),
+        referral_discount_amount: Number(Number(o.referral_discount_amount ?? 0).toFixed(2)),
+        points_discount_amount: Number(Number(o.points_discount_amount ?? 0).toFixed(2)),
         total_amount: Number(Number(o.total_amount).toFixed(2)),
         items_summary: {
           total: summary?.total ?? 0,

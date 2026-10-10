@@ -8,6 +8,7 @@ import '../UI/Widgets/Atoms/list_tile.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Organisms/delete_account_dialog.dart';
 import '../UI/Widgets/Organisms/logout_dialog.dart';
+import '../UI/Widgets/Organisms/profile_rewards_tiles.dart';
 import 'about_you_screen.dart';
 import 'customer_shell.dart';
 import 'feedback_screen.dart';
@@ -57,6 +58,9 @@ class ProfileScreen extends StatelessWidget {
                 title: 'About you',
                 callback: () => AboutYouScreen.open(context),
               ),
+            // Blynk Points and Refer a friend, each while its programme is
+            // on (owner, 2026-10-10).
+            if (signedIn) const ProfileRewardsTiles(),
             customListTile(
               icon: BlynkIcons.orders,
               title: 'Your orders',

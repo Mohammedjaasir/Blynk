@@ -5,11 +5,13 @@ import '../Services/Providers/cart.provider.dart';
 import '../Services/Providers/store_info.provider.dart';
 import '../UI/Widgets/Atoms/adaptive_sheet.dart';
 import '../UI/Widgets/Atoms/birthday_offer_banner.dart';
+import '../UI/Widgets/Atoms/store_closed_banner.dart';
 import '../UI/Widgets/Atoms/blynk_button.dart';
 import '../UI/Widgets/Atoms/card_combo_cart.dart';
 import '../UI/Widgets/Atoms/card_product_cart_screen.dart';
 import '../UI/Widgets/Atoms/connectivity_banner.dart';
 import '../UI/Widgets/Organisms/card_cart_prices_detail.dart';
+import '../UI/Widgets/Organisms/cart_rewards_lines.dart';
 import '../UI/Widgets/Organisms/empty_cart_view.dart';
 import '../design/tokens.dart';
 import '../Models/order_format.dart';
@@ -170,6 +172,12 @@ class _CartHeader extends StatelessWidget {
           ),
           // The birthday gift (owner, 2026-10-09), when it applies.
           const BirthdayOfferBanner(padding: EdgeInsets.only(top: BlynkSpace.s12)),
+          // Closed now (Ops/Admin decide the hours and closures): say so
+          // before checkout; it also asks GET /store again as the cart opens
+          // (owner, 2026-10-10).
+          const StoreClosedBanner(padding: EdgeInsets.only(top: BlynkSpace.s12)),
+          // Referral reward and points to earn (owner, 2026-10-10).
+          const CartRewardsLines(padding: EdgeInsets.only(top: BlynkSpace.s12)),
         ],
       ),
     );

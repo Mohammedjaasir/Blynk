@@ -68,6 +68,10 @@ export function Layout() {
               <NavLink to="/sales" className="nav__item">
                 Sales
               </NavLink>
+              {/* Delivery heat map (owner, 2026-10-10). */}
+              <NavLink to="/order-map" className="nav__item">
+                Delivery map
+              </NavLink>
               <NavLink to="/cash" className="nav__item">
                 Rider cash
               </NavLink>
@@ -89,6 +93,10 @@ export function Layout() {
               <NavLink to="/combos" className="nav__item">
                 Combo packs
               </NavLink>
+              {/* Purchase list from low stock (owner, 2026-10-10). */}
+              <NavLink to="/purchase-list" className="nav__item">
+                Purchase list
+              </NavLink>
 
               <p className="nav__group">Home</p>
               <NavLink to="/promotions" className="nav__item">
@@ -96,6 +104,10 @@ export function Layout() {
               </NavLink>
               <NavLink to="/coupons" className="nav__item">
                 Coupons
+              </NavLink>
+              {/* Refer a friend (owner, 2026-10-10). */}
+              <NavLink to="/referrals" className="nav__item">
+                Referrals
               </NavLink>
 
               <p className="nav__group">Customers</p>

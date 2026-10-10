@@ -80,7 +80,11 @@ export interface BoardOrder {
   total_amount: number;
   placed_at: string;
   updated_at: string;
+  /** Delivery slot start (null = as soon as possible). */
   scheduled_for: string | null;
+  /** Delivery slot end (migration 036); null on older orders - show just the
+   * start then (owner, 2026-10-10). */
+  scheduled_until?: string | null;
   delivery_recipient_name: string;
   delivery_address_line1: string;
   delivery_city: string;
@@ -160,6 +164,8 @@ export interface OrderDetail {
   total_amount: number;
   placed_at: string;
   scheduled_for: string | null;
+  /** Delivery slot end (migration 036); null on older orders (owner, 2026-10-10). */
+  scheduled_until?: string | null;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
   /** Migration 024: a second number from the address; null when none was given. */
@@ -1435,3 +1441,70 @@ export interface CouponInput {
   per_customer_limit?: number;
   is_active?: boolean;
 }
+
+// ------------------------------------------------------- store schedule
+/** Opening hours, close-now, holidays and delivery slots, set by Ops and
+ * Admin (owner, 2026-10-10: "make sure the timing will be decided by ops
+ * and admin"). All times Asia/Colombo; 'HH:MM' is 24h on 15-minute steps. */
+export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface DayHours {
+  closed: boolean;
+  open: string;
+  close: string;
+}
+
+export interface StoreHours {
+  same_every_day: boolean;
+  days: Record<DayKey, DayHours>;
+  updated_at: string | null;
+}
+
+export interface StoreClosure {
+  closed: boolean;
+  reason: string | null;
+  reopens_at: string | null;
+  closed_at: string | null;
+  updated_at: string | null;
+}
+
+export interface StoreHoliday {
+  date: string;
+  reason: string | null;
+}
+
+export type SlotMinutes = 30 | 60 | 120;
+
+export interface DeliverySlotSettings {
+  enabled: boolean;
+  slot_minutes: SlotMinutes;
+  days_ahead: 1 | 2 | 3;
+  max_orders_per_slot: number;
+  min_lead_minutes: number;
+}
+
+export type ClosedKind = 'OPEN' | 'OUTSIDE_HOURS' | 'CLOSED_DAY' | 'HOLIDAY' | 'CLOSED_NOW';
+
+export interface StoreStatus {
+  is_open_now: boolean;
+  closed_kind: ClosedKind;
+  closed_reason: string | null;
+  reopens_at: string | null;
+  next_open_at: string | null;
+  today_hours: { open: string; close: string } | null;
+}
+
+/** GET /admin/settings/store-schedule; every store-schedule PATCH returns it too. */
+export interface StoreSchedule {
+  hours: StoreHours;
+  closure: StoreClosure;
+  holidays: StoreHoliday[];
+  delivery_slots: DeliverySlotSettings & { updated_at: string | null };
+  status: StoreStatus;
+}
+
+export type StoreHoursInput =
+  | { same_every_day: true; open: string; close: string }
+  | { same_every_day: false; days: Record<DayKey, DayHours> };
+
+export type StoreClosureInput = { closed: true; reason: string; reopens_at?: string | null } | { closed: false };

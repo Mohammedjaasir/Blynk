@@ -39,4 +39,22 @@ class ShareLinks {
     final url = productUrl(productId, baseUrl: baseUrl);
     return url == null ? '$name on Blynk' : '$name on Blynk\n$url';
   }
+
+  /// Refer a friend (owner, 2026-10-10): `<site>/app/?ref=CODE`, or null
+  /// when no https site address is configured (never an invented address)
+  /// or the code is not plain letters and digits.
+  static String? referralUrl(String code, {String baseUrl = _kShareBaseUrl}) {
+    final base = Uri.tryParse(baseUrl.trim());
+    if (base == null || base.scheme != 'https' || base.host.isEmpty) return null;
+    if (!RegExp(r'^[A-Za-z0-9]{1,32}$').hasMatch(code)) return null;
+    return base.replace(path: '/app/', queryParameters: {'ref': code}, fragment: null).toString();
+  }
+
+  /// What the referral share sheet sends: the code, then the link when there
+  /// is one (owner, 2026-10-10).
+  static String referralShareText(String code, {String baseUrl = _kShareBaseUrl}) {
+    final url = referralUrl(code, baseUrl: baseUrl);
+    final text = 'Join me on Blynk and get a reward on your first order. Use my code $code';
+    return url == null ? '$text when you sign up.' : '$text or this link:\n$url';
+  }
 }

@@ -9,6 +9,13 @@ import {
   updateRiderCommissionSchema,
   updateRiderTripsSchema,
 } from './settings.service.js';
+import {
+  storeScheduleService,
+  updateDeliverySlotsSchema,
+  updateStoreClosureSchema,
+  updateStoreHolidaysSchema,
+  updateStoreHoursSchema,
+} from './store-schedule.js';
 
 export const configurationRouter = Router();
 
@@ -24,7 +31,8 @@ export const storeRouter = Router();
 storeRouter.get('/', async (_req, res, next) => {
   try {
     const store = await settingsService.getPublicStore();
-    res.set('Cache-Control', 'public, max-age=60');
+    // 30 s (was 60): a "close the store now" reaches apps quickly (owner, 2026-10-10).
+    res.set('Cache-Control', 'public, max-age=30');
     res.json({ success: true, data: store });
   } catch (err) {
     next(err);
@@ -192,3 +200,40 @@ adminSettingsRouter.patch(
     }
   }
 );
+
+// Store timing (owner, 2026-10-10: "make sure the timing will be decided by
+// ops and admin"): opening hours, "close the store now", the holiday list and
+// scheduled delivery slots. One GET for the whole screen; each PATCH answers
+// with the whole schedule again. Each change is audited (STORE_HOURS_UPDATED,
+// STORE_CLOSED_NOW / STORE_REOPENED, STORE_HOLIDAYS_UPDATED,
+// DELIVERY_SLOTS_UPDATED) and applies at once (the in-process cache is dropped).
+adminSettingsRouter.get(
+  '/settings/store-schedule',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await storeScheduleService.get() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+const scheduleEdits = [
+  ['/settings/store-hours', updateStoreHoursSchema, storeScheduleService.setHours],
+  ['/settings/store-closure', updateStoreClosureSchema, storeScheduleService.setClosure],
+  ['/settings/store-holidays', updateStoreHolidaysSchema, storeScheduleService.setHolidays],
+  ['/settings/delivery-slots', updateDeliverySlotsSchema, storeScheduleService.setSlots],
+] as const;
+
+for (const [path, schema, apply] of scheduleEdits) {
+  adminSettingsRouter.patch(path, requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (req, res, next) => {
+    try {
+      const input = schema.parse(req.body);
+      res.json({ success: true, data: await (apply as (i: unknown, a: ReturnType<typeof actorOf>) => Promise<unknown>)(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  });
+}

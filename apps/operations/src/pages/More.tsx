@@ -66,7 +66,7 @@ export function More() {
 
   return (
     <div className="page">
-      <PageHeader title="More" description="Riders, rider requests, rider cash and earnings, staff, SMS offers, birthday offer, coupons, settings and sign-out." />
+      <PageHeader title="More" description="Opening hours, riders, rider requests, rider cash and earnings, staff, SMS offers, birthday offer, coupons, settings and sign-out." />
       <section className="card">
         <p className="card__row">
           <span className="card__label">Signed in as</span>
@@ -79,6 +79,13 @@ export function More() {
       </section>
 
       <ul className="cat-hub">
+        <li>
+          {/* Opening hours, close the store now, holidays and delivery
+              slots - one screen (owner, 2026-10-10). */}
+          <Link className="cat-hub__card" to="/more/opening-hours">
+            <span className="cat-hub__title">Opening hours</span>
+          </Link>
+        </li>
         <li>
           <Link className="cat-hub__card" to="/more/riders">
             <span className="cat-hub__title">Riders</span>
@@ -129,6 +136,18 @@ export function More() {
           {/* Coupon codes for customers (owner, 2026-10-10). */}
           <Link className="cat-hub__card" to="/more/coupons">
             <span className="cat-hub__title">Coupons</span>
+          </Link>
+        </li>
+        <li>
+          {/* Refer a friend rewards and referrals (owner, 2026-10-10). */}
+          <Link className="cat-hub__card" to="/more/refer-a-friend">
+            <span className="cat-hub__title">Refer a friend</span>
+          </Link>
+        </li>
+        <li>
+          {/* Blynk Points: earn on delivered orders, spend at checkout (owner, 2026-10-10). */}
+          <Link className="cat-hub__card" to="/more/points">
+            <span className="cat-hub__title">Blynk Points</span>
           </Link>
         </li>
       </ul>

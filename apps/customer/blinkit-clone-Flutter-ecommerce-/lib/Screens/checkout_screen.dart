@@ -10,9 +10,11 @@ import '../UI/Widgets/Atoms/image_well.dart';
 import '../UI/Widgets/Atoms/money_text.dart';
 import '../UI/Widgets/Atoms/section_header.dart';
 import '../UI/Widgets/Organisms/card_cart_prices_detail.dart';
+import '../UI/Widgets/Organisms/cart_rewards_lines.dart';
 import '../UI/Widgets/Organisms/cart_screen_address_container.dart';
 import '../UI/Widgets/Organisms/cart_screen_payment_container.dart';
 import '../UI/Widgets/Organisms/checkout_coupon_field.dart';
+import '../UI/Widgets/Organisms/checkout_slot_picker.dart';
 import '../UI/Widgets/Organisms/empty_cart_view.dart';
 import '../app_design.dart';
 import '../design/tokens.dart';
@@ -73,6 +75,9 @@ class CheckoutScreen extends StatelessWidget {
                       clipBehavior: Clip.antiAlias,
                       child: const CartScreenAddressContainer(),
                     ),
+                    // Delivery time (owner, 2026-10-10): only while staff
+                    // have delivery slots switched on.
+                    const CheckoutSlotPicker(padding: EdgeInsets.only(top: BlynkSpace.s24)),
                     const BlynkSectionHeader(
                       title: 'Items',
                       padding: EdgeInsets.only(
@@ -86,6 +91,8 @@ class CheckoutScreen extends StatelessWidget {
                       const CheckoutCouponField(),
                       const SizedBox(height: BlynkSpace.s16),
                     ],
+                    // Referral reward, Use points, points to earn (owner, 2026-10-10).
+                    const CartRewardsLines(allowRedeem: true, padding: EdgeInsets.only(bottom: BlynkSpace.s16)),
                     CartPriceDetailWidget(showCoupon: couponsEnabled, showBirthday: true),
                     const CancellationPolicyCard(),
                   ],

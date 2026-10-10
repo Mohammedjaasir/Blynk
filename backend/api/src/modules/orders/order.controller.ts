@@ -11,6 +11,7 @@ import {
   orderItemParamsSchema,
 } from './order.schema.js';
 import { validateCouponSchema } from '../coupons/coupon.schema.js';
+import { availableSlots } from '../configuration/store-schedule.js';
 
 export class OrderController {
   // --------------------------------------------------------------------------
@@ -49,6 +50,15 @@ export class OrderController {
   async getCheckoutInfo(req: Request, res: Response, next: NextFunction) {
     try {
       res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /orders/slots (owner, 2026-10-10): delivery slots the customer may pick. */
+  async getDeliverySlots(_req: Request, res: Response, next: NextFunction) {
+    try {
+      res.status(200).json({ success: true, data: await availableSlots() });
     } catch (err) {
       next(err);
     }

@@ -5,6 +5,8 @@ import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { resolveSalesRange, salesReport, type SalesRangePreset } from './sales.service.js';
 import { exportCustomers, getCustomer, listCustomers, type CustomerSort } from './customers.service.js';
+import { DASHBOARD_RANGES, salesDashboard, type DashboardRange } from './dashboard.service.js';
+import { ORDER_MAP_RANGES, orderMap, type OrderMapRange } from './order-map.service.js';
 
 type Handler = (req: Request, res: Response) => Promise<void>;
 const wrap = (fn: Handler) => (req: Request, res: Response, next: NextFunction) => {
@@ -62,6 +64,40 @@ adminReportsRouter.get(
   })
 );
 
+// Sales dashboard and delivery heat map (owner, 2026-10-10): ADMIN and
+// OPERATIONS - the Ops app shows them on the phone. Aggregates only; the map
+// never carries names, phones, addresses or exact points.
+const ADMIN_OR_OPS = [requireAuth, requireRoles(['ADMIN', 'OPERATIONS'])];
+
+export const dashboardQuerySchema = z.object({
+  range: z.enum(DASHBOARD_RANGES as [DashboardRange, ...DashboardRange[]]).default('today'),
+});
+
+adminReportsRouter.get(
+  '/reports/dashboard',
+  ...ADMIN_OR_OPS,
+  validate({ query: dashboardQuerySchema }),
+  wrap(async (req, res) => {
+    const q = req.query as unknown as z.infer<typeof dashboardQuerySchema>;
+    res.json({ success: true, data: await salesDashboard(q.range ?? 'today') });
+  })
+);
+
+export const orderMapQuerySchema = z.object({
+  range: z.enum(ORDER_MAP_RANGES as [OrderMapRange, ...OrderMapRange[]]).default('last_30_days'),
+  status: z.enum(['delivered', 'all']).default('delivered'),
+});
+
+adminReportsRouter.get(
+  '/reports/order-map',
+  ...ADMIN_OR_OPS,
+  validate({ query: orderMapQuerySchema }),
+  wrap(async (req, res) => {
+    const q = req.query as unknown as z.infer<typeof orderMapQuerySchema>;
+    res.json({ success: true, data: await orderMap(q.range ?? 'last_30_days', q.status ?? 'delivered') });
+  })
+);
+
 adminReportsRouter.get(
   '/customers',
   ...ADMIN_ONLY,
@@ -93,3 +129,5 @@ adminReportsRouter.get(
 
 export * from './sales.service.js';
 export * from './customers.service.js';
+export * from './dashboard.service.js';
+export * from './order-map.service.js';

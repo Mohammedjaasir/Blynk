@@ -232,6 +232,22 @@ class OrderModel {
 
   /// The discount was the birthday gift, not a coupon.
   bool get hasBirthdayGift => birthdayDiscountAmount > 0;
+
+  /// The referral reward this order got (owner, 2026-10-10), 0 when none.
+  /// Included in [discountAmount].
+  final double referralDiscountAmount;
+
+  /// Blynk Points used on this order and what they took off (owner,
+  /// 2026-10-10), 0 when none. The amount is included in [discountAmount].
+  final int pointsRedeemed;
+  final double pointsDiscountAmount;
+
+  /// The coupon or birthday part of [discountAmount]: what is left once the
+  /// referral reward and points are taken out.
+  double get couponOrGiftDiscount {
+    final rest = discountAmount - referralDiscountAmount - pointsDiscountAmount;
+    return rest < 0.005 ? 0 : rest;
+  }
   final double totalAmount;
   final String deliveryRecipientName;
   final String deliveryRecipientPhone;
@@ -248,6 +264,11 @@ class OrderModel {
   final String? customerNotes;
   final bool canCancel;
   final DateTime? scheduledFor;
+
+  /// The end of the delivery slot the order was scheduled for
+  /// (`scheduled_until`, migration 036); null on older orders, which then
+  /// show just [scheduledFor] (owner, 2026-10-10).
+  final DateTime? scheduledUntil;
   final DateTime? placedAt;
   final DateTime? cancelledAt;
   final List<OrderItemModel> items;
@@ -278,6 +299,9 @@ class OrderModel {
     this.discountAmount = 0,
     this.couponCode,
     this.birthdayDiscountAmount = 0,
+    this.referralDiscountAmount = 0,
+    this.pointsRedeemed = 0,
+    this.pointsDiscountAmount = 0,
     required this.totalAmount,
     required this.deliveryRecipientName,
     required this.deliveryRecipientPhone,
@@ -292,6 +316,7 @@ class OrderModel {
     this.customerNotes,
     this.canCancel = false,
     this.scheduledFor,
+    this.scheduledUntil,
     this.placedAt,
     this.cancelledAt,
     this.items = const [],
@@ -351,6 +376,14 @@ class OrderModel {
       birthdayDiscountAmount: double.tryParse(
               (json['birthday_discount_amount'] ?? json['birthdayDiscountAmount'] ?? 0).toString()) ??
           0.0,
+      referralDiscountAmount: double.tryParse(
+              (json['referral_discount_amount'] ?? json['referralDiscountAmount'] ?? 0).toString()) ??
+          0.0,
+      pointsRedeemed: int.tryParse((json['points_redeemed'] ?? json['pointsRedeemed'] ?? 0).toString()) ??
+          (double.tryParse('${json['points_redeemed']}')?.toInt() ?? 0),
+      pointsDiscountAmount: double.tryParse(
+              (json['points_discount_amount'] ?? json['pointsDiscountAmount'] ?? 0).toString()) ??
+          0.0,
       totalAmount:
           double.tryParse((json['total_amount'] ?? json['totalAmount'] ?? 0).toString()) ?? 0.0,
       deliveryRecipientName:
@@ -373,6 +406,7 @@ class OrderModel {
       customerNotes: (json['customer_notes'] ?? json['customerNotes'])?.toString(),
       canCancel: json['can_cancel'] == true,
       scheduledFor: _date(json['scheduled_for'] ?? json['scheduledFor']),
+      scheduledUntil: _date(json['scheduled_until'] ?? json['scheduledUntil']),
       placedAt: _date(json['placed_at'] ?? json['placedAt'] ?? json['created_at'] ?? json['createdAt']),
       cancelledAt: _date(json['cancelled_at'] ?? json['cancelledAt']),
       items: rawItems.map(OrderItemModel.tryParse).whereType<OrderItemModel>().toList(),

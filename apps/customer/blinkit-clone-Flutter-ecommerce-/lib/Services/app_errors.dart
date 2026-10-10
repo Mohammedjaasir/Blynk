@@ -5,7 +5,6 @@ import 'package:dio/dio.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
-import 'package:ecom/Services/store_info.dart';
 
 /// What went wrong, in the words a customer needs. Never the exception text.
 enum CustomerErrorKind {
@@ -167,11 +166,28 @@ class AppErrors {
       retryable: false,
     ),
     'DELIVERY_OUTSIDE_RADIUS': outsideDeliveryArea,
-    // Orders are taken 8 AM - 9 PM Colombo time only (owner, 2026-10-06).
+    // Ops/Admin decide the hours and can close the store at any time, so
+    // this copy names no hours; place order shows the server's own sentence
+    // (which says when it reopens) and this is only its fallback
+    // (owner, 2026-10-10).
     'STORE_CLOSED': CustomerError(
       kind: CustomerErrorKind.validation,
       title: "We're closed right now",
-      message: 'We take orders ${StoreInfo.deliveryHoursLabel}. Please order again after ${StoreInfo.opensAtLabel}.',
+      message: "We're closed right now. Please order again when we open.",
+      retryable: false,
+    ),
+    // Scheduled delivery slots: the picked slot is no longer offered, or
+    // it filled up. Checkout reloads the slots (owner, 2026-10-10).
+    'SLOT_UNAVAILABLE': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Delivery time unavailable',
+      message: "That delivery time isn't available any more. Pick another time.",
+      retryable: false,
+    ),
+    'SLOT_FULL': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Delivery time full',
+      message: 'That delivery time is full. Pick another time.',
       retryable: false,
     ),
     'ADDRESS_NOT_FOUND': CustomerError(
@@ -311,6 +327,37 @@ class AppErrors {
       kind: CustomerErrorKind.validation,
       title: 'A favourite is no longer in the shop',
       message: "One of your favourites isn't in the shop any more. Untick it and save again.",
+      retryable: false,
+    ),
+    // POST /me/referral/apply (owner, 2026-10-10): a friend's code refused.
+    'REFERRALS_DISABLED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Referrals are paused',
+      message: "Referral codes can't be used right now.",
+      retryable: false,
+    ),
+    'REFERRAL_CODE_NOT_FOUND': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Code not found',
+      message: "We couldn't find that referral code. Check it and try again.",
+      retryable: false,
+    ),
+    'REFERRAL_SELF': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: "That's your own code",
+      message: "That's your own code. Enter a friend's code instead.",
+      retryable: false,
+    ),
+    'REFERRAL_ALREADY_APPLIED': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'Already applied',
+      message: "You've already used a referral code.",
+      retryable: false,
+    ),
+    'REFERRAL_NOT_NEW_CUSTOMER': CustomerError(
+      kind: CustomerErrorKind.validation,
+      title: 'New customers only',
+      message: 'Referral codes are for new customers before their first order.',
       retryable: false,
     ),
   };

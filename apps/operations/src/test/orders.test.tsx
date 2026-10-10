@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
 import type { BoardOrder, OrderDetail } from '../api/types';
+import { addDays, colomboDate, colomboInstant } from '../lib/slots';
 import { ADMIN_WITH_RIDER, fail, ok, renderAs, type Call } from './helpers';
 
 /**
@@ -663,5 +664,79 @@ describe('Assign dialog: suggested rider and trips (GET /admin/riders/suggestion
     await waitFor(() => expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)).toHaveLength(2));
     expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)[1].body).toEqual({ rider_id: 'r1', confirm_far_batch: true });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /Assign a rider/ })).not.toBeInTheDocument());
+  });
+});
+
+describe('Scheduled delivery slots on the board and detail (owner, 2026-10-10)', () => {
+  const tomorrow = () => addDays(colomboDate(new Date()), 1);
+  const slot = (day: string, from: string, to: string) => ({
+    scheduled_for: colomboInstant(day, from).toISOString(),
+    scheduled_until: colomboInstant(day, to).toISOString(),
+  });
+
+  it('a ticket says "Scheduled: Tomorrow 8–10 AM"; an older order without a slot end shows just the start', async () => {
+    const a = boardOrder(slot(tomorrow(), '08:00', '10:00'));
+    const b = boardOrder({ scheduled_for: colomboInstant(tomorrow(), '16:00').toISOString(), scheduled_until: null });
+    renderAs(ADMIN_WITH_RIDER, '/orders', ordersHandlers([a, b]));
+    const toPack = await lane('To pack');
+    expect(toPack).toHaveTextContent('Scheduled: Tomorrow 8–10 AM');
+    expect(toPack).toHaveTextContent('Scheduled: Tomorrow 4 PM');
+  });
+
+  it('ASAP orders keep their order at the top of a lane; scheduled ones follow, earliest slot first', async () => {
+    const late = boardOrder({ ...slot(tomorrow(), '16:00', '18:00'), delivery_recipient_name: 'Late Slot' });
+    const asap1 = boardOrder({ delivery_recipient_name: 'Asap One' });
+    const early = boardOrder({ ...slot(tomorrow(), '08:00', '10:00'), delivery_recipient_name: 'Early Slot' });
+    const asap2 = boardOrder({ delivery_recipient_name: 'Asap Two' });
+    renderAs(ADMIN_WITH_RIDER, '/orders', ordersHandlers([late, asap1, early, asap2]));
+    const toPack = await lane('To pack');
+    const names = within(toPack)
+      .getAllByRole('listitem')
+      .map((li) => ['Asap One', 'Asap Two', 'Early Slot', 'Late Slot'].find((n) => li.textContent?.includes(n)));
+    expect(names).toEqual(['Asap One', 'Asap Two', 'Early Slot', 'Late Slot']);
+  });
+
+  it('the Scheduled filter shows only scheduled orders, grouped by slot, earliest first', async () => {
+    const user = userEvent.setup();
+    const late = boardOrder({ ...slot(tomorrow(), '16:00', '18:00'), delivery_recipient_name: 'Late Slot' });
+    const asap = boardOrder({ delivery_recipient_name: 'Asap One' });
+    const early1 = boardOrder({ ...slot(tomorrow(), '08:00', '10:00'), delivery_recipient_name: 'Early One' });
+    const early2 = boardOrder({ ...slot(tomorrow(), '08:00', '10:00'), delivery_recipient_name: 'Early Two', order_status: 'PACKED' });
+    renderAs(ADMIN_WITH_RIDER, '/orders', ordersHandlers([late, asap, early1, early2]));
+    const filter = await screen.findByRole('group', { name: 'Show orders' });
+    expect(within(filter).getByRole('button', { name: 'All 4' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(filter).getByRole('button', { name: 'Scheduled 3' }));
+
+    expect(screen.queryByRole('region', { name: /^To pack/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Asap One')).not.toBeInTheDocument();
+    const slots = screen.getAllByRole('region', { name: /^Tomorrow/ });
+    expect(slots.map((r) => within(r).getByRole('heading').textContent)).toEqual([
+      'Tomorrow 8–10 AM 2',
+      'Tomorrow 4–6 PM 1',
+    ]);
+    expect(slots[0]).toHaveTextContent('Early One');
+    expect(slots[0]).toHaveTextContent('Early Two');
+    expect(slots[1]).toHaveTextContent('Late Slot');
+
+    await user.click(within(filter).getByRole('button', { name: 'All 4' }));
+    expect(await lane('To pack')).toHaveTextContent('Asap One');
+  });
+
+  it('with no scheduled orders the Scheduled filter says so', async () => {
+    const user = userEvent.setup();
+    renderAs(ADMIN_WITH_RIDER, '/orders', ordersHandlers([boardOrder()]));
+    await user.click(await screen.findByRole('button', { name: 'Scheduled 0' }));
+    expect(screen.getByText(/No scheduled orders/)).toBeInTheDocument();
+  });
+
+  it('the order detail shows the slot clearly; an ASAP order shows none', async () => {
+    const o = boardOrder(slot(tomorrow(), '11:00', '13:00'));
+    renderAs(ADMIN_WITH_RIDER, `/orders/${o.id}`, { 'GET /admin/orders/:id': () => ok({ order: orderDetail(o, { scheduled_until: o.scheduled_until }) }) });
+    expect(await screen.findByTestId('order-slot')).toHaveTextContent('Scheduled: Tomorrow 11 AM–1 PM');
+    cleanup();
+    const asap = boardOrder();
+    renderAs(ADMIN_WITH_RIDER, `/orders/${asap.id}`, { 'GET /admin/orders/:id': () => ok({ order: orderDetail(asap) }) });
+    expect(await screen.findByText('Kotmale Fresh Milk 1L')).toBeInTheDocument();
+    expect(screen.queryByTestId('order-slot')).not.toBeInTheDocument();
   });
 });

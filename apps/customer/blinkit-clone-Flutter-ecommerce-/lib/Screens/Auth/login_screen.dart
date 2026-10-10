@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:ecom/Infrastructure/LocalStorage/guest_choice_storage.dart';
 
+import 'package:ecom/Services/Providers/store_info.provider.dart';
 import 'package:ecom/Services/store_info.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_logo.dart';
@@ -23,7 +24,15 @@ class OnboardingSlideData {
   final double aspectRatio;
   final String titleLine1;
   final String titleLine2;
+  /// May hold [hoursToken], replaced by the live store hours when shown.
   final String description;
+
+  /// Stands for the store hours in [description]: Ops/Admin set the hours,
+  /// so the slide shows the live label (owner, 2026-10-10).
+  static const String hoursToken = '{hours}';
+
+  /// [description] with the store hours filled in.
+  String descriptionWith(String hoursLabel) => description.replaceAll(hoursToken, hoursLabel);
 
   const OnboardingSlideData({
     required this.assetPath,
@@ -69,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
       titleLine1: 'Order in a few taps,',
       titleLine2: 'pay on delivery.',
       description:
-          'We take orders ${StoreInfo.deliveryHoursLabel}.\nYou pay in cash when your order arrives.',
+          'We take orders ${OnboardingSlideData.hoursToken}.\nYou pay in cash when your order arrives.',
     ),
   ];
 
@@ -397,7 +406,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             AnimatedSwitcher(
                               duration: BlynkMotion.resolve(context, BlynkMotion.base),
                               child: Text(
-                                _slides[_currentPage].description,
+                                _slides[_currentPage].descriptionWith(watchHoursLabel(context)),
                                 key: ValueKey<int>(_currentPage),
                                 style: BlynkText.heroSubtitle(isDesktop ? 16.5 : 15.0)
                                     .copyWith(color: BlynkColors.ink2, height: 1.4),

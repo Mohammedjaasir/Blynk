@@ -68,6 +68,13 @@ export function Overview() {
             <span className="cat-hub__count">{lowStock ? lowStock.counts.total : '—'}</span>
           </Link>
         </li>
+        {/* Purchase list (owner, 2026-10-10): the same products, as a supplier order. */}
+        <li>
+          <Link className="cat-hub__card" to="/catalog/inventory/purchase-list">
+            <span className="cat-hub__title">Purchase list</span>
+            <span className="cat-hub__count">{lowStock ? lowStock.counts.total : '—'}</span>
+          </Link>
+        </li>
       </ul>
 
       <section className="section" aria-labelledby="attention-title">

@@ -1,6 +1,7 @@
 import { enqueueCustomerSms } from './notify.js';
 import { riderPaySnapshot } from '../../riders/rider.pay.js';
 import { setOrderStatus } from './status-writer.js';
+import { onOrderDeliveredRewards } from '../../loyalty/order-rewards.js';
 import type { Actor, DeliveryRow, OrderRow, Trx } from './types.js';
 
 export interface CodSettlement {
@@ -43,7 +44,10 @@ export async function settleCod(
     .where('order_id', '=', order.id)
     .execute();
 
-  await setOrderStatus(trx, order, 'DELIVERED', actor, note, { payment_status: 'PAID', delivered_at: now });
+  const delivered = await setOrderStatus(trx, order, 'DELIVERED', actor, note, { payment_status: 'PAID', delivered_at: now });
+  // Refer a friend + Blynk Points (owner, 2026-10-10; migration 037): the
+  // friend's first delivered order credits the inviter; the order earns points.
+  await onOrderDeliveredRewards(trx, delivered);
 
   await enqueueCustomerSms(trx, order, 'DELIVERED', `order_${order.id}_DELIVERED_SMS`, {
     order_number: order.order_number,

@@ -426,7 +426,11 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Rider earnings' })).toBeInTheDocument();
     // Combo packs (owner, 2026-10-09).
     expect(screen.getByRole('link', { name: 'Combo packs' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(18);
+    // Delivery map and Purchase list (owner, 2026-10-10).
+    expect(screen.getByRole('link', { name: 'Delivery map' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Purchase list' })).toBeInTheDocument();
+    // Referrals (owner, 2026-10-10) brings the sidebar to 21 links.
+    expect(screen.getAllByRole('link')).toHaveLength(21);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

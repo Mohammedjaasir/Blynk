@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { db } from '../../database/connection.js';
-import { DEFAULT_OPERATING_HOURS } from '../../utils/time.js';
+import { orderingClock } from '../../utils/time.js';
+import { DateTime } from 'luxon';
+import { STORE_TIMEZONE, displayHours, storeStatusAt } from '../../utils/store-hours.js';
+import { storeSchedule } from './store-schedule.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
@@ -280,8 +283,6 @@ export const birthdayOfferSettings = {
   read: (): Promise<BirthdayOfferSetting> => settingsService.getBirthdayOfferSetting(),
 };
 
-const hhmm = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
-
 /** The stored fee, or null when the row is missing or malformed. */
 function feeFrom(value: unknown): number | null {
   if (value && typeof value === 'object') {
@@ -553,15 +554,17 @@ export class SettingsService {
   /**
    * What the customer app and landing site may know about the store. Only
    * values with a real source: the fee (system_configurations), the active
-   * dark store's name and radius (dark_stores), and the delivery window the
-   * order scheduler uses (utils/time.ts DEFAULT_OPERATING_HOURS), plus the
+   * dark store's name and radius (dark_stores), the opening hours and whether
+   * the store is open now (store-schedule.ts, set by Ops and Admin - owner,
+   * 2026-10-10), plus the
    * checkout switches (show a coupon field; the free deliveries and since when;
    * show "Save LKR" on offers).
    */
   async getPublicStore() {
-    const [fee, checkout, store] = await Promise.all([
+    const [fee, checkout, schedule, store] = await Promise.all([
       this.getDeliveryFee(),
       this.getCheckoutSettings(),
+      storeSchedule.read(),
       db
         .selectFrom('dark_stores')
         .select(['name', 'radius_km'])
@@ -570,19 +573,25 @@ export class SettingsService {
         .limit(1)
         .executeTakeFirst(),
     ]);
+    const now = orderingClock.now();
+    const status = storeStatusAt(schedule, now);
+    const today = DateTime.fromJSDate(now).setZone(STORE_TIMEZONE).toISODate()!;
+    const in30 = DateTime.fromJSDate(now).setZone(STORE_TIMEZONE).plus({ days: 30 }).toISODate()!;
     return {
       delivery_fee_lkr: fee.fee_lkr,
       hub_name: store?.name ?? null,
-      delivery_hours: {
-        start: hhmm(DEFAULT_OPERATING_HOURS.startHour),
-        end: hhmm(DEFAULT_OPERATING_HOURS.endHour),
-        timezone: 'Asia/Colombo',
-      },
+      // Today's hours, or the next open day's when today is closed.
+      delivery_hours: { ...displayHours(schedule, now), timezone: STORE_TIMEZONE },
       radius_km: store ? Number(store.radius_km) : null,
       coupons_enabled: checkout.coupons_enabled,
       new_customer_free_deliveries: checkout.new_customer_free_deliveries,
       // Owner, 2026-10-10: the customer app shows "Save LKR X" only when on.
       show_offer_savings: checkout.show_offer_savings,
+      // Store timing (owner, 2026-10-10): set by Ops and Admin.
+      hours: { same_every_day: schedule.hours.same_every_day, days: schedule.hours.days },
+      ...status,
+      upcoming_holidays: schedule.holidays.filter((h) => h.date >= today && h.date <= in30),
+      delivery_slots_enabled: schedule.slots.enabled,
     };
   }
 }

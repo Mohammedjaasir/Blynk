@@ -5,6 +5,9 @@ import { settings as settingsApi } from '../api/resources';
 import { useLocation } from 'react-router-dom';
 import type { BirthdayOfferSetting, CheckoutSettings, DeliveryFeeSetting, RiderCommissionSetting, RiderTripsSetting } from '../api/types';
 import { PageHeader } from '../components/Layout';
+import { StoreScheduleSettings } from '../components/StoreSchedulePanels';
+import { ReferralSettingsCard } from '../components/ReferralSettingsCard';
+import { PointsSettingsCard } from '../components/PointsSettingsCard';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
 import { MAX_BIRTHDAY_SMS, fillPercent, parseBirthdayPercent, percentText } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
@@ -26,7 +29,9 @@ import { partsLabel, smsParts } from '../lib/smsOffers';
  * (GET/PATCH /admin/settings/birthday-offer; owner, 2026-10-09), and rider
  * trips - how many orders one rider may carry at once and how far apart their
  * drop-offs may be (GET/PATCH /admin/settings/rider-trips; owner, 2026-10-10).
- * /settings#checkout (the Coupons page's link) scrolls to Checkout.
+ * /settings#checkout (the Coupons page's link) scrolls to Checkout. The
+ * store schedule - store status with close-now, opening hours, holidays and
+ * delivery slots - comes first (owner, 2026-10-10).
  */
 export function Settings() {
   const { hash } = useLocation();
@@ -47,11 +52,15 @@ export function Settings() {
   return (
     <>
       <PageHeader title="Settings" description="Store-wide values the customer app uses." />
+      <StoreScheduleSettings />
       <DeliveryFeeSettingPanel />
       <CheckoutSettingsPanel />
       <RiderCommissionPanel />
       <RiderTripsPanel />
       <BirthdayOfferPanel />
+      {/* Refer a friend and Blynk Points (owner, 2026-10-10). */}
+      <ReferralSettingsCard />
+      <PointsSettingsCard />
     </>
   );
 }
@@ -598,7 +607,7 @@ function BirthdayOfferPanel() {
             <span>
               Birthday SMS
               <em>
-                Sent on the birthday from 8 AM, once a year, only while the offer is on and the customer gets offers by SMS.
+                Sent on the birthday from opening time, once a year, only while the offer is on and the customer gets offers by SMS.
               </em>
             </span>
           </label>

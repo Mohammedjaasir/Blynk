@@ -21,6 +21,7 @@ import {
   type Lane,
   type OrderAction,
 } from '../lib/orders';
+import { scheduledLabel } from '../lib/schedule';
 
 /** How often the board re-reads while it is on screen (no push; the Rider pattern). */
 const REFRESH_MS = 20_000;
@@ -64,6 +65,9 @@ export function Orders() {
   const [dialog, setDialog] = useState<{ action: OrderAction; order: BoardOrder } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  // "Scheduled" filter (owner, 2026-10-10): only orders booked for a slot,
+  // soonest slot first. "All" keeps the board's own order (oldest first).
+  const [scheduledOnly, setScheduledOnly] = useState(false);
   const inFlight = useRef(new Set<string>());
 
   const load = useCallback(async () => {
@@ -134,14 +138,21 @@ export function Orders() {
     [run]
   );
 
+  const scheduledCount = useMemo(() => (live ?? []).filter((o) => o.scheduled_for).length, [live]);
+
   const byLane = useMemo(() => {
     const groups = new Map<Lane, BoardOrder[]>();
-    for (const o of live ?? []) {
+    const shown = scheduledOnly
+      ? (live ?? [])
+          .filter((o) => o.scheduled_for)
+          .sort((a, b) => Date.parse(a.scheduled_for!) - Date.parse(b.scheduled_for!))
+      : (live ?? []);
+    for (const o of shown) {
       const lane = laneOf(o);
       groups.set(lane, [...(groups.get(lane) ?? []), o]);
     }
     return groups;
-  }, [live]);
+  }, [live, scheduledOnly]);
 
   const openOrder = live?.find((o) => o.id === openId) ?? null;
   const { delivered, cancelled } = done;
@@ -183,6 +194,29 @@ export function Orders() {
           </p>
         ) : null}
         {live && live.length === 0 ? <p className="orders__empty">No live orders.</p> : null}
+        {live && live.length > 0 && (scheduledCount > 0 || scheduledOnly) ? (
+          <div className="segmented orders-filter" role="group" aria-label="Show orders">
+            <button
+              type="button"
+              className={!scheduledOnly ? 'segmented__item is-selected' : 'segmented__item'}
+              aria-pressed={!scheduledOnly}
+              onClick={() => setScheduledOnly(false)}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={scheduledOnly ? 'segmented__item is-selected' : 'segmented__item'}
+              aria-pressed={scheduledOnly}
+              onClick={() => setScheduledOnly(true)}
+            >
+              Scheduled ({scheduledCount})
+            </button>
+          </div>
+        ) : null}
+        {live && scheduledOnly && scheduledCount === 0 ? (
+          <p className="orders__empty">No scheduled orders.</p>
+        ) : null}
 
         {LANES.map((lane) => {
           const rows = byLane.get(lane.id) ?? [];
@@ -324,7 +358,9 @@ function OrderRow({
           {exception ? <span className="ticket__flag">{STATUS_LABEL[order.order_status]}</span> : null}
           <span>{progress(order)}</span>
           {order.active_delivery?.rider_name ? <span className="ticket__rider">{order.active_delivery.rider_name}</span> : null}
-          {order.scheduled_for ? <span className="ticket__scheduled">Scheduled {formatClock(order.scheduled_for)}</span> : null}
+          {order.scheduled_for ? (
+            <span className="ticket__scheduled">{scheduledLabel(order.scheduled_for, order.scheduled_until)}</span>
+          ) : null}
         </span>
         <span className="ticket__age">{formatAge(order.placed_at)}</span>
         <span className="ticket__total">{formatMoney(order.total_amount)}</span>

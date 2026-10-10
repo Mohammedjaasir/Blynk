@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:ecom/Infrastructure/HttpMethods/requesting_methods.dart';
 import 'package:ecom/Models/coupon_model.dart';
+import 'package:ecom/Models/delivery_slot_model.dart';
 import 'package:ecom/Models/order_model.dart';
 import 'package:ecom/Services/Exceptions/api_exception.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
@@ -121,6 +122,76 @@ class OrderProvider extends ChangeNotifier {
   String? _couponCartKey;
   bool _isApplyingCoupon = false;
   String? _couponError;
+
+  // Scheduled delivery slots at checkout (owner, 2026-10-10).
+  DeliverySlots? _slots;
+  bool _isLoadingSlots = false;
+  CustomerError? _slotsFailure;
+  String? _selectedSlotStart;
+  int _slotsGeneration = 0;
+
+  /// GET /orders/slots' last answer; null until asked (or after a failure
+  /// with nothing loaded before) (owner, 2026-10-10).
+  DeliverySlots? get deliverySlots => _slots;
+  bool get isLoadingSlots => _isLoadingSlots;
+  CustomerError? get slotsFailure => _slotsFailure;
+
+  /// Whether the last answer said staff have delivery slots switched on.
+  bool get slotsEnabled => _slots?.enabled ?? false;
+
+  /// The picked slot's `start`, or null for "As soon as possible".
+  String? get selectedSlotStart => _selectedSlotStart;
+
+  // Blynk Points at checkout (owner, 2026-10-10): the "Use points" switch.
+  bool _usePoints = false;
+
+  /// Whether the next order asks to pay part of it with points
+  /// (`use_points: true`). The server decides how many and prices it.
+  bool get usePoints => _usePoints;
+
+  void setUsePoints(bool value) {
+    if (value == _usePoints) return;
+    _usePoints = value;
+    notifyListeners();
+  }
+
+  /// The picked slot while it is still offered with room; null otherwise.
+  DeliverySlot? get selectedSlot => slotsEnabled ? _slots!.availableSlot(_selectedSlotStart) : null;
+
+  /// Picks a delivery slot by its `start`, or null for "As soon as
+  /// possible" (owner, 2026-10-10).
+  void selectSlot(String? start) {
+    if (start == _selectedSlotStart) return;
+    _selectedSlotStart = start;
+    notifyListeners();
+  }
+
+  /// Asks GET /orders/slots. A picked slot that is no longer offered (or
+  /// has filled up) is dropped, so a stale one is never sent. Never throws;
+  /// a failure keeps the last answer and sets [slotsFailure]
+  /// (owner, 2026-10-10).
+  Future<void> loadSlots() async {
+    final gen = ++_slotsGeneration;
+    _isLoadingSlots = true;
+    _slotsFailure = null;
+    notifyListeners();
+    try {
+      final response = await _request('GET', '/orders/slots');
+      if (gen != _slotsGeneration) return;
+      final parsed = DeliverySlots.tryParse(response is Map ? response['data'] : null);
+      if (parsed == null) throw ApiException(500, 'Delivery times were not returned by the server.');
+      _slots = parsed;
+      if (parsed.availableSlot(_selectedSlotStart) == null) _selectedSlotStart = null;
+    } catch (e) {
+      if (gen != _slotsGeneration) return;
+      _slotsFailure = AppErrors.from(e);
+    } finally {
+      if (gen == _slotsGeneration) {
+        _isLoadingSlots = false;
+        notifyListeners();
+      }
+    }
+  }
 
   List<OrderModel> get orders => _orders;
   bool get isLoadingOrders => _isLoadingOrders;
@@ -255,6 +326,12 @@ class OrderProvider extends ChangeNotifier {
     _isApplyingCoupon = false;
     _checkoutKey = null;
     _checkoutKeyFor = null;
+    _slotsGeneration++;
+    _slots = null;
+    _isLoadingSlots = false;
+    _slotsFailure = null;
+    _selectedSlotStart = null;
+    _usePoints = false;
     notifyListeners();
   }
 
@@ -405,10 +482,16 @@ class OrderProvider extends ChangeNotifier {
   /// back the order the first attempt created rather than a duplicate. A call
   /// while an order is already being placed (a double tap) does nothing and
   /// returns null.
+  ///
+  /// [deliverySlotStart] schedules the order for a slot (exactly a slot's
+  /// `start` from GET /orders/slots); null asks for "as soon as possible".
+  /// A SLOT_UNAVAILABLE / SLOT_FULL refusal drops the pick and reloads the
+  /// slots (owner, 2026-10-10).
   Future<OrderModel?> placeOrder({
     required CartProvider cart,
     required String addressId,
     String? customerNotes,
+    String? deliverySlotStart,
   }) async {
     if (_isPlacingOrder) return null;
     _isPlacingOrder = true;
@@ -417,7 +500,8 @@ class OrderProvider extends ChangeNotifier {
     final coupon = couponFor(cart);
     final notes = customerNotes?.trim() ?? '';
     final idempotencyKey = _checkoutKeyForAttempt(
-      [cartKey(cart), addressId, coupon?.code ?? '', notes].join('|'),
+      [cartKey(cart), addressId, coupon?.code ?? '', notes, deliverySlotStart ?? '', if (_usePoints) 'points']
+          .join('|'),
     );
 
     try {
@@ -432,6 +516,9 @@ class OrderProvider extends ChangeNotifier {
             'customer_notes': customerNotes.trim(),
           // Re-validated by the server inside the order transaction.
           if (coupon != null) 'coupon_code': coupon.code,
+          if (deliverySlotStart != null) 'delivery_slot_start': deliverySlotStart,
+          // Blynk Points (owner, 2026-10-10): the server picks the amount.
+          if (_usePoints) 'use_points': true,
         },
       );
 
@@ -452,6 +539,8 @@ class OrderProvider extends ChangeNotifier {
       _coupon = null;
       _couponCartKey = null;
       _couponError = null;
+      _selectedSlotStart = null;
+      _usePoints = false;
       _isPlacingOrder = false;
       notifyListeners();
       return placed;
@@ -464,6 +553,12 @@ class OrderProvider extends ChangeNotifier {
         _coupon = null;
         _couponCartKey = null;
         _couponError = couponRefusal;
+      }
+      // The slot went (filled up, or no longer offered): drop the pick and
+      // show the slots as they stand now (owner, 2026-10-10).
+      if (apiError.code == 'SLOT_UNAVAILABLE' || apiError.code == 'SLOT_FULL') {
+        _selectedSlotStart = null;
+        loadSlots();
       }
       _placeOrderFailure = AppErrors.from(apiError);
       _isPlacingOrder = false;

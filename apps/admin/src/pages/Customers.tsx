@@ -6,6 +6,7 @@ import type { BirthdayCustomer, CustomerDetail as Detail, CustomerOrderRow, Cust
 import { PageHeader } from '../components/Layout';
 import { OrderBill } from '../components/OrderBill';
 import { OrderItems } from '../components/OrderItems';
+import { CustomerPointsPanel } from '../components/CustomerPointsPanel';
 import { Badge, EmptyState, Spinner } from '../components/ui';
 import { birthdayWhen, formatDayMonth, formatDayMonthYear } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
@@ -293,6 +294,8 @@ export function CustomerDetail() {
           </div>
 
           <CustomerLikes customer={c} />
+          {/* Blynk Points balance, history and +/- adjust (owner, 2026-10-10). */}
+          <CustomerPointsPanel customerId={c.id} />
 
           {data.orders.length === 0 ? (
             <EmptyState title="No orders yet" />

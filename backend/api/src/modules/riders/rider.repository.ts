@@ -104,6 +104,9 @@ export class RiderRepository {
         'orders.delivery_latitude',
         'orders.delivery_longitude',
         'orders.delivery_instructions',
+        // Scheduled delivery slot, if the customer picked one (owner, 2026-10-10).
+        'orders.scheduled_for',
+        'orders.scheduled_until',
       ])
       .where('deliveries.rider_id', '=', riderId)
       .where((eb) =>
@@ -170,6 +173,9 @@ export class RiderRepository {
         'orders.delivery_latitude',
         'orders.delivery_longitude',
         'orders.delivery_instructions',
+        // Scheduled delivery slot, if the customer picked one (owner, 2026-10-10).
+        'orders.scheduled_for',
+        'orders.scheduled_until',
       ])
       .where('deliveries.id', '=', deliveryId);
 

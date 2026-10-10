@@ -19,6 +19,9 @@ import 'package:ecom/Services/push/push_notifications.dart';
 import 'package:ecom/Screens/config_problem_screen.dart';
 import 'package:ecom/Services/Providers/location.provider.dart';
 import 'package:ecom/Services/Providers/rider_route.provider.dart';
+import 'package:ecom/Services/Providers/rewards.provider.dart';
+import 'package:ecom/Services/referral_link.dart';
+import 'package:ecom/UI/Widgets/Organisms/pending_referral_sync.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
 import 'package:ecom/Services/Providers/store_info.provider.dart';
@@ -72,6 +75,10 @@ void main() async {
   if (config.validate() == null) {
     unawaited(PushNotifications.instance.start(navigatorKey: rootNavigatorKey));
   }
+
+  // A friend's code in a shared web link (`/app/?ref=CODE`) is kept until
+  // the customer signs in (owner, 2026-10-10). Never awaited, never throws.
+  unawaited(ReferralLink.captureFromPageAddress());
 
   WidgetsBinding.instance.deferFirstFrame();
   runApp(buildRootWidget(config));
@@ -157,6 +164,10 @@ List<SingleChildWidget> buildAppProviders() => [
       ChangeNotifierProvider<RiderRouteProvider>(
         create: (_) => RiderRouteProvider(),
       ),
+      // Your usuals, Refer a friend and Blynk Points (owner, 2026-10-10).
+      ChangeNotifierProvider<RewardsProvider>(
+        create: (_) => RewardsProvider(),
+      ),
     ];
 
 class MainApp extends StatelessWidget {
@@ -175,7 +186,9 @@ class MainApp extends StatelessWidget {
         navigatorKey: rootNavigatorKey,
         messengerKey: rootScaffoldMessengerKey,
         // Registers this device for push while someone is signed in.
-        child: PushSessionSync(child: child ?? const SizedBox.shrink()),
+        // Applies a friend's code from a shared link after sign-in, and
+        // forgets the rewards on sign-out (owner, 2026-10-10).
+        child: PendingReferralSync(child: PushSessionSync(child: child ?? const SizedBox.shrink())),
       ),
       onGenerateRoute: AppRouter.generateRoute,
       onGenerateInitialRoutes: AppRouter.generateInitialRoutes,

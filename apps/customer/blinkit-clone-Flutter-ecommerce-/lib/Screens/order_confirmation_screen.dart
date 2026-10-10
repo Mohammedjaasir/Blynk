@@ -151,6 +151,18 @@ class _OrderFacts extends StatelessWidget {
                 : formatLkr(order.totalAmount),
             style: BlynkType.priceTotal,
           ),
+          // What the server took for Blynk Points / a referral reward
+          // (owner, 2026-10-10); already inside the amount above.
+          if (order.pointsDiscountAmount > 0 || order.referralDiscountAmount > 0)
+            Text(
+              [
+                if (order.pointsDiscountAmount > 0)
+                  '${order.pointsRedeemed > 0 ? '${order.pointsRedeemed} points' : 'Points'} took ${formatLkr(order.pointsDiscountAmount)} off',
+                if (order.referralDiscountAmount > 0) 'Referral reward took ${formatLkr(order.referralDiscountAmount)} off',
+              ].join(' · '),
+              key: const Key('confirmation-rewards'),
+              style: BlynkText.caption.copyWith(color: BlynkColors.positiveInk),
+            ),
           if (address.isNotEmpty) ...[
             const SizedBox(height: BlynkSpace.s16),
             const _FactLabel('Delivering to'),
@@ -186,7 +198,8 @@ class _OrderFacts extends StatelessWidget {
                     Flexible(
                       child: Text(
                         key: const Key('confirmation-schedule'),
-                        'Scheduled — delivery ${formatScheduled(order.scheduledFor!)}',
+                        // "Scheduled: Tomorrow 8–10 AM" (owner, 2026-10-10).
+                        scheduledLine(order)!,
                         style: BlynkText.label,
                       ),
                     ),

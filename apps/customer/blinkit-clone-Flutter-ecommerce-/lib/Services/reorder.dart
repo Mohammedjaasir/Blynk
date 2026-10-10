@@ -1,4 +1,5 @@
 import 'package:ecom/Models/order_model.dart';
+import 'package:ecom/Models/usuals_model.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/product.provider.dart';
 
@@ -101,4 +102,36 @@ bool canReorder(OrderModel order) {
     default:
       return false;
   }
+}
+
+/// "Your usuals" > Add all (owner, 2026-10-10): every product of the last
+/// order that is on sale now, at its last quantity, added to what is already
+/// in the cart (within the per-item limit). `GET /me/usuals` already carries
+/// today's product, so nothing is re-read here. Out-of-stock products and
+/// the ones the server listed as gone are skipped and named.
+ReorderResult addUsualsInto({required UsualsData usuals, required CartProvider cart}) {
+  var addedUnits = 0;
+  final unavailable = <String>[];
+  for (final item in usuals.items) {
+    if (!item.product.isAvailable) {
+      unavailable.add(item.product.name);
+      continue;
+    }
+    addedUnits += cart.addQuantity(item.product, item.quantity);
+  }
+  unavailable.addAll(usuals.unavailable);
+  return ReorderResult(addedUnits: addedUnits, unavailable: unavailable, offline: false);
+}
+
+/// The snackbar after Add all: "Added 5 items. Not available now: X, Y."
+String usualsAddedMessage(ReorderResult result) {
+  final units = result.addedUnits;
+  final missing = result.unavailable;
+  final added = units == 1 ? 'Added 1 item.' : 'Added $units items.';
+  if (units == 0) {
+    return missing.isEmpty
+        ? 'These are already in your cart.'
+        : 'Nothing was added. Not available now: ${missing.join(', ')}.';
+  }
+  return missing.isEmpty ? added : '$added Not available now: ${missing.join(', ')}.';
 }

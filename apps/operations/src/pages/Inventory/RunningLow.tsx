@@ -23,9 +23,15 @@ export function RunningLow() {
             : 'Tracked products at or under their low-stock level.'
         }
         actions={
-          <button type="button" className="button button--ghost" onClick={() => void refresh()}>
-            Refresh
-          </button>
+          <>
+            {/* Purchase list (owner, 2026-10-10). */}
+            <Link className="button button--sm" to="/catalog/inventory/purchase-list">
+              Purchase list
+            </Link>
+            <button type="button" className="button button--ghost" onClick={() => void refresh()}>
+              Refresh
+            </button>
+          </>
         }
       />
       {error ? <p className="field__error">{error}</p> : null}

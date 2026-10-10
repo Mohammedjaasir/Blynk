@@ -21,6 +21,7 @@ import {
   type Lane,
   type OrderAction,
 } from '../lib/orders';
+import { asapThenBySlot, formatSlot, scheduledLabel } from '../lib/slots';
 
 /**
  * The Orders board (plan §10), replacing F1's placeholder. Reuses Admin's
@@ -76,6 +77,10 @@ function startOfTodayColombo(now = new Date()): Date {
  */
 const FOCUS_LANE: Record<string, Lane> = { packing: 'toPack', readyForRider: 'readyForRider' };
 
+/** All live orders (by lane) or only scheduled ones, grouped by delivery
+ * slot, earliest first - so staff see the upcoming slots (owner, 2026-10-10). */
+type BoardFilter = 'all' | 'scheduled';
+
 export function Orders() {
   const [searchParams] = useSearchParams();
   const [live, setLive] = useState<BoardOrder[] | null>(null);
@@ -91,6 +96,7 @@ export function Orders() {
   const [dialog, setDialog] = useState<{ action: OrderAction; order: BoardOrder } | null>(null);
   const [farRefusal, setFarRefusal] = useState<FarBatchRefusal | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<BoardFilter>('all');
   const inFlight = useRef(new Set<string>());
   const scrolledRef = useRef(false);
 
@@ -176,8 +182,24 @@ export function Orders() {
       const lane = laneOf(o);
       groups.set(lane, [...(groups.get(lane) ?? []), o]);
     }
+    // ASAP orders keep the API's oldest-first order; scheduled ones follow,
+    // earliest slot first (owner, 2026-10-10).
+    for (const [lane, rows] of groups) groups.set(lane, asapThenBySlot(rows));
     return groups;
   }, [live]);
+
+  /** Scheduled live orders grouped by slot, earliest slot first. */
+  const bySlot = useMemo(() => {
+    const groups = new Map<string, { start: string; end: string | null; rows: BoardOrder[] }>();
+    for (const o of asapThenBySlot((live ?? []).filter((x) => x.scheduled_for))) {
+      const key = `${o.scheduled_for}|${o.scheduled_until ?? ''}`;
+      const group = groups.get(key) ?? { start: o.scheduled_for!, end: o.scheduled_until ?? null, rows: [] };
+      group.rows.push(o);
+      groups.set(key, group);
+    }
+    return [...groups.values()];
+  }, [live]);
+  const scheduledCount = bySlot.reduce((n, g) => n + g.rows.length, 0);
 
   const delivered = closed.filter((o) => o.order_status === 'DELIVERED').length;
   const cancelled = closed.filter((o) => o.order_status === 'CANCELLED').length;
@@ -220,7 +242,50 @@ export function Orders() {
         </p>
       ) : null}
 
-      {LANES.map((lane) => {
+      {live && live.length > 0 ? (
+        <div className="segmented orders-filter" role="group" aria-label="Show orders">
+          {(
+            [
+              { id: 'all', text: `All ${live.length}` },
+              { id: 'scheduled', text: `Scheduled ${scheduledCount}` },
+            ] as const
+          ).map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className={filter === f.id ? 'segmented__item is-selected' : 'segmented__item'}
+              aria-pressed={filter === f.id}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.text}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {filter === 'scheduled' && live && live.length > 0 ? (
+        bySlot.length === 0 ? (
+          <p className="orders__empty">No scheduled orders. Orders for a delivery slot show here, earliest slot first.</p>
+        ) : (
+          bySlot.map((g) => {
+            const headingId = `slot-heading-${g.start}`;
+            return (
+              <section key={`${g.start}|${g.end}`} className="lane lane--slot" aria-labelledby={headingId}>
+                <h2 className="lane__title" id={headingId}>
+                  {formatSlot(g.start, g.end)} <span className="lane__count">{g.rows.length}</span>
+                </h2>
+                <ul className="lane__rows">
+                  {g.rows.map((o) => (
+                    <OrderRow key={o.id} order={o} primary={primaryAction(o)} busy={busyId === o.id} onAct={(action) => act(o, action)} />
+                  ))}
+                </ul>
+              </section>
+            );
+          })
+        )
+      ) : null}
+
+      {filter === 'all' && LANES.map((lane) => {
         const rows = byLane.get(lane.id) ?? [];
         if (rows.length === 0) return null;
         const headingId = `lane-heading-${lane.id}`;
@@ -329,7 +394,7 @@ function OrderRow({
         <span className="ticket__foot">
           <span>{progress(order)}</span>
           {order.active_delivery?.rider_name ? <span className="ticket__rider">{order.active_delivery.rider_name}</span> : null}
-          {order.scheduled_for ? <span className="ticket__scheduled">Scheduled {formatClock(order.scheduled_for)}</span> : null}
+          {order.scheduled_for ? <span className="ticket__scheduled">{scheduledLabel(order)}</span> : null}
           <span className="ticket__total">{formatMoney(order.total_amount)}</span>
         </span>
       </Link>

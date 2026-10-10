@@ -401,7 +401,8 @@ class _OrderRow extends StatelessWidget {
                           const SizedBox(width: BlynkSpace.s4),
                           Expanded(
                             child: Text(
-                              'Scheduled · ${formatScheduled(order.scheduledFor!)}',
+                              // "Scheduled: Tomorrow 8–10 AM" (owner, 2026-10-10).
+                              scheduledLine(order)!,
                               overflow: TextOverflow.ellipsis,
                               style: BlynkText.caption.copyWith(color: BlynkColors.ink2),
                             ),

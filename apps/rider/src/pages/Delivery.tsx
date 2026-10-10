@@ -13,7 +13,7 @@ import { Navigation } from 'lucide-react';
 import { googleMapsDirectionsUrl, toLatLng } from '../lib/route';
 import { bagRows, canReportFailure, isTrackable, nextAction, stage, statusLabel, statusTone } from '../lib/delivery';
 import { MESSAGES, deliveryCodeLockedUntil, errorCode, errorMessage } from '../lib/errors';
-import { formatMoney, formatPhone, formatTime, shortOrderNumber } from '../lib/format';
+import { formatMoney, formatPhone, formatScheduledSlot, formatTime, shortOrderNumber } from '../lib/format';
 import { getTracker, stopTrackingFor, syncTracking } from '../lib/tracker-session';
 import type { TrackingState } from '../lib/tracking';
 import { useLoad } from '../lib/useLoad';
@@ -230,6 +230,8 @@ function Slip({
   const done = action.kind === 'none' && action.reason === 'done';
   const destination = toLatLng(d.delivery_latitude, d.delivery_longitude);
   const closed = action.kind === 'none' && (action.reason === 'cancelled' || action.reason === 'failed');
+  // Scheduled orders say when the customer expects them (owner, 2026-10-10).
+  const slot = formatScheduledSlot(d.scheduled_for, d.scheduled_until);
 
   return (
     <article className="slip slip--detail">
@@ -240,6 +242,7 @@ function Slip({
           <span className={`slip__state tone--${statusTone(d)}`}>{statusLabel(d)}</span>
         ) : null}
       </div>
+      {slot && !done && !closed ? <p className="slot">{slot}</p> : null}
       {closed || done ? null : <StatusRail stage={stage(d)} />}
       {/* Through ARRIVED_AT_CUSTOMER (plan §2.3, §13): tracking itself ends on arrival,
           but the readout stays to confirm "Stopped sharing your location". */}

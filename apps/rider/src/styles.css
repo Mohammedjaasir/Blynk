@@ -439,6 +439,19 @@ a {
   color: var(--paper);
 }
 
+/* Scheduled delivery slot (owner, 2026-10-10): a yellow-ruled strip so the
+   promised time reads at a glance; --ink on --paper-2 is well above 4.5:1. */
+.slot {
+  align-self: flex-start;
+  padding: 6px 12px 6px 14px;
+  border-radius: 6px;
+  background: var(--paper-2);
+  box-shadow: inset 4px 0 0 var(--yellow-press);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+
 /* Passive location-sharing readout (TrackingStatus). Four looks, so the state
    reads at a glance:
    - active:   healthy - green wash with a green rule (the plain strip below is
@@ -832,6 +845,13 @@ a {
 .row__status {
   font-size: 14px;
   font-weight: 700;
+}
+
+/* Scheduled slot on a compact row (owner, 2026-10-10). */
+.row__slot {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
 }
 
 .row__amount {

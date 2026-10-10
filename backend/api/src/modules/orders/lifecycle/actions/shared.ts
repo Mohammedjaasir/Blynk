@@ -5,6 +5,7 @@ import { CLOSED_ORDER_STATUSES } from '../catalogue.js';
 import { issueDeliveryCode } from '../delivery-code.js';
 import { releaseRedemption } from '../../../coupons/coupon.service.js';
 import { releaseBirthdayRedemption } from '../../../birthday/birthday.offer.js';
+import { onOrderCancelledRewards } from '../../../loyalty/order-rewards.js';
 import { enqueueCustomerSms } from '../notify.js';
 import { setOrderStatus } from '../status-writer.js';
 import type { Actor, DeliveryRow, OrderRow, Trx } from '../types.js';
@@ -83,6 +84,9 @@ export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reaso
   await releaseRedemption(trx, order.id);
   // Birthday gift (migration 034): a cancelled order did not use it.
   await releaseBirthdayRedemption(trx, order.id);
+  // Referral reward and Blynk Points (owner, 2026-10-10; migration 037): the
+  // reward is released and the points given back.
+  await onOrderCancelledRewards(trx, order);
   await enqueueCustomerSms(trx, order, 'ORDER_CANCELLED', `order_${order.id}_CANCELLED_SMS`, {
     order_number: order.order_number,
     reason,

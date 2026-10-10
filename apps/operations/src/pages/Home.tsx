@@ -11,6 +11,7 @@ import { formatMoney } from '../lib/orders';
 import { syncTrackingFromList } from '../lib/tracker-session';
 import { isTripStop, owesCash, tripOf, useCurrentPosition, useRoadOrder } from '../lib/trip';
 import { TripCard } from './Delivery/Queue';
+import { SalesTodayCard } from './SalesDashboard';
 
 /**
  * Operations Home (plan §9). Modelled on Admin's own `Dashboard.tsx` doc
@@ -82,6 +83,8 @@ export function Home() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Sales today card (owner, 2026-10-10): reloaded by the same Refresh.
+  const [salesKey, setSalesKey] = useState(0);
   // Shared with the tab bar's badge (one fetch per app load, see LowStock.tsx).
   const lowStock = useLowStock();
   // Orders a trip's stops when the operator is on one (sent only to the API
@@ -167,6 +170,7 @@ export function Home() {
   const refresh = () => {
     void load(true);
     void lowStock.refresh();
+    setSalesKey((n) => n + 1);
   };
 
   if (error && !summary) {
@@ -238,6 +242,9 @@ export function Home() {
       />
 
       {error ? <p className="field__error">{error} Showing the last successful load.</p> : null}
+
+      {/* The sales dashboard leads Home (owner, 2026-10-10). */}
+      <SalesTodayCard refreshKey={salesKey} />
 
       {riderCapability === 'ADMIN_PLUS_RIDER' ? (
         <section className="section">

@@ -7,6 +7,7 @@ import '../Models/order_model.dart';
 import '../Services/Providers/auth.provider.dart';
 import '../Services/Providers/order.provider.dart';
 import '../Services/Providers/product.provider.dart';
+import '../Services/Providers/store_info.provider.dart';
 import '../Services/catalog_live_updates.dart';
 import '../Services/web_back_guard.dart';
 import '../UI/Widgets/Organisms/adaptive_scaffold.dart';
@@ -158,6 +159,10 @@ class _CustomerShellState extends State<CustomerShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refreshCatalog();
+      // Staff may have closed (or reopened) the store or changed the hours
+      // while the app was away: ask GET /store again, throttled
+      // (owner, 2026-10-10).
+      context.read<StoreInfoProvider?>()?.refresh();
       _startLiveRefresh();
       _live?.start();
     } else if (state == AppLifecycleState.paused ||

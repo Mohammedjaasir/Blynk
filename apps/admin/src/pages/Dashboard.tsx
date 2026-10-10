@@ -5,6 +5,7 @@ import type { Category, Promotion } from '../api/types';
 import { errorMessage } from '../lib/apiErrors';
 import { PageHeader } from '../components/Layout';
 import { Spinner } from '../components/ui';
+import { SalesPanel } from '../components/SalesPanel';
 
 interface Summary {
   liveProducts: number;
@@ -59,10 +60,13 @@ export function Dashboard() {
     };
   }, []);
 
+  // The sales dashboard leads the page (owner, 2026-10-10). It loads on its
+  // own, so it stays put (and shows) whatever happens to the catalog summary.
   if (error) {
     return (
       <>
         <PageHeader title="Dashboard" />
+        <SalesPanel />
         <p className="field__error">{error}</p>
       </>
     );
@@ -72,6 +76,7 @@ export function Dashboard() {
     return (
       <>
         <PageHeader title="Dashboard" />
+        <SalesPanel />
         <Spinner label="Loading summary" />
       </>
     );
@@ -113,8 +118,12 @@ export function Dashboard() {
     <>
       <PageHeader
         title="Dashboard"
-        description="What customers can see right now."
+        description="Sales, and what customers can see right now."
       />
+
+      <SalesPanel />
+
+      <h2 className="section-label">Catalog</h2>
 
       {summary.productsComplete ? null : (
         <p className="form__note" role="status">

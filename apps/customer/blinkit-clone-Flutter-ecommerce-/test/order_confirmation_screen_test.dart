@@ -82,7 +82,7 @@ void main() {
       await pumpScreen(tester, order);
       expect(find.byKey(const Key('confirmation-schedule')), findsOneWidget);
       expect(
-        find.text('Scheduled — delivery ${formatScheduled(DateTime.parse(iso))}'),
+        find.text('Scheduled: ${formatSlotWindow(DateTime.parse(iso), null)}'),
         findsOneWidget,
       );
       expect(find.byIcon(Icons.schedule), findsOneWidget);
@@ -139,7 +139,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(
-        find.text('Scheduled — delivery ${formatScheduled(DateTime.parse(iso))}'),
+        find.text('Scheduled: ${formatSlotWindow(DateTime.parse(iso), null)}'),
         findsOneWidget,
       );
     });

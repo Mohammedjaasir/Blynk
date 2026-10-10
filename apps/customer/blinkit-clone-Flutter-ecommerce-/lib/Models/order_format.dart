@@ -1,5 +1,7 @@
 // Small local formatting helpers - no `intl` dependency (Global Constraints).
+import '../Services/ordering_hours.dart';
 import '../Services/store_info.dart';
+import 'colombo_time.dart';
 import 'order_model.dart';
 import 'order_status_labels.dart';
 
@@ -54,6 +56,28 @@ String formatScheduled(DateTime at) {
   final weekday = _weekdays[d.weekday - 1];
   final month = _months[d.month - 1];
   return 'from ${_time12h(d)}, $weekday ${d.day} $month';
+}
+
+/// A delivery slot in words, on the Colombo clock: "Tomorrow 8–10 AM",
+/// "Today 11 AM–1 PM", "Sat 12 Oct 4–6 PM"; just the start ("Tomorrow
+/// 8 AM") when there is no end, or the end is not later the same day
+/// (owner, 2026-10-10). [now] defaults to the app clock.
+String formatSlotWindow(DateTime start, DateTime? end, {DateTime? now}) {
+  final at = now ?? OrderingHours.now();
+  final day = colomboDayLabel(start, at);
+  final startMin = colomboMinutesOfDay(start);
+  if (end == null || !end.isAfter(start) || colomboDaysBetween(start, end) != 0) {
+    return '$day ${formatClockTime(startMin)}';
+  }
+  return '$day ${formatTimeWindow(startMin, colomboMinutesOfDay(end))}';
+}
+
+/// "Scheduled: Tomorrow 8–10 AM" for a scheduled order; null when it is not
+/// scheduled (owner, 2026-10-10).
+String? scheduledLine(OrderModel o, {DateTime? now}) {
+  final start = o.scheduledFor;
+  if (start == null) return null;
+  return 'Scheduled: ${formatSlotWindow(start, o.scheduledUntil, now: now)}';
 }
 
 /// The one-line status copy under the status header (C3/C4). Assignment

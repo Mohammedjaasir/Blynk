@@ -23,7 +23,7 @@ import {
  * offer in Sinhala, Tamil and/or English and send it to a group of
  * customers. The backend is the real guard: it picks each customer's
  * language (or the fallback), skips customers who turned offers off, adds
- * the opt-out line and only sends 8 AM - 9 PM. This screen shows the cost
+ * the opt-out line and only sends inside the opening hours (owner, 2026-10-10). This screen shows the cost
  * while typing (a debounced estimate) and asks before sending.
  *
  * Which languages can be written comes from the backend (`estimate.languages`,
@@ -45,7 +45,8 @@ function offerErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case 'OUTSIDE_SENDING_HOURS':
-        return 'Offers can be sent from 8 AM to 9 PM only.';
+        // The window is the opening hours set in More > Opening hours (owner, 2026-10-10); the server names it.
+        return err.message || 'Offers can be sent during opening hours only.';
       case 'OFFER_NO_RECIPIENTS':
         return 'No customer in this group can get offers.';
       case 'OFFER_TEXT_MISSING': {
@@ -314,7 +315,7 @@ export function SmsOffers() {
       <button type="button" className="primary sms-send" disabled={!canSend} onClick={() => setConfirming(true)}>
         {sending ? <Spinner label="Sending offer" /> : 'Send offer'}
       </button>
-      <p className="page__note">Offers go out from 8 AM to 9 PM only. Each SMS ends with how to stop offers.</p>
+      <p className="page__note">Offers go out during opening hours only. Each SMS ends with how to stop offers.</p>
 
       {confirming && estimate ? (
         <ConfirmDialog

@@ -3070,3 +3070,669 @@ a.button {
   margin: 2px 0;
   font-weight: 800;
 }
+
+/* ------------------------------------------------ opening hours (owner, 2026-10-10)
+   More -> Opening hours: status line, switch, styled 15-minute lists,
+   per-day rows and steppers - the app's own look, no bare native pickers. */
+.store-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-weight: 800;
+}
+
+.store-status__dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.store-status--open {
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
+.store-status--closed {
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+
+.store-status--closed .store-status__dot {
+  background: var(--danger);
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(18, 21, 31, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.switch[aria-checked='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.switch[aria-checked='true'] .switch__thumb {
+  transform: translateX(20px);
+  background: var(--yellow);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* A select that reads as one of our inputs: no OS chrome, our chevron. */
+.pick-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%2312151f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+.pick-select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pick-row,
+.hours-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pick-row .pick-select,
+.hours-pair .field {
+  flex: 1 1 140px;
+}
+
+.hours-days {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hours-day {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.hours-day.is-closed {
+  background: var(--canvas);
+}
+
+.hours-day__name {
+  font-weight: 800;
+}
+
+.hours-day__times,
+.hours-day__closed {
+  grid-column: 1 / -1;
+}
+
+.hours-day__times {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hours-day__times .pick-select {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+.hours-day__closed {
+  color: var(--ink-3);
+  font-size: var(--text-meta);
+}
+
+.segmented--sm .segmented__item {
+  padding: 6px 12px;
+}
+
+.settings-stepper .qty-stepper__button {
+  width: 44px;
+  min-height: 44px;
+}
+
+.settings-stepper__value {
+  min-width: 96px;
+  padding: 0 10px;
+}
+
+.holiday-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Orders board: a scheduled order's slot, and the All / Scheduled filter. */
+.ticket__scheduled {
+  font-weight: 700;
+  color: var(--ink);
+  background: #fff3b8;
+  border-color: #e6c94a;
+}
+
+.orders-filter {
+  margin: 0 0 4px;
+}
+
+.order-detail__slot,
+.packing-slip__slot {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: inset 4px 0 0 var(--yellow);
+  font-weight: 800;
+}
+
+/* --------------------------------------------- sales dashboard (owner, 2026-10-10) */
+.dash-ranges {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.dash-ranges--scroll {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dash-ranges--scroll .dash-range {
+  flex: none;
+  padding: 8px 14px;
+}
+
+.dash-range {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  padding: 9px 4px;
+  font-weight: 800;
+  font-size: var(--text-meta);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dash-range.is-selected {
+  background: var(--ink);
+  color: #fff;
+}
+
+.dash-compare {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--text-meta);
+}
+
+.dash-figures {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.dash-today .dash-figures {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.dash-figure {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dash-figure__label {
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
+.dash-figure__value {
+  font-size: var(--text-title);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.dash-change {
+  font-size: var(--text-meta);
+  font-weight: 800;
+  width: fit-content;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.dash-change--up {
+  color: var(--green);
+  background: #e7f5ea;
+}
+
+.dash-change--down {
+  color: var(--danger);
+  background: #fbeceb;
+}
+
+.dash-change--flat {
+  color: var(--ink-3);
+  background: var(--canvas);
+}
+
+.dash-today__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dash-bars {
+  list-style: none;
+  margin: 0;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-bar {
+  display: grid;
+  grid-template-columns: 9.5em 1fr 2.5em;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-meta);
+}
+
+.dash-bar__label {
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
+.dash-bar__track,
+.dash-top__track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.dash-bar__fill,
+.dash-top__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ink-3);
+}
+
+.dash-bar__fill--delivered {
+  background: var(--green);
+}
+
+.dash-bar__fill--cancelled,
+.dash-bar__fill--failed {
+  background: var(--danger);
+}
+
+.dash-bar__fill--placed,
+.dash-bar__fill--packed,
+.dash-bar__fill--out_for_delivery {
+  background: #f59f00;
+}
+
+.dash-bar__value {
+  text-align: right;
+  font-weight: 800;
+}
+
+.dash-hours {
+  margin: 0;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.dash-hours svg {
+  width: 100%;
+  height: 110px;
+  display: block;
+}
+
+.dash-hours__axis {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.dash-hours__bar {
+  fill: var(--line-strong);
+}
+
+.dash-hours__bar.is-peak {
+  fill: var(--ink);
+}
+
+.dash-hours__tick {
+  font-size: 9px;
+  fill: var(--ink-3);
+}
+
+.dash-hours__caption {
+  margin-top: 6px;
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+}
+
+.dash-top__title {
+  margin: 0;
+  font-weight: 800;
+}
+
+.dash-top__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  counter-reset: top;
+}
+
+.dash-top__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  font-size: var(--text-meta);
+  counter-increment: top;
+}
+
+.dash-top__name::before {
+  content: counter(top) '. ';
+  color: var(--ink-3);
+  font-weight: 800;
+}
+
+.dash-top__name {
+  font-weight: 700;
+}
+
+.dash-top__value {
+  font-weight: 800;
+}
+
+.dash-top__track {
+  grid-column: 1 / -1;
+  height: 6px;
+}
+
+.dash-top__fill {
+  background: var(--yellow);
+}
+
+.dash-link-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--ink);
+  color: #fff;
+  text-decoration: none;
+}
+
+.dash-link-card__title {
+  font-weight: 800;
+}
+
+.dash-link-card__title::after {
+  content: ' →';
+  color: var(--yellow);
+}
+
+.dash-link-card__meta {
+  font-size: var(--text-meta);
+  color: #c9cdd6;
+}
+
+/* ---------------------------------------------- delivery heat map (owner, 2026-10-10) */
+.order-map {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.order-map__canvas {
+  height: 340px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+.order-map__legend {
+  margin: 0;
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.order-map__dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f59f00;
+}
+
+.order-map__ring {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px dashed var(--green);
+}
+
+.map-zones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.map-zone {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.map-zone--inside {
+  border-left-color: var(--green);
+}
+
+.map-zone--near_edge {
+  border-left-color: #f59f00;
+}
+
+.map-zone--outside {
+  border-left-color: var(--danger);
+}
+
+.map-zone__value {
+  font-size: var(--text-title);
+  font-weight: 800;
+}
+
+.map-zone__label {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.25;
+}
+
+.map-busiest__rank {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--yellow);
+  color: var(--ink);
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  font-size: var(--text-meta);
+}
+
+.map-busiest__figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+}
+
+.map-busiest__orders {
+  font-weight: 800;
+}
+
+/* ------------------------------------------------ purchase list (owner, 2026-10-10) */
+.purchase-rule {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  background: #fff8d6;
+  border: 1px solid #f3e19a;
+  font-size: var(--text-meta);
+  color: var(--ink);
+}
+
+.purchase-notice {
+  margin: 0;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--green);
+}
+
+.purchase-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.purchase-group__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.purchase-group__name {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 800;
+}
+
+.purchase-group__cost {
+  font-weight: 800;
+}
+
+.purchase-item__name {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.purchase-qty {
+  width: 48px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  text-align: center;
+  font-size: var(--text-body);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.purchase-whatsapp {
+  background: #25d366;
+  border-color: #1fb457;
+  color: #fff;
+  text-decoration: none;
+}
+
+.map-note {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+}

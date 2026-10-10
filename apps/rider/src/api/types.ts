@@ -79,6 +79,13 @@ export interface DeliverySummary {
   delivery_latitude?: number | string | null;
   delivery_longitude?: number | string | null;
   delivery_instructions: string | null;
+  /**
+   * Scheduled delivery slots (migration 036; owner, 2026-10-10): the slot
+   * start the customer picked, ISO; null for an ASAP order.
+   */
+  scheduled_for?: string | null;
+  /** The slot end, ISO; null for ASAP orders and for older scheduled orders (owner, 2026-10-10). */
+  scheduled_until?: string | null;
 }
 
 export interface DeliveryItem {

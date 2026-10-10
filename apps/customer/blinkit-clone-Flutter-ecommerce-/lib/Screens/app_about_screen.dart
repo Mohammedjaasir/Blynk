@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../Services/Providers/store_info.provider.dart';
 import '../Services/store_info.dart';
 import '../design/tokens.dart';
 
@@ -55,11 +56,12 @@ class _AppAboutScreenState extends State<AppAboutScreen> {
                 },
               ),
               const SizedBox(height: BlynkSpace.s24),
-              const Text(
+              // The live hours Ops/Admin set (owner, 2026-10-10).
+              Text(
                 'Blynk delivers freshly sourced groceries and quality essentials in '
                 '${StoreInfo.hubName}. You place the order in the app and pay '
                 'in cash when it arrives. Deliveries go out '
-                '${StoreInfo.deliveryHoursLabel}.',
+                '${watchHoursLabel(context)}.',
                 style: BlynkText.body,
               ),
             ],

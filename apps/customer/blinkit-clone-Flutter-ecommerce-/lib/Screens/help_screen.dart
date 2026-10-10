@@ -4,6 +4,9 @@ import 'package:flutter/services.dart';
 import '../design/tokens.dart';
 import '../app_responsive.dart';
 import '../Services/open_link.dart';
+import 'package:provider/provider.dart';
+
+import '../Services/Providers/store_info.provider.dart';
 import '../Services/store_info.dart';
 import '../UI/Widgets/Atoms/list_tile.dart';
 import 'feedback_screen.dart';
@@ -31,8 +34,8 @@ class HelpScreen extends StatelessWidget {
     _Faq(
       question: 'What are your delivery hours?',
       answer:
-          'We take orders and deliver ${StoreInfo.deliveryHoursLabel}, every '
-          "day. Orders can't be placed outside those hours.",
+          'We take orders and deliver $_hoursToken. '
+          "Orders can't be placed outside those hours.",
     ),
     _Faq(
       question: 'How much is delivery?',
@@ -58,6 +61,24 @@ class HelpScreen extends StatelessWidget {
     ),
   ];
 
+  /// Stands for the live week of hours in an answer (owner, 2026-10-10).
+  static const String _hoursToken = '{hours}';
+
+  /// The week as Ops/Admin set it ("8 AM – 9 PM, every day", or runs of
+  /// days), with the upcoming holidays; the fallback hours "every day" until
+  /// GET /store answers (owner, 2026-10-10).
+  static String hoursAnswerPart(StoreInfoProvider? store, String hoursLabel) {
+    final status = store?.status;
+    final week = status?.weekSentence ?? '$hoursLabel, every day';
+    final holidays = status?.upcomingHolidays ?? const [];
+    if (holidays.isEmpty) return week;
+    final days = holidays
+        .take(3)
+        .map((h) => h.reason == null ? h.dateLabel : '${h.dateLabel} (${h.reason})')
+        .join(', ');
+    return '$week. Closed on $days';
+  }
+
   /// Opens the dialler or WhatsApp; where that is not possible the number is
   /// copied and shown instead.
   static void _contact(BuildContext context, String url) {
@@ -71,6 +92,9 @@ class HelpScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final responsive = Responsive.of(context);
+    final store = context.watch<StoreInfoProvider?>();
+    final hoursLabel = watchHoursLabel(context);
+    final hours = hoursAnswerPart(store, hoursLabel);
 
     return Scaffold(
       backgroundColor: BlynkColors.paper,
@@ -119,7 +143,9 @@ class HelpScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: BlynkSpace.s24),
-              ..._faqs.map((faq) => _FaqTile(faq: faq)),
+              ..._faqs.map((faq) => _FaqTile(
+                    faq: _Faq(question: faq.question, answer: faq.answer.replaceAll(_hoursToken, hours)),
+                  )),
               const SizedBox(height: BlynkSpace.s8),
               customListTile(
                 icon: Icons.call_outlined,
@@ -146,7 +172,8 @@ class HelpScreen extends StatelessWidget {
               ),
               const SizedBox(height: BlynkSpace.s8),
               Text(
-                'Deliveries go out ${StoreInfo.deliveryHoursLabel}.',
+                // The live hours Ops/Admin set (owner, 2026-10-10).
+                'Deliveries go out $hoursLabel.',
                 style: BlynkText.body.copyWith(color: BlynkColors.ink2),
               ),
               const SizedBox(height: BlynkSpace.s8),

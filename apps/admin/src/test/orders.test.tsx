@@ -6,6 +6,7 @@ import { AppRoutes } from '../App';
 import { AuthProvider } from '../auth/AuthContext';
 import { ToastProvider } from '../components/ui';
 import { tokenStore } from '../api/client';
+import { colomboToIso, upcomingDateKeys } from '../lib/schedule';
 
 /**
  * The staff Orders board (dispatch plan Task 10) against a fake Blynk API
@@ -275,7 +276,50 @@ describe('Orders board', () => {
 
   it('shows the documented "Scheduled" label for an after-hours order', async () => {
     renderBoard(ADMIN, [boardOrder({ scheduled_for: '2026-09-20T02:30:00.000Z' })]);
-    expect(await lane('To pack')).toHaveTextContent('Scheduled 08:00');
+    // An older order without a slot end shows just the start (owner, 2026-10-10).
+    expect(await lane('To pack')).toHaveTextContent('Scheduled: Sun 20 Sep 8 AM');
+  });
+
+  it('labels a slot "Scheduled: Tomorrow 8–10 AM" on the row and in the order panel (owner, 2026-10-10)', async () => {
+    const user = userEvent.setup();
+    const tomorrow = upcomingDateKeys(2)[1]!;
+    const o = boardOrder({ scheduled_for: colomboToIso(tomorrow, '08:00'), scheduled_until: colomboToIso(tomorrow, '10:00') });
+    renderBoard(ADMIN, [o], { 'GET /admin/orders/:id': () => ok({ order: orderDetail(o) }) });
+    expect(await lane('To pack')).toHaveTextContent('Scheduled: Tomorrow 8–10 AM');
+    await user.click(await screen.findByRole('button', { name: /^Open order/ }));
+    const panel = await screen.findByRole('complementary', { name: /Order #/ });
+    expect(panel).toHaveTextContent('Scheduled: Tomorrow 8–10 AM');
+  });
+
+  it('the Scheduled filter shows only booked orders, soonest slot first; All keeps oldest first (owner, 2026-10-10)', async () => {
+    const user = userEvent.setup();
+    const [today, tomorrow] = upcomingDateKeys(2) as [string, string];
+    const asap = boardOrder({ delivery_recipient_name: 'Asap Customer' });
+    const later = boardOrder({
+      delivery_recipient_name: 'Later Slot',
+      scheduled_for: colomboToIso(tomorrow, '16:00'),
+      scheduled_until: colomboToIso(tomorrow, '18:00'),
+    });
+    const sooner = boardOrder({
+      delivery_recipient_name: 'Sooner Slot',
+      scheduled_for: colomboToIso(today, '23:00'),
+      scheduled_until: colomboToIso(tomorrow, '00:00'),
+    });
+    renderBoard(ADMIN, [asap, later, sooner]);
+    const toPack = await lane('To pack');
+    const names = () => within(toPack).getAllByRole('listitem').map((li) => li.querySelector('.ticket__who')?.textContent);
+    expect(names()).toEqual(['Asap Customer', 'Later Slot', 'Sooner Slot']);
+
+    await user.click(screen.getByRole('button', { name: 'Scheduled (2)' }));
+    expect(names()).toEqual(['Sooner Slot', 'Later Slot']);
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    expect(names()).toEqual(['Asap Customer', 'Later Slot', 'Sooner Slot']);
+  });
+
+  it('offers no Scheduled filter when nothing is booked', async () => {
+    renderBoard(ADMIN, [boardOrder()]);
+    await lane('To pack');
+    expect(screen.queryByRole('button', { name: /^Scheduled/ })).toBeNull();
   });
 
   it('the order panel shows items, the customer and history - but no costs or suppliers', async () => {

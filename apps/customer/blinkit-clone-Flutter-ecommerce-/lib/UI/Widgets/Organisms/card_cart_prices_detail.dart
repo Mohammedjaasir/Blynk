@@ -8,6 +8,7 @@ import '../../../Services/Providers/store_info.provider.dart';
 import '../../../app_design.dart';
 import '../../../Services/store_info.dart';
 import '../../../Models/order_format.dart';
+import '../../../Services/rewards_estimates.dart';
 import '../Atoms/money_text.dart';
 import '../../../design/tokens.dart';
 
@@ -87,14 +88,25 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
     // The gift and a coupon never stack (owner, 2026-10-09). A previewed
     // coupon carries the server's own choice; without one, the gift is
     // estimated from checkout-info's percent.
-    final birthdayWins = coupon != null && coupon.birthdayWins;
-    final discount = coupon == null || birthdayWins ? 0.0 : coupon.discountAmount;
-    final birthdayGift = birthdayWins
-        ? coupon.birthdayDiscountAmount
-        : coupon == null && birthday != null
-            ? birthday.estimateOn(subtotal)
-            : 0.0;
-    final total = cartEstimateTotal(cart, deliveryFee, discount: discount + birthdayGift);
+    // A referral reward never stacks either (owner, 2026-10-10): the server
+    // uses the larger single discount, so the estimate takes the larger.
+    final store = context.watch<StoreInfoProvider?>();
+    final estimate = estimateDiscounts(
+      subtotal: subtotal,
+      deliveryFee: deliveryFee,
+      coupon: coupon,
+      birthday: birthday,
+      referral: widget.showBirthday ? store?.referralReward : null,
+    );
+    final discount = estimate.coupon;
+    final birthdayGift = estimate.birthday;
+    final referralGift = estimate.referral;
+    // Blynk Points (owner, 2026-10-10): checkout's "Use points" switch.
+    final usePoints = widget.showBirthday && (context.watch<OrderProvider?>()?.usePoints ?? false);
+    final pointsOff = usePoints
+        ? estimatePointsRedeem(store?.checkoutPoints, subtotal + deliveryFee - estimate.total).value
+        : 0.0;
+    final total = cartEstimateTotal(cart, deliveryFee, discount: discount + birthdayGift + referralGift + pointsOff);
 
     return Container(
       decoration: appCardDecoration(),
@@ -195,6 +207,14 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
               ],
             ),
           ],
+          if (referralGift > 0) ...[
+            const SizedBox(height: BlynkSpace.s8),
+            _DiscountRow(key: const Key('summary-referral'), label: 'Referral reward', amount: referralGift),
+          ],
+          if (pointsOff > 0) ...[
+            const SizedBox(height: BlynkSpace.s8),
+            _DiscountRow(key: const Key('summary-points'), label: 'Blynk Points (estimate)', amount: pointsOff),
+          ],
           const Padding(
             padding: EdgeInsets.symmetric(vertical: BlynkSpace.s12),
             child: Divider(height: 1, color: BlynkColors.line),
@@ -230,6 +250,28 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
 String freeDeliveryNote(FreeDeliveryOffer offer) {
   final plural = offer.count == 1 ? 'delivery' : 'deliveries';
   return 'Free delivery — ${offer.remaining} of ${offer.count} free $plural left.';
+}
+
+/// A green "−LKR 150" line (owner, 2026-10-10).
+class _DiscountRow extends StatelessWidget {
+  const _DiscountRow({super.key, required this.label, required this.amount});
+
+  final String label;
+  final double amount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: BlynkText.body.copyWith(color: BlynkColors.positiveInk))),
+        Semantics(
+          label: 'minus ${formatLkr(amount)}',
+          excludeSemantics: true,
+          child: Text('−${formatLkr(amount)}', style: BlynkType.price.copyWith(color: BlynkColors.positiveInk)),
+        ),
+      ],
+    );
+  }
 }
 
 class _SummaryRow extends StatelessWidget {

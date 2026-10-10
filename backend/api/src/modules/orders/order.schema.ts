@@ -24,12 +24,27 @@ export const createOrderSchema = z.object({
     .optional(),
   customer_notes: z.string().trim().max(500).nullable().optional(),
   idempotency_key: z.string().trim().max(128).optional(),
+  /**
+   * Migration 037 (owner, 2026-10-10): "Use points" at checkout. The server
+   * decides how many (Blynk Points rules); older apps never send it.
+   */
+  use_points: z.boolean({ invalid_type_error: 'use_points must be true or false' }).optional(),
   /** Migration 018: re-validated inside the order transaction; any case, stored upper-case. */
   coupon_code: z
     .string({ invalid_type_error: 'coupon_code must be a string' })
     .trim()
     .transform((v) => v.toUpperCase())
     .pipe(z.string().regex(/^[A-Z0-9]{4,20}$/, 'Coupon codes are 4-20 letters or digits'))
+    .nullable()
+    .optional(),
+  /**
+   * Scheduled delivery (owner, 2026-10-10): the start of a slot from GET
+   * /orders/slots. Omitted = as soon as possible. Re-checked (offered, not
+   * full) under the slot lock when the order is created.
+   */
+  delivery_slot_start: z
+    .string({ invalid_type_error: 'delivery_slot_start must be a date and time' })
+    .datetime({ offset: true, message: 'delivery_slot_start must be a date and time' })
     .nullable()
     .optional(),
 }).refine((v) => v.items.length + (v.combos?.length ?? 0) > 0, {

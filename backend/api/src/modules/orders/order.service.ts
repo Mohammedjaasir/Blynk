@@ -2,7 +2,9 @@ import { orderRepository, CreateOrderData } from './order.repository.js';
 import { CreateOrderInput, OrderQueryInput } from './order.schema.js';
 import { calculateSellingPrice } from '../pricing/index.js';
 import { assertWithinServiceZone } from './delivery-zone.js';
-import { calculateScheduledDeliveryTime, isWithinOrderingHours, orderingClock } from '../../utils/time.js';
+import { orderingClock } from '../../utils/time.js';
+import { buildSlots, storeClosedMessage, storeStatusAt, STORE_TIMEZONE } from '../../utils/store-hours.js';
+import { storeSchedule } from '../configuration/store-schedule.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { OrderStatus } from '../../database/types.js';
 import { logger } from '../../utils/logger.js';
@@ -19,6 +21,8 @@ import { applyBirthday, birthdayBeatsCoupon, birthdayOfferStatus, publicBirthday
 import { freeDeliveryStatus } from './free-delivery.js';
 import { effectivePrice } from '../catalog/catalog.offers.js';
 import { looseQuantities, priceComboLines } from '../catalog/catalog.combos.js';
+// Refer a friend and Blynk Points (owner, 2026-10-10; migration 037).
+import { checkoutRewardsInfo, previewReferral } from '../loyalty/order-rewards.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -204,17 +208,44 @@ export class OrderService {
       return { order: sanitizeCustomerOrder(existingOrder), is_idempotent_replay: true };
     }
 
-    // 1b. Ordering hours: orders are taken 8 AM - 9 PM (Asia/Colombo) only.
-    // After the replay check, so a retried order that was accepted in time
-    // still answers with that order instead of a refusal.
+    // 1b. Store timing (owner, 2026-10-10: set by Ops and Admin - opening
+    // hours, "close the store now", holidays, delivery slots). After the
+    // replay check, so a retried order that was accepted in time still
+    // answers with that order instead of a refusal.
     const now = orderingClock.now();
-    if (!isWithinOrderingHours(now)) {
-      throw new AppError(
-        'Blynk takes orders from 8 AM to 9 PM. Please order again after 8 AM.',
-        422,
-        'STORE_CLOSED',
-        { opens_at: '08:00', closes_at: '21:00', timezone: 'Asia/Colombo' }
-      );
+    const schedule = await storeSchedule.read();
+    const status = storeStatusAt(schedule, now);
+    let slot: { start: Date; until: Date; label: string } | null = null;
+    if (input.delivery_slot_start) {
+      // A chosen slot must be one GET /orders/slots offers right now (slots
+      // on, an open day, past the lead time, not while closed by staff).
+      // Capacity is re-checked under the slot lock in the transaction.
+      const wanted = Date.parse(input.delivery_slot_start);
+      const offered = schedule.slots.enabled ? buildSlots(schedule, now).find((s) => Date.parse(s.start) === wanted) : undefined;
+      if (!offered) {
+        throw new AppError(
+          schedule.slots.enabled
+            ? 'That delivery slot is no longer available. Please pick another slot.'
+            : 'Delivery slots are not available right now.',
+          422,
+          'SLOT_UNAVAILABLE',
+          { slots_enabled: schedule.slots.enabled }
+        );
+      }
+      slot = { start: new Date(offered.start), until: new Date(offered.end), label: offered.label };
+    } else if (!status.is_open_now) {
+      // As soon as possible needs the store open; with slots on, a slot can
+      // still be booked while closed (e.g. tonight for tomorrow morning).
+      throw new AppError(storeClosedMessage(status, now, schedule.slots.enabled), 422, 'STORE_CLOSED', {
+        opens_at: status.today_hours?.open ?? null,
+        closes_at: status.today_hours?.close ?? null,
+        timezone: STORE_TIMEZONE,
+        closed_kind: status.closed_kind,
+        closed_reason: status.closed_reason,
+        reopens_at: status.reopens_at,
+        next_open_at: status.next_open_at,
+        slots_enabled: schedule.slots.enabled,
+      });
     }
 
     // 2. Address verification (ownership + active)
@@ -226,9 +257,8 @@ export class OrderService {
     // 3. Geofence verification (4.00 km Haversine from Dharga Town hub)
     const store = await assertWithinServiceZone(Number(address.latitude), Number(address.longitude));
 
-    // 4. Operating window: inside ordering hours this is null (immediate);
-    // kept so the column stays meaningful if night ordering ever returns.
-    const scheduledFor = calculateScheduledDeliveryTime(now);
+    // 4. Scheduled delivery: the slot's start, or null for as soon as possible.
+    const scheduledFor = slot?.start ?? null;
 
     // 5. Products & Authoritative Pricing
     const { items: orderItemsData, combos: orderCombos, subtotal: subtotalAmount } = await priceCart(input.items, input.combos ?? []);
@@ -255,7 +285,9 @@ export class OrderService {
       total_amount: totalAmount,
       coupon_code: settings.coupons_enabled ? input.coupon_code ?? null : null,
       birthday_offer: birthdaySetting.enabled ? { setting: birthdaySetting, now } : null,
+      use_points: input.use_points === true,
       scheduled_for: scheduledFor,
+      delivery_slot: slot ? { until: slot.until, max_orders: schedule.slots.max_orders_per_slot, label: slot.label } : null,
       delivery_recipient_name: address.recipient_name,
       delivery_recipient_phone: address.recipient_phone,
       delivery_alternate_phone: address.alternate_phone ?? null,
@@ -301,7 +333,12 @@ export class OrderService {
       ? applyBirthday(await birthdayOfferStatus(db, customerId, birthdaySetting, orderingClock.now()), subtotal)
       : null;
     const birthdayWins = birthdayBeatsCoupon(birthday, applied.discount_amount);
-    const charged = birthdayWins ? birthday!.discount_amount : applied.discount_amount;
+    const couponOrGift = birthdayWins ? birthday!.discount_amount : applied.discount_amount;
+    // Referral reward (owner, 2026-10-10): no stacking either - only when
+    // strictly larger than the coupon/gift. Points are not in this preview.
+    const referral = await previewReferral(db, { customerId, subtotal, deliveryFee });
+    const referralWins = !!referral && referral.discount_amount > couponOrGift;
+    const charged = referralWins ? referral!.discount_amount : couponOrGift;
     return {
       code: applied.code,
       discount_type: applied.discount_type,
@@ -310,7 +347,8 @@ export class OrderService {
       delivery_fee: deliveryFee,
       discount_amount: applied.discount_amount,
       birthday_discount_amount: birthday?.discount_amount ?? 0,
-      applied_discount: birthdayWins ? ('BIRTHDAY' as const) : ('COUPON' as const),
+      referral_discount_amount: referral?.discount_amount ?? 0,
+      applied_discount: referralWins ? ('REFERRAL' as const) : birthdayWins ? ('BIRTHDAY' as const) : ('COUPON' as const),
       total: Number((subtotal + deliveryFee - charged).toFixed(2)),
     };
   }
@@ -335,6 +373,9 @@ export class OrderService {
       free_delivery: free,
       // Owner, 2026-10-09: eligible -> the next order gets `percent` off its items.
       birthday_offer: publicBirthdayStatus(birthday),
+      // Owner, 2026-10-10: referral_reward (applied automatically when it is
+      // the larger discount) and points (balance + the program's numbers).
+      ...(await checkoutRewardsInfo(db, customerId, free.applies ? 0 : standardFee)),
     };
   }
 

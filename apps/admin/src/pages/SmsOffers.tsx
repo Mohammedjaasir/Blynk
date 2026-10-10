@@ -23,7 +23,7 @@ import {
  * Offer SMS to registered customers (backend migration 027). Each customer
  * gets the text in the language they picked in the app, or the fallback;
  * customers who turned "Offers by SMS" off get nothing. The API decides the
- * audience, appends the opt-out line and enforces the 8 AM - 9 PM window.
+ * audience, appends the opt-out line and enforces the sending window (the opening hours set in Settings, owner 2026-10-10).
  *
  * Which languages offers are written in is a backend setting
  * (SMS_OFFER_LANGUAGES, English only at launch) that each estimate reports;
@@ -124,8 +124,8 @@ export function SmsOffers() {
         title="SMS offers"
         description={
           multilingual
-            ? 'Each customer gets the offer in the language they picked in the app. Sent 8 AM to 9 PM only.'
-            : `Sent in ${LANGUAGE_LABEL[enabled[0] ?? 'en']} to every customer who gets offers. 8 AM to 9 PM only.`
+            ? 'Each customer gets the offer in the language they picked in the app. Sent during opening hours only.'
+            : `Sent in ${LANGUAGE_LABEL[enabled[0] ?? 'en']} to every customer who gets offers. Sent during opening hours only.`
         }
       />
 

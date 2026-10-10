@@ -136,7 +136,7 @@ function BirthdayOfferCard() {
             <input type="checkbox" checked={smsEnabled} onChange={(e) => setSmsEnabled(e.target.checked)} />
             <span>
               <strong>Birthday SMS</strong>
-              <em>Sent on the birthday from 8 AM, once a year, only while the offer is on and the customer gets offers by SMS.</em>
+              <em>Sent on the birthday from opening time, once a year, only while the offer is on and the customer gets offers by SMS.</em>
             </span>
           </label>
           <div className="field sms-text">

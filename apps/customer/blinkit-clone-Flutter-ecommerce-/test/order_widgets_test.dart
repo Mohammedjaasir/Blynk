@@ -59,9 +59,20 @@ void main() {
 
       expect(find.byKey(const Key('order-schedule-notice')), findsOneWidget);
       expect(
-        find.text('Scheduled — delivery ${formatScheduled(DateTime.parse('2026-09-20T08:00:00.000Z'))}'),
+        find.text('Scheduled: Sun 20 Sep 1:30 PM'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('a slot order shows its window: "Scheduled: Tomorrow 8–10 AM" (owner, 2026-10-10)', (tester) async {
+      // The pinned clock is Tue 6 Oct, noon in Colombo; 02:30 UTC is 8 AM there.
+      final order = OrderModel.fromJson({
+        ...orderJson(status: 'PLACED', scheduledFor: '2026-10-07T02:30:00.000Z'),
+        'scheduled_until': '2026-10-07T04:30:00.000Z',
+      });
+      await _pump(tester, OrderStatusHeader(order: order));
+
+      expect(find.text('Scheduled: Tomorrow 8–10 AM'), findsOneWidget);
     });
 
     testWidgets('schedule notice is absent once the order is out for delivery', (tester) async {

@@ -33,7 +33,9 @@ class OrderBillCard extends StatelessWidget {
           _row('Delivery fee', formatLkr(order.deliveryFee)),
           // Coupon (backend migration 018) or the birthday gift (owner,
           // 2026-10-09; never both): the total already has it taken off.
-          if (order.discountAmount > 0) ...[
+          // Referral reward and points (owner, 2026-10-10) are their own
+          // lines below, so this one is only the coupon / gift part.
+          if (order.couponOrGiftDiscount > 0) ...[
             const SizedBox(height: BlynkSpace.s8),
             Row(
               key: const Key('order-bill-discount'),
@@ -51,10 +53,22 @@ class OrderBillCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '−${formatLkr(order.hasBirthdayGift ? order.birthdayDiscountAmount : order.discountAmount)}',
+                  '−${formatLkr(order.hasBirthdayGift ? order.birthdayDiscountAmount : order.couponOrGiftDiscount)}',
                   style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
                 ),
               ],
+            ),
+          ],
+          if (order.referralDiscountAmount > 0) ...[
+            const SizedBox(height: BlynkSpace.s8),
+            _discountRow(const Key('order-bill-referral'), 'Referral reward', order.referralDiscountAmount),
+          ],
+          if (order.pointsDiscountAmount > 0) ...[
+            const SizedBox(height: BlynkSpace.s8),
+            _discountRow(
+              const Key('order-bill-points'),
+              order.pointsRedeemed > 0 ? 'Blynk Points (${order.pointsRedeemed} used)' : 'Blynk Points',
+              order.pointsDiscountAmount,
             ),
           ],
           const SizedBox(height: BlynkSpace.s16),
@@ -103,6 +117,24 @@ class OrderBillCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// A green "−LKR 150" line (owner, 2026-10-10).
+  Widget _discountRow(Key key, String label, double amount) {
+    return Row(
+      key: key,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: BlynkText.body.copyWith(color: BlynkColors.positiveInk),
+          ),
+        ),
+        Text('−${formatLkr(amount)}', style: BlynkText.body.copyWith(color: BlynkColors.positiveInk)),
+      ],
     );
   }
 

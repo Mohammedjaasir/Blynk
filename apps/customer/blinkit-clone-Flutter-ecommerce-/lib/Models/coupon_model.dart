@@ -15,6 +15,7 @@ class CouponPreview {
     this.description,
     this.birthdayDiscountAmount = 0,
     this.appliedDiscount = 'COUPON',
+    this.referralDiscountAmount = 0,
   });
 
   final String code;
@@ -36,10 +37,19 @@ class CouponPreview {
   /// stays for another order that week).
   final String appliedDiscount;
 
+  /// What a referral reward would take off this cart instead (owner,
+  /// 2026-10-10); 0 when the customer has none. Like the birthday gift it
+  /// never stacks: the server uses the larger single discount, and then
+  /// [appliedDiscount] is 'REFERRAL'.
+  final double referralDiscountAmount;
+
   bool get isFreeDelivery => discountType == 'FREE_DELIVERY';
 
   /// The birthday gift beats this code on this cart, so the code is not used.
   bool get birthdayWins => appliedDiscount == 'BIRTHDAY' && birthdayDiscountAmount > 0;
+
+  /// A referral reward beats this code on this cart (owner, 2026-10-10).
+  bool get referralWins => appliedDiscount == 'REFERRAL' && referralDiscountAmount > 0;
 
   static double _num(Object? v) => double.tryParse('${v ?? 0}') ?? 0.0;
 
@@ -60,7 +70,8 @@ class CouponPreview {
       discountAmount: _num(json['discount_amount']),
       total: _num(field('total')),
       birthdayDiscountAmount: _num(field('birthday_discount_amount')),
-      appliedDiscount: applied == 'BIRTHDAY' ? 'BIRTHDAY' : 'COUPON',
+      appliedDiscount: applied == 'BIRTHDAY' || applied == 'REFERRAL' ? applied! : 'COUPON',
+      referralDiscountAmount: _num(field('referral_discount_amount')),
     );
   }
 }

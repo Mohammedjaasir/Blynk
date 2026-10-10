@@ -34,6 +34,11 @@ import type {
   DeliveryFeeSetting,
   CheckoutSettings,
   BirthdayOfferSetting,
+  DeliverySlotSettings,
+  StoreClosureInput,
+  StoreHoliday,
+  StoreHoursInput,
+  StoreSchedule,
   BirthdayOfferInput,
   BirthdaysResult,
   DeliverySummary,
@@ -1044,6 +1049,19 @@ export const settings = {
   /** Customers whose birthday week is now or within `days` days. */
   birthdays: (days = 7) =>
     apiRequest<BirthdaysResult>('/admin/birthdays', { query: { days: String(days) } }),
+  /** Opening hours, close-now, holidays and delivery slots - one read, and
+   * each PATCH returns the whole schedule again (owner, 2026-10-10). */
+  storeSchedule: {
+    get: () => apiRequest<StoreSchedule>('/admin/settings/store-schedule'),
+    updateHours: (body: StoreHoursInput) =>
+      apiRequest<StoreSchedule>('/admin/settings/store-hours', { method: 'PATCH', body: { ...body } }),
+    updateClosure: (body: StoreClosureInput) =>
+      apiRequest<StoreSchedule>('/admin/settings/store-closure', { method: 'PATCH', body: { ...body } }),
+    updateHolidays: (holidays: StoreHoliday[]) =>
+      apiRequest<StoreSchedule>('/admin/settings/store-holidays', { method: 'PATCH', body: { holidays } }),
+    updateDeliverySlots: (body: Partial<DeliverySlotSettings>) =>
+      apiRequest<StoreSchedule>('/admin/settings/delivery-slots', { method: 'PATCH', body: { ...body } }),
+  },
 };
 
 // ------------------------------------------------------------------ staff
@@ -1086,7 +1104,7 @@ export const cash = {
 /**
  * Offer SMS to registered customers (More -> SMS offers). ADMIN and
  * OPERATIONS. The backend picks each customer's language, skips those who
- * turned offers off, appends the opt-out line and enforces 8 AM - 9 PM.
+ * turned offers off, appends the opt-out line and enforces the opening hours (owner, 2026-10-10).
  */
 export const smsOffers = {
   list: () => apiRequest<{ offers: SmsOffer[] }>('/admin/sms-offers').then((d) => d.offers),

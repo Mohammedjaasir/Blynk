@@ -1,4 +1,11 @@
-import { DateTime } from 'luxon';
+import {
+  DEFAULT_SCHEDULE,
+  DEFAULT_WEEKLY_HOURS,
+  STORE_TIMEZONE,
+  nextOpenFrom,
+  withinWeeklyHours,
+  type WeeklyHours,
+} from './store-hours.js';
 
 export interface OperatingHours {
   startHour: number; // e.g. 8 (8:00 AM)
@@ -6,10 +13,16 @@ export interface OperatingHours {
   timezone: string;  // 'Asia/Colombo'
 }
 
+/**
+ * The hours the store had before staff could set them, and still the default
+ * when no 'store_hours' row is stored. The live hours are read through
+ * modules/configuration/store-schedule.ts storeSchedule.read() (owner,
+ * 2026-10-10); this constant is only the fallback.
+ */
 export const DEFAULT_OPERATING_HOURS: OperatingHours = {
   startHour: 8,
   endHour: 21,
-  timezone: 'Asia/Colombo',
+  timezone: STORE_TIMEZONE,
 };
 
 /**
@@ -20,48 +33,29 @@ export const DEFAULT_OPERATING_HOURS: OperatingHours = {
 export const orderingClock = { now: (): Date => new Date() };
 
 /**
- * Whether customers may place an order at this moment: orders are taken only
- * inside the operating window, 08:00 - 21:00 Asia/Colombo (owner, 2026-10-06;
- * before that, night orders were accepted and scheduled for 8 AM).
+ * Whether `at` falls inside the weekly opening hours (owner, 2026-10-06: orders
+ * only inside the window; owner, 2026-10-10: the window is set by Ops and
+ * Admin). Callers pass the stored hours (storeSchedule.read()); without them
+ * the default 08:00 - 21:00 applies. Holidays and "close now" are decided by
+ * storeStatusAt (utils/store-hours.ts).
  */
 export function isWithinOrderingHours(
   at: Date = orderingClock.now(),
-  config: OperatingHours = DEFAULT_OPERATING_HOURS
+  hours: WeeklyHours = DEFAULT_WEEKLY_HOURS
 ): boolean {
-  const hour = DateTime.fromJSDate(at).setZone(config.timezone).hour;
-  return hour >= config.startHour && hour < config.endHour;
+  return withinWeeklyHours(hours, at);
 }
 
 /**
- * Evaluates whether an order placed at a given timestamp falls within
- * the delivery dispatch operating window (08:00 - 21:00 in Asia/Colombo).
- *
- * If outside operating hours, returns the exact Date when dispatch should begin
- * (8:00 AM today or 8:00 AM the next morning) to populate orders.scheduled_for.
- *
- * If within operating hours, returns null (immediate processing).
+ * When an order placed at `placedAtUtc` could first be dispatched: null inside
+ * the opening hours (immediate), else the next opening time. Order placement
+ * now uses the customer's chosen delivery slot instead (owner, 2026-10-10);
+ * this stays for callers that only need the next opening.
  */
 export function calculateScheduledDeliveryTime(
   placedAtUtc: Date = new Date(),
-  config: OperatingHours = DEFAULT_OPERATING_HOURS
+  hours: WeeklyHours = DEFAULT_WEEKLY_HOURS
 ): Date | null {
-  const localTime = DateTime.fromJSDate(placedAtUtc).setZone(config.timezone);
-
-  // If inside the operating window [startHour, endHour), it's immediate
-  if (localTime.hour >= config.startHour && localTime.hour < config.endHour) {
-    return null;
-  }
-
-  // If placed before 8:00 AM on the current day, schedule for 8:00 AM today
-  if (localTime.hour < config.startHour) {
-    return localTime
-      .set({ hour: config.startHour, minute: 0, second: 0, millisecond: 0 })
-      .toJSDate();
-  }
-
-  // If placed at or after 9:00 PM, schedule for 8:00 AM the next day
-  return localTime
-    .plus({ days: 1 })
-    .set({ hour: config.startHour, minute: 0, second: 0, millisecond: 0 })
-    .toJSDate();
+  if (withinWeeklyHours(hours, placedAtUtc)) return null;
+  return nextOpenFrom({ ...DEFAULT_SCHEDULE, hours }, placedAtUtc);
 }

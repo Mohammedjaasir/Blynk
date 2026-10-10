@@ -24,6 +24,7 @@ import {
   type FarBatchRefusal,
   type OrderAction,
 } from '../lib/orders';
+import { scheduledLabel } from '../lib/slots';
 
 const STATUS_FOR: Partial<Record<OrderAction, string>> = {
   pack: 'PACKED',
@@ -207,6 +208,13 @@ export function OrderDetail() {
           Print packing slip
         </Link>
       </header>
+
+      {/* The delivery slot the customer booked (owner, 2026-10-10). */}
+      {detail.scheduled_for ? (
+        <p className="order-detail__slot" data-testid="order-slot">
+          {scheduledLabel(detail)}
+        </p>
+      ) : null}
 
       {notice ? (
         <p className="field__error" role="status">

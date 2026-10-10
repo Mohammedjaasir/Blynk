@@ -5,6 +5,7 @@ import { CATALOGUE, ITEM_WORK_STATES, packingBlockers } from '../catalogue.js';
 import { enqueueCustomerSms } from '../notify.js';
 import { recomputeOrderDiscount } from '../../../coupons/coupon.service.js';
 import { recomputeBirthdayDiscount } from '../../../birthday/birthday.offer.js';
+import { recomputeOrderRewards } from '../../../loyalty/order-rewards.js';
 import { setOrderStatus, updateOrderFields } from '../status-writer.js';
 import type { ActionImpl, Actor, DeliveryRow, ItemRow, LockedState, OrderRow, Trx } from '../types.js';
 import { dispatch, invalidTransition } from './shared.js';
@@ -60,10 +61,14 @@ export const resolveItem: ActionImpl<OrderRow> = {
         : order.coupon_code
           ? await recomputeOrderDiscount(trx, order.id, subtotal, Number(order.delivery_fee))
           : Number(order.discount_amount ?? 0);
-    const total = Number((subtotal + Number(order.delivery_fee) - discount).toFixed(2));
+    // Referral reward and Blynk Points (owner, 2026-10-10; migration 037):
+    // the reward follows the new subtotal; points never pay more than is due.
+    const rewards = await recomputeOrderRewards(trx, order, subtotal, discount);
+    const total = Number((subtotal + Number(order.delivery_fee) - rewards.discount_amount).toFixed(2));
     const fields = {
       subtotal_amount: subtotal,
-      discount_amount: discount,
+      discount_amount: rewards.discount_amount,
+      ...rewards.fields,
       ...(birthday !== null ? { birthday_discount_amount: birthday } : {}),
       total_amount: total,
     };

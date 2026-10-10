@@ -104,7 +104,8 @@ export function smsOfferErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case 'OUTSIDE_SENDING_HOURS':
-        return 'Offers can be sent from 8 AM to 9 PM only.';
+        // The window is the opening hours Ops and Admin set (owner, 2026-10-10); the server names it.
+        return err.message || 'Offers can be sent during opening hours only.';
       case 'OFFER_TEXT_MISSING': {
         const missing = (err.details as { missing_languages?: SmsLanguage[] } | undefined)?.missing_languages ?? [];
         return missing.length ? `Write the ${languageList(missing)} text too.` : err.message;

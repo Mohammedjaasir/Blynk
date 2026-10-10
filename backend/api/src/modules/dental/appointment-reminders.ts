@@ -375,7 +375,7 @@ export class AppointmentReminderJob {
         logger.error({ err }, 'Rating prompt pass failed');
       }
       // Birthday SMS (owner, 2026-10-09): once per customer per year, on the
-      // day, 8 AM - 9 PM Colombo (birthday/birthday.sms.ts).
+      // day, inside the opening hours set by Ops and Admin (birthday/birthday.sms.ts).
       try {
         await runBirthdaySms({ now, yieldToPause: true });
       } catch (err) {

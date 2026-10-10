@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../app_design.dart' show appButtonTextScale, kStackButtonsAboveTextScale;
 import '../../../design/tokens.dart';
 import '../Atoms/blynk_button.dart';
+import '../Atoms/store_closed_banner.dart';
 import '../../../Services/Providers/address.provider.dart';
 import '../../../Services/Providers/cart.provider.dart';
 import '../../../Services/Providers/order.provider.dart';
@@ -26,6 +27,27 @@ import '../../../Services/push/push_notifications.dart';
 String placeOrderFailureMessage(CustomerError failure) => failure.isTimeout
     ? "We couldn't confirm your order. Check Orders before trying again."
     : failure.message;
+
+/// The store and slot refusals of POST /orders whose server sentence is
+/// worth showing as is: STORE_CLOSED says when the store opens again (it
+/// knows the closure reason and the hours Ops/Admin set), and the slot ones
+/// say what happened to the picked time (owner, 2026-10-10).
+const Set<String> serverWordedOrderRefusals = {'STORE_CLOSED', 'SLOT_UNAVAILABLE', 'SLOT_FULL'};
+
+/// The toast for a failed place-order, from what was thrown: the server's
+/// own sentence for [serverWordedOrderRefusals] (4xx messages are kept by
+/// ApiService, 5xx text never is), else [placeOrderFailureMessage]
+/// (owner, 2026-10-10).
+String placeOrderErrorMessage(Object error) {
+  if (error is ApiException &&
+      serverWordedOrderRefusals.contains(error.code) &&
+      error.statusCode >= 400 &&
+      error.statusCode < 500 &&
+      error.message.trim().isNotEmpty) {
+    return error.message.trim();
+  }
+  return placeOrderFailureMessage(AppErrors.from(error));
+}
 
 class CartScreenPaymentContainer extends StatelessWidget {
   const CartScreenPaymentContainer({
@@ -50,7 +72,13 @@ class CartScreenPaymentContainer extends StatelessWidget {
       // recalculates prices, and computes the real total from its own
       // catalog data - this call submits the order, it doesn't assume the
       // client's estimate is what gets charged.
-      final order = await orderProvider.placeOrder(cart: cart, addressId: address.id);
+      // A picked delivery slot goes with the order; none means "as soon as
+      // possible" (owner, 2026-10-10).
+      final order = await orderProvider.placeOrder(
+        cart: cart,
+        addressId: address.id,
+        deliverySlotStart: orderProvider.selectedSlot?.start,
+      );
       // The order took the birthday gift (owner, 2026-10-09): stop offering
       // it at once rather than until the next checkout-info.
       if (order != null && order.hasBirthdayGift && context.mounted) {
@@ -71,8 +99,15 @@ class CartScreenPaymentContainer extends StatelessWidget {
           unawaited(products.loadCombos(force: true).then((_) => cart.syncCombos(products.combos)));
         }
       }
+      // Closed after all (staff closed the store, or hours changed): ask
+      // GET /store again so the banner and the button catch up, and reload
+      // the slots so one can be picked instead (owner, 2026-10-10).
+      if (e is ApiException && e.code == 'STORE_CLOSED' && context.mounted) {
+        unawaited(context.read<StoreInfoProvider?>()?.refresh(force: true));
+        if (orderProvider.slotsEnabled) unawaited(orderProvider.loadSlots());
+      }
       if (context.mounted) {
-        showAppToast(msg: placeOrderFailureMessage(AppErrors.from(e)));
+        showAppToast(msg: placeOrderErrorMessage(e));
       }
     }
   }
@@ -82,7 +117,12 @@ class CartScreenPaymentContainer extends StatelessWidget {
       OrderingHoursBuilder(builder: (context, isOpen) => _bar(context, isOpen));
 
   Widget _bar(BuildContext context, bool isOpen) {
-    final isPlacingOrder = context.watch<OrderProvider>().isPlacingOrder;
+    final orders = context.watch<OrderProvider>();
+    final isPlacingOrder = orders.isPlacingOrder;
+    // While closed, an order can still go in for a picked delivery slot
+    // (owner, 2026-10-10).
+    final slotsOn = orders.slotsEnabled;
+    final canOrder = isOpen || (slotsOn && orders.selectedSlot != null);
     final isCartEmpty = context.watch<CartProvider>().isEmpty;
     final stack = appButtonTextScale(context) > kStackButtonsAboveTextScale;
 
@@ -115,9 +155,11 @@ class CartScreenPaymentContainer extends StatelessWidget {
       loading: isPlacingOrder,
       expand: stack,
       // While placing, `loading` swallows taps, so the button keeps its look.
-      // Outside ordering hours the backend would refuse it (STORE_CLOSED),
-      // so the button waits for 8 AM and the note below says why.
-      onPressed: isCartEmpty || !isOpen ? null : () => _placeOrder(context),
+      // While the store is closed the backend would refuse an ASAP order
+      // (STORE_CLOSED), so the button waits for the store to open, or for a
+      // delivery slot to be picked, and the note above says why
+      // (owner, 2026-10-10).
+      onPressed: isCartEmpty || !canOrder ? null : () => _placeOrder(context),
     );
 
     return Container(
@@ -130,7 +172,10 @@ class CartScreenPaymentContainer extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!isOpen) ...[const ClosedForOrdersNote(), const SizedBox(height: BlynkSpace.s8)],
+          if (!isOpen) ...[
+            ClosedForOrdersNote(slotPicked: canOrder, slotsOn: slotsOn),
+            const SizedBox(height: BlynkSpace.s8),
+          ],
           stack
               ? Column(
                   mainAxisSize: MainAxisSize.min,
@@ -150,26 +195,20 @@ class CartScreenPaymentContainer extends StatelessWidget {
   }
 }
 
-/// Shown above Place order outside ordering hours (8 AM - 9 PM Sri Lanka).
+/// Shown above Place order while the store is closed: the live closed
+/// banner ("Closed now — back at 8 AM tomorrow"), plus what to do when
+/// delivery slots are on (owner, 2026-10-10).
 class ClosedForOrdersNote extends StatelessWidget {
-  const ClosedForOrdersNote({super.key});
+  const ClosedForOrdersNote({super.key, this.slotsOn = false, this.slotPicked = false});
 
-  static const String text =
-      "We're closed now. Orders open at ${StoreInfo.opensAtLabel} (we take orders ${StoreInfo.deliveryHoursLabel}).";
+  final bool slotsOn;
+  final bool slotPicked;
+
+  static const String pickSlotHint = 'Pick a delivery time above to order now.';
+  static const String slotPickedHint = "We'll deliver at the time you picked.";
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: BlynkSpace.s12, vertical: BlynkSpace.s8),
-      decoration: const BoxDecoration(color: BlynkColors.noticeTint, borderRadius: BlynkRadius.smAll),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.schedule, color: BlynkColors.ink, size: BlynkIcons.md),
-          SizedBox(width: BlynkSpace.s8),
-          Expanded(child: Text(text, style: BlynkText.label)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => StoreClosedBanner(
+        hint: !slotsOn ? null : (slotPicked ? slotPickedHint : pickSlotHint),
+      );
 }

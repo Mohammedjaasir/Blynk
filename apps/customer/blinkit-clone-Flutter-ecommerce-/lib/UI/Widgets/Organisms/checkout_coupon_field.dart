@@ -67,12 +67,15 @@ class _CheckoutCouponFieldState extends State<CheckoutCouponField> {
                       Text(
                         applied.birthdayWins
                             ? "Your birthday gift saves more, so it's used instead of this code."
-                            : applied.isFreeDelivery
+                            // A referral reward never stacks either (owner, 2026-10-10).
+                            : applied.referralWins
+                                ? "Your referral reward saves more, so it's used instead of this code."
+                                : applied.isFreeDelivery
                                 ? 'Free delivery on this order'
                                 : 'You save ${formatLkr(applied.discountAmount)}',
                         key: const Key('coupon-applied-note'),
                         style: BlynkText.body.copyWith(
-                          color: applied.birthdayWins ? BlynkColors.ink2 : BlynkColors.positiveInk,
+                          color: applied.birthdayWins || applied.referralWins ? BlynkColors.ink2 : BlynkColors.positiveInk,
                         ),
                       ),
                     ],

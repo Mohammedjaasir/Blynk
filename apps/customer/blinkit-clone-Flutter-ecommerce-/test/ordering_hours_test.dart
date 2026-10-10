@@ -6,6 +6,7 @@ import 'package:ecom/Models/product_model.dart';
 import 'package:ecom/Services/Providers/address.provider.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/Providers/order.provider.dart';
+import 'package:ecom/Services/Providers/store_info.provider.dart';
 import 'package:ecom/Services/ordering_hours.dart';
 import 'package:ecom/UI/Widgets/Atoms/blynk_button.dart';
 import 'package:ecom/UI/Widgets/Organisms/cart_screen_payment_container.dart';
@@ -79,14 +80,14 @@ void main() {
     testWidgets('at night: the note shows and Place order is off', (tester) async {
       OrderingHours.clock = () => _utc(17, 0); // 10:30 PM
       await pumpBar(tester);
-      expect(find.text(ClosedForOrdersNote.text), findsOneWidget);
+      expect(find.text(StoreInfoProvider.fallbackClosedMessage()), findsOneWidget);
       expect(placeEnabled(tester), isFalse);
     });
 
     testWidgets('in ordering hours: no note, Place order is on', (tester) async {
       OrderingHours.clock = () => _utc(6, 30); // 12:00 noon
       await pumpBar(tester);
-      expect(find.text(ClosedForOrdersNote.text), findsNothing);
+      expect(find.text(StoreInfoProvider.fallbackClosedMessage()), findsNothing);
       expect(placeEnabled(tester), isTrue);
     });
 
@@ -94,11 +95,11 @@ void main() {
       var now = _utc(2, 29); // 7:59 AM
       OrderingHours.clock = () => now;
       await pumpBar(tester);
-      expect(find.text(ClosedForOrdersNote.text), findsOneWidget);
+      expect(find.text(StoreInfoProvider.fallbackClosedMessage()), findsOneWidget);
 
       now = _utc(2, 30).add(const Duration(seconds: 1)); // 8:00:01 AM
       await tester.pump(const Duration(minutes: 1, seconds: 1));
-      expect(find.text(ClosedForOrdersNote.text), findsNothing);
+      expect(find.text(StoreInfoProvider.fallbackClosedMessage()), findsNothing);
       expect(placeEnabled(tester), isTrue);
     });
   });

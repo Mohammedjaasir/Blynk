@@ -320,7 +320,14 @@ export interface OrdersTable {
    * or all of it - the gift and a coupon never stack).
    */
   birthday_discount_amount: ColumnType<number, number | string | undefined, number | string>;
+  /** Migration 037 (owner, 2026-10-10): the part of discount_amount that is a referral reward. */
+  referral_discount_amount: ColumnType<number, number | string | undefined, number | string>;
+  /** Migration 037: Blynk Points used on the order and the LKR they took off (part of discount_amount). */
+  points_redeemed: ColumnType<number, number | undefined, number>;
+  points_discount_amount: ColumnType<number, number | string | undefined, number | string>;
   scheduled_for: Date | null;
+  /** Migration 036 (owner, 2026-10-10): end of the delivery slot the customer picked; scheduled_for is its start. */
+  scheduled_until: ColumnType<Date | null, Date | null | undefined, Date | null>;
   delivery_recipient_name: string;
   delivery_recipient_phone: string;
   /** Migration 024: snapshot of the address's alternate_phone at order creation. */
@@ -861,4 +868,60 @@ export interface Database {
   device_tokens: DeviceTokensTable;
   stock_alerts: StockAlertsTable;
   v_product_catalog: ProductCatalogView;
+  referral_codes: ReferralCodesTable;
+  referrals: ReferralsTable;
+  referral_rewards: ReferralRewardsTable;
+  points_ledger: PointsLedgerTable;
+}
+
+/** Migration 037 (owner, 2026-10-10): a customer's personal referral code. */
+export interface ReferralCodesTable {
+  customer_id: string;
+  code: string;
+  created_at: Generated<Date>;
+}
+
+export type ReferralStatus = 'PENDING' | 'REWARDED' | 'CAPPED' | 'NO_REWARD';
+export type ReferralRewardMode = 'LKR_OFF' | 'FREE_DELIVERY';
+
+/** Migration 037: who invited whom (one referral per friend account). */
+export interface ReferralsTable {
+  id: Generated<string>;
+  inviter_id: string;
+  friend_id: string;
+  code: string;
+  status: ColumnType<ReferralStatus, ReferralStatus | undefined, ReferralStatus>;
+  qualifying_order_id: string | null;
+  completed_at: Date | null;
+  created_at: Generated<Date>;
+}
+
+/** Migration 037: a referral reward, the friend's (used on the first order) or the inviter's credit. */
+export interface ReferralRewardsTable {
+  id: Generated<string>;
+  referral_id: string;
+  customer_id: string;
+  side: 'FRIEND' | 'INVITER';
+  mode: ReferralRewardMode;
+  amount: ColumnType<number, number | string | undefined, number | string>;
+  order_id: string | null;
+  discount_amount: ColumnType<number, number | string | undefined, number | string>;
+  used_at: Date | null;
+  created_at: Generated<Date>;
+}
+
+export type PointsLedgerKind = 'EARN' | 'REDEEM' | 'REFUND' | 'EXPIRE' | 'ADJUST';
+
+/** Migration 037: every change to a customer's Blynk Points (positive rows are lots). */
+export interface PointsLedgerTable {
+  id: Generated<string>;
+  customer_id: string;
+  kind: PointsLedgerKind;
+  points: number;
+  remaining: ColumnType<number, number | undefined, number>;
+  expires_at: Date | null;
+  order_id: string | null;
+  reason: string | null;
+  actor_user_id: string | null;
+  created_at: Generated<Date>;
 }

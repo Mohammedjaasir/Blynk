@@ -26,6 +26,8 @@ import 'package:ecom/Screens/user_cart_screen.dart';
 import 'package:ecom/Screens/Auth/name_capture_screen.dart';
 import 'package:ecom/Screens/Auth/birthday_prompt_screen.dart';
 import 'package:ecom/Screens/about_you_screen.dart';
+import 'package:ecom/Screens/refer_friend_screen.dart';
+import 'package:ecom/Screens/points_history_screen.dart';
 
 class AppRouter {
   static Route<dynamic>? generateRoute(RouteSettings settings) {
@@ -139,6 +141,11 @@ class AppRouter {
           settings: settings,
           builder: (_) => const AppAboutScreen(),
         );
+      // Refer a friend and Blynk Points, from Profile (owner, 2026-10-10).
+      case '/refer':
+        return MaterialPageRoute(settings: settings, builder: (_) => const ReferFriendScreen());
+      case '/points':
+        return MaterialPageRoute(settings: settings, builder: (_) => const PointsHistoryScreen());
       // --- Dental clinic appointments (task F5) ---------------------------
       case '/dental/clinics':
         return MaterialPageRoute(

@@ -5,6 +5,7 @@ import '../../../Models/address_model.dart';
 import '../../../Services/Providers/address.provider.dart';
 import '../../../Services/Providers/auth.provider.dart';
 import '../../../Services/Providers/cart.provider.dart';
+import '../../../Services/Providers/store_info.provider.dart';
 import '../../../Services/store_info.dart';
 import '../../../app_responsive.dart';
 import '../../../design/tokens.dart';
@@ -266,8 +267,9 @@ class _AddressBlock extends StatelessWidget {
                     const SizedBox(width: BlynkSpace.s4),
                     Flexible(
                       child: Text(
+                        // The live hours Ops/Admin set (owner, 2026-10-10).
                         '${StoreInfo.hubName} · '
-                        '${StoreInfo.deliveryHoursLabel}',
+                        '${watchHoursLabel(context)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: BlynkText.microLabel

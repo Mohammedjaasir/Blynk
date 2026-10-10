@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../Services/Providers/product.provider.dart';
+import '../Services/Providers/auth.provider.dart';
+import '../Services/Providers/rewards.provider.dart';
+import '../UI/Widgets/Organisms/home_usuals_row.dart';
 
 import '../UI/Widgets/Atoms/sliver_entrance.dart';
 import '../UI/Widgets/Atoms/app_skeleton.dart';
 import '../UI/Widgets/Atoms/birthday_offer_banner.dart';
 import '../UI/Widgets/Atoms/connectivity_banner.dart';
+import '../UI/Widgets/Atoms/store_closed_banner.dart';
 import '../UI/Widgets/Organisms/dental_home_entry.dart';
 import '../UI/Widgets/Organisms/home_brand_tagline.dart';
 import '../UI/Widgets/Organisms/home_category_groups.dart';
@@ -129,8 +133,12 @@ class _HomeScreenState extends State<HomeScreen>
           child: SkeletonScope(
             active: loading,
             child: RefreshIndicator(
-              onRefresh: () =>
-                  context.read<ProductProvider>().refreshCatalog(force: true),
+              onRefresh: () {
+                // "Your usuals" refreshes with the catalog (owner, 2026-10-10).
+                final auth = context.read<AuthProvider?>();
+                context.read<RewardsProvider?>()?.loadUsuals(signedIn: auth?.isAuthenticated ?? false);
+                return context.read<ProductProvider>().refreshCatalog(force: true);
+              },
               child: CustomScrollView(
                 // AlwaysScrollable so the pull works even when Home is
                 // shorter than the screen.
@@ -153,6 +161,14 @@ class _HomeScreenState extends State<HomeScreen>
                           .refreshCatalog(force: true),
                     ),
                   ),
+                  // Closed now / today (Ops/Admin decide the hours and can
+                  // close the store): nothing while it is open
+                  // (owner, 2026-10-10).
+                  const SliverToBoxAdapter(
+                    child: StoreClosedBanner(
+                      padding: EdgeInsets.fromLTRB(BlynkSpace.s16, BlynkSpace.s8, BlynkSpace.s16, BlynkSpace.s8),
+                    ),
+                  ),
                   SliverEntrance(animation: _timeline.section(1), sliver: const HomeBrandTagline()),
                   // The birthday gift (owner, 2026-10-09): only while the
                   // server says this customer's next order gets it.
@@ -170,6 +186,9 @@ class _HomeScreenState extends State<HomeScreen>
                   const SliverToBoxAdapter(
                     child: SizedBox(height: BlynkSpace.s16),
                   ),
+                  // "Your usuals" (owner, 2026-10-10): signed-in customers
+                  // with a past order only; nothing otherwise.
+                  const SliverToBoxAdapter(child: HomeUsualsRow()),
                   SliverEntrance(
                     animation: _timeline.section(3),
                     sliver: const SliverToBoxAdapter(

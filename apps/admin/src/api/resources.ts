@@ -1,6 +1,11 @@
 import { apiRequest, tokenStore } from './client';
 import type {
   RiderTripsSetting,
+  DeliverySlotSettings,
+  StoreClosureInput,
+  StoreHoliday,
+  StoreHoursInput,
+  StoreSchedule,
   DentalDoctor,
   DentalDoctorInput,
   BoardOrder,
@@ -333,6 +338,23 @@ export const settings = {
   setBirthdayOffer: (body: BirthdayOfferInput) =>
     apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer', { method: 'PATCH', body: { ...body } }),
 
+  /** Store schedule (owner, 2026-10-10): opening hours, close-now, holidays
+   * and delivery slots. Every PATCH returns the whole StoreSchedule. */
+  getStoreSchedule: () => apiRequest<StoreSchedule>('/admin/settings/store-schedule'),
+
+  setStoreHours: (body: StoreHoursInput) =>
+    apiRequest<StoreSchedule>('/admin/settings/store-hours', { method: 'PATCH', body: { ...body } }),
+
+  setStoreClosure: (body: StoreClosureInput) =>
+    apiRequest<StoreSchedule>('/admin/settings/store-closure', { method: 'PATCH', body: { ...body } }),
+
+  /** The full list replaces the stored one. */
+  setStoreHolidays: (holidays: StoreHoliday[]) =>
+    apiRequest<StoreSchedule>('/admin/settings/store-holidays', { method: 'PATCH', body: { holidays } }),
+
+  setDeliverySlots: (body: Partial<DeliverySlotSettings>) =>
+    apiRequest<StoreSchedule>('/admin/settings/delivery-slots', { method: 'PATCH', body: { ...body } }),
+
   /** Customers whose birthday week is now or within `days` days (0-31). */
   getBirthdays: (days = 7) => apiRequest<BirthdaysResult>(`/admin/birthdays?days=${days}`),
 };
@@ -589,7 +611,7 @@ export const smsOffers = {
       (d) => d.estimate
     ),
 
-  /** 8 AM - 9 PM only (422 OUTSIDE_SENDING_HOURS). */
+  /** Opening hours only (422 OUTSIDE_SENDING_HOURS; owner, 2026-10-10). */
   send: (input: SmsOfferInput) =>
     apiRequest<{ offer: SmsOfferSent }>('/admin/sms-offers', { method: 'POST', body: { ...input } }).then((d) => d.offer),
 

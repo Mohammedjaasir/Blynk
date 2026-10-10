@@ -5,6 +5,7 @@ import { orders as ordersApi } from '../api/resources';
 import type { OrderDetail } from '../api/types';
 import { comboHeading, formatMoney, groupOrderItems, orderErrorMessage } from '../lib/orders';
 import { formatPhone } from '../lib/format';
+import { formatSlotAbsolute } from '../lib/slots';
 
 const slipDate = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -121,7 +122,16 @@ export function PackingSlip() {
           </div>
         </header>
 
-        <section className="packing-slip__section" aria-label="Deliver to">
+        {/* The booked delivery slot, as a full date - paper outlives
+            "Today"/"Tomorrow" (owner, 2026-10-10). */}
+        {order.scheduled_for ? (
+          <section className="packing-slip__section" aria-label="Delivery slot">
+            <h2 className="packing-slip__label">Delivery slot</h2>
+            <p className="packing-slip__slot">Scheduled: {formatSlotAbsolute(order.scheduled_for, order.scheduled_until)}</p>
+          </section>
+        ) : null}
+
+                <section className="packing-slip__section" aria-label="Deliver to">
           <h2 className="packing-slip__label">Deliver to</h2>
           <p className="packing-slip__strong">{order.delivery_recipient_name}</p>
           <p className="mono">{formatPhone(order.delivery_recipient_phone)}</p>

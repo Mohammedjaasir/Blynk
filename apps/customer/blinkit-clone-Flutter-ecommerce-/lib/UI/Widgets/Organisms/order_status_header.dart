@@ -71,7 +71,8 @@ class OrderStatusHeader extends StatelessWidget {
                     const SizedBox(width: BlynkSpace.s4),
                     Flexible(
                       child: Text(
-                        'Scheduled — delivery ${formatScheduled(order.scheduledFor!)}',
+                        // "Scheduled: Tomorrow 8–10 AM" (owner, 2026-10-10).
+                        scheduledLine(order)!,
                         style: BlynkText.caption.copyWith(color: BlynkColors.ink),
                       ),
                     ),
