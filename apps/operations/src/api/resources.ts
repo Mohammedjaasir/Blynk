@@ -1,4 +1,4 @@
-import { apiRequest, tokenStore, type Query } from './client';
+import { UPLOAD_TIMEOUT_MS, apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
   DoctorsAccessSetting,
@@ -99,7 +99,9 @@ import type {
   RiderDocumentRejectReason,
   RiderDocumentSettings,
   RiderDocumentsForRider,
-  RiderDocumentTypeInput,
+  RiderDocumentSettingsInput,
+  CreateRiderInput,
+  CreateRiderResult,
   StaffRiderDocument,
 } from './types';
 
@@ -368,6 +370,12 @@ export const riders = {
    * needs the parsed list; both stay simple as they are.
    */
   myDeliveries: () => apiRequest<{ deliveries: MyDelivery[] }>('/riders/deliveries').then((d) => d.deliveries),
+
+  /** `POST /admin/riders` - "Add rider" (owner, 2026-10-11): staff type the
+   * rider's details; approved at once when nothing blocks approval,
+   * otherwise PENDING under Rider requests. */
+  create: (input: CreateRiderInput) =>
+    apiRequest<CreateRiderResult>('/admin/riders', { method: 'POST', body: { ...input } }),
 
   /** `GET /admin/riders/:id/pay` - company or commission, and the % (owner, 2026-10-09). */
   pay: (id: string) => apiRequest<{ pay: RiderPay }>(`/admin/riders/${id}/pay`).then((d) => d.pay),
@@ -1217,6 +1225,13 @@ export const riderApplications = {
       method: 'POST',
       body: { ...pay, override_documents: true, override_reason: reason },
     }).then((d) => d.application),
+  /** Approve with the pay stored when staff added the rider (owner,
+   * 2026-10-11: POST /admin/riders keeps the pay; the body is `{}`). */
+  approveAsAdded: (id: string) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${id}/approve`, {
+      method: 'POST',
+      body: {},
+    }).then((d) => d.application),
   /** Deletes a PENDING/REJECTED request with its documents; the account stays (owner, 2026-10-10). */
   remove: (id: string) =>
     apiRequest<{ deleted: true; documents_removed: number }>(`/admin/rider-applications/${id}`, { method: 'DELETE' }),
@@ -1246,12 +1261,38 @@ export const riderDocuments = {
   settings: {
     get: () =>
       apiRequest<{ settings: RiderDocumentSettings }>('/admin/settings/rider-documents').then((d) => d.settings),
-    update: (documents: RiderDocumentTypeInput[]) =>
+    /** Owner, 2026-10-11: the two switches can be saved with the list or alone. */
+    update: (input: RiderDocumentSettingsInput) =>
       apiRequest<{ settings: RiderDocumentSettings }>('/admin/settings/rider-documents', {
         method: 'PUT',
-        body: { documents },
+        body: { ...input },
       }).then((d) => d.settings),
   },
+  /** Staff upload a page themselves (owner, 2026-10-11: riders send their
+   * documents on WhatsApp). page 0 = front, 1 = back (front first); the
+   * expiry date travels with the upload ('' clears it). A complete staff
+   * upload is VERIFIED at once. */
+  uploadPage: (riderId: string, docType: string, page: number, file: File, expiryDate?: string | null) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (expiryDate !== undefined) form.append('expiry_date', expiryDate ?? '');
+    return apiRequest<{ document: StaffRiderDocument }>(
+      `/admin/riders/${riderId}/documents/${encodeURIComponent(docType)}/pages/${page}`,
+      { method: 'PUT', body: form, timeoutMs: UPLOAD_TIMEOUT_MS }
+    ).then((d) => d.document);
+  },
+  /** null when the last page was removed (owner, 2026-10-11). */
+  removePage: (riderId: string, docType: string, page: number) =>
+    apiRequest<{ document: StaffRiderDocument | null }>(
+      `/admin/riders/${riderId}/documents/${encodeURIComponent(docType)}/pages/${page}`,
+      { method: 'DELETE' }
+    ).then((d) => d.document ?? null),
+  /** null clears the date (owner, 2026-10-11). */
+  setExpiry: (riderId: string, docType: string, expiryDate: string | null) =>
+    apiRequest<{ document: StaffRiderDocument }>(`/admin/riders/${riderId}/documents/${encodeURIComponent(docType)}`, {
+      method: 'PATCH',
+      body: { expiry_date: expiryDate },
+    }).then((d) => d.document),
 };
 
 // ---------------------------------------------------------------- coupons

@@ -18,6 +18,7 @@ import {
 import { formatDateTime } from '../lib/inventory';
 import { colomboDate } from '../lib/slots';
 import { DatePicker } from './DatePicker';
+import { DocumentUploadSheet } from './RiderDocumentUpload';
 import { Spinner, Status } from './ui';
 import './rider-documents.css';
 
@@ -108,10 +109,13 @@ export function DocumentGrid({
   slots,
   ariaLabel,
   onOpen,
+  onUpload,
 }: {
   slots: DocumentSlot[];
   ariaLabel: string;
   onOpen(slot: DocumentSlot): void;
+  /** Staff upload / replace pages (owner, 2026-10-11); omitted = no button. */
+  onUpload?(slot: DocumentSlot): void;
 }) {
   if (slots.length === 0) return <p className="quiet">No documents are asked for this vehicle type.</p>;
   return (
@@ -140,6 +144,16 @@ export function DocumentGrid({
                 Expires {formatDay(doc.expiry_date)}
                 {chip ? <Status tone={chip.tone}>{chip.text}</Status> : null}
               </p>
+            ) : null}
+            {onUpload ? (
+              <button
+                type="button"
+                className="button button--sm button--ghost rdoc-tile__upload"
+                aria-label={`${hasPages ? 'Replace' : 'Upload'} ${slot.label}`}
+                onClick={() => onUpload(slot)}
+              >
+                {hasPages ? 'Replace' : 'Upload'}
+              </button>
             ) : null}
           </li>
         );
@@ -284,11 +298,14 @@ export function DocumentViewer({
   ownerName,
   onClose,
   onChanged,
+  onUpload,
 }: {
   slot: DocumentSlot & { document: StaffRiderDocument };
   ownerName?: string | null;
   onClose(): void;
   onChanged(document: StaffRiderDocument, message: string): void;
+  /** Staff upload / replace / remove pages (owner, 2026-10-11). */
+  onUpload?(): void;
 }) {
   const doc = slot.document;
   const today = colomboDate(new Date());
@@ -450,6 +467,11 @@ export function DocumentViewer({
                 {busy ? 'Saving…' : doc.status === 'VERIFIED' ? 'Verify again' : 'Verify'}
               </button>
             </div>
+            {onUpload ? (
+              <button type="button" className="text-button rdoc-viewer__upload" onClick={onUpload}>
+                Upload, replace or remove pages
+              </button>
+            ) : null}
           </>
         ) : (
           <div className="rdoc-reject">
@@ -519,6 +541,7 @@ export function RiderDocumentsSheet({ riderId, name, onClose, onChanged }: { rid
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [uploadKey, setUploadKey] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -536,6 +559,7 @@ export function RiderDocumentsSheet({ riderId, name, onClose, onChanged }: { rid
 
   const slots = data ? documentSlots(data.documents, data.requirements) : [];
   const open = slots.find((s) => s.key === openKey && s.document);
+  const uploading = slots.find((s) => s.key === uploadKey);
   const missingNote = data ? blockingLine(data.blocking, 'Still to verify') : null;
 
   return (
@@ -560,12 +584,19 @@ export function RiderDocumentsSheet({ riderId, name, onClose, onChanged }: { rid
         {!data && !error ? <Spinner label="Loading documents" /> : null}
         {data ? (
           <>
-            {data.all_required_verified ? (
+            {data.approval_needs_documents === false ? (
+              <p className="quiet">Documents not needed for approval (Settings → Rider documents).</p>
+            ) : data.all_required_verified ? (
               <p className="quiet quiet--ok">All required documents are verified.</p>
             ) : missingNote ? (
               <p className="rdoc-blocking">{missingNote}</p>
             ) : null}
-            <DocumentGrid slots={slots} ariaLabel={`Documents of ${name}`} onOpen={(s) => setOpenKey(s.key)} />
+            <DocumentGrid
+              slots={slots}
+              ariaLabel={`Documents of ${name}`}
+              onOpen={(s) => setOpenKey(s.key)}
+              onUpload={(s) => setUploadKey(s.key)}
+            />
           </>
         ) : null}
       </div>
@@ -575,6 +606,23 @@ export function RiderDocumentsSheet({ riderId, name, onClose, onChanged }: { rid
           slot={open as DocumentSlot & { document: StaffRiderDocument }}
           ownerName={name}
           onClose={() => setOpenKey(null)}
+          onChanged={(_doc, message) => {
+            setNotice(message);
+            void load();
+            onChanged?.();
+          }}
+          onUpload={() => {
+            setOpenKey(null);
+            setUploadKey(open.key);
+          }}
+        />
+      ) : null}
+      {uploading ? (
+        <DocumentUploadSheet
+          riderId={riderId}
+          slot={uploading}
+          ownerName={name}
+          onClose={() => setUploadKey(null)}
           onChanged={(_doc, message) => {
             setNotice(message);
             void load();

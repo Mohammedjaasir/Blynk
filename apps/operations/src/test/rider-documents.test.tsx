@@ -377,6 +377,9 @@ describe('Settings -> Rider documents (owner, 2026-10-10)', () => {
         { key: 'DRIVING_LICENCE', enabled: true, required_for: [], needs_expiry: true, needs_back: true },
         { label: 'Police report', enabled: true, required_for: motor, needs_expiry: true, needs_back: false },
       ],
+      // Owner, 2026-10-11: the two switches travel in the same PUT (API defaults here).
+      applicant_uploads_enabled: false,
+      require_documents_for_approval: true,
     });
     expect(await screen.findByText(/Rider documents saved/)).toBeInTheDocument();
   });

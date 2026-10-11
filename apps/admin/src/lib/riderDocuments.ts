@@ -142,3 +142,53 @@ export function documentActionError(err: unknown, fallback: string): string {
 }
 
 export const isPdf = (contentType: string | undefined) => contentType === 'application/pdf';
+
+// ------------------------------------------------------- staff uploads
+/*
+ * Staff upload rider documents themselves (owner, 2026-10-11: "Mainly I am
+ * going to approve the drivers manually; they will send docs on WhatsApp" /
+ * "Add a delivery rider and I upload the things"). Same file rules as the
+ * API: JPEG, PNG, WebP or PDF, 8 MB at most, no HEIC.
+ */
+export const DOCUMENT_MAX_BYTES = 8 * 1024 * 1024;
+export const DOCUMENT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
+const DOCUMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const DOCUMENT_EXTENSIONS = /\.(jpe?g|png|webp|pdf)$/i;
+
+export const UNSUPPORTED_DOCUMENT_MESSAGE =
+  'Use a JPEG, PNG or WebP photo, or a PDF. iPhone HEIC photos are not accepted: send it as a JPEG (or take a screenshot of it).';
+
+/** "1.2 MB" / "640 KB". */
+export function fileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** Why a picked file cannot be uploaded, or null when it is fine. */
+export function documentFileProblem(file: File): string | null {
+  const type = (file.type || '').toLowerCase();
+  const known = type ? DOCUMENT_TYPES.includes(type) : DOCUMENT_EXTENSIONS.test(file.name);
+  if (!known || /hei[cf]/.test(type) || /\.hei[cf]$/i.test(file.name)) return UNSUPPORTED_DOCUMENT_MESSAGE;
+  if (file.size > DOCUMENT_MAX_BYTES) {
+    return `This file is ${fileSize(file.size)}. Documents must be 8 MB or smaller: take the photo again or send a smaller copy.`;
+  }
+  return null;
+}
+
+/** Staff upload / remove / expiry refusals in plain words. */
+export function staffUploadError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    if (err.code === 'UNSUPPORTED_MEDIA_TYPE') return UNSUPPORTED_DOCUMENT_MESSAGE;
+    if (err.code === 'FILE_TOO_LARGE' || err.code === 'PAYLOAD_TOO_LARGE') return 'Documents must be 8 MB or smaller.';
+    if (err.code === 'DOCUMENT_PAGE_ORDER') return 'Upload the front first, then the back.';
+    if (err.code === 'DOCUMENT_EXPIRED') return 'That expiry date has passed, so the document is expired. Ask the rider for a current one.';
+    if (err.code === 'DOCUMENT_TYPE_NOT_FOUND') return 'This document is no longer listed in Settings, Rider documents.';
+    if (err.code === 'RIDER_NOT_FOUND') return 'This rider no longer exists.';
+  }
+  return errorMessage(err, fallback);
+}
+
+/** Sri Lankan mobile, as the API's normaliser accepts it (070-078, not 073). */
+export const SRI_LANKAN_MOBILE = /^(?:\+?94|0)?7[0124-8]\d{7}$/;
+export const MOBILE_HINT = 'Enter a Sri Lankan mobile number, e.g. 077 123 4567.';
+export const isSriLankanMobile = (phone: string) => SRI_LANKAN_MOBILE.test(phone.replace(/[\s\-()]/g, ''));

@@ -13,6 +13,7 @@ import type { VehicleType } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { CodeField, PendingNotice, RejectedNotice } from '../components/ApplicationNotice';
 import { DocumentCard } from '../components/DocumentCard';
+import { WhatsAppDocs } from '../components/WhatsAppDocs';
 import { MESSAGES, errorCode, errorMessage } from '../lib/errors';
 import {
   CODE_SPENT,
@@ -88,11 +89,19 @@ type Step = 'phone' | 'code' | 'details' | 'documents' | 'status' | 'sent' | 'pe
  *    depends on the vehicle (Ops/Admin decide). "Send application" only
  *    once every required one is uploaded (POST /riders/applications/submit);
  * 4. "Application sent". A number that already applied sees its
- *    application instead: waiting / not approved / approved, each document's
- *    review, and re-uploads just a rejected document.
+ *    application instead: waiting / not approved, each document's review,
+ *    and re-uploads just a rejected document.
+ *
+ * (owner, 2026-10-11) "For my number I don't need this": an APPROVED rider
+ * never sees this page's status / documents screen - the API refuses the
+ * applicant session (ALREADY_APPROVED) without spending the code, and the
+ * same code signs them straight in to their deliveries.
+ * "They will send docs on WhatsApp": while "Riders upload documents in the
+ * app" is off (the default) there is no Documents step - step 2 sends the
+ * application, and the rider is asked to send the documents on WhatsApp.
  */
 export function Apply() {
-  const { status, requestOtp } = useAuth();
+  const { status, requestOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const opened = (location.state as ApplyState | null) ?? {};
@@ -136,7 +145,7 @@ export function Apply() {
             setRegistration(draft.registration);
             setEmergency(draft.emergency);
           }
-          landOn(s, draft?.vehicle ? 'documents' : 'details');
+          landOn(s, draft?.vehicle && s.uploads_enabled ? 'documents' : 'details');
         })
         .catch(() => applicantToken.clear())
         .finally(() => setBusy(false));
@@ -155,6 +164,11 @@ export function Apply() {
 
   /** Where a session lands: the application if there is one, else the form. */
   function landOn(s: ApplicantState, otherwise: Step) {
+    // (owner, 2026-10-11) approved meanwhile: straight to sign-in, never the documents screen.
+    if (s.application?.status === 'APPROVED') {
+      toSignIn({ notice: MESSAGES.ALREADY_APPROVED });
+      return;
+    }
     setState(s);
     if (s.application) {
       const a = s.application;
@@ -227,6 +241,19 @@ export function Apply() {
       setPhone(number);
       landOn(s, 'details');
     } catch (err) {
+      if (errorCode(err) === 'ALREADY_APPROVED') {
+        // (owner, 2026-10-11) an approved rider: the code was not spent, so
+        // it signs them straight in to their deliveries.
+        try {
+          await verifyOtp(number.trim(), code);
+          applicantToken.clear();
+          clearDraft();
+          navigate('/', { replace: true });
+        } catch {
+          toSignIn({ notice: MESSAGES.ALREADY_APPROVED });
+        }
+        return;
+      }
       if (CODE_SPENT.has(errorCode(err) ?? '')) {
         setOtp('');
         resend.clear();
@@ -269,6 +296,11 @@ export function Apply() {
       return;
     }
     saveDraft({ phone, fullName, vehicle, registration, emergency });
+    // (owner, 2026-10-11) uploads off: no Documents step - send it now.
+    if (!uploadsOn) {
+      void sendApplication();
+      return;
+    }
     setStep('documents');
   }
 
@@ -356,6 +388,9 @@ export function Apply() {
     );
   }
 
+  /** (owner, 2026-10-11) "Riders upload documents in the app" (default off). */
+  const uploadsOn = state?.uploads_enabled === true;
+
   const errorLine = error ? (
     <p className="login__error" role="alert">
       {error}
@@ -373,6 +408,7 @@ export function Apply() {
         <p className="apply-status__text" role="status">
           Ops will review it; you'll get an SMS when you're approved.
         </p>
+        {uploadsOn ? null : <WhatsAppDocs />}
         <div className="login__form">
           <button type="button" className="primary" onClick={() => toSignIn()}>
             Back to sign in
@@ -391,7 +427,12 @@ export function Apply() {
   } else if (step === 'status' && state?.application) {
     const a = state.application;
     const rejectedDocs = state.documents.filter((d) => d.status === 'REJECTED');
-    const docs = (
+    const docs = !uploadsOn ? (
+      <>
+        <WhatsAppDocs />
+        {errorLine}
+      </>
+    ) : (
       <>
         {rejectedDocs.length ? (
           <p className="doc-alert" role="status">
@@ -423,22 +464,6 @@ export function Apply() {
           </button>
         </RejectedNotice>
       );
-    } else if (a.status === 'APPROVED') {
-      body = (
-        <section className="apply-status" aria-labelledby="apply-approved">
-          <span className="apply-status__tag apply-status__tag--done">Approved</span>
-          <h1 id="apply-approved" className="login__title">
-            You're an approved rider
-          </h1>
-          <p className="apply-status__text">Sign in with this number to see your deliveries. Renewed a document? Upload it here.</p>
-          <div className="login__form">
-            {docs}
-            <button type="button" className="primary" onClick={() => toSignIn()}>
-              Sign in
-            </button>
-          </div>
-        </section>
-      );
     } else {
       body = (
         <PendingNotice>
@@ -449,7 +474,7 @@ export function Apply() {
         </PendingNotice>
       );
     }
-  } else if (step === 'documents' && state) {
+  } else if (step === 'documents' && state && uploadsOn) {
     const types = documentsForVehicle(state.document_types, vehicle);
     const missing = types.filter((t) => t.required && !documentComplete(t, state.documents.find((d) => d.doc_type === t.key)));
     body = (
@@ -491,7 +516,9 @@ export function Apply() {
             ? "Start with your mobile number. We'll text you a code to check it's yours."
             : step === 'code'
               ? 'Enter the code we sent you.'
-              : 'Tell us about you and your vehicle. Next, you add photos of your documents.'}
+              : uploadsOn
+                ? 'Tell us about you and your vehicle. Next, you add photos of your documents.'
+                : 'Tell us about you and your vehicle.'}
         </p>
 
         {step === 'phone' ? (
@@ -612,8 +639,10 @@ export function Apply() {
               />
             </label>
 
-            <button type="submit" className="primary">
-              Next: your documents
+            {uploadsOn ? null : <WhatsAppDocs />}
+
+            <button type="submit" className="primary" disabled={busy}>
+              {uploadsOn ? 'Next: your documents' : busy ? 'Sending application…' : 'Send application'}
             </button>
           </form>
         )}

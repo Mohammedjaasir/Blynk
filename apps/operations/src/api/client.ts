@@ -85,7 +85,13 @@ interface RequestOptions {
   /** Lets a caller cancel a request (e.g. on unmount); combined with the
    * client's own timeout below, whichever fires first wins. */
   signal?: AbortSignal;
+  /** A longer wait than REQUEST_TIMEOUT_MS - rider document uploads of up to
+   * 8 MB on a phone connection (owner, 2026-10-11). */
+  timeoutMs?: number;
 }
+
+/** Rider document pages are up to 8 MB (owner, 2026-10-11). */
+export const UPLOAD_TIMEOUT_MS = 120_000;
 
 /**
  * Why the session ended - today, only ever 'expired' (the refresh token was
@@ -191,7 +197,7 @@ export async function fetchPrivateFile(path: string, options: { signal?: AbortSi
 
 async function send(
   path: string,
-  { method = 'GET', body, query, signal }: RequestOptions,
+  { method = 'GET', body, query, signal, timeoutMs = REQUEST_TIMEOUT_MS }: RequestOptions,
   auth: boolean
 ): Promise<Response> {
   const headers: Record<string, string> = {};
@@ -203,7 +209,7 @@ async function send(
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const onCallerAbort = () => controller.abort();
   signal?.addEventListener('abort', onCallerAbort);
   try {

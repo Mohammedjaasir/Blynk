@@ -1,5 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { riderDocuments, type RiderDocumentSettings, type RiderDocumentType, type RiderDocumentTypeInput } from '../api/riderDocuments';
+import {
+  riderDocuments,
+  type RiderDocumentSettings,
+  type RiderDocumentSwitches,
+  type RiderDocumentType,
+  type RiderDocumentTypeInput,
+} from '../api/riderDocuments';
 import type { VehicleType } from '../api/types';
 import { errorMessage, fieldErrors } from '../lib/apiErrors';
 import { MOTOR_VEHICLES, VEHICLE_TYPES } from '../lib/riderDocuments';
@@ -16,6 +22,13 @@ import './riderDocuments.css';
  * it per vehicle type, bicycles off by default), needs an expiry date, front
  * and back, and shown in the app. Save sends the whole list (PUT); a custom
  * document left out is removed.
+ *
+ * Two switches (owner, 2026-10-11: "Mainly I am going to approve the drivers
+ * manually; they will send docs on WhatsApp"): "Riders upload documents in
+ * the app" (off by default - applicants WhatsApp them and staff upload them)
+ * and "Documents needed before approval" (on by default). They are saved
+ * with Save, together with the list; a switch the API does not report
+ * (an older API) is not sent.
  */
 
 const VEHICLE_SHORT: Record<VehicleType, string> = {
@@ -56,10 +69,17 @@ export function RiderDocumentsSettingsCard() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [switches, setSwitches] = useState<RiderDocumentSwitches>({});
 
   function show(s: RiderDocumentSettings) {
     setCurrent(s);
     setRows(toRows(s));
+    setSwitches({
+      ...(typeof s.applicant_uploads_enabled === 'boolean' ? { applicant_uploads_enabled: s.applicant_uploads_enabled } : {}),
+      ...(typeof s.require_documents_for_approval === 'boolean'
+        ? { require_documents_for_approval: s.require_documents_for_approval }
+        : {}),
+    });
   }
 
   useEffect(() => {
@@ -138,7 +158,7 @@ export function RiderDocumentsSettingsCard() {
     }));
     setSaving(true);
     try {
-      show(await riderDocuments.setSettings(body));
+      show(await riderDocuments.setSettings(body, switches));
       toast.success('Rider documents saved.');
     } catch (err) {
       const fields = fieldErrors(err);
@@ -164,9 +184,46 @@ export function RiderDocumentsSettingsCard() {
         <Spinner label="Loading rider documents" />
       ) : (
         <form className="form" onSubmit={save} noValidate>
+          {'applicant_uploads_enabled' in switches || 'require_documents_for_approval' in switches ? (
+            <div className="rd-types" role="group" aria-label="How riders send documents">
+              {'applicant_uploads_enabled' in switches ? (
+                <div className="rd-setting">
+                  <Switch
+                    label="Riders upload documents in the app"
+                    checked={Boolean(switches.applicant_uploads_enabled)}
+                    onChange={(on) => setSwitches((s) => ({ ...s, applicant_uploads_enabled: on }))}
+                  >
+                    Riders upload documents in the app
+                  </Switch>
+                  <p data-testid="uploads-explainer">
+                    {switches.applicant_uploads_enabled
+                      ? 'On: applicants photograph and upload each document in the Rider app.'
+                      : 'Off: the Rider app application has no Documents step. Applicants send their details only and are told to send their documents to Blynk on WhatsApp (+94 71 710 7374); you upload them under Rider requests.'}
+                  </p>
+                </div>
+              ) : null}
+              {'require_documents_for_approval' in switches ? (
+                <div className="rd-setting">
+                  <Switch
+                    label="Documents needed before approval"
+                    checked={Boolean(switches.require_documents_for_approval)}
+                    onChange={(on) => setSwitches((s) => ({ ...s, require_documents_for_approval: on }))}
+                  >
+                    Documents needed before approval
+                  </Switch>
+                  <p data-testid="approval-explainer">
+                    {switches.require_documents_for_approval
+                      ? 'On: a rider can be approved only when every required document is verified and not expired. Documents staff upload count as verified at once; an Admin can still "Approve anyway" with a reason.'
+                      : 'Off: riders can be approved without documents.'}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <p className="form__note">
-            What a new rider uploads in the Rider app. Required documents must be verified before the rider can be approved;
-            the others are optional. Admin and Operations review them under Rider requests.
+            Which documents a rider needs. Required documents must be verified before the rider can be approved
+            {switches.require_documents_for_approval === false ? ' (while "Documents needed before approval" is on)' : ''}; the
+            others are optional. Admin and Operations review and upload them under Rider requests.
           </p>
           <div className="rd-types">
             {rows.map((row, i) => {

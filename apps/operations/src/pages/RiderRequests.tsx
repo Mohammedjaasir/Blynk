@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { RiderPayFields, useRiderPayDefaults } from '../components/RiderPayFields';
 import { DocumentGrid, DocumentViewer, Switch } from '../components/RiderDocuments';
+import { DocumentUploadSheet } from '../components/RiderDocumentUpload';
 import { ConfirmDialog, EmptyState, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
 import { formatDateTime } from '../lib/inventory';
@@ -29,6 +30,12 @@ import { blockingLine, documentErrorMessage, documentSlots, type DocumentSlot } 
  * (`documents_verified`). Only an ADMIN may "Approve anyway" with a reason
  * (recorded server-side; OPERATIONS is refused by the backend too). A
  * PENDING/REJECTED request can be deleted with its documents.
+ *
+ * Staff uploads (owner, 2026-10-11: riders send their documents on
+ * WhatsApp): each document tile has Upload / Replace, and the viewer has
+ * "Upload, replace or remove pages", to add the pages and expiry date
+ * themselves. When Settings says documents are not needed for approval
+ * (`approval_needs_documents` false) the row says so and Approve is open.
  */
 
 const TABS: { status: RiderApprovalStatus; label: string }[] = [
@@ -72,6 +79,7 @@ export function RiderRequests() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const [viewing, setViewing] = useState<{ appId: string; key: string } | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState<{ appId: string; key: string } | null>(null);
   const [deleting, setDeleting] = useState<RiderApplication | null>(null);
   const [override, setOverride] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
@@ -173,6 +181,20 @@ export function RiderRequests() {
     void load(true);
   }
 
+  /** After a staff upload / page removal / expiry change (owner, 2026-10-11):
+   * a new document joins the row, a removed one leaves it; then re-read. */
+  function uploadChanged(appId: string, docType: string, document: StaffRiderDocument | null, message: string) {
+    setRows((list) =>
+      (list ?? []).map((a) => {
+        if (a.id !== appId) return a;
+        const others = (a.documents ?? []).filter((d) => d.doc_type !== docType);
+        return { ...a, documents: document ? [...others, document] : others };
+      })
+    );
+    setNotice(message);
+    void load(true);
+  }
+
   async function reject(app: RiderApplication) {
     const text = reason.trim();
     if (!text) return;
@@ -191,6 +213,10 @@ export function RiderRequests() {
     }
   }
 
+  const uploadApp = uploadingDoc ? rows?.find((a) => a.id === uploadingDoc.appId) ?? null : null;
+  const uploadSlot = uploadApp
+    ? documentSlots(uploadApp.documents, uploadApp.document_requirements).find((s) => s.key === uploadingDoc?.key)
+    : undefined;
   const viewingApp = viewing ? rows?.find((a) => a.id === viewing.appId) ?? null : null;
   const viewingSlot = viewingApp
     ? (documentSlots(viewingApp.documents, viewingApp.document_requirements).find(
@@ -268,7 +294,11 @@ export function RiderRequests() {
                   slots={documentSlots(app.documents, app.document_requirements)}
                   ariaLabel={`Documents of ${app.full_name ?? 'this rider'}`}
                   onOpen={(slot) => setViewing({ appId: app.id, key: slot.key })}
+                  onUpload={status === 'REJECTED' ? undefined : (slot) => setUploadingDoc({ appId: app.id, key: slot.key })}
                 />
+                {status === 'PENDING' && app.approval_needs_documents === false ? (
+                  <p className="quiet">Documents not needed for approval.</p>
+                ) : null}
                 {status === 'PENDING' && app.documents_verified !== true ? (
                   <p className="rdoc-blocking">
                     {blockingLine(app.documents_blocking) ?? 'Verify the required documents before approving.'}
@@ -432,6 +462,24 @@ export function RiderRequests() {
           ownerName={viewingApp.full_name}
           onClose={() => setViewing(null)}
           onChanged={(document, message) => documentChanged(viewingApp.id, document, message)}
+          onUpload={
+            status === 'REJECTED'
+              ? undefined
+              : () => {
+                  setViewing(null);
+                  setUploadingDoc({ appId: viewingApp.id, key: viewingSlot.key });
+                }
+          }
+        />
+      ) : null}
+
+      {uploadSlot && uploadApp ? (
+        <DocumentUploadSheet
+          riderId={uploadApp.id}
+          slot={uploadSlot}
+          ownerName={uploadApp.full_name}
+          onClose={() => setUploadingDoc(null)}
+          onChanged={(document, message) => uploadChanged(uploadApp.id, uploadSlot.key, document, message)}
         />
       ) : null}
     </div>

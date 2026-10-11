@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { riderDocuments } from '../api/resources';
-import type { RiderDocumentType, RiderDocumentTypeInput, VehicleType } from '../api/types';
+import type { RiderDocumentSettings as RiderDocumentSettingsData, RiderDocumentType, RiderDocumentTypeInput, VehicleType } from '../api/types';
 import { ApiError } from '../api/client';
 import { PageHeader } from '../components/Layout';
 import { Switch } from '../components/RiderDocuments';
@@ -15,11 +15,19 @@ import '../components/rider-documents.css';
  * have them verified before approval (per vehicle type), whether a document
  * needs an expiry date or a front and back page, and custom documents.
  * Saved in one PUT; the backend validates and audits every change.
+ *
+ * Owner, 2026-10-11 ("Mainly I am going to approve the drivers manually;
+ * they will send docs on WhatsApp"): two switches on top, saved in the same
+ * PUT - "Riders upload documents in the app" (off = the Rider app has no
+ * Documents step; staff upload what riders send on WhatsApp) and
+ * "Documents needed before approval" (off = approve without documents).
  */
 
 const MAX_CUSTOM = 10;
 const LABEL_MIN = 2;
 const LABEL_MAX = 80;
+/** Blynk's WhatsApp number riders send their documents to (owner, 2026-10-11). */
+export const BLYNK_WHATSAPP = '+94 71 710 7374';
 
 /** A row being edited; `tempId` names a new custom document until it is saved. */
 interface Draft extends Omit<RiderDocumentType, 'key'> {
@@ -62,6 +70,16 @@ export function RiderDocumentSettings() {
   const [newLabel, setNewLabel] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Owner, 2026-10-11: the API's defaults when an older reply lacks them.
+  const [appUploads, setAppUploads] = useState(false);
+  const [needDocs, setNeedDocs] = useState(true);
+
+  function applySaved(s: RiderDocumentSettingsData) {
+    setList(s.documents.map(toDraft));
+    setUpdatedAt(s.updated_at);
+    setAppUploads(s.applicant_uploads_enabled ?? false);
+    setNeedDocs(s.require_documents_for_approval ?? true);
+  }
 
   useEffect(() => {
     let live = true;
@@ -69,8 +87,7 @@ export function RiderDocumentSettings() {
       .get()
       .then((s) => {
         if (!live) return;
-        setList(s.documents.map(toDraft));
-        setUpdatedAt(s.updated_at);
+        applySaved(s);
       })
       .catch((err) => live && setLoadError(documentErrorMessage(err, 'Could not load the rider document settings.')));
     return () => {
@@ -137,9 +154,12 @@ export function RiderDocumentSettings() {
     }
     setSaving(true);
     try {
-      const saved = await riderDocuments.settings.update(list.map(toInput));
-      setList(saved.documents.map(toDraft));
-      setUpdatedAt(saved.updated_at);
+      const saved = await riderDocuments.settings.update({
+        documents: list.map(toInput),
+        applicant_uploads_enabled: appUploads,
+        require_documents_for_approval: needDocs,
+      });
+      applySaved(saved);
       setNotice('Rider documents saved. New applications follow these settings.');
     } catch (err) {
       setRowErrors(fieldErrors(err));
@@ -167,6 +187,47 @@ export function RiderDocumentSettings() {
 
       {list ? (
         <>
+          {/* Owner, 2026-10-11: how documents reach Blynk, and whether approval waits for them. */}
+          <section className="card rdoc-approval" aria-label="Documents and approval">
+            <h2 className="section-label">Documents and approval</h2>
+            <div className="rdoc-switch-row">
+              <span>
+                Riders upload documents in the app
+                <em>
+                  {appUploads
+                    ? 'On: applicants photograph and upload each document in the Rider app.'
+                    : `Off: the Rider app's application has no Documents step. Applicants send their details only and are told to send their documents to Blynk on WhatsApp ${BLYNK_WHATSAPP}; you upload them under Rider requests or Riders.`}
+                </em>
+              </span>
+              <Switch
+                label="Riders upload documents in the app"
+                checked={appUploads}
+                onToggle={() => {
+                  setNotice(null);
+                  setAppUploads((v) => !v);
+                }}
+              />
+            </div>
+            <div className="rdoc-switch-row">
+              <span>
+                Documents needed before approval
+                <em>
+                  {needDocs
+                    ? 'On: a rider can be approved only when every required document is verified and not expired. Documents you upload count as verified at once; an Admin can still "approve anyway" with a reason.'
+                    : 'Off: riders can be approved without documents.'}
+                </em>
+              </span>
+              <Switch
+                label="Documents needed before approval"
+                checked={needDocs}
+                onToggle={() => {
+                  setNotice(null);
+                  setNeedDocs((v) => !v);
+                }}
+              />
+            </div>
+          </section>
+
           <ul className="rdoc-settings" aria-label="Rider documents">
             {list.map((d, i) => {
               const required = d.required_for.length > 0;

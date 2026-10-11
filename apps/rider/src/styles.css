@@ -2319,3 +2319,35 @@ a {
     animation: none;
   }
 }
+
+/* (owner, 2026-10-11) "Send your documents to Blynk on WhatsApp" */
+.wa-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-left: 4px solid var(--green);
+  background: var(--green-wash);
+  color: var(--ink);
+  border-radius: 4px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.wa-docs__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.wa-docs__link:active {
+  transform: translateY(1px);
+}

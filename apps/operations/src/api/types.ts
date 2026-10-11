@@ -1668,6 +1668,9 @@ export interface RiderApplication {
   documents_blocking?: RiderDocumentBlocking[];
   /** true = every REQUIRED document is verified and not expired: Approve allowed. */
   documents_verified?: boolean;
+  /** Settings -> "Documents needed before approval" (owner, 2026-10-11). false =
+   * documents_blocking is [] and documents_verified is true. */
+  approval_needs_documents?: boolean;
 }
 
 export interface RiderApplicationPage {
@@ -1737,6 +1740,8 @@ export interface RiderDocumentsForRider {
   requirements: RiderDocumentRequirement[];
   blocking: RiderDocumentBlocking[];
   all_required_verified: boolean;
+  /** Owner, 2026-10-11: false = approval does not wait for documents. */
+  approval_needs_documents?: boolean;
 }
 
 /** One row of `GET /admin/rider-documents/alerts` (approved riders only). */
@@ -1767,6 +1772,40 @@ export interface RiderDocumentType {
 export interface RiderDocumentSettings {
   documents: RiderDocumentType[];
   updated_at: string | null;
+  /** Owner, 2026-10-11: "Riders upload documents in the app" (default off -
+   * applicants send them on WhatsApp and staff upload them). */
+  applicant_uploads_enabled?: boolean;
+  /** Owner, 2026-10-11: "Documents needed before approval" (default on). */
+  require_documents_for_approval?: boolean;
+}
+
+/** `PUT /admin/settings/rider-documents` (owner, 2026-10-11): every part is
+ * optional - an omitted `documents` keeps the stored list. */
+export interface RiderDocumentSettingsInput {
+  documents?: RiderDocumentTypeInput[];
+  applicant_uploads_enabled?: boolean;
+  require_documents_for_approval?: boolean;
+}
+
+/** `POST /admin/riders` - staff add a rider themselves (owner, 2026-10-11).
+ * The pay fields are the approve body's. */
+export interface CreateRiderInput extends Partial<RiderPayInput> {
+  full_name: string;
+  phone: string;
+  vehicle_type: VehicleType;
+  /** Omitted for a BICYCLE. */
+  vehicle_registration_number?: string | null;
+  emergency_contact_phone?: string | null;
+}
+
+export interface CreateRiderResult {
+  /** The approve endpoint's `application` shape; `id` = riders.id. */
+  rider: RiderApplication;
+  /** true = approved at once (nothing blocks approval). */
+  approved: boolean;
+  documents_blocking: RiderDocumentBlocking[];
+  /** A new number, a customer's number (attached), or a taken-over request. */
+  from: 'NEW_NUMBER' | 'CUSTOMER' | 'APPLICATION';
 }
 
 /** `PUT /admin/settings/rider-documents` - a new custom document has no key. */

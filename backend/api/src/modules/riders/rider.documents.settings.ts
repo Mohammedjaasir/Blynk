@@ -31,6 +31,21 @@ import { vehicleTypes } from './rider.profile.js';
  * Defaults (owner): all four required for every motor vehicle; a BICYCLE
  * needs none of them (only what staff set); Revenue licence, Insurance and
  * Driving licence need an expiry date; the Driving licence needs front+back.
+ *
+ * Two switches (owner, 2026-10-11: "mainly I am going to approve the drivers
+ * manually; they will send docs on WhatsApp"):
+ *   applicant_uploads_enabled       "Riders upload documents in the app"
+ *                                   (default OFF). Off: the Rider app's
+ *                                   application has no Documents step, an
+ *                                   application is sent without documents,
+ *                                   and the applicant upload endpoints refuse
+ *                                   (APPLICANT_UPLOADS_OFF). Staff upload the
+ *                                   documents instead (rider.staff.ts).
+ *   require_documents_for_approval  "Documents needed before approval"
+ *                                   (default ON). On: approving needs every
+ *                                   required document VERIFIED and unexpired
+ *                                   (a document staff upload is VERIFIED at
+ *                                   once). Off: riders are approved without.
  */
 
 export const RIDER_DOCUMENTS_KEY = 'rider_documents';
@@ -49,6 +64,10 @@ export interface RiderDocumentType {
 }
 export interface RiderDocumentSettings {
   documents: RiderDocumentType[];
+  /** "Riders upload documents in the app" (owner, 2026-10-11): default false. */
+  applicant_uploads_enabled: boolean;
+  /** "Documents needed before approval" (owner, 2026-10-11): default true. */
+  require_documents_for_approval: boolean;
 }
 
 export const BUILTIN_DOCUMENTS: ReadonlyArray<Omit<RiderDocumentType, 'enabled' | 'required_for'>> = [
@@ -63,6 +82,8 @@ export const INSURANCE_KEY = 'INSURANCE';
 export function defaultRiderDocumentSettings(): RiderDocumentSettings {
   return {
     documents: BUILTIN_DOCUMENTS.map((d) => ({ ...d, enabled: true, required_for: [...MOTOR_VEHICLES] })),
+    applicant_uploads_enabled: false,
+    require_documents_for_approval: true,
   };
 }
 
@@ -72,15 +93,24 @@ const isVehicle = (v: unknown): v is VehicleType => typeof v === 'string' && (ve
 /** A stored row, read defensively: anything unreadable falls back to the default. */
 export function settingsFrom(value: unknown): RiderDocumentSettings {
   const fallback = defaultRiderDocumentSettings();
-  const stored = (value && typeof value === 'object' ? (value as { documents?: unknown }).documents : null) as unknown;
-  if (!Array.isArray(stored)) return fallback;
+  const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
+  const raw = (value && typeof value === 'object' ? value : {}) as {
+    documents?: unknown;
+    applicant_uploads_enabled?: unknown;
+    require_documents_for_approval?: unknown;
+  };
+  const switches = {
+    applicant_uploads_enabled: bool(raw.applicant_uploads_enabled, fallback.applicant_uploads_enabled),
+    require_documents_for_approval: bool(raw.require_documents_for_approval, fallback.require_documents_for_approval),
+  };
+  const stored = raw.documents;
+  if (!Array.isArray(stored)) return { ...fallback, ...switches };
   const byKey = new Map<string, Record<string, unknown>>();
   for (const raw of stored) {
     if (raw && typeof raw === 'object' && typeof (raw as { key?: unknown }).key === 'string') {
       byKey.set((raw as { key: string }).key, raw as Record<string, unknown>);
     }
   }
-  const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
   const vehicles = (v: unknown, d: VehicleType[]) => (Array.isArray(v) ? [...new Set(v.filter(isVehicle))] : d);
   const documents: RiderDocumentType[] = fallback.documents.map((d) => {
     const s = byKey.get(d.key);
@@ -107,7 +137,7 @@ export function settingsFrom(value: unknown): RiderDocumentSettings {
       needs_back: bool(s.needs_back, false),
     });
   }
-  return { documents };
+  return { documents, ...switches };
 }
 
 /** The documents an applicant with this vehicle sees, each marked required or not. */
@@ -131,10 +161,17 @@ const documentInputSchema = z
 
 export const updateRiderDocumentSettingsSchema = z
   .object({
-    documents: z.array(documentInputSchema).max(BUILTIN_DOCUMENTS.length + MAX_CUSTOM_DOCUMENTS),
+    // Left out: the stored list stays (e.g. only a switch is changed).
+    documents: z.array(documentInputSchema).max(BUILTIN_DOCUMENTS.length + MAX_CUSTOM_DOCUMENTS).optional(),
+    // (owner, 2026-10-11) each left out keeps its stored value.
+    applicant_uploads_enabled: z.boolean({ invalid_type_error: 'applicant_uploads_enabled must be true or false' }).optional(),
+    require_documents_for_approval: z
+      .boolean({ invalid_type_error: 'require_documents_for_approval must be true or false' })
+      .optional(),
   })
   .strict()
   .superRefine((input, ctx) => {
+    if (!input.documents) return;
     const seen = new Set<string>();
     input.documents.forEach((d, i) => {
       if (d.key && seen.has(d.key)) {
@@ -195,31 +232,42 @@ export class RiderDocumentSettingsService {
         .forUpdate()
         .executeTakeFirst();
       const previous = settingsFrom(before?.value);
-      const sent = new Map(input.documents.filter((d) => d.key).map((d) => [d.key as string, d]));
-      const documents: RiderDocumentType[] = BUILTIN_DOCUMENTS.map((b) => {
-        const d = sent.get(b.key);
-        const prev = previous.documents.find((p) => p.key === b.key)!;
-        return d
-          ? { ...b, enabled: d.enabled, required_for: [...new Set(d.required_for)], needs_expiry: d.needs_expiry, needs_back: d.needs_back }
-          : prev;
-      });
-      for (const d of input.documents) {
-        if (d.key && BUILTIN_KEYS.includes(d.key)) continue;
-        documents.push({
-          key: d.key ?? newCustomKey(),
-          label: d.label as string,
-          builtin: false,
-          enabled: d.enabled,
-          required_for: [...new Set(d.required_for)],
-          needs_expiry: d.needs_expiry,
-          needs_back: d.needs_back,
+      let documents: RiderDocumentType[] = previous.documents;
+      if (input.documents) {
+        const sent = new Map(input.documents.filter((d) => d.key).map((d) => [d.key as string, d]));
+        documents = BUILTIN_DOCUMENTS.map((b) => {
+          const d = sent.get(b.key);
+          const prev = previous.documents.find((p) => p.key === b.key)!;
+          return d
+            ? { ...b, enabled: d.enabled, required_for: [...new Set(d.required_for)], needs_expiry: d.needs_expiry, needs_back: d.needs_back }
+            : prev;
         });
+        for (const d of input.documents) {
+          if (d.key && BUILTIN_KEYS.includes(d.key)) continue;
+          documents.push({
+            key: d.key ?? newCustomKey(),
+            label: d.label as string,
+            builtin: false,
+            enabled: d.enabled,
+            required_for: [...new Set(d.required_for)],
+            needs_expiry: d.needs_expiry,
+            needs_back: d.needs_back,
+          });
+        }
       }
-      const next: RiderDocumentSettings = { documents };
+      const next: RiderDocumentSettings = {
+        documents,
+        applicant_uploads_enabled: input.applicant_uploads_enabled ?? previous.applicant_uploads_enabled,
+        require_documents_for_approval: input.require_documents_for_approval ?? previous.require_documents_for_approval,
+      };
       const value = JSON.stringify(next);
       await trx
         .insertInto('system_configurations')
-        .values({ key: RIDER_DOCUMENTS_KEY, value, description: 'Rider documents: which are required per vehicle type, expiry dates, front and back' })
+        .values({
+          key: RIDER_DOCUMENTS_KEY,
+          value,
+          description: 'Rider documents: which are required per vehicle type, expiry dates, front and back, who uploads them, approval gate',
+        })
         .onConflict((oc) => oc.column('key').doUpdateSet({ value, updated_at: new Date() }))
         .execute();
       await writeAudit(trx, actor, {

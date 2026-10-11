@@ -40,6 +40,15 @@ import { riderDocumentStore } from './rider.documents.files.js';
  *
  * A PENDING or REJECTED rider never appears in the rider pickers, suggestions,
  * assignment, cash hand-ins or Staff accounts.
+ *
+ * "Add rider" (owner, 2026-10-11: "add a delivery rider and I upload the
+ * things"): Operations or Admin add a rider themselves - POST /admin/riders
+ * with the details and pay. The number follows the one-number-one-account
+ * rules of an application (a new number becomes an account, a customer keeps
+ * theirs, a waiting or rejected applicant's request is taken over; staff
+ * numbers and approved riders are refused). The rider is approved at once
+ * when nothing blocks approval; otherwise it waits under Rider requests
+ * until staff upload the documents (rider.documents.ts) and approve.
  */
 
 // ----------------------------------------------------------------------------
@@ -129,6 +138,30 @@ export const approveApplicationSchema = approvePaySchema
   })
   .default({});
 export type ApproveApplicationInput = z.infer<typeof approveApplicationSchema>;
+
+/**
+ * POST /admin/riders (owner, 2026-10-11): the details an applicant would
+ * send, plus the pay an approver picks (rider.pay.ts).
+ */
+export const createRiderByStaffSchema = approvePaySchema
+  .removeDefault()
+  .extend({
+    full_name: z
+      .string({ required_error: 'Full name is required.' })
+      .trim()
+      .min(2, 'Full name must be at least 2 characters.')
+      .max(128, 'Full name must be at most 128 characters.'),
+    phone: slPhone('Phone must be a Sri Lankan mobile number, e.g. 077 123 4567'),
+    vehicle_type: vehicleTypeSchema,
+    vehicle_registration_number: optionalRegistrationSchema,
+    emergency_contact_phone: z
+      .union([z.literal(''), z.null(), slPhone('Emergency contact must be a Sri Lankan mobile number, e.g. 077 123 4567')])
+      .optional()
+      .transform((v) => (v ? v : null)),
+  })
+  .strict()
+  .superRefine(refineRegistration);
+export type CreateRiderByStaffInput = z.infer<typeof createRiderByStaffSchema>;
 
 export const applicationStatuses = ['PENDING', 'APPROVED', 'REJECTED'] as const;
 
@@ -454,6 +487,8 @@ export class RiderApplicationService {
           document_requirements: d.requirements,
           documents_blocking: d.blocking,
           documents_verified: d.all_required_verified,
+          // (owner, 2026-10-11) "Documents needed before approval".
+          approval_needs_documents: d.approval_needs_documents,
         };
       }),
       pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
@@ -498,85 +533,221 @@ export class RiderApplicationService {
     body: ApproveApplicationInput = {},
     actorRole: UserRole = 'ADMIN'
   ): Promise<RiderApplication> {
+    return db.transaction().execute((trx) => this.approveInTrx(trx, id, actor, body, actorRole));
+  }
+
+  /** The approval itself, inside the caller's transaction (also used by "Add rider"). */
+  private async approveInTrx(
+    trx: Trx,
+    id: string,
+    actor: AuditActor,
+    body: ApproveApplicationInput,
+    actorRole: UserRole
+  ): Promise<RiderApplication> {
     const { override_documents, override_reason, ...pay } = body as ApproveApplicationInput & ApprovePayInput;
-    return db.transaction().execute(async (trx) => {
-      const row = await this.lockPending(trx, id);
-      // Rider documents (owner, 2026-10-10): every required document must be
-      // verified and not expired. Only an ADMIN may "approve anyway", with a
-      // reason - recorded on the approval's audit entry and an entry of its own.
-      const { vehicle_type } = await trx.selectFrom('riders').select('vehicle_type').where('id', '=', id).executeTakeFirstOrThrow();
-      const blocking = await riderDocumentService.blockingForApproval(trx, id, vehicle_type);
-      let documentsOverride: { reason: string; blocking: typeof blocking } | null = null;
-      if (blocking.length) {
-        if (!override_documents) {
-          throw new AppError(
-            `Verify these documents first: ${blocking.map((b) => b.label).join(', ')}.`,
-            409,
-            'DOCUMENTS_NOT_VERIFIED',
-            { blocking }
-          );
-        }
-        if (actorRole !== 'ADMIN') {
-          throw new AppError('Only an Admin can approve a rider whose documents are not all verified.', 403, 'OVERRIDE_ADMIN_ONLY');
-        }
-        documentsOverride = { reason: override_reason as string, blocking };
-        await writeAudit(trx, actor, {
-          action: 'RIDER_APPROVAL_DOCUMENTS_OVERRIDDEN',
-          entityType: 'RIDER',
-          entityId: id,
-          newValues: { reason: override_reason, blocking },
-        });
+    const row = await this.lockPending(trx, id);
+    // Rider documents (owner, 2026-10-10): every required document must be
+    // verified and not expired. Only an ADMIN may "approve anyway", with a
+    // reason - recorded on the approval's audit entry and an entry of its own.
+    const { vehicle_type } = await trx.selectFrom('riders').select('vehicle_type').where('id', '=', id).executeTakeFirstOrThrow();
+    const blocking = await riderDocumentService.blockingForApproval(trx, id, vehicle_type);
+    let documentsOverride: { reason: string; blocking: typeof blocking } | null = null;
+    if (blocking.length) {
+      if (!override_documents) {
+        throw new AppError(
+          `Verify these documents first: ${blocking.map((b) => b.label).join(', ')}.`,
+          409,
+          'DOCUMENTS_NOT_VERIFIED',
+          { blocking }
+        );
       }
-      // Pay controls (migration 038; owner, 2026-10-10): the approver may pick the rider's own model too.
-      const payFields = pay.pay_type ? payValues({ ...pay, pay_type: pay.pay_type }) : {};
-      const { reviewed_at } = await trx
-        .updateTable('riders')
-        .set({
-          approval_status: 'APPROVED',
-          reviewed_at: sql<Date>`now()`,
-          reviewed_by: actor.actorId,
-          rejection_reason: null,
-          is_active: true,
-          is_available: true,
-          ...payFields,
-          updated_at: sql`now()`,
-        })
-        .where('id', '=', id)
-        .returning('reviewed_at')
-        .executeTakeFirstOrThrow();
-      // A customer who applied becomes a RIDER account - which still shops
-      // (SHOPPER_ROLES) - so the Rider app lets them in.
-      await trx
-        .updateTable('users')
-        .set({ is_active: true, role: 'RIDER', updated_at: sql`now()` })
-        .where('id', '=', row.user_id)
-        .execute();
-      await notificationService.enqueue(
-        {
-          user_id: row.user_id,
-          channel: 'SMS',
-          notification_type: 'RIDER_APPROVED',
-          recipient: row.phone,
-          idempotency_key: `rider-approved:${id}:${reviewed_at!.getTime()}`,
-          payload: { text: RIDER_APPROVED_SMS },
-        },
-        trx
-      );
+      if (actorRole !== 'ADMIN') {
+        throw new AppError('Only an Admin can approve a rider whose documents are not all verified.', 403, 'OVERRIDE_ADMIN_ONLY');
+      }
+      documentsOverride = { reason: override_reason as string, blocking };
       await writeAudit(trx, actor, {
-        action: 'RIDER_APPROVED',
+        action: 'RIDER_APPROVAL_DOCUMENTS_OVERRIDDEN',
         entityType: 'RIDER',
         entityId: id,
-        oldValues: { approval_status: 'PENDING' },
-        newValues: {
-          approval_status: 'APPROVED',
-          user_id: row.user_id,
-          ...payFields,
-          ...(documentsOverride ? { documents_override: documentsOverride } : {}),
-        },
+        newValues: { reason: override_reason, blocking },
       });
-      logger.info({ riderId: id, by: actor.actorId }, 'Rider application approved');
-      return present(await applicationQuery(trx).where('r.id', '=', id).executeTakeFirstOrThrow());
+    }
+    // Pay controls (migration 038; owner, 2026-10-10): the approver may pick the rider's own model too.
+    const payFields = pay.pay_type ? payValues({ ...pay, pay_type: pay.pay_type }) : {};
+    const { reviewed_at } = await trx
+      .updateTable('riders')
+      .set({
+        approval_status: 'APPROVED',
+        reviewed_at: sql<Date>`now()`,
+        reviewed_by: actor.actorId,
+        rejection_reason: null,
+        is_active: true,
+        is_available: true,
+        ...payFields,
+        updated_at: sql`now()`,
+      })
+      .where('id', '=', id)
+      .returning('reviewed_at')
+      .executeTakeFirstOrThrow();
+    // A customer who applied becomes a RIDER account - which still shops
+    // (SHOPPER_ROLES) - so the Rider app lets them in.
+    await trx
+      .updateTable('users')
+      .set({ is_active: true, role: 'RIDER', updated_at: sql`now()` })
+      .where('id', '=', row.user_id)
+      .execute();
+    await notificationService.enqueue(
+      {
+        user_id: row.user_id,
+        channel: 'SMS',
+        notification_type: 'RIDER_APPROVED',
+        recipient: row.phone,
+        idempotency_key: `rider-approved:${id}:${reviewed_at!.getTime()}`,
+        payload: { text: RIDER_APPROVED_SMS },
+      },
+      trx
+    );
+    await writeAudit(trx, actor, {
+      action: 'RIDER_APPROVED',
+      entityType: 'RIDER',
+      entityId: id,
+      oldValues: { approval_status: 'PENDING' },
+      newValues: {
+        approval_status: 'APPROVED',
+        user_id: row.user_id,
+        ...payFields,
+        ...(documentsOverride ? { documents_override: documentsOverride } : {}),
+      },
     });
+    logger.info({ riderId: id, by: actor.actorId }, 'Rider application approved');
+    return present(await applicationQuery(trx).where('r.id', '=', id).executeTakeFirstOrThrow());
+  }
+
+  /**
+   * POST /admin/riders - "Add rider" (owner, 2026-10-11). One transaction:
+   * the account (new, or the customer's own, or the waiting/rejected
+   * applicant's), the riders row with its pay, then - when no required
+   * document blocks it - the approval (account becomes RIDER, SMS sent).
+   * Otherwise the rider waits under Rider requests for staff to upload the
+   * documents and approve. Audited RIDER_CREATED_BY_STAFF.
+   */
+  async createByStaff(input: CreateRiderByStaffInput, actor: AuditActor, actorRole: UserRole) {
+    const { full_name, phone, vehicle_type, vehicle_registration_number, emergency_contact_phone, ...pay } = input;
+    const riderValues = { vehicle_type, vehicle_registration_number, emergency_contact_phone };
+    const payFields = pay.pay_type ? payValues({ ...pay, pay_type: pay.pay_type }) : {};
+    try {
+      return await db.transaction().execute(async (trx) => {
+        const user = await trx
+          .selectFrom('users')
+          .select(['id', 'role', 'is_active'])
+          .where('phone', '=', phone)
+          .forUpdate()
+          .executeTakeFirst();
+        if (user && user.role === 'OPERATIONS') {
+          throw new AppError(
+            'This number is an Operations account. Turn on "Can deliver" for it on the Staff page instead.',
+            409,
+            'STAFF_CAN_DELIVER'
+          );
+        }
+        if (user && !APPLICANT_ROLES.includes(user.role)) {
+          throw new AppError('This number belongs to a staff account and cannot be a rider.', 409, 'PHONE_IN_USE');
+        }
+        if (user && !user.is_active) {
+          throw new AppError('This number belongs to an account that is switched off.', 409, 'ACCOUNT_DISABLED');
+        }
+        const existing = user
+          ? await trx
+              .selectFrom('riders')
+              .select(['id', 'approval_status'])
+              .where('user_id', '=', user.id)
+              .forUpdate()
+              .executeTakeFirst()
+          : undefined;
+        if (existing?.approval_status === 'APPROVED') {
+          throw new AppError('This number is already a rider.', 409, 'ALREADY_APPROVED');
+        }
+
+        let userId: string;
+        let riderId: string;
+        let from: 'NEW_NUMBER' | 'CUSTOMER' | 'APPLICATION';
+        if (user) {
+          userId = user.id;
+          await trx
+            .updateTable('users')
+            .set({ full_name, updated_at: sql`now()` })
+            .where('id', '=', user.id)
+            .execute();
+        } else {
+          // Like an application: a customer account that can shop at once;
+          // approval makes it RIDER. The phone is proved at first sign-in.
+          const created = await trx
+            .insertInto('users')
+            .values({ phone, full_name, role: 'CUSTOMER', is_active: true })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          userId = created.id;
+        }
+        if (existing) {
+          // A waiting or rejected applicant: staff take the request over.
+          await trx
+            .updateTable('riders')
+            .set({
+              ...riderValues,
+              ...payFields,
+              approval_status: 'PENDING',
+              applied_at: sql<Date>`COALESCE(applied_at, now())`,
+              reviewed_at: null,
+              reviewed_by: null,
+              rejection_reason: null,
+              is_active: false,
+              is_available: false,
+              updated_at: sql`now()`,
+            })
+            .where('id', '=', existing.id)
+            .execute();
+          riderId = existing.id;
+          from = 'APPLICATION';
+        } else {
+          const created = await trx
+            .insertInto('riders')
+            .values({
+              user_id: userId,
+              dark_store_id: await storeId(trx),
+              ...riderValues,
+              ...payFields,
+              is_active: false,
+              is_available: false,
+              approval_status: 'PENDING',
+              applied_at: sql<Date>`now()`,
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          riderId = created.id;
+          from = user ? 'CUSTOMER' : 'NEW_NUMBER';
+        }
+        await writeAudit(trx, actor, {
+          action: 'RIDER_CREATED_BY_STAFF',
+          entityType: 'RIDER',
+          entityId: riderId,
+          oldValues: existing ? { approval_status: existing.approval_status } : null,
+          newValues: { user_id: userId, full_name, ...riderValues, ...payFields, from },
+        });
+
+        const blocking = await riderDocumentService.blockingForApproval(trx, riderId, vehicle_type);
+        const application = blocking.length
+          ? present(await applicationQuery(trx).where('r.id', '=', riderId).executeTakeFirstOrThrow())
+          : await this.approveInTrx(trx, riderId, actor, {}, actorRole);
+        logger.info({ riderId, by: actor.actorId, approved: !blocking.length, from }, 'Rider added by staff');
+        return { rider: application, approved: blocking.length === 0, documents_blocking: blocking, from };
+      });
+    } catch (err) {
+      // The same new number added twice at once meets at users.phone.
+      if ((err as { code?: string }).code === '23505') {
+        throw new AppError('This number was just added. Refresh and try again.', 409, 'PHONE_IN_USE');
+      }
+      throw err;
+    }
   }
 
   /** Reject with a reason (shown to the rider at sign-in, and sent by SMS). */
@@ -771,6 +942,22 @@ adminRiderApplicationsRouter.post(
     try {
       const application = await riderApplicationService.reject(req.params.id as string, req.body.reason, actorOf(req));
       res.status(200).json({ success: true, data: { application } });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// "Add rider" (owner, 2026-10-11): ADMIN and OPERATIONS.
+adminRiderApplicationsRouter.post(
+  '/riders',
+  requireAuth,
+  REVIEWERS,
+  validate({ body: createRiderByStaffSchema }),
+  async (req, res, next) => {
+    try {
+      const data = await riderApplicationService.createByStaff(req.body as CreateRiderByStaffInput, actorOf(req), req.user!.role);
+      res.status(201).json({ success: true, data });
     } catch (err) {
       next(err);
     }

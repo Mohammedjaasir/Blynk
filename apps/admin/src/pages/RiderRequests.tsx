@@ -3,6 +3,7 @@ import { ApiError } from '../api/client';
 import { riderApplications } from '../api/resources';
 import { riderDocuments, type RiderApplicationWithDocuments, type RiderDocumentBlocking } from '../api/riderDocuments';
 import type { RiderApprovalStatus } from '../api/types';
+import { AddRiderDialog, AddRiderNotice, type AddRiderOutcome } from '../components/AddRiderDialog';
 import { PageHeader } from '../components/Layout';
 import { RiderPayFields, useRiderPayDefaults } from '../components/RiderPayFields';
 import { DocumentAlertBadge, RiderDocumentsPanel, RiderDocumentsReview, useRiderDocumentAlerts } from '../components/RiderDocuments';
@@ -28,6 +29,13 @@ import { newPayDraft, payDraftToInput, payLabel, type PayDraft, type PayDraftErr
  * "Approve anyway" needs a reason and is recorded in the audit log. A
  * waiting or rejected request can be deleted. Approved riders keep a
  * Documents button and an expiring-insurance badge.
+ *
+ * (owner, 2026-10-11: "Mainly I am going to approve the drivers manually;
+ * they will send docs on WhatsApp" / "Add a delivery rider and I upload the
+ * things") "Add rider" lets staff add a rider and upload the documents
+ * themselves; every document tile has Upload / Replace for documents sent
+ * on WhatsApp. When "Documents needed before approval" is off, nothing
+ * blocks Approve.
  */
 
 const TABS: { status: RiderApprovalStatus; label: string }[] = [
@@ -84,6 +92,8 @@ export function RiderRequests() {
   const [draft, setDraft] = useState<PayDraft>(() => newPayDraft(null));
   const [payErrors, setPayErrors] = useState<PayDraftErrors>({});
   const alerts = useRiderDocumentAlerts(status === 'APPROVED');
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState<AddRiderOutcome | null>(null);
 
   /** `soft` keeps the table on screen (refresh after a document action). */
   const load = useCallback(
@@ -201,6 +211,10 @@ export function RiderRequests() {
         title="Rider requests"
         description="Riders apply in the Blynk Rider app. Check their documents, then approve them here; they get an SMS and sign in with their phone number."
         actions={
+          <>
+          <button type="button" className="button" onClick={() => setAdding(true)}>
+            Add rider
+          </button>
           <div className="segmented" role="group" aria-label="Show">
             {TABS.map((tab) => (
               <button
@@ -214,8 +228,18 @@ export function RiderRequests() {
               </button>
             ))}
           </div>
+          </>
         }
       />
+
+      {added ? (
+        <AddRiderNotice
+          key={added.riderId + added.message}
+          outcome={added}
+          onDismiss={() => setAdded(null)}
+          onChanged={() => void load(true)}
+        />
+      ) : null}
 
       {error ? <p className="field__error">{error}</p> : null}
 
@@ -269,6 +293,7 @@ export function RiderRequests() {
                         documents={app.documents}
                         requirements={app.document_requirements}
                         riderName={app.full_name}
+                        riderId={app.id}
                         onChanged={() => load(true)}
                       />
                     </td>
@@ -306,6 +331,10 @@ export function RiderRequests() {
                       {isBlocked(app) ? (
                         <p className="rd-blocking" data-testid={`blocking-${app.id}`}>
                           Not verified yet: {blockingText(app.documents_blocking) || 'required documents'}.
+                        </p>
+                      ) : app.approval_needs_documents === false ? (
+                        <p className="cell__secondary" data-testid={`no-docs-needed-${app.id}`}>
+                          Documents not needed for approval
                         </p>
                       ) : null}
                     </td>
@@ -428,6 +457,17 @@ export function RiderRequests() {
             if (!busy) void remove(deleting);
           }}
           onCancel={() => setDeleting(null)}
+        />
+      ) : null}
+
+      {adding ? (
+        <AddRiderDialog
+          onClose={() => setAdding(false)}
+          onDone={(outcome) => {
+            setAdding(false);
+            setAdded(outcome);
+            void load(true);
+          }}
         />
       ) : null}
 

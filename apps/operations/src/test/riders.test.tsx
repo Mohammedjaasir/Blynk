@@ -63,26 +63,27 @@ describe('Riders', () => {
     expect(await screen.findByText('No active riders')).toBeInTheDocument();
   });
 
-  it('offers no create/activate/deactivate control - only "Change pay", "Adjust pay" and "Documents" per rider (owner, 2026-10-09/10)', async () => {
+  it('offers "Add rider" and, per rider, only "Change pay", "Adjust pay" and "Documents" - no activate/deactivate (owner, 2026-10-09/10/11)', async () => {
     renderAs(ADMIN_WITH_RIDER, '/more/riders', { 'GET /admin/riders': () => ok({ riders: RIDERS }) });
     await screen.findByText('Farhan Mohamed');
 
-    // The only buttons are each rider's pay control (PATCH /admin/riders/:id/pay)
-    // , their documents and pay adjustments (owner, 2026-10-10); the backend
-    // still has no rider create/activate/deactivate endpoint.
+    // Owner, 2026-10-11: one "Add rider" (POST /admin/riders); per rider the
+    // pay control, documents and pay adjustments. Still no
+    // activate/deactivate/delete rider endpoint.
     const buttons = screen.queryAllByRole('button');
-    expect(buttons).toHaveLength(RIDERS.length * 3);
-    for (const b of buttons) expect(b.textContent).toMatch(/^(Change pay|Adjust pay|Documents)$/);
-    for (const forbidden of [/add/i, /new rider/i, /create/i, /edit/i, /activate/i, /deactivate/i, /delete/i, /remove/i]) {
+    expect(buttons).toHaveLength(RIDERS.length * 3 + 1);
+    expect(buttons.filter((b) => b.textContent === 'Add rider')).toHaveLength(1);
+    for (const b of buttons) expect(b.textContent).toMatch(/^(Add rider|Change pay|Adjust pay|Documents)$/);
+    for (const forbidden of [/new rider/i, /create/i, /edit/i, /^activate/i, /deactivate/i, /delete/i, /remove/i]) {
       expect(screen.queryByRole('button', { name: forbidden })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: forbidden })).not.toBeInTheDocument();
     }
   });
 
-  it('the honest provisioning note is real, visible copy, not hidden or implied by a disabled control', async () => {
+  it('says riders are added here or approved under Rider requests (owner, 2026-10-11)', async () => {
     renderAs(ADMIN_WITH_RIDER, '/more/riders', { 'GET /admin/riders': () => ok({ riders: RIDERS }) });
     expect(
-      await screen.findByText('Rider accounts are currently provisioned outside this app.', { exact: false })
+      await screen.findByText('Add a rider yourself, or approve the ones who apply in the Rider app under Rider requests.', { exact: false })
     ).toBeInTheDocument();
   });
 

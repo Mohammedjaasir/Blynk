@@ -70,6 +70,11 @@ export interface RiderApplicationDocuments {
   documents_blocking: RiderDocumentBlocking[];
   /** true = every REQUIRED document is VERIFIED and not expired -> Approve allowed. */
   documents_verified: boolean;
+  /**
+   * false = Settings -> "Documents needed before approval" is off (owner,
+   * 2026-10-11): nothing blocks Approve. Absent on an older API.
+   */
+  approval_needs_documents?: boolean;
 }
 
 /** An application as the list returns it; the document fields are absent on an older API. */
@@ -82,6 +87,8 @@ export interface RiderDocumentsForRider {
   requirements: RiderDocumentRequirement[];
   blocking: RiderDocumentBlocking[];
   all_required_verified: boolean;
+  /** false = documents are not needed for approval (owner, 2026-10-11). Absent on an older API. */
+  approval_needs_documents?: boolean;
 }
 
 export interface RiderDocumentAlert {
@@ -110,7 +117,26 @@ export interface RiderDocumentType {
 
 export interface RiderDocumentSettings {
   documents: RiderDocumentType[];
+  /**
+   * (owner, 2026-10-11: "they will send docs on WhatsApp") On = applicants
+   * photograph and upload each document in the Rider app; off = they send
+   * their details only and WhatsApp the documents, which staff upload here.
+   * Absent on an older API.
+   */
+  applicant_uploads_enabled?: boolean;
+  /**
+   * (owner, 2026-10-11) On = a rider is approved only once every required
+   * document is verified and not expired; off = approve without documents.
+   * Absent on an older API.
+   */
+  require_documents_for_approval?: boolean;
   updated_at: string | null;
+}
+
+/** The two switches of Settings -> Rider documents (owner, 2026-10-11); each optional in the PUT. */
+export interface RiderDocumentSwitches {
+  applicant_uploads_enabled?: boolean;
+  require_documents_for_approval?: boolean;
 }
 
 /** PUT row: omit `key` for a NEW custom document (label 2-80 chars). */
@@ -121,6 +147,27 @@ export interface RiderDocumentTypeInput {
   required_for: VehicleType[];
   needs_expiry: boolean;
   needs_back: boolean;
+}
+
+/** POST /admin/riders - "Add rider" (owner, 2026-10-11): staff add a rider and upload the documents themselves. */
+export type AddRiderInput = {
+  full_name: string;
+  /** Sri Lankan mobile in any common format; the server normalises it. */
+  phone: string;
+  vehicle_type: VehicleType;
+  /** null for a bicycle. */
+  vehicle_registration_number: string | null;
+  emergency_contact_phone: string | null;
+} & RiderPayInput;
+
+export interface AddRiderResult {
+  /** Same shape as the approve endpoint's `application`; `id` is riders.id. */
+  rider: RiderApplication;
+  /** true = approved at once (nothing blocks approval). */
+  approved: boolean;
+  documents_blocking: RiderDocumentBlocking[];
+  /** NEW_NUMBER, an existing CUSTOMER's number, or a waiting/rejected APPLICATION taken over. */
+  from: 'NEW_NUMBER' | 'CUSTOMER' | 'APPLICATION';
 }
 
 /** Approve body: the pay fields plus the ADMIN-only documents override (audited server-side). */
@@ -154,11 +201,55 @@ export const riderDocuments = {
   getSettings: () =>
     apiRequest<{ settings: RiderDocumentSettings }>('/admin/settings/rider-documents').then((d) => d.settings),
 
-  setSettings: (documents: RiderDocumentTypeInput[]) =>
+  /**
+   * The document list and/or the two switches (owner, 2026-10-11): `documents`
+   * null = the stored list is kept; a switch left out is kept too.
+   */
+  setSettings: (documents: RiderDocumentTypeInput[] | null, switches: RiderDocumentSwitches = {}) =>
     apiRequest<{ settings: RiderDocumentSettings }>('/admin/settings/rider-documents', {
       method: 'PUT',
-      body: { documents: documents.map((d) => ({ ...d })) },
+      body: { ...(documents ? { documents: documents.map((d) => ({ ...d })) } : {}), ...switches },
     }).then((d) => d.settings),
+
+  /** "Add rider" (owner, 2026-10-11). Approved at once when nothing blocks approval, else PENDING. */
+  addRider: (input: AddRiderInput) =>
+    apiRequest<AddRiderResult>('/admin/riders', { method: 'POST', body: { ...input } }),
+
+  /**
+   * Staff upload one page (0 front, 1 back) of a rider's document (owner,
+   * 2026-10-11). Multipart: the browser sets the boundary. `expiryDate`
+   * '' clears it; undefined leaves it. A complete document becomes VERIFIED.
+   */
+  uploadPage: (riderId: string, docType: string, page: number, file: File, expiryDate?: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (expiryDate !== undefined) form.append('expiry_date', expiryDate);
+    return apiRequest<{ document: StaffRiderDocument }>(
+      `/admin/riders/${riderId}/documents/${encodeURIComponent(docType)}/pages/${page}`,
+      { method: 'PUT', body: form }
+    ).then((d) => d.document);
+  },
+
+  /** null when the last page was removed (the document is gone). */
+  removePage: (riderId: string, docType: string, page: number) =>
+    apiRequest<{ document: StaffRiderDocument | null }>(
+      `/admin/riders/${riderId}/documents/${encodeURIComponent(docType)}/pages/${page}`,
+      { method: 'DELETE' }
+    ).then((d) => d.document ?? null),
+
+  /** Set or clear (null) the expiry date; VERIFIED when that completes the document. */
+  setExpiry: (riderId: string, docType: string, expiryDate: string | null) =>
+    apiRequest<{ document: StaffRiderDocument }>(`/admin/riders/${riderId}/documents/${encodeURIComponent(docType)}`, {
+      method: 'PATCH',
+      body: { expiry_date: expiryDate },
+    }).then((d) => d.document),
+
+  /** Approve with the pay stored when the rider was added (body {}). */
+  approveStored: (applicationId: string) =>
+    apiRequest<{ application: RiderApplication }>(`/admin/rider-applications/${applicationId}/approve`, {
+      method: 'POST',
+      body: {},
+    }).then((d) => d.application),
 
   /** "Approve anyway" with documents still unverified (ADMIN only; recorded in the audit log). */
   approveWithOverride: (applicationId: string, input: ApproveWithOverrideInput) =>

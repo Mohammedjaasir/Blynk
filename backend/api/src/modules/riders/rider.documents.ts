@@ -62,6 +62,23 @@ import {
  * date) or reject with a preset reason. Approval needs every required
  * document VERIFIED and unexpired (rider.applications.ts); an ADMIN may
  * "approve anyway" with a reason, audited.
+ *
+ * (owner, 2026-10-11) "Mainly I am going to approve the drivers manually;
+ * they will send docs on WhatsApp" and "add a delivery rider and I upload the
+ * things":
+ *   - "Riders upload documents in the app" (applicant_uploads_enabled,
+ *     default OFF): off, the applicant upload endpoints refuse
+ *     (APPLICANT_UPLOADS_OFF) and an application is sent without documents;
+ *   - an APPROVED rider never gets an applicant session (ALREADY_APPROVED,
+ *     the SMS code left unspent so the Rider app signs in with it) and never
+ *     uploads here - they go straight to their deliveries;
+ *   - staff upload, replace and remove a rider's pages and set the expiry
+ *     (PUT|DELETE /admin/riders/:id/documents/:docType/pages/:page, PATCH
+ *     /admin/riders/:id/documents/:docType). A complete document uploaded by
+ *     staff (every page, the expiry date where one is needed) is VERIFIED at
+ *     once, reviewed by that staff member;
+ *   - "Documents needed before approval" (require_documents_for_approval,
+ *     default ON): off, nothing blocks approval.
  */
 
 // ----------------------------------------------------------------------------
@@ -201,6 +218,8 @@ export function missingForSubmission(settings: RiderDocumentSettings, vehicle: s
  * VERIFIED and not expired.
  */
 export function reviewOf(settings: RiderDocumentSettings, vehicle: string, rows: DocumentRow[]) {
+  // (owner, 2026-10-11) "Documents needed before approval" off: nothing blocks.
+  const gate = settings.require_documents_for_approval !== false;
   const today = colomboToday();
   const requirements = documentsFor(settings, vehicle).map((t) => {
     const row = rows.find((r) => r.doc_type === t.key);
@@ -216,10 +235,12 @@ export function reviewOf(settings: RiderDocumentSettings, vehicle: string, rows:
       expiry_state: state,
     };
   });
-  const blocking = requirements
-    .filter((r) => r.required && (r.status !== 'VERIFIED' || r.expiry_state === 'EXPIRED'))
-    .map((r) => ({ key: r.key, label: r.label, status: r.status, expiry_state: r.expiry_state }));
-  return { requirements, blocking, all_required_verified: blocking.length === 0 };
+  const blocking = gate
+    ? requirements
+        .filter((r) => r.required && (r.status !== 'VERIFIED' || r.expiry_state === 'EXPIRED'))
+        .map((r) => ({ key: r.key, label: r.label, status: r.status, expiry_state: r.expiry_state }))
+    : [];
+  return { requirements, blocking, all_required_verified: blocking.length === 0, approval_needs_documents: gate };
 }
 
 // ----------------------------------------------------------------------------
@@ -452,6 +473,17 @@ export function acceptDocumentFile(file: Express.Multer.File | undefined): { buf
 // ----------------------------------------------------------------------------
 
 const docNotFound = () => new AppError('Document not found.', 404, 'DOCUMENT_NOT_FOUND');
+/** (owner, 2026-10-11) an approved rider signs in; they never use the application again. */
+export const alreadyApproved = () =>
+  new AppError('This number is already an approved rider. Sign in instead.', 409, 'ALREADY_APPROVED');
+/** (owner, 2026-10-11) "they will send docs on WhatsApp". */
+export const BLYNK_WHATSAPP = '+94 71 710 7374';
+export const applicantUploadsOff = () =>
+  new AppError(
+    `Documents are not uploaded in the app. Send them to Blynk on WhatsApp ${BLYNK_WHATSAPP}.`,
+    403,
+    'APPLICANT_UPLOADS_OFF'
+  );
 const pageNotFound = () => new AppError('That page of the document was not found.', 404, 'DOCUMENT_PAGE_NOT_FOUND');
 
 const SWEEP_EVERY_MS = 60 * 60 * 1000;
@@ -481,7 +513,11 @@ export class RiderDocumentService {
     await resolveApplicant(db, phone);
     const otpId = await authService.checkOtp(phone, otp);
     await db.transaction().execute(async (trx) => {
-      await resolveApplicant(trx, phone);
+      const owner = await resolveApplicant(trx, phone);
+      // (owner, 2026-10-11: "for my number I don't need this") an approved
+      // rider gets no application screen: refused with the code still
+      // unspent, so the Rider app signs them in with it straight away.
+      if (owner.application?.status === 'APPROVED') throw alreadyApproved();
       await authService.consumeOtp(trx, phone, otpId);
     });
     this.sweepSoon();
@@ -500,11 +536,23 @@ export class RiderDocumentService {
     return {
       phone: publicPhone(phone),
       application: owner.application,
+      // (owner, 2026-10-11) off: no Documents step; send them on WhatsApp.
+      uploads_enabled: settings.applicant_uploads_enabled,
       document_types: settings.documents
         .filter((d) => d.enabled)
         .map(({ key, label, builtin, required_for, needs_expiry, needs_back }) => ({ key, label, builtin, required_for, needs_expiry, needs_back })),
       documents: rows.map((r) => present(r, settings)),
     };
+  }
+
+  /**
+   * (owner, 2026-10-11) Applicant changes only while "Riders upload
+   * documents in the app" is on, and never by an approved rider.
+   */
+  private async assertMayUpload(owner: ApplicantOwner) {
+    const settings = await riderDocumentSettings.read();
+    if (!settings.applicant_uploads_enabled) throw applicantUploadsOff();
+    if (owner.application?.status === 'APPROVED') throw alreadyApproved();
   }
 
   private async typeFor(docType: string): Promise<RiderDocumentType> {
@@ -566,6 +614,7 @@ export class RiderDocumentService {
     try {
       await db.transaction().execute(async (trx) => {
         const owner = await resolveApplicant(trx, phone);
+        await this.assertMayUpload(owner);
         const row = await this.lockOrCreate(trx, owner, type);
         const images = [...(row.images ?? [])];
         if (page > images.length) {
@@ -613,6 +662,7 @@ export class RiderDocumentService {
     let removedDocument: string | null = null;
     await db.transaction().execute(async (trx) => {
       const owner = await resolveApplicant(trx, phone);
+      await this.assertMayUpload(owner);
       const row = await this.lockOwned(trx, owner, docType, true);
       const images = [...(row!.images ?? [])];
       if (!images[page]) throw pageNotFound();
@@ -640,6 +690,7 @@ export class RiderDocumentService {
     await this.typeFor(docType);
     await db.transaction().execute(async (trx) => {
       const owner = await resolveApplicant(trx, phone);
+      await this.assertMayUpload(owner);
       const row = await this.lockOwned(trx, owner, docType, true);
       await trx
         .updateTable('rider_documents')
@@ -707,6 +758,9 @@ export class RiderDocumentService {
         .execute();
     }
     const settings = await riderDocumentSettings.read();
+    // (owner, 2026-10-11) uploads off: the application is sent with details
+    // only; the documents come on WhatsApp and staff upload them.
+    if (!settings.applicant_uploads_enabled) return replaced;
     const rows = await riderDocuments(trx, [riderId]);
     const missing = missingForSubmission(settings, vehicle, rows);
     if (missing.length) {
@@ -850,6 +904,182 @@ export class RiderDocumentService {
     const settings = await riderDocumentSettings.read();
     const row = (await documentsQuery(db).where('d.id', '=', id).executeTakeFirstOrThrow()) as DocumentRow;
     return staffPresent(row, settings);
+  }
+
+  // ---- staff uploads (owner, 2026-10-11: "add a delivery rider and I upload the things") ----
+
+  private async lockRider(trx: Trx, riderId: string) {
+    const rider = await trx.selectFrom('riders').select(['id', 'user_id']).where('id', '=', riderId).forUpdate().executeTakeFirst();
+    if (!rider) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
+    return rider;
+  }
+
+  private async lockRiderDocument(trx: Trx, riderId: string, docType: string) {
+    return (await trx
+      .selectFrom('rider_documents')
+      .select(['id', 'images', 'status', sql<string | null>`to_char(expiry_date, 'YYYY-MM-DD')`.as('expiry_date')])
+      .where('rider_id', '=', riderId)
+      .where('doc_type', '=', docType)
+      .forUpdate()
+      .executeTakeFirst()) as { id: string; images: RiderDocumentImage[]; status: RiderDocumentStatus; expiry_date: string | null } | undefined;
+  }
+
+  /**
+   * After a staff change: a complete document (every page, the expiry date
+   * where one is needed, not expired) is VERIFIED by that staff member - they
+   * looked at it themselves; anything short of that waits (PENDING).
+   */
+  private staffReview(type: RiderDocumentType, pages: number, expiry: string | null, actor: AuditActor) {
+    const complete =
+      pages >= (type.needs_back ? 2 : 1) && (!type.needs_expiry || !!expiry) && expiryState(expiry) !== 'EXPIRED';
+    return complete
+      ? {
+          status: 'VERIFIED' as const,
+          reject_reason: null,
+          reject_note: null,
+          reviewed_by: actor.actorId,
+          reviewed_at: sql<Date>`now()`,
+          updated_at: sql<Date>`now()`,
+        }
+      : this.backToPending();
+  }
+
+  /** PUT /admin/riders/:id/documents/:docType/pages/:page - staff upload or replace one page. */
+  async staffPutPage(
+    riderId: string,
+    docType: string,
+    page: number,
+    file: { buffer: Buffer; contentType: string },
+    expiry: string | null | undefined,
+    actor: AuditActor
+  ) {
+    const type = await this.typeFor(docType);
+    if (expiry && expiryState(expiry) === 'EXPIRED') {
+      throw new AppError('That expiry date has passed. Upload the current document.', 409, 'DOCUMENT_EXPIRED');
+    }
+    let savedKey: string | null = null;
+    let replacedKey: string | null = null;
+    let documentId = '';
+    try {
+      await db.transaction().execute(async (trx) => {
+        await this.lockRider(trx, riderId);
+        await sql`INSERT INTO rider_documents (rider_id, doc_type, custom_name)
+                  VALUES (${riderId}, ${type.key}, ${type.builtin ? null : type.label})
+                  ON CONFLICT (rider_id, doc_type) WHERE rider_id IS NOT NULL DO NOTHING`.execute(trx);
+        const row = (await this.lockRiderDocument(trx, riderId, type.key))!;
+        documentId = row.id;
+        const images = [...(row.images ?? [])];
+        if (page > images.length) throw new AppError('Add the front page first.', 400, 'DOCUMENT_PAGE_ORDER');
+        savedKey = await riderDocumentStore.save(row.id, file.buffer, file.contentType);
+        replacedKey = images[page]?.key ?? null;
+        images[page] = { key: savedKey, content_type: file.contentType, bytes: file.buffer.length, uploaded_at: new Date().toISOString() };
+        const nextExpiry = expiry !== undefined ? expiry : row.expiry_date;
+        const review = this.staffReview(type, images.length, nextExpiry, actor);
+        await trx
+          .updateTable('rider_documents')
+          .set({
+            images: JSON.stringify(images),
+            ...(expiry !== undefined ? { expiry_date: expiry } : {}),
+            ...(type.builtin ? {} : { custom_name: type.label }),
+            ...review,
+          })
+          .where('id', '=', row.id)
+          .execute();
+        await writeAudit(trx, actor, {
+          action: 'RIDER_DOCUMENT_UPLOADED_BY_STAFF',
+          entityType: 'RIDER_DOCUMENT',
+          entityId: row.id,
+          oldValues: { status: row.status, expiry_date: row.expiry_date },
+          newValues: {
+            rider_id: riderId,
+            doc_type: type.key,
+            page,
+            content_type: file.contentType,
+            bytes: file.buffer.length,
+            replaced: Boolean(replacedKey),
+            expiry_date: nextExpiry,
+            status: review.status,
+          },
+        });
+      });
+    } catch (err) {
+      if (savedKey) await riderDocumentStore.remove(savedKey).catch(() => undefined);
+      throw err;
+    }
+    if (replacedKey) await riderDocumentStore.remove(replacedKey).catch(() => undefined);
+    logger.info({ riderId, docType, page, by: actor.actorId }, 'Rider document uploaded by staff');
+    return this.staffDocument(documentId);
+  }
+
+  /** DELETE /admin/riders/:id/documents/:docType/pages/:page - staff remove one page (the back moves up). */
+  async staffRemovePage(riderId: string, docType: string, page: number, actor: AuditActor) {
+    const settings = await riderDocumentSettings.read();
+    const type = settings.documents.find((d) => d.key === docType);
+    let removedKey: string | null = null;
+    let removedDocument: string | null = null;
+    let documentId = '';
+    await db.transaction().execute(async (trx) => {
+      await this.lockRider(trx, riderId);
+      const row = await this.lockRiderDocument(trx, riderId, docType);
+      if (!row) throw docNotFound();
+      documentId = row.id;
+      const images = [...(row.images ?? [])];
+      if (!images[page]) throw pageNotFound();
+      removedKey = images[page].key;
+      images.splice(page, 1);
+      let status: RiderDocumentStatus | 'REMOVED' = 'REMOVED';
+      if (images.length === 0) {
+        await trx.deleteFrom('rider_documents').where('id', '=', row.id).execute();
+        removedDocument = row.id;
+      } else {
+        const review = type ? this.staffReview(type, images.length, row.expiry_date, actor) : this.backToPending();
+        status = review.status;
+        await trx
+          .updateTable('rider_documents')
+          .set({ images: JSON.stringify(images), ...review })
+          .where('id', '=', row.id)
+          .execute();
+      }
+      await writeAudit(trx, actor, {
+        action: 'RIDER_DOCUMENT_PAGE_REMOVED_BY_STAFF',
+        entityType: 'RIDER_DOCUMENT',
+        entityId: row.id,
+        oldValues: { status: row.status, pages: row.images?.length ?? 0 },
+        newValues: { rider_id: riderId, doc_type: docType, page, status },
+      });
+    });
+    if (removedDocument) await riderDocumentStore.removeDocumentsQuietly([removedDocument]);
+    else if (removedKey) await riderDocumentStore.remove(removedKey).catch(() => undefined);
+    return removedDocument ? null : this.staffDocument(documentId);
+  }
+
+  /** PATCH /admin/riders/:id/documents/:docType - staff set (or clear) the expiry date. */
+  async staffSetExpiry(riderId: string, docType: string, expiry: string | null, actor: AuditActor) {
+    const type = await this.typeFor(docType);
+    if (expiry && expiryState(expiry) === 'EXPIRED') {
+      throw new AppError('That expiry date has passed. Upload the current document.', 409, 'DOCUMENT_EXPIRED');
+    }
+    let documentId = '';
+    await db.transaction().execute(async (trx) => {
+      await this.lockRider(trx, riderId);
+      const row = await this.lockRiderDocument(trx, riderId, docType);
+      if (!row || !row.images?.length) throw docNotFound();
+      documentId = row.id;
+      const review = this.staffReview(type, row.images.length, expiry, actor);
+      await trx
+        .updateTable('rider_documents')
+        .set({ expiry_date: expiry, ...review })
+        .where('id', '=', row.id)
+        .execute();
+      await writeAudit(trx, actor, {
+        action: 'RIDER_DOCUMENT_EXPIRY_SET_BY_STAFF',
+        entityType: 'RIDER_DOCUMENT',
+        entityId: row.id,
+        oldValues: { status: row.status, expiry_date: row.expiry_date },
+        newValues: { rider_id: riderId, doc_type: docType, expiry_date: expiry, status: review.status },
+      });
+    });
+    return this.staffDocument(documentId);
   }
 
   /**
@@ -1000,6 +1230,23 @@ riderApplicantDocumentsRouter.post(
   })
 );
 
+/**
+ * Public (owner, 2026-10-11): whether applicants upload documents in the app.
+ * The Rider app reads it to show the Documents step / "See my documents", or
+ * the "send your documents on WhatsApp" line instead.
+ */
+riderApplicantDocumentsRouter.get(
+  '/applications/settings',
+  handle(async (_req, res) => {
+    const settings = await riderDocumentSettings.read();
+    res.set('Cache-Control', 'no-store');
+    res.status(200).json({
+      success: true,
+      data: { applicant_uploads_enabled: settings.applicant_uploads_enabled, whatsapp: BLYNK_WHATSAPP },
+    });
+  })
+);
+
 riderApplicantDocumentsRouter.get(
   '/applications/me',
   requireApplicant,
@@ -1009,6 +1256,19 @@ riderApplicantDocumentsRouter.get(
   })
 );
 
+/** The optional expiry_date field of a multipart upload: undefined (not sent), null ('') or a date. */
+function multipartExpiry(req: Request): string | null | undefined {
+  const rawExpiry = typeof req.body?.expiry_date === 'string' ? req.body.expiry_date.trim() : undefined;
+  if (rawExpiry === undefined) return undefined;
+  const parsed = isoDate.safeParse(rawExpiry);
+  if (rawExpiry && !parsed.success) {
+    throw new AppError('Request validation failed', 400, 'VALIDATION_ERROR', [
+      { field: 'expiry_date', message: parsed.error.issues[0]?.message ?? 'Invalid date', rule: 'custom' },
+    ]);
+  }
+  return rawExpiry ? rawExpiry : null;
+}
+
 riderApplicantDocumentsRouter.put(
   '/applications/documents/:docType/pages/:page',
   requireApplicant,
@@ -1016,17 +1276,7 @@ riderApplicantDocumentsRouter.put(
   documentUpload,
   handle(async (req, res) => {
     const file = acceptDocumentFile(req.file);
-    const rawExpiry = typeof req.body?.expiry_date === 'string' ? req.body.expiry_date.trim() : undefined;
-    let expiry: string | null | undefined;
-    if (rawExpiry !== undefined) {
-      const parsed = isoDate.safeParse(rawExpiry);
-      if (rawExpiry && !parsed.success) {
-        throw new AppError('Request validation failed', 400, 'VALIDATION_ERROR', [
-          { field: 'expiry_date', message: parsed.error.issues[0]?.message ?? 'Invalid date', rule: 'custom' },
-        ]);
-      }
-      expiry = rawExpiry ? rawExpiry : null;
-    }
+    const expiry = multipartExpiry(req);
     const params = req.params as unknown as z.infer<typeof pageParamsSchema>;
     const document = await riderDocumentService.putPage(phoneOf(res), params.docType, params.page, file, expiry);
     res.status(200).json({ success: true, data: { document } });
@@ -1087,6 +1337,51 @@ adminRiderDocumentsRouter.get(
   handle(async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.status(200).json({ success: true, data: await riderDocumentService.forRider(String(req.params.id)) });
+  })
+);
+
+// Staff uploads (owner, 2026-10-11: "add a delivery rider and I upload the
+// things"): any rider - a new one, a waiting applicant or an approved rider
+// whose document was renewed. Same private pipeline as the applicant's.
+export const staffRiderDocParamsSchema = riderIdParamsSchema.merge(docTypeParamsSchema);
+export const staffRiderPageParamsSchema = riderIdParamsSchema.merge(pageParamsSchema);
+
+adminRiderDocumentsRouter.put(
+  '/riders/:id/documents/:docType/pages/:page',
+  requireAuth,
+  REVIEWERS,
+  validate({ params: staffRiderPageParamsSchema }),
+  documentUpload,
+  handle(async (req, res) => {
+    const file = acceptDocumentFile(req.file);
+    const expiry = multipartExpiry(req);
+    const params = req.params as unknown as z.infer<typeof staffRiderPageParamsSchema>;
+    const document = await riderDocumentService.staffPutPage(params.id, params.docType, params.page, file, expiry, actorOf(req));
+    res.status(200).json({ success: true, data: { document } });
+  })
+);
+
+adminRiderDocumentsRouter.delete(
+  '/riders/:id/documents/:docType/pages/:page',
+  requireAuth,
+  REVIEWERS,
+  validate({ params: staffRiderPageParamsSchema }),
+  handle(async (req, res) => {
+    const params = req.params as unknown as z.infer<typeof staffRiderPageParamsSchema>;
+    const document = await riderDocumentService.staffRemovePage(params.id, params.docType, params.page, actorOf(req));
+    res.status(200).json({ success: true, data: { document } });
+  })
+);
+
+adminRiderDocumentsRouter.patch(
+  '/riders/:id/documents/:docType',
+  requireAuth,
+  REVIEWERS,
+  validate({ params: staffRiderDocParamsSchema, body: expiryBodySchema }),
+  handle(async (req, res) => {
+    const params = req.params as unknown as z.infer<typeof staffRiderDocParamsSchema>;
+    const document = await riderDocumentService.staffSetExpiry(params.id, params.docType, req.body.expiry_date, actorOf(req));
+    res.status(200).json({ success: true, data: { document } });
   })
 );
 

@@ -14,6 +14,7 @@ import {
   settingsFrom,
   documentsFor,
   RIDER_DOCUMENTS_KEY,
+  defaultRiderDocumentSettings,
 } from '../src/modules/riders/rider.documents.settings.js';
 import {
   riderDocumentService,
@@ -178,6 +179,19 @@ describe('Rider documents', () => {
     );
   }
 
+  /**
+   * The default documents with "Riders upload documents in the app" ON
+   * (owner, 2026-10-11: the default is OFF; these flows test applicant
+   * uploads, so they switch it on).
+   */
+  async function uploadsOn() {
+    await pool.query(
+      `INSERT INTO system_configurations (key, value, description) VALUES ($1, $2, 'test')
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [RIDER_DOCUMENTS_KEY, JSON.stringify({ ...defaultRiderDocumentSettings(), applicant_uploads_enabled: true })]
+    );
+  }
+
   async function restoreSetting() {
     if (savedSetting) {
       await pool.query(
@@ -197,7 +211,7 @@ describe('Rider documents', () => {
     riderDocumentSettings.read = () => riderDocumentSettings.realRead();
     const saved = await pool.query(`SELECT value, description FROM system_configurations WHERE key = $1`, [RIDER_DOCUMENTS_KEY]);
     savedSetting = saved.rows[0] ?? null;
-    await pool.query(`DELETE FROM system_configurations WHERE key = $1`, [RIDER_DOCUMENTS_KEY]); // the defaults
+    await uploadsOn(); // the default documents, applicant uploads on
     await cleanup();
     const { rows } = await pool.query<{ id: string; phone: string }>(
       `INSERT INTO users (phone, email, full_name, role) VALUES
@@ -255,6 +269,9 @@ describe('Rider documents', () => {
       expect(s.documents.find((d) => d.key === 'DRIVING_LICENCE')!.needs_back).toBe(true);
       // A malformed row is the defaults.
       expect(settingsFrom({ documents: 'nope' })).toEqual(s);
+      // (owner, 2026-10-11) applicants do not upload by default; approval needs documents by default.
+      expect(s.applicant_uploads_enabled).toBe(false);
+      expect(s.require_documents_for_approval).toBe(true);
     });
 
     it('GET/PUT for ADMIN and OPERATIONS only; adds a custom document; audited', async () => {
@@ -301,8 +318,8 @@ describe('Rider documents', () => {
       );
       expect(audit.rows).toHaveLength(1);
       expect(audit.rows[0].new_values.documents).toHaveLength(5);
-      // Back to the defaults for the flows below.
-      await pool.query(`DELETE FROM system_configurations WHERE key = $1`, [RIDER_DOCUMENTS_KEY]);
+      // Back to the defaults (uploads on) for the flows below.
+      await uploadsOn();
     });
   });
 

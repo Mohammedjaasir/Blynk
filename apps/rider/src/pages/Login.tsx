@@ -1,6 +1,8 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
+import { applicantApi } from '../api/applicant';
+import { WhatsAppDocs } from '../components/WhatsAppDocs';
 import { WRONG_ROLE_MESSAGE, useAuth } from '../auth/AuthContext';
 import { CodeField, PendingNotice, RejectedNotice } from '../components/ApplicationNotice';
 import { errorCode, errorMessage } from '../lib/errors';
@@ -43,6 +45,26 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>(null);
   const resend = useResendTimer();
+  /**
+   * (owner, 2026-10-11) "See my documents" only while "Riders upload
+   * documents in the app" is on (default off: they send them on WhatsApp).
+   * Unknown (not loaded / offline) counts as off.
+   */
+  const [uploadsOn, setUploadsOn] = useState(false);
+  const outcomeKind = outcome?.kind;
+  useEffect(() => {
+    if (outcomeKind !== 'pending') return;
+    let live = true;
+    applicantApi
+      .settings()
+      .then((s) => {
+        if (live) setUploadsOn(s.applicant_uploads_enabled === true);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [outcomeKind]);
 
   if (status === 'authenticated') return <Navigate to="/" replace />;
 
@@ -156,11 +178,12 @@ export function Login() {
   if (outcome?.kind === 'pending') {
     body = (
       <PendingNotice>
-        {outcome.otp ? (
+        {outcome.otp && uploadsOn ? (
           <button type="button" className="primary" onClick={() => openApplication(outcome.otp as string)}>
             See my documents
           </button>
         ) : null}
+        {uploadsOn ? null : <WhatsAppDocs />}
         <button type="button" className="secondary" onClick={startOver}>
           Back to sign in
         </button>

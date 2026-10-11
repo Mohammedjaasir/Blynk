@@ -52,10 +52,12 @@ async function fillDetails(user: User, { emergency = '' } = {}) {
   if (emergency) await user.type(screen.getByLabelText(/Emergency contact number/), emergency);
 }
 
-/** Details -> documents -> send. */
+/**
+ * Details -> send. (owner, 2026-10-11) "Riders upload documents in the app"
+ * is off by default: no Documents step, the details step sends the
+ * application (rider-documents.test.tsx covers the uploads with it on).
+ */
 async function send(user: User) {
-  await user.click(screen.getByRole('button', { name: 'Next: your documents' }));
-  await screen.findByRole('heading', { name: 'Your documents' });
   await user.click(screen.getByRole('button', { name: 'Send application' }));
 }
 
@@ -137,7 +139,7 @@ describe('apply to deliver', () => {
     await user.type(screen.getByLabelText('Full name'), 'Nimal Perera');
     await user.click(screen.getByRole('radio', { name: 'Motorcycle' }));
     expect(screen.getByLabelText('Registration number')).toBeRequired();
-    await user.click(screen.getByRole('button', { name: 'Next: your documents' }));
+    await user.click(screen.getByRole('button', { name: 'Send application' }));
     expect(await screen.findByRole('alert')).toHaveTextContent("Enter your vehicle's registration number.");
     expect(screen.queryByRole('heading', { name: 'Your documents' })).toBeNull();
     expect(api.find('POST', '/riders/applications/submit')).toHaveLength(0);
@@ -157,7 +159,7 @@ describe('apply to deliver', () => {
     const { api } = renderApply();
     await toDetails(user);
     await user.type(screen.getByLabelText('Full name'), 'Nimal Perera');
-    await user.click(screen.getByRole('button', { name: 'Next: your documents' }));
+    await user.click(screen.getByRole('button', { name: 'Send application' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Choose your vehicle.');
     expect(api.find('POST', '/riders/applications/submit')).toHaveLength(0);
   });
@@ -219,7 +221,9 @@ describe('apply to deliver', () => {
     await user.type(screen.getByLabelText('6-digit code'), '123456');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('heading', { name: 'Waiting for approval' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Your documents' })).toBeInTheDocument();
+    // (owner, 2026-10-11) uploads off by default: the WhatsApp line instead of the document cards.
+    expect(screen.queryByRole('heading', { name: 'Your documents' })).toBeNull();
+    expect(screen.getByRole('note')).toHaveTextContent('WhatsApp +94 71 710 7374');
   });
 
   it('a pending rider asking for a code goes straight to the waiting screen', async () => {
@@ -230,6 +234,63 @@ describe('apply to deliver', () => {
     await user.type(await screen.findByLabelText('Mobile number'), '0771234567');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
     expect(await screen.findByRole('heading', { name: 'Waiting for approval' })).toBeInTheDocument();
+  });
+
+  it('uploads off: the details step says to send documents on WhatsApp and sends the application', async () => {
+    const user = userEvent.setup();
+    const { api } = renderApply();
+    await toDetails(user);
+    expect(screen.queryByRole('button', { name: 'Next: your documents' })).toBeNull();
+    expect(screen.getByRole('note')).toHaveTextContent('Send your documents to Blynk on WhatsApp +94 71 710 7374');
+    expect(screen.getByRole('link', { name: 'Open WhatsApp' })).toHaveAttribute('href', 'https://wa.me/94717107374');
+    await fillDetails(user);
+    await send(user);
+    expect(await screen.findByRole('heading', { name: 'Application sent' })).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent('WhatsApp +94 71 710 7374');
+    expect(api.find('POST', '/riders/applications/submit')).toHaveLength(1);
+  });
+
+  it('an approved rider checking their number is signed straight in to their deliveries (owner, 2026-10-11)', async () => {
+    const user = userEvent.setup();
+    const { api } = renderApply({
+      'POST /riders/applications/session': () =>
+        fail(409, 'ALREADY_APPROVED', 'This number is already an approved rider. Sign in instead.'),
+      'POST /auth/otp/verify': () => ok({ access_token: 'a', refresh_token: 'r', user: RIDER }),
+      'GET /auth/me': () => ok(RIDER),
+      'GET /riders/deliveries': () => ok({ deliveries: [] }),
+    });
+    await toCode(user);
+    await user.type(screen.getByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('No deliveries assigned to you right now.')).toBeInTheDocument();
+    expect(api.find('POST', '/auth/otp/verify')[0].body).toMatchObject({ phone: '0771234567', otp: '123456' });
+    expect(screen.queryByText("You're an approved rider")).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Your documents' })).toBeNull();
+  });
+
+  it('an applicant session that finds the application approved goes to sign-in, never the documents screen', async () => {
+    const user = userEvent.setup();
+    renderApply({
+      'POST /riders/applications/session': () =>
+        ok({
+          ...SESSION,
+          application: {
+            id: 'r1',
+            status: 'APPROVED',
+            vehicle_type: 'MOTORCYCLE',
+            vehicle_registration_number: 'WP 1',
+            full_name: 'Nimal',
+            rejection_reason: null,
+            applied_at: null,
+          },
+        }),
+    });
+    await toCode(user);
+    await user.type(screen.getByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Sign in to your deliveries' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent("You're already an approved rider. Sign in instead.");
+    expect(screen.queryByRole('heading', { name: 'Your documents' })).toBeNull();
   });
 
   it('ALREADY_APPROVED goes back to sign-in with the number filled in', async () => {

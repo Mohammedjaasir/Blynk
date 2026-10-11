@@ -384,6 +384,8 @@ describe('Rider applications and approval', () => {
             'document_requirements',
             'documents_blocking',
             'documents_verified',
+            // (owner, 2026-10-11) "Documents needed before approval".
+            'approval_needs_documents',
           ].sort()
         );
         expect(mine[0]).toMatchObject({

@@ -19,6 +19,7 @@ import {
   type DocItem,
 } from '../lib/riderDocuments';
 import { DocumentViewer } from './DocumentViewer';
+import { StaffDocumentDialog } from './RiderDocumentUpload';
 import { Spinner } from './ui';
 import { useDocumentPage } from './usePrivateFile';
 import './riderDocuments.css';
@@ -30,9 +31,14 @@ import './riderDocuments.css';
  * that opens the full-screen DocumentViewer; the Documents panel for an
  * approved rider (a renewed insurance can be re-verified); and the
  * expiring-documents badge from GET /admin/rider-documents/alerts.
+ *
+ * Staff upload (owner, 2026-10-11: riders send their documents on
+ * WhatsApp): with a `riderId`, every tile has an Upload / Replace button
+ * that opens StaffDocumentDialog - front/back pages, remove a page, the
+ * expiry date - for waiting applicants and approved riders alike.
  */
 
-function DocumentTile({ item, onOpen }: { item: DocItem; onOpen(): void }) {
+function DocumentTile({ item, onOpen, onUpload }: { item: DocItem; onOpen(): void; onUpload?(): void }) {
   const doc = item.doc;
   const front = doc?.pages.find((p) => p.index === 0) ?? null;
   const pdf = isPdf(front?.content_type);
@@ -74,6 +80,16 @@ function DocumentTile({ item, onOpen }: { item: DocItem; onOpen(): void }) {
       {doc?.status === 'REJECTED' && doc.reject_reason_label ? (
         <span className="rd-tile__meta">Rejected: {doc.reject_reason_label}</span>
       ) : null}
+      {onUpload ? (
+        <button
+          type="button"
+          className="button button--ghost button--sm rd-tile__upload"
+          aria-label={`${doc ? 'Replace' : 'Upload'} ${item.label}`}
+          onClick={onUpload}
+        >
+          {doc ? 'Replace' : 'Upload'}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -83,11 +99,14 @@ export function RiderDocumentsReview({
   documents,
   requirements,
   riderName,
+  riderId,
   onChanged,
 }: {
   documents?: StaffRiderDocument[];
   requirements?: RiderDocumentRequirement[];
   riderName?: string | null;
+  /** riders.id: shows the staff Upload / Replace buttons (owner, 2026-10-11). */
+  riderId?: string;
   /** Refresh after a verify / reject. */
   onChanged(): void | Promise<void>;
 }) {
@@ -95,6 +114,8 @@ export function RiderDocumentsReview({
   const viewable = useMemo(() => items.filter((i) => i.doc), [items]);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const openIndex = openKey ? viewable.findIndex((i) => i.key === openKey) : -1;
+  const [uploadKey, setUploadKey] = useState<string | null>(null);
+  const uploadItem = uploadKey ? items.find((i) => i.key === uploadKey) ?? null : null;
 
   if (items.length === 0) return <span className="cell__secondary">No documents</span>;
 
@@ -102,7 +123,12 @@ export function RiderDocumentsReview({
     <>
       <div className="rd-strip" aria-label={`Documents${riderName ? ` of ${riderName}` : ''}`}>
         {items.map((item) => (
-          <DocumentTile key={item.key} item={item} onOpen={() => setOpenKey(item.key)} />
+          <DocumentTile
+            key={item.key}
+            item={item}
+            onOpen={() => setOpenKey(item.key)}
+            onUpload={riderId ? () => setUploadKey(item.key) : undefined}
+          />
         ))}
       </div>
       {openIndex >= 0 ? (
@@ -110,8 +136,18 @@ export function RiderDocumentsReview({
           items={viewable}
           index={openIndex}
           riderName={riderName}
+          riderId={riderId}
           onIndex={(i) => setOpenKey(viewable[i]?.key ?? null)}
           onClose={() => setOpenKey(null)}
+          onChanged={() => onChanged()}
+        />
+      ) : null}
+      {uploadItem && riderId ? (
+        <StaffDocumentDialog
+          riderId={riderId}
+          item={uploadItem}
+          riderName={riderName}
+          onClose={() => setUploadKey(null)}
           onChanged={() => onChanged()}
         />
       ) : null}
@@ -150,7 +186,7 @@ export function RiderDocumentsPanel({
   // Escape closes the panel - unless the viewer is open on top (it closes first).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !document.querySelector('.rd-viewer')) onClose();
+      if (e.key === 'Escape' && !document.querySelector('.rd-viewer, .rd-upload')) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -169,7 +205,10 @@ export function RiderDocumentsPanel({
           <Spinner label="Loading documents" />
         ) : (
           <>
-            {data.all_required_verified ? (
+            {data.approval_needs_documents === false ? (
+              // Settings -> "Documents needed before approval" is off (owner, 2026-10-11).
+              <p className="modal__message">Documents are not needed for approval (Settings, Rider documents).</p>
+            ) : data.all_required_verified ? (
               <p className="modal__message">Every required document is verified.</p>
             ) : (
               <p className="rd-warning">Not verified yet: {blockingText(data.blocking)}.</p>
@@ -178,6 +217,7 @@ export function RiderDocumentsPanel({
               documents={data.documents}
               requirements={data.requirements}
               riderName={name}
+              riderId={riderId}
               onChanged={async () => {
                 await load();
                 onChanged?.();

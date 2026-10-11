@@ -136,6 +136,12 @@ const DOCUMENT_MESSAGES: Record<string, string> = {
   APPLICATION_APPROVED: 'This rider is already approved, so the request cannot be deleted.',
   DOCUMENT_PAGE_NOT_FOUND: 'This page was not uploaded.',
   DOCUMENT_FILE_MISSING: 'The file for this page is missing. Ask the rider to upload it again.',
+  // Staff uploads (owner, 2026-10-11).
+  UNSUPPORTED_MEDIA_TYPE: 'Use a JPEG, PNG or WebP photo, or a PDF. iPhone HEIC photos cannot be used.',
+  FILE_TOO_LARGE: 'This file is larger than 8 MB. Take the photo again or choose a smaller file.',
+  DOCUMENT_PAGE_ORDER: 'Upload the front page first, then the back.',
+  DOCUMENT_TYPE_NOT_FOUND: 'This document is no longer in Settings -> Rider documents.',
+  RIDER_NOT_FOUND: 'This rider was not found. Refresh the list and try again.',
 };
 
 export function documentErrorMessage(err: unknown, fallback: string): string {
@@ -149,4 +155,57 @@ export function documentErrorMessage(err: unknown, fallback: string): string {
     if (first?.message) return first.message;
   }
   return errorMessage(err, fallback);
+}
+
+
+// ---------------------------------------------------------------------------
+// Staff uploads (owner, 2026-10-11: "Mainly I am going to approve the drivers
+// manually; they will send docs on WhatsApp" / "Add a delivery rider and I
+// upload the things"). The backend re-checks every rule; these only answer
+// early so a slow 8 MB upload is not wasted.
+// ---------------------------------------------------------------------------
+
+/** The API's limit for one page. */
+export const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
+export const DOCUMENT_FILE_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
+const DOCUMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const EXTENSION_TYPES: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+};
+
+/** A friendly reason the file cannot be used, or null when it is fine (owner, 2026-10-11). */
+export function documentFileProblem(file: File): string | null {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  const type = file.type || EXTENSION_TYPES[ext] || '';
+  if (/hei[cf]/i.test(type) || ext === 'heic' || ext === 'heif') {
+    return 'iPhone HEIC photos cannot be used. Take the photo again in JPEG, or send a screenshot.';
+  }
+  if (!DOCUMENT_TYPES.includes(type)) return 'Use a JPEG, PNG or WebP photo, or a PDF.';
+  if (file.size > MAX_DOCUMENT_BYTES) return 'This file is larger than 8 MB. Take the photo again or choose a smaller file.';
+  return null;
+}
+
+export const isPdfFile = (file: File) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+
+/** Upload-time messages: an expired date here is the date staff picked. */
+export function uploadErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.code === 'DOCUMENT_EXPIRED') {
+    return 'That expiry date has already passed. Pick the date printed on a document that is still valid.';
+  }
+  return documentErrorMessage(err, fallback);
+}
+
+/** Sri Lankan mobile, as the API's normaliser accepts it (070-078, not 073). */
+export const SL_MOBILE_PATTERN = /^(?:\+?94|0)?7[0124-8]\d{7}$/;
+export const isSriLankanMobile = (phone: string) => SL_MOBILE_PATTERN.test(phone.replace(/[\s\-()]/g, ''));
+
+/** "+94771234567" -> "077 123 4567". */
+export function readableMobile(phone: string | null | undefined): string {
+  if (!phone) return '—';
+  const local = phone.startsWith('+94') ? `0${phone.slice(3)}` : phone;
+  return local.length === 10 ? `${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}` : local;
 }

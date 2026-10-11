@@ -6,6 +6,7 @@ import type { CreatableRole, StaffAccount, StaffRole, VehicleType } from '../api
 import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
 import { DocumentAlertBadge, RiderDocumentsPanel, useRiderDocumentAlerts } from '../components/RiderDocuments';
+import { AddRiderDialog, AddRiderNotice, type AddRiderOutcome } from '../components/AddRiderDialog';
 
 /**
  * Staff accounts (backend migration 014). Admins create the sign-ins for
@@ -28,6 +29,10 @@ import { DocumentAlertBadge, RiderDocumentsPanel, useRiderDocumentAlerts } from 
  * number plate, optional emergency contact - and is active at once; its
  * vehicle is edited here ("Edit rider"), and disabling it is refused while
  * it still holds an open delivery. The list can be filtered by role.
+ *
+ * "Add rider" (owner, 2026-10-11: "Add a delivery rider and I upload the
+ * things"): the same form as on Rider requests - details, pay and the
+ * documents the admin uploads - for riders who sign in with their phone.
  */
 
 export const VEHICLE_LABEL: Record<VehicleType, string> = {
@@ -119,6 +124,8 @@ export function Staff() {
   // Rider documents (owner, 2026-10-10): expiring-insurance badge and the Documents panel for riders.
   const docAlerts = useRiderDocumentAlerts();
   const [docsFor, setDocsFor] = useState<StaffAccount | null>(null);
+  const [addingRider, setAddingRider] = useState(false);
+  const [addedRider, setAddedRider] = useState<AddRiderOutcome | null>(null);
   const filterId = useId();
   const visible = rows?.filter((r) => roleFilter === 'ALL' || r.role === roleFilter) ?? null;
 
@@ -184,11 +191,25 @@ export function Staff() {
         title="Staff accounts"
         description="Sign-ins for Admin, Operations, Inventory and Rider accounts. Each account opens only its own app. New riders apply in the Rider app and are approved under Rider requests."
         actions={
-          <button type="button" className="button" onClick={() => setDialog({ kind: 'create' })}>
-            Create account
-          </button>
+          <>
+            <button type="button" className="button button--ghost" onClick={() => setAddingRider(true)}>
+              Add rider
+            </button>
+            <button type="button" className="button" onClick={() => setDialog({ kind: 'create' })}>
+              Create account
+            </button>
+          </>
         }
       />
+
+      {addedRider ? (
+        <AddRiderNotice
+          key={addedRider.riderId + addedRider.message}
+          outcome={addedRider}
+          onDismiss={() => setAddedRider(null)}
+          onChanged={docAlerts.reload}
+        />
+      ) : null}
 
       {notice ? (
         <div className="staff-notice" role="status">
@@ -431,6 +452,17 @@ export function Staff() {
           destructive={!dialog.account.disabled}
           onCancel={() => setDialog(null)}
           onConfirm={() => void toggleDisabled(dialog.account)}
+        />
+      ) : null}
+
+      {addingRider ? (
+        <AddRiderDialog
+          onClose={() => setAddingRider(false)}
+          onDone={(outcome) => {
+            setAddingRider(false);
+            setAddedRider(outcome);
+            void load();
+          }}
         />
       ) : null}
 

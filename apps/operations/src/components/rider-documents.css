@@ -667,3 +667,130 @@
   flex: 1;
   min-width: 0;
 }
+
+/* -------------------------------------------- staff uploads (owner, 2026-10-11) */
+.rdoc-approval .rdoc-switch-row + .rdoc-switch-row {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.rdoc-tile__upload {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.rdoc-viewer__upload {
+  align-self: center;
+  margin-top: 4px;
+}
+
+.rdoc-upload-modal {
+  z-index: 30;
+}
+
+.rdoc-upload__expiry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.rdoc-upload__page {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+}
+
+.rdoc-upload__page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rdoc-upload__page-head .quiet {
+  margin: 0;
+}
+
+.rdoc-upload__side {
+  margin: 0;
+  font-size: var(--text-label);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+.rdoc-upload__actions,
+.rdoc-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.rdoc-picked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rdoc-picked__preview {
+  flex: none;
+  width: 56px;
+  height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--canvas);
+  display: flex;
+  font-size: var(--text-label);
+}
+
+.rdoc-picked__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rdoc-picked__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+}
+
+.rdoc-add-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.rdoc-add-docs .quiet {
+  margin: 0;
+}
+
+.rdoc-add-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.rdoc-add-doc__side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

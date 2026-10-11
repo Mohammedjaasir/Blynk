@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
@@ -19,7 +19,17 @@ const TYPES = [
   { key: 'INSURANCE', label: 'Insurance certificate', builtin: true, required_for: MOTOR, needs_expiry: true, needs_back: false },
   { key: 'DRIVING_LICENCE', label: 'Driving licence', builtin: true, required_for: MOTOR, needs_expiry: true, needs_back: true },
 ];
-const SESSION = { applicant_token: 'applicant-token', expires_in: 7200, phone: '+94771234567', application: null, document_types: TYPES, documents: [] };
+const PENDING_APP = {
+  id: 'rider-1',
+  status: 'PENDING' as const,
+  vehicle_type: 'MOTORCYCLE' as const,
+  vehicle_registration_number: 'WP BCD-1234',
+  full_name: 'Nimal Perera',
+  rejection_reason: null,
+  applied_at: '2026-10-10T08:00:00.000Z',
+};
+// "Riders upload documents in the app" on (owner, 2026-10-11: default off; these tests cover the uploads).
+const SESSION = { applicant_token: 'applicant-token', expires_in: 7200, phone: '+94771234567', application: null, uploads_enabled: true, document_types: TYPES, documents: [] };
 
 function doc(type: string, pages: number, extra: Partial<RiderDocument> = {}): RiderDocument {
   const t = TYPES.find((x) => x.key === type)!;
@@ -310,6 +320,7 @@ describe('rider documents - after applying', () => {
     const { api } = renderAs(null, '/login', {
       'POST /auth/otp/request': () => ok({ dev_otp: '654321' }),
       'POST /auth/otp/verify': () => fail(403, 'RIDER_PENDING_APPROVAL', 'Waiting.'),
+      'GET /riders/applications/settings': () => ok({ applicant_uploads_enabled: true }),
       'POST /riders/applications/session': () => ok({ ...SESSION, application: REJECTED_APP, documents: [doc('VEHICLE_BOOK', 1)] }),
     });
     await user.type(await screen.findByLabelText('Mobile number'), '0771234567');
@@ -320,5 +331,41 @@ describe('rider documents - after applying', () => {
     expect(await screen.findByRole('heading', { name: 'Your documents' })).toBeInTheDocument();
     expect(api.find('POST', '/riders/applications/session')[0].body).toEqual({ phone: '0771234567', otp: '654321' });
     expect(within(card('Vehicle book (CR)')).getByText('Waiting for review')).toBeInTheDocument();
+  });
+});
+
+describe('rider documents - uploads off (owner, 2026-10-11)', () => {
+  it('from sign-in, a waiting applicant is asked to send documents on WhatsApp - no "See my documents"', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(null, '/login', {
+      'POST /auth/otp/request': () => ok({ dev_otp: '654321' }),
+      'POST /auth/otp/verify': () => fail(403, 'RIDER_PENDING_APPROVAL', 'Waiting.'),
+      'GET /riders/applications/settings': () => ok({ applicant_uploads_enabled: false }),
+    });
+    await user.type(await screen.findByLabelText('Mobile number'), '0771234567');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '654321');
+    await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
+    expect(await screen.findByRole('heading', { name: 'Waiting for approval' })).toBeInTheDocument();
+    await waitFor(() => expect(api.find('GET', '/riders/applications/settings')).toHaveLength(1));
+    expect(screen.getByRole('note')).toHaveTextContent('Send your documents to Blynk on WhatsApp +94 71 710 7374');
+    expect(screen.getByRole('link', { name: 'Open WhatsApp' })).toHaveAttribute('href', 'https://wa.me/94717107374');
+    expect(screen.queryByRole('button', { name: 'See my documents' })).toBeNull();
+  });
+
+  it('a waiting applicant opening the application sees no document cards, only the WhatsApp line', async () => {
+    const user = userEvent.setup();
+    renderApply({
+      'POST /riders/applications/session': () =>
+        ok({ ...SESSION, uploads_enabled: false, application: { ...PENDING_APP }, documents: [] }),
+    });
+    await user.type(await screen.findByLabelText('Mobile number'), '0771234567');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Waiting for approval' })).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent('WhatsApp +94 71 710 7374');
+    expect(screen.queryByRole('heading', { name: 'Your documents' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Vehicle book (CR)' })).toBeNull();
   });
 });

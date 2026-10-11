@@ -6,14 +6,17 @@ import {
   REJECT_NOTE_MAX,
   REJECT_REASONS,
   documentActionError,
+  documentFileProblem,
   expiryChip,
   formatDay,
   isPdf,
+  staffUploadError,
   statusTone,
   type DocItem,
 } from '../lib/riderDocuments';
 import { colomboDateKey } from '../lib/schedule';
 import { DatePicker } from './DatePicker';
+import { FilePickButtons, PAGE_NAME } from './RiderDocumentUpload';
 import { Spinner, useToast } from './ui';
 import { useDocumentPage } from './usePrivateFile';
 import './riderDocuments.css';
@@ -25,6 +28,10 @@ import './riderDocuments.css';
  * the rider's other documents - and the review on the right: Verify (with
  * the expiry date when the type needs one) or Reject with a preset reason.
  * Escape closes. Pages are private blobs (useDocumentPage), revoked on close.
+ *
+ * With a `riderId`, staff can also replace or remove the page on screen
+ * (owner, 2026-10-11: riders send documents on WhatsApp and staff upload
+ * them); a complete staff upload is verified at once.
  */
 
 const MIN_ZOOM = 1;
@@ -44,6 +51,7 @@ export function DocumentViewer({
   items,
   index,
   riderName,
+  riderId,
   onIndex,
   onClose,
   onChanged,
@@ -52,10 +60,12 @@ export function DocumentViewer({
   items: DocItem[];
   index: number;
   riderName?: string | null;
+  /** riders.id: shows "Replace this page" / "Remove this page" (owner, 2026-10-11). */
+  riderId?: string;
   onIndex(next: number): void;
   onClose(): void;
-  /** After a verify/reject: the API's updated document (the parent refreshes). */
-  onChanged(doc: StaffRiderDocument): void | Promise<void>;
+  /** After a verify/reject/upload: the API's updated document, null when its last page was removed (the parent refreshes). */
+  onChanged(doc: StaffRiderDocument | null): void | Promise<void>;
 }) {
   const toast = useToast();
   const [overrides, setOverrides] = useState<Record<string, StaffRiderDocument>>({});
@@ -71,7 +81,7 @@ export function DocumentViewer({
   const [expiry, setExpiry] = useState('');
   const [reason, setReason] = useState<RejectReason | null>(null);
   const [note, setNote] = useState('');
-  const [busy, setBusy] = useState<'verify' | 'reject' | null>(null);
+  const [busy, setBusy] = useState<'verify' | 'reject' | 'page' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [expiryError, setExpiryError] = useState(false);
 
@@ -217,6 +227,46 @@ export function DocumentViewer({
       await onChanged(updated);
     } catch (err) {
       setActionError(documentActionError(err, 'Could not reject this document.'));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Staff replace the page on screen (owner, 2026-10-11). */
+  async function replacePage(file: File) {
+    if (!doc || !item || !riderId) return;
+    const problem = documentFileProblem(file);
+    if (problem) {
+      setActionError(problem);
+      return;
+    }
+    setBusy('page');
+    setActionError(null);
+    try {
+      const updated = await riderDocuments.uploadPage(riderId, doc.doc_type, page, file);
+      setOverrides((o) => ({ ...o, [updated.id]: updated }));
+      toast.success(`${item.label}: ${PAGE_NAME[page]?.toLowerCase() ?? 'page'} uploaded${updated.status === 'VERIFIED' ? ' and verified' : ''}.`);
+      await onChanged(updated);
+    } catch (err) {
+      setActionError(staffUploadError(err, 'Could not upload this page.'));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removePage() {
+    if (!doc || !item || !riderId) return;
+    setBusy('page');
+    setActionError(null);
+    try {
+      const updated = await riderDocuments.removePage(riderId, doc.doc_type, page);
+      if (updated) setOverrides((o) => ({ ...o, [updated.id]: updated }));
+      toast.success(updated ? `${item.label}: page removed.` : `${item.label} removed.`);
+      await onChanged(updated);
+      if (!updated) onClose();
+      else if (page > 0) setPage(0);
+    } catch (err) {
+      setActionError(staffUploadError(err, 'Could not remove this page.'));
     } finally {
       setBusy(null);
     }
@@ -434,6 +484,27 @@ export function DocumentViewer({
             {busy === 'reject' ? 'Rejecting…' : 'Reject'}
           </button>
         </section>
+
+        {riderId ? (
+          <section className="rd-viewer__section" aria-label="Staff upload">
+            <h3>{twoSided ? `${PAGE_NAME[page] ?? 'Page'} page` : 'Page'}</h3>
+            <div className="rd-viewer__pages">
+              <FilePickButtons
+                name={`${item.label}, ${(PAGE_NAME[page] ?? 'page').toLowerCase()}`}
+                replace={Boolean(pageMeta)}
+                disabled={busy !== null || (page === 1 && !doc.pages.some((p) => p.index === 0))}
+                testId={`viewer-page-${page}`}
+                onFile={(file) => void replacePage(file)}
+              />
+              {pageMeta ? (
+                <button type="button" className="button button--ghost button--sm" disabled={busy !== null} onClick={() => void removePage()}>
+                  Remove this page
+                </button>
+              ) : null}
+            </div>
+            <span className="cell__secondary">For documents the rider sent on WhatsApp. JPEG, PNG, WebP or PDF, up to 8 MB.</span>
+          </section>
+        ) : null}
 
         {actionError ? (
           <p className="rd-warning rd-warning--danger" role="alert">

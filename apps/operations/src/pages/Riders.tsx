@@ -6,6 +6,7 @@ import { PageHeader } from '../components/Layout';
 import { RiderPayFields, useRiderPayDefaults } from '../components/RiderPayFields';
 import { RiderAdjustSheet } from '../components/RiderAdjustments';
 import { RiderDocumentsSheet } from '../components/RiderDocuments';
+import { AddRiderSheet, type AddRiderOutcome } from '../components/AddRiderSheet';
 import { EmptyState, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
 import {
@@ -25,9 +26,13 @@ import {
  * Rider pay (owner, 2026-10-09): each rider shows their type - "Company"
  * (salaried, no per-delivery commission) or "Commission · 80%" (their own %
  * or the store default) - and staff can change it here via
- * `PATCH /admin/riders/:id/pay`. That is the only change this screen makes:
- * the backend still has no create/activate/deactivate rider endpoint, so no
- * such control is offered (rider accounts come in through Rider requests).
+ * `PATCH /admin/riders/:id/pay`. There is still no activate/deactivate
+ * rider endpoint, so no such control is offered.
+ *
+ * Add rider (owner, 2026-10-11: "Add a delivery rider and I upload the
+ * things"): staff type a rider's details, pay and documents themselves
+ * (POST /admin/riders + the page uploads); the list refreshes afterwards. A
+ * rider whose documents still block approval waits under Rider requests.
  *
  * Rider documents (owner, 2026-10-10): "Documents" opens the rider's
  * vehicle book, revenue licence, insurance and driving licence (verify /
@@ -50,6 +55,8 @@ export function Riders() {
   const [adjusting, setAdjusting] = useState<RiderOption | null>(null);
   const [alerts, setAlerts] = useState<RiderDocumentAlert[]>([]);
   const [docsFor, setDocsFor] = useState<RiderOption | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [pendingLink, setPendingLink] = useState(false);
 
   // Expiry badges (owner, 2026-10-10). A failure only hides the badges.
   function loadAlerts() {
@@ -60,26 +67,39 @@ export function Riders() {
   }
   useEffect(loadAlerts, []);
 
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let cancelled = false;
     ridersApi
       .listActive()
       .then((list) => {
-        if (!cancelled) setRows(list);
+        if (cancelled) return;
+        setRows(list);
+        setError(null);
       })
       .catch((err) => {
         if (cancelled) return;
         setError(errorMessage(err, 'Could not load riders.'));
-        setRows([]);
+        setRows((current) => current ?? []);
       });
     // The store default (useRiderPayDefaults) labels riders without their own pay.
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reload]);
+
+  /** After Add rider (owner, 2026-10-11): say what happened, re-read the list. */
+  function added(outcome: AddRiderOutcome) {
+    setAdding(false);
+    setNotice(outcome.message);
+    setPendingLink(outcome.pending);
+    setReload((n) => n + 1);
+    loadAlerts();
+  }
 
   function saved(rider: RiderOption, pay: RiderPay) {
     setEditing(null);
+    setPendingLink(false);
     learn(pay);
     setRows((list) =>
       (list ?? []).map((r) =>
@@ -103,11 +123,23 @@ export function Riders() {
     <div className="page">
       <PageHeader
         title="Riders"
-        description="Active riders, their delivery load and how they are paid. Rider accounts are currently provisioned outside this app."
+        description="Active riders, their delivery load and how they are paid. Add a rider yourself, or approve the ones who apply in the Rider app under Rider requests."
         actions={
-          <Link className="button button--ghost" to="/more/earnings">
-            Earnings
-          </Link>
+          <>
+            <button
+              type="button"
+              className="button button--ink"
+              onClick={() => {
+                setNotice(null);
+                setAdding(true);
+              }}
+            >
+              Add rider
+            </button>
+            <Link className="button button--ghost" to="/more/earnings">
+              Earnings
+            </Link>
+          </>
         }
       />
 
@@ -119,6 +151,12 @@ export function Riders() {
       {notice ? (
         <p className="quiet quiet--ok" role="status">
           {notice}
+          {pendingLink ? (
+            <>
+              {' '}
+              <Link to="/more/rider-requests">Open Rider requests</Link>
+            </>
+          ) : null}
         </p>
       ) : null}
 
@@ -189,6 +227,7 @@ export function Riders() {
           onClose={() => setAdjusting(null)}
         />
       ) : null}
+      {adding ? <AddRiderSheet onClose={() => setAdding(false)} onDone={added} /> : null}
       {docsFor ? (
         <RiderDocumentsSheet
           riderId={docsFor.id}

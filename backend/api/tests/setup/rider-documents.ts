@@ -5,6 +5,8 @@ import { riderDocumentSettings } from '../../src/modules/riders/rider.documents.
 // before approval. Suites written before documents existed apply and approve
 // without any, so pin "nothing required" here; tests/rider-documents.test.ts
 // switches back to riderDocumentSettings.realRead to test the real setting.
-riderDocumentSettings.read = async () => ({
-  documents: (await riderDocumentSettings.realRead()).documents.map((d) => ({ ...d, required_for: [] })),
-});
+// The two switches (owner, 2026-10-11) keep their stored values.
+riderDocumentSettings.read = async () => {
+  const real = await riderDocumentSettings.realRead();
+  return { ...real, documents: real.documents.map((d) => ({ ...d, required_for: [] })) };
+};

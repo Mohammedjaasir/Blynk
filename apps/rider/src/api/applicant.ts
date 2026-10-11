@@ -76,6 +76,12 @@ export interface ApplicantApplication {
 export interface ApplicantState {
   phone: string;
   application: ApplicantApplication | null;
+  /**
+   * "Riders upload documents in the app" (owner, 2026-10-11; default off).
+   * Off: no Documents step - the applicant sends details only and sends the
+   * documents to Blynk on WhatsApp; Ops/Admin upload them.
+   */
+  uploads_enabled?: boolean;
   document_types: RiderDocumentType[];
   documents: RiderDocument[];
 }
@@ -215,7 +221,13 @@ function uploadWithProgress(
   });
 }
 
+/** (owner, 2026-10-11) "they will send docs on WhatsApp". */
+export const BLYNK_WHATSAPP = '+94 71 710 7374';
+export const BLYNK_WHATSAPP_URL = 'https://wa.me/94717107374';
+
 export const applicantApi = {
+  /** Public: whether applicants upload documents in the app (owner, 2026-10-11). */
+  settings: () => request<{ applicant_uploads_enabled: boolean }>('/riders/applications/settings', { auth: false }),
   /** SMS code -> applicant token (stored) + the current state. */
   startSession: async (phone: string, otp: string) => {
     const data = await request<ApplicantState & { applicant_token: string; expires_in: number }>('/riders/applications/session', {
