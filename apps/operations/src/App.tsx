@@ -47,6 +47,7 @@ import { StoreHours } from './pages/StoreHours';
 import { Coupons } from './pages/Coupons';
 import { ReferAFriend } from './pages/ReferAFriend';
 import { BlynkPoints } from './pages/BlynkPoints';
+import { CustomerAddressBook, CustomerAddressDetail } from './pages/CustomerAddresses';
 import { RiderRequests } from './pages/RiderRequests';
 import { RiderDocumentSettings } from './pages/RiderDocumentSettings';
 import { StaffAccounts } from './pages/StaffAccounts';
@@ -178,6 +179,9 @@ export function AppRoutes() {
         {/* Refer a friend and Blynk Points (owner, 2026-10-10). */}
         <Route path="more/refer-a-friend" element={<ReferAFriend />} />
         <Route path="more/points" element={<BlynkPoints />} />
+        {/* Customer addresses (owner, 2026-10-11): same view as Admin's. */}
+        <Route path="more/customers" element={<CustomerAddressBook />} />
+        <Route path="more/customers/:id" element={<CustomerAddressDetail />} />
         <Route path="more/rider-requests" element={<RiderRequests />} />
         {/* Which documents riders upload and must have verified (owner, 2026-10-10). */}
         <Route path="more/rider-documents" element={<RiderDocumentSettings />} />

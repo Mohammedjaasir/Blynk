@@ -75,7 +75,7 @@ export function More() {
 
   return (
     <div className="page">
-      <PageHeader title="More" description="Opening hours, riders, rider requests, rider cash and earnings, staff, SMS offers, birthday offer, coupons, settings and sign-out." />
+      <PageHeader title="More" description="Opening hours, riders, rider requests, rider cash and earnings, customer addresses, staff, SMS offers, birthday offer, coupons, settings and sign-out." />
       <section className="card">
         <p className="card__row">
           <span className="card__label">Signed in as</span>
@@ -135,6 +135,12 @@ export function More() {
           {/* Which documents riders upload and must have verified (owner, 2026-10-10). */}
           <Link className="cat-hub__card" to="/more/rider-documents">
             <span className="cat-hub__title">Rider documents</span>
+          </Link>
+        </li>
+        <li>
+          {/* Each customer's saved addresses and orders per address (owner, 2026-10-11). */}
+          <Link className="cat-hub__card" to="/more/customers">
+            <span className="cat-hub__title">Customer addresses</span>
           </Link>
         </li>
         <li>

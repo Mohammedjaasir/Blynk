@@ -38,7 +38,7 @@ class _CheckoutCouponFieldState extends State<CheckoutCouponField> {
     final cart = context.read<CartProvider>();
     FocusScope.of(context).unfocus();
     // The preview prices delivery for the selected address (owner, 2026-10-10).
-    final addressId = context.read<AddressProvider?>()?.defaultAddress?.id;
+    final addressId = context.read<AddressProvider?>()?.selectedAddress?.id;
     final ok = await orders.applyCoupon(_controller.text, cart, addressId: addressId);
     if (ok && mounted) _controller.clear();
   }

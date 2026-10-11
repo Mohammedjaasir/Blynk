@@ -4,7 +4,7 @@ import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { percentChange, resolveDashboardRange, salesDashboard } from '../src/modules/reports/dashboard.service.js';
-import { CELL_DEG, orderMap } from '../src/modules/reports/order-map.service.js';
+import { CELL_DEG, orderMap, orderMapCell } from '../src/modules/reports/order-map.service.js';
 import { suggestedQuantity } from '../src/modules/inventory/purchase-list.js';
 import { RIDER_A, auth, stockFixtures, tokens, users } from './helpers/stock.js';
 
@@ -40,6 +40,7 @@ async function insertOrder(o: {
   total: number;
   at: { lat: number; lng: number };
   city?: string;
+  line?: string;
   items?: { product: string; qty: number; price: number }[];
 }) {
   seq += 1;
@@ -47,7 +48,7 @@ async function insertOrder(o: {
     await pool.query(
       `INSERT INTO orders (order_number, idempotency_key, customer_id, dark_store_id, order_status, subtotal_amount, delivery_fee, total_amount,
                            delivery_recipient_name, delivery_recipient_phone, delivery_address_line1, delivery_city, delivery_latitude, delivery_longitude, placed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 100, $7, $8, $9, 'No. 9, Secret Lane', $10, $11, $12, $13) RETURNING id`,
+       VALUES ($1, $2, $3, $4, $5, $6, 100, $7, $8, $9, $14, $10, $11, $12, $13) RETURNING id`,
       [
         `TST-INS-${seq}-${Date.now()}`,
         `tst-ins-${seq}-${Date.now()}`,
@@ -62,6 +63,7 @@ async function insertOrder(o: {
         o.at.lat.toFixed(6),
         o.at.lng.toFixed(6),
         o.placedAt,
+        o.line ?? 'No. 9, Secret Lane',
       ]
     )
   ).rows[0].id as string;
@@ -107,7 +109,7 @@ beforeAll(async () => {
   // Monday 11 May: outside the radius.
   await insertOrder({ status: 'DELIVERED', placedAt: '2020-05-11T06:00:00Z', total: 1000, at: kmEast(store.radius + 1) });
   // Last week (Tuesday 5 May), in the hub cell.
-  await insertOrder({ status: 'DELIVERED', placedAt: '2020-05-05T06:00:00Z', total: 500, at: nearHub() });
+  await insertOrder({ status: 'DELIVERED', placedAt: '2020-05-05T06:00:00Z', total: 500, at: nearHub(), line: '  No. 4,  Galle Road ' });
   // Last month (10 April).
   await insertOrder({ status: 'DELIVERED', placedAt: '2020-04-10T06:00:00Z', total: 800, at: nearHub() });
 }, 60_000);
@@ -187,6 +189,9 @@ describe('delivery heat map', () => {
     expect(m.cell_meters).toBe(150);
     expect(m.totals).toMatchObject({ orders: 5, revenue: 2800, inside: 3, near_edge: 1, outside: 1, cells: 3 });
     expect(m.busiest[0]).toMatchObject({ orders: 3, delivered: 3, revenue: 1400, zone: 'inside', area: 'Dharga Town' });
+    // Named by its most common address line, not just the town (owner, 2026-10-11).
+    expect(m.busiest[0]).toMatchObject({ label: 'No. 9, Secret Lane', addresses: 2, customers: 1 });
+    expect(m.busiest[0].cell).toBe(`${Math.floor(nearHub().lat / CELL_DEG)}:${Math.floor(nearHub().lng / CELL_DEG)}`);
     // A cell centre, not anybody's exact point.
     expect(m.busiest[0].lat).toBeCloseTo(nearHub().lat, 6);
     expect(m.busiest[0].lng).toBeCloseTo(nearHub().lng, 6);
@@ -200,14 +205,13 @@ describe('delivery heat map', () => {
     expect(twoKm).toMatchObject({ orders: 2, revenue: 0, zone: 'inside' });
   });
 
-  it('GET /admin/reports/order-map: no names, phones or addresses; ADMIN and OPERATIONS only', async () => {
+  it('GET /admin/reports/order-map: no names or phones on the map itself; ADMIN and OPERATIONS only', async () => {
     for (const t of [tokens.admin, opsToken]) {
       const res = await request(app).get('/api/v1/admin/reports/order-map?range=last_90_days&status=all').set(auth(t));
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       const text = JSON.stringify(res.body);
       expect(text).not.toContain(SECRET_NAME);
       expect(text).not.toContain(SECRET_PHONE);
-      expect(text).not.toContain('Secret Lane');
       expect(res.body.data.store.radius_km).toBe(store.radius);
     }
     expect((await request(app).get('/api/v1/admin/reports/order-map').set(auth(tokens.admin))).body.data).toMatchObject({ range: 'last_30_days', status: 'delivered' });
@@ -217,6 +221,50 @@ describe('delivery heat map', () => {
     for (const t of [tokens.staff, tokens.customer, tokens.rider]) {
       expect((await request(app).get('/api/v1/admin/reports/order-map').set(auth(t))).status).toBe(403);
     }
+  });
+});
+
+describe('one location on the delivery map', () => {
+  const hubCell = () => ({ cy: Math.floor(nearHub().lat / CELL_DEG), cx: Math.floor(nearHub().lng / CELL_DEG) });
+
+  it('lists the addresses in the cell with their order counts, and the orders', async () => {
+    const c = await orderMapCell('this_month', 'delivered', hubCell(), NOW);
+    expect(c.cell).toBe(`${hubCell().cy}:${hubCell().cx}`);
+    expect(c.totals).toEqual({ orders: 3, delivered: 3, revenue: 1400, customers: 1, addresses: 2 });
+    expect(c.addresses.map((a) => [a.address_line1, a.orders, a.revenue])).toEqual([
+      ['No. 9, Secret Lane', 2, 900],
+      ['No. 4, Galle Road', 1, 500],
+    ]);
+    expect(c.orders).toHaveLength(3);
+    expect(c.orders[0]).toMatchObject({ customer_id: users.customer.id, recipient_name: SECRET_NAME, recipient_phone: SECRET_PHONE, order_status: 'DELIVERED', total_amount: 300 });
+    expect(new Date(c.orders[0].placed_at).toISOString()).toBe('2020-05-14T05:00:00.000Z');
+    // Last month's order in the same cell is outside this range.
+    expect((await orderMapCell('last_90_days', 'delivered', hubCell(), NOW)).totals.orders).toBe(4);
+  });
+
+  it('status=all adds orders that were not delivered; an empty cell is empty', async () => {
+    const east = (await orderMap('this_month', 'all', NOW)).cells.find((x) => x.delivered === 0)!;
+    const [cy, cx] = east.cell.split(':').map(Number);
+    const c = await orderMapCell('this_month', 'all', { cy, cx }, NOW);
+    expect(c.totals).toMatchObject({ orders: 2, delivered: 0, revenue: 0 });
+    expect(c.addresses[0]).toMatchObject({ address_line1: 'No. 9, Secret Lane', orders: 2 });
+    expect((await orderMapCell('this_month', 'delivered', { cy, cx }, NOW)).totals.orders).toBe(0);
+  });
+
+  it('GET /admin/reports/order-map/cell: ADMIN and OPERATIONS only, validated', async () => {
+    const { cy, cx } = hubCell();
+    for (const t of [tokens.admin, opsToken]) {
+      const res = await request(app).get(`/api/v1/admin/reports/order-map/cell?range=last_90_days&status=all&cell=${cy}:${cx}`).set(auth(t));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.data).toMatchObject({ cell: `${cy}:${cx}`, range: 'last_90_days', status: 'all' });
+    }
+    for (const q of ['', 'cell=abc', 'cell=1:2:3', `cell=${cy}:${cx}&range=forever`]) {
+      expect((await request(app).get(`/api/v1/admin/reports/order-map/cell?${q}`).set(auth(tokens.admin))).status, q).toBe(400);
+    }
+    for (const t of [tokens.staff, tokens.customer, tokens.rider]) {
+      expect((await request(app).get(`/api/v1/admin/reports/order-map/cell?cell=${cy}:${cx}`).set(auth(t))).status).toBe(403);
+    }
+    expect((await request(app).get(`/api/v1/admin/reports/order-map/cell?cell=${cy}:${cx}`)).status).toBe(401);
   });
 });
 

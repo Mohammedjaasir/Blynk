@@ -158,3 +158,21 @@ export function radiusAdvice(t: { orders: number; near_edge: number; outside: nu
   }
   return `Most orders come from well inside the ${radiusKm} km radius.`;
 }
+
+/**
+ * What a map cell is called (owner, 2026-10-11): its most common address
+ * line - the town alone is the same for nearly every cell - else the town.
+ */
+export function cellName(c: { label: string | null; area: string | null }): string {
+  return c.label?.trim() || c.area?.trim() || 'Unnamed area';
+}
+
+/** The line under a cell's name: "+2 more addresses · Dharga Town · 3 customers". */
+export function cellDetail(c: { label: string | null; area: string | null; addresses: number; customers: number }): string {
+  const parts: string[] = [];
+  const more = c.label ? c.addresses - 1 : c.addresses;
+  if (more > 0) parts.push(`+${more} more ${more === 1 ? 'address' : 'addresses'}`);
+  if (c.label && c.area) parts.push(c.area);
+  if (c.customers > 0) parts.push(`${c.customers} ${c.customers === 1 ? 'customer' : 'customers'}`);
+  return parts.join(' · ');
+}

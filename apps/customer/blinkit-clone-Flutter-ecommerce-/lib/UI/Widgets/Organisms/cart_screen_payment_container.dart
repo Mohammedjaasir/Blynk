@@ -18,6 +18,7 @@ import '../../../Services/app_errors.dart';
 import '../../../Services/ordering_hours.dart';
 import '../../../Services/store_info.dart';
 import '../../../Services/push/push_notifications.dart';
+import '../../../Screens/user_address_screen.dart';
 
 /// The toast for a failed place-order. A timeout is worded as "we could not
 /// confirm" because the order may well have been placed: the customer is sent
@@ -56,14 +57,17 @@ class CartScreenPaymentContainer extends StatelessWidget {
 
   Future<void> _placeOrder(BuildContext context) async {
     final cart = context.read<CartProvider>();
-    final address = context.read<AddressProvider>().defaultAddress;
+    final address = context.read<AddressProvider>().selectedAddress;
     final orderProvider = context.read<OrderProvider>();
 
     if (cart.isEmpty) return;
 
     if (address == null) {
       showAppToast(msg: 'Add a delivery address to place your order.');
-      Navigator.of(context).pushNamed('/user/address');
+      Navigator.of(context).pushNamed(
+        '/user/address',
+        arguments: UserAddressScreen.pickForCheckout,
+      );
       return;
     }
 

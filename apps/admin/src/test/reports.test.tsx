@@ -214,6 +214,47 @@ describe('Customers page', () => {
   it('shows one customer, their orders, and an order with its discount', async () => {
     const user = userEvent.setup();
     stubFetch((_m, path) => {
+      if (path === '/admin/customers/u1/addresses') {
+        return respond({
+          customer: { id: 'u1', full_name: 'Fathima Rizna', phone: '+94771234567' },
+          addresses: [
+            {
+              id: 'a1',
+              label: 'Home',
+              recipient_name: 'Fathima',
+              recipient_phone: '+94771234567',
+              alternate_phone: '+94712345678',
+              address_line1: 'No. 1, Main Street',
+              address_line2: null,
+              city: 'Beruwala',
+              postal_code: null,
+              latitude: 6.4351,
+              longitude: 80.0243,
+              delivery_instructions: 'Blue gate',
+              is_default: true,
+              created_at: '2026-09-01T04:00:00.000Z',
+              updated_at: '2026-09-01T04:00:00.000Z',
+              orders: 6,
+              delivered: 5,
+              last_order_at: '2026-09-29T10:00:00.000Z',
+            },
+          ],
+          other_addresses: [
+            {
+              address_line1: 'No. 9, Old Road',
+              address_line2: null,
+              city: 'Aluthgama',
+              latitude: 6.43,
+              longitude: 80.0,
+              recipient_name: 'Fathima',
+              recipient_phone: '+94771234567',
+              orders: 1,
+              delivered: 1,
+              last_order_at: '2026-09-02T10:00:00.000Z',
+            },
+          ],
+        });
+      }
       if (path.startsWith('/admin/customers/u1')) {
         return respond({
           customer: { ...customer(), last_login_at: null },
@@ -283,6 +324,17 @@ describe('Customers page', () => {
     expect(details).toHaveTextContent('Milk 1L');
     expect(details).toHaveTextContent('Discount (WELCOME50)−LKR 50');
     expect(details).toHaveTextContent('Total · cash to collectLKR 650');
+
+    // Each address the customer saved, with how many orders went to it (owner, 2026-10-11).
+    const saved = await screen.findByRole('table', { name: 'Saved addresses' });
+    const row = within(saved).getAllByRole('row')[1];
+    expect(row).toHaveTextContent('No. 1, Main Street, Beruwala');
+    expect(row).toHaveTextContent('Default');
+    expect(row).toHaveTextContent('Blue gate');
+    expect(row).toHaveTextContent('+94771234567 / +94712345678');
+    expect(row).toHaveTextContent('6 (5 delivered)');
+    expect(within(row).getByRole('link', { name: 'Open No. 1, Main Street on the map' })).toHaveAttribute('href', 'https://www.google.com/maps?q=6.4351,80.0243');
+    expect(screen.getByRole('list', { name: 'Other addresses orders went to' })).toHaveTextContent('No. 9, Old Road, Aluthgama');
   });
 });
 

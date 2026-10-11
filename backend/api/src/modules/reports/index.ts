@@ -4,9 +4,9 @@ import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { resolveSalesRange, salesReport, type SalesRangePreset } from './sales.service.js';
-import { exportCustomers, getCustomer, listCustomers, type CustomerSort } from './customers.service.js';
+import { customerAddresses, exportCustomers, getCustomer, listCustomerAddressBook, listCustomers, type CustomerSort } from './customers.service.js';
 import { DASHBOARD_RANGES, salesDashboard, type DashboardRange } from './dashboard.service.js';
-import { ORDER_MAP_RANGES, orderMap, type OrderMapRange } from './order-map.service.js';
+import { ORDER_MAP_RANGES, orderMap, orderMapCell, type OrderMapRange } from './order-map.service.js';
 
 type Handler = (req: Request, res: Response) => Promise<void>;
 const wrap = (fn: Handler) => (req: Request, res: Response, next: NextFunction) => {
@@ -65,8 +65,10 @@ adminReportsRouter.get(
 );
 
 // Sales dashboard and delivery heat map (owner, 2026-10-10): ADMIN and
-// OPERATIONS - the Ops app shows them on the phone. Aggregates only; the map
-// never carries names, phones, addresses or exact points.
+// OPERATIONS - the Ops app shows them on the phone. Since 2026-10-11 the map
+// names each cell by its most common address line, and its cell view and the
+// customer address book carry names, phones and addresses: staff only, the
+// same in both apps, never on a customer-facing route.
 const ADMIN_OR_OPS = [requireAuth, requireRoles(['ADMIN', 'OPERATIONS'])];
 
 export const dashboardQuerySchema = z.object({
@@ -95,6 +97,48 @@ adminReportsRouter.get(
   wrap(async (req, res) => {
     const q = req.query as unknown as z.infer<typeof orderMapQuerySchema>;
     res.json({ success: true, data: await orderMap(q.range ?? 'last_30_days', q.status ?? 'delivered') });
+  })
+);
+
+export const orderMapCellQuerySchema = orderMapQuerySchema.extend({
+  cell: z.string().regex(/^-?\d{1,7}:-?\d{1,7}$/, 'Use the map cell id, e.g. 4769:59278'),
+});
+
+adminReportsRouter.get(
+  '/reports/order-map/cell',
+  ...ADMIN_OR_OPS,
+  validate({ query: orderMapCellQuerySchema }),
+  wrap(async (req, res) => {
+    const q = req.query as unknown as z.infer<typeof orderMapCellQuerySchema>;
+    const [cy, cx] = q.cell.split(':').map(Number);
+    res.json({ success: true, data: await orderMapCell(q.range ?? 'last_30_days', q.status ?? 'delivered', { cy, cx }) });
+  })
+);
+
+// Customer address book (owner, 2026-10-11): ADMIN and OPERATIONS. Names,
+// phones and addresses - no spend figures (the customer list stays ADMIN only).
+export const addressBookQuerySchema = z.object({
+  search: z.string().trim().max(64).optional(),
+  page,
+  limit: limit(100, 25),
+});
+
+adminReportsRouter.get(
+  '/customer-addresses',
+  ...ADMIN_OR_OPS,
+  validate({ query: addressBookQuerySchema }),
+  wrap(async (req, res) => {
+    const q = req.query as unknown as z.infer<typeof addressBookQuerySchema>;
+    res.json({ success: true, data: await listCustomerAddressBook(q) });
+  })
+);
+
+adminReportsRouter.get(
+  '/customers/:id/addresses',
+  ...ADMIN_OR_OPS,
+  validate({ params: z.object({ id: z.string().uuid('Invalid customer ID') }) }),
+  wrap(async (req, res) => {
+    res.json({ success: true, data: await customerAddresses(req.params.id as string) });
   })
 );
 

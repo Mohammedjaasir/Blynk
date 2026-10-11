@@ -41,7 +41,7 @@ class _BirthdayOfferBannerState extends State<BirthdayOfferBanner> {
       // cart's ask for that address's fee (owner, 2026-10-10).
       context.read<StoreInfoProvider?>()?.loadCheckoutInfo(
             signedIn: signedIn,
-            addressId: context.read<AddressProvider?>()?.defaultAddress?.id,
+            addressId: context.read<AddressProvider?>()?.selectedAddress?.id,
           );
     });
   }

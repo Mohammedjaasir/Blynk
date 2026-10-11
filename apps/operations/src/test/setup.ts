@@ -99,8 +99,10 @@ vi.mock('maplibre-gl', () => {
       this.options = options;
       mapInstances.push(this);
     }
-    on(event: string, handler: (e?: unknown) => void) {
-      this.handlers[event] = handler;
+    on(event: string, layerOrHandler: string | ((e?: unknown) => void), handler?: (e?: unknown) => void) {
+      // map.on('click', 'layer', fn) is kept as handlers['click:layer'].
+      if (typeof layerOrHandler === 'string') this.handlers[`${event}:${layerOrHandler}`] = handler!;
+      else this.handlers[event] = layerOrHandler;
     }
     easeTo(options: { center: unknown }) {
       this.centre = options.center;

@@ -3,14 +3,17 @@ import 'package:provider/provider.dart';
 
 import '../../../design/tokens.dart';
 import '../../../Services/Providers/address.provider.dart';
+import '../../../Screens/user_address_screen.dart';
 import '../Atoms/blynk_button.dart';
 
 /// The checkout screen's delivery-address row.
 ///
-/// **Behaviour is frozen** (W9): it still loads the address book once after
-/// the first frame, still reads `defaultAddress`, still shows "Add" instead of
-/// "Change" when there is none, and still pushes `/user/address`. Only the
-/// skin moved onto tokens — the address-required guard itself lives in
+/// It loads the address book once after the first frame, shows "Add" instead
+/// of "Change" when there is none, and pushes `/user/address`. Since
+/// 2026-10-11 it shows the address the customer picked for this checkout
+/// (`selectedAddress` - the default until they tap another card), and opens
+/// the address book in pick mode, so tapping a card chooses it and comes
+/// straight back here. The address-required guard itself lives in
 /// [CartScreenPaymentContainer].
 ///
 /// It draws **no surface of its own**. `checkout_screen.dart` already wraps it
@@ -39,7 +42,7 @@ class _CartScreenAddressContainerState extends State<CartScreenAddressContainer>
 
   @override
   Widget build(BuildContext context) {
-    final address = context.watch<AddressProvider>().defaultAddress;
+    final address = context.watch<AddressProvider>().selectedAddress;
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -101,7 +104,10 @@ class _CartScreenAddressContainerState extends State<CartScreenAddressContainer>
               semanticLabel:
                   address != null ? 'Change delivery address' : 'Add delivery address',
               onPressed: () {
-                Navigator.of(context).pushNamed('/user/address');
+                Navigator.of(context).pushNamed(
+                  '/user/address',
+                  arguments: UserAddressScreen.pickForCheckout,
+                );
               },
             ),
           ],

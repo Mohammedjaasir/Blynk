@@ -972,6 +972,9 @@ export interface CustomerRow {
   sms_offers: boolean;
   /** Optional profile (owner, 2026-10-09): YYYY-MM-DD, a calendar day. */
   date_of_birth?: string | null;
+  /** Owner, 2026-10-11: saved addresses, and the default (else newest) one as one line. */
+  addresses_count?: number;
+  default_address?: string | null;
 }
 
 /** GET /admin/customers/export: every customer, by name (ADMIN only). */

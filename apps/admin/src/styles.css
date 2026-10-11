@@ -3019,3 +3019,62 @@ body {
 .table tbody tr.is-muted td {
   color: var(--ink-3);
 }
+
+/* Delivery map: one location's addresses and orders; customer addresses (owner, 2026-10-11). */
+.grid-map__cell {
+  cursor: pointer;
+}
+
+.grid-map__cell.is-selected {
+  stroke: var(--ink);
+  stroke-width: 3px;
+}
+
+.table tbody tr.is-selected td {
+  background: #f3f5f8;
+}
+
+.area-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.area-button:hover,
+.area-button:focus-visible {
+  text-decoration-color: var(--ink);
+}
+
+.map-cell-detail {
+  margin-top: 28px;
+}
+
+.address-list {
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+
+.address-list li {
+  margin: 6px 0;
+}
+
+.map-cell-detail__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.map-cell-detail__head .panel__title {
+  margin: 0;
+  flex: 1 1 auto;
+}

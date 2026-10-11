@@ -7,7 +7,8 @@ import { AuthProvider } from '../auth/AuthContext';
 import { ToastProvider } from '../components/ui';
 import { tokenStore } from '../api/client';
 import type { OrderMap, PurchaseItem, PurchaseList, SalesDashboard } from '../api/insights';
-import { changeOf, purchaseText, whatsappUrl } from '../lib/insights';
+import type { MapCellDetail } from '../api/addresses';
+import { cellDetail, cellName, changeOf, purchaseText, whatsappUrl } from '../lib/insights';
 import { toKm } from '../pages/OrderMap';
 import { mockApi, ok, type Call, type Reply } from './mockApi';
 
@@ -132,8 +133,8 @@ const MAP: OrderMap = {
   store: { name: 'Dharga Town', lat: 6.4351, lng: 80.0243, radius_km: 4 },
   totals: { orders: 20, revenue: 30000, inside: 14, near_edge: 5, outside: 1, farthest_km: 4.6, cells: 2 },
   cells: [
-    { lat: 6.43568, lng: 80.02498, orders: 19, delivered: 19, revenue: 29000, area: 'Dharga Town', distance_km: 0.1, zone: 'inside' },
-    { lat: 6.43568, lng: 80.06548, orders: 1, delivered: 1, revenue: 1000, area: 'Matugama', distance_km: 4.6, zone: 'outside' },
+    { cell: '4767:59277', lat: 6.43568, lng: 80.02498, orders: 19, delivered: 19, revenue: 29000, area: 'Dharga Town', label: 'No. 12, Station Road', addresses: 3, customers: 4, distance_km: 0.1, zone: 'inside' },
+    { cell: '4767:59307', lat: 6.43568, lng: 80.06548, orders: 1, delivered: 1, revenue: 1000, area: 'Matugama', label: null, addresses: 0, customers: 1, distance_km: 4.6, zone: 'outside' },
   ],
   busiest: [],
 };
@@ -147,12 +148,80 @@ describe('Delivery map', () => {
     expect(screen.getAllByTestId('map-cell').map((c) => c.getAttribute('data-orders'))).toEqual(['19', '1']);
     expect(screen.getByText('1 order was outside the 4 km radius. Farthest: 4.6 km.')).toBeInTheDocument();
     const table = screen.getByRole('table', { name: 'Busiest areas' });
-    expect(within(table).getAllByRole('row')[1]).toHaveTextContent('Dharga Town');
+    // Named by the most common address line, the town beside it (owner, 2026-10-11).
+    expect(within(table).getAllByRole('row')[1]).toHaveTextContent('No. 12, Station Road');
+    expect(within(table).getAllByRole('row')[1]).toHaveTextContent('+2 more addresses · Dharga Town · 4 customers');
+    expect(within(table).getAllByRole('row')[2]).toHaveTextContent('Matugama');
     expect(within(table).getAllByRole('row')[2]).toHaveTextContent('Outside');
     expect(api.find('GET', '/admin/reports/order-map')[0].query.toString()).toBe('range=last_30_days&status=delivered');
 
     await user.click(screen.getByRole('button', { name: 'All orders' }));
     await waitFor(() => expect(api.find('GET', '/admin/reports/order-map').at(-1)!.query.get('status')).toBe('all'));
+  });
+
+  const CELL: MapCellDetail = {
+    range: 'last_30_days',
+    status: 'delivered',
+    period: MAP.period,
+    cell: '4767:59277',
+    lat: 6.43568,
+    lng: 80.02498,
+    totals: { orders: 19, delivered: 19, revenue: 29000, customers: 4, addresses: 3 },
+    addresses: [
+      { address_line1: 'No. 12, Station Road', address_line2: null, city: 'Dharga Town', orders: 12, delivered: 12, revenue: 18000, customers: 2, last_order_at: '2026-10-09T05:00:00.000Z', lat: 6.4357, lng: 80.025 },
+      { address_line1: 'No. 3, Lake View', address_line2: 'Upstairs', city: 'Dharga Town', orders: 7, delivered: 7, revenue: 11000, customers: 2, last_order_at: '2026-10-08T05:00:00.000Z', lat: 6.4358, lng: 80.0251 },
+    ],
+    orders: [
+      {
+        id: 'o1',
+        order_number: 'BL-20261009-0042',
+        order_status: 'DELIVERED',
+        total_amount: 1500,
+        placed_at: '2026-10-09T05:00:00.000Z',
+        customer_id: 'u1',
+        customer_name: 'Fathima Rizna',
+        customer_phone: '+94771234567',
+        recipient_name: 'Fathima',
+        recipient_phone: '+94771234567',
+        address_line1: 'No. 12, Station Road',
+        address_line2: null,
+        city: 'Dharga Town',
+        latitude: 6.4357,
+        longitude: 80.025,
+      },
+    ],
+    orders_shown: 1,
+  };
+
+  it('clicking an area lists its addresses with their order counts and its orders', async () => {
+    const user = userEvent.setup();
+    const api = renderApp('/order-map', (c) =>
+      c.path === '/admin/reports/order-map' ? ok(MAP) : c.path === '/admin/reports/order-map/cell' ? ok(CELL) : undefined
+    );
+    await user.click(await screen.findByRole('button', { name: /No\. 12, Station Road: 19 orders/ }));
+    const panel = await screen.findByRole('region', { name: 'Area: No. 12, Station Road' });
+    expect(api.find('GET', '/admin/reports/order-map/cell')[0].query.toString()).toBe('range=last_30_days&status=delivered&cell=4767%3A59277');
+    const places = await within(panel).findByRole('table', { name: 'Addresses in this area' });
+    expect(within(places).getAllByRole('row')[1]).toHaveTextContent('No. 12, Station Road, Dharga Town12');
+    expect(within(places).getAllByRole('row')[2]).toHaveTextContent('No. 3, Lake View, Upstairs, Dharga Town7');
+    const orders = within(panel).getByRole('table', { name: 'Orders in this area' });
+    expect(within(orders).getByRole('link', { name: 'Fathima Rizna' })).toHaveAttribute('href', '/customers/u1');
+    expect(orders).toHaveTextContent('#0042');
+    expect(within(panel).getByRole('link', { name: 'Open on the map' })).toHaveAttribute('href', 'https://www.google.com/maps?q=6.43568,80.02498');
+
+    // A bubble on the map opens its area too.
+    await user.click(within(panel).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('region', { name: /^Area:/ })).not.toBeInTheDocument();
+    await user.click(screen.getAllByTestId('map-cell')[1]);
+    expect(await screen.findByRole('region', { name: 'Area: Matugama' })).toBeInTheDocument();
+  });
+
+  it('names an area by its address line, else its town', () => {
+    expect(cellName({ label: 'No. 12, Station Road', area: 'Dharga Town' })).toBe('No. 12, Station Road');
+    expect(cellName({ label: null, area: 'Matugama' })).toBe('Matugama');
+    expect(cellName({ label: '  ', area: null })).toBe('Unnamed area');
+    expect(cellDetail({ label: 'A', area: 'Dharga Town', addresses: 1, customers: 1 })).toBe('Dharga Town · 1 customer');
+    expect(cellDetail({ label: 'A', area: 'Dharga Town', addresses: 2, customers: 2 })).toBe('+1 more address · Dharga Town · 2 customers');
   });
 });
 

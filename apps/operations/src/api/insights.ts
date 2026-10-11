@@ -47,7 +47,9 @@ export interface SalesDashboard extends DashboardFigures {
 export type MapZone = 'inside' | 'near_edge' | 'outside';
 
 export interface OrderMapCell {
-  /** The ~150 m grid cell's centre - never an exact drop-off point. */
+  /** The cell's id ("row:column") - ask for its addresses and orders with it. */
+  cell: string;
+  /** The ~150 m grid cell's centre. */
   lat: number;
   lng: number;
   orders: number;
@@ -55,6 +57,11 @@ export interface OrderMapCell {
   revenue: number;
   /** The town most of the cell's orders name. */
   area: string | null;
+  /** The address line most of the cell's orders name (owner, 2026-10-11) - what tells one cell from the next. */
+  label: string | null;
+  /** Different address lines and customers in the cell. */
+  addresses: number;
+  customers: number;
   distance_km: number;
   zone: MapZone;
 }
@@ -120,7 +127,7 @@ export interface PurchaseList {
 export const insights = {
   /** GET /admin/reports/dashboard - ADMIN and OPERATIONS. */
   dashboard: (range: DashboardRange) => apiRequest<SalesDashboard>('/admin/reports/dashboard', { query: { range } }),
-  /** GET /admin/reports/order-map - ADMIN and OPERATIONS; aggregates only. */
+  /** GET /admin/reports/order-map - ADMIN and OPERATIONS (staff only: cells are named by address). */
   orderMap: (range: OrderMapRange, status: 'delivered' | 'all') =>
     apiRequest<OrderMap>('/admin/reports/order-map', { query: { range, status } }),
   /** GET /admin/inventory/purchase-list - ADMIN, OPERATIONS and Inventory staff. */

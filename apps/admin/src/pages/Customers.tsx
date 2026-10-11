@@ -7,6 +7,7 @@ import { PageHeader } from '../components/Layout';
 import { OrderBill } from '../components/OrderBill';
 import { OrderItems } from '../components/OrderItems';
 import { CustomerPointsPanel } from '../components/CustomerPointsPanel';
+import { CustomerAddressesPanel } from '../components/CustomerAddressesPanel';
 import { Badge, EmptyState, Spinner } from '../components/ui';
 import { birthdayWhen, formatDayMonth, formatDayMonthYear } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
@@ -20,7 +21,9 @@ import { STATUS_LABEL, formatClock, formatMoney, orderErrorMessage, shortNumber 
  * phone numbers). Spend is the total of delivered orders. The optional
  * profile customers save in the app - date of birth, favourite categories
  * and a note - shows here, with a "Birthdays this week" view so the shop can
- * plan a small extra for the bag (owner, 2026-10-09).
+ * plan a small extra for the bag (owner, 2026-10-09). Each customer's
+ * address shows in the list, and every saved address with its order count
+ * on the customer's page (owner, 2026-10-11).
  */
 
 export const SORT_LABEL: Record<Exclude<CustomerSort, 'name'>, string> = {
@@ -167,6 +170,7 @@ export function Customers() {
                     <tr>
                       <th scope="col">Customer</th>
                       <th scope="col">Phone</th>
+                      <th scope="col">Address</th>
                       <th scope="col" className="num">
                         Orders
                       </th>
@@ -188,6 +192,10 @@ export function Customers() {
                           </Link>
                         </td>
                         <td className="cell__secondary mono">{c.phone}</td>
+                        <td>
+                          {c.default_address ?? <span className="cell__secondary">None saved</span>}
+                          {(c.addresses_count ?? 0) > 1 ? <span className="cell__secondary"> +{(c.addresses_count ?? 0) - 1} more</span> : null}
+                        </td>
                         <td className="num mono">{c.orders_count}</td>
                         <td className="num mono">{formatMoney(c.delivered_spend)}</td>
                         <td className="cell__secondary">{c.last_order_at ? formatDay(c.last_order_at) : 'Never'}</td>
@@ -294,6 +302,8 @@ export function CustomerDetail() {
           </div>
 
           <CustomerLikes customer={c} />
+          {/* Saved addresses and how many orders went to each (owner, 2026-10-11). */}
+          <CustomerAddressesPanel customerId={c.id} />
           {/* Blynk Points balance, history and +/- adjust (owner, 2026-10-10). */}
           <CustomerPointsPanel customerId={c.id} />
 

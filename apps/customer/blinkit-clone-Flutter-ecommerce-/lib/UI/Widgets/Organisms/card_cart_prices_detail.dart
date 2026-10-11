@@ -89,7 +89,7 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
-    _askIfNeeded(context.select<AddressProvider?, String?>((a) => a?.defaultAddress?.id));
+    _askIfNeeded(context.select<AddressProvider?, String?>((a) => a?.selectedAddress?.id));
     final footer = widget.footer;
     final cart = context.watch<CartProvider>();
     final subtotal = cart.subtotal;

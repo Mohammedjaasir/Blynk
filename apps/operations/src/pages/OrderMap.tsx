@@ -1,27 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { insights, type OrderMap as OrderMapData, type OrderMapRange } from '../api/insights';
+import { addressText, addresses as addressesApi, mapsLink, type MapCellDetail } from '../api/addresses';
+import { insights, type OrderMap as OrderMapData, type OrderMapCell, type OrderMapRange } from '../api/insights';
 import { PageHeader } from '../components/Layout';
 import { Spinner } from '../components/ui';
+import { formatColomboDate } from '../lib/catalog';
 import { errorMessage } from '../lib/errors';
-import { ORDER_MAP_RANGE_LABEL, ZONE_LABEL, circlePolygon, radiusAdvice } from '../lib/insights';
-import { formatMoney } from '../lib/orders';
+import { ORDER_MAP_RANGE_LABEL, ZONE_LABEL, cellDetail, cellName, circlePolygon, radiusAdvice } from '../lib/insights';
+import { STATUS_LABEL, formatClock, formatMoney, shortNumber } from '../lib/orders';
 import { MAP_STYLE_URL } from '../lib/route';
 
 /**
- * Delivery heat map (owner, 2026-10-10): where orders come from. The API
- * sends only ~150 m grid cells with counts and revenue - no names, phones
- * or exact points. Drawn on the same MapLibre + OpenFreeMap stack as the
- * delivery map: the hub, the service radius as a circle, and one bubble
- * per cell (bigger and warmer = more orders). Under it: inside / near the
- * edge / outside counts and the busiest areas.
+ * Delivery heat map (owner, 2026-10-10): where orders come from, on ~150 m
+ * grid cells with counts and revenue. Drawn on the same MapLibre +
+ * OpenFreeMap stack as the delivery map: the hub, the service radius as a
+ * circle, and one bubble per cell (bigger and warmer = more orders). Under
+ * it: inside / near the edge / outside counts and the busiest areas.
+ *
+ * Owner, 2026-10-11 ("see number of order for the particular location"):
+ * each area is named by its most common address line, and tapping an area
+ * or a bubble lists that location's addresses with their order counts and
+ * its orders - the same as the Admin site's Delivery map.
  */
 export function OrderMap() {
   const [range, setRange] = useState<OrderMapRange>('last_30_days');
   const [status, setStatus] = useState<'delivered' | 'all'>('delivered');
   const [data, setData] = useState<OrderMapData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<OrderMapCell | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -35,9 +43,14 @@ export function OrderMap() {
     };
   }, [range, status]);
 
+  // Another period or status: the chosen location's figures change with it.
+  useEffect(() => {
+    setSelected((cur) => (cur && data ? data.cells.find((c) => c.cell === cur.cell) ?? null : null));
+  }, [data]);
+
   return (
     <div className="page">
-      <PageHeader title="Delivery map" description={`Orders on a ${data?.cell_meters ?? 150} m grid. No customer names or exact addresses.`} />
+      <PageHeader title="Delivery map" description={`Orders on a ${data?.cell_meters ?? 150} m grid. Tap an area to see its addresses and orders.`} />
 
       <div className="dash-ranges dash-ranges--scroll" role="group" aria-label="Period">
         {(Object.keys(ORDER_MAP_RANGE_LABEL) as OrderMapRange[]).map((r) => (
@@ -70,7 +83,8 @@ export function OrderMap() {
 
       {data ? (
         <>
-          <HeatMap data={data} />
+          <HeatMap data={data} onSelect={setSelected} />
+          {selected ? <MapCellSection key={`${selected.cell}|${range}|${status}`} cell={selected} range={range} status={status} onClose={() => setSelected(null)} /> : null}
 
           <section className="section" aria-labelledby="map-radius">
             <h2 className="section-label" id="map-radius">
@@ -96,20 +110,27 @@ export function OrderMap() {
             ) : (
               <ol className="cat-list map-busiest">
                 {data.busiest.map((c, i) => (
-                  <li key={`${c.lat},${c.lng}`} className="cat-row cat-row--flat">
-                    <span className="map-busiest__rank">{i + 1}</span>
-                    <div className="cat-row__main">
-                      <p className="cat-row__title">{c.area ?? 'Unnamed area'}</p>
-                      <p className="cat-row__meta">
-                        {c.distance_km} km from the store · {ZONE_LABEL[c.zone]}
-                      </p>
-                    </div>
-                    <div className="map-busiest__figures">
-                      <span className="map-busiest__orders">
-                        {c.orders} {c.orders === 1 ? 'order' : 'orders'}
+                  <li key={c.cell} className={selected?.cell === c.cell ? 'cat-row cat-row--flat is-selected' : 'cat-row cat-row--flat'}>
+                    <button
+                      type="button"
+                      className="map-busiest__pick"
+                      aria-pressed={selected?.cell === c.cell}
+                      aria-label={`${cellName(c)}: ${ordersText(c.orders)} - show addresses and orders`}
+                      onClick={() => setSelected(c)}
+                    >
+                      <span className="map-busiest__rank">{i + 1}</span>
+                      <span className="cat-row__main">
+                        <span className="cat-row__title">{cellName(c)}</span>
+                        {cellDetail(c) ? <span className="cat-row__meta">{cellDetail(c)}</span> : null}
+                        <span className="cat-row__meta">
+                          {c.distance_km} km from the store · {ZONE_LABEL[c.zone]}
+                        </span>
                       </span>
-                      <span className="cat-row__meta">{formatMoney(c.revenue)}</span>
-                    </div>
+                      <span className="map-busiest__figures">
+                        <span className="map-busiest__orders">{ordersText(c.orders)}</span>
+                        <span className="cat-row__meta">{formatMoney(c.revenue)}</span>
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ol>
@@ -118,6 +139,102 @@ export function OrderMap() {
         </>
       ) : null}
     </div>
+  );
+}
+
+const ordersText = (n: number) => `${n} ${n === 1 ? 'order' : 'orders'}`;
+
+/** One location of the map: its addresses with their order counts, then its orders (owner, 2026-10-11). */
+function MapCellSection({ cell, range, status, onClose }: { cell: OrderMapCell; range: OrderMapRange; status: 'delivered' | 'all'; onClose(): void }) {
+  const [detail, setDetail] = useState<MapCellDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    addressesApi
+      .mapCell(range, status, cell.cell)
+      .then((d) => live && setDetail(d))
+      .catch((err) => live && setError(errorMessage(err, 'Could not load this area.')));
+    return () => {
+      live = false;
+    };
+  }, [cell.cell, range, status]);
+
+  return (
+    <section className="section map-cell" aria-label={`Area: ${cellName(cell)}`}>
+      <div className="map-cell__head">
+        <h2 className="section-label">
+          {cellName(cell)} · {ordersText(cell.orders)}
+        </h2>
+        <button type="button" className="button button--ghost" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <p className="cat-row__meta">
+        <a className="link" href={mapsLink(cell.lat, cell.lng)} target="_blank" rel="noreferrer">
+          Open on the map
+        </a>
+      </p>
+      {error ? <p className="field__error">{error}</p> : null}
+      {!detail && !error ? <Spinner label="Loading this area" /> : null}
+      {detail ? (
+        <>
+          <p className="dash-compare">
+            {ordersText(detail.totals.orders)} from {detail.totals.addresses} {detail.totals.addresses === 1 ? 'address' : 'addresses'} and {detail.totals.customers}{' '}
+            {detail.totals.customers === 1 ? 'customer' : 'customers'} · {formatMoney(detail.totals.revenue)} delivered.
+          </p>
+          <ul className="cat-list" aria-label="Addresses in this area">
+            {detail.addresses.map((a) => (
+              <li key={`${a.address_line1}|${a.address_line2 ?? ''}|${a.city}`} className="cat-row cat-row--flat">
+                <div className="cat-row__main">
+                  <p className="cat-row__title">{addressText(a) || 'No address line'}</p>
+                  <p className="cat-row__meta">
+                    {a.customers} {a.customers === 1 ? 'customer' : 'customers'} · last {formatColomboDate(a.last_order_at)} ·{' '}
+                    <a className="link" href={mapsLink(a.lat, a.lng)} target="_blank" rel="noreferrer">
+                      Map
+                    </a>
+                  </p>
+                </div>
+                <div className="map-busiest__figures">
+                  <span className="map-busiest__orders">{ordersText(a.orders)}</span>
+                  <span className="cat-row__meta">{formatMoney(a.revenue)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <h3 className="section-label">Orders</h3>
+          <ul className="cat-list" aria-label="Orders in this area">
+            {detail.orders.map((o) => (
+              <li key={o.id} className="cat-row cat-row--flat">
+                <div className="cat-row__main">
+                  <p className="cat-row__title">
+                    #{shortNumber(o.order_number)} ·{' '}
+                    <Link className="link" to={`/more/customers/${o.customer_id}`}>
+                      {o.customer_name || 'Unnamed customer'}
+                    </Link>
+                  </p>
+                  <p className="cat-row__meta">
+                    {addressText(o)} · {o.recipient_name} {o.recipient_phone}
+                  </p>
+                  <p className="cat-row__meta">
+                    {formatColomboDate(o.placed_at)} {formatClock(o.placed_at)} · {STATUS_LABEL[o.order_status as keyof typeof STATUS_LABEL] ?? o.order_status}
+                  </p>
+                </div>
+                <div className="map-busiest__figures">
+                  <span className="map-busiest__orders">{formatMoney(o.total_amount)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {detail.orders_shown < detail.totals.orders ? (
+            <p className="quiet">
+              The newest {detail.orders_shown} of {detail.totals.orders} orders.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+    </section>
   );
 }
 
@@ -137,7 +254,7 @@ function cellsGeoJson(data: OrderMapData) {
     type: 'FeatureCollection' as const,
     features: data.cells.map((c) => ({
       type: 'Feature' as const,
-      properties: { orders: c.orders, weight: c.orders / max },
+      properties: { cell: c.cell, orders: c.orders, weight: c.orders / max },
       geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
     })),
   };
@@ -151,12 +268,14 @@ function radiusGeoJson(data: OrderMapData) {
   };
 }
 
-function HeatMap({ data }: { data: OrderMapData }) {
+function HeatMap({ data, onSelect }: { data: OrderMapData; onSelect(c: OrderMapCell): void }) {
   const container = useRef<HTMLDivElement | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const loaded = useRef(false);
   const latest = useRef(data);
   latest.current = data;
+  const pick = useRef(onSelect);
+  pick.current = onSelect;
   const [failed, setFailed] = useState(false);
   const { lat, lng, radius_km } = data.store;
 
@@ -203,6 +322,12 @@ function HeatMap({ data }: { data: OrderMapData }) {
         source: 'cells',
         layout: { 'text-field': ['to-string', ['get', 'orders']], 'text-size': 11, 'text-font': ['Noto Sans Bold'] },
         paint: { 'text-color': '#12151f' },
+      });
+      // Tap a bubble: that location's addresses and orders (owner, 2026-10-11).
+      m.on('click', 'cells', (e) => {
+        const id = e.features?.[0]?.properties?.cell;
+        const c = latest.current.cells.find((x) => x.cell === id);
+        if (c) pick.current(c);
       });
     });
     const dLat = radius_km / 111.32;

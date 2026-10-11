@@ -3,7 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
 import type { OrderMap, PurchaseItem, PurchaseList, SalesDashboard } from '../api/insights';
+import type { CustomerAddresses, MapCellDetail } from '../api/addresses';
 import {
+  cellDetail,
+  cellName,
   changeOf,
   circlePolygon,
   lineName,
@@ -108,9 +111,9 @@ const MAP: OrderMap = {
   store: { name: 'Dharga Town', lat: 6.4351, lng: 80.0243, radius_km: 4 },
   totals: { orders: 20, revenue: 30000, inside: 14, near_edge: 5, outside: 1, farthest_km: 4.6, cells: 3 },
   cells: [
-    { lat: 6.43568, lng: 80.02498, orders: 12, delivered: 12, revenue: 18000, area: 'Dharga Town', distance_km: 0.1, zone: 'inside' },
-    { lat: 6.46808, lng: 80.02498, orders: 7, delivered: 7, revenue: 11000, area: 'Aluthgama', distance_km: 3.7, zone: 'near_edge' },
-    { lat: 6.43568, lng: 80.06548, orders: 1, delivered: 1, revenue: 1000, area: 'Matugama', distance_km: 4.6, zone: 'outside' },
+    { cell: '4767:59277', lat: 6.43568, lng: 80.02498, orders: 12, delivered: 12, revenue: 18000, area: 'Dharga Town', label: 'No. 12, Station Road', addresses: 3, customers: 4, distance_km: 0.1, zone: 'inside' },
+    { cell: '4791:59277', lat: 6.46808, lng: 80.02498, orders: 7, delivered: 7, revenue: 11000, area: 'Aluthgama', label: 'No. 2, Beach Road', addresses: 1, customers: 1, distance_km: 3.7, zone: 'near_edge' },
+    { cell: '4767:59307', lat: 6.43568, lng: 80.06548, orders: 1, delivered: 1, revenue: 1000, area: 'Matugama', label: null, addresses: 0, customers: 1, distance_km: 4.6, zone: 'outside' },
   ],
   busiest: [],
 };
@@ -226,19 +229,146 @@ describe('Delivery map', () => {
     m.handlers.load();
     expect(m.sources.radius.data.geometry.type).toBe('Polygon');
     expect(m.sources.cells.data.features).toHaveLength(3);
-    expect(m.sources.cells.data.features[0].properties).toEqual({ orders: 12, weight: 1 });
+    expect(m.sources.cells.data.features[0].properties).toEqual({ cell: '4767:59277', orders: 12, weight: 1 });
 
     expect(screen.getByText('Service radius · 4 km')).toBeInTheDocument();
     expect(screen.getByText('Near the edge (last 0.5 km)').previousSibling).toHaveTextContent('5');
     expect(screen.getByRole('status')).toHaveTextContent('1 order was outside the 4 km radius. Farthest: 4.6 km.');
     const busiest = screen.getByRole('heading', { name: 'Busiest areas' }).closest('section')!;
-    expect(within(busiest).getAllByRole('listitem')[0]).toHaveTextContent('Dharga Town');
+    // Named by the most common address line, the town beside it (owner, 2026-10-11).
+    expect(within(busiest).getAllByRole('listitem')[0]).toHaveTextContent('No. 12, Station Road');
+    expect(within(busiest).getAllByRole('listitem')[0]).toHaveTextContent('+2 more addresses · Dharga Town · 4 customers');
     expect(within(busiest).getAllByRole('listitem')[0]).toHaveTextContent('12 orders');
+    expect(within(busiest).getAllByRole('listitem')[2]).toHaveTextContent('Matugama');
 
     await user.click(screen.getByRole('button', { name: 'All orders' }));
     await waitFor(() => expect(api.find('GET', '/admin/reports/order-map').map((c) => c.query.status)).toEqual(['delivered', 'all']));
     await user.click(screen.getByRole('button', { name: '90 days' }));
     await waitFor(() => expect(api.find('GET', '/admin/reports/order-map').at(-1)!.query).toEqual({ range: 'last_90_days', status: 'all' }));
+  });
+
+  const CELL: MapCellDetail = {
+    range: 'last_30_days',
+    status: 'delivered',
+    period: MAP.period,
+    cell: '4767:59277',
+    lat: 6.43568,
+    lng: 80.02498,
+    totals: { orders: 12, delivered: 12, revenue: 18000, customers: 4, addresses: 3 },
+    addresses: [
+      { address_line1: 'No. 12, Station Road', address_line2: null, city: 'Dharga Town', orders: 8, delivered: 8, revenue: 12000, customers: 2, last_order_at: '2026-10-09T05:00:00.000Z', lat: 6.4357, lng: 80.025 },
+      { address_line1: 'No. 3, Lake View', address_line2: null, city: 'Dharga Town', orders: 4, delivered: 4, revenue: 6000, customers: 2, last_order_at: '2026-10-08T05:00:00.000Z', lat: 6.4358, lng: 80.0251 },
+    ],
+    orders: [
+      {
+        id: 'o1',
+        order_number: 'BL-20261009-0042',
+        order_status: 'DELIVERED',
+        total_amount: 1500,
+        placed_at: '2026-10-09T05:00:00.000Z',
+        customer_id: 'u1',
+        customer_name: 'Fathima Rizna',
+        customer_phone: '+94771234567',
+        recipient_name: 'Fathima',
+        recipient_phone: '+94771234567',
+        address_line1: 'No. 12, Station Road',
+        address_line2: null,
+        city: 'Dharga Town',
+        latitude: 6.4357,
+        longitude: 80.025,
+      },
+    ],
+    orders_shown: 1,
+  };
+
+  it('tapping an area or a bubble lists its addresses with their order counts and its orders', async () => {
+    const user = userEvent.setup();
+    const { mapInstances } = (await import('maplibre-gl')) as unknown as {
+      mapInstances: { handlers: Record<string, (e?: unknown) => void> }[];
+    };
+    const { api } = renderAs(ADMIN_NO_RIDER, '/dashboard/map', {
+      'GET /admin/reports/order-map': () => ok(MAP),
+      'GET /admin/reports/order-map/cell': (call) => ok({ ...CELL, cell: call.query.cell }),
+    });
+    await user.click(await screen.findByRole('button', { name: /No\. 12, Station Road: 12 orders/ }));
+    const area = await screen.findByRole('region', { name: 'Area: No. 12, Station Road' });
+    expect(api.find('GET', '/admin/reports/order-map/cell')[0].query).toEqual({ range: 'last_30_days', status: 'delivered', cell: '4767:59277' });
+    const places = await within(area).findByRole('list', { name: 'Addresses in this area' });
+    expect(within(places).getAllByRole('listitem')[0]).toHaveTextContent('No. 12, Station Road, Dharga Town');
+    expect(within(places).getAllByRole('listitem')[0]).toHaveTextContent('8 orders');
+    expect(within(places).getAllByRole('listitem')[1]).toHaveTextContent('4 orders');
+    const orders = within(area).getByRole('list', { name: 'Orders in this area' });
+    expect(within(orders).getByRole('link', { name: 'Fathima Rizna' })).toHaveAttribute('href', '/more/customers/u1');
+    expect(orders).toHaveTextContent('#0042');
+
+    // A bubble on the map opens its area too.
+    const m = mapInstances[mapInstances.length - 1];
+    m.handlers.load();
+    m.handlers['click:cells']({ features: [{ properties: { cell: '4767:59307' } }] });
+    expect(await screen.findByRole('region', { name: 'Area: Matugama' })).toBeInTheDocument();
+    await waitFor(() => expect(api.find('GET', '/admin/reports/order-map/cell').at(-1)!.query.cell).toBe('4767:59307'));
+  });
+
+  it('names an area by its address line, else its town', () => {
+    expect(cellName({ label: 'No. 12, Station Road', area: 'Dharga Town' })).toBe('No. 12, Station Road');
+    expect(cellName({ label: null, area: 'Matugama' })).toBe('Matugama');
+    expect(cellDetail({ label: null, area: 'Matugama', addresses: 0, customers: 1 })).toBe('1 customer');
+  });
+});
+
+describe('Customer addresses', () => {
+  const ADDRESSES: CustomerAddresses = {
+    customer: { id: 'u1', full_name: 'Fathima Rizna', phone: '+94771234567' },
+    addresses: [
+      {
+        id: 'a1',
+        label: 'Home',
+        recipient_name: 'Fathima',
+        recipient_phone: '+94771234567',
+        alternate_phone: null,
+        address_line1: 'No. 1, Main Street',
+        address_line2: null,
+        city: 'Beruwala',
+        postal_code: null,
+        latitude: 6.4351,
+        longitude: 80.0243,
+        delivery_instructions: 'Blue gate',
+        is_default: true,
+        created_at: '2026-09-01T04:00:00.000Z',
+        updated_at: '2026-09-01T04:00:00.000Z',
+        orders: 6,
+        delivered: 5,
+        last_order_at: '2026-09-29T10:00:00.000Z',
+      },
+    ],
+    other_addresses: [
+      { address_line1: 'No. 9, Old Road', address_line2: null, city: 'Aluthgama', latitude: 6.43, longitude: 80.0, recipient_name: 'Fathima', recipient_phone: '+94771234567', orders: 1, delivered: 1, last_order_at: '2026-09-02T10:00:00.000Z' },
+    ],
+  };
+
+  it('More opens a search of customers and each one\'s saved addresses with order counts', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_NO_RIDER, '/more/customers', {
+      'GET /admin/customer-addresses': () =>
+        ok({
+          customers: [{ id: 'u1', full_name: 'Fathima Rizna', phone: '+94771234567', orders_count: 7, last_order_at: null, addresses_count: 2, default_address: 'No. 1, Main Street, Beruwala' }],
+          pagination: { page: 1, limit: 25, total: 1, total_pages: 1 },
+        }),
+      'GET /admin/customers/u1/addresses': () => ok(ADDRESSES),
+    });
+    const list = await screen.findByRole('list', { name: 'Customers' });
+    expect(list).toHaveTextContent('No. 1, Main Street, Beruwala (+1 more)');
+    await user.type(screen.getByRole('searchbox', { name: 'Search customers' }), '0771234');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(api.find('GET', '/admin/customer-addresses').at(-1)!.query).toMatchObject({ search: '0771234', page: '1' }));
+
+    await user.click(screen.getByRole('link', { name: /Fathima Rizna/ }));
+    const saved = await screen.findByRole('list', { name: 'Saved addresses' });
+    expect(within(saved).getAllByRole('listitem')[0]).toHaveTextContent('No. 1, Main Street, Beruwala');
+    expect(within(saved).getAllByRole('listitem')[0]).toHaveTextContent('Default');
+    expect(within(saved).getAllByRole('listitem')[0]).toHaveTextContent('6 orders');
+    expect(within(saved).getByRole('link', { name: 'Open No. 1, Main Street on the map' })).toHaveAttribute('href', 'https://www.google.com/maps?q=6.4351,80.0243');
+    expect(screen.getByRole('list', { name: 'Other addresses orders went to' })).toHaveTextContent('No. 9, Old Road, Aluthgama');
   });
 });
 

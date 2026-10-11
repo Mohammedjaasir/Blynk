@@ -4,6 +4,7 @@ import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { rangeBounds, resolveSalesRange } from '../src/modules/reports/sales.service.js';
+import { sameAddress } from '../src/modules/reports/customers.service.js';
 import { stockFixtures, tokens, auth } from './helpers/stock.js';
 import { customerFixtures, expectCreated } from './helpers/customers.js';
 
@@ -150,6 +151,8 @@ describe('GET /admin/customers', () => {
     expect(rows[2]).toMatchObject({ orders_count: 1, delivered_spend: 0 });
     expect(new Date(rows[1].last_order_at).toISOString()).toBe('2020-03-10T18:00:00.000Z');
     expect(res.body.data.pagination).toMatchObject({ total: 3, page: 1 });
+    // Each customer's address, recorded in Admin (owner, 2026-10-11).
+    expect(rows[0]).toMatchObject({ addresses_count: 1, default_address: 'No. 1, Test Lane, Dharga Town' });
   });
 
   it('sorts by order count and pages', async () => {
@@ -200,5 +203,98 @@ describe('GET /admin/customers/export', () => {
     expect(rows.every((c) => typeof c.phone === 'string')).toBe(true);
     expect(rows).not.toContainEqual(expect.objectContaining({ phone: '+94775551122' }));
     expect(res.body.data.pagination).toBeUndefined();
+  });
+});
+
+/**
+ * Customer addresses (owner, 2026-10-11): "record the address of each
+ * customer in admin" - Admin and Ops alike, staff only.
+ */
+describe('customer addresses', () => {
+  const STAFF_ONLY = [tokens.staff, tokens.customer, tokens.rider];
+
+  it('an order address belongs to a saved one at the same point, or on the same line in the same town', () => {
+    const saved = { address_line1: 'No. 1, Test Lane', city: 'Dharga Town', latitude: 6.4351, longitude: 80.0243 };
+    expect(sameAddress(saved, { ...saved, address_line1: 'Somewhere else' })).toBe(true);
+    expect(sameAddress(saved, { ...saved, latitude: 6.5, address_line1: '  no. 1,   test lane ' })).toBe(true);
+    expect(sameAddress(saved, { ...saved, latitude: 6.5 })).toBe(true);
+    expect(sameAddress(saved, { ...saved, latitude: 6.5, city: 'Aluthgama' })).toBe(false);
+    expect(sameAddress(saved, { address_line1: 'No. 2, Other Road', city: 'Dharga Town', latitude: 6.44, longitude: 80.03 })).toBe(false);
+  });
+
+  it('GET /admin/customers/:id/addresses: saved addresses with how many orders went to each', async () => {
+    for (const t of [tokens.admin, opsToken]) {
+      const res = await request(app).get(`/api/v1/admin/customers/${alice.id}/addresses`).set(auth(t));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.data.customer).toMatchObject({ id: alice.id, full_name: 'Zqxreport Alice', phone: alice.phone });
+      expect(res.body.data.addresses).toHaveLength(1);
+      expect(res.body.data.addresses[0]).toMatchObject({
+        id: alice.addressId,
+        recipient_name: 'Zqxreport Alice',
+        recipient_phone: alice.phone,
+        address_line1: 'No. 1, Test Lane',
+        city: 'Dharga Town',
+        latitude: 6.4351,
+        longitude: 80.0243,
+        is_default: true,
+        orders: 2,
+        delivered: 2,
+      });
+      expect(res.body.data.other_addresses).toEqual([]);
+    }
+    // Bob: one delivered, one cancelled - both went there.
+    const bobs = (await request(app).get(`/api/v1/admin/customers/${bob.id}/addresses`).set(auth(tokens.admin))).body.data;
+    expect(bobs.addresses[0]).toMatchObject({ orders: 2, delivered: 1 });
+  });
+
+  it('keeps the addresses orders went to after the customer moves or deletes one', async () => {
+    // Carol moves her saved address somewhere else and adds a second one.
+    await pool.query("UPDATE customer_addresses SET address_line1 = 'No. 5, New Road', latitude = 6.4362, longitude = 80.0255 WHERE id = $1", [carol.addressId]);
+    await pool.query(
+      `INSERT INTO customer_addresses (user_id, label, recipient_name, recipient_phone, address_line1, city, latitude, longitude, is_default)
+       VALUES ($1, 'Work', 'Carol at work', $2, 'No. 7, Office Street', 'Dharga Town', 6.4371, 80.0261, false)`,
+      [carol.id, carol.phone]
+    );
+    const res = await request(app).get(`/api/v1/admin/customers/${carol.id}/addresses`).set(auth(tokens.admin));
+    expect(res.status).toBe(200);
+    expect(res.body.data.addresses.map((a: { address_line1: string; orders: number }) => [a.address_line1, a.orders])).toEqual([
+      ['No. 5, New Road', 0],
+      ['No. 7, Office Street', 0],
+    ]);
+    expect(res.body.data.other_addresses).toHaveLength(1);
+    expect(res.body.data.other_addresses[0]).toMatchObject({ address_line1: 'No. 1, Test Lane', city: 'Dharga Town', orders: 1, delivered: 0 });
+  });
+
+  it('GET /admin/customer-addresses: search by name or phone, default address, no spend figures', async () => {
+    for (const t of [tokens.admin, opsToken]) {
+      const res = await request(app).get('/api/v1/admin/customer-addresses?search=zqxreport').set(auth(t));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const rows = res.body.data.customers as Record<string, unknown>[];
+      expect(rows.map((c) => c.full_name).sort()).toEqual(['Zqxreport Alice', 'Zqxreport Bob', 'Zqxreport Carol']);
+      const a = rows.find((c) => c.id === alice.id)!;
+      expect(a).toMatchObject({ phone: alice.phone, addresses_count: 1, default_address: 'No. 1, Test Lane, Dharga Town', orders_count: 2 });
+      expect(rows.find((c) => c.id === carol.id)).toMatchObject({ addresses_count: 2, default_address: 'No. 5, New Road, Dharga Town' });
+      expect(a).not.toHaveProperty('delivered_spend');
+    }
+    const byPhone = await request(app).get(`/api/v1/admin/customer-addresses?search=0${bob.phone.slice(3)}`).set(auth(opsToken));
+    expect(byPhone.body.data.customers.map((c: { id: string }) => c.id)).toEqual([bob.id]);
+  });
+
+  it('staff only; a missing customer is 404 and a bad id 400', async () => {
+    for (const t of STAFF_ONLY) {
+      expect((await request(app).get(`/api/v1/admin/customers/${alice.id}/addresses`).set(auth(t))).status).toBe(403);
+      expect((await request(app).get('/api/v1/admin/customer-addresses').set(auth(t))).status).toBe(403);
+    }
+    expect((await request(app).get(`/api/v1/admin/customers/${alice.id}/addresses`)).status).toBe(401);
+    expect((await request(app).get('/api/v1/admin/customers/c0c00002-0000-0000-0000-000000000099/addresses').set(auth(tokens.admin))).status).toBe(404);
+    expect((await request(app).get('/api/v1/admin/customers/not-a-uuid/addresses').set(auth(tokens.admin))).status).toBe(400);
+  });
+
+  it('the customer app only ever sees its own addresses', async () => {
+    const res = await request(app).get('/api/v1/me/addresses').set(auth(alice.token));
+    expect(res.status).toBe(200);
+    const text = JSON.stringify(res.body);
+    expect(text).not.toContain('Zqxreport Bob');
+    expect(text).not.toContain('Office Street');
   });
 });

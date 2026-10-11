@@ -67,7 +67,7 @@ class _HomeScreenAppBarState extends State<HomeScreenAppBar> {
 
   @override
   Widget build(BuildContext context) {
-    final address = context.watch<AddressProvider>().defaultAddress;
+    final address = context.watch<AddressProvider>().selectedAddress;
     final isAuthenticated = context.watch<AuthProvider>().isAuthenticated;
     final gutter = BlynkSpace.gutterFor(Responsive.of(context).width);
 

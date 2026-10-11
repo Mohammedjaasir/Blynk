@@ -1,24 +1,32 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { addressText, addresses as addressesApi, mapsLink, type MapCellDetail } from '../api/addresses';
 import { insights, type OrderMap as OrderMapData, type OrderMapCell, type OrderMapRange } from '../api/insights';
 import { PageHeader } from '../components/Layout';
 import { EmptyState, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
-import { ORDER_MAP_RANGE_LABEL, ZONE_LABEL, radiusAdvice } from '../lib/insights';
-import { formatMoney } from '../lib/orders';
+import { formatDay } from '../lib/coupons';
+import { ORDER_MAP_RANGE_LABEL, ZONE_LABEL, cellDetail, cellName, radiusAdvice } from '../lib/insights';
+import { STATUS_LABEL, formatClock, formatMoney, shortNumber } from '../lib/orders';
 
 /**
- * Delivery heat map (owner, 2026-10-10): where orders come from. The API
- * sends only ~150 m grid cells with counts and revenue - no names, phones
- * or exact points. Admin has no map library, so this is a plain SVG plot
- * in kilometres around the store: the service radius, the "near the edge"
- * band, and one bubble per cell (bigger and warmer = more orders). The
- * Operations app shows the same data on a street map.
+ * Delivery heat map (owner, 2026-10-10): where orders come from, on ~150 m
+ * grid cells with counts and revenue. Admin has no map library, so this is a
+ * plain SVG plot in kilometres around the store: the service radius, the
+ * "near the edge" band, and one bubble per cell (bigger and warmer = more
+ * orders). The Operations app shows the same data on a street map.
+ *
+ * Owner, 2026-10-11 ("see number of order for the particular location"):
+ * each area is named by its most common address line, and clicking a row or
+ * a bubble lists that location's addresses with their order counts and its
+ * orders, each linking to the customer.
  */
 export function OrderMap() {
   const [range, setRange] = useState<OrderMapRange>('last_30_days');
   const [status, setStatus] = useState<'delivered' | 'all'>('delivered');
   const [data, setData] = useState<OrderMapData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<OrderMapCell | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -32,11 +40,16 @@ export function OrderMap() {
     };
   }, [range, status]);
 
+  // Another period or status: the chosen location's figures change with it.
+  useEffect(() => {
+    setSelected((cur) => (cur && data ? data.cells.find((c) => c.cell === cur.cell) ?? null : null));
+  }, [data]);
+
   return (
     <>
       <PageHeader
         title="Delivery map"
-        description={`Where orders come from, on a ${data?.cell_meters ?? 150} m grid. No customer names or exact addresses.`}
+        description={`Where orders come from, on a ${data?.cell_meters ?? 150} m grid. Click an area to see its addresses and orders.`}
         actions={
           <>
             <div className="segmented" role="group" aria-label="Period">
@@ -80,7 +93,7 @@ export function OrderMap() {
           </p>
 
           <div className="order-map">
-            <GridMap data={data} />
+            <GridMap data={data} selected={selected?.cell ?? null} onSelect={setSelected} />
             <section className="attention order-map__list">
               <h2 className="section-label">Busiest areas</h2>
               {data.busiest.length === 0 ? (
@@ -105,11 +118,20 @@ export function OrderMap() {
                     </thead>
                     <tbody>
                       {data.busiest.map((c, i) => (
-                        <tr key={`${c.lat},${c.lng}`}>
+                        <tr key={c.cell} className={selected?.cell === c.cell ? 'is-selected' : undefined}>
                           <td className="mono">{i + 1}</td>
                           <td>
-                            {c.area ?? 'Unnamed area'}
+                            <button
+                              type="button"
+                              className="area-button"
+                              aria-pressed={selected?.cell === c.cell}
+                              aria-label={`${cellName(c)}: ${ordersText(c.orders)} - show addresses and orders`}
+                              onClick={() => setSelected(c)}
+                            >
+                              {cellName(c)}
+                            </button>
                             <span className={`zone-tag zone-tag--${c.zone}`}>{ZONE_LABEL[c.zone]}</span>
+                            {cellDetail(c) ? <span className="cell__secondary"> {cellDetail(c)}</span> : null}
                           </td>
                           <td className="num mono">{c.orders}</td>
                           <td className="num mono">{formatMoney(c.revenue)}</td>
@@ -122,9 +144,137 @@ export function OrderMap() {
               )}
             </section>
           </div>
+          {selected ? <MapCellPanel key={`${selected.cell}|${range}|${status}`} cell={selected} range={range} status={status} onClose={() => setSelected(null)} /> : null}
         </>
       ) : null}
     </>
+  );
+}
+
+const ordersText = (n: number) => `${n} ${n === 1 ? 'order' : 'orders'}`;
+
+/** One location of the map: its addresses with their order counts, then its orders (owner, 2026-10-11). */
+function MapCellPanel({ cell, range, status, onClose }: { cell: OrderMapCell; range: OrderMapRange; status: 'delivered' | 'all'; onClose(): void }) {
+  const [detail, setDetail] = useState<MapCellDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    addressesApi
+      .mapCell(range, status, cell.cell)
+      .then((d) => live && setDetail(d))
+      .catch((err) => live && setError(errorMessage(err, 'Could not load this area.')));
+    return () => {
+      live = false;
+    };
+  }, [cell.cell, range, status]);
+
+  return (
+    <section className="panel map-cell-detail" aria-label={`Area: ${cellName(cell)}`}>
+      <div className="map-cell-detail__head">
+        <h2 className="panel__title">
+          {cellName(cell)} · {ordersText(cell.orders)}
+        </h2>
+        <a className="link" href={mapsLink(cell.lat, cell.lng)} target="_blank" rel="noreferrer">
+          Open on the map
+        </a>
+        <button type="button" className="button button--ghost button--sm" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      {error ? <p className="field__error">{error}</p> : null}
+      {!detail && !error ? <Spinner label="Loading this area" /> : null}
+      {detail ? (
+        <>
+          <p className="form__note">
+            {ordersText(detail.totals.orders)} from {detail.totals.addresses} {detail.totals.addresses === 1 ? 'address' : 'addresses'} and {detail.totals.customers}{' '}
+            {detail.totals.customers === 1 ? 'customer' : 'customers'} · {formatMoney(detail.totals.revenue)} delivered.
+          </p>
+          <div className="table-wrap">
+            <table className="table" aria-label="Addresses in this area">
+              <thead>
+                <tr>
+                  <th scope="col">Address</th>
+                  <th scope="col" className="num">
+                    Orders
+                  </th>
+                  <th scope="col" className="num">
+                    Customers
+                  </th>
+                  <th scope="col" className="num">
+                    Revenue
+                  </th>
+                  <th scope="col">Last order</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.addresses.map((a) => (
+                  <tr key={`${a.address_line1}|${a.address_line2 ?? ''}|${a.city}`}>
+                    <td>
+                      <a className="link" href={mapsLink(a.lat, a.lng)} target="_blank" rel="noreferrer">
+                        {addressText(a) || 'No address line'}
+                      </a>
+                    </td>
+                    <td className="num mono">{a.orders}</td>
+                    <td className="num mono">{a.customers}</td>
+                    <td className="num mono">{formatMoney(a.revenue)}</td>
+                    <td className="cell__secondary">{formatDay(a.last_order_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 className="section-label">Orders</h3>
+          <div className="table-wrap">
+            <table className="table" aria-label="Orders in this area">
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Placed</th>
+                  <th scope="col">Customer</th>
+                  <th scope="col">Deliver to</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" className="num">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.orders.map((o) => (
+                  <tr key={o.id}>
+                    <td className="mono">#{shortNumber(o.order_number)}</td>
+                    <td className="cell__secondary">
+                      {formatDay(o.placed_at)} {formatClock(o.placed_at)}
+                    </td>
+                    <td>
+                      <Link className="link" to={`/customers/${o.customer_id}`}>
+                        {o.customer_name || 'Unnamed customer'}
+                      </Link>
+                      {o.customer_phone ? <span className="cell__secondary mono"> {o.customer_phone}</span> : null}
+                    </td>
+                    <td>
+                      {addressText(o)}
+                      <span className="cell__secondary">
+                        {' · '}
+                        {o.recipient_name} <span className="mono">{o.recipient_phone}</span>
+                      </span>
+                    </td>
+                    <td>{STATUS_LABEL[o.order_status as keyof typeof STATUS_LABEL] ?? o.order_status}</td>
+                    <td className="num mono">{formatMoney(o.total_amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {detail.orders_shown < detail.totals.orders ? (
+            <p className="cell__secondary">
+              The newest {detail.orders_shown} of {detail.totals.orders} orders.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+    </section>
   );
 }
 
@@ -149,7 +299,7 @@ export function toKm(store: { lat: number; lng: number }, p: { lat: number; lng:
 
 const heat = (w: number) => (w > 0.66 ? '#d9480f' : w > 0.33 ? '#f59f00' : '#fcc419');
 
-function GridMap({ data }: { data: OrderMapData }) {
+function GridMap({ data, selected, onSelect }: { data: OrderMapData; selected: string | null; onSelect(c: OrderMapCell): void }) {
   const r = data.store.radius_km;
   const points = data.cells.map((c) => ({ c, ...toKm(data.store, c) }));
   const reach = Math.max(r * 1.15, ...points.map((p) => Math.max(Math.abs(p.x), Math.abs(p.y)) + 0.4));
@@ -172,16 +322,17 @@ function GridMap({ data }: { data: OrderMapData }) {
         <circle cx={0} cy={0} r={Math.max(0, r - data.edge_km)} className="grid-map__edge" />
         {points.map(({ c, x, y }) => (
           <circle
-            key={`${c.lat},${c.lng}`}
+            key={c.cell}
             data-testid="map-cell"
             data-orders={c.orders}
             cx={x}
             cy={-y}
             r={bubble(c)}
             fill={heat(c.orders / max)}
-            className="grid-map__cell"
+            className={selected === c.cell ? 'grid-map__cell is-selected' : 'grid-map__cell'}
+            onClick={() => onSelect(c)}
           >
-            <title>{`${c.area ?? 'Area'}: ${c.orders} ${c.orders === 1 ? 'order' : 'orders'}, ${formatMoney(c.revenue)}, ${c.distance_km} km`}</title>
+            <title>{`${cellName(c)}: ${ordersText(c.orders)}, ${formatMoney(c.revenue)}, ${c.distance_km} km`}</title>
           </circle>
         ))}
         <rect x={-0.12} y={-0.12} width={0.24} height={0.24} className="grid-map__hub" />

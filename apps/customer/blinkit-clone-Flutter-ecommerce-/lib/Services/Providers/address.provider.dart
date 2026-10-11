@@ -42,9 +42,38 @@ class AddressProvider extends ChangeNotifier {
     return _addresses.isNotEmpty ? _addresses.first : null;
   }
 
+  /// The address this checkout delivers to (owner, 2026-10-11: "choose the
+  /// address by click, instead of making it default"). Tapping a card in My
+  /// Addresses picks it for now without touching the default; until the
+  /// customer picks one - or once the picked one is deleted - it is the
+  /// default address. Kept in memory only: the next app start begins from
+  /// the default again.
+  AddressModel? get selectedAddress {
+    final id = _selectedId;
+    if (id != null) {
+      for (final a in addresses) {
+        if (a.id == id) return a;
+      }
+    }
+    return defaultAddress;
+  }
+
+  String? _selectedId;
+
+  /// Whether [id] is the address checkout will deliver to.
+  bool isSelected(String id) => selectedAddress?.id == id;
+
+  /// Deliver this checkout to [id] without making it the default.
+  void selectAddress(String id) {
+    if (_selectedId == id) return;
+    _selectedId = id;
+    notifyListeners();
+  }
+
   /// Forgets the signed-in customer's addresses (logout / session end).
   void clear() {
     _addresses = [];
+    _selectedId = null;
     _isLoading = false;
     _failure = null;
     _saveFailure = null;
@@ -88,6 +117,8 @@ class AddressProvider extends ChangeNotifier {
       _addresses = [..._addresses, created];
       // The server moved the default to it: no other address is still marked.
       if (created.isDefault) _addresses = _onlyDefault(created.id);
+      // A new address is the one the customer means to use next.
+      _selectedId = created.id;
       notifyListeners();
       return created;
     } catch (e) {
@@ -131,6 +162,7 @@ class AddressProvider extends ChangeNotifier {
         url: '/me/addresses/$id',
       );
       _addresses = _addresses.where((a) => a.id != id).toList();
+      if (_selectedId == id) _selectedId = null;
       notifyListeners();
     } catch (e) {
       _saveFailure = AppErrors.from(e);

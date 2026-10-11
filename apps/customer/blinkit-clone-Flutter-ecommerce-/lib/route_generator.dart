@@ -135,7 +135,10 @@ class AppRouter {
       case '/user/address':
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => const UserAddressScreen(),
+          // From checkout, tapping an address picks it and comes back.
+          builder: (_) => UserAddressScreen(
+            pickMode: settings.arguments == UserAddressScreen.pickForCheckout,
+          ),
         );
       case '/app/about':
         return MaterialPageRoute(
