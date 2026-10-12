@@ -101,7 +101,7 @@ export function Products() {
         actions={
           <>
             <Link className="button button--ghost" to="/catalog/products/import">
-              Import
+              Bulk upload (Excel)
             </Link>
             <button type="button" className="button" onClick={() => navigate('/catalog/products/new')}>
               Add product

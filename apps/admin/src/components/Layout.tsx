@@ -80,8 +80,12 @@ export function Layout() {
               </NavLink>
 
               <p className="nav__group">Catalog</p>
-              <NavLink to="/products" className="nav__item">
+              <NavLink to="/products" end className="nav__item">
                 Products
+              </NavLink>
+              {/* Excel bulk upload, easy to find (owner, 2026-10-12). */}
+              <NavLink to="/products/import" className="nav__item">
+                Bulk upload (Excel)
               </NavLink>
               <NavLink to="/categories" className="nav__item">
                 Categories

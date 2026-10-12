@@ -126,7 +126,7 @@ describe('delete product', () => {
       if (c.path === '/admin/products') return { data: { products: [] } };
     });
     renderPage(<Products />);
-    expect(await screen.findByRole('button', { name: 'Import products' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Bulk upload (Excel)' })).toBeInTheDocument();
   });
 });
 

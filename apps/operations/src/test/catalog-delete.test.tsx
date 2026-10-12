@@ -83,7 +83,7 @@ describe('Delete product', () => {
       'GET /admin/categories': () => ok({ categories: [] }),
       'GET /admin/products': () => ok({ products: [], pagination: {} }),
     });
-    expect(await screen.findByRole('link', { name: 'Import' })).toHaveAttribute('href', '/catalog/products/import');
+    expect(await screen.findByRole('link', { name: 'Bulk upload (Excel)' })).toHaveAttribute('href', '/catalog/products/import');
   });
 });
 

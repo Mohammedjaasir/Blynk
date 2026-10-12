@@ -586,6 +586,8 @@ export function RiderDocumentsSheet({ riderId, name, onClose, onChanged }: { rid
           <>
             {data.approval_needs_documents === false ? (
               <p className="quiet">Documents not needed for approval (Settings → Rider documents).</p>
+            ) : data.all_required_verified && !slots.some((s) => s.required) ? (
+              <p className="quiet">None of these documents are required for this vehicle. You can still upload them.</p>
             ) : data.all_required_verified ? (
               <p className="quiet quiet--ok">All required documents are verified.</p>
             ) : missingNote ? (

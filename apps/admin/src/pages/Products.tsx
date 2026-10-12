@@ -95,7 +95,7 @@ export function Products() {
         actions={
           <>
             <button type="button" className="button button--ghost" onClick={() => navigate('/products/import')}>
-              Import products
+              Bulk upload (Excel)
             </button>
             <button type="button" className="button" onClick={() => navigate('/products/new')}>
               Add product
