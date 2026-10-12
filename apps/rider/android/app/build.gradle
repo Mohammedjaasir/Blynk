@@ -1,5 +1,14 @@
 apply plugin: 'com.android.application'
 
+// Release signing (owner, 2026-10-12): the key and its passwords live outside
+// the repo in ~/.blynk-release/keystore.properties (or the file named by
+// BLYNK_KEYSTORE_PROPERTIES). Without that file, release builds stay unsigned.
+def releaseKeystorePropsFile = file(System.getenv('BLYNK_KEYSTORE_PROPERTIES') ?: "${System.getProperty('user.home')}/.blynk-release/keystore.properties")
+def releaseKeystoreProps = new Properties()
+if (releaseKeystorePropsFile.exists()) {
+    releaseKeystorePropsFile.withInputStream { releaseKeystoreProps.load(it) }
+}
+
 android {
     namespace "lk.blynk.rider"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +16,8 @@ android {
         applicationId "lk.blynk.rider"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +25,21 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseKeystorePropsFile.exists()) {
+            release {
+                storeFile file(releaseKeystoreProps['storeFile'])
+                storePassword releaseKeystoreProps['storePassword']
+                keyAlias releaseKeystoreProps['keyAlias']
+                keyPassword releaseKeystoreProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseKeystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
