@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { db } from '../../database/connection.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
+import { requireAuth } from '../../middleware/auth.middleware.js';
+import { downloadHandler, manifestHandler, shareDownloadHandler } from './app-downloads.js';
 
 /**
  * In-app updates for the staff Android apps (owner, 2026-10-12): Admin and
@@ -11,8 +13,9 @@ import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.
  * system_configurations 'app_updates' {"ops": Policy, "rider": Policy}, where
  * Policy = {min_version_code, mode, notes}. No row (or a malformed entry)
  * means {min_version_code: 0, mode: 'optional', notes: ''}: the apps only
- * offer an update when the published manifest
- * (https://blynk.lk/download/<app>.json) is newer than what is installed.
+ * offer an update when the published manifest (GET
+ * /app-updates/manifest?app=<app>, signed in; app-downloads.ts) is newer
+ * than what is installed.
  *
  * - mode 'optional': a dismissible "Update available" reminder.
  * - mode 'required': an installed versionCode below min_version_code blocks
@@ -138,8 +141,18 @@ function stripUndefined<T extends object>(o: T | undefined): Partial<T> {
 
 export const appUpdatesService = new AppUpdatesService();
 
-/** Public: GET /api/v1/app-updates/policy?app=ops|rider - only the policy. */
+/**
+ * /api/v1/app-updates:
+ * - GET /policy?app=ops|rider        public - only the policy.
+ * - GET /manifest?app=ops|rider      signed in (per-app roles; app-downloads.ts).
+ * - GET|HEAD /download?app=ops|rider signed in - the APK.
+ * - GET|HEAD /share/:token/:file     public only while a share link is on.
+ */
 export const appUpdatesRouter = Router();
+appUpdatesRouter.get('/manifest', requireAuth, manifestHandler);
+// Express answers HEAD with the GET handler; sendApk sends headers only.
+appUpdatesRouter.get('/download', requireAuth, downloadHandler);
+appUpdatesRouter.get('/share/:token/:file', shareDownloadHandler);
 appUpdatesRouter.get('/policy', async (req, res, next) => {
   try {
     const { app } = policyQuerySchema.parse(req.query);

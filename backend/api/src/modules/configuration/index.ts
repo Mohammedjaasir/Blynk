@@ -19,6 +19,7 @@ import {
 } from './store-schedule.js';
 import { doctorsAccessService, updateDoctorsAccessSchema } from './doctors-access.js';
 import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
+import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
 import { smsLanguagePreview } from '../notifications/sms-language.preview.js';
 
@@ -302,6 +303,41 @@ adminSettingsRouter.patch(
     try {
       const input = updateAppUpdatesSchema.parse(req.body);
       res.json({ success: true, data: await appUpdatesService.set(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Temporary public share link per staff app (owner, 2026-10-12): the APKs are
+// served only to signed-in staff; Admin or Operations can switch on a public
+// link for 1-72 hours (default 24) to hand the app to a new phone. Each
+// switch-on makes a fresh random token; Off or the expiry ends it. Audited
+// (APP_SHARE_LINK_UPDATED, without the token). Served by the public
+// GET /app-updates/share/<token>/<app>.apk (modules/configuration/app-downloads.ts).
+adminSettingsRouter.get(
+  '/settings/app-share-links',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      res.json({ success: true, data: await appShareLinksService.get() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/app-share-links',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateShareLinkSchema.parse(req.body);
+      res.set('Cache-Control', 'no-store');
+      res.json({ success: true, data: await appShareLinksService.set(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

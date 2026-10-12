@@ -46,7 +46,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- In-app updates (owner, 2026-10-12): AppUpdatePlugin opens Android's installer for the
-         app's own new APK (https://blynk.lk/download/<app>.apk). Android 8+ asks the user once
+         app's own new APK (from the Blynk API, signed in only: /api/v1/app-updates/download). Android 8+ asks the user once
          to allow "Install unknown apps" for this app. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

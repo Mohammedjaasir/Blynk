@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
  * strict-origin-when-cross-origin on every response.
  *
  * nginx's add_header is inherited only by a location with NO add_header of
- * its own, so every location that sets a header (cache rules, the APK
- * download) must repeat the three - this test reads each config and checks
+ * its own, so every location that sets a header (cache rules) must repeat
+ * the three - this test reads each config and checks
  * the server level and every such location. A full script-src CSP is a
  * follow-up (GTM, MapLibre and Firebase need a reviewed allow-list).
  */
@@ -73,18 +73,47 @@ describe('web nginx security headers', () => {
     });
   }
 
-  it('keeps the existing cache and download headers', () => {
+  it('keeps the existing cache headers', () => {
     const customer = fs.readFileSync(CONFIGS[3]!, 'utf8');
     expect(customer).toMatch(/location \/app\/ \{[^}]*Cache-Control "no-cache"/);
-    expect(customer).toMatch(/add_header Content-Disposition "attachment";/);
-    // In-app updates (2026-10-12): the version manifest next to each APK,
-    // never cached, readable cross-origin, same volume-then-built-in lookup.
-    const manifest = customer.match(/location ~ \^\/download\/\(\[A-Za-z0-9_-\]\+\\\.json\)\$ \{([^}]*)\}/);
-    expect(manifest, 'the /download/<name>.json location').not.toBeNull();
-    expect(manifest![1]).toMatch(/add_header Cache-Control "no-cache";/);
-    expect(manifest![1]).toMatch(/add_header Access-Control-Allow-Origin "\*";/);
-    expect(manifest![1]).toMatch(/try_files \/download\/\$1 \/files\/\$1 =404;/);
     const admin = fs.readFileSync(CONFIGS[0]!, 'utf8');
     expect(admin).toMatch(/add_header Cache-Control "public, immutable";/);
+  });
+
+  // Staff downloads moved behind sign-in (owner, 2026-10-12): the landing
+  // site no longer serves any APK or version manifest. /download/ is a plain
+  // 404 (never the landing page), and nothing in the image or config points
+  // at the old built-in files.
+  it('customer-site: /download/ is closed (404) and no APK or manifest is served', () => {
+    const customer = fs.readFileSync(CONFIGS[3]!, 'utf8');
+    const { locations } = split(customer);
+    const download = locations.find((l) => l.head === 'location ^~ /download/');
+    expect(download, 'location ^~ /download/').toBeDefined();
+    expect(download!.body.replace(/#.*$/gm, '').trim()).toBe('return 404;');
+    const bare = locations.find((l) => l.head === 'location = /download');
+    expect(bare?.body.replace(/#.*$/gm, '').trim()).toBe('return 404;');
+    const live = customer.replace(/#.*$/gm, '');
+    expect(live).not.toMatch(/\.apk/);
+    expect(live).not.toMatch(/\/download\/\(/);
+    expect(live).not.toMatch(/try_files[^;]*\/files\//);
+    expect(live).not.toMatch(/location \/files\//);
+    expect(live).not.toMatch(/application\/vnd\.android\.package-archive/);
+    const dockerfile = fs.readFileSync(path.join(APPS, 'customer-site', 'Dockerfile'), 'utf8').replace(/#.*$/gm, '');
+    expect(dockerfile).not.toMatch(/customer-site\/files/);
+    expect(dockerfile).not.toMatch(/html\/download/);
+    const leftovers = path.join(APPS, 'customer-site', 'files');
+    expect(fs.existsSync(leftovers) ? fs.readdirSync(leftovers) : []).toEqual([]);
+  });
+
+  it('the API image carries the APKs (backend/api/app-files) and .dockerignore keeps them', () => {
+    const api = path.resolve(APPS, '..', 'backend', 'api');
+    const dockerfile = fs.readFileSync(path.join(api, 'Dockerfile'), 'utf8');
+    expect(dockerfile).toMatch(/COPY --chown=node:node app-files\/ \.\/app-files\//);
+    expect(dockerfile).toMatch(/ENV APP_FILES_DIR=\/app\/app-files/);
+    const ignore = fs.readFileSync(path.join(api, '.dockerignore'), 'utf8').replace(/#.*$/gm, '');
+    expect(ignore).not.toMatch(/app-files|\.apk|\*\.json/);
+    for (const f of ['ops.apk', 'ops.json', 'rider.apk', 'rider.json']) {
+      expect(fs.existsSync(path.join(api, 'app-files', f)), f).toBe(true);
+    }
   });
 });

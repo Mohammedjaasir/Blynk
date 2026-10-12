@@ -3890,3 +3890,26 @@ a.button {
   margin: 0 0 12px;
   min-width: 0;
 }
+
+/* Temporary public share link per staff app (owner, 2026-10-12). */
+.app-updates__share {
+  border-top: 1px dashed var(--line);
+  margin-top: 10px;
+  padding-top: 10px;
+  min-width: 0;
+}
+.app-updates__share .input[readonly] {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+.app-updates__share-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+.app-updates__share-row .field {
+  flex: 0 1 140px;
+  margin: 0;
+}

@@ -101,6 +101,12 @@ describe('parsing and messages', () => {
     expect(parsePolicy({ min_version_code: -1 })).toBeNull();
   });
 
+  it('sign-in problems in plain words', () => {
+    expect(installErrorMessage({ code: 'UNAUTHORIZED' })).toBe('Please sign in again.');
+    expect(installErrorMessage({ code: 'FORBIDDEN' })).toBe("Your account can't download this app.");
+    expect(installErrorMessage({ code: 'TIMEOUT' })).toMatch(/Check your connection/);
+  });
+
   it('turns the plugin codes into plain words', () => {
     expect(installErrorMessage({ code: 'CHECKSUM_MISMATCH' })).toBe('The download was corrupted. Try again.');
     expect(installErrorMessage({ code: 'SIZE_MISMATCH' })).toBe('The download was corrupted. Try again.');
@@ -118,6 +124,8 @@ describe('update store', () => {
 
   beforeEach(() => {
     __resetAppUpdateForTests();
+    // Update checks are for signed-in staff only (the prompt sets this from the session).
+    updateStore.setSignedIn(true);
     now = NOW;
     fetchManifest = vi.fn(async () => manifest(11));
     fetchPolicy = vi.fn(async () => policy());
@@ -128,7 +136,8 @@ describe('update store', () => {
       fetchPolicy,
       canRequestInstall: async () => true,
       openInstallSettings: vi.fn(async () => undefined),
-      downloadAndInstall: vi.fn(async (_m: UpdateManifest, onProgress: (f: number) => void) => {
+      freshAccessToken: vi.fn(async () => 'fresh-access-token'),
+      downloadAndInstall: vi.fn(async (_m: UpdateManifest, _token: string, onProgress: (f: number) => void) => {
         onProgress(0.5);
       }),
       now: () => now,
@@ -165,6 +174,7 @@ describe('update store', () => {
     expect(currentDecision().kind).toBe('none');
     // A new launch the same day still remembers it.
     __resetAppUpdateForTests(false);
+    updateStore.setSignedIn(true);
     await updateStore.start();
     expect(currentDecision().kind).toBe('none');
     now += DISMISS_MS + 1;
@@ -178,6 +188,7 @@ describe('update store', () => {
     expect(updateStore.getState().offline).toBe(false);
     // Next launch with no signal.
     __resetAppUpdateForTests(false);
+    updateStore.setSignedIn(true);
     fetchManifest.mockRejectedValue(new TypeError('Failed to fetch'));
     fetchPolicy.mockRejectedValue(new TypeError('Failed to fetch'));
     await updateStore.start();
@@ -197,7 +208,8 @@ describe('update store', () => {
     appUpdateDeps.canRequestInstall = async () => true;
     updateStore.resetPhase();
     await updateStore.install();
-    expect(appUpdateDeps.downloadAndInstall).toHaveBeenCalledWith(manifest(11), expect.any(Function));
+    expect(appUpdateDeps.freshAccessToken).toHaveBeenCalledTimes(1);
+    expect(appUpdateDeps.downloadAndInstall).toHaveBeenCalledWith(manifest(11), 'fresh-access-token', expect.any(Function));
     expect(updateStore.getState().phase).toBe('installing');
   });
 
@@ -208,5 +220,46 @@ describe('update store', () => {
     };
     await updateStore.install();
     expect(updateStore.getState()).toMatchObject({ phase: 'error', installError: 'The download was corrupted. Try again.' });
+  });
+
+  it('signed out: never asks the server and shows nothing, even below a required minimum', async () => {
+    fetchPolicy.mockResolvedValue(policy({ mode: 'required', min_version_code: 11 }));
+    updateStore.setSignedIn(false);
+    await updateStore.start();
+    await updateStore.check({ force: true });
+    expect(fetchManifest).not.toHaveBeenCalled();
+    expect(fetchPolicy).not.toHaveBeenCalled();
+    expect(currentDecision().kind).toBe('none');
+    // Signing in checks at once.
+    updateStore.setSignedIn(true);
+    await vi.waitFor(() => expect(currentDecision().kind).toBe('required'));
+    expect(fetchManifest).toHaveBeenCalledTimes(1);
+    // Signing out hides it again (the login screen stays usable).
+    updateStore.setSignedIn(false);
+    expect(currentDecision().kind).toBe('none');
+  });
+
+  it('a token that cannot be renewed: "Please sign in again", and the plugin is not called', async () => {
+    await updateStore.start();
+    appUpdateDeps.freshAccessToken = vi.fn(async () => {
+      throw Object.assign(new Error('Please sign in again.'), { status: 401, code: 'UNAUTHORIZED' });
+    });
+    await updateStore.install();
+    expect(updateStore.getState()).toMatchObject({ phase: 'error', installError: 'Please sign in again.' });
+    expect(appUpdateDeps.downloadAndInstall).not.toHaveBeenCalled();
+  });
+
+  it('the plugin refusing with 401 / 403', async () => {
+    await updateStore.start();
+    appUpdateDeps.downloadAndInstall = async () => {
+      throw Object.assign(new Error('x'), { code: 'FORBIDDEN' });
+    };
+    await updateStore.install();
+    expect(updateStore.getState().installError).toBe("Your account can't download this app.");
+    appUpdateDeps.downloadAndInstall = async () => {
+      throw Object.assign(new Error('x'), { code: 'UNAUTHORIZED' });
+    };
+    await updateStore.install();
+    expect(updateStore.getState().installError).toBe('Please sign in again.');
   });
 });

@@ -1,6 +1,7 @@
 import { UPLOAD_TIMEOUT_MS, apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
+  AppShareLinks,
   AppUpdatePolicySetting,
   AppUpdatesSetting,
   DoctorsAccessSetting,
@@ -1125,6 +1126,12 @@ export const settings = {
     get: () => apiRequest<AppUpdatesSetting>('/admin/settings/app-updates'),
     update: (body: { ops?: Partial<AppUpdatePolicySetting>; rider?: Partial<AppUpdatePolicySetting> }) =>
       apiRequest<AppUpdatesSetting>('/admin/settings/app-updates', { method: 'PATCH', body }),
+  },
+  /** Temporary public download link per staff app (owner, 2026-10-12). Audited. */
+  appShareLinks: {
+    get: () => apiRequest<AppShareLinks>('/admin/settings/app-share-links'),
+    update: (body: { app: 'ops' | 'rider'; enabled: boolean; hours?: number }) =>
+      apiRequest<AppShareLinks>('/admin/settings/app-share-links', { method: 'PATCH', body }),
   },
   doctorsAccess: {
     get: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),

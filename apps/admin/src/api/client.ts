@@ -10,6 +10,8 @@
 const BASE_URL: string =
   (import.meta.env?.VITE_API_BASE_URL as string | undefined) ??
   'http://localhost:4000/api/v1';
+/** The API base (…/api/v1), for links that point at the API (app share links). */
+export const API_BASE_URL = BASE_URL;
 
 const ACCESS_TOKEN_KEY = 'blynk.admin.accessToken';
 const REFRESH_TOKEN_KEY = 'blynk.admin.refreshToken';

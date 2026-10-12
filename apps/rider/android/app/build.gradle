@@ -10,7 +10,7 @@ if (releaseKeystorePropsFile.exists()) {
 }
 
 // In-app updates (owner, 2026-10-12): the app offers an update when the
-// published manifest (https://blynk.lk/download/<app>.json) has a higher
+// published manifest (GET /api/v1/app-updates/manifest?app=<app>) has a higher
 // versionCode than the installed one, so every release must increase it.
 // BLYNK_VERSION_CODE wins (use it for release builds and record it in the
 // manifest - docs/06-deployment/staff-app-updates.md); otherwise the number of

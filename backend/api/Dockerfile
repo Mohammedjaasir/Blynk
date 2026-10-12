@@ -59,6 +59,9 @@ ENV API_PREFIX=/api/v1
 ENV APP_NAME=blynk-backend-api
 # Self-hosted PMTiles archive directory (served publicly at /map-tiles/*.pmtiles)
 ENV MAP_TILES_DIR=/app/map-tiles
+# Staff app APKs + version manifests (Blynk Ops, Blynk Rider), served only to
+# signed-in staff or through a temporary share link (app-downloads.ts).
+ENV APP_FILES_DIR=/app/app-files
 
 # Uploaded product/category/promotion images (MEDIA_ROOT defaults to
 # ./uploads). Created here, as root, and handed to the node user: after
@@ -82,6 +85,11 @@ COPY --chown=node:node --from=builder /app/dist ./dist
 
 # Self-hosted map tiles (~2 MB PMTiles archive; not compiled, lives outside src/)
 COPY --chown=node:node map-tiles/ ./map-tiles/
+
+# Staff app APKs + manifests ({ops,rider}.{apk,json}, ~11 MB; committed in
+# backend/api/app-files - release steps: docs/06-deployment/staff-app-updates.md).
+# Read-only for the app: a new release ships with a new image.
+COPY --chown=node:node app-files/ ./app-files/
 
 # Document exposed HTTP API port
 EXPOSE 3000

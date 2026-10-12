@@ -60,6 +60,11 @@ const envSchema = z.object({
   // holding *.pmtiles files, resolved against the working directory exactly
   // like MEDIA_ROOT. Served publicly at GET /map-tiles/<name>.pmtiles.
   MAP_TILES_DIR: z.string().default('map-tiles'),
+  // Staff app APKs + version manifests ({ops,rider}.{apk,json}; owner,
+  // 2026-10-12). Served only to signed-in staff (GET /app-updates/download)
+  // or through a temporary share link. Unset = backend/api/app-files next to
+  // the code (src/ or dist/); the Docker image sets /app/app-files.
+  APP_FILES_DIR: z.string().optional(),
 
   // Logging
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),

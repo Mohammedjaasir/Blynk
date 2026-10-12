@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 // In-app updates (owner, 2026-10-12): writes the version manifest that sits
-// next to a staff APK on the landing site, e.g. apps/customer-site/files/ops.json
-// served at https://blynk.lk/download/ops.json. Blynk Ops and Blynk Rider read
-// it to offer an update, then download the APK and check its size and SHA-256
-// against these values before Android's installer opens.
+// next to a staff APK in the API image, e.g. backend/api/app-files/ops.json.
+// The APKs are not public (blynk.lk/download is closed): the API serves the
+// manifest at GET /api/v1/app-updates/manifest?app=ops and the APK at
+// GET /api/v1/app-updates/download?app=ops to signed-in staff only. Blynk Ops
+// and Blynk Rider read it to offer an update, then download the APK and check
+// its size and SHA-256 against these values before Android's installer opens.
 //
 // Offline: reads only the APK. Release steps: docs/06-deployment/staff-app-updates.md
 //
 // Usage (from the repo root):
 //   node apps/customer-site/scripts/write-apk-manifest.mjs --app ops \
-//     --apk apps/customer-site/files/ops.apk --version-code 57 --version-name 1.2
-// Options: --out <file> (default apps/customer-site/files/<app>.json),
+//     --apk backend/api/app-files/ops.apk --version-code 57 --version-name 1.2
+// Options: --out <file> (default backend/api/app-files/<app>.json),
 //          --released-at <ISO time> (default now).
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -18,7 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const APPS = ['ops', 'rider'];
-const FILES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'files');
+export const FILES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'backend', 'api', 'app-files');
 const MAX_VERSION_CODE = 2_100_000_000;
 
 export function sha256File(path) {

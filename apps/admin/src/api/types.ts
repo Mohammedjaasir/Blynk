@@ -787,6 +787,21 @@ export interface AppUpdatesSetting {
   updated_at: string | null;
 }
 
+/** GET/PATCH /admin/settings/app-share-links - a temporary public download
+ * link per staff app (owner, 2026-10-12). `path` is relative to the API base. */
+export interface AppShareLink {
+  active: boolean;
+  path: string | null;
+  hours: number | null;
+  created_at: string | null;
+  expires_at: string | null;
+}
+export interface AppShareLinks {
+  ops: AppShareLink;
+  rider: AppShareLink;
+  updated_at: string | null;
+}
+
 /** GET/PATCH /admin/settings/birthday-offer - X% off ONE order in the
  * customer's birthday week, plus a birthday SMS (owner, 2026-10-09). */
 export interface BirthdayOfferSetting {

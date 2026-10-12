@@ -1,3 +1,5 @@
+import { API_BASE_URL, apiRequest } from '../api/client';
+
 /**
  * In-app updates settings (owner, 2026-10-12): helpers for the "App updates"
  * panel (Settings here, More in Operations). Same logic in apps/operations.
@@ -10,8 +12,6 @@ export const STAFF_APP_NAMES: ReadonlyArray<{ id: StaffAppName; label: string }>
 export const MAX_VERSION_CODE = 2_100_000_000;
 export const MAX_NOTES = 500;
 
-export const publishedManifestUrl = (app: StaffAppName) => `https://blynk.lk/download/${app}.json`;
-
 export interface PublishedVersion {
   version_code: number;
   version_name: string;
@@ -19,13 +19,16 @@ export interface PublishedVersion {
   size: number;
 }
 
-/** The APK published on the landing site, read from its manifest; null when missing or unreadable. */
+/**
+ * The published APK, from the signed-in manifest endpoint
+ * (GET /app-updates/manifest?app=<app>; ADMIN and OPERATIONS may read both
+ * apps). The APKs are no longer public on blynk.lk (owner, 2026-10-12).
+ * null when nothing is published or it cannot be read.
+ */
 export async function fetchPublishedVersion(app: StaffAppName): Promise<PublishedVersion | null> {
   try {
-    const res = await fetch(publishedManifestUrl(app), { cache: 'no-store' });
-    if (!res.ok) return null;
-    const v = JSON.parse(await res.text()) as Record<string, unknown>;
-    if (v.app !== app || typeof v.version_code !== 'number' || !Number.isInteger(v.version_code)) return null;
+    const v = (await apiRequest<unknown>(`/app-updates/manifest?app=${app}`)) as Record<string, unknown> | null;
+    if (!v || v.app !== app || typeof v.version_code !== 'number' || !Number.isInteger(v.version_code)) return null;
     return {
       version_code: v.version_code,
       version_name: typeof v.version_name === 'string' ? v.version_name : String(v.version_code),
@@ -36,6 +39,25 @@ export async function fetchPublishedVersion(app: StaffAppName): Promise<Publishe
     return null;
   }
 }
+
+/** Temporary public share link (owner, 2026-10-12): 1-72 hours, default 24. */
+export const SHARE_MIN_HOURS = 1;
+export const SHARE_MAX_HOURS = 72;
+export const SHARE_DEFAULT_HOURS = 24;
+
+/** A whole number of hours from 1 to 72. */
+export function parseShareHours(raw: string): { value: number } | { error: string } {
+  const text = raw.trim();
+  if (!/^\d+$/.test(text)) return { error: `Enter whole hours, ${SHARE_MIN_HOURS} to ${SHARE_MAX_HOURS}.` };
+  const value = Number(text);
+  if (value < SHARE_MIN_HOURS || value > SHARE_MAX_HOURS) {
+    return { error: `Enter whole hours, ${SHARE_MIN_HOURS} to ${SHARE_MAX_HOURS}.` };
+  }
+  return { value };
+}
+
+/** The full public link: the API base (…/api/v1) + the path the API returns. */
+export const shareLinkUrl = (path: string) => `${API_BASE_URL}${path}`;
 
 /** A whole number from 0; '' means 0 (no minimum). */
 export function parseMinVersionCode(raw: string): { value: number } | { error: string } {

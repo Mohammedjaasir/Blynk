@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from '../api/client';
 import { AppUpdatePrompt, AppVersionCard } from '../components/AppUpdate';
-import { __resetAppUpdateForTests, appUpdateDeps, type UpdateManifest, type UpdatePolicy } from '../lib/app-update';
+import { __resetAppUpdateForTests, appUpdateDeps, updateStore, type UpdateManifest, type UpdatePolicy } from '../lib/app-update';
 import { RIDER, fail, renderAs } from './helpers';
 
 /**
@@ -39,7 +39,8 @@ function fakeDevice(opts: { installed?: number; manifest?: UpdateManifest | null
     }),
     canRequestInstall: vi.fn(async () => true),
     openInstallSettings: vi.fn(async () => undefined),
-    downloadAndInstall: vi.fn(async (_m: UpdateManifest, onProgress: (f: number) => void) => {
+    freshAccessToken: vi.fn(async () => 'fresh-access-token'),
+    downloadAndInstall: vi.fn(async (_m: UpdateManifest, _token: string, onProgress: (f: number) => void) => {
       onProgress(0.4);
     }),
   };
@@ -59,14 +60,14 @@ afterEach(() => {
 describe('Update prompt', () => {
   it('shows nothing on web / in a browser', async () => {
     appUpdateDeps.isNative = () => false;
-    const { container } = render(<AppUpdatePrompt />);
+    const { container } = render(<AppUpdatePrompt signedIn />);
     await act(async () => undefined);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('shows nothing when the installed app is the latest', async () => {
     fakeDevice({ installed: 11 });
-    const { container } = render(<AppUpdatePrompt />);
+    const { container } = render(<AppUpdatePrompt signedIn />);
     await act(async () => undefined);
     expect(container).toBeEmptyDOMElement();
   });
@@ -74,7 +75,7 @@ describe('Update prompt', () => {
   it('optional: "Update available" with the notes; Later hides it', async () => {
     const user = userEvent.setup();
     fakeDevice({ policy: { min_version_code: 0, mode: 'optional', notes: 'Clearer stop list' } });
-    render(<AppUpdatePrompt />);
+    render(<AppUpdatePrompt signedIn />);
     expect(await screen.findByText('Update available — v1.11')).toBeInTheDocument();
     expect(screen.getByText('Clearer stop list')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Later' }));
@@ -86,16 +87,18 @@ describe('Update prompt', () => {
     const deps = fakeDevice();
     let finish: () => void = () => undefined;
     deps.downloadAndInstall.mockImplementation(
-      (_m, onProgress) =>
+      (_m, _token, onProgress) =>
         new Promise<void>((resolve) => {
           onProgress(0.4);
           finish = resolve;
         })
     );
-    render(<AppUpdatePrompt />);
+    render(<AppUpdatePrompt signedIn />);
     await user.click(await screen.findByRole('button', { name: 'Update' }));
     expect(await screen.findByText(/Downloading the update… 40% of 6.0 MB/)).toBeInTheDocument();
-    expect(deps.downloadAndInstall).toHaveBeenCalledWith(manifest(11), expect.any(Function));
+    // A just-renewed token, renewed right before the download, goes to the plugin.
+    expect(deps.freshAccessToken).toHaveBeenCalledTimes(1);
+    expect(deps.downloadAndInstall).toHaveBeenCalledWith(manifest(11), 'fresh-access-token', expect.any(Function));
     await act(async () => finish());
     expect(await screen.findByText(/install screen is open/)).toBeInTheDocument();
   });
@@ -104,7 +107,7 @@ describe('Update prompt', () => {
     const user = userEvent.setup();
     const deps = fakeDevice();
     deps.canRequestInstall.mockResolvedValue(false);
-    render(<AppUpdatePrompt />);
+    render(<AppUpdatePrompt signedIn />);
     await user.click(await screen.findByRole('button', { name: 'Update' }));
     expect(await screen.findByText(/allow Blynk Rider to install apps/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Open settings' }));
@@ -116,7 +119,7 @@ describe('Update prompt', () => {
     const user = userEvent.setup();
     const deps = fakeDevice();
     deps.downloadAndInstall.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'CHECKSUM_MISMATCH' }));
-    render(<AppUpdatePrompt />);
+    render(<AppUpdatePrompt signedIn />);
     await user.click(await screen.findByRole('button', { name: 'Update' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('The download was corrupted. Try again.');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
@@ -125,7 +128,7 @@ describe('Update prompt', () => {
 
   it('required: a blocking screen with only Update (no Later)', async () => {
     fakeDevice({ manifest: manifest(12), policy: { min_version_code: 12, mode: 'required', notes: 'New payment flow' } });
-    render(<AppUpdatePrompt />);
+    render(<AppUpdatePrompt signedIn />);
     const dialog = await screen.findByRole('dialog', { name: 'Update required' });
     expect(within(dialog).getByText(/Install Blynk Rider 1.12 to keep using the app/)).toBeInTheDocument();
     expect(within(dialog).getByText('New payment flow')).toBeInTheDocument();
@@ -133,15 +136,43 @@ describe('Update prompt', () => {
     expect(within(dialog).queryByRole('button', { name: 'Later' })).not.toBeInTheDocument();
   });
 
+  it('signed out: nothing is checked or shown, even below a required minimum; sign-in brings the block', async () => {
+    const deps = fakeDevice({ manifest: manifest(12), policy: { min_version_code: 12, mode: 'required', notes: '' } });
+    const { container, rerender } = render(<AppUpdatePrompt signedIn={false} />);
+    await act(async () => undefined);
+    expect(container).toBeEmptyDOMElement();
+    expect(deps.fetchManifest).not.toHaveBeenCalled();
+    expect(deps.fetchPolicy).not.toHaveBeenCalled();
+    rerender(<AppUpdatePrompt signedIn />);
+    expect(await screen.findByRole('dialog', { name: 'Update required' })).toBeInTheDocument();
+    rerender(<AppUpdatePrompt signedIn={false} />);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('a 401 says "Please sign in again"; a 403 says the account cannot download', async () => {
+    const user = userEvent.setup();
+    const deps = fakeDevice();
+    deps.downloadAndInstall.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'UNAUTHORIZED' }));
+    deps.downloadAndInstall.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'FORBIDDEN' }));
+    render(<AppUpdatePrompt signedIn />);
+    await user.click(await screen.findByRole('button', { name: 'Update' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Please sign in again.');
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Your account can't download this app."));
+  });
+
   it('required but offline with nothing remembered: no block (policy unknown)', async () => {
     fakeDevice({ offline: true });
-    const { container } = render(<AppUpdatePrompt />);
+    const { container } = render(<AppUpdatePrompt signedIn />);
     await act(async () => undefined);
     expect(container).toBeEmptyDOMElement();
   });
 });
 
 describe('My day > App version', () => {
+  // Only reachable signed in; the prompt in App sets this from the session.
+  beforeEach(() => updateStore.setSignedIn(true));
+
   it('shows the installed version; Check for updates asks again', async () => {
     const user = userEvent.setup();
     const deps = fakeDevice({ installed: 11 });

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { settings as settingsApi } from '../api/resources';
-import type { AppUpdateMode, AppUpdatesSetting } from '../api/types';
+import type { AppShareLinks, AppUpdateMode, AppUpdatesSetting } from '../api/types';
 import { errorMessage } from '../lib/apiErrors';
 import {
   MAX_NOTES,
@@ -12,6 +12,7 @@ import {
   type PublishedVersion,
   type StaffAppName,
 } from '../lib/appUpdatesSettings';
+import { AppShareLinkControls } from './AppShareLinkControls';
 import { ModeChoice } from './KmTierEditor';
 import { Field, Spinner, useToast } from './ui';
 
@@ -35,10 +36,12 @@ const draftsFrom = (s: AppUpdatesSetting): Drafts => ({
 /**
  * Settings > "App updates" (owner, 2026-10-12; GET|PATCH
  * /admin/settings/app-updates, audited): for Blynk Ops and Blynk Rider, the
- * latest published APK (read from https://blynk.lk/download/<app>.json), a
+ * latest published APK (from the signed-in GET /app-updates/manifest), a
  * minimum version code, Optional (a reminder staff can put off for a day) or
- * Required (older apps are blocked until updated) and short release notes.
- * Operations has the same panel under More.
+ * Required (older apps are blocked until updated), short release notes, and
+ * a temporary public share link (AppShareLinkControls; PATCH
+ * /admin/settings/app-share-links, audited). Operations has the same panel
+ * under More.
  */
 export function AppUpdatesPanel() {
   const toast = useToast();
@@ -48,6 +51,7 @@ export function AppUpdatesPanel() {
     ops: undefined,
     rider: undefined,
   });
+  const [shareLinks, setShareLinks] = useState<AppShareLinks | null | undefined>(undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Partial<Record<StaffAppName, string>>>({});
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +68,10 @@ export function AppUpdatesPanel() {
       .getAppUpdates()
       .then((s) => !cancelled && show(s))
       .catch((err) => !cancelled && setLoadError(errorMessage(err, 'Could not load the app update settings.')));
+    settingsApi
+      .getAppShareLinks()
+      .then((l) => !cancelled && setShareLinks(l))
+      .catch(() => !cancelled && setShareLinks(null));
     for (const { id } of STAFF_APP_NAMES) {
       fetchPublishedVersion(id).then((v) => !cancelled && setPublished((p) => ({ ...p, [id]: v })));
     }
@@ -155,6 +163,11 @@ export function AppUpdatesPanel() {
                   />
                 </Field>
                 {warning ? <p className="form__note">{warning}</p> : null}
+                {shareLinks === null ? (
+                  <p className="form__note">Could not load the share link.</p>
+                ) : (
+                  <AppShareLinkControls app={id} label={label} link={shareLinks?.[id]} onChange={setShareLinks} />
+                )}
               </fieldset>
             );
           })}

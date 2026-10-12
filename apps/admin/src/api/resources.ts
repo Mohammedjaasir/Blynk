@@ -1,5 +1,6 @@
 import { apiRequest, tokenStore } from './client';
 import type {
+  AppShareLinks,
   AppUpdatePolicySetting,
   AppUpdatesSetting,
   DoctorsAccessSetting,
@@ -379,6 +380,12 @@ export const settings = {
 
   setAppUpdates: (body: { ops?: Partial<AppUpdatePolicySetting>; rider?: Partial<AppUpdatePolicySetting> }) =>
     apiRequest<AppUpdatesSetting>('/admin/settings/app-updates', { method: 'PATCH', body }),
+
+  /** Temporary public download link per staff app (owner, 2026-10-12). Audited. */
+  getAppShareLinks: () => apiRequest<AppShareLinks>('/admin/settings/app-share-links'),
+
+  setAppShareLink: (body: { app: 'ops' | 'rider'; enabled: boolean; hours?: number }) =>
+    apiRequest<AppShareLinks>('/admin/settings/app-share-links', { method: 'PATCH', body }),
 
   getDoctorsAccess: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
 

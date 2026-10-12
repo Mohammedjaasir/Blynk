@@ -15,6 +15,8 @@
 export const BASE_URL: string =
   (import.meta.env?.VITE_API_BASE_URL as string | undefined) ??
   'http://localhost:4000/api/v1';
+/** The same base, under the name the Admin app uses (lib/appUpdatesSettings.ts). */
+export const API_BASE_URL = BASE_URL;
 
 const ACCESS_TOKEN_KEY = 'blynk.operations.accessToken';
 const REFRESH_TOKEN_KEY = 'blynk.operations.refreshToken';
@@ -126,6 +128,31 @@ function buildUrl(path: string, query?: Query) {
   }
   const qs = params.toString();
   return `${BASE_URL}${path}${qs ? `?${qs}` : ''}`;
+}
+
+/**
+ * A just-renewed access token for the one request that cannot go through
+ * apiRequest: the in-app update download, which the native AppUpdatePlugin
+ * makes itself (lib/app-update.ts). Renewing right before it means the token
+ * is fresh for that single request. Uses the same single-flight refresh, so
+ * it never races other calls. A refused refresh ends the session.
+ * Throws ApiError UNAUTHORIZED (401) when signed out, NETWORK/TIMEOUT when
+ * the server could not be reached.
+ */
+export async function freshAccessToken(): Promise<string> {
+  if (!tokenStore.refresh) {
+    const access = tokenStore.access;
+    if (access) return access;
+    throw new ApiError('Please sign in again.', 401, 'UNAUTHORIZED');
+  }
+  const outcome = await refreshSession();
+  const access = tokenStore.access;
+  if (outcome === 'refreshed' && access) return access;
+  if (outcome === 'refused') {
+    endSession('expired');
+    throw new ApiError('Please sign in again.', 401, 'UNAUTHORIZED');
+  }
+  throw connectionError(outcome === 'timeout' ? 'timeout' : 'network');
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {

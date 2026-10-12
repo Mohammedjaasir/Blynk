@@ -30,23 +30,33 @@ import java.util.concurrent.Executors;
 
 /**
  * In-app updates (owner, 2026-10-12). The web side (src/lib/app-update.ts)
- * reads the published manifest https://blynk.lk/download/<app>.json and asks
+ * reads the signed-in manifest GET /app-updates/manifest?app=<app> and asks
  * this plugin to fetch and install the new APK. Android's own install screen
  * opens; the user taps Install and keeps their data and sign-in.
  *
+ * The APKs are not public (owner, 2026-10-12): the download needs the
+ * signed-in user's access token. JavaScript renews it right before the call
+ * and passes it as `accessToken`; it is used ONLY as the Authorization header
+ * of that single request - never logged, stored or sent anywhere else.
+ *
  * Safety: the APK URL is fixed here - this app only ever installs its own
- * APK (APP_NAME); no URL is accepted from JavaScript or the server. The
- * download is capped at the expected size, its SHA-256 must match the
- * manifest, and its package name and signing certificate must match the
- * installed app (Android also refuses an update signed by another key).
- * Partial or failed downloads are deleted.
+ * APK (APP_NAME) from the production API host (API_HOST). It must match the
+ * host of the release VITE_API_BASE_URL (https://blynk-api.valgrowlabs.com/api/v1);
+ * if the API ever moves, change it here too and ship a new APK. No URL is
+ * accepted from JavaScript or the server, and redirects are NOT followed (the
+ * token must never reach another host). The download is capped at the
+ * expected size, its SHA-256 must match the manifest, and its package name
+ * and signing certificate must match the installed app (Android also refuses
+ * an update signed by another key). Partial or failed downloads are deleted.
  *
  * Methods: getInstalledVersion() -> {versionCode, versionName};
  * canRequestInstall() -> {allowed}; openInstallSettings();
- * downloadAndInstall({expectedSha256, size}) -> {status: "installing"}, with
- * "downloadProgress" events {downloaded, total}. Rejection codes: BUSY,
- * BAD_INPUT, INSTALL_PERMISSION, NETWORK, SIZE_MISMATCH, CHECKSUM_MISMATCH,
- * INVALID_APK, SIGNATURE_MISMATCH, INSTALL_FAILED.
+ * downloadAndInstall({expectedSha256, size, accessToken}) -> {status:
+ * "installing"}, with "downloadProgress" events {downloaded, total}.
+ * Rejection codes: BUSY, BAD_INPUT, INSTALL_PERMISSION, UNAUTHORIZED (401:
+ * sign in again), FORBIDDEN (403: this account may not download this app),
+ * NETWORK, SIZE_MISMATCH, CHECKSUM_MISMATCH, INVALID_APK, SIGNATURE_MISMATCH,
+ * INSTALL_FAILED.
  *
  * This file is the same in apps/operations and apps/rider apart from the
  * package line and APP_NAME. Registered in MainActivity.
@@ -54,9 +64,11 @@ import java.util.concurrent.Executors;
 @CapacitorPlugin(name = "AppUpdate")
 public class AppUpdatePlugin extends Plugin {
 
-    /** The only APK this app installs: https://blynk.lk/download/rider.apk */
+    /** The only APK this app installs: https://blynk-api.valgrowlabs.com/api/v1/app-updates/download?app=rider */
     static final String APP_NAME = "rider";
-    static final String APK_URL = "https://blynk.lk/download/" + APP_NAME + ".apk";
+    /** The production API host - keep in step with the release VITE_API_BASE_URL. */
+    static final String API_HOST = "blynk-api.valgrowlabs.com";
+    static final String APK_URL = "https://" + API_HOST + "/api/v1/app-updates/download?app=" + APP_NAME;
     static final long MAX_APK_BYTES = 200L * 1024 * 1024;
     static final String APK_MIME = "application/vnd.android.package-archive";
     private static final String UPDATE_DIR = "app-update";
@@ -123,6 +135,13 @@ public class AppUpdatePlugin extends Plugin {
         final String expectedSha256 = expected == null ? "" : expected.trim().toLowerCase(Locale.ROOT);
         Object rawSize = call.getData().opt("size");
         final long size = rawSize instanceof Number ? ((Number) rawSize).longValue() : -1;
+        // Only this request's Authorization header; never logged or kept.
+        final String rawToken = call.getString("accessToken", "");
+        final String accessToken = rawToken == null ? "" : rawToken.trim();
+        if (accessToken.isEmpty() || accessToken.length() > 4096 || !accessToken.matches("[A-Za-z0-9._~+/=-]+")) {
+            call.reject("Please sign in again", "UNAUTHORIZED");
+            return;
+        }
         if (!expectedSha256.matches("[0-9a-f]{64}") || size <= 0 || size > MAX_APK_BYTES) {
             call.reject("The update details are not valid", "BAD_INPUT");
             return;
@@ -142,7 +161,7 @@ public class AppUpdatePlugin extends Plugin {
             File apk = new File(updateDir(), APP_NAME + "-update.apk");
             try {
                 if (apk.exists()) apk.delete();
-                String actualSha = download(apk, size);
+                String actualSha = download(apk, size, accessToken);
                 if (!actualSha.equals(expectedSha256)) {
                     fail(call, apk, "The download was corrupted", "CHECKSUM_MISMATCH");
                     return;
@@ -159,6 +178,14 @@ public class AppUpdatePlugin extends Plugin {
                 call.resolve(ret);
             } catch (SizeException e) {
                 fail(call, apk, "The download was corrupted", "SIZE_MISMATCH");
+            } catch (HttpStatusException e) {
+                if (e.status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                    fail(call, apk, "Please sign in again", "UNAUTHORIZED");
+                } else if (e.status == HttpURLConnection.HTTP_FORBIDDEN) {
+                    fail(call, apk, "Your account can't download this app", "FORBIDDEN");
+                } else {
+                    fail(call, apk, "Could not download the update. Check your connection and try again.", "NETWORK");
+                }
             } catch (IOException e) {
                 fail(call, apk, "Could not download the update. Check your connection and try again.", "NETWORK");
             } catch (Exception e) {
@@ -191,17 +218,36 @@ public class AppUpdatePlugin extends Plugin {
         }
     }
 
-    /** Streams APK_URL into `target`, never more than `size` bytes. Returns the SHA-256 (hex). */
-    private String download(File target, long size) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(APK_URL).openConnection();
+    /** A non-200 answer from the API (401 / 403 are told apart for the user). */
+    private static class HttpStatusException extends IOException {
+        final int status;
+
+        HttpStatusException(int status) {
+            super("HTTP " + status);
+            this.status = status;
+        }
+    }
+
+    /**
+     * Streams APK_URL into `target`, never more than `size` bytes. Returns the
+     * SHA-256 (hex). `accessToken` goes only into this request's Authorization
+     * header; redirects are refused so it can never be sent to another host.
+     */
+    private String download(File target, long size, String accessToken) throws Exception {
+        URL url = new URL(APK_URL);
+        if (!"https".equals(url.getProtocol()) || !API_HOST.equals(url.getHost())) throw new IOException("bad url");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setConnectTimeout(20_000);
         conn.setReadTimeout(30_000);
-        conn.setInstanceFollowRedirects(true);
+        conn.setInstanceFollowRedirects(false);
+        conn.setUseCaches(false);
         conn.setRequestProperty("Cache-Control", "no-cache");
+        conn.setRequestProperty("Authorization", "Bearer " + accessToken);
         try {
             int status = conn.getResponseCode();
-            if (status != HttpURLConnection.HTTP_OK || !"https".equals(conn.getURL().getProtocol())) {
-                throw new IOException("HTTP " + status);
+            if (status != HttpURLConnection.HTTP_OK) throw new HttpStatusException(status);
+            if (!"https".equals(conn.getURL().getProtocol()) || !API_HOST.equals(conn.getURL().getHost())) {
+                throw new IOException("unexpected host");
             }
             long announced = conn.getContentLengthLong();
             if (announced >= 0 && announced != size) throw new SizeException();

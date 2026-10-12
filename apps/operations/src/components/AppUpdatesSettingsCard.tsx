@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { settings } from '../api/resources';
-import type { AppUpdateMode, AppUpdatesSetting } from '../api/types';
+import type { AppShareLinks, AppUpdateMode, AppUpdatesSetting } from '../api/types';
+import { AppShareLinkControls } from './AppShareLinkControls';
 import { TierModeChoice } from './KmTierEditor';
 import { Spinner } from './ui';
 import { catalogErrorMessage } from '../lib/catalog';
@@ -34,10 +35,11 @@ const draftsFrom = (s: AppUpdatesSetting): Drafts => ({
 
 /**
  * More > "App updates" (owner, 2026-10-12; `GET|PATCH
- * /admin/settings/app-updates`): per app the latest published APK (read from
- * https://blynk.lk/download/<app>.json), a minimum version code, Optional (a
+ * /admin/settings/app-updates`): per app the latest published APK (from the
+ * signed-in GET /app-updates/manifest), a minimum version code, Optional (a
  * reminder staff can put off for a day) or Required (older apps are blocked
- * until updated), and short release notes. Same setting as Admin > Settings.
+ * until updated), short release notes, and a temporary public share link
+ * (AppShareLinkControls; audited). Same settings as Admin > Settings.
  */
 export function AppUpdatesSettingsCard() {
   const [current, setCurrent] = useState<AppUpdatesSetting | null>(null);
@@ -46,6 +48,7 @@ export function AppUpdatesSettingsCard() {
     ops: undefined,
     rider: undefined,
   });
+  const [shareLinks, setShareLinks] = useState<AppShareLinks | null | undefined>(undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -62,6 +65,10 @@ export function AppUpdatesSettingsCard() {
       .get()
       .then((s) => live && show(s))
       .catch((err) => live && setLoadError(catalogErrorMessage(err)));
+    settings.appShareLinks
+      .get()
+      .then((l) => live && setShareLinks(l))
+      .catch(() => live && setShareLinks(null));
     for (const { id } of STAFF_APP_NAMES) {
       fetchPublishedVersion(id).then((v) => live && setPublished((p) => ({ ...p, [id]: v })));
     }
@@ -154,6 +161,11 @@ export function AppUpdatesSettingsCard() {
                   />
                 </label>
                 {warning ? <p className="quiet">{warning}</p> : null}
+                {shareLinks === null ? (
+                  <p className="quiet">Could not load the share link.</p>
+                ) : (
+                  <AppShareLinkControls app={id} label={label} link={shareLinks?.[id]} onChange={setShareLinks} />
+                )}
               </fieldset>
             );
           })}

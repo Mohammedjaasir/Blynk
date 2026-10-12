@@ -1887,6 +1887,21 @@ export interface AppUpdatesSetting {
   updated_at: string | null;
 }
 
+/** GET/PATCH /admin/settings/app-share-links - a temporary public download
+ * link per staff app (owner, 2026-10-12). `path` is relative to the API base. */
+export interface AppShareLink {
+  active: boolean;
+  path: string | null;
+  hours: number | null;
+  created_at: string | null;
+  expires_at: string | null;
+}
+export interface AppShareLinks {
+  ops: AppShareLink;
+  rider: AppShareLink;
+  updated_at: string | null;
+}
+
 // ------------------------------------------------------------- coupons
 /** Coupon codes customers type at checkout (backend migration 018). Admin
  * and Operations manage them (owner, 2026-10-10). */

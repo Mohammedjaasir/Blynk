@@ -10,9 +10,9 @@
 #   CONSENT_DEFAULT  granted (default) or denied: Google Consent Mode default (optional)
 #   Tracking setup: docs/06-deployment/google-tag-manager-and-ads-setup.md (owner, 2026-10-10)
 #
-# APKs: https://<site>/download/<name>.apk serves a file from a volume mounted
-# at /usr/share/nginx/html/download if there is one, else the copy built in
-# from apps/customer-site/files/ (rider.apk, ops.apk; the customer app is web-only).
+# Staff APKs are NOT served here any more (owner, 2026-10-12): /download/ is
+# closed (404). The API serves Blynk Ops / Blynk Rider to signed-in staff and
+# through temporary share links - docs/06-deployment/staff-app-updates.md.
 
 # ---- 1. The shop: the Flutter customer app, built for the web --------------
 FROM ghcr.io/cirruslabs/flutter:stable AS app
@@ -34,7 +34,6 @@ COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-s
      apps/customer-site/manifest.webmanifest apps/customer-site/firebase-messaging-sw.js \
      apps/customer-site/walkthrough.js apps/customer-site/analytics.js /usr/share/nginx/html/
 COPY apps/customer-site/assets /usr/share/nginx/html/assets
-COPY apps/customer-site/files /usr/share/nginx/html/files
 # Android App Links. The fingerprint is the key the Blynk APK is signed with;
 # a build signed with another key needs ANDROID_CERT_SHA256 set to its SHA-256.
 COPY apps/customer-site/.well-known /usr/share/nginx/html/.well-known
@@ -51,5 +50,4 @@ RUN tr -d '\r' < /tmp/gtm-inject.sh > /tmp/gtm.sh \
  && GTM_ID="$GTM_ID" CONSENT_DEFAULT="$CONSENT_DEFAULT" sh /tmp/gtm.sh \
       /usr/share/nginx/html/index.html /usr/share/nginx/html/app/index.html \
  && rm /tmp/gtm-inject.sh /tmp/gtm.sh
-RUN mkdir -p /usr/share/nginx/html/download
 EXPOSE 80

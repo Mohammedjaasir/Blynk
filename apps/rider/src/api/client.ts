@@ -10,7 +10,7 @@
  * The backend enforces requireAuth + requireRoles('RIDER') and checks that
  * the delivery belongs to this rider on every call.
  */
-const BASE_URL: string =
+export const BASE_URL: string =
   (import.meta.env?.VITE_API_BASE_URL as string | undefined) ??
   'http://localhost:4000/api/v1';
 
@@ -94,6 +94,31 @@ export function onSessionEnded(listener: (reason: SessionEndReason) => void): ()
 function endSession(reason: SessionEndReason) {
   tokenStore.clear();
   sessionEndedListeners.forEach((listener) => listener(reason));
+}
+
+/**
+ * A just-renewed access token for the one request that cannot go through
+ * apiRequest: the in-app update download, which the native AppUpdatePlugin
+ * makes itself (lib/app-update.ts). Renewing right before it means the token
+ * is fresh for that single request. Uses the same single-flight refresh, so
+ * it never races other calls. A refused refresh ends the session.
+ * Throws ApiError UNAUTHORIZED (401) when signed out, NETWORK when the
+ * server could not be reached.
+ */
+export async function freshAccessToken(): Promise<string> {
+  if (!tokenStore.refresh) {
+    const access = tokenStore.access;
+    if (access) return access;
+    throw new ApiError('Please sign in again.', 401, 'UNAUTHORIZED');
+  }
+  const result = await refreshSession();
+  const access = tokenStore.access;
+  if (result === 'ok' && access) return access;
+  if (result === 'rejected') {
+    endSession('expired');
+    throw new ApiError('Please sign in again.', 401, 'UNAUTHORIZED');
+  }
+  throw new ApiError("Couldn't renew your session. Check your connection.", 0, 'NETWORK');
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {

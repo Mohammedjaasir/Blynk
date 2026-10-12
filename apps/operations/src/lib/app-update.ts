@@ -1,19 +1,27 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { useSyncExternalStore } from 'react';
+import { ApiError, apiRequest, freshAccessToken } from '../api/client';
 
 /**
  * In-app updates (owner, 2026-10-12). The app finds a newer APK, downloads it
  * inside the app, checks it and opens Android's install screen (the user taps
  * Install; data and sign-in are kept).
  *
- * - The published manifest https://blynk.lk/download/<app>.json says what the
- *   latest APK is (version_code, version_name, sha256, size).
+ * - GET /app-updates/manifest?app=<app> (signed in, through the app's own API
+ *   client so the token is attached and renewed) says what the latest APK is
+ *   (version_code, version_name, sha256, size). The APKs are not public any
+ *   more (owner, 2026-10-12): signed out, nothing is checked or shown, and the
+ *   login screen always stays usable.
  * - GET /app-updates/policy?app=<app> (public, set by Admin and Operations)
  *   says whether an older install must update: mode 'required' with
  *   min_version_code blocks the app until it is updated; 'optional' only
  *   shows a reminder that can be put off for a day.
  * - The native AppUpdatePlugin (android/.../AppUpdatePlugin.java) downloads
- *   only this app's own APK from a fixed URL, checks size, SHA-256 and the
+ *   only this app's own APK from a URL fixed in the app,
+ *   https://blynk-api.valgrowlabs.com/api/v1/app-updates/download?app=<app>
+ *   (the production API - keep it the same host as the release
+ *   VITE_API_BASE_URL), with a just-renewed access token passed in for that
+ *   one request (never logged or stored). It checks size, SHA-256 and the
  *   signing key, and opens the installer.
  *
  * Checked on start and when the app comes back to the front (at most every
@@ -25,7 +33,7 @@ import { useSyncExternalStore } from 'react';
 export type StaffApp = 'ops' | 'rider';
 export const APP_NAME: StaffApp = 'ops';
 export const APP_LABEL = 'Blynk Ops';
-export const MANIFEST_URL = `https://blynk.lk/download/${APP_NAME}.json`;
+export const MANIFEST_PATH = '/app-updates/manifest';
 const API_BASE_URL: string = (import.meta.env?.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:4000/api/v1';
 const STORAGE_PREFIX = `blynk.${APP_NAME}.appUpdate`;
 
@@ -117,15 +125,20 @@ export function parsePolicy(value: unknown): UpdatePolicy | null {
   };
 }
 
-/** The plugin's rejection codes in the user's words. */
+/** The plugin's (and the token renewal's) rejection codes in the user's words. */
 export function installErrorMessage(err: unknown): string {
   const code = (err as { code?: string } | null)?.code;
   switch (code) {
+    case 'UNAUTHORIZED':
+      return 'Please sign in again.';
+    case 'FORBIDDEN':
+      return "Your account can't download this app.";
     case 'CHECKSUM_MISMATCH':
     case 'SIZE_MISMATCH':
     case 'INVALID_APK':
       return 'The download was corrupted. Try again.';
     case 'NETWORK':
+    case 'TIMEOUT':
       return 'Could not download the update. Check your connection and try again.';
     case 'SIGNATURE_MISMATCH':
       return 'This update is not signed by Blynk, so it was not installed. Tell the store.';
@@ -149,7 +162,8 @@ interface AppUpdatePlugin {
   getInstalledVersion(): Promise<{ versionCode: number; versionName: string }>;
   canRequestInstall(): Promise<{ allowed: boolean }>;
   openInstallSettings(): Promise<void>;
-  downloadAndInstall(options: { expectedSha256: string; size: number }): Promise<{ status: string }>;
+  /** accessToken: used by the plugin only as this one request's Authorization header. */
+  downloadAndInstall(options: { expectedSha256: string; size: number; accessToken: string }): Promise<{ status: string }>;
   addListener(
     event: 'downloadProgress',
     listener: (p: { downloaded: number; total: number }) => void
@@ -180,11 +194,18 @@ export const appUpdateDeps = {
     const v = await AppUpdate.getInstalledVersion();
     return { versionCode: Number(v.versionCode), versionName: String(v.versionName ?? '') };
   },
-  /** Throws when unreachable; null for a missing or malformed manifest. */
+  /**
+   * Signed in only (the API client attaches and renews the token). Throws
+   * when unreachable; null when nothing is published (404), this account may
+   * not download the app (403), or the manifest is malformed.
+   */
   async fetchManifest(): Promise<UpdateManifest | null> {
-    const { ok, text } = await getText(MANIFEST_URL);
-    if (!ok) return null;
-    return parseManifest(JSON.parse(text));
+    try {
+      return parseManifest(await apiRequest<unknown>(`${MANIFEST_PATH}?app=${APP_NAME}`));
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 404 || err.status === 403 || err.status === 401)) return null;
+      throw err;
+    }
   },
   async fetchPolicy(): Promise<UpdatePolicy | null> {
     const { ok, text } = await getText(`${API_BASE_URL}/app-updates/policy?app=${APP_NAME}`);
@@ -197,12 +218,18 @@ export const appUpdateDeps = {
   async openInstallSettings(): Promise<void> {
     await AppUpdate.openInstallSettings();
   },
-  async downloadAndInstall(manifest: UpdateManifest, onProgress: (fraction: number) => void): Promise<void> {
+  /** A just-renewed access token (api/client.ts); throws ApiError UNAUTHORIZED / NETWORK. */
+  freshAccessToken: (): Promise<string> => freshAccessToken(),
+  async downloadAndInstall(
+    manifest: UpdateManifest,
+    accessToken: string,
+    onProgress: (fraction: number) => void
+  ): Promise<void> {
     const handle = await AppUpdate.addListener('downloadProgress', (p) => {
       if (p.total > 0) onProgress(Math.min(1, p.downloaded / p.total));
     }).catch(() => null);
     try {
-      await AppUpdate.downloadAndInstall({ expectedSha256: manifest.sha256, size: manifest.size });
+      await AppUpdate.downloadAndInstall({ expectedSha256: manifest.sha256, size: manifest.size, accessToken });
     } finally {
       await handle?.remove().catch(() => undefined);
     }
@@ -218,6 +245,8 @@ export type InstallPhase = 'idle' | 'permission' | 'downloading' | 'installing' 
 export interface UpdateState {
   /** null until known; false off Android. */
   supported: boolean | null;
+  /** Signed in (set by the prompt from the session). Signed out: nothing is checked or shown. */
+  signedIn: boolean;
   installed: InstalledVersion | null;
   manifest: UpdateManifest | null;
   policy: UpdatePolicy | null;
@@ -233,6 +262,7 @@ export interface UpdateState {
 
 const initialState = (): UpdateState => ({
   supported: null,
+  signedIn: false,
   installed: null,
   manifest: null,
   policy: null,
@@ -324,9 +354,19 @@ export const updateStore = {
     return started;
   },
 
-  /** Asks the server again (at most every CHECK_INTERVAL_MS unless forced). */
+  /**
+   * Signed in or out (the prompt follows the session). Signing in checks at
+   * once; signing out hides everything and stops any further checks.
+   */
+  setSignedIn(signedIn: boolean): void {
+    if (signedIn === state.signedIn) return;
+    set({ signedIn, lastChecked: null, offline: false, ...(signedIn ? {} : { phase: 'idle', progress: null, installError: null }) });
+    if (signedIn) void updateStore.check({ force: true });
+  },
+
+  /** Asks the server again (at most every CHECK_INTERVAL_MS unless forced). Signed in only. */
   async check(options: { force?: boolean } = {}): Promise<void> {
-    if (!state.supported || state.checking) return;
+    if (!state.supported || !state.signedIn || state.checking) return;
     const now = appUpdateDeps.now();
     if (!options.force && state.lastChecked !== null && now - state.lastChecked < CHECK_INTERVAL_MS) return;
     set({ checking: true });
@@ -367,7 +407,10 @@ export const updateStore = {
     }
     set({ phase: 'downloading', progress: 0 });
     try {
-      await appUpdateDeps.downloadAndInstall(manifest, (progress) => set({ progress }));
+      // Renewed right before the download: the plugin sends it once, as the
+      // Authorization header of that single request.
+      const accessToken = await appUpdateDeps.freshAccessToken();
+      await appUpdateDeps.downloadAndInstall(manifest, accessToken, (progress) => set({ progress }));
       set({ phase: 'installing', progress: 1 });
     } catch (err) {
       if ((err as { code?: string } | null)?.code === 'INSTALL_PERMISSION') {
@@ -393,6 +436,8 @@ export const updateStore = {
 };
 
 export function currentDecision(s: UpdateState = state): UpdateDecision {
+  // Signed out: nothing (the login screen stays usable, even below a required minimum).
+  if (!s.signedIn) return { kind: 'none' };
   return decideUpdate({
     installed: s.installed,
     manifest: s.manifest,

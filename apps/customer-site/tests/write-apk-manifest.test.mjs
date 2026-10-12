@@ -4,11 +4,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeApkManifest } from '../scripts/write-apk-manifest.mjs';
+import { FILES_DIR, sha256File, writeApkManifest } from '../scripts/write-apk-manifest.mjs';
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'write-apk-manifest.mjs');
 
@@ -70,4 +70,19 @@ test('command line: writes the file and exits 0; a mistake exits 1', () => {
   const bad = spawnSync(process.execPath, [script, '--app', 'rider', '--apk', apk], { encoding: 'utf8' });
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /--version-code/);
+});
+
+// Staff downloads moved to the API (owner, 2026-10-12): the default output is
+// backend/api/app-files, and the committed manifests there match their APKs.
+test('default output is backend/api/app-files; committed manifests match their APKs', async () => {
+  assert.match(FILES_DIR.split('\\').join('/'), /backend\/api\/app-files$/);
+  for (const app of ['ops', 'rider']) {
+    const apk = join(FILES_DIR, `${app}.apk`);
+    const json = join(FILES_DIR, `${app}.json`);
+    if (!existsSync(apk) || !existsSync(json)) continue;
+    const manifest = JSON.parse(readFileSync(json, 'utf8'));
+    assert.equal(manifest.app, app);
+    assert.equal(manifest.size, readFileSync(apk).length);
+    assert.equal(manifest.sha256, await sha256File(apk));
+  }
 });

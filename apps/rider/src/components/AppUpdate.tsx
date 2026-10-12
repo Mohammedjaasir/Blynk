@@ -11,16 +11,21 @@ import {
 
 /**
  * In-app updates (owner, 2026-10-12; lib/app-update.ts). Rendered once in
- * App, above the routes, so it also covers the login screen:
+ * App, above the routes, and told whether someone is signed in:
+ * - signed out: nothing at all - the APKs and their manifest are only for
+ *   signed-in staff, and the login screen must always stay usable.
  * - 'required' (Admin/Operations set a minimum version): a full-screen
  *   "Update required" with only the Update button.
  * - 'available': a card at the bottom - Update, or Later (hidden for a day).
  */
-export function AppUpdatePrompt() {
+export function AppUpdatePrompt({ signedIn }: { signedIn: boolean }) {
   const s = useUpdateState();
   useEffect(() => {
     void updateStore.start();
   }, []);
+  useEffect(() => {
+    updateStore.setSignedIn(signedIn);
+  }, [signedIn]);
   const decision = currentDecision(s);
 
   if (decision.kind === 'required') {

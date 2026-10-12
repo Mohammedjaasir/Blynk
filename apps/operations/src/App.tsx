@@ -193,6 +193,16 @@ export function AppRoutes() {
   );
 }
 
+/**
+ * Update checks and the update prompt only for a signed-in session (the
+ * APKs are not public; owner, 2026-10-12). Signed out - the login screen -
+ * nothing is checked and nothing blocks.
+ */
+function AppUpdateGate() {
+  const { status } = useAuth();
+  return <AppUpdatePrompt signedIn={status === 'authenticated'} />;
+}
+
 export function App() {
   return (
     <>
@@ -200,10 +210,10 @@ export function App() {
         <AndroidBackButton />
         <AuthProvider>
           <AppRoutes />
+          {/* In-app updates (owner, 2026-10-12): signed-in staff only. */}
+          <AppUpdateGate />
         </AuthProvider>
       </BrowserRouter>
-      {/* In-app updates (owner, 2026-10-12): also covers the login screen. */}
-      <AppUpdatePrompt />
       <LaunchScreen />
     </>
   );
