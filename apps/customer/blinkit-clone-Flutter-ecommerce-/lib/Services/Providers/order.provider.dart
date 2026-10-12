@@ -10,6 +10,7 @@ import 'package:ecom/Services/Exceptions/api_exception.dart';
 import 'package:ecom/Services/Providers/cart.provider.dart';
 import 'package:ecom/Services/app_errors.dart';
 import 'package:ecom/Services/analytics/analytics.dart';
+import 'package:ecom/Services/Validation/app_validators.dart';
 
 /// A request against the orders API. Defaults to the app's single
 /// ApiService; injectable only so tests can replay captured real backend
@@ -154,6 +155,91 @@ class OrderProvider extends ChangeNotifier {
     if (value == _usePoints) return;
     _usePoints = value;
     notifyListeners();
+  }
+
+  // Order for family / someone else (owner, 2026-10-12): the receiver for
+  // THIS order only (the saved address is not changed), a note for the rider
+  // and "needs help at the door".
+  bool _forSomeoneElse = false;
+  String _recipientName = '';
+  String _recipientPhone = '';
+  String _deliveryNote = '';
+  bool _needsHelp = false;
+
+  /// "For someone else" is on at checkout.
+  bool get forSomeoneElse => _forSomeoneElse;
+  String get recipientName => _recipientName;
+  String get recipientPhone => _recipientPhone;
+
+  /// A note for the rider for this order (replaces the address's instructions).
+  String get deliveryNote => _deliveryNote;
+
+  /// "Elderly / needs help - please knock and wait, carry items inside".
+  bool get needsHelp => _needsHelp;
+
+  void setForSomeoneElse(bool value) {
+    if (value == _forSomeoneElse) return;
+    _forSomeoneElse = value;
+    notifyListeners();
+  }
+
+  void setRecipientName(String value) {
+    if (value == _recipientName) return;
+    _recipientName = value;
+    notifyListeners();
+  }
+
+  void setRecipientPhone(String value) {
+    if (value == _recipientPhone) return;
+    _recipientPhone = value;
+    notifyListeners();
+  }
+
+  void setDeliveryNote(String value) {
+    if (value == _deliveryNote) return;
+    _deliveryNote = value;
+    notifyListeners();
+  }
+
+  void setNeedsHelp(bool value) {
+    if (value == _needsHelp) return;
+    _needsHelp = value;
+    notifyListeners();
+  }
+
+  /// What is wrong with the receiver / note before the order can go, or null.
+  /// [allowForSomeoneElse] false (staff switched it off) ignores the receiver.
+  String? checkoutDetailsProblem({bool allowForSomeoneElse = true}) {
+    if (allowForSomeoneElse && _forSomeoneElse) {
+      final name = AppValidators.recipientName(_recipientName);
+      if (name != null) return "Enter the receiver's name";
+      if (AppValidators.phone(_recipientPhone) != null) return "Enter the receiver's Sri Lankan mobile number";
+    }
+    return AppValidators.deliveryInstructions(_deliveryNote) == null ? null : 'Check the note for the rider';
+  }
+
+  /// The POST /orders fields for the receiver, note and "needs help".
+  Map<String, dynamic> _checkoutDetailsBody(bool allowForSomeoneElse) {
+    final note = AppValidators.normalizeText(_deliveryNote);
+    return {
+      if (allowForSomeoneElse && _forSomeoneElse) ...{
+        'for_someone_else': true,
+        'recipient': {
+          'name': AppValidators.normalizeText(_recipientName),
+          'phone': AppValidators.normalizePhone(_recipientPhone) ?? _recipientPhone.trim(),
+        },
+      },
+      if (note.isNotEmpty) 'delivery_note': note,
+      if (_needsHelp) 'needs_help': true,
+    };
+  }
+
+  void _clearCheckoutDetails() {
+    _forSomeoneElse = false;
+    _recipientName = '';
+    _recipientPhone = '';
+    _deliveryNote = '';
+    _needsHelp = false;
   }
 
   /// The picked slot while it is still offered with room; null otherwise.
@@ -336,6 +422,7 @@ class OrderProvider extends ChangeNotifier {
     _slotsFailure = null;
     _selectedSlotStart = null;
     _usePoints = false;
+    _clearCheckoutDetails();
     notifyListeners();
   }
 
@@ -496,6 +583,7 @@ class OrderProvider extends ChangeNotifier {
     required String addressId,
     String? customerNotes,
     String? deliverySlotStart,
+    bool allowForSomeoneElse = true,
   }) async {
     if (_isPlacingOrder) return null;
     _isPlacingOrder = true;
@@ -503,9 +591,18 @@ class OrderProvider extends ChangeNotifier {
     notifyListeners();
     final coupon = couponFor(cart);
     final notes = customerNotes?.trim() ?? '';
+    final details = _checkoutDetailsBody(allowForSomeoneElse);
     final idempotencyKey = _checkoutKeyForAttempt(
-      [cartKey(cart), addressId, coupon?.code ?? '', notes, deliverySlotStart ?? '', if (_usePoints) 'points']
-          .join('|'),
+      [
+        cartKey(cart),
+        addressId,
+        coupon?.code ?? '',
+        notes,
+        deliverySlotStart ?? '',
+        if (_usePoints) 'points',
+        // A different receiver, note or "needs help" is a different order.
+        if (details.isNotEmpty) details.toString(),
+      ].join('|'),
     );
     // Website tracking, once per checkout attempt (owner, 2026-10-10).
     Analytics.instance.addShippingInfo(cart, attemptKey: idempotencyKey, coupon: coupon?.code, scheduled: deliverySlotStart != null);
@@ -525,6 +622,8 @@ class OrderProvider extends ChangeNotifier {
           if (deliverySlotStart != null) 'delivery_slot_start': deliverySlotStart,
           // Blynk Points (owner, 2026-10-10): the server picks the amount.
           if (_usePoints) 'use_points': true,
+          // Order for someone else, the rider note, "needs help" (owner, 2026-10-12).
+          ...details,
         },
       );
 
@@ -548,6 +647,7 @@ class OrderProvider extends ChangeNotifier {
       _couponError = null;
       _selectedSlotStart = null;
       _usePoints = false;
+      _clearCheckoutDetails();
       _isPlacingOrder = false;
       notifyListeners();
       return placed;

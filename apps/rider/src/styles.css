@@ -590,6 +590,16 @@ a {
   font-weight: 600;
 }
 
+/* "Needs help" (owner, 2026-10-12): inverted so it reads before anything else. */
+.dest__note--help {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.dest__note--help .dest__note-label {
+  color: var(--paper);
+}
+
 .dest__note-label {
   display: block;
   font-size: 12px;

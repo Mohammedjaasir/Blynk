@@ -105,11 +105,56 @@ export interface FreeDeliveriesSetting {
   since: string;
 }
 
+/**
+ * Free delivery above a basket amount (owner, 2026-10-12): 'basket_free_delivery'
+ * {"enabled": bool, "min_subtotal_lkr": number}. When on, an order whose item
+ * subtotal (orders.subtotal_amount - after item/category offers and combo
+ * prices, BEFORE coupons, the birthday gift, referral rewards and points) is
+ * at or above min_subtotal_lkr has no delivery fee. Checked before the free
+ * deliveries, and never uses one of them up (migration 043). Off by default.
+ */
+export const BASKET_FREE_DELIVERY_KEY = 'basket_free_delivery';
+export const MAX_BASKET_FREE_DELIVERY_LKR = 100_000;
+export const DEFAULT_BASKET_FREE_DELIVERY = { enabled: false, min_subtotal_lkr: 3000 } as const;
+
+export interface BasketFreeDeliverySetting {
+  enabled: boolean;
+  min_subtotal_lkr: number;
+}
+
+/**
+ * Order for someone else (owner, 2026-10-12): 'order_for_someone_else'
+ * {"enabled": bool, "send_code_to_receiver": bool}, both on by default.
+ *  - enabled: the customer app offers "For someone else" at checkout; off ->
+ *    the server refuses such an order (422 FOR_SOMEONE_ELSE_DISABLED).
+ *  - send_code_to_receiver: the delivery code rides on the receiver's "on the
+ *    way" SMS; off -> only the buyer gets it (SMS + app), as before.
+ */
+export const ORDER_FOR_SOMEONE_ELSE_KEY = 'order_for_someone_else';
+export const DEFAULT_ORDER_FOR_SOMEONE_ELSE = { enabled: true, send_code_to_receiver: true } as const;
+
+export interface OrderForSomeoneElseSetting {
+  enabled: boolean;
+  send_code_to_receiver: boolean;
+}
+
 export interface CheckoutSettings {
   coupons_enabled: boolean;
   new_customer_free_deliveries: FreeDeliveriesSetting;
   show_offer_savings: boolean;
+  /** Owner, 2026-10-12. Optional so a reader replaced in tests may leave it out (= the default). */
+  basket_free_delivery?: BasketFreeDeliverySetting;
+  /** Owner, 2026-10-12. Optional so a reader replaced in tests may leave it out (= the default). */
+  order_for_someone_else?: OrderForSomeoneElseSetting;
 }
+
+/** The basket setting as applied: a reader without it means the default (off). */
+export const basketFreeDeliveryOf = (s: Pick<CheckoutSettings, 'basket_free_delivery'>): BasketFreeDeliverySetting =>
+  s.basket_free_delivery ?? { ...DEFAULT_BASKET_FREE_DELIVERY };
+
+/** The "for someone else" switches as applied: a reader without them means the defaults (on). */
+export const orderForSomeoneElseOf = (s: Pick<CheckoutSettings, 'order_for_someone_else'>): OrderForSomeoneElseSetting =>
+  s.order_for_someone_else ?? { ...DEFAULT_ORDER_FOR_SOMEONE_ELSE };
 
 export const updateCheckoutSettingsSchema = z
   .object({
@@ -132,12 +177,29 @@ export const updateCheckoutSettingsSchema = z
       .strict()
       .optional(),
     show_offer_savings: z.boolean({ invalid_type_error: 'show_offer_savings must be true or false' }).optional(),
+    basket_free_delivery: z
+      .object({
+        enabled: z.boolean({ required_error: 'enabled is required', invalid_type_error: 'enabled must be true or false' }),
+        min_subtotal_lkr: z
+          .number({ required_error: 'The basket amount is required', invalid_type_error: 'The basket amount must be a number' })
+          .finite()
+          .gt(0, 'The basket amount must be more than 0')
+          .max(MAX_BASKET_FREE_DELIVERY_LKR, `The basket amount can be at most LKR ${MAX_BASKET_FREE_DELIVERY_LKR}`)
+          .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'The basket amount can have at most 2 decimals'),
+      })
+      .strict()
+      .optional(),
+    order_for_someone_else: z
+      .object({
+        enabled: z.boolean({ invalid_type_error: 'enabled must be true or false' }).optional(),
+        send_code_to_receiver: z.boolean({ invalid_type_error: 'send_code_to_receiver must be true or false' }).optional(),
+      })
+      .strict()
+      .refine((v) => v.enabled !== undefined || v.send_code_to_receiver !== undefined, 'Nothing to change')
+      .optional(),
   })
   .strict()
-  .refine(
-    (v) => v.coupons_enabled !== undefined || v.new_customer_free_deliveries !== undefined || v.show_offer_savings !== undefined,
-    'Nothing to change',
-  );
+  .refine((v) => Object.values(v).some((x) => x !== undefined), 'Nothing to change');
 export type UpdateCheckoutSettingsInput = z.infer<typeof updateCheckoutSettingsSchema>;
 
 /** {"enabled": bool} rows (coupons_enabled, show_offer_savings). */
@@ -147,6 +209,32 @@ function couponsEnabledFrom(value: unknown): boolean | null {
     if (typeof enabled === 'boolean') return enabled;
   }
   return null;
+}
+
+function basketFreeDeliveryFrom(value: unknown): BasketFreeDeliverySetting | null {
+  if (value && typeof value === 'object') {
+    const { enabled, min_subtotal_lkr } = value as { enabled?: unknown; min_subtotal_lkr?: unknown };
+    if (
+      typeof enabled === 'boolean' &&
+      typeof min_subtotal_lkr === 'number' &&
+      Number.isFinite(min_subtotal_lkr) &&
+      min_subtotal_lkr > 0 &&
+      min_subtotal_lkr <= MAX_BASKET_FREE_DELIVERY_LKR
+    ) {
+      return { enabled, min_subtotal_lkr };
+    }
+  }
+  return null;
+}
+
+function orderForSomeoneElseFrom(value: unknown): OrderForSomeoneElseSetting {
+  const out: OrderForSomeoneElseSetting = { ...DEFAULT_ORDER_FOR_SOMEONE_ELSE };
+  if (value && typeof value === 'object') {
+    const v = value as Record<string, unknown>;
+    if (typeof v.enabled === 'boolean') out.enabled = v.enabled;
+    if (typeof v.send_code_to_receiver === 'boolean') out.send_code_to_receiver = v.send_code_to_receiver;
+  }
+  return out;
 }
 
 function freeDeliveriesFrom(value: unknown): FreeDeliveriesSetting | null {
@@ -170,6 +258,14 @@ function freeDeliveriesFrom(value: unknown): FreeDeliveriesSetting | null {
  * switches keep their coupons and full delivery fee; a test about the
  * switches restores settingsService.getCheckoutSettings.
  */
+const CHECKOUT_KEYS = [
+  COUPONS_ENABLED_KEY,
+  FREE_DELIVERIES_KEY,
+  SHOW_OFFER_SAVINGS_KEY,
+  BASKET_FREE_DELIVERY_KEY,
+  ORDER_FOR_SOMEONE_ELSE_KEY,
+];
+
 export const checkoutSettings = {
   read: (): Promise<CheckoutSettings> => settingsService.getCheckoutSettings(),
 };
@@ -419,16 +515,20 @@ export class SettingsService {
     const rows = await db
       .selectFrom('system_configurations')
       .select(['key', 'value', 'updated_at'])
-      .where('key', 'in', [COUPONS_ENABLED_KEY, FREE_DELIVERIES_KEY, SHOW_OFFER_SAVINGS_KEY])
+      .where('key', 'in', CHECKOUT_KEYS)
       .execute();
     const coupons = rows.find((r) => r.key === COUPONS_ENABLED_KEY);
     const free = rows.find((r) => r.key === FREE_DELIVERIES_KEY);
     const savings = rows.find((r) => r.key === SHOW_OFFER_SAVINGS_KEY);
+    const basket = rows.find((r) => r.key === BASKET_FREE_DELIVERY_KEY);
+    const forOthers = rows.find((r) => r.key === ORDER_FOR_SOMEONE_ELSE_KEY);
     const stamps = rows.map((r) => r.updated_at).filter((d): d is Date => d instanceof Date);
     return {
       coupons_enabled: (coupons ? couponsEnabledFrom(coupons.value) : null) ?? DEFAULT_COUPONS_ENABLED,
       new_customer_free_deliveries: (free ? freeDeliveriesFrom(free.value) : null) ?? { ...DEFAULT_FREE_DELIVERIES },
       show_offer_savings: (savings ? couponsEnabledFrom(savings.value) : null) ?? DEFAULT_SHOW_OFFER_SAVINGS,
+      basket_free_delivery: (basket ? basketFreeDeliveryFrom(basket.value) : null) ?? { ...DEFAULT_BASKET_FREE_DELIVERY },
+      order_for_someone_else: orderForSomeoneElseFrom(forOthers?.value),
       updated_at: stamps.length ? new Date(Math.max(...stamps.map((d) => d.getTime()))) : null,
     };
   }
@@ -439,7 +539,7 @@ export class SettingsService {
       const before = await trx
         .selectFrom('system_configurations')
         .select(['key', 'value'])
-        .where('key', 'in', [COUPONS_ENABLED_KEY, FREE_DELIVERIES_KEY, SHOW_OFFER_SAVINGS_KEY])
+        .where('key', 'in', CHECKOUT_KEYS)
         .forUpdate()
         .execute();
       const writes: Array<{ key: string; value: object; description: string }> = [];
@@ -448,6 +548,28 @@ export class SettingsService {
       }
       if (input.show_offer_savings !== undefined) {
         writes.push({ key: SHOW_OFFER_SAVINGS_KEY, value: { enabled: input.show_offer_savings }, description: "Whether the customer app shows 'Save LKR' on offers" });
+      }
+      if (input.basket_free_delivery !== undefined) {
+        writes.push({
+          key: BASKET_FREE_DELIVERY_KEY,
+          value: {
+            enabled: input.basket_free_delivery.enabled,
+            min_subtotal_lkr: Math.round(input.basket_free_delivery.min_subtotal_lkr * 100) / 100,
+          },
+          description: 'Free delivery when the item subtotal (after item offers, before coupons) reaches min_subtotal_lkr',
+        });
+      }
+      if (input.order_for_someone_else !== undefined) {
+        // Only the switch sent changes; the other keeps its stored value.
+        const stored = orderForSomeoneElseFrom(before.find((r) => r.key === ORDER_FOR_SOMEONE_ELSE_KEY)?.value);
+        writes.push({
+          key: ORDER_FOR_SOMEONE_ELSE_KEY,
+          value: {
+            enabled: input.order_for_someone_else.enabled ?? stored.enabled,
+            send_code_to_receiver: input.order_for_someone_else.send_code_to_receiver ?? stored.send_code_to_receiver,
+          },
+          description: "Order for someone else at checkout, and whether the receiver's SMS carries the delivery code",
+        });
       }
       if (input.new_customer_free_deliveries !== undefined) {
         // An omitted `since` keeps the stored one (or the default start).

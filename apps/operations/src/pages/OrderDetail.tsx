@@ -262,6 +262,17 @@ export function OrderDetail() {
           {detail.delivery_address_line1}
           {detail.delivery_address_line2 ? `, ${detail.delivery_address_line2}` : ''}, {detail.delivery_city}
         </p>
+        {/* Owner, 2026-10-12: ordered for family, and "needs help at the door". */}
+        {detail.ordered_for_someone_else ? (
+          <p className="order-detail__meta" data-testid="order-for-someone-else">
+            Ordered for someone else - the receiver gets the order texts.
+          </p>
+        ) : null}
+        {detail.delivery_needs_help ? (
+          <p className="order-detail__note" data-testid="order-needs-help">
+            Needs help: please knock and wait, carry items inside.
+          </p>
+        ) : null}
         {detail.delivery_instructions ? <p className="order-detail__note">"{detail.delivery_instructions}"</p> : null}
         <p className="order-detail__meta">
           {detail.payment_method === 'COD' ? 'Cash on delivery' : 'Paid online'} · {formatMoney(detail.total_amount)}

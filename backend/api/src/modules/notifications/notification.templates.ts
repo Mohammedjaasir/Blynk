@@ -6,6 +6,8 @@
  * or staff notes. Only customer-facing order numbers and retail LKR totals are rendered.
  */
 
+import { localizedTexts, type LocalizedTexts } from './sms-i18n.js';
+
 export interface OrderPlacedPayload {
   order_number: string;
   total_amount: number | string;
@@ -80,21 +82,98 @@ function formatClinicDateTime(iso: string): string {
   return `${datePart} at ${timePart}`;
 }
 
+/** "10:30 AM" in Colombo, as ORDER_PLACED shows a scheduled time. */
+function formatColomboTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    timeZone: 'Asia/Colombo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/**
+ * Sinhala / Tamil (payload.lang 'si' | 'ta', owner 2026-10-12). Same inputs
+ * and the same customer-text rules as the English cases below; null = no
+ * localized version for this type (the English text is sent).
+ */
+function renderLocalized(t: LocalizedTexts, notificationType: string, data: Record<string, unknown>): string | null {
+  const orderNumber = (data.order_number as string) || '';
+  switch (notificationType) {
+    case 'ORDER_PLACED': {
+      const total = Number(data.total_amount || 0).toFixed(2);
+      return data.scheduled_for
+        ? t.orderPlacedScheduled(orderNumber, total, formatColomboTime(data.scheduled_for as string))
+        : t.orderPlaced(orderNumber, total);
+    }
+    case 'ORDER_CANCELLED':
+      // A customer's own text is never sent (security audit 2026-10).
+      return t.orderCancelled(orderNumber, (data.cancelled_by !== 'customer' && (data.reason as string)) || null);
+    case 'ITEM_UNAVAILABLE':
+      return t.itemUnavailable(orderNumber, (data.item_name as string) || '-', Number(data.new_total_amount || 0).toFixed(2));
+    case 'RIDER_ASSIGNED':
+      return t.riderAssigned(
+        orderNumber,
+        (data.rider_name as string) || null,
+        (data.vehicle_registration_number as string) || null
+      );
+    case 'OUT_FOR_DELIVERY': {
+      const code = typeof data.delivery_code === 'string' ? data.delivery_code : null;
+      return data.to_buyer === true
+        ? t.outForDeliveryToBuyer(orderNumber, code)
+        : t.outForDelivery(orderNumber, Number(data.total_amount || 0).toFixed(2), code);
+    }
+    case 'DELIVERED':
+      return t.delivered(orderNumber);
+    case 'COD_PAYMENT_CONFIRMED':
+      return t.codConfirmed(orderNumber, Number(data.amount || 0).toFixed(2));
+    case 'DENTAL_APPOINTMENT_CONFIRMED':
+      return t.dentalConfirmed(
+        (data.doctor_name as string) || '-',
+        (data.clinic_name as string) || '-',
+        formatClinicDateTime(data.start_at as string)
+      );
+    case 'DENTAL_APPOINTMENT_CANCELLED': {
+      const byClinic = data.cancelled_by === 'clinic';
+      // Only a clinic/admin reason (security audit 2026-10).
+      const reason = byClinic && data.reason ? (data.reason as string) : null;
+      return t.dentalCancelled(
+        (data.doctor_name as string) || '-',
+        (data.clinic_name as string) || '-',
+        formatClinicDateTime(data.start_at as string),
+        byClinic,
+        reason
+      );
+    }
+    case 'DENTAL_APPOINTMENT_REMINDER':
+      // Rows queued before the localized reminder carry only title/body.
+      if (typeof data.start_at !== 'string' || typeof data.doctor_name !== 'string') return null;
+      return t.dentalReminder(data.doctor_name, (data.clinic_name as string) || '-', formatClinicDateTime(data.start_at));
+    case 'RIDER_APPROVED':
+      return t.riderApproved();
+    case 'RIDER_REJECTED':
+      return typeof data.reason === 'string' ? t.riderRejected(data.reason) : null;
+    default:
+      return null;
+  }
+}
+
 export class NotificationTemplates {
   static render(notificationType: string, payload: unknown): string {
     const data = (payload as Record<string, unknown>) || {};
     const orderNumber = (data.order_number as string) || 'Your order';
 
+    const localized = localizedTexts(data.lang);
+    if (localized) {
+      const text = renderLocalized(localized, notificationType, data);
+      if (text !== null) return text;
+    }
+
     switch (notificationType) {
       case 'ORDER_PLACED': {
         const total = Number(data.total_amount || 0).toFixed(2);
         if (data.scheduled_for) {
-          const scheduledTime = new Date(data.scheduled_for as string).toLocaleString('en-US', {
-            timeZone: 'Asia/Colombo',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          });
+          const scheduledTime = formatColomboTime(data.scheduled_for as string);
           return `Blynk: Order #${orderNumber} placed for LKR ${total}. Delivery is scheduled for 8:00 AM - 9:00 PM operating hours (${scheduledTime}).`;
         }
         return `Blynk: Order #${orderNumber} has been placed successfully! Total: LKR ${total}. Sourcing and packing are in progress.`;
@@ -123,6 +202,13 @@ export class NotificationTemplates {
         const total = Number(data.total_amount || 0).toFixed(2);
         // One plain-text part: about 100 characters with the code.
         const code = typeof data.delivery_code === 'string' ? data.delivery_code : null;
+        // The buyer's copy of an order placed for someone else (owner,
+        // 2026-10-12): the receiver pays at the door, so no "keep LKR ready".
+        if (data.to_buyer === true) {
+          return code
+            ? `Blynk: Order #${orderNumber} is on the way to your receiver. Delivery code: ${code}.`
+            : `Blynk: Order #${orderNumber} is on the way to your receiver.`;
+        }
         return code
           ? `Blynk: Order #${orderNumber} is on the way. Delivery code: ${code}, show it to the rider. Keep LKR ${total} ready.`
           : `Blynk: Order #${orderNumber} is on the way. Keep LKR ${total} ready.`;

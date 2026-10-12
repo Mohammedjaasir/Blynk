@@ -59,7 +59,7 @@ class _Placing extends OrderProvider {
   bool get isPlacingOrder => true;
 
   @override
-  Future<OrderModel?> placeOrder({required CartProvider cart, required String addressId, String? customerNotes, String? deliverySlotStart}) async {
+  Future<OrderModel?> placeOrder({required CartProvider cart, required String addressId, String? customerNotes, String? deliverySlotStart, bool allowForSomeoneElse = true}) async {
     placeCalls++;
     return null;
   }

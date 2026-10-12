@@ -85,23 +85,23 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   FlutterSecureStorage.setMockInitialValues({});
 
-  group('launch default: English-only offers', () {
-    test('the language choice is switched off', () {
-      expect(SmsPreferencesScreen.smsLanguageChoiceEnabled, isFalse);
-      expect(const SmsPreferencesScreen().languageChoice, isFalse);
+  group('language choice switched off', () {
+    test('the language choice is on by default (owner, 2026-10-12: Sinhala/Tamil order texts)', () {
+      expect(SmsPreferencesScreen.smsLanguageChoiceEnabled, isTrue);
+      expect(const SmsPreferencesScreen().languageChoice, isTrue);
     });
 
     testWidgets('shows only the Offers by SMS switch: no language rows, heading or hint', (tester) async {
       final api = _FakeMe(language: null, offers: true);
-      await _pump(tester, api);
+      await _pump(tester, api, languageChoice: false);
 
       expect(find.text('Offers by SMS'), findsOneWidget);
       expect(find.text('Get Blynk offers and discounts by SMS. Order updates still arrive.'), findsOneWidget);
       expect(_switchValue(tester), isTrue);
       for (final hidden in [
         'SMS language',
-        'Offer SMS are sent in this language.',
-        'Pick a language for offer SMS',
+        smsLanguageNote,
+        smsLanguageHint,
         'සිංහල (Sinhala)',
         'தமிழ் (Tamil)',
         'English',
@@ -132,7 +132,7 @@ void main() {
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Offers by SMS'), findsOneWidget);
     expect(find.text('Get Blynk offers and discounts by SMS. Order updates still arrive.'), findsOneWidget);
-    expect(find.text('Pick a language for offer SMS'), findsNothing);
+    expect(find.text(smsLanguageHint), findsNothing);
 
     // Exactly one choice is marked, and it is Sinhala.
     expect(find.byIcon(BlynkIcons.choiceOn), findsOneWidget);
@@ -152,7 +152,7 @@ void main() {
   testWidgets('no language picked yet: nothing is selected and a hint says to pick one', (tester) async {
     await _pump(tester, _FakeMe(language: null, offers: false), languageChoice: true);
 
-    expect(find.text('Pick a language for offer SMS'), findsOneWidget);
+    expect(find.text(smsLanguageHint), findsOneWidget);
     expect(find.byIcon(BlynkIcons.choiceOn), findsNothing);
     expect(find.byIcon(BlynkIcons.choiceOff), findsNWidgets(3));
     expect(_switchValue(tester), isFalse);
@@ -168,7 +168,7 @@ void main() {
     expect(api.patches, [
       {'method': 'PATCH', 'url': '/me', 'body': {'sms_language': 'ta'}},
     ]);
-    expect(find.text('Pick a language for offer SMS'), findsNothing);
+    expect(find.text(smsLanguageHint), findsNothing);
     expect(find.byIcon(BlynkIcons.choiceOn), findsOneWidget);
     final tamilRow = find.ancestor(of: find.text('தமிழ் (Tamil)'), matching: find.byType(Row)).first;
     expect(find.descendant(of: tamilRow, matching: find.byIcon(BlynkIcons.choiceOn)), findsOneWidget);
@@ -244,7 +244,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(BlynkIcons.choiceOn), findsNothing);
-    expect(find.text('Pick a language for offer SMS'), findsOneWidget);
+    expect(find.text(smsLanguageHint), findsOneWidget);
     expect(find.text('Something went wrong on our side. Try again in a moment.'), findsOneWidget);
   });
 

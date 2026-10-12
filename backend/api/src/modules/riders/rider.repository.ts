@@ -109,6 +109,10 @@ export class RiderRepository {
         // Scheduled delivery slot, if the customer picked one (owner, 2026-10-10).
         'orders.scheduled_for',
         'orders.scheduled_until',
+        // Migration 042 (owner, 2026-10-12): the person at the door is not the
+        // buyer, and "needs help - knock and wait, carry items inside".
+        'orders.ordered_for_someone_else',
+        'orders.delivery_needs_help',
       ])
       .where('deliveries.rider_id', '=', riderId)
       .where((eb) =>
@@ -178,6 +182,10 @@ export class RiderRepository {
         // Scheduled delivery slot, if the customer picked one (owner, 2026-10-10).
         'orders.scheduled_for',
         'orders.scheduled_until',
+        // Migration 042 (owner, 2026-10-12): the person at the door is not the
+        // buyer, and "needs help - knock and wait, carry items inside".
+        'orders.ordered_for_someone_else',
+        'orders.delivery_needs_help',
       ])
       .where('deliveries.id', '=', deliveryId);
 

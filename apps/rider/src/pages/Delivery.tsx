@@ -292,10 +292,23 @@ function Slip({
         <p className="dest__line1">{d.delivery_address_line1}</p>
         {d.delivery_address_line2 ? <p className="dest__line2">{d.delivery_address_line2}</p> : null}
         <p className="dest__city">{d.delivery_city}</p>
+        {/* Owner, 2026-10-12: "needs help at the door" comes first, so it is not missed. */}
+        {d.delivery_needs_help && !done && !closed ? (
+          <p className="dest__note dest__note--help" data-testid="needs-help">
+            <span className="dest__note-label">Needs help</span>
+            Please knock and wait. Carry the items inside.
+          </p>
+        ) : null}
         {d.delivery_instructions && !done ? (
           <p className="dest__note">
             <span className="dest__note-label">Customer note</span>
             {d.delivery_instructions}
+          </p>
+        ) : null}
+        {d.ordered_for_someone_else && !done && !closed ? (
+          <p className="dest__note" data-testid="for-someone-else">
+            <span className="dest__note-label">Ordered by family</span>
+            Hand it to the person below, not the buyer.
           </p>
         ) : null}
         <div className="dest__who">

@@ -6,11 +6,14 @@ import { useLocation } from 'react-router-dom';
 import type {
   BirthdayOfferSetting,
   CheckoutSettings,
+  CustomerSmsLanguageMode,
+  CustomerSmsLanguageSetting,
   DeliveryFeeInput,
   DeliveryFeeMode,
   DeliveryFeeSetting,
   RiderCommissionSetting,
   RiderTripsSetting,
+  SmsLanguageCode,
 } from '../api/types';
 import { KmTierEditor, ModeChoice } from '../components/KmTierEditor';
 import { PageHeader } from '../components/Layout';
@@ -22,12 +25,13 @@ import { RiderPaySettings } from '../components/RiderPaySettings';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
 import { MAX_BIRTHDAY_SMS, fillPercent, parseBirthdayPercent, percentText } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
-import { parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
+import { parseBasketAmount, parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
 import { parseFeeCap, parseTierDrafts, tiersSummary, tiersToDrafts, type TierErrors } from '../lib/kmTiers';
 import { formatMoney } from '../lib/orders';
 import { formatPercent, parsePercent } from '../lib/riderPay';
 import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
 import { partsLabel, smsParts } from '../lib/smsOffers';
+import { checkoutExtrasPatch } from '../lib/checkoutExtras';
 
 /**
  * Store settings: the delivery fee the customer app charges on new orders
@@ -67,6 +71,8 @@ export function Settings() {
       <StoreScheduleSettings />
       <DeliveryFeeSettingPanel />
       <CheckoutSettingsPanel />
+      {/* Customer SMS language (owner, 2026-10-12). */}
+      <CustomerSmsLanguagePanel />
       {/* Rider pay (owner, 2026-10-10): default pay model, bonuses and the rain
           boost. Its % is the default commission, so the old commission card
           only shows against an API without the pay controls. */}
@@ -362,6 +368,12 @@ function CheckoutSettingsPanel() {
   const [savings, setSavings] = useState(false);
   const [freeOn, setFreeOn] = useState(true);
   const [count, setCount] = useState('2');
+  // Owner, 2026-10-12: free delivery above a basket amount, and ordering for someone else.
+  const [basketOn, setBasketOn] = useState(false);
+  const [basketAmount, setBasketAmount] = useState('3000');
+  const [basketError, setBasketError] = useState<string | null>(null);
+  const [forOthersOn, setForOthersOn] = useState(true);
+  const [codeToReceiver, setCodeToReceiver] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -373,6 +385,10 @@ function CheckoutSettingsPanel() {
     setSavings(setting.show_offer_savings === true);
     setFreeOn(setting.new_customer_free_deliveries.enabled);
     setCount(String(setting.new_customer_free_deliveries.count));
+    setBasketOn(setting.basket_free_delivery?.enabled === true);
+    setBasketAmount(String(setting.basket_free_delivery?.min_subtotal_lkr ?? 3000));
+    setForOthersOn(setting.order_for_someone_else?.enabled ?? true);
+    setCodeToReceiver(setting.order_for_someone_else?.send_code_to_receiver ?? true);
   }
 
   useEffect(() => {
@@ -393,6 +409,12 @@ function CheckoutSettingsPanel() {
       setError(parsed.error);
       return;
     }
+    const basket = parseBasketAmount(basketAmount);
+    if (basketOn && 'error' in basket) {
+      setBasketError(basket.error);
+      return;
+    }
+    setBasketError(null);
     setSaving(true);
     setError(null);
     try {
@@ -402,6 +424,13 @@ function CheckoutSettingsPanel() {
         // Sent only when flipped, so saving the other switches works against
         // a backend from before this one (owner, 2026-10-10).
         ...(savings !== (current?.show_offer_savings === true) ? { show_offer_savings: savings } : {}),
+        // Owner, 2026-10-12: likewise sent only when changed.
+        ...checkoutExtrasPatch(current, {
+          basketOn,
+          basketAmount: 'amount' in basket ? basket.amount : null,
+          forOthersOn,
+          codeToReceiver,
+        }),
       });
       show(updated);
       toast.success('Checkout settings saved.');
@@ -480,6 +509,45 @@ function CheckoutSettingsPanel() {
               use one up.
             </p>
           ) : null}
+          <label className="toggle">
+            <input type="checkbox" checked={basketOn} onChange={(e) => setBasketOn(e.target.checked)} />
+            <span>Free delivery above a basket amount</span>
+          </label>
+          <Field
+            label="Free delivery from (LKR)"
+            hint="Item total after product offers, before coupons and points. Up to 100,000."
+            error={basketError ?? undefined}
+          >
+            <input
+              className="input"
+              inputMode="decimal"
+              value={basketAmount}
+              disabled={!basketOn}
+              onChange={(e) => setBasketAmount(e.target.value)}
+            />
+          </Field>
+          <p className="form__note">
+            The app shows &quot;Add LKR X more for free delivery&quot;. An order free this way does not use up the
+            customer&apos;s free deliveries. Not shown on the website.
+          </p>
+          <label className="toggle">
+            <input type="checkbox" checked={forOthersOn} onChange={(e) => setForOthersOn(e.target.checked)} />
+            <span>Allow ordering for someone else</span>
+          </label>
+          <p className="form__note">
+            Customers can send an order to family with the receiver&apos;s name and phone. The receiver and the buyer
+            both get the order texts.
+          </p>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={codeToReceiver}
+              disabled={!forOthersOn}
+              onChange={(e) => setCodeToReceiver(e.target.checked)}
+            />
+            <span>Send delivery code to receiver</span>
+          </label>
+          <p className="form__note">When off, only the buyer gets the delivery code (in the app and by SMS).</p>
           <p className="form__note">Changes apply to orders placed from now on.</p>
           <div className="form__actions">
             <button
@@ -735,6 +803,127 @@ function BirthdayOfferPanel() {
           {saveError ? (
             <p className="field__error" role="alert">
               {saveError}
+            </p>
+          ) : null}
+          <div className="form__actions">
+            <button type="submit" className="button" disabled={saving}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+const SMS_LANGUAGE_MODES: { value: CustomerSmsLanguageMode; label: string }[] = [
+  { value: 'ENGLISH_ONLY', label: 'English only' },
+  { value: 'CUSTOMER_CHOICE', label: "Customer's choice" },
+  { value: 'ALWAYS_SINHALA', label: 'Always Sinhala' },
+  { value: 'ALWAYS_TAMIL', label: 'Always Tamil' },
+];
+
+const SMS_LANGUAGE_NAMES: Record<SmsLanguageCode, string> = { en: 'English', si: 'Sinhala', ta: 'Tamil' };
+
+/**
+ * Customer SMS language (owner, 2026-10-12): the language of order texts,
+ * sign-in codes, dental and rider texts. English only is the default (the
+ * texts as before); "Customer's choice" uses the language the customer picked
+ * in the app (Profile > SMS & offers), else the fallback. Offer and birthday
+ * SMS keep their own texts.
+ */
+function CustomerSmsLanguagePanel() {
+  const toast = useToast();
+  const [current, setCurrent] = useState<CustomerSmsLanguageSetting | null>(null);
+  const [mode, setMode] = useState<CustomerSmsLanguageMode>('ENGLISH_ONLY');
+  const [fallback, setFallback] = useState<SmsLanguageCode>('en');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function show(setting: CustomerSmsLanguageSetting) {
+    setCurrent(setting);
+    setMode(setting.mode);
+    setFallback(setting.fallback);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .getCustomerSmsLanguage()
+      .then((setting) => !cancelled && show(setting))
+      .catch((err) => !cancelled && setLoadError(errorMessage(err, 'Could not load the customer SMS language.')));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await settingsApi.setCustomerSmsLanguage({ mode, fallback });
+      show(updated);
+      toast.success('Customer SMS language saved.');
+    } catch (err) {
+      const detail =
+        err instanceof ApiError && err.code === 'VALIDATION_ERROR'
+          ? (err.details as Array<{ message?: string }> | undefined)?.[0]?.message
+          : undefined;
+      setError(detail ?? errorMessage(err, 'Could not save the customer SMS language.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-label="Customer SMS language">
+      <h2 className="panel__title">Customer SMS language</h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading the customer SMS language" />
+      ) : (
+        <form className="form" onSubmit={save} noValidate>
+          <ModeChoice<CustomerSmsLanguageMode>
+            label="Order, sign-in, dental and rider texts go out in"
+            value={mode}
+            options={SMS_LANGUAGE_MODES}
+            onChange={setMode}
+          />
+          <Field label="If the customer never picked a language" hint="Used with Customer's choice.">
+            <select
+              className="input"
+              value={fallback}
+              disabled={mode !== 'CUSTOMER_CHOICE'}
+              onChange={(e) => setFallback(e.target.value as SmsLanguageCode)}
+            >
+              {(['en', 'si', 'ta'] as SmsLanguageCode[]).map((l) => (
+                <option key={l} value={l}>
+                  {SMS_LANGUAGE_NAMES[l]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="form__note">
+            Customers pick their language in the app under Profile &gt; SMS &amp; offers. Sinhala and Tamil texts cost
+            more (70 letters per SMS part). Offer and birthday SMS keep their own wording.
+          </p>
+          {current.samples?.length ? (
+            <div className="preview">
+              <p className="preview__label">The &quot;on the way&quot; text</p>
+              {current.samples.map((sample) => (
+                <p key={sample.lang} className="sms-offers__preview" aria-label={`${SMS_LANGUAGE_NAMES[sample.lang]} sample`}>
+                  {SMS_LANGUAGE_NAMES[sample.lang]} ({partsLabel(sample.parts)}): {sample.text}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          {current.updated_at ? <p className="form__note">Changed {new Date(current.updated_at).toLocaleString()}.</p> : null}
+          {error ? (
+            <p className="field__error" role="alert">
+              {error}
             </p>
           ) : null}
           <div className="form__actions">

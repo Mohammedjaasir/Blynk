@@ -18,6 +18,8 @@ import { formatDateTime } from '../lib/inventory';
 import { parseMaxFee, parseTierRows, tierAmountText, tiersSummary, tiersToRows } from '../lib/kmTiers';
 import { formatPercent, parseCommissionPercent } from '../lib/riderPay';
 import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
+import { checkoutExtrasPatch, parseBasketAmount } from '../lib/checkoutExtras';
+import { CustomerSmsLanguageCard } from '../components/CustomerSmsLanguageCard';
 
 /**
  * The More tab (plan §8: rider list, settings, sign-out). Sign-out is real,
@@ -181,6 +183,8 @@ export function More() {
 
       <DeliveryFeeCard />
       <CheckoutSettingsCard />
+      {/* Customer SMS language (owner, 2026-10-12). */}
+      <CustomerSmsLanguageCard />
       <RiderCommissionCard />
       <RiderTripsCard />
 
@@ -404,6 +408,11 @@ function CheckoutSettingsCard() {
   const [savings, setSavings] = useState(false);
   const [freeOn, setFreeOn] = useState(true);
   const [count, setCount] = useState('2');
+  // Owner, 2026-10-12: free delivery above a basket amount, and ordering for someone else.
+  const [basketOn, setBasketOn] = useState(false);
+  const [basketAmount, setBasketAmount] = useState('3000');
+  const [forOthersOn, setForOthersOn] = useState(true);
+  const [codeToReceiver, setCodeToReceiver] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -415,6 +424,10 @@ function CheckoutSettingsCard() {
     setSavings(s.show_offer_savings === true);
     setFreeOn(s.new_customer_free_deliveries.enabled);
     setCount(String(s.new_customer_free_deliveries.count));
+    setBasketOn(s.basket_free_delivery?.enabled === true);
+    setBasketAmount(String(s.basket_free_delivery?.min_subtotal_lkr ?? 3000));
+    setForOthersOn(s.order_for_someone_else?.enabled ?? true);
+    setCodeToReceiver(s.order_for_someone_else?.send_code_to_receiver ?? true);
   }
 
   useEffect(() => {
@@ -432,6 +445,11 @@ function CheckoutSettingsCard() {
       setError(parsed.error);
       return;
     }
+    const basket = parseBasketAmount(basketAmount);
+    if (basketOn && 'error' in basket) {
+      setError(basket.error);
+      return;
+    }
     setError(null);
     setSaving(true);
     try {
@@ -442,6 +460,13 @@ function CheckoutSettingsCard() {
           // Sent only when flipped, so saving the other switches works
           // against a backend from before this one (owner, 2026-10-10).
           ...(savings !== (current?.show_offer_savings === true) ? { show_offer_savings: savings } : {}),
+          // Owner, 2026-10-12: likewise sent only when changed.
+          ...checkoutExtrasPatch(current, {
+            basketOn,
+            basketAmount: 'amount' in basket ? basket.amount : null,
+            forOthersOn,
+            codeToReceiver,
+          }),
         })
       );
       setNotice('Checkout settings saved.');
@@ -535,6 +560,42 @@ function CheckoutSettingsCard() {
               Start again from today
             </button>
           </div>
+          <label className="toggle">
+            <input type="checkbox" checked={basketOn} onChange={(e) => setBasketOn(e.target.checked)} />
+            <span>
+              <strong>Free delivery above a basket amount</strong>
+              <em>Item total after product offers, before coupons. Does not use up a free delivery. Not on the website.</em>
+            </span>
+          </label>
+          <label className="field">
+            <span className="field__label">Free delivery from (LKR)</span>
+            <input
+              className="input"
+              inputMode="decimal"
+              value={basketAmount}
+              onChange={(e) => setBasketAmount(e.target.value)}
+              disabled={!basketOn}
+            />
+          </label>
+          <label className="toggle">
+            <input type="checkbox" checked={forOthersOn} onChange={(e) => setForOthersOn(e.target.checked)} />
+            <span>
+              <strong>Allow ordering for someone else</strong>
+              <em>The receiver and the buyer both get the order texts.</em>
+            </span>
+          </label>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={codeToReceiver}
+              onChange={(e) => setCodeToReceiver(e.target.checked)}
+              disabled={!forOthersOn}
+            />
+            <span>
+              <strong>Send delivery code to receiver</strong>
+              <em>When off, only the buyer gets the delivery code.</em>
+            </span>
+          </label>
           <button type="submit" className="button" disabled={saving}>
             {saving ? <Spinner label="Saving" /> : 'Save'}
           </button>

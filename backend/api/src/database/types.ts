@@ -138,6 +138,9 @@ export interface UsersTable {
 /** Migration 027: the languages an offer SMS can be written in. */
 export type SmsLanguage = 'si' | 'ta' | 'en';
 
+/** Migration 043: why an order's delivery fee was waived. */
+export type FreeDeliveryReason = 'NEW_CUSTOMER' | 'BASKET_THRESHOLD';
+
 /** Migration 027: who an SMS offer goes to. */
 export type SmsOfferAudience = 'ALL' | 'ORDERED_30D' | 'ORDERED_90D' | 'NEVER_ORDERED';
 
@@ -357,6 +360,18 @@ export interface OrdersTable {
   delivery_latitude: ColumnType<number, number | string, number | string>;
   delivery_longitude: ColumnType<number, number | string, number | string>;
   delivery_instructions: string | null;
+  /**
+   * Migration 042 (owner, 2026-10-12): the buyer marked the order "For someone
+   * else"; delivery_recipient_* is then the receiver they typed for this order.
+   */
+  ordered_for_someone_else: ColumnType<boolean, boolean | undefined, boolean>;
+  /** Migration 042: "Elderly / needs help - knock and wait, carry items inside". */
+  delivery_needs_help: ColumnType<boolean, boolean | undefined, boolean>;
+  /**
+   * Migration 043 (owner, 2026-10-12): why delivery_fee is 0 - one of the
+   * customer's free deliveries, or the basket amount (which never uses one up).
+   */
+  free_delivery_reason: ColumnType<FreeDeliveryReason | null, FreeDeliveryReason | null | undefined, FreeDeliveryReason | null>;
   cancellation_reason: string | null;
   cancelled_by_user_id: string | null;
   cancelled_at: Date | null;

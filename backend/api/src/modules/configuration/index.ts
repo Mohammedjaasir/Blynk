@@ -18,6 +18,8 @@ import {
   updateStoreSmsSchema,
 } from './store-schedule.js';
 import { doctorsAccessService, updateDoctorsAccessSchema } from './doctors-access.js';
+import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
+import { smsLanguagePreview } from '../notifications/sms-language.preview.js';
 
 export const configurationRouter = Router();
 
@@ -268,6 +270,38 @@ adminSettingsRouter.patch(
     try {
       const input = updateDoctorsAccessSchema.parse(req.body);
       res.json({ success: true, data: await doctorsAccessService.set(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Customer SMS language (owner, 2026-10-12): English only (the default),
+// the customer's own pick with a fallback, or always Sinhala / Tamil - for
+// order, sign-in code, dental and rider texts. Audited
+// (CUSTOMER_SMS_LANGUAGE_UPDATED); applies to texts queued afterwards. The
+// answer carries sample texts in each language so staff see what goes out.
+adminSettingsRouter.get(
+  '/settings/customer-sms-language',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: smsLanguagePreview(await customerSmsLanguageService.get()) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/customer-sms-language',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateCustomerSmsLanguageSchema.parse(req.body);
+      res.json({ success: true, data: smsLanguagePreview(await customerSmsLanguageService.set(input, actorOf(req))) });
     } catch (err) {
       next(err);
     }

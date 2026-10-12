@@ -18,7 +18,7 @@ const app = createApp();
 const fx = stockFixtures(app, 'TST-CHK-');
 const people = customerFixtures(app, { idPrefix: 'c0c00029', phoneBase: '+947092900', name: 'Checkout Switch Customer' });
 const opsToken = generateAccessToken({ ...users.admin, role: 'OPERATIONS' });
-const KEYS = ['coupons_enabled', 'new_customer_free_deliveries', 'show_offer_savings'];
+const KEYS = ['coupons_enabled', 'new_customer_free_deliveries', 'show_offer_savings', 'basket_free_delivery', 'order_for_someone_else'];
 const FEE = 100;
 // Owner, 2026-10-09: with no stored start, free deliveries count from Colombo midnight that day.
 const DEFAULT_SINCE = '2026-10-08T18:30:00.000Z';
@@ -83,6 +83,9 @@ describe('Checkout settings', () => {
       coupons_enabled: false,
       new_customer_free_deliveries: { enabled: true, count: 2, since: DEFAULT_SINCE },
       show_offer_savings: false,
+      // Owner, 2026-10-12: basket free delivery off, ordering for someone else on.
+      basket_free_delivery: { enabled: false, min_subtotal_lkr: 3000 },
+      order_for_someone_else: { enabled: true, send_code_to_receiver: true },
       updated_at: null,
     });
     const store = await request(app).get('/api/v1/store');
@@ -182,6 +185,9 @@ describe('Free deliveries for every customer', () => {
       delivery_fee_address_id: me.addressId,
       coupons_enabled: false,
       free_delivery: { enabled: true, count: 2, since: DEFAULT_SINCE, used: 0, remaining: 2, applies: true },
+      // Owner, 2026-10-12: free delivery above a basket amount (off), and ordering for someone else (on).
+      basket_free_delivery: { enabled: false, min_subtotal_lkr: 3000, applies: false, remaining_lkr: null },
+      order_for_someone_else: { enabled: true, send_code_to_receiver: true },
       // Migration 034 (owner, 2026-10-09): no date of birth saved, so no gift.
       birthday_offer: expect.objectContaining({ has_birthday: false, eligible: false }),
       // Migration 037 (owner, 2026-10-10): refer a friend and Blynk Points, both off by default.

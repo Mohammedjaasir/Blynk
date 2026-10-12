@@ -51,7 +51,7 @@ class CartRewardsLines extends StatelessWidget {
 
     final cart = context.watch<CartProvider>();
     final orders = context.watch<OrderProvider?>();
-    final deliveryFee = store.checkoutDeliveryFee;
+    final deliveryFee = store.checkoutDeliveryFeeFor(cart.subtotal);
     final coupon = allowRedeem && store.couponsEnabled ? orders?.couponFor(cart) : null;
     final estimate = estimateDiscounts(
       subtotal: cart.subtotal,

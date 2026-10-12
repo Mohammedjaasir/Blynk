@@ -16,9 +16,14 @@ import { toPublicDelivery } from './delivery.columns.js';
 import { db } from '../../database/connection.js';
 import { evaluateCoupon } from '../coupons/coupon.service.js';
 import type { ValidateCouponInput } from '../coupons/coupon.schema.js';
-import { birthdayOfferSettings, checkoutSettings } from '../configuration/settings.service.js';
+import {
+  basketFreeDeliveryOf,
+  birthdayOfferSettings,
+  checkoutSettings,
+  orderForSomeoneElseOf,
+} from '../configuration/settings.service.js';
 import { applyBirthday, birthdayBeatsCoupon, birthdayOfferStatus, publicBirthdayStatus } from '../birthday/birthday.offer.js';
-import { freeDeliveryStatus } from './free-delivery.js';
+import { basketFreeDeliveryApplies, basketFreeDeliveryStatus, freeDeliveryStatus } from './free-delivery.js';
 // Per-km tier delivery fee (owner, 2026-10-10): the one place the fee is worked out.
 import { quoteDeliveryFee, type DeliveryFeeQuote } from './delivery-fee.js';
 import { effectivePrice } from '../catalog/catalog.offers.js';
@@ -259,6 +264,18 @@ export class OrderService {
     // 3. Geofence verification (4.00 km Haversine from Dharga Town hub)
     const store = await assertWithinServiceZone(Number(address.latitude), Number(address.longitude));
 
+    // Checkout switches (owner, 2026-10-08; basket amount and "for someone
+    // else" since 2026-10-12).
+    const settings = await checkoutSettings.read();
+
+    // 3b. Order for someone else (owner, 2026-10-12): the receiver typed for
+    // this order replaces the saved address's recipient on the ORDER only.
+    if (input.for_someone_else === true && !orderForSomeoneElseOf(settings).enabled) {
+      throw new AppError('Ordering for someone else is not available right now.', 422, 'FOR_SOMEONE_ELSE_DISABLED');
+    }
+    const receiver = input.for_someone_else === true && input.recipient ? input.recipient : null;
+    const deliveryNote = input.delivery_note?.trim() ? input.delivery_note.trim() : null;
+
     // 4. Scheduled delivery: the slot's start, or null for as soon as possible.
     const scheduledFor = slot?.start ?? null;
 
@@ -271,9 +288,8 @@ export class OrderService {
       { hub: store }
     );
     const deliveryFee = feeQuote.fee_lkr;
-    // Checkout switches (owner, 2026-10-08). With coupons off a code is
-    // ignored, not refused, so an older app that still sends one can order.
-    const settings = await checkoutSettings.read();
+    // With coupons off a code is ignored, not refused, so an older app that
+    // still sends one can order.
     // Birthday gift (owner, 2026-10-09): decided inside the order transaction.
     const birthdaySetting = await birthdayOfferSettings.read();
     if (input.coupon_code && !settings.coupons_enabled) {
@@ -291,22 +307,29 @@ export class OrderService {
       delivery_fee: deliveryFee,
       delivery_fee_quote: feeQuote,
       free_delivery: settings.new_customer_free_deliveries,
+      // Owner, 2026-10-12: decided on the server-priced subtotal in the transaction.
+      basket_free_delivery: basketFreeDeliveryOf(settings),
+      ordered_for_someone_else: receiver !== null,
+      delivery_needs_help: input.needs_help === true,
       total_amount: totalAmount,
       coupon_code: settings.coupons_enabled ? input.coupon_code ?? null : null,
       birthday_offer: birthdaySetting.enabled ? { setting: birthdaySetting, now } : null,
       use_points: input.use_points === true,
       scheduled_for: scheduledFor,
       delivery_slot: slot ? { until: slot.until, max_orders: schedule.slots.max_orders_per_slot, label: slot.label } : null,
-      delivery_recipient_name: address.recipient_name,
-      delivery_recipient_phone: address.recipient_phone,
-      delivery_alternate_phone: address.alternate_phone ?? null,
+      delivery_recipient_name: receiver?.name ?? address.recipient_name,
+      delivery_recipient_phone: receiver?.phone ?? address.recipient_phone,
+      // The address's second number stays for the rider, unless it is the receiver's own.
+      delivery_alternate_phone:
+        receiver && address.alternate_phone === receiver.phone ? null : (address.alternate_phone ?? null),
       delivery_address_line1: address.address_line1,
       delivery_address_line2: address.address_line2,
       delivery_city: address.city,
       delivery_postal_code: address.postal_code,
       delivery_latitude: Number(address.latitude),
       delivery_longitude: Number(address.longitude),
-      delivery_instructions: address.delivery_instructions,
+      // A note for this order replaces the address's instructions (rider/staff only, never SMS).
+      delivery_instructions: deliveryNote ?? address.delivery_instructions,
       customer_notes: input.customer_notes ?? null,
       items: orderItemsData,
       combos: orderCombos,
@@ -331,9 +354,12 @@ export class OrderService {
       input.items?.length || input.combos?.length
         ? (await priceCart(input.items ?? [], input.combos ?? [])).subtotal
         : Number(input.subtotal!.toFixed(2));
-    const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
+    // The basket amount first (owner, 2026-10-12), then the free deliveries.
+    const basketFree = basketFreeDeliveryApplies(basketFreeDeliveryOf(settings), subtotal);
+    const free = basketFree ? null : await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
     // Owner, 2026-10-10: the fee for the chosen address (address_id), as the order will charge it.
-    const deliveryFee = free.applies ? 0 : (await this.quoteForCustomer(customerId, input.address_id)).quote.fee_lkr;
+    const deliveryFee =
+      basketFree || free?.applies ? 0 : (await this.quoteForCustomer(customerId, input.address_id)).quote.fee_lkr;
     const applied = await evaluateCoupon(db, { code: input.code, customerId, subtotal, deliveryFee });
     // Birthday gift (owner, 2026-10-09): never stacked with a coupon - the
     // larger is used (a tie keeps the coupon). discount_amount stays the
@@ -402,7 +428,7 @@ export class OrderService {
    * Per-km tiers (owner, 2026-10-10): ?address_id= gives the fee for that
    * address (the cart's chosen one); without it, the default address's.
    */
-  async getCheckoutInfo(customerId: string, addressId?: string) {
+  async getCheckoutInfo(customerId: string, addressId?: string, subtotal?: number) {
     const [settings, fee, birthdaySetting] = await Promise.all([
       checkoutSettings.read(),
       this.quoteForCustomer(customerId, addressId),
@@ -411,8 +437,14 @@ export class OrderService {
     const standardFee = fee.quote.fee_lkr;
     const free = await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
     const birthday = await birthdayOfferStatus(db, customerId, birthdaySetting, orderingClock.now());
+    // Free delivery above a basket amount (owner, 2026-10-12): with ?subtotal=
+    // the answer says whether this cart reaches it (then no free delivery is
+    // used up). The app shows "Add LKR X more for free delivery".
+    const basket = basketFreeDeliveryStatus(basketFreeDeliveryOf(settings), subtotal);
+    const forOthers = orderForSomeoneElseOf(settings);
+    const charged = basket.applies === true || free.applies ? 0 : standardFee;
     return {
-      delivery_fee_lkr: free.applies ? 0 : standardFee,
+      delivery_fee_lkr: charged,
       standard_delivery_fee_lkr: standardFee,
       delivery_fee_mode: fee.quote.fee_mode,
       delivery_distance_km: fee.quote.distance_km,
@@ -420,11 +452,15 @@ export class OrderService {
       delivery_fee_address_id: fee.address_id,
       coupons_enabled: settings.coupons_enabled,
       free_delivery: free,
+      basket_free_delivery: basket,
+      // Owner, 2026-10-12: whether checkout offers "For someone else", and
+      // whether the receiver's SMS carries the delivery code.
+      order_for_someone_else: forOthers,
       // Owner, 2026-10-09: eligible -> the next order gets `percent` off its items.
       birthday_offer: publicBirthdayStatus(birthday),
       // Owner, 2026-10-10: referral_reward (applied automatically when it is
       // the larger discount) and points (balance + the program's numbers).
-      ...(await checkoutRewardsInfo(db, customerId, free.applies ? 0 : standardFee)),
+      ...(await checkoutRewardsInfo(db, customerId, charged)),
     };
   }
 

@@ -14,7 +14,20 @@ import { validateCouponSchema } from '../coupons/coupon.schema.js';
 import { z } from 'zod';
 
 /** GET /orders/checkout-info?address_id= (owner, 2026-10-10). */
-const checkoutInfoQuerySchema = z.object({ address_id: z.string().uuid('address_id must be a valid UUID').optional() });
+const checkoutInfoQuerySchema = z.object({
+  address_id: z.string().uuid('address_id must be a valid UUID').optional(),
+  /**
+   * Free delivery above a basket amount (owner, 2026-10-12): the cart's item
+   * subtotal, so the answer says whether it reaches the amount. Advisory -
+   * order placement re-prices the cart and decides again.
+   */
+  subtotal: z.coerce
+    .number({ invalid_type_error: 'subtotal must be a number' })
+    .finite()
+    .min(0, 'subtotal cannot be negative')
+    .max(10_000_000, 'subtotal is too large')
+    .optional(),
+});
 import { availableSlots } from '../configuration/store-schedule.js';
 
 export class OrderController {
@@ -54,8 +67,8 @@ export class OrderController {
   async getCheckoutInfo(req: Request, res: Response, next: NextFunction) {
     try {
       // Per-km tiers (owner, 2026-10-10): the fee for the cart's chosen address.
-      const { address_id } = checkoutInfoQuerySchema.parse(req.query);
-      res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id, address_id) });
+      const { address_id, subtotal } = checkoutInfoQuerySchema.parse(req.query);
+      res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id, address_id, subtotal) });
     } catch (err) {
       next(err);
     }

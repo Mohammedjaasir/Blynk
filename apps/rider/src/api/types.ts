@@ -80,6 +80,13 @@ export interface DeliverySummary {
   delivery_longitude?: number | string | null;
   delivery_instructions: string | null;
   /**
+   * Migration 042 (owner, 2026-10-12): the order was placed by family for the
+   * person named above - hand it to them, not to the buyer.
+   */
+  ordered_for_someone_else?: boolean;
+  /** Migration 042: "Elderly / needs help - please knock and wait, carry items inside". */
+  delivery_needs_help?: boolean;
+  /**
    * Scheduled delivery slots (migration 036; owner, 2026-10-10): the slot
    * start the customer picked, ISO; null for an ASAP order.
    */

@@ -245,9 +245,41 @@ class StoreInfoProvider extends ChangeNotifier {
   /// free delivery applies, else the server's fee for the selected address
   /// from checkout-info ([checkoutFee]; it can depend on the distance since
   /// owner, 2026-10-10), else the store's [deliveryFee]. Advisory only; the
-  /// server decides again when the order is placed.
+  /// server decides again when the order is placed. Without the basket
+  /// amount - see [checkoutDeliveryFeeFor].
   double get checkoutDeliveryFee =>
       (_freeDelivery?.applies ?? false) ? 0 : (_checkoutFee?.fee ?? _deliveryFee);
+
+  BasketFreeDelivery? _basketFreeDelivery;
+  SomeoneElseOrdering? _someoneElseOrdering;
+
+  /// Free delivery above a basket amount (owner, 2026-10-12), from
+  /// `basket_free_delivery` on checkout-info; null when unknown, signed out
+  /// or an older backend.
+  BasketFreeDelivery? get basketFreeDelivery => _basketFreeDelivery;
+
+  /// Whether checkout offers "For someone else" and whether the receiver's
+  /// SMS carries the delivery code (owner, 2026-10-12), from
+  /// `order_for_someone_else` on checkout-info; null when unknown (the
+  /// option is then hidden).
+  SomeoneElseOrdering? get someoneElseOrdering => _someoneElseOrdering;
+
+  /// Whether a cart worth [subtotal] (items after offers, before coupons -
+  /// the same basket the server compares) gets free delivery by the basket
+  /// amount.
+  bool basketFreeDeliveryReached(double subtotal) => _basketFreeDelivery?.reachedBy(subtotal) ?? false;
+
+  /// [checkoutDeliveryFee] for a cart worth [subtotal]: also 0 once the
+  /// basket amount is reached (owner, 2026-10-12). Advisory; the server
+  /// re-prices the cart and decides when the order is placed.
+  double checkoutDeliveryFeeFor(double subtotal) => basketFreeDeliveryReached(subtotal) ? 0 : checkoutDeliveryFee;
+
+  void _setCheckoutExtras(BasketFreeDelivery? basket, SomeoneElseOrdering? someoneElse) {
+    if (_disposed || (basket == _basketFreeDelivery && someoneElse == _someoneElseOrdering)) return;
+    _basketFreeDelivery = basket;
+    _someoneElseOrdering = someoneElse;
+    notifyListeners();
+  }
 
   /// Asks `GET /orders/checkout-info` where this customer stands. Pass
   /// [signedIn] false to forget a previous customer's offer without asking.
@@ -265,6 +297,7 @@ class StoreInfoProvider extends ChangeNotifier {
       _setBirthdayOffer(null);
       _setRewards(null, null);
       _setCheckoutFee(null);
+      _setCheckoutExtras(null, null);
       return Future.value();
     }
     final running = _loadingCheckoutInfo;
@@ -300,12 +333,18 @@ class StoreInfoProvider extends ChangeNotifier {
         CheckoutReferralReward.tryParse(data is Map ? data['referral_reward'] : null),
         CheckoutPoints.tryParse(data is Map ? data['points'] : null),
       );
+      // Owner, 2026-10-12: the basket amount and "For someone else".
+      _setCheckoutExtras(
+        BasketFreeDelivery.tryParse(data is Map ? data['basket_free_delivery'] : null),
+        SomeoneElseOrdering.tryParse(data is Map ? data['order_for_someone_else'] : null),
+      );
     } catch (_) {
       if (generation != _checkoutInfoGeneration) return;
       _setFreeDelivery(null);
       _setBirthdayOffer(null);
       _setRewards(null, null);
       _setCheckoutFee(null);
+      _setCheckoutExtras(null, null);
     }
   }
 
@@ -435,6 +474,11 @@ double watchDeliveryFee(BuildContext context) =>
 double watchCheckoutDeliveryFee(BuildContext context) =>
     context.watch<StoreInfoProvider?>()?.checkoutDeliveryFee ??
     StoreInfo.defaultDeliveryFee;
+
+/// The fee for a cart worth [subtotal]: [watchCheckoutDeliveryFee], and 0
+/// once the basket amount is reached (owner, 2026-10-12).
+double watchCheckoutDeliveryFeeFor(BuildContext context, double subtotal) =>
+    context.watch<StoreInfoProvider?>()?.checkoutDeliveryFeeFor(subtotal) ?? StoreInfo.defaultDeliveryFee;
 
 /// Whether checkout shows the coupon field; false where no
 /// [StoreInfoProvider] is in the tree (unknown means hidden).
@@ -631,4 +675,83 @@ String? watchDeliveryDistanceLabel(BuildContext context) =>
 BirthdayOffer? watchEligibleBirthdayOffer(BuildContext context) {
   final offer = context.watch<StoreInfoProvider?>()?.birthdayOffer;
   return offer != null && offer.eligible ? offer : null;
+}
+
+/// Free delivery above a basket amount (owner, 2026-10-12), from
+/// `basket_free_delivery` on `GET /orders/checkout-info`. The basket is the
+/// cart's items after product offers, before coupons and points - what
+/// [CartProvider.subtotal] shows. Never on the website.
+@immutable
+class BasketFreeDelivery {
+  const BasketFreeDelivery({required this.enabled, required this.minSubtotal});
+
+  /// Staff have it switched on.
+  final bool enabled;
+
+  /// LKR the basket must reach (`min_subtotal_lkr`).
+  final double minSubtotal;
+
+  static const double maxAmount = 100000;
+
+  /// Null for anything that is not a well-formed setting.
+  static BasketFreeDelivery? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final enabled = raw['enabled'];
+    final min = raw['min_subtotal_lkr'];
+    final amount = switch (min) {
+      num n => n.toDouble(),
+      String s => double.tryParse(s.trim()),
+      _ => null,
+    };
+    if (enabled is! bool || amount == null || !amount.isFinite || amount <= 0 || amount > maxAmount) return null;
+    return BasketFreeDelivery(enabled: enabled, minSubtotal: amount);
+  }
+
+  /// Whether a basket of [subtotal] reaches the amount (while switched on).
+  bool reachedBy(double subtotal) => enabled && subtotal + 1e-9 >= minSubtotal;
+
+  /// LKR still to add (0 once reached); 0 while switched off.
+  double remainingFor(double subtotal) {
+    if (!enabled) return 0;
+    final left = minSubtotal - subtotal;
+    return left <= 0 ? 0 : (left * 100).roundToDouble() / 100;
+  }
+
+  /// How far the basket is towards the amount, 0..1.
+  double progressFor(double subtotal) {
+    if (!enabled || minSubtotal <= 0) return 0;
+    final p = subtotal / minSubtotal;
+    return p < 0 ? 0 : (p > 1 ? 1 : p);
+  }
+
+  @override
+  bool operator ==(Object other) => other is BasketFreeDelivery && other.enabled == enabled && other.minSubtotal == minSubtotal;
+
+  @override
+  int get hashCode => Object.hash(enabled, minSubtotal);
+}
+
+/// "Allow ordering for someone else" and "Send delivery code to receiver"
+/// (owner, 2026-10-12), from `order_for_someone_else` on checkout-info.
+@immutable
+class SomeoneElseOrdering {
+  const SomeoneElseOrdering({required this.enabled, required this.sendCodeToReceiver});
+
+  final bool enabled;
+  final bool sendCodeToReceiver;
+
+  static SomeoneElseOrdering? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final enabled = raw['enabled'];
+    final code = raw['send_code_to_receiver'];
+    if (enabled is! bool) return null;
+    return SomeoneElseOrdering(enabled: enabled, sendCodeToReceiver: code is bool ? code : true);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is SomeoneElseOrdering && other.enabled == enabled && other.sendCodeToReceiver == sendCodeToReceiver;
+
+  @override
+  int get hashCode => Object.hash(enabled, sendCodeToReceiver);
 }

@@ -14,6 +14,7 @@ import { authService } from '../auth/auth.service.js';
 import { authRateLimiter } from '../auth/auth.rate-limiter.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { notificationService } from '../notifications/notification.service.js';
+import { withSmsLanguage } from '../notifications/sms-language.js';
 import { approvePaySchema, payValues, type ApprovePayInput } from './rider.pay.js';
 import { optionalRegistrationSchema, refineRegistration, storeId, vehicleTypeSchema } from './rider.profile.js';
 import { requireApplicant, riderDocumentService } from './rider.documents.js';
@@ -265,10 +266,10 @@ const notPending = (status: string) =>
 const SMS_REASON_MAX = 120;
 
 export const RIDER_APPROVED_SMS = "Blynk: you're approved as a rider. Sign in to the Blynk Rider app with this number.";
-export const riderRejectedSms = (reason: string) => {
-  const r = reason.length > SMS_REASON_MAX ? `${reason.slice(0, SMS_REASON_MAX - 3).trimEnd()}...` : reason;
-  return `Blynk: your rider application wasn't approved. Reason: ${r}`;
-};
+/** The staff reason as an SMS carries it (at most SMS_REASON_MAX characters). */
+export const smsReason = (reason: string) =>
+  reason.length > SMS_REASON_MAX ? `${reason.slice(0, SMS_REASON_MAX - 3).trimEnd()}...` : reason;
+export const riderRejectedSms = (reason: string) => `Blynk: your rider application wasn't approved. Reason: ${smsReason(reason)}`;
 
 export class RiderApplicationService {
   /**
@@ -614,7 +615,8 @@ export class RiderApplicationService {
         notification_type: 'RIDER_APPROVED',
         recipient: row.phone,
         idempotency_key: `rider-approved:${id}:${reviewed_at!.getTime()}`,
-        payload: { text: RIDER_APPROVED_SMS },
+        // Customer SMS language (owner, 2026-10-12): payload.lang.
+        payload: await withSmsLanguage(trx, row.user_id, { text: RIDER_APPROVED_SMS }),
       },
       trx
     );
@@ -786,7 +788,9 @@ export class RiderApplicationService {
           notification_type: 'RIDER_REJECTED',
           recipient: row.phone,
           idempotency_key: `rider-rejected:${id}:${reviewed_at!.getTime()}`,
-          payload: { text: riderRejectedSms(reason) },
+          // `reason` (the staff reason, shortened) and payload.lang for the
+          // Sinhala/Tamil text (owner, 2026-10-12).
+          payload: await withSmsLanguage(trx, row.user_id, { text: riderRejectedSms(reason), reason: smsReason(reason) }),
         },
         trx
       );

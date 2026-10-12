@@ -27,6 +27,11 @@ import type {
   DeliveryFeeInput,
   DeliveryFeeSetting,
   CheckoutSettings,
+  BasketFreeDeliverySetting,
+  OrderForSomeoneElseSetting,
+  CustomerSmsLanguageMode,
+  CustomerSmsLanguageSetting,
+  SmsLanguageCode,
   BirthdayOfferSetting,
   BirthdayOfferInput,
   BirthdaysResult,
@@ -323,8 +328,18 @@ export const settings = {
     coupons_enabled?: boolean;
     show_offer_savings?: boolean;
     new_customer_free_deliveries?: { enabled: boolean; count: number; since?: string };
+    /** Owner, 2026-10-12: free delivery above a basket amount. */
+    basket_free_delivery?: BasketFreeDeliverySetting;
+    /** Owner, 2026-10-12: either switch alone keeps the other. */
+    order_for_someone_else?: Partial<OrderForSomeoneElseSetting>;
   }) =>
     apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
+
+  /** Customer SMS language (owner, 2026-10-12): order / sign-in / dental / rider texts. */
+  getCustomerSmsLanguage: () => apiRequest<CustomerSmsLanguageSetting>('/admin/settings/customer-sms-language'),
+
+  setCustomerSmsLanguage: (body: { mode?: CustomerSmsLanguageMode; fallback?: SmsLanguageCode }) =>
+    apiRequest<CustomerSmsLanguageSetting>('/admin/settings/customer-sms-language', { method: 'PATCH', body }),
 
   /** Commission riders' default share of the standard delivery fee (owner, 2026-10-09). */
   getRiderCommission: () => apiRequest<RiderCommissionSetting>('/admin/settings/rider-commission'),

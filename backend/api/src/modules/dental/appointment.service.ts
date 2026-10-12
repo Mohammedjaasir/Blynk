@@ -3,6 +3,7 @@ import { db } from '../../database/connection.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { DentalAppointmentStatus } from '../../database/types.js';
 import { notificationService } from '../notifications/notification.service.js';
+import { withSmsLanguage } from '../notifications/sms-language.js';
 import { bestEffort } from '../notifications/push/push.repository.js';
 import { logger } from '../../utils/logger.js';
 import { remindIfDue } from './appointment-reminders.js';
@@ -379,13 +380,14 @@ export class AppointmentService {
           channel: 'SMS',
           notification_type: 'DENTAL_APPOINTMENT_CONFIRMED',
           recipient: confirmed.patient_phone as string,
-          payload: {
+          // Customer SMS language (owner, 2026-10-12): payload.lang.
+          payload: await withSmsLanguage(trx, customerId, {
             appointment_id: appointmentId,
             clinic_name: context?.clinic_name ?? 'the clinic',
             doctor_name: context?.doctor_name ?? 'your doctor',
             start_at: confirmed.start_at.toISOString(),
             consultation_fee_snapshot: confirmed.consultation_fee_snapshot,
-          },
+          }),
         },
         trx
       );
@@ -447,7 +449,7 @@ export class AppointmentService {
           channel: 'SMS',
           notification_type: 'DENTAL_APPOINTMENT_CANCELLED',
           recipient: cancelled.patient_phone as string,
-          payload: {
+          payload: await withSmsLanguage(trx, customerId, {
             appointment_id: appointmentId,
             clinic_name: context?.clinic_name ?? 'the clinic',
             doctor_name: context?.doctor_name ?? 'your doctor',
@@ -458,7 +460,7 @@ export class AppointmentService {
             // party under the Blynk sender ID (security audit 2026-10). The
             // reason stays on the appointment (cancellation_reason) for staff.
             reason: null,
-          },
+          }),
         },
         trx
       );
@@ -509,14 +511,14 @@ export class AppointmentService {
             channel: 'SMS',
             notification_type: 'DENTAL_APPOINTMENT_CANCELLED',
             recipient: cancelled.patient_phone,
-            payload: {
+            payload: await withSmsLanguage(trx, cancelled.customer_id, {
               appointment_id: appointmentId,
               clinic_name: context?.clinic_name ?? 'the clinic',
               doctor_name: context?.doctor_name ?? 'your doctor',
               start_at: cancelled.start_at.toISOString(),
               cancelled_by: 'clinic',
               reason,
-            },
+            }),
           },
           trx
         );

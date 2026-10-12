@@ -174,6 +174,10 @@ export interface OrderDetail {
   delivery_address_line2: string | null;
   delivery_city: string;
   delivery_instructions: string | null;
+  /** Migration 042 (owner, 2026-10-12): the receiver is someone the buyer ordered for. */
+  ordered_for_someone_else?: boolean;
+  /** Migration 042: "Elderly / needs help - knock and wait, carry items inside". */
+  delivery_needs_help?: boolean;
   /** The customer's own note on the order (packing slip). */
   customer_notes?: string | null;
   delivery_postal_code?: string | null;
@@ -321,6 +325,10 @@ export interface DeliverySummary {
   delivery_latitude?: number | string | null;
   delivery_longitude?: number | string | null;
   delivery_instructions: string | null;
+  /** Migration 042 (owner, 2026-10-12): the receiver is someone the buyer ordered for. */
+  ordered_for_someone_else?: boolean;
+  /** Migration 042: "Elderly / needs help - knock and wait, carry items inside". */
+  delivery_needs_help?: boolean;
 }
 
 export interface DeliveryItem {
@@ -1108,7 +1116,37 @@ export interface CheckoutSettings {
   /** The customer app shows "Save LKR X" on offers (owner, 2026-10-10).
    * Optional: a backend from before the switch leaves it out (= off). */
   show_offer_savings?: boolean;
+  /** Free delivery when the item subtotal (after item offers, before coupons)
+   * is at least `min_subtotal_lkr` (owner, 2026-10-12). Optional: a backend
+   * from before it leaves it out (= off). */
+  basket_free_delivery?: BasketFreeDeliverySetting;
+  /** "Allow ordering for someone else" and "Send delivery code to receiver"
+   * (owner, 2026-10-12). Optional: a backend from before it leaves it out. */
+  order_for_someone_else?: OrderForSomeoneElseSetting;
   updated_at: string | null;
+}
+
+export interface BasketFreeDeliverySetting {
+  enabled: boolean;
+  min_subtotal_lkr: number;
+}
+
+export interface OrderForSomeoneElseSetting {
+  enabled: boolean;
+  send_code_to_receiver: boolean;
+}
+
+/** `GET|PATCH /admin/settings/customer-sms-language` (owner, 2026-10-12). */
+export type CustomerSmsLanguageMode = 'ENGLISH_ONLY' | 'CUSTOMER_CHOICE' | 'ALWAYS_SINHALA' | 'ALWAYS_TAMIL';
+export type SmsLanguageCode = 'si' | 'ta' | 'en';
+
+export interface CustomerSmsLanguageSetting {
+  mode: CustomerSmsLanguageMode;
+  /** CUSTOMER_CHOICE: the language for customers who never picked one. */
+  fallback: SmsLanguageCode;
+  updated_at: string | null;
+  /** The "on the way" SMS in each language, as it goes out, with its SMS parts. */
+  samples?: Array<{ lang: SmsLanguageCode; text: string; parts: number }>;
 }
 
 /** `GET|PATCH /admin/settings/birthday-offer` - X% off ONE order in the

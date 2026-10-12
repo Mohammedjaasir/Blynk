@@ -11,22 +11,26 @@ import '../UI/Widgets/Atoms/blynk_spinner.dart';
 import '../UI/Widgets/Atoms/failure_states.dart';
 import '../UI/Widgets/Atoms/snackbar_helper.dart';
 
-/// Profile -> SMS & offers: the language offer SMS arrive in, and the
-/// "Offers by SMS" switch. Every offer SMS ends by pointing here
+/// Profile -> SMS & offers: the language the customer's SMS arrive in (order
+/// texts, sign-in codes and offers, while staff use the customer's choice -
+/// owner, 2026-10-12), and the "Offers by SMS" switch. Every offer SMS ends by pointing here
 /// ("Blynk app > Profile > SMS & offers"), so that label is fixed.
 ///
 /// Both settings save the moment they change (PATCH /me). A failed save puts
 /// the old value back and says why.
+/// Under "SMS language" (owner, 2026-10-12).
+const String smsLanguageNote = 'Order updates, sign-in codes and offers by SMS come in this language when Blynk sends them in yours.';
+const String smsLanguageHint = 'Pick a language for your SMS';
+
 class SmsPreferencesScreen extends StatefulWidget {
   const SmsPreferencesScreen({super.key, this.provider, this.languageChoice = smsLanguageChoiceEnabled});
 
   /// Whether the "SMS language" choice is offered at all.
   ///
-  /// Offers are English only at launch, so this is false and the screen shows
-  /// just the "Offers by SMS" switch; the language code and the model fields
-  /// stay in place. Set it to true when Sinhala/Tamil offers are switched on
-  /// in the backend's SMS_OFFER_LANGUAGES.
-  static const bool smsLanguageChoiceEnabled = false;
+  /// On since the Sinhala/Tamil order texts (owner, 2026-10-12): Admin/Ops
+  /// "Customer SMS language" set to "Customer's choice" sends order texts and
+  /// sign-in codes in the language picked here (users.sms_language).
+  static const bool smsLanguageChoiceEnabled = true;
 
   /// Injectable for tests; the screen makes its own otherwise.
   final ProfileProvider? provider;
@@ -156,8 +160,8 @@ class _Settings extends StatelessWidget {
         if (languageChoice) ...[
           const Text('SMS language', style: BlynkText.heading),
           const SizedBox(height: BlynkSpace.s4),
-          Text('Offer SMS are sent in this language.', style: BlynkText.body.copyWith(color: BlynkColors.ink2)),
-          if (chosen == null) ...[const SizedBox(height: BlynkSpace.s8), const _Hint('Pick a language for offer SMS')],
+          Text(smsLanguageNote, style: BlynkText.body.copyWith(color: BlynkColors.ink2)),
+          if (chosen == null) ...[const SizedBox(height: BlynkSpace.s8), const _Hint(smsLanguageHint)],
           const SizedBox(height: BlynkSpace.s8),
           for (final language in SmsLanguage.values)
             _LanguageChoice(

@@ -14,6 +14,7 @@ import '../UI/Widgets/Organisms/cart_rewards_lines.dart';
 import '../UI/Widgets/Organisms/cart_screen_address_container.dart';
 import '../UI/Widgets/Organisms/cart_screen_payment_container.dart';
 import '../UI/Widgets/Organisms/checkout_coupon_field.dart';
+import '../UI/Widgets/Organisms/checkout_recipient_section.dart';
 import '../UI/Widgets/Organisms/checkout_slot_picker.dart';
 import '../UI/Widgets/Organisms/empty_cart_view.dart';
 import '../app_design.dart';
@@ -78,6 +79,9 @@ class CheckoutScreen extends StatelessWidget {
                     // Delivery time (owner, 2026-10-10): only while staff
                     // have delivery slots switched on.
                     const CheckoutSlotPicker(padding: EdgeInsets.only(top: BlynkSpace.s24)),
+                    // For someone else, the rider note and "needs help"
+                    // (owner, 2026-10-12).
+                    const CheckoutRecipientSection(padding: EdgeInsets.only(top: BlynkSpace.s24)),
                     const BlynkSectionHeader(
                       title: 'Items',
                       padding: EdgeInsets.only(

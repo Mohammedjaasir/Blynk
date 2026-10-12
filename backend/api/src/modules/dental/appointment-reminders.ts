@@ -6,6 +6,7 @@ import type { Database } from '../../database/types.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { notificationService } from '../notifications/notification.service.js';
+import { withSmsLanguage } from '../notifications/sms-language.js';
 import { OUTBOX_PAUSE_LOCK_KEY } from '../notifications/outbox-pause.js';
 import { enqueuePush, PUSH_TYPES } from '../notifications/push/push.repository.js';
 import { isPushEnabled } from '../notifications/push/push.sender.js';
@@ -245,7 +246,15 @@ async function sendReminder(trx: Executor, row: ClaimedRow, smsFallback: boolean
         channel: 'SMS',
         notification_type: 'DENTAL_APPOINTMENT_REMINDER',
         recipient: row.patient_phone!,
-        payload: { appointment_id: row.id, ...text },
+        // Doctor, clinic and time too, for the Sinhala/Tamil text, and the
+        // customer SMS language (owner, 2026-10-12).
+        payload: await withSmsLanguage(trx, row.customer_id, {
+          appointment_id: row.id,
+          ...text,
+          doctor_name: row.doctor_name,
+          clinic_name: row.clinic_name,
+          start_at: new Date(row.start_at).toISOString(),
+        }),
       },
       trx
     );

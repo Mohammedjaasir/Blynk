@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { sql, type Transaction } from 'kysely';
 import { db } from '../../database/connection.js';
-import type { Database } from '../../database/types.js';
+import type { Database, SmsLanguage } from '../../database/types.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { AppError } from '../../middleware/error.middleware.js';
@@ -9,6 +9,8 @@ import { authRepository } from './auth.repository.js';
 import { authRateLimiter } from './auth.rate-limiter.js';
 import { generateOtp, hashOtp, compareOtp } from './otp.service.js';
 import { SmsProvider } from '../notifications/providers/sms.provider.js';
+import { localizedTexts } from '../notifications/sms-i18n.js';
+import { smsLanguageForPhone } from '../notifications/sms-language.js';
 import { generateAccessToken, generateRefreshToken, hashToken } from './token.service.js';
 import { isEmailOnlyRole, publicPhone } from '../../utils/phone.js';
 
@@ -143,8 +145,20 @@ async function refuseCustomerInRiderApp(trx: Transaction<Database>, userId: stri
 }
 
 /** The sign-in code SMS: "123456 is your Blynk code. Valid 2 min. Do not share it." */
-export const otpSmsText = (otp: string, minutes: number) =>
-  `${otp} is your Blynk code. Valid ${minutes} min. Do not share it.`;
+export const otpSmsText = (otp: string, minutes: number, lang: SmsLanguage = 'en') =>
+  // Sinhala / Tamil (owner, 2026-10-12; "Customer SMS language"): still only
+  // the code, the brand and how long it is valid (sms-i18n.ts).
+  localizedTexts(lang)?.otp(otp, minutes) ?? `${otp} is your Blynk code. Valid ${minutes} min. Do not share it.`;
+
+/** The sign-in code's language; a lookup failure never blocks the code (English). */
+async function otpSmsLanguage(phone: string): Promise<SmsLanguage> {
+  try {
+    return await smsLanguageForPhone(phone);
+  } catch (err) {
+    logger.warn({ err: (err as Error)?.message }, 'OTP SMS language unavailable; sending English');
+    return 'en';
+  }
+}
 
 /** POST /auth/otp/verify edge limits, per 15 minutes. */
 export const OTP_VERIFY_PHONE_MAX = 10;
@@ -213,7 +227,8 @@ export class AuthService {
       recipient: phone,
       // Short on purpose (owner, 2026-10-07: SMS cost): plain GSM text,
       // well inside one 160-character part. The sender name already says Blynk.
-      message: otpSmsText(otp, env.OTP_EXPIRY_MINUTES),
+      // English unless staff picked another "Customer SMS language".
+      message: otpSmsText(otp, env.OTP_EXPIRY_MINUTES, await otpSmsLanguage(phone)),
     });
     if (!sms.success) {
       logger.error(

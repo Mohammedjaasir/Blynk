@@ -5,7 +5,12 @@ import { ACTIVE_DELIVERY_STATUSES, INITIAL_ORDER_STATUS, isUncostedSubstitution 
 import { recordOrderPlaced } from './lifecycle/status-writer.js';
 import { DELIVERY_PUBLIC_SELECT } from './delivery.columns.js';
 import { evaluateCoupon, recordRedemption } from '../coupons/coupon.service.js';
-import { freeDeliveryStatus, type FreeDeliveryPolicy } from './free-delivery.js';
+import {
+  basketFreeDeliveryApplies,
+  freeDeliveryStatus,
+  type BasketFreeDeliveryPolicy,
+  type FreeDeliveryPolicy,
+} from './free-delivery.js';
 import {
   applyBirthday,
   birthdayBeatsCoupon,
@@ -60,6 +65,16 @@ export interface CreateOrderData {
    * customer's row lock inside the order transaction. Absent = no offer.
    */
   free_delivery?: FreeDeliveryPolicy | null;
+  /**
+   * Free delivery above a basket amount (owner, 2026-10-12): checked first,
+   * on subtotal_amount; when it applies no free delivery is used up.
+   * Absent = off.
+   */
+  basket_free_delivery?: BasketFreeDeliveryPolicy | null;
+  /** Migration 042 (owner, 2026-10-12): delivery_recipient_* is a receiver typed for this order. */
+  ordered_for_someone_else?: boolean;
+  /** Migration 042: "Elderly / needs help - knock and wait, carry items inside". */
+  delivery_needs_help?: boolean;
   /** Before any coupon; the discount and final total are settled in the transaction. */
   total_amount: number;
   /** Migration 018: re-checked under the coupon row lock inside the order transaction. */
@@ -238,12 +253,17 @@ export class OrderRepository {
         await assertSlotHasRoom(trx, data.scheduled_for, data.delivery_slot.max_orders, data.delivery_slot.label);
       }
 
-      // 0a. New-customer free delivery: counted under the customer's row lock,
+      // 0a. Free delivery above the basket amount (owner, 2026-10-12) first:
+      //     it never uses up one of the customer's free deliveries.
+      const basketFree = basketFreeDeliveryApplies(data.basket_free_delivery, data.subtotal_amount);
+      // 0a'. New-customer free delivery: counted under the customer's row lock,
       //     so two racing checkouts cannot both take the last one.
-      const free = data.free_delivery
-        ? await freeDeliveryStatus(trx, data.customer_id, data.free_delivery, true)
-        : null;
-      const deliveryFee = free?.applies ? 0 : data.delivery_fee;
+      const free =
+        !basketFree && data.free_delivery ? await freeDeliveryStatus(trx, data.customer_id, data.free_delivery, true) : null;
+      const deliveryFee = basketFree || free?.applies ? 0 : data.delivery_fee;
+      // Migration 043: why the fee was waived (only written when it was, so a
+      // charged order inserts exactly the columns it did before).
+      const freeDeliveryReason = basketFree ? ('BASKET_THRESHOLD' as const) : free?.applies ? ('NEW_CUSTOMER' as const) : null;
 
       // 0b. Coupon (migration 018): locked and re-validated here, so limits
       //     hold when checkouts race; the preview the app showed is advisory.
@@ -327,6 +347,11 @@ export class OrderRepository {
           delivery_longitude: data.delivery_longitude,
           delivery_instructions: data.delivery_instructions,
           customer_notes: data.customer_notes,
+          // Migrations 042/043 (owner, 2026-10-12): written only when set; the
+          // columns default to false / NULL.
+          ...(freeDeliveryReason ? { free_delivery_reason: freeDeliveryReason } : {}),
+          ...(data.ordered_for_someone_else ? { ordered_for_someone_else: true } : {}),
+          ...(data.delivery_needs_help ? { delivery_needs_help: true } : {}),
           placed_at: new Date(),
         })
         .returningAll()

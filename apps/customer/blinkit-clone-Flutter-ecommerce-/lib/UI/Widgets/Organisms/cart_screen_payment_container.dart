@@ -33,7 +33,7 @@ String placeOrderFailureMessage(CustomerError failure) => failure.isTimeout
 /// worth showing as is: STORE_CLOSED says when the store opens again (it
 /// knows the closure reason and the hours Ops/Admin set), and the slot ones
 /// say what happened to the picked time (owner, 2026-10-10).
-const Set<String> serverWordedOrderRefusals = {'STORE_CLOSED', 'SLOT_UNAVAILABLE', 'SLOT_FULL'};
+const Set<String> serverWordedOrderRefusals = {'STORE_CLOSED', 'SLOT_UNAVAILABLE', 'SLOT_FULL', 'FOR_SOMEONE_ELSE_DISABLED'};
 
 /// The toast for a failed place-order, from what was thrown: the server's
 /// own sentence for [serverWordedOrderRefusals] (4xx messages are kept by
@@ -71,6 +71,15 @@ class CartScreenPaymentContainer extends StatelessWidget {
       return;
     }
 
+    // Order for someone else (owner, 2026-10-12): the receiver's name and
+    // mobile must be valid before anything is sent (the server checks again).
+    final allowForSomeoneElse = context.read<StoreInfoProvider?>()?.someoneElseOrdering?.enabled ?? false;
+    final problem = orderProvider.checkoutDetailsProblem(allowForSomeoneElse: allowForSomeoneElse);
+    if (problem != null) {
+      showAppToast(msg: problem);
+      return;
+    }
+
     try {
       // The backend independently verifies the delivery geofence,
       // recalculates prices, and computes the real total from its own
@@ -82,6 +91,7 @@ class CartScreenPaymentContainer extends StatelessWidget {
         cart: cart,
         addressId: address.id,
         deliverySlotStart: orderProvider.selectedSlot?.start,
+        allowForSomeoneElse: allowForSomeoneElse,
       );
       // The order took the birthday gift (owner, 2026-10-09): stop offering
       // it at once rather than until the next checkout-info.

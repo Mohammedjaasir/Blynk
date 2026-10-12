@@ -1,5 +1,34 @@
 import { z } from 'zod';
 import { orderComboLineSchema } from '../catalog/catalog.combos.js';
+import { normalizeSriLankanPhone } from '../../utils/phone.js';
+
+/**
+ * The receiver of an order placed "For someone else" (owner, 2026-10-12): for
+ * this order only - the saved address is not changed. The phone must be a
+ * Sri Lankan mobile (it gets the order texts); it is NOT verified, so no
+ * customer-written text is ever put in an SMS to it.
+ */
+export const orderRecipientSchema = z
+  .object({
+    name: z
+      .string({ required_error: "The receiver's name is required", invalid_type_error: "The receiver's name must be text" })
+      .trim()
+      .min(2, "The receiver's name must be at least 2 characters")
+      .max(128, "The receiver's name can be at most 128 characters"),
+    phone: z
+      .string({ required_error: "The receiver's phone is required", invalid_type_error: "The receiver's phone must be text" })
+      .trim()
+      // Reported as a zod issue (400 VALIDATION_ERROR), as in address.schema.ts.
+      .transform((val, ctx) => {
+        try {
+          return normalizeSriLankanPhone(val);
+        } catch {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "The receiver's phone must be a Sri Lankan mobile number" });
+          return z.NEVER;
+        }
+      }),
+  })
+  .strict();
 
 export const orderItemInputSchema = z.object({
   product_id: z.string().uuid('Invalid product_id UUID'),
@@ -47,9 +76,30 @@ export const createOrderSchema = z.object({
     .datetime({ offset: true, message: 'delivery_slot_start must be a date and time' })
     .nullable()
     .optional(),
+  /**
+   * Order for someone else (owner, 2026-10-12): true with `recipient` sends
+   * the order to that person (name + phone for this order only). Refused with
+   * 422 FOR_SOMEONE_ELSE_DISABLED while staff have it switched off.
+   */
+  for_someone_else: z.boolean({ invalid_type_error: 'for_someone_else must be true or false' }).optional(),
+  recipient: orderRecipientSchema.optional(),
+  /**
+   * A note for the rider for this order (e.g. "Gate code 12, second floor"),
+   * shown instead of the saved address's delivery instructions. Shown to the
+   * rider and staff only - never put in an SMS.
+   */
+  delivery_note: z.string({ invalid_type_error: 'delivery_note must be text' }).trim().max(500).nullable().optional(),
+  /** "Elderly / needs help - please knock and wait, carry items inside" (owner, 2026-10-12). */
+  needs_help: z.boolean({ invalid_type_error: 'needs_help must be true or false' }).optional(),
 }).refine((v) => v.items.length + (v.combos?.length ?? 0) > 0, {
   message: 'At least one order item is required',
   path: ['items'],
+}).refine((v) => v.for_someone_else !== true || v.recipient !== undefined, {
+  message: "Add the receiver's name and phone",
+  path: ['recipient'],
+}).refine((v) => v.recipient === undefined || v.for_someone_else === true, {
+  message: 'A receiver can only be given for an order for someone else',
+  path: ['recipient'],
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;

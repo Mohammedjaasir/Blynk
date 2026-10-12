@@ -121,7 +121,18 @@ export function OrderPanel({
           </section>
 
           <section className="order-panel__section" aria-label="Customer">
-            <h3 className="order-panel__label">Customer</h3>
+            <h3 className="order-panel__label">{detail.ordered_for_someone_else ? 'Receiver' : 'Customer'}</h3>
+            {/* Owner, 2026-10-12: ordered for family, and "needs help at the door". */}
+            {detail.ordered_for_someone_else ? (
+              <p className="order-panel__meta" data-testid="order-for-someone-else">
+                Ordered for someone else - the receiver gets the order texts.
+              </p>
+            ) : null}
+            {detail.delivery_needs_help ? (
+              <p className="order-panel__note" data-testid="order-needs-help">
+                Needs help: please knock and wait, carry items inside.
+              </p>
+            ) : null}
             <p className="order-panel__strong">{detail.delivery_recipient_name}</p>
             <a
               className="link mono"

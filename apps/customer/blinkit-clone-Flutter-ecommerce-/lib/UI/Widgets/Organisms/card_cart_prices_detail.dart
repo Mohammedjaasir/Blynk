@@ -94,9 +94,13 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
     final cart = context.watch<CartProvider>();
     final subtotal = cart.subtotal;
     final itemCount = cart.itemCount;
-    final deliveryFee = watchCheckoutDeliveryFee(context);
+    // Free delivery above a basket amount (owner, 2026-10-12): 0 once this
+    // cart's subtotal reaches it. The server re-prices and decides.
+    final deliveryFee = watchCheckoutDeliveryFeeFor(context, subtotal);
+    final basket = context.watch<StoreInfoProvider?>()?.basketFreeDelivery;
+    final basketFree = basket != null && basket.reachedBy(subtotal);
     final offer = context.watch<StoreInfoProvider?>()?.freeDelivery;
-    final freeDelivery = offer != null && offer.applies;
+    final freeDelivery = basketFree || (offer != null && offer.applies);
     final coupon = widget.showCoupon ? context.watch<OrderProvider>().couponFor(cart) : null;
     final birthday = widget.showBirthday ? watchEligibleBirthdayOffer(context) : null;
     // The gift and a coupon never stack (owner, 2026-10-09). A previewed
@@ -167,7 +171,9 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
             ),
             const SizedBox(height: BlynkSpace.s4),
             Text(
-              freeDeliveryNote(offer),
+              // The basket amount first: then no free delivery is used up.
+              basketFree ? basketFreeDeliveryNote(basket) : freeDeliveryNote(offer!),
+              key: basketFree ? const Key('summary-basket-free-note') : null,
               style: BlynkText.caption.copyWith(color: BlynkColors.positiveInk),
             ),
           ] else
@@ -178,6 +184,11 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
               detail: watchDeliveryDistanceLabel(context),
               detailKey: const Key('summary-delivery-distance'),
             ),
+          // "Add LKR X more for free delivery" while the basket is short of it.
+          if (basket != null && basket.enabled && !basketFree) ...[
+            const SizedBox(height: BlynkSpace.s8),
+            BasketFreeDeliveryProgress(basket: basket, subtotal: subtotal),
+          ],
           if (birthdayGift > 0) ...[
             const SizedBox(height: BlynkSpace.s8),
             Row(
@@ -267,6 +278,54 @@ class _CartPriceDetailWidgetState extends State<CartPriceDetailWidget> {
 String freeDeliveryNote(FreeDeliveryOffer offer) {
   final plural = offer.count == 1 ? 'delivery' : 'deliveries';
   return 'Free delivery — ${offer.remaining} of ${offer.count} free $plural left.';
+}
+
+/// The line under a FREE delivery fee reached by the basket amount (owner,
+/// 2026-10-12), e.g. "Free delivery on orders of LKR 3,000 or more."
+String basketFreeDeliveryNote(BasketFreeDelivery basket) =>
+    'Free delivery on orders of ${formatLkr(basket.minSubtotal)} or more.';
+
+/// "Add LKR 450 more for free delivery" (owner, 2026-10-12).
+String basketFreeDeliveryPrompt(BasketFreeDelivery basket, double subtotal) =>
+    'Add ${formatLkr(basket.remainingFor(subtotal))} more for free delivery';
+
+/// How far the cart is towards free delivery by the basket amount, with the
+/// LKR still to add (owner, 2026-10-12). Drawn only while it is switched on
+/// and not reached; never on the website.
+class BasketFreeDeliveryProgress extends StatelessWidget {
+  const BasketFreeDeliveryProgress({super.key, required this.basket, required this.subtotal});
+
+  final BasketFreeDelivery basket;
+  final double subtotal;
+
+  static const Key progressKey = Key('basket-free-delivery-progress');
+
+  @override
+  Widget build(BuildContext context) {
+    final prompt = basketFreeDeliveryPrompt(basket, subtotal);
+    return Semantics(
+      container: true,
+      label: prompt,
+      excludeSemantics: true,
+      child: Column(
+        key: progressKey,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(prompt, style: BlynkText.caption.copyWith(color: BlynkColors.ink2)),
+          const SizedBox(height: BlynkSpace.s4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(BlynkSpace.s4),
+            child: LinearProgressIndicator(
+              value: basket.progressFor(subtotal),
+              minHeight: 6,
+              backgroundColor: BlynkColors.line,
+              color: BlynkColors.positiveInk,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// A green "−LKR 150" line (owner, 2026-10-10).

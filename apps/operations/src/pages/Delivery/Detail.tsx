@@ -247,6 +247,17 @@ export function Detail() {
         {data.delivery_address_line2 ? <p>{data.delivery_address_line2}</p> : null}
         <p>{data.delivery_city}</p>
         {data.delivery_instructions && !done ? <p className="order-detail__note">"{data.delivery_instructions}"</p> : null}
+        {/* Owner, 2026-10-12: "needs help at the door", and ordered for family. */}
+        {data.delivery_needs_help && !done ? (
+          <p className="order-detail__note" data-testid="delivery-needs-help">
+            Needs help: please knock and wait, carry items inside.
+          </p>
+        ) : null}
+        {data.ordered_for_someone_else ? (
+          <p className="order-detail__meta" data-testid="delivery-for-someone-else">
+            Ordered by family for this person - hand it to the receiver below.
+          </p>
+        ) : null}
       </section>
 
       <section className="order-detail__section" aria-label="Customer">
