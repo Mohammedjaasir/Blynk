@@ -226,6 +226,12 @@ export class OrderRepository {
    */
   async createOrderAtomic(data: CreateOrderData) {
     return await db.transaction().execute(async (trx) => {
+      // Serialise every checkout of this customer before any per-customer
+      // rule (first-order coupon, free deliveries, birthday, referral,
+      // points): two racing checkouts must not both see "no earlier order"
+      // (security audit 2026-10). The later steps re-take this same lock.
+      await trx.selectFrom('users').select('id').where('id', '=', data.customer_id).forNoKeyUpdate().executeTakeFirst();
+
       // 0. Delivery slot (owner, 2026-10-10): one transaction-scoped advisory
       //    lock per slot start, then count the non-cancelled orders in it.
       if (data.delivery_slot && data.scheduled_for) {

@@ -15,6 +15,19 @@ import { isEmailOnlyRole, publicPhone } from '../../utils/phone.js';
 
 const otpSms = new SmsProvider();
 
+
+/**
+ * Whether POST /auth/otp/request returns the code as dev_otp (and logs it).
+ * Fails closed (security audit 2026-10): always under NODE_ENV=test (the
+ * automated suites), in development only with EXPOSE_DEV_OTP=true, and never
+ * in production. A server started without NODE_ENV is "development", so the
+ * code is not exposed by accident.
+ */
+export function shouldExposeDevOtp(e: { NODE_ENV: string; EXPOSE_DEV_OTP: boolean }): boolean {
+  if (e.NODE_ENV === 'test') return true;
+  return e.NODE_ENV === 'development' && e.EXPOSE_DEV_OTP === true;
+}
+
 export interface RequestOtpResult {
   message: string;
   expires_in_seconds: number;
@@ -207,9 +220,9 @@ export class AuthService {
         { provider: sms.providerName, errorType: sms.errorType, error: sms.errorMessage },
         'OTP SMS delivery failed'
       );
-      // In production a code nobody receives is a dead end: say so. Outside
-      // production the dev_otp below still lets sign-in proceed.
-      if (env.NODE_ENV === 'production') {
+      // A code nobody receives is a dead end: say so - unless dev_otp below
+      // hands it back (test, or development with EXPOSE_DEV_OTP=true).
+      if (!shouldExposeDevOtp(env)) {
         throw new AppError(
           'We could not send the verification code. Please try again shortly.',
           502,
@@ -218,8 +231,9 @@ export class AuthService {
       }
     }
 
-    // In dev / test environments, attach dev_otp to allow automated verification
-    const isDevOrTest = env.NODE_ENV !== 'production';
+    // Fails closed (security audit 2026-10): only NODE_ENV=test, or
+    // development with EXPOSE_DEV_OTP=true, ever sees the code.
+    const isDevOrTest = shouldExposeDevOtp(env);
     if (isDevOrTest) {
       logger.debug({ phone, dev_otp: otp }, '[DEV/TEST ONLY] Plaintext OTP generated');
     }

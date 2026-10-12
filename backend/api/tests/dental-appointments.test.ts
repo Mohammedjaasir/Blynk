@@ -191,6 +191,66 @@ describe('Dental appointments API (POST/GET /api/v1/dental/appointments)', () =>
       expect(await fx.history(held.id)).toHaveLength(1);
     });
 
+    // Security audit 2026-10: a HELD row made before staff blocked the date
+    // must not be reclaimed (or confirmed) on the blocked day.
+    it('refuses re-holding your own live slot once its date is blocked, and the confirm too', async () => {
+      const held = await heldSlot(alice);
+      await fx.blockDate(held.clinicDoctorId, REFERENCE_MONDAY); // direct insert: the HELD row stays live
+
+      const res = await hold(alice, held.clinicDoctorId, held.startAt);
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('SLOT_UNAVAILABLE');
+      expect(res.body.error.details).toEqual({ reason: 'BLOCKED' });
+
+      const confirmed = await confirm(alice, held.id);
+      expect(confirmed.status).toBe(409);
+      expect(confirmed.body.error.code).toBe('SLOT_UNAVAILABLE');
+      expect((await fx.appointmentRow(held.id)).status).toBe('HELD');
+    });
+
+    it("refuses another customer reclaiming an expired hold on a blocked date", async () => {
+      const held = await heldSlot(alice);
+      await fx.blockDate(held.clinicDoctorId, REFERENCE_MONDAY);
+      await fx.expireHold(held.id);
+
+      const res = await hold(bob, held.clinicDoctorId, held.startAt);
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('SLOT_UNAVAILABLE');
+      const row = await fx.appointmentRow(held.id);
+      expect(row.customer_id).toBe(alice.id);
+    });
+
+    it('refuses reclaiming a slot that is no longer on the template', async () => {
+      const held = await heldSlot(alice);
+      await pool.query('DELETE FROM doctor_availability WHERE clinic_doctor_id = $1', [held.clinicDoctorId]);
+
+      const res = await hold(alice, held.clinicDoctorId, held.startAt);
+      expect(res.status).toBe(409);
+      expect(res.body.error.details).toEqual({ reason: 'NOT_ON_TEMPLATE' });
+    });
+
+    it('blocking a date in Admin/Ops expires the live holds on that date only', async () => {
+      const held = await heldSlot(alice);
+      // A hold on another day stays live.
+      const other = await heldSlot(bob);
+      await pool.query(
+        `UPDATE appointments SET start_at = start_at + interval '7 days', end_at = end_at + interval '7 days' WHERE id = $1`,
+        [other.id]
+      );
+
+      const res = await request(app)
+        .post(`/api/v1/admin/dental/clinic-doctors/${held.clinicDoctorId}/blocked-dates`)
+        .set(auth(adminToken))
+        .send({ blocked_date: REFERENCE_MONDAY, reason: 'Clinic closed' });
+      expect(res.status).toBe(201);
+
+      expect(new Date((await fx.appointmentRow(held.id)).held_until).getTime()).toBeLessThanOrEqual(Date.now());
+      expect(new Date((await fx.appointmentRow(other.id)).held_until).getTime()).toBeGreaterThan(Date.now());
+      const confirmed = await confirm(alice, held.id);
+      expect(confirmed.status).toBe(410);
+      expect(confirmed.body.error.code).toBe('HOLD_EXPIRED');
+    });
+
     it('replays an identical idempotency key instead of creating a second appointment (body field)', async () => {
       const s = await fx.slot();
       const key = 'b3a-idem-body-1';

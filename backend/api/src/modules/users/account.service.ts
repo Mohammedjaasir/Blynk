@@ -62,8 +62,71 @@ export async function deleteCustomerAccount(userId: string, actor: AuditActor): 
     }
 
     riderDocumentIds = await riderDocumentService.deleteForUser(trx, userId, user.phone);
+    // A waiting or rejected rider application goes with the account, so a
+    // later approval cannot bring the account back as an active RIDER, and
+    // its details leave the review queue (security audit 2026-10). A row
+    // with deliveries or cash records (never expected for a CUSTOMER) is
+    // kept - approval refuses a switched-off account anyway.
+    const ridersRemoved = await trx
+      .deleteFrom('riders')
+      .where('user_id', '=', userId)
+      .where('approval_status', '!=', 'APPROVED')
+      .where(({ not, exists, selectFrom }) =>
+        not(exists(selectFrom('deliveries').select('deliveries.id').whereRef('deliveries.rider_id', '=', 'riders.id')))
+      )
+      .where(({ not, exists, selectFrom }) =>
+        not(exists(selectFrom('cash_handins').select('cash_handins.id').whereRef('cash_handins.rider_id', '=', 'riders.id')))
+      )
+      .executeTakeFirst();
 
     const now = new Date();
+
+    // Dental bookings (owner, 2026-10-12): upcoming HELD/CONFIRMED ones are
+    // cancelled as the customer's own cancellation - no SMS to the patient -
+    // and the patient's name, phone and notes are removed from every one of
+    // their appointments (the in-app promise: name and phone are removed).
+    const upcoming = await trx
+      .selectFrom('appointments')
+      .select(['id', 'status'])
+      .where('customer_id', '=', userId)
+      .where('status', 'in', ['HELD', 'CONFIRMED'])
+      .where('start_at', '>', now)
+      .forUpdate()
+      .execute();
+    if (upcoming.length) {
+      await trx
+        .updateTable('appointments')
+        .set({
+          status: 'CANCELLED_BY_CUSTOMER',
+          held_until: null,
+          cancelled_by: userId,
+          cancellation_reason: 'Account deleted',
+          updated_at: now,
+        })
+        .where(
+          'id',
+          'in',
+          upcoming.map((a) => a.id)
+        )
+        .execute();
+      await trx
+        .insertInto('appointment_status_history')
+        .values(
+          upcoming.map((a) => ({
+            appointment_id: a.id,
+            old_status: a.status,
+            new_status: 'CANCELLED_BY_CUSTOMER' as const,
+            changed_by: userId,
+          }))
+        )
+        .execute();
+    }
+    await trx
+      .updateTable('appointments')
+      .set({ patient_name: null, patient_phone: null, patient_notes: null, updated_at: now })
+      .where('customer_id', '=', userId)
+      .where((eb) => eb.or([eb('patient_name', 'is not', null), eb('patient_phone', 'is not', null), eb('patient_notes', 'is not', null)]))
+      .execute();
     await trx
       .updateTable('users')
       .set({
@@ -108,6 +171,8 @@ export async function deleteCustomerAccount(userId: string, actor: AuditActor): 
         addresses_removed: Number(addresses.numDeletedRows),
         devices_removed: Number(devices.numDeletedRows),
         rider_documents_removed: riderDocumentIds.length,
+        rider_applications_removed: Number(ridersRemoved.numDeletedRows),
+        appointments_cancelled: upcoming.length,
       },
     });
 

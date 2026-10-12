@@ -84,6 +84,7 @@ describe('Admin app access', () => {
       'Rider cash',
       'Rider earnings',
       'Products',
+      'Bulk upload (Excel)',
       'Categories',
       'Category groups',
       'Combo packs',

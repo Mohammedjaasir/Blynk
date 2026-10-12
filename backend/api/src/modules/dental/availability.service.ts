@@ -156,7 +156,9 @@ export class AvailabilityService {
     clinicDoctorId: string,
     startAt: Date,
     executor: DentalExecutor = db,
-    now: Date = new Date()
+    now: Date = new Date(),
+    /** The reclaim branch's own locked row: its occupancy does not count. */
+    ignoreAppointmentId?: string
   ): Promise<ResolvedSlot> {
     const target = startAt.getTime();
     // Checked first, and before any query: a past instant is not a slot at
@@ -195,7 +197,8 @@ export class AvailabilityService {
       clinicDoctorId,
       start,
       end,
-      executor
+      executor,
+      ignoreAppointmentId
     );
     if (buildOccupiedSet(occupyingRows, now).has(target)) {
       return { ok: false, reason: 'OCCUPIED' };

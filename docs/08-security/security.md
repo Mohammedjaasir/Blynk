@@ -346,7 +346,7 @@ All queries use the Kysely query builder with typed schemas. No string interpola
 ## 15. Sensitive Data Handling
 
 ### Never Logged
-- OTP plaintext (only logged in dev/test as dev_otp)
+- OTP plaintext (only returned/logged as dev_otp under NODE_ENV=test, or NODE_ENV=development with EXPOSE_DEV_OTP=true; never in production)
 - Access tokens
 - Refresh tokens
 - Authorization header

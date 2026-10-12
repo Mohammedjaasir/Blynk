@@ -19,8 +19,18 @@ export const MESSAGES: Record<string, string> = {
   TIMEOUT: "The server didn't answer. Check before trying again.",
 };
 
+/**
+ * Codes whose server message is already written for the operator and is
+ * shown as it is (it names what was refused), before the generic 403 text.
+ */
+export const SERVER_WORDED: Record<string, string> = {
+  // Owner, 2026-10-12: cash, pay and points are never recorded for yourself.
+  CANNOT_RECORD_FOR_SELF: "You can't do this for your own account. Please ask another staff member to do it.",
+};
+
 export function errorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
   if (err instanceof ApiError) {
+    if (err.code && SERVER_WORDED[err.code]) return err.message || SERVER_WORDED[err.code];
     if (err.code && MESSAGES[err.code]) return MESSAGES[err.code];
     if (err.status === 403) return MESSAGES.FORBIDDEN;
     if (err.status >= 500) return 'The Blynk API had a problem. Try again in a moment.';

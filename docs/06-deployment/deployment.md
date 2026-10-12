@@ -95,6 +95,9 @@ Runtime environment variables are validated at bootstrap using Zod schema refine
 | `SMS_API_KEY` | Placeholder allowed (mock fallback) | Required live gateway credential; mock prohibited |
 | `SMS_USER_ID` | Placeholder allowed | Required live gateway credential |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Optional: unset means push is off (every push is a no-op) | Optional; set it to turn on app push notifications (see section 8) |
+| `TRUST_PROXY` | `loopback, linklocal, uniquelocal` | Express `trust proxy`: the hops allowed to set `X-Forwarded-For` (the reverse proxy). Per-IP limits use `req.ip`, never the raw header. Keep the default behind Coolify/Traefik on the same host/network |
+| `TRUST_CLOUDFLARE_HEADER` | `false` | Set `true` ONLY if the origin is reachable solely through Cloudflare (firewall to Cloudflare ranges or a Tunnel); then `CF-Connecting-IP` is the client IP |
+| `EXPOSE_DEV_OTP` | `false` (development); `test` always returns `dev_otp` | Ignored: production never returns `dev_otp`. In development the code is returned only when this is `true` |
 
 ---
 

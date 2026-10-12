@@ -86,6 +86,12 @@ services:
       OTP_SECRET: ${OTP_SECRET:-dev_otp_hmac_secret_min_32_chars_random_string!}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Security audit 2026-10: client IP from trusted proxy hops only; CF
+      # header only when the origin is reachable solely through Cloudflare;
+      # dev_otp off unless explicitly enabled (development only).
+      TRUST_PROXY: ${TRUST_PROXY:-loopback, linklocal, uniquelocal}
+      TRUST_CLOUDFLARE_HEADER: ${TRUST_CLOUDFLARE_HEADER:-false}
+      EXPOSE_DEV_OTP: ${EXPOSE_DEV_OTP:-false}
       # Dedicated worker container handles outbox polling; disable in API process to prevent race conditions
       NOTIFICATION_WORKER_ENABLED: "false"
       SMS_PROVIDER: ${SMS_PROVIDER:-notifylk}

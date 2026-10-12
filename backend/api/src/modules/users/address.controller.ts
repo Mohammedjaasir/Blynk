@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { addressService } from './address.service.js';
+import { AppError } from '../../middleware/error.middleware.js';
 import { createAddressSchema, updateAddressSchema, updateProfileSchema } from './address.schema.js';
 
 export class AddressController {
@@ -18,6 +19,11 @@ export class AddressController {
   async updateProfile(req: Request, res: Response, next: NextFunction) {
     try {
       const input = updateProfileSchema.parse(req.body);
+      // Staff sign in with their email: it changes only on the audited Staff
+      // page, never here (security audit 2026-10).
+      if (input.email !== undefined && req.user!.role !== 'CUSTOMER') {
+        throw new AppError('Staff email is changed by an admin on the Staff page.', 403, 'STAFF_EMAIL_MANAGED');
+      }
       const profile = await addressService.updateProfile(req.user!.id, input);
       res.status(200).json({
         success: true,

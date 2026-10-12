@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from './auth.service.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { clientIp as clientIpOf } from '../../utils/client-ip.js';
 
 export async function requestOtpController(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const clientIp = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+    const clientIp = clientIpOf(req) ?? 'unknown';
     const result = await authService.requestOtp(req.body.phone, clientIp);
 
     res.status(200).json({
@@ -18,7 +19,7 @@ export async function requestOtpController(req: Request, res: Response, next: Ne
 
 export async function verifyOtpController(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const clientIp = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || undefined;
+    const clientIp = clientIpOf(req) ?? undefined;
     const deviceInfo = req.headers['user-agent'] || undefined;
 
     const result = await authService.verifyOtp(req.body.phone, req.body.otp, {
@@ -39,7 +40,7 @@ export async function verifyOtpController(req: Request, res: Response, next: Nex
 
 export async function refreshTokensController(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const clientIp = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || undefined;
+    const clientIp = clientIpOf(req) ?? undefined;
     const deviceInfo = req.headers['user-agent'] || undefined;
 
     const result = await authService.refreshTokens(req.body.refresh_token, {
@@ -91,7 +92,7 @@ export async function getCurrentUserController(req: Request, res: Response, next
 
 export async function staffLoginController(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const clientIp = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || undefined;
+    const clientIp = clientIpOf(req) ?? undefined;
     const deviceInfo = req.headers['user-agent'] || undefined;
     const result = await authService.loginWithPassword(req.body.email, req.body.password, {
       ipAddress: clientIp,

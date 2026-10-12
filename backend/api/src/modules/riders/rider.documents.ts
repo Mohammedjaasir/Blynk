@@ -9,6 +9,7 @@ import { env } from '../../config/env.js';
 import { db } from '../../database/connection.js';
 import type { Database, RiderApprovalStatus, RiderDocumentImage, RiderDocumentStatus, UserRole } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { clientIp } from '../../utils/client-ip.js';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
@@ -513,10 +514,12 @@ export class RiderDocumentService {
         message: 'Too many tries from this device. Please wait before retrying.',
       },
     ]);
-    // Email-only and staff numbers are refused before the code is spent.
-    await resolveApplicant(db, phone);
+    // Prove the phone first: nothing about the number (staff, switched off,
+    // already a customer) is said before the code checks out (security audit
+    // 2026-10). checkOtp does not spend the code.
     const otpId = await authService.checkOtp(phone, otp);
     await db.transaction().execute(async (trx) => {
+      // Staff and switched-off numbers are refused here, with the code still unspent.
       const owner = await resolveApplicant(trx, phone);
       // (owner, 2026-10-11: "for my number I don't need this") an approved
       // rider gets no application screen: refused with the code still
@@ -1193,7 +1196,6 @@ export const riderDocumentService = new RiderDocumentService();
 // Routes
 // ----------------------------------------------------------------------------
 
-const clientIp = (req: Request) => req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || null;
 const actorOf = (req: Request): AuditActor => ({
   actorId: req.user!.id,
   ipAddress: req.ip ?? null,

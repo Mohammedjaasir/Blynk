@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
+import { AppError } from '../../middleware/error.middleware.js';
 import { CreateAddressInput, UpdateAddressInput } from './address.schema.js';
 
 export class AddressRepository {
@@ -195,11 +196,25 @@ export class AddressRepository {
       favourites_note?: string | null;
     }
   ) {
+    try {
+      return await this.writeUserProfile(id, data);
+    } catch (err) {
+      // An address already in use - by anyone, staff included - gets one
+      // answer that does not say whose it is (security audit 2026-10).
+      const e = err as { code?: string; constraint?: string };
+      if (e.code === '23505' && (e.constraint === 'users_email_lower_key' || e.constraint === 'users_email_key')) {
+        throw new AppError('This email address cannot be used. Please try another one.', 409, 'EMAIL_UNAVAILABLE');
+      }
+      throw err;
+    }
+  }
+
+  private async writeUserProfile(id: string, data: Parameters<AddressRepository['updateUserProfile']>[1]) {
     const [record] = await db
       .updateTable('users')
       .set({
         ...(data.full_name !== undefined ? { full_name: data.full_name } : {}),
-        ...(data.email !== undefined ? { email: data.email } : {}),
+        ...(data.email !== undefined ? { email: data.email.toLowerCase() } : {}),
         ...(data.sms_language !== undefined ? { sms_language: data.sms_language } : {}),
         // Keep the first opt-out time; turning offers back on clears it.
         ...(data.sms_offers === true ? { sms_offers_opted_out_at: null } : {}),

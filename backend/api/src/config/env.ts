@@ -25,6 +25,23 @@ const envSchema = z.object({
   // CORS
   CORS_ORIGINS: z.string().default('*'),
 
+  // Client IP behind proxies (security audit 2026-10). Express "trust proxy":
+  // which hops may set X-Forwarded-For. The default trusts loopback,
+  // link-local and private ranges (the reverse proxy on the same host or
+  // Docker network). Also "true", "false", a hop count, or an address list.
+  TRUST_PROXY: z.string().default('loopback, linklocal, uniquelocal'),
+  // Prefer Cloudflare's CF-Connecting-IP header. Enable ONLY when the origin
+  // is reachable solely through Cloudflare - otherwise anyone can forge it.
+  TRUST_CLOUDFLARE_HEADER: z
+    .preprocess((val) => (val === 'true' ? true : val === 'false' || val === undefined || val === '' ? false : val), z.boolean())
+    .default(false),
+  // dev_otp (the sign-in code in the API response) is returned only when
+  // NODE_ENV=test, or NODE_ENV=development AND this is "true". Never in
+  // production, whatever this says (security audit 2026-10).
+  EXPOSE_DEV_OTP: z
+    .preprocess((val) => (val === 'true' ? true : val === 'false' || val === undefined || val === '' ? false : val), z.boolean())
+    .default(false),
+
   // Media storage (admin-uploaded product / promotion images).
   // MEDIA_ROOT is a directory on the API host; PUBLIC_BASE_URL is the
   // origin clients use to fetch what's stored there.

@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
+import type { DentalExecutor } from './dental.repository.js';
 import { DentalAppointmentStatus, DentalSpecialty } from '../../database/types.js';
 
 /** Postgres unique-constraint names this repository translates into clean
@@ -281,13 +282,36 @@ export class DentalAdminRepository {
       .execute();
   }
 
-  async createBlockedDate(data: {
-    clinic_doctor_id: string;
-    blocked_date: string;
-    reason: string;
-    created_by: string;
-  }) {
-    return await db.insertInto('doctor_blocked_dates').values(data).returningAll().executeTakeFirstOrThrow();
+  async createBlockedDate(
+    data: {
+      clinic_doctor_id: string;
+      blocked_date: string;
+      reason: string;
+      created_by: string;
+    },
+    executor: DentalExecutor = db
+  ) {
+    return await executor.insertInto('doctor_blocked_dates').values(data).returningAll().executeTakeFirstOrThrow();
+  }
+
+  /**
+   * Blocking a date ends the live holds on it (security audit 2026-10):
+   * held_until moves to now, the module's lazy-expiry convention (EXPIRED is
+   * never written), so the hold can neither be confirmed nor reclaimed.
+   * CONFIRMED bookings are left for staff to cancel with a reason.
+   */
+  async expireHoldsBetween(executor: DentalExecutor, clinicDoctorId: string, fromUtc: Date, toUtc: Date) {
+    const now = new Date();
+    const result = await executor
+      .updateTable('appointments')
+      .set({ held_until: now, updated_at: now })
+      .where('clinic_doctor_id', '=', clinicDoctorId)
+      .where('status', '=', 'HELD')
+      .where('start_at', '>=', fromUtc)
+      .where('start_at', '<', toUtc)
+      .where('held_until', '>', now)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows);
   }
 
   async deleteBlockedDate(id: string): Promise<boolean> {

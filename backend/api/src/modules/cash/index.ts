@@ -10,6 +10,8 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { publicPhone } from '../../utils/phone.js';
 import { STORE_ZONE } from '../reports/sales.service.js';
 import { dayCash, riderLedger } from '../riders/rider.pay-ledger.js';
+import { assertNotOwnRider } from '../riders/self-record.js';
+import { writeAudit } from '../audit/audit.writer.js';
 
 /*
  * Rider cash reconciliation (migration 019). Riders collect COD cash - the
@@ -117,6 +119,7 @@ export async function createHandin(input: CreateHandinInput, userId: string) {
     .where('approval_status', '=', 'APPROVED')
     .executeTakeFirst();
   if (!rider) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
+  await assertNotOwnRider(input.rider_id, userId);
   const row = await db
     .insertInto('cash_handins')
     .values({
@@ -129,6 +132,37 @@ export async function createHandin(input: CreateHandinInput, userId: string) {
     .returning('id')
     .executeTakeFirstOrThrow();
   return presentHandin(await handinQuery().where('h.id', '=', row.id).executeTakeFirstOrThrow());
+}
+
+/**
+ * Removes a mistyped hand-in - never one of the admin's own (owner,
+ * 2026-10-12) - and audits what it was (CASH_HANDIN_DELETED; security
+ * audit 2026-10).
+ */
+export async function deleteHandin(id: string, actor: { actorId: string; ipAddress?: string | null; userAgent?: string | null }) {
+  await db.transaction().execute(async (trx) => {
+    const before = await trx
+      .selectFrom('cash_handins')
+      .select(['id', 'rider_id', 'amount', sql<string>`handin_date::text`.as('handin_date'), 'note', 'recorded_by_user_id'])
+      .where('id', '=', id)
+      .forUpdate()
+      .executeTakeFirst();
+    if (!before) throw new AppError('Hand-in not found.', 404, 'HANDIN_NOT_FOUND');
+    await assertNotOwnRider(before.rider_id, actor.actorId, trx);
+    await trx.deleteFrom('cash_handins').where('id', '=', id).execute();
+    await writeAudit(trx, actor, {
+      action: 'CASH_HANDIN_DELETED',
+      entityType: 'CASH_HANDIN',
+      entityId: id,
+      oldValues: {
+        rider_id: before.rider_id,
+        amount: money(before.amount),
+        handin_date: before.handin_date,
+        note: before.note,
+        recorded_by_user_id: before.recorded_by_user_id,
+      },
+    });
+  });
 }
 
 export async function listHandins(params: { date?: string; rider_id?: string }) {
@@ -261,8 +295,11 @@ adminCashRouter.delete(
   requireRoles('ADMIN'),
   validate({ params: z.object({ id: z.string().uuid('Invalid hand-in ID') }) }),
   wrap(async (req, res) => {
-    const deleted = await db.deleteFrom('cash_handins').where('id', '=', req.params.id as string).executeTakeFirst();
-    if (!deleted.numDeletedRows) throw new AppError('Hand-in not found.', 404, 'HANDIN_NOT_FOUND');
+    await deleteHandin(req.params.id as string, {
+      actorId: req.user!.id,
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    });
     res.json({ success: true, data: { deleted: true } });
   })
 );

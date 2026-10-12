@@ -397,6 +397,32 @@ describe('Rider documents', () => {
       const res = await request(app).post('/api/v1/riders/applications/session').send({ phone: local('1'), otp });
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('STAFF_CAN_DELIVER');
+      // Refused with the code still unspent.
+      expect(
+        (await pool.query('SELECT 1 FROM otp_verifications WHERE phone = $1 AND consumed_at IS NULL', [`${PREFIX}1`])).rowCount
+      ).toBe(1);
+    });
+
+    it('says nothing about the number before the SMS code checks out: one 401 INVALID_OTP for all (security audit 2026-10)', async () => {
+      // Every suffix of PREFIX is used by a later test, so the switched-off
+      // account gets its own number, removed again below.
+      const DISABLED = '+94770009519';
+      await pool.query(`INSERT INTO users (phone, full_name, role, is_active) VALUES ($1, 'RD Disabled', 'CUSTOMER', false)`, [DISABLED]);
+      try {
+        // No code issued for any of them.
+        await pool.query(`UPDATE otp_verifications SET consumed_at = now() WHERE phone LIKE $1 AND consumed_at IS NULL`, [`${PREFIX}%`]);
+        const bodies = [];
+        // Operations, switched off, customer, unknown.
+        for (const phone of [local('1'), '0770009519', local('2'), local('9')]) {
+          const res = await request(app).post('/api/v1/riders/applications/session').send({ phone, otp: '123456' });
+          expect(res.status, `${phone}: ${JSON.stringify(res.body)}`).toBe(401);
+          bodies.push({ code: res.body.error.code, message: res.body.error.message });
+        }
+        for (const b of bodies) expect(b).toEqual(bodies[0]);
+        expect(bodies[0].code).toBe('INVALID_OTP');
+      } finally {
+        await pool.query('DELETE FROM users WHERE phone = $1', [DISABLED]);
+      }
     });
   });
 

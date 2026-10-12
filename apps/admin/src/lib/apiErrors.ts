@@ -48,6 +48,9 @@ export function fieldLabel(field: string): string {
 /** Upload refusals (backend media limits) in the operator's words. */
 export const IMAGE_TOO_LARGE_MESSAGE = 'Images must be 2 MB or smaller.';
 
+/** Owner, 2026-10-12: cash, pay and points are never recorded for yourself (403 CANNOT_RECORD_FOR_SELF). */
+export const CANNOT_RECORD_FOR_SELF_MESSAGE = "You can't do this for your own account. Please ask another staff member to do it.";
+
 /**
  * The message to show for a failed request. Validation details are listed
  * per field; `skipFields` leaves out the fields a form already shows inline.
@@ -61,6 +64,7 @@ export function errorMessage(err: unknown, fallback: string, skipFields: Readonl
       return rest.map((issue) => (issue.field ? `${fieldLabel(issue.field)}: ${issue.message}` : issue.message)).join(' ');
     }
     if (err.code === 'FILE_TOO_LARGE' || err.code === 'PAYLOAD_TOO_LARGE') return IMAGE_TOO_LARGE_MESSAGE;
+    if (err.code === 'CANNOT_RECORD_FOR_SELF') return err.message || CANNOT_RECORD_FOR_SELF_MESSAGE;
     return err.message || fallback;
   }
   if (err instanceof Error && err.message) return err.message;

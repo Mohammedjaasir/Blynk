@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '../../database/connection.js';
 import type { Database, RiderApprovalStatus, RiderPayModel, RiderPayType, UserRole } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { clientIp } from '../../utils/client-ip.js';
 import { requireAuth } from '../../middleware/auth.middleware.js';
 import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
@@ -515,12 +516,18 @@ export class RiderApplicationService {
     const row = await trx
       .selectFrom('riders as r')
       .innerJoin('users as u', 'u.id', 'r.user_id')
-      .select(['r.id', 'r.user_id', 'r.approval_status', 'u.phone', 'u.role'])
+      .select(['r.id', 'r.user_id', 'r.approval_status', 'u.phone', 'u.role', 'u.is_active'])
       .where('r.id', '=', id)
       .where('r.applied_at', 'is not', null)
       .forUpdate()
       .executeTakeFirst();
     if (!row || !APPLICANT_ROLES.includes(row.role)) throw notFound();
+    // A switched-off (or deleted) account is never brought back by a review:
+    // approval would set users.is_active = true (security audit 2026-10).
+    // Same answer as "Add rider" (createByStaff).
+    if (!row.is_active) {
+      throw new AppError('This number belongs to an account that is switched off.', 409, 'ACCOUNT_DISABLED');
+    }
     if (row.approval_status !== 'PENDING') throw notPending(row.approval_status);
     return row;
   }
@@ -846,8 +853,6 @@ export async function deleteRiderApplication(id: string, actor: AuditActor) {
 // Routes
 // ----------------------------------------------------------------------------
 
-const clientIp = (req: Request) =>
-  req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || null;
 
 const actorOf = (req: Request): AuditActor => ({
   actorId: req.user!.id,

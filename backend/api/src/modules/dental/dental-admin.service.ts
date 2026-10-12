@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon';
 import { AppError } from '../../middleware/error.middleware.js';
+import { db } from '../../database/connection.js';
 import { DentalAppointmentStatus } from '../../database/types.js';
 import { dentalRepository } from './dental.repository.js';
 import { CLINIC_TIMEZONE } from './availability.service.js';
@@ -328,11 +329,25 @@ export class DentalAdminService {
     }
 
     try {
-      const created = await dentalAdminRepository.createBlockedDate({
-        clinic_doctor_id: clinicDoctorId,
-        blocked_date: input.blocked_date,
-        reason: input.reason,
-        created_by: createdBy,
+      const created = await db.transaction().execute(async (trx) => {
+        const row = await dentalAdminRepository.createBlockedDate(
+          {
+            clinic_doctor_id: clinicDoctorId,
+            blocked_date: input.blocked_date,
+            reason: input.reason,
+            created_by: createdBy,
+          },
+          trx
+        );
+        // The clinic-local day, as UTC instants (availability.service.ts's convention).
+        const dayStart = DateTime.fromISO(input.blocked_date, { zone: CLINIC_TIMEZONE }).startOf('day');
+        await dentalAdminRepository.expireHoldsBetween(
+          trx,
+          clinicDoctorId,
+          dayStart.toUTC().toJSDate(),
+          dayStart.plus({ days: 1 }).toUTC().toJSDate()
+        );
+        return row;
       });
       return toBlockedDateDto(created);
     } catch (err) {

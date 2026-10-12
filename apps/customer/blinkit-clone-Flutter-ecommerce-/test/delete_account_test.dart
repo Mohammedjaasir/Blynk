@@ -176,6 +176,10 @@ void main() {
     expect(find.text(DeleteAccountSheet.title), findsOneWidget);
     expect(find.textContaining('saved addresses'), findsOneWidget);
     expect(find.text("Your past orders are kept for the store's records."), findsOneWidget);
+    expect(
+      find.text('Upcoming dental bookings are cancelled, and your name and phone number are removed from them.'),
+      findsOneWidget,
+    );
     expect(find.text("This can't be undone."), findsOneWidget);
     expect(find.widgetWithText(BlynkButton, 'Cancel'), findsOneWidget);
     expect(confirm(), findsOneWidget);

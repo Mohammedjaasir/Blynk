@@ -189,16 +189,19 @@ export class DentalRepository {
     clinicDoctorId: string,
     dayStartUtc: Date,
     dayEndUtc: Date,
-    executor: DentalExecutor = db
+    executor: DentalExecutor = db,
+    excludeAppointmentId?: string
   ) {
-    return await executor
+    let q = executor
       .selectFrom('appointments')
       .select(['start_at', 'status', 'held_until'])
       .where('clinic_doctor_id', '=', clinicDoctorId)
       .where('start_at', '>=', dayStartUtc)
       .where('start_at', '<', dayEndUtc)
-      .where('status', 'in', OCCUPYING_STATUSES)
-      .execute();
+      .where('status', 'in', OCCUPYING_STATUSES);
+    // A reclaim re-checks its own locked row's slot: that row is not "someone else".
+    if (excludeAppointmentId) q = q.where('id', '!=', excludeAppointmentId);
+    return await q.execute();
   }
 }
 

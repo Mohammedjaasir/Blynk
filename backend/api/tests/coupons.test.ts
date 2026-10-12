@@ -294,6 +294,45 @@ describe('Coupons at checkout', () => {
     expect(second.body.error.code).toBe('COUPON_FIRST_ORDER_ONLY');
   });
 
+  it('first-order-only holds when one customer races two checkouts with different coupons (security audit 2026-10)', async () => {
+    // Free deliveries are off in this suite (tests/setup/checkout-settings.ts),
+    // so nothing else locked the customer row before the coupon check.
+    const a = await coupon({ first_order_only: true, per_customer_limit: 5 });
+    const b = await coupon({ first_order_only: true, per_customer_limit: 5 });
+    const me = await people.customer(14);
+    // Hold the customer's row so both checkouts are inside their transactions
+    // at once: before the fix both passed the first-order check and only then
+    // queued on this row (the referral step), never re-checking.
+    const holder = await pool.connect();
+    let results: request.Response[];
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [me.id]);
+      const pending = Promise.all([
+        me.placeOrder([{ product_id: productA, quantity: 1 }], { coupon_code: a.code }).then((r) => r),
+        me.placeOrder([{ product_id: productA, quantity: 1 }], { coupon_code: b.code }).then((r) => r),
+      ]);
+      // Wait until both checkouts are blocked on a lock.
+      for (let i = 0; i < 100; i++) {
+        const { rows } = await pool.query(
+          "SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()"
+        );
+        if (rows[0].n >= 2) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      await holder.query('COMMIT');
+      results = await pending;
+    } finally {
+      holder.release();
+    }
+    expect(results.map((r) => r.status).sort()).toEqual([201, 422]);
+    expect(results.find((r) => r.status === 422)!.body.error.code).toBe('COUPON_FIRST_ORDER_ONLY');
+    const used = (
+      await pool.query('SELECT count(*)::int AS n FROM coupon_redemptions WHERE coupon_id = ANY($1)', [[a.id, b.id]])
+    ).rows[0].n;
+    expect(used).toBe(1);
+  });
+
   it('holds the total usage limit when checkouts race', async () => {
     const c = await coupon({ usage_limit: 1 });
     const buyers = [await people.customer(9), await people.customer(10), await people.customer(11)];

@@ -187,6 +187,8 @@ async function claimReminders(
           AND start_at >= ${window.from}
           AND start_at < ${window.to}
           AND start_at > ${window.after}
+          -- A deleted or switched-off account is never reminded (owner, 2026-10-12).
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = appointments.customer_id AND u.is_active)
           ${opts.appointmentId ? sql`AND id = ${opts.appointmentId}` : sql``}
           ${opts.clinicDoctorIds ? sql`AND clinic_doctor_id = ANY(${opts.clinicDoctorIds}::uuid[])` : sql``}
         ORDER BY start_at

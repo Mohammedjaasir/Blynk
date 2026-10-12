@@ -1,3 +1,4 @@
+import { trustProxySetting } from './utils/client-ip.js';
 import express, { Express } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -34,6 +35,8 @@ import { rewardsMeRouter } from './modules/loyalty/index.js';
 
 export function createApp(): Express {
   const app = express();
+  // req.ip from trusted proxy hops only (TRUST_PROXY; utils/client-ip.ts).
+  app.set('trust proxy', trustProxySetting());
 
   // 1. Core Security & Request ID
   app.use(requestIdMiddleware);

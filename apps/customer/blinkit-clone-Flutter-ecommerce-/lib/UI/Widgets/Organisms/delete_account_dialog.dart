@@ -55,6 +55,7 @@ class DeleteAccountSheet extends StatefulWidget {
   static const List<String> points = [
     'Your name, phone number, saved addresses and settings are removed, and you are logged out.',
     "Your past orders are kept for the store's records.",
+    'Upcoming dental bookings are cancelled, and your name and phone number are removed from them.',
     "This can't be undone.",
   ];
   static const String confirmLabel = 'Delete account';

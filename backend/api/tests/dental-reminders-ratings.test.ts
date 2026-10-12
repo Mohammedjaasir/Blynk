@@ -233,6 +233,19 @@ describe('Reminder pass (database)', () => {
     expect(await runAppointmentReminders({ now: new Date('2031-03-10T12:00:00Z'), clinicDoctorIds: [s.clinicDoctorId] })).toEqual([]);
   });
 
+  it('never reminds an appointment whose customer account is switched off or deleted (owner, 2026-10-12)', async () => {
+    setPushSenderForTests(null);
+    const dave = await fx.customer(4);
+    await pool.query('UPDATE users SET is_active = false WHERE id = $1', [dave.id]);
+    const s = await fx.slot();
+    const id = await insertAppointment(s, dave, TOMORROW_0900);
+
+    expect(await runAppointmentReminders(scope(s))).toEqual([]);
+    expect(await db.transaction().execute((trx) => remindIfDue(trx, id, NOW))).toBeNull();
+    expect(await remindedAt(id)).toBeNull();
+    expect(await notificationsFor(id)).toHaveLength(0);
+  });
+
   it('two passes racing send each reminder exactly once', async () => {
     setPushSenderForTests(new FakeSender());
     const s = await fx.slot();

@@ -6,6 +6,7 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { logger } from '../../utils/logger.js';
 import { programSettings } from './program-settings.js';
+import { cannotRecordForSelf } from '../riders/self-record.js';
 import {
   earnBase,
   expiryFor,
@@ -346,6 +347,8 @@ export async function adminCustomerPoints(customerId: string, limit = 100) {
 
 /** Manual +/- with a reason, audited (POINTS_ADJUSTED). Never below 0. */
 export async function adjustPoints(customerId: string, points: number, reason: string, actor: AuditActor) {
+  // Never your own balance (owner, 2026-10-12): someone else adjusts it.
+  if (customerId === actor.actorId) throw cannotRecordForSelf('points');
   const now = new Date();
   await db.transaction().execute(async (trx) => {
     const user = await trx.selectFrom('users').select(['id']).where('id', '=', customerId).forNoKeyUpdate().executeTakeFirst();

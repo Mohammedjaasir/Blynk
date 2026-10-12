@@ -6,7 +6,9 @@ import { notificationService } from '../notifications/notification.service.js';
 import { bestEffort } from '../notifications/push/push.repository.js';
 import { logger } from '../../utils/logger.js';
 import { remindIfDue } from './appointment-reminders.js';
-import { availabilityService } from './availability.service.js';
+import { DateTime } from 'luxon';
+import { availabilityService, CLINIC_TIMEZONE } from './availability.service.js';
+import { dentalRepository } from './dental.repository.js';
 import {
   appointmentRepository,
   UQ_IDEMPOTENCY_KEY,
@@ -263,6 +265,22 @@ export class AppointmentService {
         throw new AppError('Someone else is holding this slot right now.', 409, 'SLOT_HELD');
       }
 
+      // Security audit 2026-10: the slot is re-checked like a fresh hold -
+      // a date staff blocked, or a time taken off the template, after this
+      // row was first held must not be reclaimed. The row's own occupancy is
+      // ignored (it is the row being reclaimed).
+      const recheck = await availabilityService.resolveOpenSlot(
+        input.clinic_doctor_id,
+        input.start_at,
+        trx,
+        now,
+        existing.id
+      );
+      if (!recheck.ok) {
+        if (recheck.reason === 'IN_PAST') throw slotInPast();
+        throw slotUnavailable({ reason: recheck.reason });
+      }
+
       // Reclaim the SAME row rather than inserting a second one, so a slot
       // never has two rows even transiently (brief step 5). The fee snapshot
       // is re-read now, because this is effectively a fresh hold.
@@ -327,6 +345,12 @@ export class AppointmentService {
       // row - otherwise the five-minute rule would mean nothing.
       if (appointment.held_until === null || appointment.held_until <= new Date()) {
         throw new AppError('Your hold on this slot has expired. Please pick the time again.', 410, 'HOLD_EXPIRED');
+      }
+      // A date staff blocked after the hold was taken is never confirmed
+      // (security audit 2026-10; blocking also expires the day's holds).
+      const day = DateTime.fromJSDate(appointment.start_at).setZone(CLINIC_TIMEZONE).toISODate();
+      if (day && (await dentalRepository.findBlockedDate(appointment.clinic_doctor_id, day, trx))) {
+        throw slotUnavailable({ reason: 'BLOCKED' });
       }
 
       const confirmed = await appointmentRepository.confirmAppointment(trx, appointmentId, {

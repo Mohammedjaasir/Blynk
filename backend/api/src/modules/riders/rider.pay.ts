@@ -39,6 +39,7 @@ import {
   type RainBoostPatch,
 } from './rider.pay-rules.js';
 import { kmTiersFrom, kmTiersSchema, type KmTier } from '../pricing/km-tiers.js';
+import { assertNotOwnRider } from './self-record.js';
 import { BONUS_KINDS, emptyTotals, riderLedger, sumTotals, type LedgerTotals } from './rider.pay-ledger.js';
 
 /*
@@ -279,6 +280,7 @@ export async function setRiderPay(riderId: string, input: RiderPayInput, actor: 
       .forUpdate()
       .executeTakeFirst();
     if (!before) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
+    await assertNotOwnRider(riderId, actor.actorId, trx);
     const values = payValues(input);
     // Per-km tiers (owner, 2026-10-10): TIERS needs a table - the rider's own
     // or the store default's.
@@ -385,6 +387,7 @@ export async function createAdjustment(riderId: string, input: CreateAdjustmentI
   return await db.transaction().execute(async (trx) => {
     const rider = await trx.selectFrom('riders').select('id').where('id', '=', riderId).where('approval_status', '=', 'APPROVED').executeTakeFirst();
     if (!rider) throw new AppError('Rider not found.', 404, 'RIDER_NOT_FOUND');
+    await assertNotOwnRider(riderId, actor.actorId, trx);
     const values = {
       rider_id: riderId,
       amount_lkr: input.amount_lkr,
@@ -434,6 +437,7 @@ async function lockAdjustment(trx: DBConnection, id: string) {
 export async function updateAdjustment(id: string, input: UpdateAdjustmentInput, actor: AuditActor) {
   return await db.transaction().execute(async (trx) => {
     const before = await lockAdjustment(trx, id);
+    await assertNotOwnRider(before.rider_id, actor.actorId, trx);
     const next = {
       rider_id: before.rider_id,
       amount_lkr: input.amount_lkr ?? Number(before.amount_lkr),
@@ -461,6 +465,7 @@ export async function updateAdjustment(id: string, input: UpdateAdjustmentInput,
 export async function deleteAdjustment(id: string, actor: AuditActor) {
   await db.transaction().execute(async (trx) => {
     const before = await lockAdjustment(trx, id);
+    await assertNotOwnRider(before.rider_id, actor.actorId, trx);
     await trx.deleteFrom('rider_pay_adjustments').where('id', '=', id).execute();
     await writeAudit(trx, actor, {
       action: 'RIDER_PAY_ADJUSTMENT_DELETED',
