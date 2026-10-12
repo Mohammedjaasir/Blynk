@@ -46,6 +46,10 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- In-app updates (owner, 2026-10-12): AppUpdatePlugin opens Android's installer for the
+         app's own new APK (https://blynk.lk/download/<app>.apk). Android 8+ asks the user once
+         to allow "Install unknown apps" for this app. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- "Take photo" for product images (components/ImageUploader.tsx). -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />

@@ -18,6 +18,7 @@ import {
   updateStoreSmsSchema,
 } from './store-schedule.js';
 import { doctorsAccessService, updateDoctorsAccessSchema } from './doctors-access.js';
+import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
 import { smsLanguagePreview } from '../notifications/sms-language.preview.js';
 
@@ -270,6 +271,37 @@ adminSettingsRouter.patch(
     try {
       const input = updateDoctorsAccessSchema.parse(req.body);
       res.json({ success: true, data: await doctorsAccessService.set(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Staff app updates (owner, 2026-10-12): per app (ops, rider) a minimum
+// version code and optional/required, plus short release notes. Audited
+// (APP_UPDATES_UPDATED). The apps read it from the public
+// GET /app-updates/policy (modules/configuration/app-updates.ts).
+adminSettingsRouter.get(
+  '/settings/app-updates',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await appUpdatesService.get() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/app-updates',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateAppUpdatesSchema.parse(req.body);
+      res.json({ success: true, data: await appUpdatesService.set(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

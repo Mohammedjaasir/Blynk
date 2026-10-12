@@ -1874,6 +1874,19 @@ export interface DoctorsAccessSetting {
   updated_at: string | null;
 }
 
+/** In-app updates (owner, 2026-10-12): GET|PATCH /admin/settings/app-updates. */
+export type AppUpdateMode = 'optional' | 'required';
+export interface AppUpdatePolicySetting {
+  min_version_code: number;
+  mode: AppUpdateMode;
+  notes: string;
+}
+export interface AppUpdatesSetting {
+  ops: AppUpdatePolicySetting;
+  rider: AppUpdatePolicySetting;
+  updated_at: string | null;
+}
+
 // ------------------------------------------------------------- coupons
 /** Coupon codes customers type at checkout (backend migration 018). Admin
  * and Operations manage them (owner, 2026-10-10). */

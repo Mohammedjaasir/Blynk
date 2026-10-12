@@ -774,6 +774,19 @@ export interface DoctorsAccessSetting {
   updated_at: string | null;
 }
 
+/** In-app updates (owner, 2026-10-12): GET|PATCH /admin/settings/app-updates. */
+export type AppUpdateMode = 'optional' | 'required';
+export interface AppUpdatePolicySetting {
+  min_version_code: number;
+  mode: AppUpdateMode;
+  notes: string;
+}
+export interface AppUpdatesSetting {
+  ops: AppUpdatePolicySetting;
+  rider: AppUpdatePolicySetting;
+  updated_at: string | null;
+}
+
 /** GET/PATCH /admin/settings/birthday-offer - X% off ONE order in the
  * customer's birthday week, plus a birthday SMS (owner, 2026-10-09). */
 export interface BirthdayOfferSetting {

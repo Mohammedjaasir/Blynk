@@ -8,6 +8,7 @@ import { MyDay } from './pages/MyDay';
 import { Queue } from './pages/Queue';
 import { LaunchScreen } from './components/LaunchScreen';
 import { AndroidBackButton } from './components/AndroidBackButton';
+import { AppUpdatePrompt } from './components/AppUpdate';
 
 /**
  * Route protection is for the rider's benefit only: every rider endpoint is
@@ -99,6 +100,8 @@ export function App() {
           <AppRoutes />
         </AuthProvider>
       </BrowserRouter>
+      {/* In-app updates (owner, 2026-10-12): also covers the login screen. */}
+      <AppUpdatePrompt />
       <LaunchScreen />
     </>
   );

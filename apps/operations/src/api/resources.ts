@@ -1,6 +1,8 @@
 import { UPLOAD_TIMEOUT_MS, apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type {
+  AppUpdatePolicySetting,
+  AppUpdatesSetting,
   DoctorsAccessSetting,
   Coupon,
   CouponInput,
@@ -1118,6 +1120,12 @@ export const settings = {
   },
   /** Doctors need sign-in (owner, 2026-10-10): guests must log in before
    * the customer app shows doctors. */
+  /** In-app updates for Blynk Ops and Blynk Rider (owner, 2026-10-12). Same setting as Admin > Settings. */
+  appUpdates: {
+    get: () => apiRequest<AppUpdatesSetting>('/admin/settings/app-updates'),
+    update: (body: { ops?: Partial<AppUpdatePolicySetting>; rider?: Partial<AppUpdatePolicySetting> }) =>
+      apiRequest<AppUpdatesSetting>('/admin/settings/app-updates', { method: 'PATCH', body }),
+  },
   doctorsAccess: {
     get: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
     update: (require_sign_in: boolean) =>

@@ -3078,3 +3078,12 @@ body {
   margin: 0;
   flex: 1 1 auto;
 }
+
+/* In-app updates (owner, 2026-10-12): one box per staff app in Settings > App updates. */
+.app-updates__app {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+  margin: 0 0 12px;
+  min-width: 0;
+}

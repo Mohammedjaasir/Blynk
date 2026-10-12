@@ -77,6 +77,13 @@ describe('web nginx security headers', () => {
     const customer = fs.readFileSync(CONFIGS[3]!, 'utf8');
     expect(customer).toMatch(/location \/app\/ \{[^}]*Cache-Control "no-cache"/);
     expect(customer).toMatch(/add_header Content-Disposition "attachment";/);
+    // In-app updates (2026-10-12): the version manifest next to each APK,
+    // never cached, readable cross-origin, same volume-then-built-in lookup.
+    const manifest = customer.match(/location ~ \^\/download\/\(\[A-Za-z0-9_-\]\+\\\.json\)\$ \{([^}]*)\}/);
+    expect(manifest, 'the /download/<name>.json location').not.toBeNull();
+    expect(manifest![1]).toMatch(/add_header Cache-Control "no-cache";/);
+    expect(manifest![1]).toMatch(/add_header Access-Control-Allow-Origin "\*";/);
+    expect(manifest![1]).toMatch(/try_files \/download\/\$1 \/files\/\$1 =404;/);
     const admin = fs.readFileSync(CONFIGS[0]!, 'utf8');
     expect(admin).toMatch(/add_header Cache-Control "public, immutable";/);
   });

@@ -20,6 +20,8 @@ import { formatPercent, parseCommissionPercent } from '../lib/riderPay';
 import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
 import { checkoutExtrasPatch, parseBasketAmount } from '../lib/checkoutExtras';
 import { CustomerSmsLanguageCard } from '../components/CustomerSmsLanguageCard';
+import { AppVersionCard } from '../components/AppUpdate';
+import { AppUpdatesSettingsCard } from '../components/AppUpdatesSettingsCard';
 
 /**
  * The More tab (plan §8: rider list, settings, sign-out). Sign-out is real,
@@ -77,7 +79,7 @@ export function More() {
 
   return (
     <div className="page">
-      <PageHeader title="More" description="Opening hours, riders, rider requests, rider cash and earnings, customer addresses, staff, SMS offers, birthday offer, coupons, settings and sign-out." />
+      <PageHeader title="More" description="Opening hours, riders, rider requests, rider cash and earnings, customer addresses, staff, SMS offers, birthday offer, coupons, settings, app updates and sign-out." />
       <section className="card">
         <p className="card__row">
           <span className="card__label">Signed in as</span>
@@ -187,6 +189,10 @@ export function More() {
       <CustomerSmsLanguageCard />
       <RiderCommissionCard />
       <RiderTripsCard />
+      {/* In-app updates (owner, 2026-10-12): force or offer the new Ops / Rider APK. */}
+      <AppUpdatesSettingsCard />
+      {/* This phone's Blynk Ops version and "Check for updates". */}
+      <AppVersionCard />
 
       <section className="card">
         <button type="button" className="button button--ghost" onClick={() => void handleSignOut()}>

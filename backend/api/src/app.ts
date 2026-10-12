@@ -26,6 +26,7 @@ import { adminRouter } from './modules/admin/index.js';
 import { promotionsRouter } from './modules/promotions/index.js';
 import { auditRouter } from './modules/audit/index.js';
 import { configurationRouter, storeRouter } from './modules/configuration/index.js';
+import { appUpdatesRouter } from './modules/configuration/app-updates.js';
 import { mapTilesRouter } from './modules/map-tiles/index.js';
 import { routingRouter } from './modules/routing/index.js';
 import { dentalRouter } from './modules/dental/index.js';
@@ -148,6 +149,8 @@ export function createApp(): Express {
   apiRouter.use('/audit', auditRouter);
   apiRouter.use('/configuration', configurationRouter);
   apiRouter.use('/store', storeRouter);
+  // Public: the staff apps' update policy (in-app updates, owner 2026-10-12).
+  apiRouter.use('/app-updates', appUpdatesRouter);
   apiRouter.use('/dental', dentalRouter);
   apiRouter.use('/routing', routingRouter);
   apiRouter.use('/feedback', feedbackRouter);

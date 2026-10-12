@@ -18,6 +18,7 @@ import { errorMessage } from '../lib/errors';
 import { formatMoney, formatTime, formatUntil, shortOrderNumber } from '../lib/format';
 import { useLoad } from '../lib/useLoad';
 import { useRevalidate } from '../lib/useRevalidate';
+import { AppVersionCard } from '../components/AppUpdate';
 
 const OUTCOME: Record<RiderDayDelivery['outcome'], { label: string; tone: string }> = {
   DELIVERED: { label: 'Delivered', tone: 'done' },
@@ -117,6 +118,8 @@ export function MyDay() {
             </section>
           </>
         ) : null}
+        {/* This phone's Blynk Rider version and "Check for updates" (owner, 2026-10-12). */}
+        <AppVersionCard />
       </main>
     </>
   );

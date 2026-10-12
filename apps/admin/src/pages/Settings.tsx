@@ -22,6 +22,7 @@ import { ReferralSettingsCard } from '../components/ReferralSettingsCard';
 import { PointsSettingsCard } from '../components/PointsSettingsCard';
 import { RiderDocumentsSettingsCard } from '../components/RiderDocumentsSettingsCard';
 import { RiderPaySettings } from '../components/RiderPaySettings';
+import { AppUpdatesPanel } from '../components/AppUpdatesPanel';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
 import { MAX_BIRTHDAY_SMS, fillPercent, parseBirthdayPercent, percentText } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
@@ -84,6 +85,8 @@ export function Settings() {
       {/* Refer a friend and Blynk Points (owner, 2026-10-10). */}
       <ReferralSettingsCard />
       <PointsSettingsCard />
+      {/* In-app updates for Blynk Ops and Blynk Rider (owner, 2026-10-12). */}
+      <AppUpdatesPanel />
     </>
   );
 }

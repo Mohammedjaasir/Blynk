@@ -2361,3 +2361,110 @@ a {
 .wa-docs__link:active {
   transform: translateY(1px);
 }
+
+/* -------------------------------------------------------- in-app updates */
+/* Owner, 2026-10-12 (components/AppUpdate.tsx): "Update required" covers the
+ * whole app; "Update available" is a card at the bottom. */
+.app-update {
+  font-size: 17px;
+  color: var(--ink);
+}
+.app-update--blocking {
+  position: fixed;
+  inset: 0;
+  z-index: 9990; /* under the launch splash (10000), over everything else */
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--paper);
+}
+.app-update__panel {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 24px 20px;
+}
+.app-update--banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 9000;
+  max-width: 520px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--rule-strong);
+  border-left: 4px solid var(--green);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 20px rgba(18, 21, 31, 0.12);
+}
+.app-update__title {
+  margin: 0 0 6px;
+  font-size: 21px;
+  font-weight: 700;
+}
+.app-update--banner .app-update__title {
+  font-size: 17px;
+}
+.app-update__text,
+.app-update__notes,
+.app-update__fine {
+  margin: 0 0 10px;
+}
+.app-update__notes {
+  color: var(--ink-2);
+  white-space: pre-line;
+}
+.app-update__fine {
+  margin: 12px 0 0;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+.app-update__error {
+  margin: 0 0 10px;
+  color: #b3261e;
+}
+.app-update__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.app-update__primary,
+.app-update__secondary {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.app-update__primary {
+  border: 0;
+  background: var(--green);
+  color: #fff;
+}
+.app-update__primary:disabled {
+  opacity: 0.6;
+}
+.app-update__secondary {
+  border: 1px solid var(--rule-strong);
+  background: #fff;
+  color: var(--ink);
+}
+.app-update__progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--green);
+}
+.app-version {
+  margin: 24px 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+.app-version__line {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+}

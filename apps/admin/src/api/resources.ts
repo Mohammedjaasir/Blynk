@@ -1,5 +1,7 @@
 import { apiRequest, tokenStore } from './client';
 import type {
+  AppUpdatePolicySetting,
+  AppUpdatesSetting,
   DoctorsAccessSetting,
   RiderTripsSetting,
   DeliverySlotSettings,
@@ -372,6 +374,12 @@ export const settings = {
 
   /** Doctors need sign-in (owner, 2026-10-10): guests must log in before
    * the customer app shows doctors. */
+  /** In-app updates for Blynk Ops and Blynk Rider (owner, 2026-10-12). Same setting as Operations > More. */
+  getAppUpdates: () => apiRequest<AppUpdatesSetting>('/admin/settings/app-updates'),
+
+  setAppUpdates: (body: { ops?: Partial<AppUpdatePolicySetting>; rider?: Partial<AppUpdatePolicySetting> }) =>
+    apiRequest<AppUpdatesSetting>('/admin/settings/app-updates', { method: 'PATCH', body }),
+
   getDoctorsAccess: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
 
   setDoctorsAccess: (require_sign_in: boolean) =>

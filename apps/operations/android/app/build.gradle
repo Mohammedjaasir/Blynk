@@ -9,6 +9,28 @@ if (releaseKeystorePropsFile.exists()) {
     releaseKeystorePropsFile.withInputStream { releaseKeystoreProps.load(it) }
 }
 
+// In-app updates (owner, 2026-10-12): the app offers an update when the
+// published manifest (https://blynk.lk/download/<app>.json) has a higher
+// versionCode than the installed one, so every release must increase it.
+// BLYNK_VERSION_CODE wins (use it for release builds and record it in the
+// manifest - docs/06-deployment/staff-app-updates.md); otherwise the number of
+// commits on HEAD (always above the first shipped code, 2); else 2.
+def blynkVersionCode = { ->
+    def fromEnv = System.getenv('BLYNK_VERSION_CODE')?.trim()
+    if (fromEnv) return fromEnv.toInteger()
+    try {
+        def count = providers.exec {
+            commandLine 'git', 'rev-list', '--count', 'HEAD'
+            ignoreExitValue = true
+        }.standardOutput.asText.get().trim()
+        if (count.isInteger() && count.toInteger() > 2) return count.toInteger()
+    } catch (Exception ignored) {
+        // No git here (e.g. a source zip): fall back below.
+    }
+    return 2
+}()
+def blynkVersionName = System.getenv('BLYNK_VERSION_NAME')?.trim() ?: "1.2"
+
 android {
     namespace "lk.blynk.ops"
     compileSdk rootProject.ext.compileSdkVersion
@@ -16,8 +38,8 @@ android {
         applicationId "lk.blynk.ops"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.1"
+        versionCode blynkVersionCode
+        versionName blynkVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
+import { AppUpdatePrompt } from './components/AppUpdate';
 import { Cash } from './pages/Cash';
 import { Catalog } from './pages/Catalog';
 import { Categories } from './pages/Catalog/Categories';
@@ -201,6 +202,8 @@ export function App() {
           <AppRoutes />
         </AuthProvider>
       </BrowserRouter>
+      {/* In-app updates (owner, 2026-10-12): also covers the login screen. */}
+      <AppUpdatePrompt />
       <LaunchScreen />
     </>
   );
