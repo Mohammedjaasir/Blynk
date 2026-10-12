@@ -429,7 +429,11 @@ export class AppointmentService {
             doctor_name: context?.doctor_name ?? 'your doctor',
             start_at: cancelled.start_at.toISOString(),
             cancelled_by: 'customer',
-            reason: reason ?? null,
+            // Never the customer's own text: patient_phone is a number they
+            // typed and never proved, so their reason would reach a third
+            // party under the Blynk sender ID (security audit 2026-10). The
+            // reason stays on the appointment (cancellation_reason) for staff.
+            reason: null,
           },
         },
         trx

@@ -1,5 +1,6 @@
 import type { OrderStatus } from '../../database/types.js';
 import type { DBConnection } from './order.repository.js';
+import { phoneLineageIds } from '../users/phone-identity.js';
 
 /**
  * Free deliveries (owner, 2026-10-08; every customer since 2026-10-09): while
@@ -52,10 +53,14 @@ export async function freeDeliveryStatus(
   if (lock) {
     await executor.selectFrom('users').select('id').where('id', '=', customerId).forNoKeyUpdate().executeTakeFirst();
   }
+  // Counted across every account on the same verified number, so deleting
+  // the account and registering again does not give the free deliveries back
+  // (migration 041; security audit 2026-10).
+  const customerIds = await phoneLineageIds(executor, customerId);
   const row = await executor
     .selectFrom('orders')
     .select((eb) => eb.fn.countAll<string>().as('n'))
-    .where('customer_id', '=', customerId)
+    .where('customer_id', 'in', customerIds)
     .where('order_status', 'not in', FREE_DELIVERY_NOT_USED_BY)
     .where('created_at', '>=', new Date(policy.since))
     .executeTakeFirst();

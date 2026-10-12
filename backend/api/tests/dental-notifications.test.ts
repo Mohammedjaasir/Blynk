@@ -104,7 +104,10 @@ describe('Dental appointment notifications (B5)', () => {
     const confirmRes = await confirm(alice, id);
     expect(confirmRes.status).toBe(200);
 
-    const cancelRes = await cancel(alice, id, 'Change of plans');
+    // Security audit 2026-10: the customer's own text never reaches the SMS
+    // (patient_phone is a number they typed and never proved). It stays on
+    // the appointment for staff.
+    const cancelRes = await cancel(alice, id, 'X-MARKER visit http://marker.invalid/z');
     expect(cancelRes.status).toBe(200);
 
     const rows = await notificationsFor(`dental_appointment_${id}_CANCELLED`);
@@ -114,12 +117,28 @@ describe('Dental appointment notifications (B5)', () => {
     expect(row.recipient).toBe(NORMALIZED_PHONE);
     expect(row.user_id).toBe(alice.id);
     expect(row.payload.cancelled_by).toBe('customer');
-    expect(row.payload.reason).toBe('Change of plans');
+    expect(row.payload.reason).toBeNull();
+    expect(JSON.stringify(row.payload)).not.toContain('X-MARKER');
 
     const message = NotificationTemplates.render(row.notification_type, row.payload);
     expect(message).toContain('cancelled by you');
-    expect(message).toContain('Change of plans');
+    expect(message).not.toContain('X-MARKER');
+    expect(message).not.toContain('Reason:');
     expect(message).not.toContain('!');
+
+    const stored = await pool.query('SELECT cancellation_reason FROM appointments WHERE id = $1', [id]);
+    expect(stored.rows[0].cancellation_reason).toBe('X-MARKER visit http://marker.invalid/z');
+  });
+
+  it('a customer cancel payload queued with a reason (before the fix) still renders without it', () => {
+    const message = NotificationTemplates.render('DENTAL_APPOINTMENT_CANCELLED', {
+      clinic_name: 'C',
+      doctor_name: 'D',
+      start_at: new Date().toISOString(),
+      cancelled_by: 'customer',
+      reason: 'X-MARKER',
+    });
+    expect(message).not.toContain('X-MARKER');
   });
 
   it('an admin cancelling a confirmed appointment enqueues exactly one CANCELLED notification, addressed to the customer and attributed to the clinic', async () => {

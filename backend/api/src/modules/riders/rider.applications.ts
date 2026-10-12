@@ -281,18 +281,22 @@ export class RiderApplicationService {
     /** 'session': the phone was proved by an applicant token (rider.documents.ts), no code here. */
     proof: 'otp' | 'session' = 'otp'
   ) {
-    authRateLimiter.checkLimit(
-      `rider_apply_phone:${input.phone}`,
-      5,
-      60 * 60 * 1000,
-      'Too many applications for this phone number. Please try again in 1 hour.'
-    );
-    authRateLimiter.checkLimit(
-      `rider_apply_ip:${meta.ipAddress ?? 'unknown'}`,
-      15,
-      15 * 60 * 1000,
-      'Too many applications from this device. Please wait before retrying.'
-    );
+    // Both limits are checked before either is recorded: a request refused by
+    // the device limit never uses up the phone's quota (security audit 2026-10).
+    authRateLimiter.checkLimits([
+      {
+        key: `rider_apply_phone:${input.phone}`,
+        max: 5,
+        windowMs: 60 * 60 * 1000,
+        message: 'Too many applications for this phone number. Please try again in 1 hour.',
+      },
+      {
+        key: `rider_apply_ip:${meta.ipAddress ?? 'unknown'}`,
+        max: 15,
+        windowMs: 15 * 60 * 1000,
+        message: 'Too many applications from this device. Please wait before retrying.',
+      },
+    ]);
 
     const otpId = proof === 'otp' ? await authService.checkOtp(input.phone, input.otp ?? '') : null;
     const consume = (trx: Trx) => (otpId ? authService.consumeOtp(trx, input.phone, otpId) : Promise.resolve());

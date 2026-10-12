@@ -127,6 +127,12 @@ export interface UsersTable {
   date_of_birth: ColumnType<Date | string | null, string | null | undefined, string | null>;
   favourite_category_ids: ColumnType<string[], string[] | undefined, string[]>;
   favourites_note: ColumnType<string | null, string | null | undefined, string | null>;
+  /**
+   * Migration 041 (security audit 2026-10): hex HMAC-SHA256 of the normalised
+   * phone, kept when the account is deleted so per-customer promotion limits
+   * survive delete + re-register (users/phone-identity.ts).
+   */
+  phone_hash: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 /** Migration 027: the languages an offer SMS can be written in. */

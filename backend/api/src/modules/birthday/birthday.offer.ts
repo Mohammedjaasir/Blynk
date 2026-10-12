@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import type { DBConnection } from '../orders/order.repository.js';
 import type { BirthdayOfferSetting } from '../configuration/settings.service.js';
+import { phoneLineageIds } from '../users/phone-identity.js';
 import {
   birthdayDiscount,
   birthdayWindow,
@@ -50,13 +51,19 @@ export async function dateOfBirthOf(executor: DBConnection, customerId: string):
   return row?.dob ?? null;
 }
 
-/** Whether a gift already counts against this birthday (or one was used too recently). */
+/**
+ * Whether a gift already counts against this birthday (or one was used too
+ * recently) - on any account with the same verified number, so deleting the
+ * account and registering again does not give the gift back (migration 041;
+ * security audit 2026-10).
+ */
 async function giftUsed(executor: DBConnection, customerId: string, offerYear: number, now: Date): Promise<boolean> {
   const since = new Date(now.getTime() - MIN_DAYS_BETWEEN_GIFTS * 24 * 60 * 60 * 1000);
+  const customerIds = await phoneLineageIds(executor, customerId);
   const row = await executor
     .selectFrom('birthday_offer_redemptions')
     .select('id')
-    .where('customer_id', '=', customerId)
+    .where('customer_id', 'in', customerIds)
     .where('released_at', 'is', null)
     .where((eb) => eb.or([eb('offer_year', '=', offerYear), eb('created_at', '>', since)]))
     .limit(1)

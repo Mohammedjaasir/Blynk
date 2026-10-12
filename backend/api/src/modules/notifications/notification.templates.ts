@@ -101,7 +101,9 @@ export class NotificationTemplates {
       }
 
       case 'ORDER_CANCELLED': {
-        const reason = (data.reason as string) || 'Cancelled per customer request';
+        // A customer's own text is never sent (the recipient phone is not
+        // verified; security audit 2026-10), even if a payload carries one.
+        const reason = (data.cancelled_by !== 'customer' && (data.reason as string)) || 'Cancelled per customer request';
         return `Blynk: Order #${orderNumber} has been cancelled (${reason}). If you did not make this request, please contact support.`;
       }
 
@@ -147,7 +149,10 @@ export class NotificationTemplates {
         const clinicName = (data.clinic_name as string) || 'the clinic';
         const when = formatClinicDateTime(data.start_at as string);
         const cancelledBy = data.cancelled_by === 'clinic' ? 'by the clinic' : 'by you';
-        const reason = data.reason ? ` Reason: ${data.reason as string}.` : '';
+        // Only a clinic/admin reason is sent: patient_phone is a number the
+        // customer typed and never proved, so their own text never goes in an
+        // SMS (security audit 2026-10), even from a payload queued earlier.
+        const reason = data.cancelled_by === 'clinic' && data.reason ? ` Reason: ${data.reason as string}.` : '';
         return `Blynk Dental: your appointment with Dr. ${doctorName} at ${clinicName} on ${when} has been cancelled ${cancelledBy}.${reason}`;
       }
 

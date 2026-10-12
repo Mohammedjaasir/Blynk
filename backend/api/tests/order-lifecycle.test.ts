@@ -5,6 +5,7 @@ import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { deliveryCodeForDelivery } from './helpers/delivery-code.js';
 import { liftRiderTripCap } from './helpers/rider-trips.js';
+import { NotificationTemplates } from '../src/modules/notifications/notification.templates.js';
 
 // Many orders go to one seeded rider here; the trip cap has its own tests (rider-trips.test.ts).
 liftRiderTripCap();
@@ -265,6 +266,32 @@ describe('Order lifecycle', () => {
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('ORDER_CANNOT_BE_CANCELLED');
     });
+
+    // Security audit 2026-10: the SMS goes to the address's recipient phone,
+    // which the customer typed and never proved - their own text is never in it.
+    it("the customer's reason is kept for staff but never put in the cancellation SMS", async () => {
+      const order = await placeOrder();
+      const res = await request(app)
+        .post(`/api/v1/orders/${order.id}/cancel`)
+        .set(auth(tokens.customer))
+        .send({ reason: 'X-MARKER visit http://marker.invalid/z' });
+      expect(res.status).toBe(200);
+      expect((await row(order.id)).cancellation_reason).toBe('X-MARKER visit http://marker.invalid/z');
+
+      const sms = (
+        await pool.query("SELECT notification_type, payload FROM notifications WHERE order_id = $1 AND notification_type = 'ORDER_CANCELLED'", [
+          order.id,
+        ])
+      ).rows;
+      expect(sms).toHaveLength(1);
+      expect(JSON.stringify(sms[0].payload)).not.toContain('X-MARKER');
+      const text = NotificationTemplates.render('ORDER_CANCELLED', sms[0].payload);
+      expect(text).not.toContain('X-MARKER');
+      expect(text).toContain('Cancelled per customer request');
+      // Every outbox row for this order is free of the customer's text.
+      const all = (await pool.query('SELECT payload FROM notifications WHERE order_id = $1', [order.id])).rows;
+      for (const n of all) expect(JSON.stringify(n.payload)).not.toContain('X-MARKER');
+    });
   });
 
   describe('#3 PACK', () => {
@@ -392,6 +419,11 @@ describe('Order lifecycle', () => {
       const r = await row(order.id);
       expect(r).toMatchObject({ order_status: 'CANCELLED', cancellation_reason: 'Supplier closed today', cancelled_by_user_id: admin.id });
       expect(await notifications(order.id, 'ORDER_CANCELLED')).toBe(1);
+      // A staff-written reason is still sent by SMS.
+      const sms = (await pool.query("SELECT payload FROM notifications WHERE order_id = $1 AND notification_type = 'ORDER_CANCELLED'", [order.id]))
+        .rows[0];
+      expect(sms.payload.reason).toBe('Supplier closed today');
+      expect(NotificationTemplates.render('ORDER_CANCELLED', sms.payload)).toContain('Supplier closed today');
       const seen = await request(app).get(`/api/v1/orders/${order.id}`).set(auth(tokens.customer));
       expect(seen.body.data.order).toMatchObject({ order_status: 'CANCELLED', cancellation_reason: 'Supplier closed today' });
     });

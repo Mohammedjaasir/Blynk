@@ -6,6 +6,7 @@ import { logger } from '../../utils/logger.js';
 import { PHONE_ROLES, type CreateStaffInput, type UpdateStaffInput } from './staff.schema.js';
 import { generatePlaceholderPhone, isEmailOnlyRole, isPlaceholderPhone, publicPhone } from '../../utils/phone.js';
 import { findOpenDeliveriesForRiders } from '../riders/batching.js';
+import { phoneHash } from '../users/phone-identity.js';
 import { REGISTRATION_REQUIRED_MESSAGE, registrationRequiredFor } from '../riders/rider.profile.js';
 
 /**
@@ -361,7 +362,8 @@ export class StaffService {
           throw phoneRequired();
         }
       }
-      if (nextPhone) query = query.set({ phone: nextPhone });
+      // Migration 041: the number's stable identity follows the number (null for a placeholder).
+      if (nextPhone) query = query.set({ phone: nextPhone, phone_hash: phoneHash(nextPhone) });
 
       if (roleChange) {
         query = query.set({ role: input.role! });

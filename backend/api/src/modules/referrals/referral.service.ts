@@ -5,6 +5,7 @@ import type { DBConnection } from '../orders/order.repository.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import { programSettings } from '../loyalty/program-settings.js';
+import { phoneLineageIds } from '../users/phone-identity.js';
 import {
   colomboMonthStart,
   generateReferralCode,
@@ -32,12 +33,17 @@ async function lockUser(executor: DBConnection, userId: string): Promise<void> {
   await executor.selectFrom('users').select('id').where('id', '=', userId).forNoKeyUpdate().executeTakeFirst();
 }
 
-/** Any order that was not cancelled: the customer is no longer "new". */
+/**
+ * Any order that was not cancelled, on any account with the same verified
+ * number: the customer is no longer "new" (migration 041; security audit
+ * 2026-10 - deleting the account and registering again must not make them new).
+ */
 async function hasLiveOrder(executor: DBConnection, customerId: string): Promise<boolean> {
+  const customerIds = await phoneLineageIds(executor, customerId);
   const row = await executor
     .selectFrom('orders')
     .select('id')
-    .where('customer_id', '=', customerId)
+    .where('customer_id', 'in', customerIds)
     .where('order_status', '!=', 'CANCELLED')
     .limit(1)
     .executeTakeFirst();
@@ -88,8 +94,11 @@ export async function applyReferralCode(friendId: string, code: string) {
       .where('referral_codes.code', '=', code)
       .executeTakeFirst();
     if (!owner || !owner.is_active) throw new AppError('That referral code does not exist.', 404, 'REFERRAL_CODE_NOT_FOUND', { code });
-    if (owner.customer_id === friendId) throw new AppError("You can't use your own referral code.", 422, 'REFERRAL_SELF');
-    const already = await trx.selectFrom('referrals').select('id').where('friend_id', '=', friendId).executeTakeFirst();
+    // The same verified number counts as the same customer, across a deleted
+    // account and its re-registration (migration 041; security audit 2026-10).
+    const friendIds = await phoneLineageIds(trx, friendId);
+    if (friendIds.includes(owner.customer_id)) throw new AppError("You can't use your own referral code.", 422, 'REFERRAL_SELF');
+    const already = await trx.selectFrom('referrals').select('id').where('friend_id', 'in', friendIds).executeTakeFirst();
     if (already) throw new AppError('You have already used a referral code.', 409, 'REFERRAL_ALREADY_APPLIED');
     if (await hasLiveOrder(trx, friendId)) {
       throw new AppError('Referral codes are for new customers, before their first order.', 422, 'REFERRAL_NOT_NEW_CUSTOMER');
@@ -110,6 +119,8 @@ const firstName = (full: string | null) => (full ?? '').trim().split(/\s+/)[0] |
 export async function referralOverview(customerId: string) {
   const setting = await referralSettings.read();
   const code = await referralCodeFor(customerId);
+  // A referral taken by an earlier (deleted) account on the same number counts (migration 041).
+  const sameNumberIds = await phoneLineageIds(db, customerId);
   const [counts, mine, credits, live] = await Promise.all([
     db
       .selectFrom('referrals')
@@ -123,7 +134,8 @@ export async function referralOverview(customerId: string) {
       .selectFrom('referrals')
       .innerJoin('users', 'users.id', 'referrals.inviter_id')
       .select(['referrals.status', 'users.full_name'])
-      .where('referrals.friend_id', '=', customerId)
+      .where('referrals.friend_id', 'in', sameNumberIds)
+      .orderBy('referrals.created_at', 'desc')
       .executeTakeFirst(),
     availableCredits(db, customerId),
     hasLiveOrder(db, customerId),

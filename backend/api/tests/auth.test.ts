@@ -4,7 +4,8 @@ import { createApp } from '../src/app.js';
 import { env } from '../src/config/env.js';
 import { otpSmsText } from '../src/modules/auth/auth.service.js';
 import { pool, db } from '../src/database/connection.js';
-import { authRateLimiter } from '../src/modules/auth/auth.rate-limiter.js';
+import { authRateLimiter, RATE_LIMIT_SWEEP_THRESHOLD, type RateLimitCheck } from '../src/modules/auth/auth.rate-limiter.js';
+import type { AppError } from '../src/middleware/error.middleware.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { requireRoles } from '../src/middleware/role.middleware.js';
 import { requireAuth } from '../src/middleware/auth.middleware.js';
@@ -26,13 +27,13 @@ describe('Stage 2 Authentication & OTP Module', () => {
   ];
   let runStart: Date;
   // As text: a JS Date would drop Postgres's microseconds and not restore exactly.
-  let seededBefore: { id: string; last_login_at: string | null; phone_verified_at: string | null; updated_at: string }[] = [];
+  let seededBefore: { id: string; last_login_at: string | null; phone_verified_at: string | null; updated_at: string; phone_hash: string | null }[] = [];
 
   beforeAll(async () => {
     runStart = (await pool.query('SELECT clock_timestamp() AS t')).rows[0].t;
     seededBefore = (
       await pool.query(
-        'SELECT id, last_login_at::text, phone_verified_at::text, updated_at::text FROM users WHERE id = ANY($1)',
+        'SELECT id, last_login_at::text, phone_verified_at::text, updated_at::text, phone_hash FROM users WHERE id = ANY($1)',
         [SEEDED.map((u) => u.id)]
       )
     ).rows;
@@ -48,12 +49,11 @@ describe('Stage 2 Authentication & OTP Module', () => {
     await pool.query('DELETE FROM otp_verifications WHERE phone = ANY($1) AND created_at >= $2', [SEEDED.map((u) => u.phone), runStart]);
     await pool.query('DELETE FROM refresh_tokens WHERE user_id = ANY($1) AND created_at >= $2', [SEEDED.map((u) => u.id), runStart]);
     for (const u of seededBefore) {
-      await pool.query('UPDATE users SET last_login_at = $2::timestamptz, phone_verified_at = $3::timestamptz, updated_at = $4::timestamptz WHERE id = $1', [
-        u.id,
-        u.last_login_at,
-        u.phone_verified_at,
-        u.updated_at,
-      ]);
+      // phone_hash (migration 041) is filled in at sign-in.
+      await pool.query(
+        'UPDATE users SET last_login_at = $2::timestamptz, phone_verified_at = $3::timestamptz, updated_at = $4::timestamptz, phone_hash = $5 WHERE id = $1',
+        [u.id, u.last_login_at, u.phone_verified_at, u.updated_at, u.phone_hash]
+      );
     }
   });
 
@@ -551,6 +551,152 @@ describe('Stage 2 Authentication & OTP Module', () => {
 
       // Exactly one must succeed (200), and the other must fail (401 invalid/consumed)
       expect(statuses).toEqual([200, 401]);
+    });
+
+    // Security audit 2026-10 (finding: non-atomic OTP attempt limit).
+    it('concurrent wrong codes against one challenge: at most max_attempts are compared, then the correct code is refused', async () => {
+      const phone = '0770000091';
+      const reqRes = await request(app).post('/api/v1/auth/otp/request').send({ phone });
+      const otp: string = reqRes.body.data.dev_otp;
+      const wrong = otp === '000000' ? '111111' : '000000';
+
+      // 9 concurrent wrong guesses (the per-phone verify limit is 10).
+      const results = await Promise.all(
+        Array.from({ length: 9 }, () => request(app).post('/api/v1/auth/otp/verify').send({ phone, otp: wrong }))
+      );
+      const statuses = results.map((r) => r.status).sort();
+      // Exactly max_attempts wrong codes were compared: two 401s with attempts
+      // left, the third one locks (429); every other request was refused at
+      // the gate (429) without a comparison. No constraint violations (500).
+      expect(statuses).toEqual([401, 401, 429, 429, 429, 429, 429, 429, 429]);
+      expect(results.filter((r) => r.body.error?.code === 'OTP_MAX_ATTEMPTS_EXCEEDED')).toHaveLength(7);
+
+      const row = (
+        await pool.query("SELECT attempts_count, max_attempts FROM otp_verifications WHERE phone = '+94770000091' AND consumed_at IS NULL")
+      ).rows[0];
+      expect(row.attempts_count).toBe(row.max_attempts);
+
+      // The correct code after the cap is refused.
+      const late = await request(app).post('/api/v1/auth/otp/verify').send({ phone, otp });
+      expect(late.status).toBe(429);
+      expect(late.body.error.code).toBe('OTP_MAX_ATTEMPTS_EXCEEDED');
+      expect(late.body.data).toBeUndefined();
+    });
+
+    it('a correct code after wrong ones (within the cap) still signs in; the counter is committed', async () => {
+      const phone = '0770000092';
+      const reqRes = await request(app).post('/api/v1/auth/otp/request').send({ phone });
+      const otp: string = reqRes.body.data.dev_otp;
+      const wrong = otp === '000000' ? '111111' : '000000';
+
+      const w = await request(app).post('/api/v1/auth/otp/verify').send({ phone, otp: wrong });
+      expect(w.status).toBe(401);
+      expect(w.body.error.details).toEqual({ remaining_attempts: 2 });
+      const counted = await pool.query("SELECT attempts_count FROM otp_verifications WHERE phone = '+94770000092' AND consumed_at IS NULL");
+      expect(counted.rows[0].attempts_count).toBe(1);
+
+      const ok = await request(app).post('/api/v1/auth/otp/verify').send({ phone, otp });
+      expect(ok.status).toBe(200);
+      expect(ok.body.data.access_token).toBeDefined();
+    });
+  });
+
+  // ==========================================================================
+  // 8. RATE LIMITS (security audit 2026-10)
+  // ==========================================================================
+  describe('Rate limits', () => {
+    it('OTP requests refused by the IP limit do not use up the phone quota', async () => {
+      // One real request reveals this client's IP key; then use up the rest
+      // of its budget (15 per 15 minutes).
+      const first = await request(app).post('/api/v1/auth/otp/request').send({ phone: '0770000095' });
+      expect(first.status).toBe(200);
+      const ipKey = authRateLimiter.keys().find((k) => k.startsWith('otp_ip:'))!;
+      expect(ipKey).toBeDefined();
+      for (let i = 0; i < 14; i++) authRateLimiter.checkLimit(ipKey, 15, 15 * 60 * 1000);
+
+      const phone = '0770000093';
+      for (let i = 0; i < 3; i++) {
+        const res = await request(app).post('/api/v1/auth/otp/request').send({ phone });
+        expect(res.status).toBe(429);
+        expect(res.body.error.message).toBe('Too many OTP requests from this IP address. Please wait before retrying.');
+      }
+      // The refused requests recorded nothing for the phone.
+      expect(authRateLimiter.has('otp_phone:+94770000093')).toBe(false);
+      const sent = await pool.query("SELECT 1 FROM otp_verifications WHERE phone = '+94770000093'");
+      expect(sent.rowCount).toBe(0);
+
+      // A clean IP: the phone still has its full quota.
+      authRateLimiter.clear(ipKey);
+      for (let i = 0; i < 3; i++) {
+        const res = await request(app).post('/api/v1/auth/otp/request').send({ phone });
+        expect(res.status).toBe(200);
+      }
+      const fourth = await request(app).post('/api/v1/auth/otp/request').send({ phone });
+      expect(fourth.status).toBe(429);
+      expect(fourth.body.error.message).toBe('Maximum OTP requests reached for this phone number. Please try again in 1 hour.');
+    });
+
+    it('checkLimits records nothing when any limit refuses, and empty windows are deleted', async () => {
+      const refuse = (checks: RateLimitCheck[]) => {
+        try {
+          authRateLimiter.checkLimits(checks);
+        } catch (err) {
+          return err as AppError;
+        }
+        return null;
+      };
+      authRateLimiter.checkLimit('t_ip', 1, 60_000);
+      authRateLimiter.checkLimit('t_short', 5, 1);
+      await new Promise((r) => setTimeout(r, 5));
+
+      const err = refuse([
+        { key: 't_phone', max: 3, windowMs: 60_000 },
+        { key: 't_short', max: 5, windowMs: 1 },
+        { key: 't_ip', max: 1, windowMs: 60_000 },
+      ]);
+      expect(err?.statusCode).toBe(429);
+      expect(err?.code).toBe('TOO_MANY_REQUESTS');
+      // Nothing was recorded for the keys that passed...
+      expect(authRateLimiter.has('t_phone')).toBe(false);
+      // ...and the key whose window had emptied was deleted.
+      expect(authRateLimiter.has('t_short')).toBe(false);
+      expect(authRateLimiter.has('t_ip')).toBe(true);
+    });
+
+    it('the limiter Map is bounded: expired keys are swept once it grows large', async () => {
+      for (let i = 0; i < RATE_LIMIT_SWEEP_THRESHOLD; i++) authRateLimiter.checkLimit(`t_flood:${i}`, 3, 1);
+      expect(authRateLimiter.size()).toBe(RATE_LIMIT_SWEEP_THRESHOLD);
+      await new Promise((r) => setTimeout(r, 5));
+      authRateLimiter.checkLimit('t_after_flood', 3, 60_000);
+      expect(authRateLimiter.size()).toBe(1);
+    });
+
+    it('POST /otp/verify is limited per phone (10 per 15 minutes)', async () => {
+      const phone = '0770000094';
+      const reqRes = await request(app).post('/api/v1/auth/otp/request').send({ phone });
+      const otp: string = reqRes.body.data.dev_otp;
+      const wrong = otp === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 10; i++) {
+        const res = await request(app).post('/api/v1/auth/otp/verify').send({ phone, otp: wrong });
+        expect([401, 429]).toContain(res.status);
+        expect(res.body.error.code).not.toBe('TOO_MANY_REQUESTS');
+      }
+      const limited = await request(app).post('/api/v1/auth/otp/verify').send({ phone, otp: wrong });
+      expect(limited.status).toBe(429);
+      expect(limited.body.error.code).toBe('TOO_MANY_REQUESTS');
+      expect(limited.body.error.message).toBe('Too many verification attempts for this phone number. Please wait before retrying.');
+    });
+
+    it('POST /otp/verify is limited per IP (30 per 15 minutes)', async () => {
+      for (let i = 0; i < 30; i++) {
+        const res = await request(app)
+          .post('/api/v1/auth/otp/verify')
+          .send({ phone: `07704199${String(i).padStart(2, '0')}`, otp: '000000' });
+        expect(res.body.error.code).not.toBe('TOO_MANY_REQUESTS');
+      }
+      const limited = await request(app).post('/api/v1/auth/otp/verify').send({ phone: '0770419999', otp: '000000' });
+      expect(limited.status).toBe(429);
+      expect(limited.body.error.message).toBe('Too many verification attempts from this IP address. Please wait before retrying.');
     });
   });
 

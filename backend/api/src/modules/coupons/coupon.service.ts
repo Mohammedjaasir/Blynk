@@ -6,6 +6,7 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { computeDiscount } from './coupon.rules.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import type { CreateCouponInput, UpdateCouponInput } from './coupon.schema.js';
+import { phoneLineageIds } from '../users/phone-identity.js';
 
 export type CouponRow = Selectable<CouponsTable>;
 
@@ -17,23 +18,26 @@ export interface AppliedCoupon {
   discount_amount: number;
 }
 
-/** Uses that still count: a cancelled order's redemption is released. */
-async function liveUses(executor: DBConnection, couponId: string, customerId?: string): Promise<number> {
+/**
+ * Uses that still count: a cancelled order's redemption is released.
+ * `customerIds`: the customer's accounts on the same number (phoneLineageIds).
+ */
+async function liveUses(executor: DBConnection, couponId: string, customerIds?: string[]): Promise<number> {
   let q = executor
     .selectFrom('coupon_redemptions')
     .select(sql<number>`count(*)::int`.as('n'))
     .where('coupon_id', '=', couponId)
     .where('released_at', 'is', null);
-  if (customerId) q = q.where('customer_id', '=', customerId);
+  if (customerIds) q = q.where('customer_id', 'in', customerIds);
   return (await q.executeTakeFirstOrThrow()).n;
 }
 
-/** "First order" = no earlier order of theirs that is not CANCELLED. */
-async function hasEarlierOrder(executor: DBConnection, customerId: string): Promise<boolean> {
+/** "First order" = no earlier order of theirs (any account on the same number) that is not CANCELLED. */
+async function hasEarlierOrder(executor: DBConnection, customerIds: string[]): Promise<boolean> {
   const row = await executor
     .selectFrom('orders')
     .select('id')
-    .where('customer_id', '=', customerId)
+    .where('customer_id', 'in', customerIds)
     .where('order_status', '!=', 'CANCELLED')
     .limit(1)
     .executeTakeFirst();
@@ -73,10 +77,13 @@ export async function evaluateCoupon(
   if (coupon.usage_limit != null && (await liveUses(executor, coupon.id)) >= coupon.usage_limit) {
     throw new AppError('This coupon has been fully used.', 422, 'COUPON_LIMIT_REACHED', { code, scope: 'TOTAL' });
   }
-  if ((await liveUses(executor, coupon.id, params.customerId)) >= coupon.per_customer_limit) {
+  // Per customer = per verified number: a deleted account's uses still count
+  // after the number registers again (migration 041; security audit 2026-10).
+  const customerIds = await phoneLineageIds(executor, params.customerId);
+  if ((await liveUses(executor, coupon.id, customerIds)) >= coupon.per_customer_limit) {
     throw new AppError('You have already used this coupon.', 422, 'COUPON_LIMIT_REACHED', { code, scope: 'CUSTOMER' });
   }
-  if (coupon.first_order_only && (await hasEarlierOrder(executor, params.customerId))) {
+  if (coupon.first_order_only && (await hasEarlierOrder(executor, customerIds))) {
     throw new AppError('This coupon is for your first order only.', 422, 'COUPON_FIRST_ORDER_ONLY', { code });
   }
   const min = coupon.min_subtotal != null ? Number(coupon.min_subtotal) : null;

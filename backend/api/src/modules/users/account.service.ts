@@ -5,6 +5,7 @@ import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import type { OrderStatus } from '../../database/types.js';
 import { riderDocumentService } from '../riders/rider.documents.js';
 import { riderDocumentStore } from '../riders/rider.documents.files.js';
+import { phoneHash } from './phone-identity.js';
 
 /**
  * Orders in these states are finished; anything else (PLACED, PACKED,
@@ -18,7 +19,9 @@ export const FINAL_ORDER_STATUSES: readonly OrderStatus[] = ['DELIVERED', 'CANCE
  * row (orders reference it for accounting) but frees the number with a
  * placeholder like "del:1a2b3c4d5e6f7a8b" (20 chars). Every sign-in path
  * normalises the number to +94XXXXXXXXX first, so an OTP lookup can never
- * match it and the number can register again as a new customer.
+ * match it and the number can register again as a new customer - who
+ * inherits this account's promotion usage through users.phone_hash
+ * (migration 041, users/phone-identity.ts).
  */
 function deletedPhonePlaceholder(): string {
   return `del:${randomBytes(8).toString('hex')}`;
@@ -35,7 +38,7 @@ export async function deleteCustomerAccount(userId: string, actor: AuditActor): 
   const result = await db.transaction().execute(async (trx) => {
     const user = await trx
       .selectFrom('users')
-      .select(['id', 'role', 'is_active', 'phone'])
+      .select(['id', 'role', 'is_active', 'phone', 'phone_hash'])
       .where('id', '=', userId)
       .forUpdate()
       .executeTakeFirst();
@@ -68,6 +71,11 @@ export async function deleteCustomerAccount(userId: string, actor: AuditActor): 
         full_name: null,
         email: null,
         phone: deletedPhonePlaceholder(),
+        // Migration 041 (security audit 2026-10): the number is freed but its
+        // keyed hash stays, so a new account on the same number inherits this
+        // one's promotion usage (coupons, free deliveries, birthday gift,
+        // referral) instead of getting every perk again.
+        phone_hash: phoneHash(user.phone) ?? user.phone_hash,
         sms_offers_opted_out_at: now,
         // Migration 034: the optional profile is personal too.
         date_of_birth: null,

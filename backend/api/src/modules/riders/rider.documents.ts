@@ -497,18 +497,22 @@ export class RiderDocumentService {
 
   /** POST /riders/applications/session: SMS code -> applicant token. */
   async startSession(phone: string, otp: string, meta: { ipAddress?: string | null }) {
-    authRateLimiter.checkLimit(
-      `rider_doc_session_phone:${phone}`,
-      10,
-      60 * 60 * 1000,
-      'Too many tries for this phone number. Please try again in 1 hour.'
-    );
-    authRateLimiter.checkLimit(
-      `rider_doc_session_ip:${meta.ipAddress ?? 'unknown'}`,
-      30,
-      15 * 60 * 1000,
-      'Too many tries from this device. Please wait before retrying.'
-    );
+    // Both limits are checked before either is recorded: a request refused by
+    // the device limit never uses up the phone's quota (security audit 2026-10).
+    authRateLimiter.checkLimits([
+      {
+        key: `rider_doc_session_phone:${phone}`,
+        max: 10,
+        windowMs: 60 * 60 * 1000,
+        message: 'Too many tries for this phone number. Please try again in 1 hour.',
+      },
+      {
+        key: `rider_doc_session_ip:${meta.ipAddress ?? 'unknown'}`,
+        max: 30,
+        windowMs: 15 * 60 * 1000,
+        message: 'Too many tries from this device. Please wait before retrying.',
+      },
+    ]);
     // Email-only and staff numbers are refused before the code is spent.
     await resolveApplicant(db, phone);
     const otpId = await authService.checkOtp(phone, otp);

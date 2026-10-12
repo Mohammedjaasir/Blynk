@@ -1,6 +1,7 @@
 import { sql, Transaction } from 'kysely';
 import { db } from '../../database/connection.js';
 import { Database } from '../../database/types.js';
+import { phoneHash } from '../users/phone-identity.js';
 
 export type DBConnection = Transaction<Database> | typeof db;
 
@@ -162,11 +163,14 @@ export class AuthRepository {
         is_active: true,
         phone_verified_at: now,
         last_login_at: now,
+        // Migration 041: the number's stable identity (users/phone-identity.ts).
+        phone_hash: phoneHash(phone),
       })
       .onConflict((oc) =>
         oc.column('phone').doUpdateSet({
           last_login_at: now,
           phone_verified_at: sql`COALESCE(users.phone_verified_at, ${now})`,
+          phone_hash: phoneHash(phone),
         })
       )
       .returningAll()
@@ -178,13 +182,16 @@ export class AuthRepository {
   /**
    * Updates last_login_at and ensures phone_verified_at is set for an existing user.
    */
-  async updateLastLogin(executor: DBConnection, userId: string) {
+  async updateLastLogin(executor: DBConnection, userId: string, phone?: string) {
     const now = new Date();
+    // Migration 041: rows made before it get their phone_hash at sign-in.
+    const hash = phoneHash(phone);
     const [updated] = await executor
       .updateTable('users')
       .set({
         last_login_at: now,
         phone_verified_at: sql`COALESCE(phone_verified_at, ${now})`,
+        ...(hash ? { phone_hash: hash } : {}),
       })
       .where('id', '=', userId)
       .returningAll()

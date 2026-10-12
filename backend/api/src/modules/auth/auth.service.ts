@@ -133,6 +133,10 @@ async function refuseCustomerInRiderApp(trx: Transaction<Database>, userId: stri
 export const otpSmsText = (otp: string, minutes: number) =>
   `${otp} is your Blynk code. Valid ${minutes} min. Do not share it.`;
 
+/** POST /auth/otp/verify edge limits, per 15 minutes. */
+export const OTP_VERIFY_PHONE_MAX = 10;
+export const OTP_VERIFY_IP_MAX = 30;
+
 export const LOGIN_MAX_ATTEMPTS = 5;
 export const LOGIN_LOCK_MINUTES = 15;
 
@@ -147,21 +151,23 @@ export class AuthService {
     // A rider still waiting for approval (migration 029): same.
     await refusePendingRider(phone);
 
-    // Rate limit per phone: max 3 requests per hour
-    authRateLimiter.checkLimit(
-      `otp_phone:${phone}`,
-      3,
-      60 * 60 * 1000,
-      'Maximum OTP requests reached for this phone number. Please try again in 1 hour.'
-    );
-
-    // Rate limit per IP: max 15 requests per 15 minutes
-    authRateLimiter.checkLimit(
-      `otp_ip:${clientIp}`,
-      15,
-      15 * 60 * 1000,
-      'Too many OTP requests from this IP address. Please wait before retrying.'
-    );
+    // Rate limits: max 3 requests per phone per hour, max 15 per IP per 15
+    // minutes. Both are checked before either is recorded, so a request the
+    // IP limit refuses never uses up the phone's quota (security audit 2026-10).
+    authRateLimiter.checkLimits([
+      {
+        key: `otp_phone:${phone}`,
+        max: 3,
+        windowMs: 60 * 60 * 1000,
+        message: 'Maximum OTP requests reached for this phone number. Please try again in 1 hour.',
+      },
+      {
+        key: `otp_ip:${clientIp}`,
+        max: 15,
+        windowMs: 15 * 60 * 1000,
+        message: 'Too many OTP requests from this IP address. Please wait before retrying.',
+      },
+    ]);
 
     const otp = generateOtp();
     const otpHash = await hashOtp(otp);
@@ -233,55 +239,66 @@ export class AuthService {
    * (INVALID_OTP, OTP_EXPIRED, OTP_MAX_ATTEMPTS_EXCEEDED).
    */
   async checkOtp(phone: string, submittedOtp: string): Promise<string> {
-    // 1. Fetch active OTP challenge without transaction
-    const activeOtp = await authRepository.findLatestOtp(db, phone);
+    // Steps 1-4 run in one transaction holding a row lock on the challenge,
+    // so concurrent checks of one code are serialised and each sees the
+    // counter the previous one committed: at most max_attempts wrong codes
+    // are ever compared (security audit 2026-10; before, the counter was read
+    // unlocked and every concurrent guess passed the gate). The outcome is
+    // returned and the error thrown only AFTER the commit - throwing inside
+    // the transaction would roll the wrong-code increment back and remove the
+    // cap entirely (same pattern as loginWithPassword).
+    const outcome = await db.transaction().execute(async (trx) => {
+      // 1. Lock the active OTP challenge
+      const activeOtp = await authRepository.findActiveOtpForUpdate(trx, phone);
+      if (!activeOtp) return { kind: 'missing' as const };
 
-    if (!activeOtp) {
-      throw new AppError(
-        'Invalid or expired OTP challenge. Please request a new OTP.',
-        401,
-        'INVALID_OTP'
-      );
-    }
+      // 2. Check attempt limit
+      if (activeOtp.attempts_count >= activeOtp.max_attempts) return { kind: 'locked' as const };
 
-    // 2. Check attempt limit
-    if (activeOtp.attempts_count >= activeOtp.max_attempts) {
-      throw new AppError(
-        'Too many failed verification attempts. This OTP has been locked. Please request a new one.',
-        429,
-        'OTP_MAX_ATTEMPTS_EXCEEDED'
-      );
-    }
+      // 3. Check expiration
+      if (new Date() > activeOtp.expires_at) return { kind: 'expired' as const };
 
-    // 3. Check expiration
-    if (new Date() > activeOtp.expires_at) {
-      throw new AppError('OTP has expired. Please request a new one.', 410, 'OTP_EXPIRED');
-    }
+      // 4. Cryptographic constant-time compare
+      const isValid = await compareOtp(submittedOtp, activeOtp.otp_hash);
+      if (isValid) return { kind: 'ok' as const, id: activeOtp.id };
 
-    // 4. Cryptographic constant-time compare
-    const isValid = await compareOtp(submittedOtp, activeOtp.otp_hash);
+      // A wrong code is counted, committed with this transaction.
+      const updated = await authRepository.incrementOtpAttempts(trx, activeOtp.id);
+      return { kind: 'wrong' as const, remaining: activeOtp.max_attempts - updated.attempts_count };
+    });
 
-    if (!isValid) {
-      const updated = await authRepository.incrementOtpAttempts(db, activeOtp.id);
-      const remainingAttempts = activeOtp.max_attempts - updated.attempts_count;
-
-      if (remainingAttempts <= 0) {
+    switch (outcome.kind) {
+      case 'ok':
+        return outcome.id;
+      case 'missing':
         throw new AppError(
-          'Too many failed verification attempts. Please request a new OTP.',
+          'Invalid or expired OTP challenge. Please request a new OTP.',
+          401,
+          'INVALID_OTP'
+        );
+      case 'locked':
+        throw new AppError(
+          'Too many failed verification attempts. This OTP has been locked. Please request a new one.',
           429,
           'OTP_MAX_ATTEMPTS_EXCEEDED'
         );
-      }
-
-      throw new AppError(
-        `Invalid OTP code. ${remainingAttempts} attempt(s) remaining.`,
-        401,
-        'INVALID_OTP',
-        { remaining_attempts: remainingAttempts }
-      );
+      case 'expired':
+        throw new AppError('OTP has expired. Please request a new one.', 410, 'OTP_EXPIRED');
+      case 'wrong':
+        if (outcome.remaining <= 0) {
+          throw new AppError(
+            'Too many failed verification attempts. Please request a new OTP.',
+            429,
+            'OTP_MAX_ATTEMPTS_EXCEEDED'
+          );
+        }
+        throw new AppError(
+          `Invalid OTP code. ${outcome.remaining} attempt(s) remaining.`,
+          401,
+          'INVALID_OTP',
+          { remaining_attempts: outcome.remaining }
+        );
     }
-
-    return activeOtp.id;
   }
 
   /**
@@ -311,6 +328,24 @@ export class AuthService {
     submittedOtp: string,
     meta: { ipAddress?: string; deviceInfo?: string; createAccount?: boolean; app?: 'rider' }
   ): Promise<AuthTokensResult> {
+    // Edge limit on code guessing (security audit 2026-10): max 10 verifies
+    // per phone and 30 per IP per 15 minutes, on top of the per-code attempt
+    // cap. Both checked before either is recorded.
+    authRateLimiter.checkLimits([
+      {
+        key: `otp_verify_phone:${phone}`,
+        max: OTP_VERIFY_PHONE_MAX,
+        windowMs: 15 * 60 * 1000,
+        message: 'Too many verification attempts for this phone number. Please wait before retrying.',
+      },
+      {
+        key: `otp_verify_ip:${meta.ipAddress ?? 'unknown'}`,
+        max: OTP_VERIFY_IP_MAX,
+        windowMs: 15 * 60 * 1000,
+        message: 'Too many verification attempts from this IP address. Please wait before retrying.',
+      },
+    ]);
+
     // Admin / Inventory never sign in with a code (also checked again below,
     // under the row lock, before anything is consumed).
     await refuseEmailOnlyAccount(phone);
@@ -343,7 +378,7 @@ export class AuthService {
         // application is approved (which makes it RIDER); in the customer
         // app the same account just shops.
         if (meta.app === 'rider' && existingUser.role === 'CUSTOMER') await refuseCustomerInRiderApp(trx, existingUser.id);
-        user = await authRepository.updateLastLogin(trx, existingUser.id);
+        user = await authRepository.updateLastLogin(trx, existingUser.id, existingUser.phone);
       } else if (meta.createAccount === false) {
         // Staff apps sign in with create_account:false - an unknown number is
         // refused instead of becoming a customer. Thrown inside the

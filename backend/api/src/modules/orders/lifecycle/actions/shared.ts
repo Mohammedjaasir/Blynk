@@ -87,9 +87,15 @@ export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reaso
   // Referral reward and Blynk Points (owner, 2026-10-10; migration 037): the
   // reward is released and the points given back.
   await onOrderCancelledRewards(trx, order);
+  // The SMS goes to the delivery recipient's phone, which the customer typed
+  // and never proved: a customer's own reason is never put in it (security
+  // audit 2026-10) - it stays on the order (cancellation_reason) for staff.
+  // A staff-written reason is still sent.
+  const byCustomer = actor.role === 'CUSTOMER';
   await enqueueCustomerSms(trx, order, 'ORDER_CANCELLED', `order_${order.id}_CANCELLED_SMS`, {
     order_number: order.order_number,
-    reason,
+    cancelled_by: byCustomer ? 'customer' : 'store',
+    reason: byCustomer ? null : reason,
   });
   return updated;
 }
