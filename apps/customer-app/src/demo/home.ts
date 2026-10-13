@@ -33,10 +33,10 @@ export const SEARCH_HINTS = ['Burger', 'Pizza', 'Biryani', 'Cakes', 'Noodles', '
 
 export const BANNER = {
   title: ['BROKE', 'HOURS'] as [string, string],
-  line: 'Dishes starting at ₹49',
+  line: 'Groceries starting at ₹49',
   accent: '₹49',
-  /** What the beam abducts in turn (the video: a sandwich, noodles, then a burger). */
-  emojis: ['🥪', '🍜', '🍔', '🍕'],
+  /** What the beam abducts in turn: grocery stand-ins in the video's slot (owner: no photos). */
+  emojis: ['🥛', '🍞', '🍎', '🥚', '🥦', '🍌'],
 };
 
 /** Before location is granted the rail has no "FROM" tags and a different order. */
