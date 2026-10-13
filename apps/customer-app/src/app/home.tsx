@@ -42,6 +42,9 @@ import { useCartSelect } from '@/lib/cart';
 import { openAisle } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 
+/** Blynk's rider illustration: the promo band's waving mascot (owner: illustrated, not a photo). */
+const RIDER = require('../../assets/rider.png');
+
 /*
  * Home, matched frame by frame to the reference recording (0:04–0:31). All content is the
  * video's own (src/demo/home.ts); colours follow Blynk's mapping (purple → ink, pink → Blynk yellow).
@@ -454,13 +457,13 @@ function LocationRow({ locating, dark, name, address }: { locating: boolean; dar
   );
 }
 
-/** "Search for 'Burger'" — the quoted word rolls up to the next dish now and then. */
+/** "Search for 'Burger'" — the quoted word rolls up to the next name every 1.5 s. */
 function SearchBar({ phase, hints }: { phase: Phase; hints: string[] }) {
   const [i, setI] = useState(0);
   useEffect(() => {
-    const first = setTimeout(() => setI(1), 2200);
-    const t = setInterval(() => setI((n) => n + 1), 9000);
-    return () => { clearTimeout(first); clearInterval(t); };
+    // owner: a new name about every 1.5 s
+    const t = setInterval(() => setI((n) => n + 1), 1500);
+    return () => clearInterval(t);
   }, []);
   const hint = hints[i % hints.length];
   const grey = phase === 'locating' || phase === 'skeleton';
@@ -743,7 +746,7 @@ function PromoBand({ live }: { live?: { line1: string | null; fees: string[] } }
             </View>
           ))}
         </View>
-        <Animated.Text style={[styles.mascot, a]}>🛒</Animated.Text>
+        <Animated.Image source={RIDER} resizeMode="contain" style={[styles.mascot, a]} />
       </LinearGradient>
       <Wave color={C.brandDeep} flip />
     </View>
@@ -859,7 +862,7 @@ const styles = StyleSheet.create({
   promo: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 16, overflow: 'hidden' },
   promoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   promoTxt: { color: C.brandInk, fontFamily: F.semi, fontSize: 14 },
-  mascot: { position: 'absolute', right: 16, bottom: -2, fontSize: 46 },
+  mascot: { position: 'absolute', right: 10, bottom: 2, width: 74, height: 74 },
   pillWrap: { position: 'absolute', alignSelf: 'center' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#17171B', paddingHorizontal: 11, height: 32, borderRadius: 16 },
   pillTxt: { color: '#fff', fontFamily: F.medium, fontSize: 13 },

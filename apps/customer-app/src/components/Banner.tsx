@@ -1,11 +1,10 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, SharedValue, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, LinearGradient as SvgGrad, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { cutout } from '@/blynk/lib/cutout';
 import { formatLkr } from '@/blynk/lib/money';
 import { withSpring } from '@/lib/motion';
 import { F } from '@/lib/theme';
@@ -28,6 +27,9 @@ const H = 183;
 const ITEM = 86;
 const TEXT_W = 196;
 const P = 2600; // ms per dish
+
+/** What the beam lifts in live mode: illustrated grocery stand-ins, never product photos. */
+const GROCERY_ITEMS = ['🍞', '🍎', '🥕', '🥚', '🥦', '🍌'];
 
 /** The banner's top purple. Home paints its header the same, so header and banner read as one block, as in the reference. */
 export const BANNER_TOP = '#2E0C66';
@@ -177,15 +179,16 @@ function useRoll(lines: string[]) {
  * Home's hero. Design mock: the reference's own copy and emoji dishes. Live: "FREE /
  * DELIVERY" while Blynk's new-customer free deliveries are on (otherwise "FRESH /
  * GROCERIES"), the sub-line rolls between the terms and "Groceries starting at" the
- * cheapest effective price, and the beam abducts real product photos cut out on the fly.
+ * cheapest effective price, and the beam lifts illustrated grocery items.
  */
-export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
-  images: string[]; minPrice: number | null; freeCount: number; onOrderNow?: () => void;
+export function Banner({ minPrice, freeCount, onOrderNow, demo }: {
+  /** Kept for callers; the banner no longer shows product photos. */
+  images?: string[]; minPrice: number | null; freeCount: number; onOrderNow?: () => void;
   /** Design mock: the reference's own copy, with emoji stand-ins for the abducted dishes. */
   demo?: { title: [string, string]; line: string; accent: string; emojis: string[] };
 }) {
-  const cutouts = useCutouts(demo ? [] : images);
-  const items = demo ? demo.emojis : cutouts;
+  // Illustrated grocery items in both modes (owner: no real product photos in the banner).
+  const items = demo ? demo.emojis : GROCERY_ITEMS;
   const [idx, setIdx] = useState(0);
 
   const bob = useSharedValue(0);
@@ -338,11 +341,7 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
         </Animated.View>
         {cur && (
           <Animated.View style={[styles.item, itemA]}>
-            {demo ? (
-              <Text style={styles.itemEmoji}>{cur}</Text>
-            ) : (
-              <Image source={{ uri: cur }} resizeMode="contain" style={styles.itemImg} />
-            )}
+            <Text style={styles.itemEmoji}>{cur}</Text>
           </Animated.View>
         )}
         <Animated.View style={[styles.saucer, ufoA]}>
@@ -354,20 +353,6 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
       </View>
     </View>
   );
-}
-
-/** Cut-outs of the banner photos that have a plain background, in catalogue order. */
-function useCutouts(images: string[]) {
-  const key = images.slice(0, 10).join('|');
-  const [out, setOut] = useState<string[]>([]);
-  useEffect(() => {
-    let live = true;
-    Promise.all(images.slice(0, 10).map(cutout)).then((r) => {
-      if (live) setOut(r.filter((x): x is string => !!x));
-    });
-    return () => { live = false; };
-  }, [key]);
-  return out;
 }
 
 const styles = StyleSheet.create({
@@ -391,8 +376,6 @@ const styles = StyleSheet.create({
   stage: { position: 'absolute', right: 0, top: 0, width: 180, height: H },
   beam: { position: 'absolute', left: -30, top: 0 },
   saucer: { position: 'absolute', right: 8, top: 12 },
-  item: { position: 'absolute', right: 44, bottom: 12, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
-  // web: the reference's soft shadow under the floating dish
-  itemImg: { width: ITEM, height: ITEM, filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
+  item: { position: 'absolute', right: 30, bottom: 36, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
   itemEmoji: { fontSize: 74, lineHeight: 88, textAlign: 'center', filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
 });
