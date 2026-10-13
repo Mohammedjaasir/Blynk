@@ -42,7 +42,7 @@ const T = {
 };
 const S2 = T.s1Out + 300; // slide two mounts here
 
-/** Yellow check box whose tick draws itself in. */
+/** Ink check box whose tick draws itself in. */
 function DrawCheck({ size = 27, delay = 0 }: { size?: number; delay?: number }) {
   const d = useSharedValue(0);
   useEffect(() => {
@@ -51,8 +51,8 @@ function DrawCheck({ size = 27, delay = 0 }: { size?: number; delay?: number }) 
   const props = useAnimatedProps(() => ({ strokeDashoffset: 24 * (1 - d.value) }));
   return (
     <Svg width={size} height={size} viewBox="0 0 26 26">
-      <Rect x={2} y={2} width={22} height={22} rx={4} stroke={C.yellow} strokeWidth={2.4} fill="none" />
-      <AnimatedPath d="M7 13.5l4 4 9-11" stroke={C.yellow} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" fill="none" strokeDasharray="24" animatedProps={props} />
+      <Rect x={2} y={2} width={22} height={22} rx={4} stroke={C.brandInk} strokeWidth={2.4} fill="none" />
+      <AnimatedPath d="M7 13.5l4 4 9-11" stroke={C.brandInk} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" fill="none" strokeDasharray="24" animatedProps={props} />
     </Svg>
   );
 }
@@ -67,7 +67,7 @@ function Rays() {
   }).join('');
   return (
     <Svg width={300} height={FEE.burstH} style={StyleSheet.absoluteFill}>
-      <Path d={d} fill={C.greenDark} opacity={0.8} />
+      <Path d={d} fill={C.brandDeep} opacity={0.7} />
     </Svg>
   );
 }
@@ -97,8 +97,8 @@ function Mascot({ emoji, rise }: { emoji: string; rise: boolean }) {
 }
 
 /**
- * The cart's green fee header. At rest it is the "₹0 Packaging Fee · ₹0 Platform fee" pill
- * under the back row. Each time `burstKey` changes it bursts: a soft-edged green sweep wipes
+ * The cart's yellow fee header. At rest it is the "₹0 Packaging Fee · ₹0 Platform fee" pill
+ * under the back row. Each time `burstKey` changes it bursts: a soft-edged yellow sweep wipes
  * in from the right over the back row, slide 1 ("OFFLINE PRICE / MATCH ✓") rises in line by
  * line while the mascot climbs up, slide 2 ("₹0 Packaging fee / Platform fee") follows on
  * sun-burst rays, then the header shrinks back into the pill and the pill text fades back.
@@ -147,7 +147,7 @@ export function FeeHeader({ topInset, burstKey, backRow }: { topInset: number; b
     right: interpolate(shrink.value, [0, 1], [0, 17]),
     borderRadius: interpolate(shrink.value, [0, 1], [0, 10]),
   }));
-  // a band (soft diagonal gradient edge, then solid green) sliding right → left
+  // a band (soft diagonal gradient edge, then solid yellow) sliding right → left
   const band = useAnimatedStyle(() => ({ transform: [{ translateX: interpolate(sweep.value, [0, 1], [width, -220]) }] }));
   const content = useAnimatedStyle(() => ({ opacity: 1 - shrink.value, transform: [{ scale: 1 - shrink.value * 0.35 }] }));
   const pillA = useAnimatedStyle(() => ({ opacity: pillTxt.value }));
@@ -168,8 +168,8 @@ export function FeeHeader({ topInset, burstKey, backRow }: { topInset: number; b
       {/* burst */}
       <Animated.View pointerEvents="none" style={[styles.panel, panel]}>
         <Animated.View style={[styles.band, { width: width + 220 }, band]}>
-          <LinearGradient colors={['rgba(12,131,31,0)', C.green]} start={{ x: 0, y: 0.1 }} end={{ x: 1, y: 0.9 }} style={{ width: 220, height: '100%' }} />
-          <View style={{ flex: 1, backgroundColor: C.green }} />
+          <LinearGradient colors={['rgba(255,225,65,0)', C.brand]} start={{ x: 0, y: 0.1 }} end={{ x: 1, y: 0.9 }} style={{ width: 220, height: '100%' }} />
+          <View style={{ flex: 1, backgroundColor: C.brand }} />
         </Animated.View>
         {phase !== 0 && (
           <Animated.View key={burstKey} style={[StyleSheet.absoluteFill, content]}>
@@ -204,17 +204,17 @@ export function FeeHeader({ topInset, burstKey, backRow }: { topInset: number; b
 const styles = StyleSheet.create({
   cover: { position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: C.bg, zIndex: 4 },
   back: { position: 'absolute', left: 0, right: 0, height: 38, zIndex: 5 },
-  pill: { position: 'absolute', left: 19, right: 17, height: FEE.pillH, borderRadius: 10, backgroundColor: C.green, zIndex: 6 },
+  pill: { position: 'absolute', left: 19, right: 17, height: FEE.pillH, borderRadius: 10, backgroundColor: C.brand, zIndex: 6 },
   pillRow: { ...StyleSheet.absoluteFill, justifyContent: 'center', paddingLeft: 36, paddingRight: 50 },
-  pillTxt: { color: C.yellow, fontFamily: F.semi, fontSize: 14.5, letterSpacing: -0.1 },
+  pillTxt: { color: C.brandInk, fontFamily: F.semi, fontSize: 14.5, letterSpacing: -0.1 },
   pillMascot: { position: 'absolute', right: 10, bottom: -4, fontSize: 40, lineHeight: 52 },
   panel: { position: 'absolute', overflow: 'hidden', zIndex: 20 },
   band: { position: 'absolute', top: 0, bottom: 0, left: 0, flexDirection: 'row' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   s1: { position: 'absolute', left: 28, top: 22 },
-  big: { fontFamily: F.condensed, fontSize: 29, color: C.yellow, lineHeight: 33, letterSpacing: 0.2 },
+  big: { fontFamily: F.condensed, fontSize: 29, color: C.brandInk, lineHeight: 33, letterSpacing: 0.2 },
   s2: { position: 'absolute', left: 33, top: 17, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  zero: { fontFamily: F.condensed, fontSize: 60, color: C.yellow, lineHeight: 72 },
-  feeLine: { fontFamily: F.medium, fontSize: 19, color: C.yellow, lineHeight: 27 },
+  zero: { fontFamily: F.condensed, fontSize: 60, color: C.brandInk, lineHeight: 72 },
+  feeLine: { fontFamily: F.medium, fontSize: 19, color: C.brandInk, lineHeight: 27 },
   mascot: { position: 'absolute', right: 24, bottom: -12, fontSize: 74, lineHeight: 98 },
 });

@@ -42,12 +42,12 @@ export default function Placed() {
 
   return (
     <View style={styles.root}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <Animated.View style={popA}>
         <Svg width={120} height={120} viewBox="0 0 120 120">
-          <Circle cx={60} cy={60} r={48} fill="rgba(255,255,255,0.12)" />
-          <AnimatedCircle cx={60} cy={60} r={48} stroke={C.yellow} strokeWidth={6} fill="none" strokeDasharray="302" animatedProps={ringP} strokeLinecap="round" rotation={-90} origin="60,60" />
-          <AnimatedPath d="M38 62 L54 77 L84 45" stroke="#fff" strokeWidth={8} fill="none" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="70" animatedProps={tickP} />
+          <Circle cx={60} cy={60} r={48} fill="rgba(26,29,46,0.1)" />
+          <AnimatedCircle cx={60} cy={60} r={48} stroke={C.brandInk} strokeWidth={6} fill="none" strokeDasharray="302" animatedProps={ringP} strokeLinecap="round" rotation={-90} origin="60,60" />
+          <AnimatedPath d="M38 62 L54 77 L84 45" stroke={C.brandInk} strokeWidth={8} fill="none" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="70" animatedProps={tickP} />
         </Svg>
       </Animated.View>
       <Animated.Text entering={FadeInDown.delay(700)} style={styles.title}>Order placed!</Animated.Text>
@@ -63,9 +63,9 @@ export default function Placed() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
-  title: { fontFamily: F.display, color: C.yellow, fontSize: 30, marginTop: 20 },
-  sub: { fontFamily: F.medium, color: '#fff', fontSize: 15, textAlign: 'center', marginTop: 8, lineHeight: 22 },
-  cta: { marginTop: 28, backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 30, paddingVertical: 14 },
-  ctaTxt: { fontFamily: F.bold, color: C.green, fontSize: 15 },
+  root: { flex: 1, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
+  title: { fontFamily: F.display, color: C.brandInk, fontSize: 30, marginTop: 20 },
+  sub: { fontFamily: F.medium, color: C.brandInk, fontSize: 15, textAlign: 'center', marginTop: 8, lineHeight: 22 },
+  cta: { marginTop: 28, backgroundColor: C.brandInk, borderRadius: 14, paddingHorizontal: 30, paddingVertical: 14 },
+  ctaTxt: { fontFamily: F.bold, color: C.brand, fontSize: 15 },
 });

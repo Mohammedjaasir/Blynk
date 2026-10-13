@@ -46,9 +46,9 @@ export default function Otp() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <View style={[styles.head, { paddingTop: insets.top }]}>
-        <PressScale onPress={() => router.back()} style={styles.back}><BackIcon size={20} color="#fff" stroke={1.6} /></PressScale>
+        <PressScale onPress={() => router.back()} style={styles.back}><BackIcon size={20} color={C.brandInk} stroke={1.6} /></PressScale>
         <Text style={styles.title}>{COPY.verifyTitle}</Text>
         <Text style={styles.sub}>{DEMO ? COPY.otpSentTo(phone ?? '') : LIVE.otpSentTo(phone ?? '')}</Text>
         <PhoneArt />
@@ -76,7 +76,7 @@ export default function Otp() {
           {!done && !DEMO && <Animated.Text entering={FadeIn.delay(130).duration(1)} style={styles.retry}>{LIVE.otpNote}</Animated.Text>}
           {!done && DEMO && (
             <Animated.Text entering={FadeIn.delay(130).duration(1)} style={styles.retry}>
-              {secs > 0 ? COPY.retry(secs) : <Text style={{ color: C.green, fontFamily: F.semi }} onPress={() => setSecs(25)}>Resend OTP</Text>}
+              {secs > 0 ? COPY.retry(secs) : <Text style={{ color: C.brandText, fontFamily: F.bold }} onPress={() => setSecs(25)}>Resend OTP</Text>}
             </Animated.Text>
           )}
         </View>
@@ -88,7 +88,7 @@ export default function Otp() {
   );
 }
 
-/** One OTP cell: digit above a 45 px underline; the cell waiting for input is green and thicker. */
+/** One OTP cell: digit above a 45 px underline; the cell waiting for input is dark and thicker. */
 function Slot({ ch, active }: { ch?: string; active: boolean }) {
   const w = useSharedValue(active ? 1 : 0);
   useEffect(() => {
@@ -96,7 +96,7 @@ function Slot({ ch, active }: { ch?: string; active: boolean }) {
   }, [active]);
   const line = useAnimatedStyle(() => ({
     height: 1 + w.value * 1.6,
-    backgroundColor: interpolateColor(w.value, [0, 1], ['#DCDCE0', C.green]),
+    backgroundColor: interpolateColor(w.value, [0, 1], ['#DCDCE0', C.brandInk]),
   }));
   return (
     <View style={styles.slot}>
@@ -108,7 +108,7 @@ function Slot({ ch, active }: { ch?: string; active: boolean }) {
   );
 }
 
-/** Yellow outline phone with "XXXXXX", cut off by the header's bottom edge (steady, as in the video). */
+/** Ink outline phone with "XXXXXX", cut off by the header's bottom edge (steady, as in the video). */
 function PhoneArt() {
   return (
     <View style={styles.phone}>
@@ -119,16 +119,16 @@ function PhoneArt() {
 }
 
 const styles = StyleSheet.create({
-  head: { backgroundColor: C.green, paddingHorizontal: 15, paddingBottom: 23, overflow: 'hidden' },
+  head: { backgroundColor: C.brand, paddingHorizontal: 15, paddingBottom: 23, overflow: 'hidden' },
   back: { marginTop: 22, width: 24, height: 18, justifyContent: 'center', marginLeft: -1 },
-  title: { color: '#fff', fontFamily: F.semi, fontSize: 16.7, marginTop: 11, lineHeight: 22 },
-  sub: { color: 'rgba(255,255,255,0.92)', fontFamily: F.regular, fontSize: 11.3, marginTop: 1, lineHeight: 16 },
+  title: { color: C.brandInk, fontFamily: F.semi, fontSize: 16.7, marginTop: 11, lineHeight: 22 },
+  sub: { color: C.brandInk, fontFamily: F.regular, fontSize: 11.3, marginTop: 1, lineHeight: 16 },
   phone: {
-    position: 'absolute', right: 30, bottom: -2, width: 60, height: 74, borderWidth: 2, borderColor: C.yellow,
+    position: 'absolute', right: 30, bottom: -2, width: 60, height: 74, borderWidth: 2, borderColor: C.brandInk,
     borderTopLeftRadius: 9, borderTopRightRadius: 9, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 16,
   },
-  notch: { position: 'absolute', top: 6, width: 14, height: 3, borderRadius: 2, backgroundColor: C.yellow },
-  xx: { color: C.yellow, fontFamily: F.regular, fontSize: 9.5, letterSpacing: 3, marginRight: -3 },
+  notch: { position: 'absolute', top: 6, width: 14, height: 3, borderRadius: 2, backgroundColor: C.brandInk },
+  xx: { color: C.brandInk, fontFamily: F.regular, fontSize: 9.5, letterSpacing: 3, marginRight: -3 },
   label: { fontFamily: F.regular, fontSize: 9.5, color: '#5E5E66', marginTop: 35, lineHeight: 12 },
   slots: { flexDirection: 'row', gap: 11, marginTop: 15 },
   slot: { width: 45, alignItems: 'center' },
@@ -137,6 +137,6 @@ const styles = StyleSheet.create({
   hidden: { position: 'absolute', opacity: 0, height: 1, width: 1 },
   retryBox: { height: 72, justifyContent: 'center' },
   retry: { fontFamily: F.regular, fontSize: 11.6, color: '#55555C' },
-  cta: { height: 45, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: C.greenSoft },
-  ctaTxt: { color: '#fff', fontFamily: F.semi, fontSize: 14 },
+  cta: { height: 45, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: C.brandSoft },
+  ctaTxt: { color: C.brandInk, fontFamily: F.semi, fontSize: 14 },
 });

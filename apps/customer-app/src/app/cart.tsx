@@ -154,7 +154,7 @@ export default function Cart() {
           <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, styles.itemsCard]}>
             {lines.map(({ product: p, quantity }) => (DEMO ? (
               <Animated.View key={p.id} exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={styles.itemRow}>
-                <VegMark size={11} color={C.green} />
+                <VegMark size={11} color={C.veg} />
                 <Text style={styles.itemName} numberOfLines={1}>{p.name}</Text>
                 <Stepper product={p} qty={quantity} />
                 <View style={styles.priceCol}>
@@ -241,9 +241,9 @@ export default function Cart() {
           </View>
           <View style={[styles.sep, { marginHorizontal: 0 }]} />
           <View style={{ paddingHorizontal: 15, paddingTop: 12 }}>
-            <BillRow l="Item Total" r={<Text style={styles.billR}><Text style={styles.billStrike}>{rupee(mrpTotal)}</Text> <Text style={{ color: C.green }}>{rupee(total)}</Text></Text>} />
+            <BillRow l="Item Total" r={<Text style={styles.billR}><Text style={styles.billStrike}>{rupee(mrpTotal)}</Text> <Text style={{ color: C.brandText }}>{rupee(total)}</Text></Text>} />
             {after && <Dashed style={{ marginVertical: 11 }} />}
-            <BillRow dashed l={bill.distance} r={<Text style={styles.billR}><Text style={styles.billStrike}>{rupee(BILL.deliveryFee, bill.feeFixed)}</Text> <Text style={{ color: C.green }}>FREE</Text></Text>} />
+            <BillRow dashed l={bill.distance} r={<Text style={styles.billR}><Text style={styles.billStrike}>{rupee(BILL.deliveryFee, bill.feeFixed)}</Text> <Text style={{ color: C.brandText }}>FREE</Text></Text>} />
             <Text style={styles.freeNote}>{BILL.freeNote}</Text>
             {!after && <Dashed style={{ marginVertical: 11 }} />}
             <View style={{ height: 2 }} />
@@ -252,7 +252,7 @@ export default function Cart() {
           </View>
           {after && (
             <Animated.View entering={FadeIn.duration(250)} style={styles.thatsIt}>
-              <LinearGradient colors={[C.greenTint, 'rgba(231,245,234,0)']} start={{ x: 0.55, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={[C.brandTint, 'rgba(255,248,214,0)']} start={{ x: 0.55, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
               <Text style={styles.thatsItTxt}>{COPY.thatsIt}</Text>
             </Animated.View>
           )}
@@ -291,7 +291,7 @@ export default function Cart() {
         ) : !address ? (
           <Animated.View key="addr" entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
             <View style={styles.whereRow}>
-              <View style={{ marginTop: 3 }}><NavIcon size={16} color={C.green} /></View>
+              <View style={{ marginTop: 3 }}><NavIcon size={16} color={C.brandInk} /></View>
               <Text style={styles.whereTxt}>{COPY.whereTitle}</Text>
             </View>
             <PressScale onPress={() => router.push('/address')} haptic style={{ marginTop: 21 }} scaleTo={0.95}>
@@ -301,7 +301,7 @@ export default function Cart() {
         ) : (
           <Animated.View key="place" entering={FadeIn.duration(200)}>
             <View style={styles.whereRow}>
-              <View style={{ marginTop: 3 }}><NavIcon size={16} color={C.green} /></View>
+              <View style={{ marginTop: 3 }}><NavIcon size={16} color={C.brandInk} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.whereTxt, { marginLeft: 0 }]} numberOfLines={1}>Delivering to {address.title}</Text>
                 <Text style={styles.bottomSub} numberOfLines={1}>{address.line}</Text>
@@ -314,7 +314,7 @@ export default function Cart() {
               </PressScale>
             ) : (
               <PressScale onPress={() => setNotice(Date.now())} disabled={count === 0 || closedNow} haptic style={{ marginTop: 21 }} scaleTo={0.95}>
-                <View style={[styles.cta, (count === 0 || closedNow) && { backgroundColor: C.greenSoft }]}>
+                <View style={[styles.cta, (count === 0 || closedNow) && { backgroundColor: C.brandSoft }]}>
                   <Text style={styles.ctaTxt}>{closedNow ? LIVE.closedCta : `Place order  |  ${money(toPay)}${live.feeKnown ? '' : ' + delivery'}`}</Text>
                 </View>
               </PressScale>
@@ -358,7 +358,7 @@ function CheckBox({ on }: { on: boolean }) {
   }, [on]);
   const a = useAnimatedStyle(() => ({ opacity: s.value, transform: [{ scale: s.value }] }));
   return (
-    <View style={[styles.checkBox, on && { borderColor: C.green }]}>
+    <View style={[styles.checkBox, on && { borderColor: C.brandDeep }]}>
       <Animated.View style={[styles.checkFill, a]}><Text style={styles.checkTick}>✓</Text></Animated.View>
     </View>
   );
@@ -416,8 +416,8 @@ function InstructionChips() {
         const a = on.includes(o);
         return (
           <PressScale key={o} haptic onPress={() => setOn((s) => (a ? s.filter((x) => x !== o) : [...s, o]))}
-            style={[styles.chip, a && { borderColor: C.green, backgroundColor: C.greenTint }]}>
-            <Text style={[styles.chipTxt, a && { color: C.greenDark }]}>{o}</Text>
+            style={[styles.chip, a && { borderColor: C.brandDeep, backgroundColor: C.brand }]}>
+            <Text style={[styles.chipTxt, a && { color: C.brandInk }]}>{o}</Text>
           </PressScale>
         );
       })}
@@ -448,7 +448,7 @@ function MealCard({ ready }: { ready: boolean }) {
               <Skeleton w={69} h={64} r={8} />
             )}
             <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
-              <View style={{ marginTop: 3 }}><VegMark size={11} color={C.green} /></View>
+              <View style={{ marginTop: 3 }}><VegMark size={11} color={C.veg} /></View>
               <Text style={styles.mealName} numberOfLines={2}>{p.name}</Text>
             </View>
             <Text style={styles.mealPrice}>{rupee(p.selling_price)}</Text>
@@ -463,8 +463,8 @@ function MealCard({ ready }: { ready: boolean }) {
 function MealAdd({ product }: { product: Product }) {
   const q = useCartSelect((c) => c.qty[product.id] ?? 0);
   return (
-    <PressScale haptic onPress={() => cartActions.add(product)} style={[styles.mealPlus, q > 0 && { backgroundColor: C.green }]} scaleTo={0.85}>
-      <Text style={[styles.mealPlusTxt, q > 0 && { color: '#fff', fontSize: 11 }]}>{q > 0 ? q : '+'}</Text>
+    <PressScale haptic onPress={() => cartActions.add(product)} style={[styles.mealPlus, q > 0 && { backgroundColor: C.brand, borderColor: C.brandDeep }]} scaleTo={0.85}>
+      <Text style={[styles.mealPlusTxt, q > 0 && { color: C.brandInk, fontSize: 11 }]}>{q > 0 ? q : '+'}</Text>
     </PressScale>
   );
 }
@@ -555,7 +555,7 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
               <Skeleton w={69} h={64} r={8} />
             )}
             <Text style={[styles.mealName, { marginTop: 5 }]} numberOfLines={2}>{p.name}</Text>
-            <Text style={[styles.mealPrice, isOfferActive(p) && { color: C.green }]}>{formatLkr(effectivePrice(p))}</Text>
+            <Text style={[styles.mealPrice, isOfferActive(p) && { color: C.brandText }]}>{formatLkr(effectivePrice(p))}</Text>
           </View>
         ))}
       </View>
@@ -589,15 +589,15 @@ function LiveBillCard({ bill, itemTotal, mrpTotal }: { bill: LiveBill; itemTotal
         <BillRow l="Item Total" r={(
           <Text style={styles.billR}>
             {bill.showSaved && <Text style={styles.billStrike}>{formatLkr(mrpTotal)} </Text>}
-            <Text style={bill.showSaved ? { color: C.green } : undefined}>{formatLkr(itemTotal)}</Text>
+            <Text style={bill.showSaved ? { color: C.brandText } : undefined}>{formatLkr(itemTotal)}</Text>
           </Text>
         )} />
         <Dashed style={{ marginVertical: 11 }} />
-        <BillRow dashed l="Delivery Fee" r={<Text style={[styles.billR, free && { color: C.green }]}>{bill.feeText}</Text>} />
+        <BillRow dashed l="Delivery Fee" r={<Text style={[styles.billR, free && { color: C.brandText }]}>{bill.feeText}</Text>} />
         {free && <Text style={styles.freeNote}>{LIVE.freeNote(bill.freeCount)}</Text>}
       </View>
       <Animated.View entering={FadeIn.duration(250)} style={styles.thatsIt}>
-        <LinearGradient colors={[C.greenTint, 'rgba(231,245,234,0)']} start={{ x: 0.55, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={[C.brandTint, 'rgba(255,248,214,0)']} start={{ x: 0.55, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
         <Text style={styles.thatsItTxt}>{LIVE.thatsIt}</Text>
       </Animated.View>
       <View style={[styles.billRow, { paddingHorizontal: 15, height: 46 }]}>
@@ -628,7 +628,7 @@ function LoginSheet({ onClose }: { onClose: () => void }) {
   const label = useAnimatedStyle(() => ({
     transform: [{ translateY: interpolate(lift.value, [0, 1], [0, -22]) }, { scale: interpolate(lift.value, [0, 1], [1, 0.72]) }],
   }));
-  const btn = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(en.value, [0, 1], [C.greenSoft, C.green]) }));
+  const btn = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(en.value, [0, 1], [C.brandSoft, C.brand]) }));
   const submit = () => {
     Keyboard.dismiss();
     onClose();
@@ -700,24 +700,24 @@ function CartSkeleton({ top, bottomPad }: { top: number; bottomPad: number }) {
   );
 }
 
-/* ---------- small glyphs (white on the green squares) ---------- */
+/* ---------- small glyphs (ink on the yellow squares) ---------- */
 const PlusGlyph = () => (
   <Svg width={14} height={14} viewBox="0 0 24 24"><Path d="M12 4v16M4 12h16" stroke="#444" strokeWidth={2} strokeLinecap="round" /></Svg>
 );
 const PenGlyph = ({ white }: { white?: boolean }) => (
   <Svg width={white ? 11 : 15} height={white ? 11 : 15} viewBox="0 0 24 24" fill="none">
-    <Path d="M4 20l1-5L16 4l4 4L9 19l-5 1z" stroke={white ? '#fff' : '#444'} strokeWidth={white ? 2.6 : 1.8} strokeLinejoin="round" fill={white ? '#fff' : 'none'} />
+    <Path d="M4 20l1-5L16 4l4 4L9 19l-5 1z" stroke={white ? C.brandInk : '#444'} strokeWidth={white ? 2.6 : 1.8} strokeLinejoin="round" fill={white ? C.brandInk : 'none'} />
     {!white && <Path d="M13 20h7" stroke="#444" strokeWidth={1.8} strokeLinecap="round" />}
   </Svg>
 );
 const TagGlyph = () => (
-  <Svg width={11} height={11} viewBox="0 0 24 24"><Path d="M3 12V4a1 1 0 011-1h8l9 9-9 9-9-9z" fill="#fff" /><Circle cx={8} cy={8} r={2} fill={C.green} /></Svg>
+  <Svg width={11} height={11} viewBox="0 0 24 24"><Path d="M3 12V4a1 1 0 011-1h8l9 9-9 9-9-9z" fill={C.brandInk} /><Circle cx={8} cy={8} r={2} fill={C.brand} /></Svg>
 );
 const BagGlyph = () => (
-  <Svg width={11} height={12} viewBox="0 0 22 24"><Rect x={3} y={7} width={16} height={15} rx={2} fill="#fff" /><Path d="M7 7V5a4 4 0 018 0v2" stroke="#fff" strokeWidth={2.4} fill="none" /><Circle cx={11} cy={14} r={2.5} fill={C.green} /></Svg>
+  <Svg width={11} height={12} viewBox="0 0 22 24"><Rect x={3} y={7} width={16} height={15} rx={2} fill={C.brandInk} /><Path d="M7 7V5a4 4 0 018 0v2" stroke={C.brandInk} strokeWidth={2.4} fill="none" /><Circle cx={11} cy={14} r={2.5} fill={C.brand} /></Svg>
 );
 const ReceiptGlyph = () => (
-  <Svg width={10} height={11} viewBox="0 0 20 22"><Path d="M2 1h16v20l-4-2-4 2-4-2-4 2z" fill="#fff" /><Path d="M6 7h8M6 11h8" stroke={C.green} strokeWidth={2} /></Svg>
+  <Svg width={10} height={11} viewBox="0 0 20 22"><Path d="M2 1h16v20l-4-2-4 2-4-2-4 2z" fill={C.brandInk} /><Path d="M6 7h8M6 11h8" stroke={C.brand} strokeWidth={2} /></Svg>
 );
 
 const styles = StyleSheet.create({
@@ -744,8 +744,8 @@ const styles = StyleSheet.create({
   },
   chipTxt: { fontFamily: F.regular, fontSize: 12, color: '#4A4A52' },
   checkBox: { width: 16, height: 16, borderRadius: 3, borderWidth: 1.3, borderColor: '#9A9AA2', overflow: 'hidden' },
-  checkFill: { flex: 1, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
-  checkTick: { color: '#fff', fontSize: 10, fontFamily: F.black, lineHeight: 12 },
+  checkFill: { flex: 1, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
+  checkTick: { color: C.brandInk, fontSize: 10, fontFamily: F.black, lineHeight: 12 },
   tipWrap: { position: 'absolute', left: 149, bottom: -20, zIndex: 5 },
   tipArrow: {
     width: 0, height: 0, marginRight: 24, borderLeftWidth: 6.5, borderRightWidth: 6.5, borderBottomWidth: 8,
@@ -755,21 +755,21 @@ const styles = StyleSheet.create({
   tipTxt: { color: '#fff', fontFamily: F.semi, fontSize: 12.5, letterSpacing: -0.2 },
   tipX: { width: 15, height: 15, borderRadius: 8, backgroundColor: '#3A3A3E', alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
-  sq: { width: 18, height: 18, borderRadius: 4.5, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
+  sq: { width: 18, height: 18, borderRadius: 4.5, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
   rowLabel: { flex: 1, fontFamily: F.regular, fontSize: 13.3, color: TEXT, marginLeft: 11, letterSpacing: -0.1 },
   sep: { height: 1, backgroundColor: LINE },
-  applied: { fontFamily: F.medium, color: C.green, fontSize: 12.5 },
+  applied: { fontFamily: F.semi, color: C.brandText, fontSize: 12.5 },
   billHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 11, paddingHorizontal: 16, paddingTop: 14, height: 66 },
   payLine: { fontFamily: F.medium, fontSize: 13, color: INK, lineHeight: 17 },
   payStrike: { color: '#6E6E76', textDecorationLine: 'line-through', fontFamily: F.regular },
-  savedTxt: { fontFamily: F.regular, color: C.green, fontSize: 12.1, marginTop: 1 },
+  savedTxt: { fontFamily: F.medium, color: C.brandText, fontSize: 12.1, marginTop: 1 },
   billRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   billL: { fontFamily: F.regular, fontSize: 12.6, color: GREY, lineHeight: 22 },
   billR: { fontFamily: F.regular, fontSize: 12.6, color: TEXT },
   billStrike: { color: '#6E6E76', textDecorationLine: 'line-through' },
   freeNote: { fontFamily: F.regular, fontSize: 11.5, color: '#7A7A82', marginTop: 8, lineHeight: 16 },
   thatsIt: { height: 28, justifyContent: 'center', paddingHorizontal: 15, marginTop: 15, overflow: 'hidden' },
-  thatsItTxt: { fontFamily: F.medium, fontSize: 12.3, color: C.green, letterSpacing: -0.1 },
+  thatsItTxt: { fontFamily: F.medium, fontSize: 12.3, color: C.brandText, letterSpacing: -0.1 },
   payTotal: { fontFamily: F.semi, fontSize: 12.8, color: INK },
   policyTitle: { fontFamily: F.semi, fontSize: 12, color: '#A3A3AA', marginHorizontal: 23, marginTop: 10 },
   policy: { fontFamily: F.regular, fontSize: 12, color: '#A8A8AE', marginHorizontal: 23, marginTop: 1, lineHeight: 16.5 },
@@ -781,20 +781,20 @@ const styles = StyleSheet.create({
   bottomSub: { fontFamily: F.regular, fontSize: 12.2, color: '#6E6E76', marginTop: 4, lineHeight: 18 },
   whereRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 2 },
   whereTxt: { flex: 1, fontFamily: F.semi, fontSize: 16.8, color: TEXT, lineHeight: 21 },
-  change: { fontFamily: F.bold, color: C.green, fontSize: 13 },
-  cta: { height: 50, borderRadius: 25, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
-  ctaTxt: { color: '#fff', fontFamily: F.semi, fontSize: 16 },
+  change: { fontFamily: F.bold, color: C.brandText, fontSize: 13 },
+  cta: { height: 50, borderRadius: 25, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
+  ctaTxt: { color: C.brandInk, fontFamily: F.semi, fontSize: 16 },
   veil: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(255,255,255,0.4)', zIndex: 40 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 50 },
   modal: { width: 290, backgroundColor: '#fff', borderRadius: 16, paddingTop: 19, paddingBottom: 29, alignItems: 'center', overflow: 'hidden' },
   modalX: { position: 'absolute', right: 12, top: 12, width: 22, height: 22, borderRadius: 11, backgroundColor: '#D6D6DA', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  mascotCircle: { width: 135, height: 135, borderRadius: 68, backgroundColor: '#DDF2E1', alignItems: 'center', justifyContent: 'center' },
+  mascotCircle: { width: 135, height: 135, borderRadius: 68, backgroundColor: C.brandSoft, alignItems: 'center', justifyContent: 'center' },
   modalTitle: { fontFamily: F.bold, fontSize: 21.5, color: '#141414', textAlign: 'center', marginTop: 22, lineHeight: 24, letterSpacing: -0.3 },
   modalSub: { fontFamily: F.regular, fontSize: 13, color: '#55555C', marginTop: 4 },
-  yay: { alignSelf: 'stretch', marginHorizontal: 15, marginTop: 38, height: 50, borderRadius: 25, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
-  yayTxt: { color: '#fff', fontFamily: F.semi, fontSize: 15.5 },
+  yay: { alignSelf: 'stretch', marginHorizontal: 15, marginTop: 38, height: 50, borderRadius: 25, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
+  yayTxt: { color: C.brandInk, fontFamily: F.semi, fontSize: 15.5 },
   drainTrack: { position: 'absolute', left: 0, right: 0, bottom: 2, height: 4, alignItems: 'flex-end' },
-  drain: { height: 4, backgroundColor: C.green, borderTopLeftRadius: 2, borderBottomLeftRadius: 2 },
+  drain: { height: 4, backgroundColor: C.brandDeep, borderTopLeftRadius: 2, borderBottomLeftRadius: 2 },
   sheet: { alignSelf: 'stretch', height: 547, backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingHorizontal: 15, paddingTop: 16 },
   sheetTitle: { fontFamily: F.semi, fontSize: 17.5, color: INK, lineHeight: 22 },
   sheetSub: { fontFamily: F.regular, fontSize: 12, color: '#6E6E76', marginTop: 0, lineHeight: 16 },
@@ -809,8 +809,8 @@ const styles = StyleSheet.create({
   terms: { fontFamily: F.regular, fontSize: 13.4, color: '#6E6E76', textAlign: 'center', marginTop: 16 },
   link: { textDecorationLine: 'underline', color: INK, fontFamily: F.semi },
   mealTitle: { fontFamily: F.semi, fontSize: 12.5, color: '#7A7A82', letterSpacing: 2 },
-  mealPlus: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.4, borderColor: C.green, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  mealPlusTxt: { color: C.green, fontFamily: F.semi, fontSize: 15, lineHeight: 17, marginTop: -1 },
+  mealPlus: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.4, borderColor: C.brandInk, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  mealPlusTxt: { color: C.brandInk, fontFamily: F.semi, fontSize: 15, lineHeight: 17, marginTop: -1 },
   mealTile: { width: 69, height: 64, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   mealAdd: { position: 'absolute', top: -1, right: -1 },
   mealName: { flex: 1, fontFamily: F.regular, fontSize: 12, color: TEXT, lineHeight: 15.5 },
