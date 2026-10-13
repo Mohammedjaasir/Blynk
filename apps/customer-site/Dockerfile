@@ -14,25 +14,18 @@
 # closed (404). The API serves Blynk Ops / Blynk Rider to signed-in staff and
 # through temporary share links - docs/06-deployment/staff-app-updates.md.
 
-# ---- 1. The shop: the Blynk customer app (apps/customer-app), built for the web --
-# Owner, 2026-10-13: the new customer app replaces the Flutter shop at /app/ and is
-# released as a PWA first. Built in live mode (EXPO_PUBLIC_DEMO=0) against API_BASE_URL,
-# so prices, offers, fees, free deliveries and store hours all come from the API that
-# Admin and Ops control. Its public/ folder carries the GTM markers, the manifest
-# (same id /app/), the install helper, the phones-only gate, and a worker that retires
-# the old Flutter shop's offline cache on customers' phones.
-FROM node:20-bookworm-slim AS app
+# ---- 1. The shop: the Flutter customer app, built for the web --------------
+FROM ghcr.io/cirruslabs/flutter:stable AS app
 WORKDIR /src
-COPY apps/customer-app/package.json apps/customer-app/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY apps/customer-app/ ./
+COPY apps/customer/blinkit-clone-Flutter-ecommerce-/ ./
 ARG API_BASE_URL
-# Kept so existing Coolify build arguments still apply; the new app does not use it yet.
+# This site's own address (https://...), for the links the app shares. Optional.
 ARG SHARE_BASE_URL=
 RUN test -n "$API_BASE_URL" || (echo "API_BASE_URL build argument is required" && exit 1)
-RUN EXPO_PUBLIC_DEMO=0 EXPO_PUBLIC_API_BASE_URL="$API_BASE_URL" \
-    npx expo export -p web --clear --output-dir build/web \
- && test -f build/web/index.html && test -f build/web/manifest.json
+# The bundled .env is for local development only; the build-time value wins.
+RUN rm -f .env && touch .env \
+ && flutter pub get \
+ && flutter build web --release --base-href /app/ --dart-define=API_BASE_URL="$API_BASE_URL" --dart-define=SHARE_BASE_URL="$SHARE_BASE_URL"
 
 # ---- 2. The website ---------------------------------------------------------
 FROM nginx:1.27-alpine
