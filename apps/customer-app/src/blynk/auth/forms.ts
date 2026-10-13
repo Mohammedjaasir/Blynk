@@ -35,6 +35,22 @@ export function parseBirthday(d: string, m: string, y: string, today = new Date(
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+/** The server's message when it sent one, else the fallback. */
+const serverText = (e: ApiError, fallback: string) => (e.message && e.message !== 'Request failed.' ? e.message : fallback);
+
+/** Fallback copy for sign-in refusals (the server's message wins). Kept as the backend words them. */
+export const REFUSED_FALLBACK: Record<string, string> = {
+  EMAIL_SIGN_IN_REQUIRED: 'This account signs in with email and password.',
+  RIDER_PENDING_APPROVAL: 'Your application is waiting for approval.',
+  RIDER_APPLICATION_REJECTED: "Your application wasn't approved.",
+  INVALID_CREDENTIALS: 'Sign-in failed. Check your details or ask your store admin.',
+};
+
+/** A sign-in the server refused for this account (not a wrong code): no new code will help. */
+export function isAccountRefusal(e: unknown): boolean {
+  return e instanceof ApiError && !!e.code && (e.code in REFUSED_FALLBACK || e.code === 'ACCOUNT_DEACTIVATED');
+}
+
 const mins = (s: number) => Math.max(1, Math.ceil(s / 60));
 
 type Details = { retry_after_seconds?: number; remaining_attempts?: number };
@@ -49,8 +65,14 @@ export function authErrorText(e: unknown): string {
       return typeof details.retry_after_seconds === 'number'
         ? `Too many codes requested. Try again in ${mins(details.retry_after_seconds)} min.`
         : 'Too many codes requested. Please try again later.';
-    case 'EMAIL_SIGN_IN_REQUIRED': return 'This number belongs to a Blynk staff account. Please use another number.';
-    case 'RIDER_PENDING_APPROVAL': return 'This number has a rider application waiting for approval.';
+    // Accounts this app may not sign in (Flutter shows the server's own words): Admin and
+    // Inventory sign in with email only, a rider still waiting for approval, a rejected rider,
+    // a disabled staff account. Riders and Operations otherwise shop like any customer.
+    case 'EMAIL_SIGN_IN_REQUIRED':
+    case 'RIDER_PENDING_APPROVAL':
+    case 'RIDER_APPLICATION_REJECTED':
+    case 'INVALID_CREDENTIALS':
+      return serverText(e, REFUSED_FALLBACK[e.code]);
     case 'OTP_DELIVERY_FAILED': return 'We could not send the code by SMS. Please try again.';
     case 'INVALID_OTP':
       return typeof details.remaining_attempts === 'number'
@@ -58,7 +80,7 @@ export function authErrorText(e: unknown): string {
         : 'This code is no longer valid. Tap Resend OTP for a new one.';
     case 'OTP_EXPIRED': return 'This code has expired. Tap Resend OTP for a new one.';
     case 'OTP_MAX_ATTEMPTS_EXCEEDED': return 'Too many wrong codes. Tap Resend OTP for a new one.';
-    case 'ACCOUNT_DEACTIVATED': return 'This account has been deactivated. Please contact Blynk support.';
+    case 'ACCOUNT_DEACTIVATED': return serverText(e, 'This account has been deactivated. Please contact Blynk support.');
     case 'UNAUTHENTICATED': return 'Your sign-in has expired. Please sign in again.';
     case 'REFERRAL_DISABLED': return 'Referral codes are not available right now.';
     case 'REFERRAL_CODE_NOT_FOUND': return 'We could not find that referral code.';

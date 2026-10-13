@@ -1,13 +1,18 @@
 import { useSyncExternalStore } from 'react';
-import { apiPost, ApiError } from '@/blynk/api/client';
+import { apiGet, apiPost, ApiError } from '@/blynk/api/client';
 import { storage } from '@/blynk/lib/storage';
 
 /*
  * The signed-in customer: tokens and user, persisted to localStorage on the web (an in-memory
  * fallback elsewhere) and restored on load. A tiny external store, read with useSession().
  * Every signed-in call goes through authed(): on a 401 it refreshes once (the refresh token is
- * single-use, so the rotated pair is stored), retries, and clears the session when the
- * refresh is refused.
+ * single-use, so the rotated pair is stored), retries, and ends the session when the server
+ * refuses the refresh (401/403, as Flutter's AuthProvider.refreshToken). Being offline, a
+ * timeout or a server error keeps the customer signed in.
+ *
+ * However a session ends (logout, a refused refresh, account deletion) the end handlers run once
+ * with the session that ended and why (onSessionEnd): they clear this customer's local state
+ * and unregister the push device with the old access token (src/blynk/account/cleanup.ts).
  */
 export const SESSION_KEY = 'blynk.app.session.v1';
 
@@ -52,6 +57,17 @@ function restore(): Session | null {
 let current: Session | null = restore();
 const listeners = new Set<() => void>();
 
+/** Why a session ended: the customer logged out, the server refused it, or the account was deleted. */
+export type SessionEndReason = 'logout' | 'rejected' | 'deleted';
+type EndHandler = (ended: Session, reason: SessionEndReason) => void;
+const endHandlers = new Set<EndHandler>();
+
+/** Run `fn` whenever a session ends (after the session is cleared). Returns an unsubscribe. */
+export function onSessionEnd(fn: EndHandler): () => void {
+  endHandlers.add(fn);
+  return () => { endHandlers.delete(fn); };
+}
+
 function set(next: Session | null) {
   current = next;
   // signing out clears the stored copy; the adapter never throws
@@ -87,12 +103,25 @@ export function updateUser(patch: Partial<SessionUser>) {
   if (current) set({ ...current, user: { ...current.user, ...patch } });
 }
 
-/** Forget the session here; the refresh token is revoked best-effort on the server. */
-export function signOut() {
+/** Clear the session here (local first) and tell the end handlers. A no-op when signed out. */
+export function endSession(reason: SessionEndReason): Session | null {
   const s = current;
+  if (!s) return null;
   set(null);
+  endHandlers.forEach((h) => {
+    try { h(s, reason); } catch { /* a cleanup step never blocks the sign-out */ }
+  });
+  return s;
+}
+
+/** Log out: signed out here at once; the refresh token is revoked best-effort on the server. */
+export function signOut() {
+  const s = endSession('logout');
   if (s) void apiPost('/auth/logout', { refresh_token: s.refreshToken }).catch(() => undefined);
 }
+
+/** A refusal of the refresh token that means this login is over (Flutter: 401 or 403). */
+export const isSessionRefusal = (e: unknown) => e instanceof ApiError && (e.status === 401 || e.status === 403);
 
 // one refresh at a time: concurrent 401s share it (the old refresh token is single-use)
 let refreshing: Promise<Session | null> | null = null;
@@ -110,10 +139,10 @@ function refresh(): Promise<Session | null> {
       return next;
     })
     .catch((e) => {
-      // refused (expired, revoked, account deactivated): sign out. A network failure keeps the
-      // session so the next try can refresh.
-      if (!(e instanceof ApiError) || (e.status > 0 && e.status !== 408)) {
-        if (current === s) set(null);
+      // refused (expired, revoked, account deactivated, staff disabled): the login is over. Being
+      // offline, a timeout or a server error keeps the session so the next try can refresh.
+      if (isSessionRefusal(e)) {
+        if (current === s) endSession('rejected');
         return null;
       }
       throw e;
@@ -137,4 +166,37 @@ export async function authed<T>(request: (accessToken: string) => Promise<T>): P
   const next = current && current !== s && current.user.id === s.user.id ? current : await refresh();
   if (!next) throw signInAgain();
   return request(next.accessToken);
+}
+
+/**
+ * Background check of a restored session (Flutter's _revalidate): GET /auth/me refreshes the
+ * stored user (name, email, role). A refused refresh ends the session through authed(); being
+ * offline changes nothing. Never throws.
+ */
+export async function revalidateSession(): Promise<void> {
+  const s = current;
+  if (!s) return;
+  try {
+    const me = await authed((t) => apiGet<Partial<SessionUser> | null>('/auth/me', t));
+    if (!me || !current || current.user.id !== s.user.id || me.id !== s.user.id) return;
+    const patch: Partial<SessionUser> = {};
+    if (typeof me.phone === 'string' && me.phone) patch.phone = me.phone;
+    if (typeof me.role === 'string' && me.role) patch.role = me.role;
+    if ('full_name' in me) patch.full_name = me.full_name ?? null;
+    if ('email' in me) patch.email = me.email ?? null;
+    updateUser(patch);
+  } catch { /* offline or a server error: keep what is stored */ }
+}
+
+/**
+ * A fresh access token for a raw request (the location stream) that got a 401 with `stale`:
+ * the current one if another call already refreshed, else one refresh. Null when the session
+ * is over (the refusal has already ended it).
+ */
+export async function freshAccessToken(stale: string): Promise<string | null> {
+  const s = current;
+  if (!s) return null;
+  if (s.accessToken !== stale) return s.accessToken;
+  const next = await refresh();
+  return next?.accessToken ?? null;
 }
