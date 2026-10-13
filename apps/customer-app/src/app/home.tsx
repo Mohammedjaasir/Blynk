@@ -11,6 +11,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
+import { useHomeLocation } from '@/blynk/address/homeLocation';
 import type { Product } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { FILTERS as LIVE_FILTERS, toggle, type FilterId } from '@/blynk/lib/filters';
@@ -32,7 +33,7 @@ import {
   SEARCH_HINTS, STORES, STORES_BY_CATEGORY, VS, type DemoFilter, type DemoStore,
 } from '@/demo/home';
 import {
-  LIVE_LOCATION_NAME, LIVE_LOCATION_SHEET, liveAddress, liveAisles, liveBanner, liveFees, liveHints, livePromo, liveRail,
+  liveAisles, liveBanner, liveFees, liveHints, livePromo, liveRail,
   liveUnder, liveVs, UNDER_LKR, type LiveAisleCard, type LiveVs,
 } from '@/demo/homeLive';
 import { extraOf } from '@/demo/extras';
@@ -86,7 +87,9 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
   const [timedPhase, setPhase] = useState<Phase>('locating');
-  const [granted, setGranted] = useState(false);
+  // live: where to deliver (header row, first-launch sheet); a spot chosen earlier keeps the sheet closed
+  const here = useHomeLocation(useStore());
+  const [granted, setGranted] = useState(!DEMO && here.chosen);
   const [cat, setCat] = useState('all');
   const [filters, setFilters] = useState<string[]>([]);
   const [past, setPast] = useState(false);
@@ -113,7 +116,7 @@ export default function Home() {
   const allowStrip = useSharedValue(0);
   const ink = useSharedValue(0); // header white → ink
   const bannerOpen = useSharedValue(0);
-  const scrim = useSharedValue(1);
+  const scrim = useSharedValue(granted ? 0 : 1);
   const splash = useSharedValue(fromSplash ? 1 : 0);
   const rise = useSharedValue(fromSplash ? 1 : 0);
 
@@ -235,21 +238,34 @@ export default function Home() {
   const meals = live ? live.under : granted ? MEALS : MEALS_PRE;
   const stores = useMemo(() => (DEMO ? filterStores(cat, filters as DemoFilter[]) : []), [cat, filters]);
   const fees = live ? live.fees : FEES;
-  const sheet = DEMO ? LOCATION_SHEET : LIVE_LOCATION_SHEET;
+  const sheet = DEMO ? LOCATION_SHEET : here.sheet;
   const feedError = !DEMO && !data && !!error && timedPhase !== 'locating';
 
-  const grant = () => {
-    // Asking the browser is fine; the position never leaves this device in this phase.
-    try {
-      const geo = (globalThis as { navigator?: { geolocation?: Geolocation } }).navigator?.geolocation;
-      geo?.getCurrentPosition(() => {}, () => {}, { timeout: 8000 });
-    } catch { /* no geolocation here */ }
+  /** The sheet goes and the page reloads its header, as after GRANT in the reference. */
+  const reveal = () => {
     scrim.set(withTiming(0, { duration: 320 }));
     setGranted(true);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
     setPhase('locating');
     load({ name: 500, content: 1000, banner: 1300 });
   };
+
+  // Design mock: GRANT only asks the browser (the position is not used) and reveals the page.
+  // Live: GRANT and "Enter Location Manually" open the map; the sheet closes once a spot is chosen.
+  const grant = () => {
+    if (!DEMO) { here.grant(); return; }
+    try {
+      const geo = (globalThis as { navigator?: { geolocation?: Geolocation } }).navigator?.geolocation;
+      geo?.getCurrentPosition(() => {}, () => {}, { timeout: 8000 });
+    } catch { /* no geolocation here */ }
+    reveal();
+  };
+  useEffect(() => {
+    // a spot was chosen (on the map, or a saved address loaded): the sheet goes, as after GRANT
+    if (DEMO || !here.chosen || granted) return;
+    const t = setTimeout(reveal, 0);
+    return () => clearTimeout(t);
+  }, [here.chosen]);
 
   const toExplore = () => {
     scrollRef.current?.scrollTo({ y: Math.max(0, feedY.get() + exploreY.get() - catH.get() - 52), animated: true });
@@ -277,8 +293,9 @@ export default function Home() {
             <LocationRow
               locating={phase === 'locating'}
               dark={dark}
-              name={DEMO ? LOCATION.name : LIVE_LOCATION_NAME}
-              address={DEMO ? LOCATION.address : liveAddress(store)}
+              name={DEMO ? LOCATION.name : here.name}
+              address={DEMO ? LOCATION.address : here.address}
+              onPress={DEMO ? undefined : here.openRow}
             />
             <SearchBar phase={phase} hints={live ? (live.hints.length ? live.hints : ['groceries']) : SEARCH_HINTS} />
             {/* live: /store says the store is closed (hidden in the design mock, which loads no store) */}
@@ -408,10 +425,10 @@ export default function Home() {
               <Text style={styles.locSub}>{sheet.sub}</Text>
             </View>
             <PressScale onPress={grant} style={styles.grant} haptic>
-              <Text style={styles.grantTxt}>{sheet.cta}</Text>
+              <Text style={styles.grantTxt}>{!DEMO && here.asking ? here.sheet.asking : sheet.cta}</Text>
             </PressScale>
           </View>
-          <Pressable onPress={() => router.push('/address')} style={styles.locManual}>
+          <Pressable onPress={DEMO ? () => router.push('/address') : here.manual} style={styles.locManual}>
             <SearchIcon size={17} color={C.brandInk} />
             <Text style={styles.locManualTxt}>{sheet.manual}</Text>
           </Pressable>
@@ -443,7 +460,9 @@ function filterStores(cat: string, filters: DemoFilter[]): DemoStore[] {
     .filter((s) => s.dishes.length > 0);
 }
 
-function LocationRow({ locating, dark, name, address }: { locating: boolean; dark: boolean; name: string; address: string | null }) {
+function LocationRow({ locating, dark, name, address, onPress }: {
+  locating: boolean; dark: boolean; name: string; address: string | null; onPress?: () => void;
+}) {
   const spin = useSharedValue(0);
   useEffect(() => {
     spin.value = locating ? withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1) : withSpring(0);
@@ -452,6 +471,7 @@ function LocationRow({ locating, dark, name, address }: { locating: boolean; dar
   const fg = dark ? '#fff' : '#1B1B1F';
   return (
     <View style={styles.locRow}>
+      <Pressable onPress={onPress} disabled={!onPress || locating} accessibilityRole={onPress ? 'button' : undefined} style={styles.locTap}>
       <Animated.View style={[styles.navDot, a]}>
         <NavIcon size={15} color={C.ink} />
       </Animated.View>
@@ -466,7 +486,8 @@ function LocationRow({ locating, dark, name, address }: { locating: boolean; dar
           </Animated.Text>
         )}
       </View>
-      <PressScale style={{ padding: 6, marginRight: -6 }}>
+      </Pressable>
+      <PressScale onPress={() => router.push('/orders')} style={{ padding: 6, marginRight: -6 }}>
         <MenuIcon size={22} color={fg} stroke={2.3} />
       </PressScale>
     </View>
@@ -840,6 +861,7 @@ const styles = StyleSheet.create({
   splashCover: { backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   splashLogo: { height: SPLASH_LOGO_H, width: SPLASH_LOGO_W },
   locRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 15, paddingRight: 16, paddingTop: 18, gap: 8 },
+  locTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   navDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.yellow, alignItems: 'center', justifyContent: 'center' },
   locName: { fontFamily: F.bold, fontSize: 17, letterSpacing: -0.1 },
   locAddr: { fontFamily: F.regular, fontSize: 12, marginTop: 0, marginRight: 30 },

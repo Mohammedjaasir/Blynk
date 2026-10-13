@@ -8,8 +8,10 @@ import Animated, {
   ZoomOut,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
+import Svg, { G, Path, Rect } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
+import { LiveAddressScreen } from '@/blynk/address/LiveAddressScreen';
+import { Pin, SmallPin, TargetIcon } from '@/blynk/address/pins';
 import { BackIcon, CloseIcon, SearchIcon } from '@/components/icons';
 import { PressScale, Skeleton, tap } from '@/components/ui';
 import { ADDRESS as DEMO_ADDRESS } from '@/demo/cart';
@@ -39,7 +41,17 @@ const CURRENT_MS = 420;
  * keeps a "pin preview" address on this device only; nothing is looked up or sent.
  */
 const ADDRESS = DEMO ? DEMO_ADDRESS : { ...DEMO_ADDRESS, ...LIVE.address, labels: [] as typeof DEMO_ADDRESS.labels };
+
+/**
+ * Live (EXPO_PUBLIC_DEMO=0): the real picker, a MapLibre map with a fixed centre pin, then the
+ * address form (src/blynk/address/LiveAddressScreen.tsx). The design mock keeps the drawing below.
+ * Params: return (in-app path to go back to), lat/lng (a GPS fix to start at), id (edit), gps=off.
+ */
 export default function Address() {
+  return DEMO ? <DemoAddress /> : <LiveAddressScreen />;
+}
+
+function DemoAddress() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [placed, setPlaced] = useState(false);
@@ -210,32 +222,6 @@ export default function Address() {
     </Animated.View>
   );
 }
-
-/** Video pin: 31 pt yellow head (ink outline, so it reads on the pale map) with an ink hole, a short point, then a yellow tail dot. */
-function Pin() {
-  return (
-    <Svg width={32} height={46} viewBox="0 0 32 46">
-      <Path d="M16 1a15 15 0 0115 15c0 7.5-5.4 13.3-12 14.7L16 35l-3-4.3C6.4 29.3 1 23.5 1 16A15 15 0 0116 1z" fill={C.brand} stroke={C.brandInk} strokeWidth={1.6} strokeLinejoin="round" />
-      <Circle cx={16} cy={16} r={5.2} fill={C.brandInk} />
-      <Circle cx={16} cy={39.5} r={4.5} fill={C.brand} stroke={C.brandInk} strokeWidth={1.6} />
-    </Svg>
-  );
-}
-
-const SmallPin = () => (
-  <Svg width={13} height={17} viewBox="0 0 13 17">
-    <Path d="M6.5 0A6.5 6.5 0 0113 6.5c0 3.2-2.3 5.8-5.2 6.4L6.5 15l-1.3-2.1C2.3 12.3 0 9.7 0 6.5A6.5 6.5 0 016.5 0z" fill={C.brand} stroke={C.brandInk} strokeWidth={1} />
-    <Circle cx={6.5} cy={6.5} r={2.3} fill={C.brandInk} />
-  </Svg>
-);
-
-const TargetIcon = () => (
-  <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
-    <Circle cx={12} cy={12} r={6.5} stroke={C.brandInk} strokeWidth={2.2} />
-    <Circle cx={12} cy={12} r={2.6} fill={C.brandInk} />
-    <Path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" stroke={C.brandInk} strokeWidth={2.2} strokeLinecap="round" />
-  </Svg>
-);
 
 /** Street drawing in the video map's light style: grey ground, pale building blocks, white roads. */
 function MapDrawing() {

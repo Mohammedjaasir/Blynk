@@ -9,13 +9,13 @@ export class ApiError extends Error {
   }
 }
 
-export type Method = 'GET' | 'POST' | 'PATCH';
+export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 interface Options {
   signal?: AbortSignal;
   /** GET when omitted (the catalogue and store reads). */
   method?: Method;
-  /** Sent as JSON. Only for POST and PATCH. */
+  /** Sent as JSON. Only for POST, PATCH and DELETE. */
   body?: unknown;
   /** Bearer access token for signed-in calls. */
   token?: string | null;
@@ -64,3 +64,6 @@ export const apiPatch = <T>(path: string, body: unknown, token?: string | null, 
 
 export const apiGet = <T>(path: string, token?: string | null, signal?: AbortSignal) =>
   apiRequest<T>(path, { token, signal });
+
+export const apiDelete = <T>(path: string, token?: string | null, signal?: AbortSignal) =>
+  apiRequest<T>(path, { method: 'DELETE', token, signal });
