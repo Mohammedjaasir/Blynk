@@ -1,0 +1,37 @@
+import { router } from 'expo-router';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { townFromHub } from '@/blynk/address/forms';
+import { useStore } from '@/blynk/store/StoreContext';
+import { ChevronIcon } from '@/components/icons';
+import { PressScale } from '@/components/ui';
+import { C, F } from '@/lib/theme';
+import { ToothGlyph } from './glyphs';
+
+/** Home's "Channel doctors" row (Flutter DentalHomeEntry): opens the clinic list. */
+export function DoctorsHomeEntry({ style }: { style?: StyleProp<ViewStyle> }) {
+  const town = townFromHub(useStore()?.hub_name);
+  return (
+    <PressScale onPress={() => router.push('/doctors')} scaleTo={0.98} style={style}>
+      <View
+        style={s.row}
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={`Channel doctors in ${town}. Book an appointment with a doctor near you.`}
+      >
+        <View style={s.icon}><ToothGlyph size={22} color={C.brandInk} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.title}>Channel doctors</Text>
+          <Text style={s.sub} numberOfLines={1}>Book a doctor in {town}</Text>
+        </View>
+        <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={14} color={C.sub} stroke={2.2} /></View>
+      </View>
+    </PressScale>
+  );
+}
+
+const s = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.bg, borderRadius: 14, padding: 12, minHeight: 56 },
+  icon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
+  title: { fontFamily: F.semi, fontSize: 15, color: C.ink },
+  sub: { fontFamily: F.regular, fontSize: 12.5, color: C.sub, marginTop: 2 },
+});
