@@ -140,7 +140,7 @@ export function useTicker() {
  * The reference's "eyes" mark: outlined eyes that pop into heart-eyes a moment after they
  * appear (and stay). `still` shows the heart-eyes straight away. Height is about 1.33 x size.
  */
-export function Hearts({ size = 12, still, color = C.pink }: { size?: number; still?: boolean; color?: string }) {
+export function Hearts({ size = 12, still, color = C.brandInk }: { size?: number; still?: boolean; color?: string }) {
   const h = Math.round(size * 1.33);
   const v = useSharedValue(still ? 1 : 0);
   useEffect(() => {
@@ -189,12 +189,12 @@ export function PriceTicker({ product, showSavings, forceSave }: { product: Prod
     <View style={styles.ticker}>
       <Animated.View style={[styles.tickRow, other]}>
         <Hearts size={10} still />
-        <Text numberOfLines={1} style={[styles.tickTxt, { color: C.pink, fontFamily: F.semi }]}>Offer price</Text>
+        <Text numberOfLines={1} style={[styles.tickTxt, { color: C.brandText, fontFamily: F.semi }]}>Offer price</Text>
       </Animated.View>
       {flips && (
         <Animated.View style={[styles.tickRow, ours]}>
           <Hearts size={10} still />
-          <Text numberOfLines={1} style={[styles.tickTxt, { color: C.pink, fontFamily: F.semi }]}>You save {formatLkr(save)}</Text>
+          <Text numberOfLines={1} style={[styles.tickTxt, { color: C.brandText, fontFamily: F.semi }]}>You save {formatLkr(save)}</Text>
         </Animated.View>
       )}
     </View>
@@ -260,7 +260,7 @@ export function AddButton({ product, compact, big }: { product: Product; compact
 }
 
 /** Thin geometric "+" (the reference's add button draws it, it is not a font glyph). */
-function PlusGlyph({ size, color = C.pink }: { size: number; color?: string }) {
+function PlusGlyph({ size, color = C.brandInk }: { size: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 14 14">
       <Path d="M7 1v12M1 7h12" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
@@ -300,7 +300,7 @@ export function DemoTicker({ other, lowerPct, seen = true, forceSave, money, del
       )}
       {!!lowerPct && (
         <Animated.View style={[styles.dRow, oursA]}>
-          <EyesPop h={13} color={C.pink} v={v} />
+          <EyesPop h={13} color={C.brandInk} v={v} />
           <Text numberOfLines={1} style={styles.dOurs}>Our app: {lowerPct}% lower</Text>
         </Animated.View>
       )}
@@ -326,15 +326,15 @@ export function StampBadge({ size = 58, style, variant = 'lowest' }: {
             <Path id="stTop" d="M 7.5 32 A 24.5 24.5 0 0 1 56.5 32" />
             <Path id="stBot" d="M 6 32 A 26 26 0 0 0 58 32" />
           </Defs>
-          <Circle cx={32} cy={32} r={30.5} stroke={C.pink} strokeWidth={1.3} fill="none" />
-          <Circle cx={32} cy={32} r={18.5} stroke={C.pink} strokeWidth={1} fill="none" />
-          <SvgText fill={C.pink} fontSize={7.4} fontWeight="bold" letterSpacing={1.1} textAnchor="middle">
+          <Circle cx={32} cy={32} r={30.5} stroke={C.brandText} strokeWidth={1.3} fill="none" />
+          <Circle cx={32} cy={32} r={18.5} stroke={C.brandText} strokeWidth={1} fill="none" />
+          <SvgText fill={C.brandText} fontSize={7.4} fontWeight="bold" letterSpacing={1.1} textAnchor="middle">
             <TextPath href="#stTop" startOffset="50%">EVERYDAY</TextPath>
           </SvgText>
-          <SvgText fill={C.pink} fontSize={7.4} fontWeight="bold" letterSpacing={1.1} textAnchor="middle">
+          <SvgText fill={C.brandText} fontSize={7.4} fontWeight="bold" letterSpacing={1.1} textAnchor="middle">
             <TextPath href="#stBot" startOffset="50%">EVERYDAY</TextPath>
           </SvgText>
-          <Path d="M 1 25.5 L 63 25.5 L 60 32 L 63 38.5 L 1 38.5 L 4 32 Z" fill={C.pink} />
+          <Path d="M 1 25.5 L 63 25.5 L 60 32 L 63 38.5 L 1 38.5 L 4 32 Z" fill={C.brandText} />
           <SvgText x={32} y={34.6} fill="#fff" fontSize={7.6} fontWeight="bold" textAnchor="middle" letterSpacing={0.3}>LOWEST PRICE</SvgText>
         </Svg>
       </Animated.View>
@@ -346,20 +346,20 @@ export function StampBadge({ size = 58, style, variant = 'lowest' }: {
         <Defs>
           <Path id="arc" d={`M ${32 - R} 32 a ${R} ${R} 0 1 1 ${2 * R} 0 a ${R} ${R} 0 1 1 ${-2 * R} 0`} />
         </Defs>
-        <Circle cx={32} cy={32} r={30} stroke={C.pink} strokeWidth={1.5} fill="none" strokeDasharray="3 2" />
-        <Circle cx={32} cy={32} r={18} stroke={C.pink} strokeWidth={1} fill="none" />
-        <SvgText fill={C.pink} fontSize={7} fontWeight="bold" letterSpacing={1.2}>
+        <Circle cx={32} cy={32} r={30} stroke={C.brandText} strokeWidth={1.5} fill="none" strokeDasharray="3 2" />
+        <Circle cx={32} cy={32} r={18} stroke={C.brandText} strokeWidth={1} fill="none" />
+        <SvgText fill={C.brandText} fontSize={7} fontWeight="bold" letterSpacing={1.2}>
           <TextPath href="#arc">FREE • DELIVERY • BLYNK •</TextPath>
         </SvgText>
-        <SvgText x={32} y={30} fill={C.pink} fontSize={7} fontWeight="bold" textAnchor="middle">FREE</SvgText>
-        <SvgText x={32} y={39} fill={C.pink} fontSize={5.6} fontWeight="bold" textAnchor="middle">DELIVERY</SvgText>
+        <SvgText x={32} y={30} fill={C.brandText} fontSize={7} fontWeight="bold" textAnchor="middle">FREE</SvgText>
+        <SvgText x={32} y={39} fill={C.brandText} fontSize={5.6} fontWeight="bold" textAnchor="middle">DELIVERY</SvgText>
       </Svg>
     </Animated.View>
   );
 }
 
 /* ---------- Confetti burst (physics: initial velocity + gravity) ---------- */
-const CONFETTI_COLORS = [C.pink, C.yellow, '#3B82F6', C.green, '#FF6B35', C.purpleLight];
+const CONFETTI_COLORS = [C.brandInk, C.brand, '#3B82F6', C.brandDeep, '#FF6B35', C.purpleLight];
 function Piece({ seed, originX, originY }: { seed: number; originX: number; originY: number }) {
   const p = useSharedValue(0);
   const rnd = (k: number) => {
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   add: {
     backgroundColor: C.white,
     borderWidth: 1.2,
-    borderColor: C.pink,
+    borderColor: C.brandInk,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.12,
@@ -491,17 +491,17 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   addBig: { borderWidth: 1.4, shadowOpacity: 0.16, shadowRadius: 5 },
-  plus: { color: C.pink, fontSize: 18, lineHeight: 20, fontFamily: F.bold, marginTop: -1 },
+  plus: { color: C.brandInk, fontSize: 18, lineHeight: 20, fontFamily: F.bold, marginTop: -1 },
   stepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
   stepBtn: { width: 22, alignItems: 'center' },
-  stepTxt: { color: C.pink, fontSize: 16, fontFamily: F.bold },
-  qty: { color: C.pink, fontSize: 13, fontFamily: F.bold },
+  stepTxt: { color: C.brandInk, fontSize: 16, fontFamily: F.bold },
+  qty: { color: C.brandInk, fontSize: 13, fontFamily: F.bold },
   stepTxtBig: { fontSize: 18, fontFamily: F.medium, lineHeight: 20 },
-  qtyBig: { fontSize: 13, fontFamily: F.medium, color: C.pink },
+  qtyBig: { fontSize: 13, fontFamily: F.medium, color: C.brandInk },
   dTicker: { height: 16, overflow: 'hidden', alignSelf: 'stretch', marginTop: 5 },
   dRow: { position: 'absolute', left: 0, right: 0, top: 0, height: 16, flexDirection: 'row', alignItems: 'center', gap: 3 },
   dOther: { fontSize: 11.5, fontFamily: F.regular, color: '#77777C', flexShrink: 1 },
-  dOurs: { fontSize: 12, fontFamily: F.semi, color: C.pink, flexShrink: 1 },
+  dOurs: { fontSize: 12, fontFamily: F.semi, color: C.brandText, flexShrink: 1 },
   tri: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   tip: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.ink, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, gap: 8 },
   tipTxt: { color: C.white, fontSize: 11.5, fontFamily: F.medium },

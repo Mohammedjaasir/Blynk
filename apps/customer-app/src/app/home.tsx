@@ -44,12 +44,12 @@ import { C, F } from '@/lib/theme';
 
 /*
  * Home, matched frame by frame to the reference recording (0:04–0:31). All content is the
- * video's own (src/demo/home.ts); colours follow Blynk's mapping (purple → ink, pink → green).
+ * video's own (src/demo/home.ts); colours follow Blynk's mapping (purple → ink, pink → Blynk yellow).
  *
- *   0:04.5  splash green fades off while the page rises into place, header WHITE, "Locating …"
+ *   0:04.5  splash yellow fades off while the page rises into place, header WHITE, "Locating …"
  *   0:05.1  location name rolls in     0:05.5  skeleton → content     0:05.7  ink header + banner unfold
  *   pre-grant: 60 % black scrim + black "Location Permission is Off" bar
- *   GRANT   bar slides away, page reloads the same way, then the green fee strip rises
+ *   GRANT   bar slides away, page reloads the same way, then the yellow fee strip rises
  *   scroll  categories (+ filter chips) stick; fee strip hides; black "Search" pill springs up
  *
  * Live (DEMO = false): the same layout and motion over Blynk's catalogue and GET /store
@@ -367,7 +367,7 @@ export default function Home() {
 
       {/* fee strip (after location is granted) */}
       <Animated.View style={[styles.feeStripWrap, stripA]} pointerEvents="none">
-        <LinearGradient colors={[C.green, C.greenDark]} style={[styles.feeStrip, { paddingBottom: insets.bottom + 27 }]}>
+        <LinearGradient colors={[C.brand, C.brandDeep]} style={[styles.feeStrip, { paddingBottom: insets.bottom + 27 }]}>
           {fees.map(([c, l]) => (
             <View key={l} style={styles.fee}>
               <View style={styles.coin}><Text style={styles.coinTxt}>{c}</Text></View>
@@ -395,14 +395,14 @@ export default function Home() {
             </PressScale>
           </View>
           <Pressable onPress={() => router.push('/address')} style={styles.locManual}>
-            <SearchIcon size={17} color={C.green} />
+            <SearchIcon size={17} color={C.brandInk} />
             <Text style={styles.locManualTxt}>{sheet.manual}</Text>
           </Pressable>
         </Animated.View>
       )}
 
-      {/* the splash's green card, fading off as the page rises in */}
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: C.green }, splashA]} />
+      {/* the splash's yellow card, fading off as the page rises in */}
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: C.brand }, splashA]} />
     </View>
   );
 }
@@ -543,9 +543,9 @@ function FilterChips({ items, on, onToggle }: { items: readonly Chip[]; on: stri
         return (
           <PressScale key={f.id} onPress={() => onToggle(f.id)} style={[styles.chip, active && styles.chipOn]}>
             {f.hearts && (
-              <View style={styles.chipHearts}><HeartsIcon size={15} color={C.pink} filled /></View>
+              <View style={styles.chipHearts}><HeartsIcon size={15} color={C.brandInk} filled /></View>
             )}
-            <Text style={[styles.chipTxt, active && { color: C.pink }]}>{f.label}</Text>
+            <Text style={[styles.chipTxt, active && { color: C.brandInk, fontFamily: F.semi }]}>{f.label}</Text>
             {f.caret && <ChevronIcon size={14} color="#3A3A40" stroke={2.2} />}
           </PressScale>
         );
@@ -575,10 +575,10 @@ function VsSection({ live }: { live: LiveVs | null }) {
   const kicker = live ? live.kicker : VS.kicker;
   return (
     <View style={{ marginTop: 34 }}>
-      <Wave color={C.greenTint} />
-      <LinearGradient colors={[C.greenTint, '#F5FBF6', '#FFFFFF']} style={{ paddingTop: 12, paddingBottom: 6 }}>
+      <Wave color={C.brandTint} />
+      <LinearGradient colors={[C.brandTint, '#FFFCEB', '#FFFFFF']} style={{ paddingTop: 12, paddingBottom: 6 }}>
         <View style={styles.vsKicker}>
-          <HeartsIcon size={15} color={C.pink} pupil="#3A3A40" />
+          <HeartsIcon size={15} color={C.brandInk} pupil="#3A3A40" />
           <Text style={styles.vsSmall}>{kicker[0]} <Text style={styles.vsVs}>{kicker[1]}</Text> {kicker[2]}</Text>
         </View>
         <Text style={styles.vsBig}>{live ? live.title : VS.title}</Text>
@@ -596,8 +596,8 @@ function VsSection({ live }: { live: LiveVs | null }) {
               )}
               {!!t.save && (
                 <View style={[styles.vsMeta, { marginTop: 7 }]}>
-                  <HeartsIcon size={12} color={C.pink} filled />
-                  <Text style={[styles.vsTags, { marginTop: 0, color: C.pink, fontFamily: F.semi }]}>{t.save}</Text>
+                  <HeartsIcon size={12} color={C.brandInk} filled />
+                  <Text style={[styles.vsTags, { marginTop: 0, color: C.brandText, fontFamily: F.semi }]}>{t.save}</Text>
                 </View>
               )}
             </PressScale>
@@ -611,7 +611,7 @@ function VsSection({ live }: { live: LiveVs | null }) {
               </View>
               <Text style={styles.vsName} numberOfLines={1}>{t.name}</Text>
               <View style={styles.vsMeta}>
-                <StarBadge size={12} color={C.green} />
+                <StarBadge size={12} color={C.brandInk} />
                 <Text style={styles.vsMetaTxt}>{t.rating.toFixed(1)} • {t.eta}</Text>
               </View>
               <Text style={styles.vsTags}>{t.tags}</Text>
@@ -630,7 +630,7 @@ function VsSection({ live }: { live: LiveVs | null }) {
 /** One restaurant card. Its dishes' footers roll to "Our app" once the card is on screen. */
 const StoreCard = memo(function StoreCard({ store: s, y, feedY, screenH, promo }: {
   store: DemoStore; y: SharedValue<number>; feedY: SharedValue<number>; screenH: number;
-  /** The green promo band follows this card. */
+  /** The yellow promo band follows this card. */
   promo?: boolean;
 }) {
   const top = useSharedValue(99999);
@@ -651,11 +651,11 @@ const StoreCard = memo(function StoreCard({ store: s, y, feedY, screenH, promo }
           <Text style={styles.storeName} numberOfLines={1}>{s.name}</Text>
         </View>
         <View style={styles.metaRow}>
-          <StarBadge size={12} color={C.green} />
+          <StarBadge size={12} color={C.brandInk} />
           <Text style={styles.meta}>{s.rating.toFixed(1)} • {s.eta} • {s.tags}</Text>
         </View>
         <View style={[styles.metaRow, { marginTop: 4 }]}>
-          <OfferBadge size={12} color={C.green} />
+          <OfferBadge size={12} color={C.brandInk} />
           <Text style={[styles.meta, { fontSize: 11.5 }]}>Free Delivery • Items At {rupees(s.itemsAt)}</Text>
         </View>
         <ScrollView
@@ -682,7 +682,7 @@ const StoreCard = memo(function StoreCard({ store: s, y, feedY, screenH, promo }
  */
 const AisleCard = memo(function AisleCard({ aisle: a, freeStamp, promo }: {
   aisle: LiveAisleCard; freeStamp: boolean;
-  /** The green promo band follows this card. */
+  /** The yellow promo band follows this card. */
   promo: { line1: string | null; fees: string[] } | null;
 }) {
   return (
@@ -694,11 +694,11 @@ const AisleCard = memo(function AisleCard({ aisle: a, freeStamp, promo }: {
           <Text style={styles.storeName} numberOfLines={1}>{a.cat.name}</Text>
         </View>
         <View style={styles.metaRow}>
-          <BagBadge size={12} color={C.green} />
+          <BagBadge size={12} color={C.brandInk} />
           <Text style={styles.meta}>{a.meta}</Text>
         </View>
         <View style={[styles.metaRow, { marginTop: 4 }]}>
-          <OfferBadge size={12} color={C.green} />
+          <OfferBadge size={12} color={C.brandInk} />
           <Text style={[styles.meta, { fontSize: 11.5, flexShrink: 1 }]}>{a.delivery}</Text>
         </View>
         <ScrollView
@@ -717,7 +717,7 @@ const AisleCard = memo(function AisleCard({ aisle: a, freeStamp, promo }: {
   );
 });
 
-/** Green band with scalloped edges: the reference's "Offline Menu Price Match / ₹0 fees" (live: Blynk's own). */
+/** Yellow band with scalloped edges: the reference's "Offline Menu Price Match / ₹0 fees" (live: Blynk's own). */
 function PromoBand({ live }: { live?: { line1: string | null; fees: string[] } }) {
   const band = live ?? PROMO;
   const w = useSharedValue(0);
@@ -727,25 +727,25 @@ function PromoBand({ live }: { live?: { line1: string | null; fees: string[] } }
   const a = useAnimatedStyle(() => ({ transform: [{ rotate: `${w.value * 10}deg` }] }));
   return (
     <View style={{ marginTop: 2, marginBottom: 22 }}>
-      <Wave color="#14A02C" />
-      <LinearGradient colors={['#14A02C', C.green]} style={styles.promo}>
+      <Wave color={C.brand} />
+      <LinearGradient colors={[C.brand, C.brandDeep]} style={styles.promo}>
         {!!band.line1 && (
           <View style={[styles.promoRow, { marginBottom: 9 }]}>
-            <CheckBoxIcon size={14} color={C.yellow} />
+            <CheckBoxIcon size={14} color={C.brandInk} />
             <Text style={styles.promoTxt}>{band.line1}</Text>
           </View>
         )}
         <View style={styles.promoRow}>
           {band.fees.map((f) => (
             <View key={f} style={[styles.promoRow, { marginRight: 12 }]}>
-              <CheckBoxIcon size={14} color={C.yellow} />
+              <CheckBoxIcon size={14} color={C.brandInk} />
               <Text style={styles.promoTxt}>{f}</Text>
             </View>
           ))}
         </View>
-        <Animated.Text style={[styles.mascot, a]}>🫶</Animated.Text>
+        <Animated.Text style={[styles.mascot, a]}>🛒</Animated.Text>
       </LinearGradient>
-      <Wave color={C.green} flip />
+      <Wave color={C.brandDeep} flip />
     </View>
   );
 }
@@ -806,12 +806,12 @@ const styles = StyleSheet.create({
   },
   catIndicator: {
     position: 'absolute', left: (CAT_W - TILE_W) / 2, width: TILE_W, borderRadius: 14,
-    backgroundColor: C.pinkSoft, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 3, shadowOffset: { width: 0, height: 2 },
+    backgroundColor: C.brandSoft, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 3, shadowOffset: { width: 0, height: 2 },
   },
   cat: { width: CAT_W, alignItems: 'center', paddingTop: 7 },
   catImg: { width: 56, height: 50, alignItems: 'center', justifyContent: 'center' },
-  fromTag: { backgroundColor: C.pink, borderRadius: 7, paddingHorizontal: 5, height: 13, justifyContent: 'center', marginTop: -6 },
-  fromTxt: { color: '#fff', fontSize: 8.5, fontFamily: F.bold, letterSpacing: 0.1 },
+  fromTag: { backgroundColor: C.brand, borderRadius: 7, paddingHorizontal: 5, height: 13, justifyContent: 'center', marginTop: -6 },
+  fromTxt: { color: C.brandInk, fontSize: 8.5, fontFamily: F.bold, letterSpacing: 0.1 },
   catName: { fontFamily: F.medium, fontSize: 11, color: '#55555C', marginTop: 2, maxWidth: CAT_W - 8 },
   catNameOn: { fontFamily: F.bold, color: '#1B1B1F' },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, marginTop: 16, marginBottom: 15 },
@@ -824,7 +824,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#E1E1E6', borderRadius: 18,
     paddingHorizontal: 12, height: 34, backgroundColor: '#fff',
   },
-  chipOn: { borderColor: C.pink, backgroundColor: C.greenTint },
+  chipOn: { borderColor: C.brandInk, backgroundColor: C.brandTint },
   chipHearts: { marginLeft: -3 },
   chipTxt: { fontFamily: F.regular, fontSize: 13.5, color: '#2E2E33' },
   store: {
@@ -833,7 +833,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
   },
   stamp: { position: 'absolute', right: -10, top: -9 },
-  lower: { fontFamily: F.bold, color: C.pink, fontSize: 12, letterSpacing: -0.1, marginBottom: 1 },
+  lower: { fontFamily: F.bold, color: C.brandText, fontSize: 12, letterSpacing: -0.1, marginBottom: 1 },
   storeNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 52 },
   ad: { backgroundColor: '#F1F1F3', borderRadius: 4, paddingHorizontal: 4, height: 15, justifyContent: 'center' },
   adTxt: { fontFamily: F.medium, fontSize: 9, color: '#8A8A90' },
@@ -841,9 +841,9 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5, marginRight: 50 },
   meta: { fontFamily: F.regular, fontSize: 12.5, color: '#3A3A40' },
   vsKicker: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 15 },
-  vsSmall: { fontFamily: F.bold, fontSize: 13, color: C.pink, letterSpacing: -0.1 },
+  vsSmall: { fontFamily: F.bold, fontSize: 13, color: C.brandText, letterSpacing: -0.1 },
   vsVs: { fontFamily: F.semi, fontSize: 10.5, fontStyle: 'italic' },
-  vsBig: { fontFamily: F.black, fontSize: 22.5, color: C.pink, marginHorizontal: 15, marginTop: 2, letterSpacing: -0.2 },
+  vsBig: { fontFamily: F.black, fontSize: 22.5, color: C.ink, marginHorizontal: 15, marginTop: 2, letterSpacing: -0.2 },
   vsTile: { width: MEAL_W, height: MEAL_W, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: C.tile },
   vsShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
   vsItems: { position: 'absolute', left: 9, bottom: 9, color: '#fff', fontFamily: F.black, fontSize: 15.5, lineHeight: 18 },
@@ -854,11 +854,11 @@ const styles = StyleSheet.create({
   vsStrike: { color: '#77777C', textDecorationLine: 'line-through' },
   initial: { fontFamily: F.bold, color: C.faint },
   errorBox: { padding: 24, alignItems: 'center', gap: 12 },
-  retry: { backgroundColor: C.green, borderRadius: 14, paddingHorizontal: 22, paddingVertical: 11 },
-  retryTxt: { color: '#fff', fontFamily: F.bold, fontSize: 14 },
+  retry: { backgroundColor: C.brand, borderRadius: 14, paddingHorizontal: 22, paddingVertical: 11 },
+  retryTxt: { color: C.brandInk, fontFamily: F.bold, fontSize: 14 },
   promo: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 16, overflow: 'hidden' },
   promoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  promoTxt: { color: '#fff', fontFamily: F.semi, fontSize: 14 },
+  promoTxt: { color: C.brandInk, fontFamily: F.semi, fontSize: 14 },
   mascot: { position: 'absolute', right: 16, bottom: -2, fontSize: 46 },
   pillWrap: { position: 'absolute', alignSelf: 'center' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#17171B', paddingHorizontal: 11, height: 32, borderRadius: 16 },
@@ -867,11 +867,11 @@ const styles = StyleSheet.create({
   feeStrip: { flexDirection: 'row', paddingTop: 17, paddingHorizontal: 4, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   fee: { alignItems: 'center', gap: 3, flex: 1 },
   coin: {
-    minWidth: 23, height: 23, borderRadius: 12, paddingHorizontal: 2, backgroundColor: C.yellow,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E0B800',
+    minWidth: 23, height: 23, borderRadius: 12, paddingHorizontal: 2, backgroundColor: C.brandInk,
+    alignItems: 'center', justifyContent: 'center',
   },
-  coinTxt: { fontFamily: F.black, fontSize: 10.5, color: C.ink },
-  feeTxt: { color: '#fff', fontFamily: F.medium, fontSize: 14 },
+  coinTxt: { fontFamily: F.black, fontSize: 10.5, color: C.brand },
+  feeTxt: { color: C.brandInk, fontFamily: F.medium, fontSize: 14 },
   locSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#fff' },
   locDark: { backgroundColor: '#000', flexDirection: 'row', alignItems: 'flex-start', paddingLeft: 15, paddingRight: 13, paddingTop: 16, paddingBottom: 14, gap: 10 },
   locTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

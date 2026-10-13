@@ -29,7 +29,7 @@ export const CART_BAR_H = CART_BAR.h + 8;
 const ROW_STRIP = CART_BAR.withStripH - CART_BAR.stripH; // 37
 
 /** Filled trolley, as on the reference's "View Cart". */
-function TrolleyIcon({ size = 18, color = '#fff' }: { size?: number; color?: string }) {
+function TrolleyIcon({ size = 18, color = C.brandInk }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path d="M1.5 3h3l.6 2.4H22l-2.4 9.1H7.3L4.4 4.6" fill="none" stroke={color} strokeWidth={2.2} strokeLinejoin="round" />
@@ -126,11 +126,11 @@ const styles = StyleSheet.create({
   fade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   wrap: { position: 'absolute', left: 13, right: 13 },
   bar: {
-    backgroundColor: C.green, borderRadius: CART_BAR.radius, overflow: 'hidden',
+    backgroundColor: C.brand, borderRadius: CART_BAR.radius, overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6,
   },
-  strip: { justifyContent: 'center', paddingHorizontal: 19, backgroundColor: C.greenDark },
-  stripTxt: { color: '#fff', fontFamily: F.medium, fontSize: 12.5 },
+  strip: { justifyContent: 'center', paddingHorizontal: 19, backgroundColor: C.brandDeep },
+  stripTxt: { color: C.brandInk, fontFamily: F.medium, fontSize: 12.5 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 19 },
-  txt: { color: '#fff', fontFamily: F.semi, fontSize: 15 },
+  txt: { color: C.brandInk, fontFamily: F.semi, fontSize: 15 },
 });

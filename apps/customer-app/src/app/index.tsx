@@ -5,9 +5,9 @@ import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTi
 import { C } from '@/lib/theme';
 
 /**
- * Splash, as in the reference (0:03.8–0:04.6): the launcher icon grows into a plain green
+ * Splash, as in the reference (0:03.8–0:04.6): the launcher icon grows into a plain yellow
  * card that fills the screen (a container transform, corners easing from icon-round to the
- * screen's own), holds for a beat, then Home takes over: the green fades off there while
+ * screen's own), holds for a beat, then Home takes over: the yellow fades off there while
  * the page rises into place (see `fromSplash` in home.tsx).
  */
 export default function Splash() {
@@ -39,5 +39,5 @@ export default function Splash() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  card: { backgroundColor: C.green },
+  card: { backgroundColor: C.brand },
 });

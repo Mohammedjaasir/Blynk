@@ -62,7 +62,7 @@ export const ProductCard = memo(function ProductCard({
         )}
         {showRating && x?.rating != null && (
           <View style={styles.rating}>
-            <StarIcon size={10} color={C.green} />
+            <StarIcon size={10} color={C.brandInk} />
             <Text style={styles.ratingTxt}>{x.rating.toFixed(1)}</Text>
           </View>
         )}
@@ -77,7 +77,7 @@ export const ProductCard = memo(function ProductCard({
       {!!line && <Text style={styles.sub} numberOfLines={1}>{line}</Text>}
       <View style={[styles.nameRow, !line && { marginTop: 9 }]}>
         {x?.veg != null && (
-          <View style={styles.mark}>{x.veg ? <VegMark size={11} color={C.green} /> : <NonVegMark size={11} />}</View>
+          <View style={styles.mark}>{x.veg ? <VegMark size={11} color={C.veg} /> : <NonVegMark size={11} />}</View>
         )}
         <Text style={styles.name} numberOfLines={2}>{x?.veg != null ? '     ' : ''}{p.name}</Text>
       </View>
@@ -108,8 +108,8 @@ export function ProductCardEntering({ children, index }: { children: React.React
 
 const styles = StyleSheet.create({
   img: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: C.tile },
-  popular: { position: 'absolute', left: 6, top: 6, backgroundColor: C.white, borderRadius: 9, paddingHorizontal: 6, height: 19, justifyContent: 'center' },
-  popularTxt: { fontFamily: F.semi, fontSize: 11, color: C.green },
+  popular: { position: 'absolute', left: 6, top: 6, backgroundColor: C.brandSoft, borderRadius: 9, paddingHorizontal: 6, height: 19, justifyContent: 'center' },
+  popularTxt: { fontFamily: F.semi, fontSize: 11, color: C.brandInk },
   rating: {
     position: 'absolute', left: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 2,
     backgroundColor: C.white, borderTopRightRadius: 9, paddingLeft: 3, paddingRight: 5, height: 18,
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   unit: { fontSize: 10, color: C.sub, fontFamily: F.regular, marginTop: 1 },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, minHeight: 20 },
   mrp: { fontSize: 13, color: '#9A9AA0', textDecorationLine: 'line-through', fontFamily: F.regular },
-  pill: { backgroundColor: C.greenTint, borderRadius: 9, paddingHorizontal: 5, height: 20, justifyContent: 'center' },
-  pillTxt: { fontSize: 13.5, color: C.pink, fontFamily: F.semi },
+  pill: { backgroundColor: C.brandSoft, borderRadius: 9, paddingHorizontal: 5, height: 20, justifyContent: 'center' },
+  pillTxt: { fontSize: 13.5, color: C.brandInk, fontFamily: F.semi },
   price: { fontSize: 13.5, color: '#1E1E24', fontFamily: F.regular },
 });
