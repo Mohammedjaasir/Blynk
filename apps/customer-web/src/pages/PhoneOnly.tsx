@@ -11,7 +11,7 @@ export default function PhoneOnly() {
       <div>
         <img src={logo} alt="" width={72} style={{ margin: '0 auto' }} />
         <h1>Blynk is a phone app</h1>
-        <p>Groceries delivered in Dharga Town and its 4 km surroundings. Open blynk.lk on your phone and tap Get Blynk.</p>
+        <p>Groceries delivered in Dharga Town and nearby. Open blynk.lk on your phone and tap Get Blynk.</p>
       </div>
     </div>
   );
