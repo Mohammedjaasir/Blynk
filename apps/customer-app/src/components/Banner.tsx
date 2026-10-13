@@ -2,74 +2,93 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
+  Easing, SharedValue, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, LinearGradient as SvgGrad, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { scheduleOnRN } from 'react-native-worklets';
 import { cutout } from '@/blynk/lib/cutout';
 import { formatLkr } from '@/blynk/lib/money';
 import { withSpring } from '@/lib/motion';
-import { C, F } from '@/lib/theme';
+import { F } from '@/lib/theme';
 import { ArrowRight } from './icons';
 import { PressScale } from './ui';
 
 /*
- * Rebuilt frame by frame from the reference recording (0:06–0:16, 384 px wide ≈ 1:1 with a
- * 390 pt phone). Layout, sizes and timings are measured off those frames; the reference's
- * purple becomes Blynk ink, its pink extrusion / saucer becomes Blynk green, yellow stays.
+ * The "BROKE HOURS" promo, rebuilt frame by frame from the reference recording (0:05–0:17,
+ * 384 px wide ≈ 1:1 with a 390 pt phone). Owner's call (2026-10-13): this banner keeps the
+ * reference's own purple / pink / yellow, unlike the rest of the app.
+ *
+ * One cycle per dish (the video: sandwich 11.0 → 13.4 s, noodles 13.4 → 15.5 s, burger …):
+ *   0 ms     dish is lowered down the beam from the saucer and springs into place
+ *   300 ms   gradient underline sweeps under the sub-line
+ *   550 ms   firework burst around the price
+ *   1100 ms  the title letters jump one after another (and, every other dish, the moon pops in)
+ *   P−380 ms dish is sucked back up the beam while the saucer swings, then the next one drops
  */
-const H = 183; // banner height in the reference (search bar bottom → white page)
-const EXTRUDE = C.green; // the 3D slab under the title letters and the CTA
-const ITEM = 112; // floating product box (the sandwich is ~120 × 110 in the frames)
-const TEXT_W = 196; // left column, clear of the beam
+const H = 183;
+const ITEM = 116;
+const TEXT_W = 196;
+const P = 2600; // ms per dish
 
-/** One title word: per-letter face + green slab, each letter rocking on its own phase. */
-function WobbleWord({ word, color, delay }: { word: string; color: string; delay: number }) {
+/** Reference palette, sampled off the frames. */
+const V = {
+  bg: ['#2A0A62', '#300C6C', '#3A1380'] as const,
+  glow: '#6A3AA8',
+  cloud: '#250854',
+  pink: '#F04FB2',
+  pinkDeep: '#C41E86',
+  extrude: '#E8279A',
+  rimDark: '#3A0B48',
+  lime: '#CBEB6B',
+  limeDeep: '#8FC23A',
+  yellow: '#FFE81F',
+  ctaText: '#1E0B3A',
+  white: '#FFFFFF',
+};
+
+/** Letter-by-letter jump: a wave travels across the word once per cycle. */
+function WaveWord({ word, color, wave, offset, clockO }: {
+  word: string; color: string; wave: SharedValue<number>; offset: number; clockO?: boolean;
+}) {
   // Bowlby One averages ~0.82 em per capital; fit the word into the left column.
   const size = Math.min(36, Math.floor(TEXT_W / (word.length * 0.82)));
   return (
     <View style={{ flexDirection: 'row' }}>
       {word.split('').map((ch, i) => (
-        <WobbleLetter key={i} ch={ch} color={color} size={size} delay={delay + i * 70} />
+        <WaveLetter key={i} ch={ch} color={color} size={size} wave={wave} at={offset + i} clock={clockO && ch === 'O'} />
       ))}
     </View>
   );
 }
-function WobbleLetter({ ch, color, size, delay }: { ch: string; color: string; size: number; delay: number }) {
-  const r = useSharedValue(0);
-  useEffect(() => {
-    r.value = withDelay(
-      delay,
-      withRepeat(
-        withSequence(
-          withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) }),
-          withTiming(-0.6, { duration: 200 }),
-          withTiming(0, { duration: 200 }),
-          withTiming(0, { duration: 2400 }),
-        ),
-        -1,
-      ),
-    );
-  }, []);
-  const a = useAnimatedStyle(() => ({
-    transform: [{ translateY: -Math.abs(r.value) * 3 }, { rotate: `${r.value * 9}deg` }],
-  }));
-  const t = { fontSize: size, lineHeight: Math.round(size * 1.08) };
+function WaveLetter({ ch, color, size, wave, at, clock }: {
+  ch: string; color: string; size: number; wave: SharedValue<number>; at: number; clock?: boolean;
+}) {
+  const a = useAnimatedStyle(() => {
+    const p = wave.value * 12 - at * 0.9; // ~70 ms between neighbours
+    const bump = p > 0 && p < 1 ? Math.sin(p * Math.PI) : 0;
+    return { transform: [{ translateY: -bump * 7 }, { rotate: `${bump * (at % 2 ? 13 : -13)}deg` }] };
+  });
+  const t = { fontSize: size, lineHeight: Math.round(size * 1.02) };
   return (
-    <Animated.View style={[{ marginRight: -1 }, a]}>
+    <Animated.View style={[{ marginRight: -1.5 }, a]}>
       <Text style={[styles.title, t, styles.slab]}>{ch}</Text>
       <Text style={[styles.title, t, { color }]}>{ch}</Text>
+      {clock && (
+        // the clock hands inside the O of HOURS
+        <Svg pointerEvents="none" style={{ position: 'absolute', left: size * 0.3, top: size * 0.3 }} width={size * 0.36} height={size * 0.36} viewBox="0 0 12 12">
+          <Path d="M6 6 L6 2.2 M6 6 L8.8 7.6" stroke={V.bg[0]} strokeWidth={1.9} strokeLinecap="round" />
+        </Svg>
+      )}
     </Animated.View>
   );
 }
 
 /** Four-point star that blinks in, turns and goes out. */
-function Sparkle({ x, y, delay, size = 12, color = C.yellow }: { x: number; y: number; delay: number; size?: number; color?: string }) {
+function Sparkle({ x, y, delay, size = 12, color = V.yellow, period = 2200 }: { x: number; y: number; delay: number; size?: number; color?: string; period?: number }) {
   const s = useSharedValue(0);
   useEffect(() => {
-    s.value = withDelay(delay, withRepeat(withSequence(withTiming(1, { duration: 280 }), withTiming(0, { duration: 420 }), withTiming(0, { duration: 1500 })), -1));
+    s.value = withDelay(delay, withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(0, { duration: 380 }), withTiming(0, { duration: period - 640 })), -1));
   }, []);
-  const a = useAnimatedStyle(() => ({ opacity: s.value, transform: [{ scale: 0.4 + s.value * 0.6 }, { rotate: `${s.value * 45}deg` }] }));
+  const a = useAnimatedStyle(() => ({ opacity: s.value, transform: [{ scale: 0.3 + s.value * 0.7 }, { rotate: `${s.value * 45}deg` }] }));
   return (
     <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x, top: y }, a]}>
       <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -79,31 +98,68 @@ function Sparkle({ x, y, delay, size = 12, color = C.yellow }: { x: number; y: n
   );
 }
 
-/** The saucer from the frames: dome, wide tilted brim, glowing strip underneath. */
+/** The saucer: pink dome, thick pink rim, dark underside with a lime light ring. */
 function Saucer() {
   return (
-    <Svg width={96} height={58} viewBox="0 0 96 58">
+    <Svg width={92} height={56} viewBox="0 0 92 56">
       <Defs>
-        <SvgGrad id="dome" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#3FCB5F" />
-          <Stop offset="1" stopColor={C.green} />
+        <SvgGrad id="sDome" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor="#FF8AD2" />
+          <Stop offset="0.55" stopColor={V.pink} />
+          <Stop offset="1" stopColor={V.pinkDeep} />
         </SvgGrad>
-        <SvgGrad id="brim" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#2DB24C" />
-          <Stop offset="1" stopColor="#0A6B19" />
+        <SvgGrad id="sLime" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#F2FFB0" />
+          <Stop offset="1" stopColor={V.limeDeep} />
         </SvgGrad>
       </Defs>
-      <Path d="M24 30 C24 10 36 2 48 2 C60 2 72 10 72 30 Z" fill="url(#dome)" />
-      <Path d="M34 14 C38 8 43 6 48 6" stroke="#fff" strokeOpacity={0.7} strokeWidth={3} strokeLinecap="round" fill="none" />
-      <Ellipse cx={48} cy={34} rx={46} ry={15} fill="url(#brim)" />
-      <Ellipse cx={48} cy={36} rx={36} ry={9} fill="#11131D" />
-      <Ellipse cx={48} cy={38} rx={20} ry={4.5} fill={C.yellow} />
-      <Ellipse cx={48} cy={38} rx={12} ry={2.5} fill="#FFFBE0" />
+      <Path d="M12 28 C12 7 30 1 47 1 C64 1 82 7 82 28 Z" fill="url(#sDome)" />
+      <Path d="M26 13 C32 7 39 5 46 5" stroke="#fff" strokeOpacity={0.75} strokeWidth={2.6} strokeLinecap="round" fill="none" />
+      <Ellipse cx={46} cy={31} rx={43} ry={15} fill={V.pink} />
+      <Ellipse cx={46} cy={32.5} rx={36} ry={10.5} fill={V.rimDark} />
+      <Ellipse cx={46} cy={35} rx={20} ry={6} fill="url(#sLime)" />
+      <Ellipse cx={46} cy={34} rx={11} ry={2.6} fill="#FBFFE0" opacity={0.9} />
     </Svg>
   );
 }
 
-/** Rolls between the two facts the reference's single sub-line has room for. */
+/** Dark cloud silhouettes along the top edge, drifting slowly. */
+function Clouds() {
+  const d = useSharedValue(0);
+  useEffect(() => {
+    d.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.inOut(Easing.sin) }), -1, true);
+  }, []);
+  const a = useAnimatedStyle(() => ({ transform: [{ translateX: -d.value * 14 }] }));
+  const cloud = 'M0 18 C2 10 10 8 15 11 C17 4 27 2 31 8 C36 4 44 7 44 13 C50 13 52 18 50 20 L2 20 C0 20 0 19 0 18 Z';
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, a]}>
+      <Svg width={420} height={60} style={{ position: 'absolute', left: 0, top: 0 }}>
+        <Path d={cloud} fill={V.cloud} transform="translate(210 6) scale(1.1)" />
+        <Path d={cloud} fill={V.cloud} transform="translate(300 -2) scale(1.4)" opacity={0.9} />
+        <Path d={cloud} fill={V.cloud} transform="translate(372 14) scale(0.9)" />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** Firework burst around the price: short dashes flying outwards. */
+function Firework({ f }: { f: SharedValue<number> }) {
+  const colors = ['#8FB8FF', '#FFFFFF', '#FF7ACB', '#8FB8FF', '#FFFFFF', '#FF7ACB', '#8FB8FF', '#FFFFFF', '#FF7ACB', '#FFFFFF'];
+  return (
+    <View pointerEvents="none" style={styles.fwAnchor}>
+      {colors.map((c, i) => <Dash key={i} f={f} angle={(i * 360) / colors.length} color={c} />)}
+    </View>
+  );
+}
+function Dash({ f, angle, color }: { f: SharedValue<number>; angle: number; color: string }) {
+  const a = useAnimatedStyle(() => ({
+    opacity: f.value <= 0 || f.value >= 1 ? 0 : 1 - f.value * f.value,
+    transform: [{ rotate: `${angle}deg` }, { translateY: -(7 + f.value * 13) }, { scaleY: 1 - f.value * 0.5 }],
+  }));
+  return <Animated.View style={[styles.dash, { backgroundColor: color }, a]} />;
+}
+
+/** Rolls between the facts the single sub-line has room for (live mode). */
 function useRoll(lines: string[]) {
   const [i, setI] = useState(0);
   useEffect(() => {
@@ -114,38 +170,11 @@ function useRoll(lines: string[]) {
   return lines.length ? lines[i % lines.length] : null;
 }
 
-function SubLine({ text, accent }: { text: string; accent: string | null }) {
-  const v = useSharedValue(0);
-  const sweep = useSharedValue(0);
-  useEffect(() => {
-    v.value = 0;
-    v.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
-    sweep.value = 0;
-    sweep.value = withDelay(350, withSequence(withTiming(1, { duration: 520, easing: Easing.inOut(Easing.quad) }), withDelay(500, withTiming(2, { duration: 300 }))));
-  }, [text]);
-  const a = useAnimatedStyle(() => ({ opacity: v.value, transform: [{ translateY: (1 - v.value) * 10 }] }));
-  const u = useAnimatedStyle(() => ({
-    opacity: sweep.value > 1 ? 2 - sweep.value : 1,
-    transform: [{ scaleX: Math.min(1, sweep.value) }],
-  }));
-  const parts = accent ? text.split(accent) : [text];
-  return (
-    <Animated.View style={[{ marginTop: -3, alignSelf: 'flex-start' }, a]}>
-      <Text style={styles.sub} numberOfLines={1}>
-        {parts[0]}
-        {accent && <Text style={{ color: C.yellow }}>{accent}</Text>}
-        {parts[1]}
-      </Text>
-      <Animated.View style={[styles.underline, u]} />
-    </Animated.View>
-  );
-}
-
 /**
- * Home's hero. "FREE / DELIVERY" while Blynk's new-customer free deliveries are on
- * (otherwise "FRESH / GROCERIES"); the sub-line rolls between the free-delivery terms and
- * "Groceries from" the cheapest effective price. The beam abducts real product photos,
- * cut out of their backgrounds on the fly.
+ * Home's hero. Design mock: the reference's own copy and emoji dishes. Live: "FREE /
+ * DELIVERY" while Blynk's new-customer free deliveries are on (otherwise "FRESH /
+ * GROCERIES"), the sub-line rolls between the terms and "Groceries starting at" the
+ * cheapest effective price, and the beam abducts real product photos cut out on the fly.
  */
 export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
   images: string[]; minPrice: number | null; freeCount: number; onOrderNow?: () => void;
@@ -155,9 +184,14 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
   const cutouts = useCutouts(demo ? [] : images);
   const items = demo ? demo.emojis : cutouts;
   const [idx, setIdx] = useState(0);
-  const ufo = useSharedValue(0);
-  const beam = useSharedValue(0);
-  const item = useSharedValue(1); // 1 = floating in the beam, 0 = inside the saucer
+
+  const bob = useSharedValue(0);
+  const swing = useSharedValue(0);
+  const item = useSharedValue(1); // 1 = resting in the beam, 0 = up inside the saucer
+  const fire = useSharedValue(0);
+  const moon = useSharedValue(0);
+  const wave = useSharedValue(0);
+  const sweep = useSharedValue(0);
   const nudge = useSharedValue(0);
 
   const price = minPrice != null ? formatLkr(minPrice) : null;
@@ -170,35 +204,61 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
   }, [freeCount, price, demo]);
   const line = useRoll(lines);
 
-  const next = () => setIdx((i) => i + 1);
   useEffect(() => {
-    ufo.value = withRepeat(withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.sin) }), -1, true);
-    beam.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.sin) }), -1, true);
+    bob.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
     nudge.value = withRepeat(withSequence(withTiming(4, { duration: 280 }), withTiming(0, { duration: 280 }), withTiming(0, { duration: 1000 })), -1);
   }, []);
-  useEffect(() => {
-    if (items.length < 2) return;
-    const t = setInterval(() => {
-      // pulled up the beam into the saucer, swapped, the next one lowered back down
-      item.value = withTiming(0, { duration: 560, easing: Easing.in(Easing.cubic) }, (done) => {
-        if (!done) return;
-        scheduleOnRN(next);
-        item.value = withDelay(120, withSpring(1, { damping: 11, stiffness: 110 }));
-      });
-    }, 3000);
-    return () => clearInterval(t);
-  }, [items.length]);
 
-  const ufoA = useAnimatedStyle(() => ({ transform: [{ translateY: ufo.value * 5 }, { rotate: `${16 + ufo.value * 4}deg` }] }));
-  const beamA = useAnimatedStyle(() => ({ opacity: (0.55 + beam.value * 0.25) * (0.35 + item.value * 0.65) }));
-  const itemA = useAnimatedStyle(() => ({
-    opacity: interpolate(item.value, [0, 0.25, 1], [0, 1, 1]),
+  // One choreographed cycle per dish.
+  useEffect(() => {
+    const first = idx === 0;
+    if (!first) {
+      item.value = 0;
+      item.value = withSpring(1, { damping: 12, stiffness: 150 });
+    }
+    sweep.value = 0;
+    sweep.value = withDelay(300, withSequence(withTiming(1, { duration: 480, easing: Easing.inOut(Easing.quad) }), withDelay(1500, withTiming(2, { duration: 300 }))));
+    fire.value = 0;
+    fire.value = withDelay(550, withTiming(1, { duration: 620, easing: Easing.out(Easing.quad) }));
+    moon.value = 0;
+    // the moon only shows up every other dish in the reference
+    if (idx % 2 === 1) moon.value = withDelay(1100, withSequence(withSpring(1, { damping: 9, stiffness: 220 }), withDelay(420, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }))));
+    wave.value = 0;
+    wave.value = withDelay(1100, withTiming(1, { duration: 1000, easing: Easing.linear }));
+    if (items.length < 2) {
+      const t = setTimeout(() => setIdx((i) => i + 1), P);
+      return () => clearTimeout(t);
+    }
+    const exit = setTimeout(() => {
+      // sucked back up the beam while the saucer swings
+      item.value = withTiming(0, { duration: 230, easing: Easing.in(Easing.cubic) });
+      swing.value = withSequence(withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 340, easing: Easing.inOut(Easing.quad) }));
+    }, P - 380);
+    const nextT = setTimeout(() => setIdx((i) => i + 1), P - 120);
+    return () => { clearTimeout(exit); clearTimeout(nextT); };
+  }, [idx, items.length]);
+
+  const ufoA = useAnimatedStyle(() => ({
     transform: [
-      { translateX: interpolate(item.value, [0, 1], [34, 0]) },
-      { translateY: interpolate(item.value, [0, 1], [-88, 0]) + (1 - ufo.value) * 3 },
-      { scale: interpolate(item.value, [0, 1], [0.12, 1]) },
-      { rotate: `${interpolate(item.value, [0, 1], [-30, -6])}deg` },
+      { translateY: bob.value * 4 - 2 },
+      { translateX: -swing.value * 6 },
+      { rotate: `${14 + bob.value * 5 + swing.value * 16}deg` },
     ],
+  }));
+  const beamA = useAnimatedStyle(() => ({ opacity: 0.75 + bob.value * 0.2 - swing.value * 0.25 }));
+  const itemA = useAnimatedStyle(() => ({
+    opacity: item.value < 0.04 ? 0 : 1,
+    transform: [
+      { translateX: (1 - item.value) * 40 },
+      { translateY: (1 - item.value) * -84 + bob.value * 2 },
+      { scale: 0.1 + item.value * 0.9 },
+      { rotate: `${-4 + (1 - item.value) * 20}deg` },
+    ],
+  }));
+  const moonA = useAnimatedStyle(() => ({ opacity: moon.value > 0.02 ? 1 : 0, transform: [{ scale: moon.value }] }));
+  const lineA = useAnimatedStyle(() => ({
+    opacity: sweep.value > 1 ? 2 - sweep.value : 1,
+    transform: [{ scaleX: Math.min(1, sweep.value) }],
   }));
   const arrowA = useAnimatedStyle(() => ({ transform: [{ translateX: nudge.value }] }));
 
@@ -206,36 +266,49 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
   const [w1, w2] = demo ? demo.title : free ? ['FREE', 'DELIVERY'] : ['FRESH', 'GROCERIES'];
   const accent = demo ? demo.accent : price;
   const cur = items.length ? items[idx % items.length] : null;
+  const parts = line && accent && line.includes(accent) ? line.split(accent) : null;
 
   return (
     <View style={styles.wrap}>
-      <LinearGradient colors={['#1F2338', C.purple, '#14162A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      {/* soft glow behind the beam, as in the reference */}
+      <LinearGradient colors={V.bg} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={StyleSheet.absoluteFill} />
+      {/* the beam lights the ground under the dish */}
       <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>
-          <RadialGradient id="glow" cx="72%" cy="62%" rx="38%" ry="70%">
-            <Stop offset="0" stopColor="#3A4170" stopOpacity="0.9" />
-            <Stop offset="1" stopColor="#3A4170" stopOpacity="0" />
+          <RadialGradient id="bGlow" cx="72%" cy="96%" rx="34%" ry="48%">
+            <Stop offset="0" stopColor={V.glow} stopOpacity="0.95" />
+            <Stop offset="1" stopColor={V.glow} stopOpacity="0" />
           </RadialGradient>
         </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#glow)" />
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#bGlow)" />
       </Svg>
+      <Clouds />
 
-      <Sparkle x={214} y={26} delay={200} size={6} color="#fff" />
-      <Sparkle x={168} y={130} delay={900} size={7} color="#fff" />
+      <Animated.View pointerEvents="none" style={[styles.moon, moonA]} />
+      <Sparkle x={168} y={150} delay={300} size={7} color="#fff" />
+      <Sparkle x={214} y={30} delay={1200} size={6} color="#fff" />
 
       <View style={styles.copy}>
-        <WobbleWord key={w1} word={w1} color="#fff" delay={0} />
-        <View style={{ marginTop: -4 }}>
-          <WobbleWord key={w2} word={w2} color={C.yellow} delay={380} />
+        <WaveWord key={`a${w1}`} word={w1} color={V.white} wave={wave} offset={0} />
+        <View style={{ marginTop: -5, marginLeft: -7 }}>
+          <WaveWord key={`b${w2}`} word={w2} color={V.yellow} wave={wave} offset={w1.length + 0.6} clockO />
         </View>
-        {line && <SubLine key={line} text={line} accent={line.includes(accent ?? '\u0000') ? accent : null} />}
+        {line && (
+          <View style={styles.subWrap}>
+            <Text style={styles.sub} numberOfLines={1}>
+              {parts ? <>{parts[0]}{accent}{parts[1]}</> : line}
+            </Text>
+            <Animated.View style={[styles.underline, lineA]}>
+              <LinearGradient colors={['#4E73DA', '#9A4FD0', V.extrude]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+            </Animated.View>
+            {parts && <Firework f={fire} />}
+          </View>
+        )}
         <PressScale style={styles.ctaWrap} haptic onPress={onOrderNow}>
           <View style={styles.ctaSlab} />
           <View style={styles.cta}>
             <Text style={styles.ctaTxt}>ORDER NOW</Text>
             <Animated.View style={arrowA}>
-              <ArrowRight size={13} color={C.ink} />
+              <ArrowRight size={13} color={V.ctaText} />
             </Animated.View>
           </View>
         </PressScale>
@@ -243,15 +316,15 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
 
       <View style={styles.stage} pointerEvents="none">
         <Animated.View style={[styles.beam, beamA]}>
-          <Svg width={170} height={140}>
+          <Svg width={176} height={150}>
             <Defs>
-              <SvgGrad id="beam" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor="#E9ECFF" stopOpacity="0.55" />
-                <Stop offset="0.6" stopColor="#C9CEF0" stopOpacity="0.2" />
-                <Stop offset="1" stopColor="#C9CEF0" stopOpacity="0" />
+              <SvgGrad id="bBeam" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor="#FFE3EE" stopOpacity="0.72" />
+                <Stop offset="0.5" stopColor="#E9B9E8" stopOpacity="0.32" />
+                <Stop offset="1" stopColor="#C79BEF" stopOpacity="0.06" />
               </SvgGrad>
             </Defs>
-            <Polygon points="118,0 146,0 150,140 8,140" fill="url(#beam)" />
+            <Polygon points="112,0 140,0 146,150 14,150" fill="url(#bBeam)" />
           </Svg>
         </Animated.View>
         {cur && (
@@ -266,8 +339,9 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
         <Animated.View style={[styles.saucer, ufoA]}>
           <Saucer />
         </Animated.View>
-        <Sparkle x={128} y={96} delay={1400} size={13} />
-        <Sparkle x={10} y={40} delay={600} size={9} />
+        <Sparkle x={150} y={104} delay={1500} size={12} />
+        <Sparkle x={22} y={62} delay={800} size={9} />
+        <Sparkle x={150} y={40} delay={2000} size={8} />
       </View>
     </View>
   );
@@ -288,24 +362,28 @@ function useCutouts(images: string[]) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { height: H, overflow: 'hidden', flexDirection: 'row' },
-  copy: { paddingLeft: 24, paddingTop: 30, width: TEXT_W + 24, zIndex: 2 },
-  title: { fontFamily: F.display, color: '#fff', includeFontPadding: false },
-  slab: { position: 'absolute', left: 1.5, top: 2.5, color: EXTRUDE },
-  sub: { fontFamily: F.bold, color: '#F4F2FA', fontSize: 13.5, letterSpacing: 0.3 },
-  underline: { height: 2, borderRadius: 1, backgroundColor: '#fff', opacity: 0.85, marginTop: 1, transformOrigin: 'left' },
-  ctaWrap: { marginTop: 13, alignSelf: 'flex-start' },
-  ctaSlab: { position: 'absolute', left: 0, right: 0, top: 3, bottom: -3, borderRadius: 16, backgroundColor: EXTRUDE },
+  wrap: { height: H, overflow: 'hidden', flexDirection: 'row', backgroundColor: V.bg[1] },
+  copy: { paddingLeft: 24, paddingTop: 26, width: TEXT_W + 24, zIndex: 2 },
+  title: { fontFamily: F.display, color: V.white, includeFontPadding: false },
+  slab: { position: 'absolute', left: -2.5, top: 3.5, color: V.extrude },
+  subWrap: { marginTop: 1, alignSelf: 'flex-start' },
+  sub: { fontFamily: F.bold, color: '#FFF4FF', fontSize: 15, letterSpacing: 0.8 },
+  underline: { height: 2, borderRadius: 1, marginTop: 2, overflow: 'hidden', transformOrigin: 'left' },
+  fwAnchor: { position: 'absolute', right: 12, top: 10, width: 0, height: 0 },
+  dash: { position: 'absolute', left: -1, top: -3, width: 2, height: 6, borderRadius: 1 },
+  ctaWrap: { marginTop: 12, alignSelf: 'flex-start' },
+  ctaSlab: { position: 'absolute', left: -3, right: 3, top: 4, bottom: -4, borderRadius: 16, backgroundColor: V.extrude },
   cta: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: C.yellow, paddingHorizontal: 12, height: 28, borderRadius: 16,
+    backgroundColor: V.yellow, paddingHorizontal: 13, height: 28, borderRadius: 16,
   },
-  ctaTxt: { fontFamily: F.black, fontSize: 12, color: C.ink, letterSpacing: 0.6 },
-  stage: { position: 'absolute', right: 0, top: 0, width: 170, height: H },
-  beam: { position: 'absolute', right: 0, top: 24 },
-  saucer: { position: 'absolute', right: 16, top: 10 },
-  item: { position: 'absolute', right: 52, bottom: 14, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
-  // web: the reference's soft shadow under the floating product
+  ctaTxt: { fontFamily: F.black, fontSize: 12, color: V.ctaText, letterSpacing: 0.6 },
+  moon: { position: 'absolute', left: 184, top: 34, width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
+  stage: { position: 'absolute', right: 0, top: 0, width: 180, height: H },
+  beam: { position: 'absolute', right: 4, top: 42 },
+  saucer: { position: 'absolute', right: 8, top: 12 },
+  item: { position: 'absolute', right: 50, bottom: 20, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
+  // web: the reference's soft shadow under the floating dish
   itemImg: { width: ITEM, height: ITEM, filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
   itemEmoji: { fontSize: 108, lineHeight: 124, textAlign: 'center', filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
 });

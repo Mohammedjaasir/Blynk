@@ -35,8 +35,8 @@ export const BANNER = {
   title: ['BROKE', 'HOURS'] as [string, string],
   line: 'Dishes starting at ₹49',
   accent: '₹49',
-  /** What the beam abducts in turn (the video: a sandwich, then a burger). */
-  emojis: ['🥪', '🍔', '🍕', '🌯'],
+  /** What the beam abducts in turn (the video: a sandwich, noodles, then a burger). */
+  emojis: ['🥪', '🍜', '🍔', '🍕'],
 };
 
 /** Before location is granted the rail has no "FROM" tags and a different order. */
