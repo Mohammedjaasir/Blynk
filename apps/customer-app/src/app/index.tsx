@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+
+const LOGO = require('../../assets/logo-mark.png');
 import Animated, {
   Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming,
 } from 'react-native-reanimated';
@@ -9,7 +11,7 @@ import { C, F } from '@/lib/theme';
 
 /**
  * Splash — mirrors the original: the launcher icon grows into a full-screen green
- * card (container transform), the wordmark pops, then everything fades into Home
+ * card (container transform), the Blynk logo hops and the wordmark pops, then everything fades into Home
  * which is already showing its "Locating…" skeleton underneath.
  */
 export default function Splash() {
@@ -44,9 +46,12 @@ export default function Splash() {
     <View style={styles.root}>
       <Animated.View style={[styles.card, card]} />
       <Animated.View style={[styles.center, word]}>
-        <Animated.Text style={[styles.basket, bk]}>🧺</Animated.Text>
-        <Text style={styles.word}>tokri</Text>
-        <Text style={styles.tag}>Mandi prices. Doorstep fast.</Text>
+        <Animated.View style={[styles.logoTile, bk]}>
+          <Animated.Image source={LOGO} resizeMode="contain" style={styles.logo} accessibilityLabel="Blynk" />
+        </Animated.View>
+        <Text style={styles.word}>Blynk</Text>
+        {/* Blynk's own tagline, from the customer app's HomeBrandTagline (Flutter). */}
+        <Text style={styles.tag}>Your daily essentials, simplified</Text>
       </Animated.View>
     </View>
   );
@@ -56,7 +61,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   card: { position: 'absolute', backgroundColor: C.green },
   center: { alignItems: 'center' },
-  basket: { fontSize: 56 },
+  logoTile: { width: 76, height: 76, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  logo: { width: 56, height: 64 },
   word: { fontFamily: F.display, fontSize: 46, color: C.yellow, marginTop: 4, letterSpacing: 1 },
   tag: { fontFamily: F.semi, color: '#fff', opacity: 0.9, fontSize: 14, marginTop: 4 },
 });

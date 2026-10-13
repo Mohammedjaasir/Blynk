@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "tokri",
-    "slug": "tokri",
+    "name": "Blynk",
+    "slug": "blynk",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,7 +11,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B9A2C",
+        "backgroundColor": "#0C831F",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -32,9 +32,10 @@
         }
       ]
     ],
-    "scheme": "tokri",
+    "scheme": "blynk",
     "experiments": {
-      "typedRoutes": false
+      "typedRoutes": false,
+      "baseUrl": "/app"
     }
   }
 }
