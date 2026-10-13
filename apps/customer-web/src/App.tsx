@@ -6,6 +6,8 @@ import Home from './pages/Home';
 import Aisle from './pages/Aisle';
 import ProductPage from './pages/ProductPage';
 import Search from './pages/Search';
+import Cart from './pages/Cart';
+import CartBar from './components/CartBar';
 
 export default function App() {
   if (typeof window !== 'undefined' && isDesktopBlocked(window.innerWidth, window.location.search)) return <PhoneOnly />;
@@ -18,8 +20,11 @@ export default function App() {
             <Route path="/aisle/:slug" element={<Aisle />} />
             <Route path="/p/:id" element={<ProductPage />} />
             <Route path="/search" element={<Search />} />
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/login" element={<div style={{ padding: 40, textAlign: 'center' }}>Sign-in comes in the next update.</div>} />
             <Route path="*" element={<div />} />
           </Routes>
+          <CartBar />
         </div>
       </CartProvider>
     </StoreProvider>
