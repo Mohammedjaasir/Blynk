@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { milk, sugar, MemoryStorage } from '../test/fixtures';
-import { checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, newIdempotencyKey, orderItems } from './checkout';
+import { basketProgress, basketPrompt, checkoutBill, checkoutKeyFor, freeDeliveryNote, checkoutSignature, forgetCheckoutKey, newIdempotencyKey, orderItems } from './checkout';
 import type { CheckoutInfo, CouponPreview } from './types';
 
 beforeEach(() => { vi.stubGlobal('localStorage', new MemoryStorage()); });
@@ -102,4 +102,49 @@ test('bill: an applied coupon preview takes its discount off', () => {
   const b = checkoutBill(1000, quote({ coupons_enabled: true }), coupon);
   expect(b.discount).toBe(100);
   expect(b.toPay).toBe(1050);
+});
+
+test('signature: slot, points, receiver and needs help make a different order; a plain checkout keeps its old signature', () => {
+  const base = { items: [{ product_id: 'x', quantity: 1 }], addressId: 'a1' };
+  const plain = checkoutSignature(base);
+  expect(checkoutSignature({ ...base, extra: {} })).toBe(plain);
+  const sigs = [
+    checkoutSignature({ ...base, extra: { delivery_slot_start: '2026-10-14T02:30:00.000Z' } }),
+    checkoutSignature({ ...base, extra: { use_points: true } }),
+    checkoutSignature({ ...base, extra: { for_someone_else: true, recipient: { name: 'Amma', phone: '+94771234567' } } }),
+    checkoutSignature({ ...base, extra: { for_someone_else: true, recipient: { name: 'Amma', phone: '+94771234568' } } }),
+    checkoutSignature({ ...base, extra: { needs_help: true } }),
+  ];
+  expect(new Set([plain, ...sigs]).size).toBe(6);
+});
+
+test('bill: birthday gift estimated without a coupon, points on top when switched on', () => {
+  const q = quote({
+    birthday_offer: { eligible: true, percent: 10 },
+    points: { enabled: true, balance: 100, value_lkr: 100, earn_points: 1, earn_per_lkr: 100, lkr_per_point: 1, min_redeem_points: 10, max_redeem_percent: 50 },
+  });
+  const off = checkoutBill(1000, q);
+  expect(off).toMatchObject({ discount: 100, discountKind: 'BIRTHDAY', toPay: 1050, earn: 9 });
+  const on = checkoutBill(1000, q, null, true);
+  expect(on.points).toEqual({ points: 100, value: 100 });
+  expect(on.toPay).toBe(950);
+});
+
+test('bill: basket free delivery makes the fee 0 and the total the items', () => {
+  const b = checkoutBill(5200, quote({ delivery_fee_lkr: 0, basket_free_delivery: { enabled: true, min_subtotal_lkr: 5000, applies: true, remaining_lkr: 0 } }));
+  expect(b).toMatchObject({ deliveryFee: 0, standardFee: 150, freeReason: 'BASKET', toPay: 5200 });
+});
+
+test('basket free delivery: "add more" from this basket, progress, and the notes', () => {
+  const short = checkoutBill(4200, quote({ basket_free_delivery: { enabled: true, min_subtotal_lkr: 5000, applies: false, remaining_lkr: 900 } }));
+  // the quote was for an older basket; the prompt follows this one
+  expect(short.basketRemaining).toBe(800);
+  expect(basketPrompt(800)).toBe('Add LKR 800 more for free delivery');
+  expect(basketProgress(4200, 5000)).toBeCloseTo(0.84);
+  expect(basketProgress(6000, 5000)).toBe(1);
+  expect(basketProgress(100, null)).toBe(0);
+  const free = checkoutBill(5200, quote({ delivery_fee_lkr: 0, basket_free_delivery: { enabled: true, min_subtotal_lkr: 5000, applies: true, remaining_lkr: 0 } }));
+  expect(freeDeliveryNote(free, 0)).toBe('Free delivery on orders of LKR 5,000 or more.');
+  const nc = checkoutBill(800, quote({ delivery_fee_lkr: 0, free_delivery: { enabled: true, count: 2, since: 'x', used: 1, remaining: 1, applies: true } }));
+  expect(freeDeliveryNote(nc, 2)).toBe('Free delivery — 1 of 2 free deliveries left.');
 });

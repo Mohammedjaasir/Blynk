@@ -11,7 +11,8 @@ import { appHidden, onVisible } from '@/blynk/lib/visibility';
 import { cancelOrder, getOrder } from '@/blynk/orders/api';
 import { cancelErrorText, placeErrorCopy } from '@/blynk/orders/errors';
 import {
-  discountRows, isOpenOrder, itemTitle, orderTime, paymentLine, progressOf, PROGRESS_STEPS, statusLabel, statusSentence, statusTone,
+  CODE_COMING, discountRows, isOpenOrder, itemCaption, itemTitle, mayCancel, orderTime, paymentLine, progressOf, PROGRESS_STEPS,
+  riderArrived, showsDeliveryCode, showsDeliveryCodeComing, slotWindowText, statusLabel, statusSentence, statusTone,
   timelineLabel, type OrderTone,
 } from '@/blynk/orders/status';
 import type { Order } from '@/blynk/orders/types';
@@ -66,14 +67,17 @@ export default function OrderStatus() {
     return () => { clearInterval(t); off(); };
   }, [load, status]);
 
+  const cancelRef = useRef(false);
   const doCancel = () => {
-    if (!order || cancelling) return;
+    // a double tap sends one cancel
+    if (!order || cancelRef.current) return;
+    cancelRef.current = true;
     setCancelling(true);
     setCancelMsg(null);
     cancelOrder(order.id)
       .then((o) => { setOrder({ ...order, ...o, history: o.history ?? order.history }); setConfirm(false); load(); })
       .catch((e) => { setCancelMsg(cancelErrorText(e)); setConfirm(false); load(); })
-      .finally(() => setCancelling(false));
+      .finally(() => { cancelRef.current = false; setCancelling(false); });
   };
 
   const title = order?.order_number ?? 'Order';
@@ -109,18 +113,22 @@ export default function OrderStatus() {
         ) : (
           <Animated.View entering={FadeIn.duration(200)}>
             <StatusCard order={order} />
-            {!!order.delivery_code && (
-              <View style={[styles.card, styles.codeCard]} accessibilityLabel={`Your delivery code: ${order.delivery_code}. Show this to your rider.`}>
+            {showsDeliveryCode(order) ? (
+              <View style={[styles.card, styles.codeCard]} accessible accessibilityLabel={`Your delivery code: ${order.delivery_code}. Show this to your rider.`}>
                 <Text style={styles.codeLabel}>Your delivery code</Text>
                 <Text style={styles.code}>{order.delivery_code}</Text>
                 <Text style={styles.codeSub}>Show this to your rider.</Text>
               </View>
-            )}
+            ) : showsDeliveryCodeComing(order) ? (
+              <View style={[styles.card, styles.comingCard]}>
+                <Text style={styles.small}>{CODE_COMING}</Text>
+              </View>
+            ) : null}
             {!!order.rider_contact && (
               <View style={[styles.card, styles.riderRow]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.small}>Your rider</Text>
-                  <Text style={styles.strong}>{order.rider_contact.first_name ?? 'Your rider'}</Text>
+                  <Text style={styles.small}>{riderArrived(order) ? 'At your door' : 'Your rider'}</Text>
+                  <Text style={styles.strong}>{(order.rider_contact.first_name ?? 'Your rider') + (riderArrived(order) ? ' has arrived' : '')}</Text>
                 </View>
                 <PressScale onPress={() => Linking.openURL(`tel:${order.rider_contact!.phone}`)} style={styles.callBtn} haptic>
                   <Text style={styles.callTxt}>Call rider</Text>
@@ -149,15 +157,22 @@ export default function OrderStatus() {
 
             <View style={styles.card}>
               <Text style={styles.section}>Items</Text>
-              {order.items.map((it) => (
-                <View key={it.id} style={styles.itemRow}>
-                  <Text style={[styles.itemName, it.item_status === 'UNAVAILABLE' && styles.struck]} numberOfLines={2}>
-                    {itemTitle(it.product_name_snapshot, it.unit_snapshot)}
-                  </Text>
-                  <Text style={styles.qty}>× {it.quantity}</Text>
-                  <Text style={[styles.price, it.item_status === 'UNAVAILABLE' && styles.struck]}>{formatLkr(it.subtotal)}</Text>
-                </View>
-              ))}
+              {order.items.map((it) => {
+                // an UNAVAILABLE line is out of the totals (struck, shown for the record); a SUBSTITUTED one was replaced
+                const cap = itemCaption(it.item_status);
+                return (
+                  <View key={it.id} style={styles.itemRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.itemName, cap?.struck && styles.struck]} numberOfLines={2}>
+                        {itemTitle(it.product_name_snapshot, it.unit_snapshot)}
+                      </Text>
+                      {!!cap && <Text style={[styles.small, { fontSize: 11.5 }, cap.problem && { color: C.problem }]}>{cap.text}</Text>}
+                    </View>
+                    <Text style={styles.qty}>× {it.quantity}</Text>
+                    <Text style={[styles.price, cap?.struck && styles.struck]}>{formatLkr(it.subtotal)}</Text>
+                  </View>
+                );
+              })}
             </View>
 
             <View style={styles.card}>
@@ -172,17 +187,22 @@ export default function OrderStatus() {
 
             <View style={styles.card}>
               <Text style={styles.section}>Delivering to</Text>
+              {!!slotWindowText(order.scheduled_for, order.scheduled_until) && (
+                <Text style={[styles.body, { marginTop: 0, marginBottom: 6 }]}>Delivery time: <Text style={{ fontFamily: F.semi }}>{slotWindowText(order.scheduled_for, order.scheduled_until)}</Text></Text>
+              )}
+              {order.ordered_for_someone_else === true && <Text style={[styles.small, { marginBottom: 2 }]}>For someone else</Text>}
               {!!order.delivery_recipient_name && (
                 <Text style={styles.strong}>{order.delivery_recipient_name}{order.delivery_recipient_phone ? `  ·  ${order.delivery_recipient_phone}` : ''}</Text>
               )}
               <Text style={styles.body}>{[order.delivery_address_line1, order.delivery_address_line2, order.delivery_city].filter(Boolean).join(', ')}</Text>
               {!!order.delivery_instructions && <Text style={[styles.small, { marginTop: 4 }]}>Note: {order.delivery_instructions}</Text>}
+              {order.delivery_needs_help === true && <Text style={[styles.small, { marginTop: 4 }]}>Needs help at the door</Text>}
             </View>
 
-            {(order.can_cancel || cancelMsg) && (
+            {(mayCancel(order) || cancelMsg) && (
               <Animated.View layout={LinearTransition.duration(200)} style={styles.card}>
                 {!!cancelMsg && <Text style={[styles.stale, { marginTop: 0, marginBottom: 8 }]}>{cancelMsg}</Text>}
-                {order.can_cancel && (
+                {mayCancel(order) && (
                   <>
                     <Text style={styles.small}>You can cancel until your order is out for delivery.</Text>
                     <PressScale onPress={() => setConfirm(true)} style={styles.cancelBtn}>
@@ -201,7 +221,7 @@ export default function OrderStatus() {
           <Pressable style={StyleSheet.absoluteFill} onPress={() => !cancelling && setConfirm(false)} />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]} accessibilityRole="alert">
             <Text style={styles.sheetTitle}>Cancel this order?</Text>
-            <Text style={styles.body}>This can't be undone.</Text>
+            <Text style={styles.body}>{"This can't be undone."}</Text>
             <PressScale onPress={() => setConfirm(false)} disabled={cancelling} style={[styles.keepBtn, { marginTop: 18 }]}>
               <Text style={styles.keepTxt}>Keep order</Text>
             </PressScale>
@@ -286,6 +306,7 @@ const styles = StyleSheet.create({
   trackDotOn: { backgroundColor: C.brand, borderColor: C.brandDeep },
   trackLabel: { fontFamily: F.regular, fontSize: 11, color: C.sub, marginTop: 6 },
   codeCard: { alignItems: 'center', backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandSoft },
+  comingCard: { backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandSoft },
   codeLabel: { fontFamily: F.semi, fontSize: 13, color: C.brandInk },
   code: { fontFamily: F.black, fontSize: 34, letterSpacing: 8, color: C.brandInk, marginTop: 4 },
   codeSub: { fontFamily: F.regular, fontSize: 12, color: C.text, marginTop: 2 },

@@ -33,9 +33,14 @@ export interface CheckoutInfo {
   coupons_enabled: boolean;
   free_delivery: FreeDeliveryStatus;
   basket_free_delivery?: BasketFreeDeliveryStatus;
+  /** Owner, 2026-10-12: whether checkout offers "For someone else" (absent on an older server = off). */
+  order_for_someone_else?: { enabled: boolean; send_code_to_receiver: boolean };
   birthday_offer?: { eligible?: boolean; percent?: number; [k: string]: unknown };
   referral_reward?: { available: boolean; side: string | null; mode: string | null; amount_lkr: number };
-  points?: { enabled: boolean; balance: number; value_lkr: number; [k: string]: unknown };
+  points?: {
+    enabled: boolean; balance: number; value_lkr: number; earn_points?: number; earn_per_lkr?: number;
+    lkr_per_point?: number; min_redeem_points?: number; max_redeem_percent?: number; [k: string]: unknown;
+  };
 }
 
 /** POST /orders/validate-coupon data.coupon. */
@@ -84,6 +89,12 @@ export interface Order {
   total_amount: number;
   free_delivery_reason?: 'BASKET_THRESHOLD' | 'NEW_CUSTOMER' | null;
   scheduled_for: string | null;
+  /** The end of a booked delivery slot (null = as soon as possible). */
+  scheduled_until?: string | null;
+  /** Owner, 2026-10-12: sent to a receiver for this order only. */
+  ordered_for_someone_else?: boolean;
+  /** "Needs help at the door". */
+  delivery_needs_help?: boolean;
   delivery_recipient_name: string | null;
   delivery_recipient_phone: string | null;
   delivery_address_line1: string | null;
@@ -113,4 +124,11 @@ export interface PlaceOrderBody {
   idempotency_key: string;
   coupon_code?: string;
   delivery_note?: string;
+  /** A slot start from GET /orders/slots; omitted = as soon as possible. */
+  delivery_slot_start?: string;
+  /** "Use points": the server decides how many. */
+  use_points?: boolean;
+  for_someone_else?: boolean;
+  recipient?: { name: string; phone: string };
+  needs_help?: boolean;
 }

@@ -33,3 +33,15 @@ test('cancel refusals', () => {
   expect(cancelErrorText(new ApiError('x', 400, 'ORDER_CANNOT_BE_CANCELLED'))).toBe("This order can't be cancelled now.");
   expect(cancelErrorText(new ApiError('x', 400, 'ORDER_ALREADY_CANCELLED'))).toBe('This order is already cancelled.');
 });
+
+test('slot and for-someone-else refusals show the server sentence and their own action', () => {
+  const full = placeErrorCopy(new ApiError('That delivery slot is no longer available. Please pick another slot.', 422, 'SLOT_UNAVAILABLE'));
+  expect(full).toEqual({ title: 'Delivery time unavailable', message: 'That delivery slot is no longer available. Please pick another slot.', action: 'slot' });
+  expect(placeErrorCopy(new ApiError('Request failed.', 409, 'SLOT_FULL')).message).toBe('That delivery time is full. Pick another time.');
+  expect(placeErrorCopy(new ApiError('Ordering for someone else is not available right now.', 422, 'FOR_SOMEONE_ELSE_DISABLED')).action).toBe('details');
+});
+
+test('cancel: out-for-delivery refusal wording', () => {
+  expect(cancelErrorText(new ApiError('x', 422, 'ORDER_ALREADY_OUT_FOR_DELIVERY'))).toBe("Your order is already on its way, so it can't be cancelled.");
+  expect(cancelErrorText(new Error('boom'))).toBe("We couldn't confirm the cancellation. Checking your order…");
+});

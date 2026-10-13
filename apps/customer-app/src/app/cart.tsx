@@ -19,9 +19,15 @@ import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { addressSummary } from '@/blynk/address/api';
 import { clearSelection, useDeliveryLocation, type DeliveryLocation } from '@/blynk/address/store';
-import { getCheckoutInfo, placeOrder, previewCoupon } from '@/blynk/orders/api';
+import { couponAppliedNote, couponErrorText, couponInputError, discountLabel, normalizeCoupon } from '@/blynk/checkout/coupon';
+import { BirthdayBanner, DeliveryDetailsCard, RewardsCard, SlotPickerCard } from '@/blynk/checkout/CheckoutSections';
+import { detailsBody, detailsProblem, EMPTY_DETAILS, type CheckoutDetails } from '@/blynk/checkout/details';
+import { birthdayOf, canRedeem, pointsOf, referralOf } from '@/blynk/checkout/rewards';
+import { availableSlot, canOrderNow, SLOT_COPY, slotForOrder, type DeliverySlots } from '@/blynk/checkout/slots';
+import { getCheckoutInfo, getDeliverySlots, placeOrder, previewCoupon } from '@/blynk/orders/api';
 import {
-  checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, orderItems, rememberPlaced, type CheckoutBill,
+  basketProgress, basketPrompt, checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, freeDeliveryNote, orderItems,
+  rememberPlaced, type CheckoutBill,
 } from '@/blynk/orders/checkout';
 import { OUTSIDE_AREA, placeErrorCopy, refusedProduct, type PlaceErrorCopy } from '@/blynk/orders/errors';
 import type { CheckoutInfo, CouponPreview } from '@/blynk/orders/types';
@@ -104,7 +110,18 @@ export default function Cart() {
   const addr = DEMO || !phone ? null : loc.address;
   const items = orderItems(lines);
   const itemsSig = checkoutSignature({ items, addressId: '' });
-  const [notes, setNotes] = useState<string[]>([]);
+  // receiver, needs help, quick notes and the rider note (the quick picks also show signed out)
+  const [details, setDetails] = useState<CheckoutDetails>(EMPTY_DETAILS);
+  const notes = details.noteChips;
+  const setNotes = (f: (s: string[]) => string[]) => setDetails((d) => ({ ...d, noteChips: f(d.noteChips) }));
+  const [showDetailErrors, setShowDetailErrors] = useState(false);
+  const [usePoints, setUsePoints] = useState(false);
+  // scheduled delivery: GET /orders/slots while staff have slots on (or the store is closed)
+  const [slots, setSlots] = useState<DeliverySlots | null>(null);
+  const [slotsFailed, setSlotsFailed] = useState(false);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsTick, setSlotsTick] = useState(0);
+  const [pickedRaw, setPickedSlot] = useState<string | null>(null);
   const [quote, setQuote] = useState<CheckoutInfo | null>(null);
   const [quoteFailed, setQuoteFailed] = useState(false);
   const [quoteTick, setQuoteTick] = useState(0);
@@ -112,17 +129,39 @@ export default function Cart() {
   const [couponErr, setCouponErr] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
   const placingRef = useRef(false);
-  const [placeErr, setPlaceErr] = useState<PlaceErrorCopy | null>(null);
+  const [placeErrState, setPlaceErrState] = useState<{ copy: PlaceErrorCopy; for: string } | null>(null);
   const addrId = addr?.id ?? null;
   const quoteFor = quote && addrId && quote.delivery_fee_address_id === addrId ? quote : null;
-  const checkout: CheckoutBill | null = addrId ? checkoutBill(total, quoteFor, coupon) : null;
+  const checkout: CheckoutBill | null = addrId ? checkoutBill(total, quoteFor, coupon, usePoints) : null;
+  // "For someone else" only while staff allow it (checkout-info; absent = off)
+  const forOthers = quoteFor?.order_for_someone_else;
+  const allowForOthers = forOthers?.enabled === true;
+  const storeOpen = !closedNow;
+  // slots are asked for once the store says they are on, or while closed (a slot may still be booked)
+  const slotsWanted = !DEMO && !!addrId && (store?.delivery_slots_enabled === true || closedNow);
+  const slotsOn = slots?.enabled === true;
+  // a picked slot that filled up (or is no longer offered) is dropped: the customer picks again
+  const pickedSlot = pickedRaw && slots && !availableSlot(slots, pickedRaw) ? null : pickedRaw;
+  const orderable = canOrderNow({ storeOpen, slots: slotsOn ? slots : null, picked: pickedSlot });
+
+  useEffect(() => {
+    if (!slotsWanted) return;
+    const ctrl = new AbortController();
+    void Promise.resolve().then(() => { if (!ctrl.signal.aborted) setSlotsLoading(true); });
+    getDeliverySlots(ctrl.signal)
+      .then((s) => { setSlots(s); setSlotsFailed(false); })
+      .catch(() => { if (!ctrl.signal.aborted) setSlotsFailed(true); })
+      .finally(() => { if (!ctrl.signal.aborted) setSlotsLoading(false); });
+    return () => ctrl.abort();
+  }, [slotsWanted, slotsTick]);
+
 
   // the fee for the chosen address and this basket (refetched when either changes)
   useEffect(() => {
     if (DEMO || !addrId || !items.length) return;
     const ctrl = new AbortController();
-    setQuoteFailed(false);
     const t = setTimeout(() => {
+      setQuoteFailed(false);
       getCheckoutInfo(addrId, total, ctrl.signal)
         .then((q) => setQuote(q))
         .catch((e) => {
@@ -141,27 +180,48 @@ export default function Cart() {
     let alive = true;
     previewCoupon(coupon.code, items, addrId)
       .then((c) => { if (alive) setCoupon(c); })
-      .catch((e) => { if (alive) { setCoupon(null); setCouponErr(placeErrorCopy(e).message); } });
+      .catch((e) => { if (alive) { setCoupon(null); setCouponErr(couponErrorText(e)); } });
     return () => { alive = false; };
   }, [addrId, itemsSig]);
 
-  // a new address or a changed basket clears the last refusal
-  useEffect(() => { setPlaceErr(null); }, [addrId, itemsSig]);
+  // a new address or a changed basket clears the last refusal (kept with the checkout it was for)
+  const placeErr = placeErrState && placeErrState.for === `${addrId}|${itemsSig}` ? placeErrState.copy : null;
+  const setPlaceErr = (copy: PlaceErrorCopy | null) => setPlaceErrState(copy ? { copy, for: `${addrId}|${itemsSig}` } : null);
 
-  const applyCoupon = async (code: string) => {
+  const applyCoupon = async (raw: string) => {
     if (!addrId) return;
+    const bad = couponInputError(raw);
+    if (bad) { setCouponErr(bad); return; }
     setCouponErr(null);
     try {
-      setCoupon(await previewCoupon(code, items, addrId));
+      setCoupon(await previewCoupon(normalizeCoupon(raw), items, addrId));
     } catch (e) {
-      setCouponErr(placeErrorCopy(e).message);
+      setCoupon(null);
+      setCouponErr(couponErrorText(e));
     }
   };
 
   const place = async () => {
-    if (DEMO || placingRef.current || !addrId || !items.length || closedNow) return;
-    const note = notes.join(', ');
-    const sig = checkoutSignature({ items, addressId: addrId, coupon: coupon?.code ?? null, note });
+    if (DEMO || placingRef.current || !addrId || !items.length || !orderable) return;
+    const problem = detailsProblem(details, allowForOthers);
+    if (problem) {
+      setShowDetailErrors(true);
+      setPlaceErr({ title: 'Check the delivery details', message: problem, action: null });
+      return;
+    }
+    const more = detailsBody(details, allowForOthers);
+    const slotStart = slotsOn ? slotForOrder(slots, pickedSlot) : undefined;
+    // the switch shows only while points can be used; the server decides how many
+    const pointsOn = usePoints && canRedeem(pointsOf(quoteFor));
+    const extra = {
+      ...(slotStart ? { delivery_slot_start: slotStart } : {}),
+      ...(pointsOn ? { use_points: true } : {}),
+      ...(more.for_someone_else ? { for_someone_else: true, recipient: more.recipient } : {}),
+      ...(more.needs_help ? { needs_help: true } : {}),
+    };
+    const note = more.delivery_note ?? '';
+    // one key per checkout: a double tap or a retry after a timeout replays the same order
+    const sig = checkoutSignature({ items, addressId: addrId, coupon: coupon?.code ?? null, note, extra });
     const key = checkoutKeyFor(sig);
     placingRef.current = true;
     setPlacing(true);
@@ -173,6 +233,7 @@ export default function Cart() {
         idempotency_key: key,
         ...(coupon ? { coupon_code: coupon.code } : {}),
         ...(note ? { delivery_note: note } : {}),
+        ...extra,
       });
       forgetCheckoutKey();
       rememberPlaced(order);
@@ -183,8 +244,11 @@ export default function Cart() {
       setPlaceErr(gone?.name ? { ...copy, message: `${gone.name} isn't available right now. Remove it and try again.` } : copy);
       // fresh prices and availability: the catalogue reconciles the cart lines
       if (copy.action === 'reconcile') void refresh();
-      if (copy.action === 'coupon') setCoupon(null);
-      if (copy.action === 'address') setQuoteTick((n) => n + 1);
+      if (copy.action === 'coupon') { setCoupon(null); setCouponErr(couponErrorText(e)); }
+      if (copy.action === 'address' || copy.action === 'details') setQuoteTick((n) => n + 1);
+      // the slot went, or the store closed after all: fresh slots so one can be picked
+      if (copy.action === 'slot') setPickedSlot(null);
+      if (copy.action === 'slot' || copy.action === 'closed') setSlotsTick((n) => n + 1);
     } finally {
       placingRef.current = false;
       setPlacing(false);
@@ -264,6 +328,8 @@ export default function Cart() {
       >
         {!DEMO && <ClosedBanner style={{ marginHorizontal: 15, marginBottom: 15 }} />}
         {!DEMO && refreshFailed && <Text style={styles.warn}>{LIVE.refreshFailed}</Text>}
+        {/* the birthday gift, while the server says it applies (signed in, with an address) */}
+        {!DEMO && checkout && <BirthdayBanner birthday={birthdayOf(quoteFor)} />}
 
         {/* items */}
         <View style={{ zIndex: 3 }}>
@@ -332,15 +398,38 @@ export default function Cart() {
           </Animated.View>
         )}
 
-        {/* instructions */}
-        <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0 }]}>
-          <Pressable onPress={() => setInstr((v) => !v)}>
-            <Row icon={<PenGlyph white />} label={COPY.instructions} right={<ChevronIcon size={16} color={INK} stroke={2.2} />} h={48} />
-          </Pressable>
-          <Collapsible open={instr}>
-            <InstructionChips on={notes} setOn={setNotes} />
-          </Collapsible>
-        </Animated.View>
+        {/* delivery time: only while staff have slots on (GET /orders/slots) */}
+        {!DEMO && checkout && slotsWanted && (
+          <SlotPickerCard
+            slots={slots}
+            failed={slotsFailed}
+            loading={slotsLoading}
+            storeOpen={storeOpen}
+            picked={pickedSlot}
+            onPick={setPickedSlot}
+            onRetry={() => setSlotsTick((n) => n + 1)}
+          />
+        )}
+
+        {/* signed in with an address: who it is for, needs help, the rider note; else the quick notes */}
+        {!DEMO && checkout ? (
+          <DeliveryDetailsCard
+            details={details}
+            setDetails={setDetails}
+            allowForSomeoneElse={allowForOthers}
+            codeToReceiver={forOthers?.send_code_to_receiver !== false}
+            showErrors={showDetailErrors}
+          />
+        ) : (
+          <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0 }]}>
+            <Pressable onPress={() => setInstr((v) => !v)}>
+              <Row icon={<PenGlyph white />} label={COPY.instructions} right={<ChevronIcon size={16} color={INK} stroke={2.2} />} h={48} />
+            </Pressable>
+            <Collapsible open={instr}>
+              <InstructionChips on={notes} setOn={setNotes} />
+            </Collapsible>
+          </Animated.View>
+        )}
 
         {/* bill */}
         {/* coupons: only while Admin has them switched on (checkout-info) */}
@@ -348,7 +437,19 @@ export default function Cart() {
           <CouponCard coupon={coupon} error={couponErr} onApply={applyCoupon} onRemove={() => { setCoupon(null); setCouponErr(null); }} />
         )}
 
-        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} /> : (
+        {/* referral reward, Use points, points to earn: only what applies */}
+        {!DEMO && checkout && quoteFor && (
+          <RewardsCard
+            referral={referralOf(quoteFor)}
+            points={pointsOf(quoteFor)}
+            usePoints={usePoints}
+            onUsePoints={setUsePoints}
+            redeem={checkout.points}
+            earn={checkout.earn}
+          />
+        )}
+
+        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} freeCount={quoteFor?.free_delivery?.count ?? 0} /> : (
         <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
           <StampBadge size={78} style={{ position: 'absolute', right: -6, top: -4 }} />
           <View style={styles.billHead}>
@@ -416,6 +517,8 @@ export default function Cart() {
             quoteFailed={quoteFailed}
             onRetryQuote={() => setQuoteTick((n) => n + 1)}
             closedNow={closedNow}
+            orderable={orderable}
+            closedHint={!closedNow || !slotsOn ? null : pickedSlot ? SLOT_COPY.slotPickedHint : SLOT_COPY.pickSlotHint}
             canOrder={items.length > 0}
             placing={placing}
             error={placeErr}
@@ -696,8 +799,10 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
  * address (GET /orders/checkout-info: free deliveries, the basket amount, per-km distance);
  * otherwise it is what /store says. No taxes or invented savings.
  */
-function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon }: {
+function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount }: {
   bill: LiveBill; itemTotal: number; mrpTotal: number; checkout: CheckoutBill | null; coupon: CouponPreview | null;
+  /** New-customer free deliveries in all (checkout-info free_delivery.count). */
+  freeCount: number;
 }) {
   const quoted = !!checkout && checkout.deliveryFee !== null;
   const free = quoted ? checkout!.freeReason !== null : bill.freeCount > 0;
@@ -719,13 +824,10 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon }: {
   );
   const freeNote = !checkout
     ? (free ? LIVE.freeNote(bill.freeCount) : null)
-    : checkout.freeReason === 'BASKET' && checkout.basketMin
-      ? `Free delivery on baskets of ${formatLkr(checkout.basketMin)} or more.`
-      : checkout.freeReason === 'NEW_CUSTOMER'
-        ? `One of your free deliveries (${checkout.freeRemaining} left) is used on this order.`
-        : null;
-  const discountLabel = coupon?.applied_discount === 'BIRTHDAY' ? 'Birthday gift'
-    : coupon?.applied_discount === 'REFERRAL' ? 'Referral reward' : coupon ? `Coupon (${coupon.code})` : '';
+    : freeDeliveryNote(checkout, freeCount);
+  // the one discount used (coupon, birthday gift or referral reward), then the points
+  const discountName = checkout ? discountLabel(checkout.discountKind, coupon?.code) : '';
+  const estimated = !!checkout && !coupon && checkout.discount > 0;
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
       {free && <StampBadge variant="free" size={70} style={{ position: 'absolute', right: -2, top: -2 }} />}
@@ -752,15 +854,27 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon }: {
         <BillRow dashed l={`Delivery Fee${distance}`} r={feeRight} />
         {!!freeNote && <Text style={styles.freeNote}>{freeNote}</Text>}
         {checkout?.basketRemaining != null && (
-          <Text style={[styles.freeNote, { color: C.brandText, fontFamily: F.medium }]}>
-            Add {formatLkr(checkout.basketRemaining)} more for free delivery.
-          </Text>
+          <View accessible accessibilityLabel={basketPrompt(checkout.basketRemaining)} style={{ marginTop: 8 }}>
+            <Text style={[styles.freeNote, { marginTop: 0, color: C.brandText, fontFamily: F.medium }]}>{basketPrompt(checkout.basketRemaining)}</Text>
+            <View style={styles.progressTrack}>
+              <Animated.View layout={LinearTransition.duration(260)} style={[styles.progressFill, { width: `${Math.round(basketProgress(itemTotal, checkout.basketMin) * 100)}%` }]} />
+            </View>
+          </View>
         )}
         {!!checkout && checkout.discount > 0 && (
           <>
             <Dashed style={{ marginVertical: 11 }} />
-            <BillRow l={discountLabel} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(checkout.discount)}</Text>} />
+            <BillRow l={discountName} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(checkout.discount)}</Text>} />
           </>
+        )}
+        {!!checkout && checkout.points.value > 0 && (
+          <>
+            <Dashed style={{ marginVertical: 11 }} />
+            <BillRow l={`Blynk Points (${checkout.points.points})`} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(checkout.points.value)}</Text>} />
+          </>
+        )}
+        {!!checkout && (estimated || checkout.points.value > 0) && (
+          <Text style={styles.freeNote}>Estimated. The final amount is confirmed when you place the order.</Text>
         )}
       </View>
       <Animated.View entering={FadeIn.duration(250)} style={styles.thatsIt}>
@@ -788,8 +902,8 @@ function CouponCard({ coupon, error, onApply, onRemove }: {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  const clean = code.trim().toUpperCase();
-  const valid = /^[A-Z0-9]{4,20}$/.test(clean);
+  const clean = normalizeCoupon(code);
+  const valid = clean.length > 0;
   const apply = async () => {
     if (!valid || busy) return;
     setBusy(true);
@@ -799,12 +913,15 @@ function CouponCard({ coupon, error, onApply, onRemove }: {
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0 }]}>
       {coupon ? (
-        <Row icon={<TagGlyph />} label={`${coupon.code} applied`} right={(
-          <Pressable onPress={onRemove} hitSlop={8}><Text style={styles.change}>Remove</Text></Pressable>
-        )} />
+        <View>
+          <Row icon={<TagGlyph />} label={`${coupon.code} applied`} right={(
+            <Pressable onPress={onRemove} hitSlop={8} accessibilityLabel={`Remove coupon ${coupon.code}`}><Text style={styles.change}>Remove</Text></Pressable>
+          )} />
+          <Text style={[styles.couponNote, couponAppliedNote(coupon).muted && { color: '#6E6E76' }]}>{couponAppliedNote(coupon).text}</Text>
+        </View>
       ) : (
         <Pressable onPress={() => setOpen((v) => !v)}>
-          <Row icon={<TagGlyph />} label="Apply a coupon" right={<ChevronIcon size={16} color={INK} stroke={2.2} />} />
+          <Row icon={<TagGlyph />} label="Have a coupon code?" right={<ChevronIcon size={16} color={INK} stroke={2.2} />} />
         </Pressable>
       )}
       <Collapsible open={open && !coupon}>
@@ -833,8 +950,12 @@ function CouponCard({ coupon, error, onApply, onRemove }: {
  * The signed-in bottom panel: where the order goes (the address book's chosen address, with
  * Change), then "Place order" for the server-quoted total. Refusals show here with their copy.
  */
-function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow, canOrder, placing, error, onPlace }: {
+function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow, orderable, closedHint, canOrder, placing, error, onPlace }: {
   loc: DeliveryLocation; checkout: CheckoutBill | null; quoteFailed: boolean; onRetryQuote: () => void; closedNow: boolean;
+  /** Open for ASAP, or a picked delivery slot with room (a closed store can still take a slot). */
+  orderable: boolean;
+  /** While closed with slots on: "Pick a delivery time above…" / "We'll deliver at the time you picked." */
+  closedHint: string | null;
   canOrder: boolean; placing: boolean; error: PlaceErrorCopy | null; onPlace: () => void;
 }) {
   const a = loc.address;
@@ -870,8 +991,8 @@ function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow
     );
   }
   const toPay = checkout?.toPay ?? null;
-  const disabled = !canOrder || closedNow || placing || toPay === null;
-  const label = closedNow ? LIVE.closedCta
+  const disabled = !canOrder || !orderable || placing || toPay === null;
+  const label = !orderable ? (closedNow && closedHint ? 'Pick a delivery time' : LIVE.closedCta)
     : placing ? 'Placing your order…'
       : toPay === null ? (quoteFailed ? 'Delivery fee unavailable' : 'Getting the delivery fee…')
         : `Place order  |  ${formatLkr(toPay)}`;
@@ -892,9 +1013,10 @@ function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow
       </View>
       {quoteFailed && toPay === null && (
         <Pressable onPress={onRetryQuote} hitSlop={6}>
-          <Text style={[styles.warn, { marginHorizontal: 0, marginTop: 10, marginBottom: 0 }]}>Couldn't get the delivery fee. Tap to try again.</Text>
+          <Text style={[styles.warn, { marginHorizontal: 0, marginTop: 10, marginBottom: 0 }]}>{"Couldn't get the delivery fee. Tap to try again."}</Text>
         </Pressable>
       )}
+      {!!closedHint && <Text style={[styles.bottomSub, { marginTop: 10, color: C.brandText, fontFamily: F.medium }]}>{closedHint}</Text>}
       <PressScale onPress={onPlace} disabled={disabled} haptic style={{ marginTop: 21 }} scaleTo={0.95}>
         <View style={[styles.cta, disabled && { backgroundColor: C.brandSoft }]} accessibilityRole="button" accessibilityLabel={label}>
           <Text style={styles.ctaTxt}>{label}</Text>
@@ -1166,6 +1288,9 @@ const styles = StyleSheet.create({
     flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: '#E4E4EA', paddingHorizontal: 12,
     fontFamily: F.medium, fontSize: 13.5, color: INK, letterSpacing: 0.5, outlineStyle: 'none',
   } as object,
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: LINE, marginTop: 6, overflow: 'hidden' },
+  progressFill: { height: 6, borderRadius: 3, backgroundColor: C.green },
+  couponNote: { fontFamily: F.medium, fontSize: 12, color: C.green, marginLeft: 45, marginTop: -10, marginBottom: 12 },
   couponBtn: { height: 40, borderRadius: 10, paddingHorizontal: 16, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
   couponBtnTxt: { fontFamily: F.semi, fontSize: 13.5, color: C.brandInk },
 });

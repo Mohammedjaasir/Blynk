@@ -59,3 +59,34 @@ test('item titles never repeat the unit', () => {
   expect(itemTitle('Big Onions', '1 kg')).toBe('Big Onions · 1 kg');
   expect(itemTitle('Big Onions', null)).toBe('Big Onions');
 });
+
+test('delivery code: only out for delivery with a code; "coming" before pickup', async () => {
+  const { showsDeliveryCode, showsDeliveryCodeComing } = await import('./status');
+  expect(showsDeliveryCode({ order_status: 'OUT_FOR_DELIVERY', delivery_code: '4821' })).toBe(true);
+  expect(showsDeliveryCode({ order_status: 'DELIVERED', delivery_code: '4821' })).toBe(false);
+  expect(showsDeliveryCode({ order_status: 'OUT_FOR_DELIVERY', delivery_code: null })).toBe(false);
+  expect(showsDeliveryCodeComing({ order_status: 'PACKED' })).toBe(true);
+  expect(showsDeliveryCodeComing({ order_status: 'OUT_FOR_DELIVERY' })).toBe(false);
+  expect(showsDeliveryCodeComing({ order_status: 'CANCELLED' })).toBe(false);
+});
+
+test('item captions for unavailable and replaced lines', async () => {
+  const { itemCaption } = await import('./status');
+  expect(itemCaption('UNAVAILABLE')).toEqual({ text: 'Unavailable — not charged', struck: true, problem: true });
+  expect(itemCaption('SUBSTITUTED')?.text).toBe('Replaced by the store');
+  expect(itemCaption('PENDING')).toBeNull();
+});
+
+test('slot window in Sri Lanka time', async () => {
+  const { slotWindowText } = await import('./status');
+  expect(slotWindowText('2026-10-14T02:30:00.000Z', '2026-10-14T04:30:00.000Z')).toBe('14 Oct, 8:00 AM – 10:00 AM');
+  expect(slotWindowText(null, null)).toBeNull();
+});
+
+test('cancel follows the server flag, only from PLACED or PACKED', async () => {
+  const { mayCancel } = await import('./status');
+  expect(mayCancel({ order_status: 'PLACED', can_cancel: true })).toBe(true);
+  expect(mayCancel({ order_status: 'PACKED', can_cancel: true })).toBe(true);
+  expect(mayCancel({ order_status: 'PACKED', can_cancel: false })).toBe(false);
+  expect(mayCancel({ order_status: 'OUT_FOR_DELIVERY', can_cancel: true })).toBe(false);
+});

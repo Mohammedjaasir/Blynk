@@ -1,5 +1,6 @@
-import { apiGet, apiPost } from '@/blynk/api/client';
+import { apiGet, apiPost, ApiError } from '@/blynk/api/client';
 import { authed } from '@/blynk/auth/session';
+import { parseSlots, type DeliverySlots } from '@/blynk/checkout/slots';
 import type { CheckoutInfo, CouponPreview, Order, OrderList, PlaceOrderBody } from './types';
 
 /*
@@ -55,6 +56,14 @@ export async function previewCoupon(
 ): Promise<CouponPreview> {
   const { coupon } = await authed((t) => apiPost<{ coupon: CouponPreview }>('/orders/validate-coupon', { code, items, address_id: addressId }, t));
   return coupon;
+}
+
+/** GET /orders/slots: scheduled delivery on/off, whether ASAP is allowed now, and the windows with room. */
+export async function getDeliverySlots(signal?: AbortSignal): Promise<DeliverySlots> {
+  const raw = await authed((t) => apiGet<unknown>('/orders/slots', t, signal));
+  const parsed = parseSlots(raw);
+  if (!parsed) throw new ApiError("We couldn't load delivery times.", 500, 'BAD_SLOTS');
+  return parsed;
 }
 
 /** POST /orders: 201 a new order, 200 the same order again for a repeated idempotency key. */
