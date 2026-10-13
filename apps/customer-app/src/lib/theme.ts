@@ -24,6 +24,17 @@ export const C = {
   skeleton: '#E9E9EF',
   tile: '#F3F4F6',
   problem: '#C0392B',
+  // Blynk's brand colour is yellow (owner, 2026-10-13). Yellow is a FILL; anything sitting on
+  // it uses brandInk. Never use brand yellow for text or thin lines on white: use brandText.
+  brand: '#FFE141',
+  brandDeep: '#F2C600', // pressed state, borders around yellow fills
+  brandInk: '#1A1D2E', // text and icons on brand yellow
+  brandText: '#7A5F00', // yellow-family text on white (meets AA contrast)
+  brandSoft: '#FFEFA0',
+  brandTint: '#FFF8D6',
+  // Food-standard marks only (veg / non-veg). Not a brand colour.
+  veg: '#0C831F',
+  nonVeg: '#C0392B',
 };
 
 export const F = {

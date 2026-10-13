@@ -332,8 +332,8 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
                 <Stop offset="1" stopColor="#FFE9F4" stopOpacity="0" />
               </SvgGrad>
             </Defs>
-            <Polygon points="138,44 172,50 194,183 14,183" fill="url(#bBeam)" />
-            <Polygon points="148,46 166,49 160,150 92,150" fill="url(#bCore)" />
+            <Polygon points="138,44 172,50 206,183 40,183" fill="url(#bBeam)" />
+            <Polygon points="148,46 166,49 170,150 108,150" fill="url(#bCore)" />
           </Svg>
         </Animated.View>
         {cur && (
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   stage: { position: 'absolute', right: 0, top: 0, width: 180, height: H },
   beam: { position: 'absolute', left: -30, top: 0 },
   saucer: { position: 'absolute', right: 8, top: 12 },
-  item: { position: 'absolute', right: 66, bottom: 10, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
+  item: { position: 'absolute', right: 44, bottom: 12, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
   // web: the reference's soft shadow under the floating dish
   itemImg: { width: ITEM, height: ITEM, filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
   itemEmoji: { fontSize: 74, lineHeight: 88, textAlign: 'center', filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
