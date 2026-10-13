@@ -1749,6 +1749,40 @@ input {
   gap: 4px;
 }
 
+/* Categories (2026-10-13): the actions take their own wrapping line under the
+   details, so on a phone the name, slug and description keep the full width
+   instead of being squeezed beside a tall column of buttons. */
+.cat-row--stacked {
+  flex-wrap: wrap;
+}
+
+.cat-row--stacked .cat-row__main {
+  flex: 1 1 calc(100% - 64px);
+}
+
+.cat-row--stacked .cat-row__actions {
+  flex: 1 1 100%;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.cat-row__desc {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Arrange mode: big, thumb-sized move buttons. */
+.cat-row--arranging .order-cell .button {
+  min-width: 44px;
+  min-height: 40px;
+}
+
 /* --------------------------------------------------------------- editor */
 .editor__section {
   display: flex;
@@ -2448,6 +2482,24 @@ a.cat-row__main {
 
 .import-table__row--bad td {
   color: var(--danger);
+}
+
+/* Selling-price modes (044): a below-cost warning under a preview row, and
+   the pricing rules list on the import screen. */
+.import-table__warning {
+  display: block;
+  margin-top: 4px;
+  color: var(--danger);
+  font-weight: 600;
+}
+.import-steps ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+.import-steps .card__note p {
+  margin: 0;
 }
 
 /* ------------------------------------------ order bill, rider cash (018/019) */

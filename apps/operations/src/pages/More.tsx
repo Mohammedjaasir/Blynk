@@ -22,6 +22,7 @@ import { checkoutExtrasPatch, parseBasketAmount } from '../lib/checkoutExtras';
 import { CustomerSmsLanguageCard } from '../components/CustomerSmsLanguageCard';
 import { AppVersionCard } from '../components/AppUpdate';
 import { AppUpdatesSettingsCard } from '../components/AppUpdatesSettingsCard';
+import { DefaultMarkupCard } from '../components/DefaultMarkupCard';
 
 /**
  * The More tab (plan §8: rider list, settings, sign-out). Sign-out is real,
@@ -41,6 +42,9 @@ import { AppUpdatesSettingsCard } from '../components/AppUpdatesSettingsCard';
  * sets how many orders one rider may carry at once and how far apart their
  * drop-offs may be, and "Coupons" opens the coupon codes (/more/coupons).
  * /more#checkout-settings (the Coupons page's link) scrolls to Checkout.
+ * Owner, 2026-10-13: "Global default markup" (`GET|PATCH
+ * /admin/settings/default-markup`, migration 044) sits with the store
+ * settings; /more#default-markup (linked from Catalog) scrolls to it.
  */
 export function More() {
   const { user, signOut } = useAuth();
@@ -79,7 +83,7 @@ export function More() {
 
   return (
     <div className="page">
-      <PageHeader title="More" description="Opening hours, riders, rider requests, rider cash and earnings, customer addresses, staff, SMS offers, birthday offer, coupons, settings, app updates and sign-out." />
+      <PageHeader title="More" description="Opening hours, riders, rider requests, rider cash and earnings, customer addresses, staff, SMS offers, birthday offer, coupons, settings (delivery fee, global markup and more), app updates and sign-out." />
       <section className="card">
         <p className="card__row">
           <span className="card__label">Signed in as</span>
@@ -184,6 +188,8 @@ export function More() {
       </ul>
 
       <DeliveryFeeCard />
+      {/* Selling prices (owner, 2026-10-13): the markup products fall back to. */}
+      <DefaultMarkupCard />
       <CheckoutSettingsCard />
       {/* Customer SMS language (owner, 2026-10-12). */}
       <CustomerSmsLanguageCard />

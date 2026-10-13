@@ -2,10 +2,12 @@ import { errorMessage } from '../lib/apiErrors';
 import { useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { products as productsApi } from '../api/resources';
-import type { ImportResponse, ImportResultRow } from '../api/types';
+import type { ImportResponse, ImportResultRow, ImportRow } from '../api/types';
 import { PageHeader } from '../components/Layout';
-import { EmptyState, Spinner, useToast } from '../components/ui';
+import { Badge, EmptyState, Spinner, useToast } from '../components/ui';
+import { PRICING_SOURCE_LABEL, formatLkr, formatPercent } from '../lib/pricing';
 import {
+  PRICING_RULES,
   TEMPLATE_COLUMNS,
   buildTemplateXlsx,
   downloadBlob,
@@ -21,6 +23,46 @@ const STATUS_TEXT: Record<ImportResultRow['status'], string> = {
   skipped: 'No change',
   error: 'Error',
 };
+
+/**
+ * The resulting selling price of a preview row: the dry run's own (price +
+ * source badge) once it is back, else what the row asks for.
+ */
+function SellingCell({ data, server }: { data: ImportRow; server: ImportResultRow | undefined }) {
+  const pricing = server?.status !== 'error' ? server?.pricing : undefined;
+  if (pricing) {
+    const markup = pricing.effective_markup_percent;
+    return (
+      <>
+        {formatLkr(Number(pricing.selling_price))}
+        <span className="price-source">
+          <Badge tone="muted">{PRICING_SOURCE_LABEL[pricing.pricing_source] ?? pricing.pricing_source}</Badge>
+        </span>
+        {markup !== null && markup !== undefined ? (
+          <span className="cell__secondary">
+            {pricing.pricing_mode !== 'FIXED'
+              ? `${formatPercent(markup)}% markup`
+              : markup < 0
+                ? `${formatPercent(-markup)}% below cost`
+                : `${formatPercent(markup)}% over cost`}
+          </span>
+        ) : null}
+        {/* Both price cells empty on an existing SKU (owner, 2026-10-13). */}
+        {pricing.kept_current ? <span className="cell__secondary">Current pricing kept</span> : null}
+      </>
+    );
+  }
+  if (data.selling_price != null) {
+    return (
+      <>
+        {formatLkr(data.selling_price)}
+        <span className="cell__secondary">Fixed</span>
+      </>
+    );
+  }
+  if (data.markup_percent != null) return <span className="cell__secondary">{`Markup ${formatPercent(data.markup_percent)}%`}</span>;
+  return <span className="cell__secondary">Category / global markup (new) or current pricing (existing)</span>;
+}
 
 /**
  * Bulk product import (API contract §4): the file is parsed here, each row
@@ -130,8 +172,16 @@ export function ProductImport() {
       <section className="panel import__steps" aria-label="File">
         <p className="panel__body">
           Columns, in this order: <span className="mono">{TEMPLATE_COLUMNS.join(', ')}</span>. Required: name,
-          category (must already exist), unit, cost_price, sku.
+          category (must already exist), unit, purchase_cost (or cost_price), sku.
         </p>
+        <div>
+          <p className="panel__body">How prices work:</p>
+          <ul className="import__rules" aria-label="How prices work">
+            {PRICING_RULES.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </div>
         <div className="row-actions">
           <button type="button" className="button button--ghost" onClick={() => void downloadTemplate()}>
             Download template
@@ -221,7 +271,7 @@ export function ProductImport() {
                     <th scope="col">Product</th>
                     <th scope="col">Category</th>
                     <th scope="col" className="num">Cost</th>
-                    <th scope="col" className="num">Selling</th>
+                    <th scope="col" className="num">Selling price</th>
                     <th scope="col">Stock</th>
                     <th scope="col">Check</th>
                   </tr>
@@ -246,8 +296,10 @@ export function ProductImport() {
                           </span>
                         </td>
                         <td>{r.data.category || '-'}</td>
-                        <td className="num">{r.data.cost_price}</td>
-                        <td className="num">{r.data.selling_price ?? 'Default'}</td>
+                        <td className="num">{formatLkr(r.data.purchase_cost)}</td>
+                        <td className="num">
+                          <SellingCell data={r.data} server={r.errors.length ? undefined : server} />
+                        </td>
                         <td className="cell__secondary">
                           {r.data.tracked === 'yes' ? `Tracked${r.data.opening_stock != null ? ` · ${r.data.opening_stock}` : ''}` : '-'}
                         </td>
@@ -261,7 +313,16 @@ export function ProductImport() {
                               ))}
                             </ul>
                           ) : server ? (
-                            <span className="cell__secondary">{server.message ?? STATUS_TEXT[server.status]}</span>
+                            <>
+                              <span className="cell__secondary">{server.message ?? STATUS_TEXT[server.status]}</span>
+                              {server.warnings?.length ? (
+                                <ul className="import__errors">
+                                  {server.warnings.map((w) => (
+                                    <li key={w} className="import__warning">{`Warning: ${w}`}</li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </>
                           ) : (
                             <span className="cell__secondary">{checking ? 'Checking…' : 'Looks fine'}</span>
                           )}

@@ -75,7 +75,7 @@ describe('moved()', () => {
 });
 
 describe('Categories: Arrange mode', () => {
-  it('moves a top-level category up and saves the top-level order only', async () => {
+  it('moves a top-level category up and saves the top-level order on "Save order"', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(OPERATIONS_STAFF, '/catalog/categories', {
       'GET /admin/categories': () => ok({ categories: CATEGORIES }),
@@ -87,15 +87,21 @@ describe('Categories: Arrange mode', () => {
     // Sub-categories move only within their parent.
     expect(screen.getByRole('button', { name: 'Move Milk up' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Move Eggs down' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save order' })).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Move Snacks up' }));
+    // The draft shows the move at once; nothing is sent until Save order.
+    expect(screen.getAllByText(/^Place 2 of 3$/).length).toBeGreaterThanOrEqual(1);
+    expect(api.find('PUT', '/admin/categories/order')).toHaveLength(0);
+    await user.click(screen.getByRole('button', { name: 'Save order' }));
     await waitFor(() => expect(api.find('PUT', '/admin/categories/order')).toHaveLength(1));
     expect(api.find('PUT', '/admin/categories/order')[0].body).toEqual({ ids: ['c1', 'c3', 'c2'] });
+    expect(await screen.findByText(/Category order saved/)).toBeInTheDocument();
     // The list reloads from the server afterwards.
     await waitFor(() => expect(api.find('GET', '/admin/categories').length).toBeGreaterThanOrEqual(2));
-  });
+  }, 20_000);
 
-  it('"Top" moves a sub-category to the top of its parent', async () => {
+  it('"Top" moves a sub-category to the top of its parent; Cancel sends nothing', async () => {
     const user = userEvent.setup();
     const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/categories', {
       'GET /admin/categories': () => ok({ categories: CATEGORIES }),
@@ -103,9 +109,15 @@ describe('Categories: Arrange mode', () => {
     });
     await user.click(await screen.findByRole('button', { name: 'Arrange' }));
     await user.click(screen.getByRole('button', { name: 'Move Eggs to the top' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.find('PUT', '/admin/categories/order')).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }));
+    await user.click(screen.getByRole('button', { name: 'Move Eggs to the top' }));
+    await user.click(screen.getByRole('button', { name: 'Save order' }));
     await waitFor(() => expect(api.find('PUT', '/admin/categories/order')).toHaveLength(1));
     expect(api.find('PUT', '/admin/categories/order')[0].body).toEqual({ ids: ['c5', 'c4'] });
-  });
+  }, 20_000);
 
   it('shows a refusal from the server', async () => {
     const user = userEvent.setup();
@@ -115,8 +127,23 @@ describe('Categories: Arrange mode', () => {
     });
     await user.click(await screen.findByRole('button', { name: 'Arrange' }));
     await user.click(screen.getByRole('button', { name: 'Move Dairy down' }));
+    await user.click(screen.getByRole('button', { name: 'Save order' }));
     expect(await screen.findByText(/Arrange one level at a time/)).toBeInTheDocument();
-  });
+  }, 20_000);
+
+  it('each row keeps name, slug and description together, with the actions on their own line', async () => {
+    renderAs(OPERATIONS_STAFF, '/catalog/categories', {
+      'GET /admin/categories': () => ok({ categories: CATEGORIES.map((c) => ({ ...c, description: `${c.name} things` })) }),
+    });
+    const title = await screen.findByText('Dairy');
+    const row = title.closest('li')!;
+    expect(row.className).toContain('cat-row--stacked');
+    const main = row.querySelector('.cat-row__main')!;
+    expect(main).toHaveTextContent('Dairy');
+    expect(main).toHaveTextContent('Dairy things');
+    expect(row.querySelector('.cat-row__actions')).not.toBeNull();
+    expect(main.contains(row.querySelector('.cat-row__actions'))).toBe(false);
+  }, 20_000);
 
   it('every category links to its Arrange products screen', async () => {
     renderAs(OPERATIONS_STAFF, '/catalog/categories', {

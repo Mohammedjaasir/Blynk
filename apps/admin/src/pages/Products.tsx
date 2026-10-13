@@ -6,6 +6,7 @@ import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 import { formatMoney } from '../lib/orders';
+import { PRICING_SOURCE_LABEL, formatPercent } from '../lib/pricing';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -185,7 +186,16 @@ export function Products() {
                 </td>
                 <td>{product.category_name ?? categoryName(product.category_id)}</td>
                 <td className="num">
-                  LKR {Number(product.calculated_selling_price ?? 0).toFixed(2)}
+                  LKR {Number(product.calculated_selling_price ?? product.selling_price ?? 0).toFixed(2)}
+                  {/* How the price is set (migration 044; owner, 2026-10-13). */}
+                  {product.pricing_source ? (
+                    <span className="price-source" title={pricingTitle(product)}>
+                      <Badge tone="muted">{PRICING_SOURCE_LABEL[product.pricing_source] ?? product.pricing_source}</Badge>
+                    </span>
+                  ) : null}
+                  {product.price_warning ? (
+                    <span className="cell__secondary field__error">Below cost</span>
+                  ) : null}
                   {/* Offer price, while it applies (owner, 2026-10-09). */}
                   {product.offer_active && product.offer_price != null ? (
                     <span className="cell__secondary">
@@ -201,13 +211,13 @@ export function Products() {
                     <Badge tone="muted">Unavailable</Badge>
                   ) : null}
                 </td>
-                <td className="cell__secondary">
-                  {product.updated_at
-                    ? new Date(product.updated_at).toLocaleDateString()
-                    : '-'}
+                <td>
+                  <span className="cell__secondary">
+                    {product.updated_at ? new Date(product.updated_at).toLocaleDateString() : '-'}
+                  </span>
                 </td>
                 <td>
-                  <div className="row-actions">
+                  <div className="row-actions row-actions--wrap">
                     <button
                       type="button"
                       className="button button--ghost button--sm"
@@ -266,4 +276,11 @@ export function Products() {
       ) : null}
     </>
   );
+}
+
+/** "Markup 25%" / "Fixed, 10% over cost": the badge's tooltip. */
+function pricingTitle(product: AdminProduct): string {
+  const m = product.effective_markup_percent;
+  if (m === null || m === undefined) return product.pricing_mode === 'FIXED' ? 'Fixed price' : 'Markup';
+  return product.pricing_mode === 'FIXED' ? `Fixed price, ${formatPercent(m)}% over cost` : `Markup ${formatPercent(m)}%`;
 }

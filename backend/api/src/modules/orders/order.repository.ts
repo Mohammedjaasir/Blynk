@@ -1,4 +1,5 @@
 import { sql, Transaction } from 'kysely';
+import { defaultMarkupFrom } from '../pricing/index.js';
 import { db } from '../../database/connection.js';
 import { Database, OrderStatus, ItemFulfillmentStatus } from '../../database/types.js';
 import { ACTIVE_DELIVERY_STATUSES, INITIAL_ORDER_STATUS, isUncostedSubstitution } from './lifecycle/catalogue.js';
@@ -175,11 +176,7 @@ export class OrderRepository {
       .where('key', '=', 'default_markup')
       .executeTakeFirst();
 
-    if (config && typeof config.value === 'object' && config.value !== null) {
-      const val = (config.value as any).markup_percent;
-      if (typeof val === 'number') return val;
-    }
-    return 20.0;
+    return defaultMarkupFrom(config?.value);
   }
 
   /**
@@ -222,17 +219,33 @@ export class OrderRepository {
 
   /**
    * Migration 033: the running category offer of each product (own category
-   * or its parent, from v_product_catalog), for priceCart.
+   * or its parent, from v_product_catalog), for priceCart. Migration 044 adds
+   * the category and parent-category markups the product inherits.
    */
   async findCategoryOffers(productIds: string[], executor: DBConnection = db) {
-    const map = new Map<string, { category_offer_percent: string | null; category_offer_ends_at: Date | null }>();
+    const map = new Map<
+      string,
+      {
+        category_offer_percent: string | null;
+        category_offer_ends_at: Date | null;
+        category_markup_percent: string | null;
+        parent_category_markup_percent: string | null;
+      }
+    >();
     if (productIds.length === 0) return map;
     const rows = await executor
       .selectFrom('v_product_catalog')
-      .select(['id', 'category_offer_percent', 'category_offer_ends_at'])
+      .select(['id', 'category_offer_percent', 'category_offer_ends_at', 'category_markup_percent', 'parent_category_markup_percent'])
       .where('id', 'in', productIds)
       .execute();
-    for (const r of rows) map.set(r.id, { category_offer_percent: r.category_offer_percent, category_offer_ends_at: r.category_offer_ends_at });
+    for (const r of rows) {
+      map.set(r.id, {
+        category_offer_percent: r.category_offer_percent,
+        category_offer_ends_at: r.category_offer_ends_at,
+        category_markup_percent: r.category_markup_percent,
+        parent_category_markup_percent: r.parent_category_markup_percent,
+      });
+    }
     return map;
   }
 

@@ -1,3 +1,12 @@
+import type { PricingMode, PricingSource } from '../lib/pricing';
+
+export type { PricingMode, PricingSource };
+
+export interface PriceWarning {
+  code: 'SELLING_BELOW_COST';
+  message: string;
+}
+
 /**
  * Shapes returned by the Blynk API - mirrors of the backend DTOs. Extend
  * this file the same way `resources.ts` is extended: this task (F1) adds
@@ -683,6 +692,16 @@ export interface Category {
   offer_percent?: number | null;
   offer_ends_at?: string | null;
   offer_active?: boolean;
+  /**
+   * Category markup (migration 044; owner, 2026-10-13): the markup % its
+   * MARKUP products with no markup of their own use (and its sub-categories'
+   * products when the sub-category has none). null = use the parent's, else
+   * the global default. Absent on an older API.
+   */
+  markup_percent?: number | null;
+  /** MARKUP products without a custom markup that follow this category's
+   * markup slot (its own + sub-categories without a markup). */
+  markup_product_count?: number;
 }
 
 /**
@@ -776,10 +795,27 @@ export interface AdminProduct {
   image_focal_x?: number;
   image_focal_y?: number;
   purchase_cost: number;
+  /**
+   * Selling-price mode (migration 044; owner, 2026-10-13). FIXED = exactly
+   * `fixed_selling_price`; MARKUP = cost x (1 + markup), the markup being the
+   * product's own, else the category's, parent's or global one. Absent on an
+   * older API (read as MARKUP).
+   */
+  pricing_mode?: PricingMode;
+  /** Kept (and ignored) while in MARKUP mode. */
+  fixed_selling_price?: number | null;
   custom_markup_percent: number | null;
-  effective_markup_percent?: number;
+  category_markup_percent?: number | null;
+  parent_category_markup_percent?: number | null;
+  global_markup_percent?: number | null;
+  /** MARKUP: the markup used. FIXED: the implied markup over cost (null when
+   * the cost is 0, negative below cost). */
+  effective_markup_percent?: number | null;
+  pricing_source?: PricingSource;
   calculated_selling_price?: number;
   selling_price?: number;
+  /** A FIXED price below the purchase cost (a warning, never a block). */
+  price_warning?: PriceWarning | null;
   /**
    * Offer price (owner, 2026-10-09): the reduced price customers pay, as
    * stored, with an optional end. `offer_active` is the backend's word on
@@ -1212,15 +1248,21 @@ export interface LowStockResult {
   counts: { low: number; out: number; total: number };
 }
 
-/** A spreadsheet row sent to `POST /admin/products/import`. */
+/**
+ * A spreadsheet row sent to `POST /admin/products/import`. Pricing (migration
+ * 044): selling_price = FIXED at that price; else markup_percent = MARKUP with
+ * that custom markup; else MARKUP on the category/parent/global markup. The
+ * older `cost_price` header is read as purchase_cost by the client.
+ */
 export interface ImportRow {
   row?: number;
   name: string;
   category: string;
   unit: string;
   pack_size?: string | null;
-  cost_price: number;
+  purchase_cost: number;
   selling_price?: number | null;
+  markup_percent?: number | null;
   sku: string;
   barcode?: string | null;
   description?: string | null;
@@ -1238,6 +1280,19 @@ export interface ImportRowResult {
   product_id?: string;
   message?: string;
   errors?: Array<{ field: string; message: string }>;
+  /** Migration 044: the price this row gives the product (non-error rows). */
+  pricing?: ImportRowPricing;
+  /** Non-blocking notes, e.g. a fixed price below the purchase cost. */
+  warnings?: string[];
+}
+
+export interface ImportRowPricing {
+  pricing_mode: PricingMode;
+  pricing_source: PricingSource;
+  purchase_cost: number;
+  selling_price: number;
+  effective_markup_percent: number | null;  /** Both price cells were empty on an existing SKU: its current pricing is kept. */
+  kept_current?: boolean;
 }
 
 export interface ImportResult {
@@ -1501,6 +1556,16 @@ export interface RiderAdjustmentInput {
   note?: string | null;
   /** Default today; not in the future, at most 400 days back. */
   adjustment_date?: string;
+}
+
+/** `GET|PATCH /admin/settings/default-markup` (migration 044; owner,
+ * 2026-10-13): the markup for products with no markup of their own and none
+ * on their category or parent category. */
+export interface DefaultMarkupSetting {
+  markup_percent: number;
+  updated_at: string | null;
+  /** Live products priced by the global markup right now. */
+  products_using: number;
 }
 
 /** `GET|PATCH /admin/settings/rider-commission`. */

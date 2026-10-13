@@ -1,8 +1,6 @@
 import { sql, type ExpressionBuilder } from 'kysely';
 import type { Database } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
-import { db } from '../../database/connection.js';
-import { calculateSellingPrice } from '../pricing/index.js';
 
 /**
  * Product offers (migration 031; owner, 2026-10-09): a product on offer at a
@@ -12,8 +10,9 @@ import { calculateSellingPrice } from '../pricing/index.js';
  *   offer_price IS NOT NULL
  *   AND (offer_ends_at IS NULL OR offer_ends_at > now())
  *   AND offer_price < the selling price.
- * The last condition matters when the default markup or the cost drops below
- * the offer after it was set: the customer then simply pays the (lower)
+ * The last condition matters when the selling price (a fixed price, or the
+ * cost x product/category/global markup - migration 044) drops below the
+ * offer after it was set: the customer then simply pays the (lower)
  * regular price, never more. The same rule decides what the catalog shows
  * (catalog.service), the on_offer filter (catalog.repository) and what an
  * order charges (order.service priceCart).
@@ -170,21 +169,6 @@ export function assertOfferAllowed(args: {
   if (endsAt !== null && endsAtChanged && new Date(endsAt).getTime() <= now.getTime()) {
     throw new AppError('The offer end date must be in the future.', 400, 'OFFER_END_IN_PAST', { offer_ends_at: endsAt });
   }
-}
-
-/**
- * The selling price a product will have with this cost and markup - the same
- * rule order placement uses (pricing calculateSellingPrice, default markup
- * from system_configurations.default_markup, 20% when missing).
- */
-export async function sellingPriceFor(purchaseCost: number, customMarkupPercent: number | null): Promise<number> {
-  const row = await db.selectFrom('system_configurations').select('value').where('key', '=', 'default_markup').executeTakeFirst();
-  const configured = row && typeof row.value === 'object' && row.value !== null ? (row.value as { markup_percent?: unknown }).markup_percent : undefined;
-  return calculateSellingPrice({
-    purchaseCost,
-    customMarkupPercent,
-    defaultMarkupPercent: typeof configured === 'number' ? configured : 20.0,
-  }).sellingPrice;
 }
 
 /**

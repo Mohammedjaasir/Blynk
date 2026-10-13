@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { catalog } from '../../api/resources';
 import type { AdminProduct, Category } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Spinner } from '../../components/ui';
 import { catalogErrorMessage } from '../../lib/catalog';
+import { percentText, pricingSourceLabel } from '../../lib/pricing';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -22,6 +23,8 @@ type StatusFilter = 'all' | 'active' | 'inactive';
  */
 export function Products() {
   const navigate = useNavigate();
+  // The product form hands over a save warning (e.g. a fixed price below cost).
+  const handedNotice = (useLocation().state as { notice?: string } | null)?.notice ?? null;
 
   const [rows, setRows] = useState<AdminProduct[] | null>(null);
   /** More products exist than were loaded (see `products.listAll`). */
@@ -31,7 +34,7 @@ export function Products() {
   const [categoryId, setCategoryId] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(handedNotice);
   const [pendingToggle, setPendingToggle] = useState<AdminProduct | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AdminProduct | null>(null);
 
@@ -176,10 +179,20 @@ export function Products() {
                 <p className="cat-row__meta">
                   {product.sku} · {product.unit} · {product.category_name ?? categoryName(product.category_id)}
                 </p>
-                <p className="cat-row__price">LKR {Number(product.calculated_selling_price ?? 0).toFixed(2)}</p>
+                <p className="cat-row__price">
+                  LKR {Number(product.calculated_selling_price ?? 0).toFixed(2)}
+                </p>
+                {product.pricing_source && product.pricing_source !== 'FIXED' && product.effective_markup_percent != null ? (
+                  <p className="cat-row__meta">{`${percentText(Number(product.effective_markup_percent))} over cost LKR ${Number(product.purchase_cost).toFixed(2)}`}</p>
+                ) : null}
                 <div className="cat-row__badges">
                   <Badge tone={product.is_active ? 'active' : 'inactive'}>{product.is_active ? 'Active' : 'Inactive'}</Badge>
                   {!product.is_available ? <Badge tone="muted">Unavailable</Badge> : null}
+                  {/* Where the selling price comes from (migration 044; owner, 2026-10-13). */}
+                  {product.pricing_source ? (
+                    <Badge tone="muted">{pricingSourceLabel(product.pricing_source)}</Badge>
+                  ) : null}
+                  {product.price_warning ? <Badge tone="inactive">Below cost</Badge> : null}
                   {/* Only while the backend says the offer applies now (owner, 2026-10-09). */}
                   {product.offer_active && product.offer_price != null ? (
                     <span className="offer-tag">Offer LKR {Number(product.offer_price).toFixed(2)}</span>

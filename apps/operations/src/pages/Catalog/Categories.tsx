@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, deleteImagesQuietly } from '../../api/client';
-import { catalog } from '../../api/resources';
+import { catalog, settings } from '../../api/resources';
 import type { Category, CategoryGroup } from '../../api/types';
 import { ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
@@ -17,6 +17,7 @@ import {
   parseOfferPercent,
 } from '../../lib/catalog';
 import { replacedImages } from '../../lib/image';
+import { inheritedMarkup, markupProductCountText, parseMarkupPercent, percentText } from '../../lib/pricing';
 
 /**
  * Categories: create, edit and activate/deactivate (task F5). Ported from
@@ -38,17 +39,28 @@ import { replacedImages } from '../../lib/image';
  * /admin/categories/:id/offer). The list shows an "x% off" tag while the
  * backend says the offer is running.
  *
- * Arrange (owner, 2026-10-10): "Arrange" switches the list into an order
- * mode - Top / ↑ / ↓ on each top-level category, and on each sub-category
- * within its parent. Every move is saved at once (PUT
- * /admin/categories/order with that sibling set's new order; the server
- * writes display_order 10, 20, 30...), then the list reloads. "Arrange
- * products" on a category opens its product order screen.
+ * Arrange (owner, 2026-10-10; reworked 2026-10-13): "Arrange" switches the
+ * list into an order mode - Top / ↑ / ↓ on each top-level category, and on
+ * each sub-category within its parent, with its place ("2 of 5"). Moves
+ * change a draft; "Save order" sends one PUT /admin/categories/order per
+ * sibling set that changed (the server writes display_order 10, 20, 30...),
+ * "Cancel" drops it. "Arrange products" on a category opens its product
+ * order screen.
+ *
+ * Phone layout (2026-10-13): the actions sit on their own wrapping line under
+ * the category's details instead of a tall column beside them, so the name,
+ * slug and description keep the row's full width.
  *
  * "+ Add sidebar item" (owner, 2026-10-10) on each top-level row opens the
  * Add category form with "Inside category" already set to that row, so
  * Bakery's sidebar items (Bread, Cakes...) take one tap each. Sub-categories
  * are one level only, so sub-category rows don't get the button.
+ *
+ * Markup % (migration 044; owner, 2026-10-13): a category can carry the
+ * markup its MARKUP-priced products use when they have none of their own
+ * (sub-categories without one use their parent's; blank everywhere = the
+ * global default markup, set under More). Saving reprices those products at
+ * once on the server; the row and the dialog say how many follow it.
  */
 export const SIDEBAR_ITEM_HINT = "Shows in this category's left sidebar in the app";
 
@@ -63,8 +75,11 @@ export function Categories() {
   // For the edit form's Group select. An API without category groups just
   // leaves this empty (the select then offers only "None").
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
-  const [arranging, setArranging] = useState(false);
+  // Arrange: the order being edited (null = not arranging). Saved with "Save order".
+  const [draft, setDraft] = useState<Category[] | null>(null);
   const [moving, setMoving] = useState(false);
+  /** The global default markup, for rows with no markup of their own; null = unknown. */
+  const [globalMarkup, setGlobalMarkup] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -82,6 +97,10 @@ export function Categories() {
       .list()
       .then((r) => setGroups(r.groups))
       .catch(() => setGroups([]));
+    void settings.defaultMarkup
+      .get()
+      .then((s) => setGlobalMarkup(Number(s.markup_percent)))
+      .catch(() => setGlobalMarkup(null));
   }, [load]);
 
   async function toggleActive(category: Category) {
@@ -94,27 +113,40 @@ export function Categories() {
     }
   }
 
-  /** Moves `category` to `target` among its siblings and saves that order. */
-  async function moveCategory(category: Category, siblings: Category[], target: number) {
-    const from = siblings.findIndex((c) => c.id === category.id);
-    if (from < 0 || target < 0 || target >= siblings.length || target === from) return;
-    const next = siblings.filter((c) => c.id !== category.id);
-    next.splice(target, 0, category);
+  /** Moves `category` to position `target` among its siblings, in the draft only. */
+  function moveCategory(category: Category, target: number) {
+    setDraft((current) => (current ? moveAmongSiblings(current, category, target) : current));
+  }
+
+  /** "Save order": one PUT /admin/categories/order per sibling set that changed. */
+  async function saveOrder() {
+    if (!draft || !rows) return;
+    const sets = changedSiblingSets(rows, draft);
+    if (sets.length === 0) {
+      setDraft(null);
+      return;
+    }
     setMoving(true);
     try {
-      await catalog.categories.reorder(next.map((c) => c.id));
+      for (const ids of sets) await catalog.categories.reorder(ids);
+      setNotice('Category order saved.');
+      setDraft(null);
       await load();
     } catch (err) {
       setNotice(catalogErrorMessage(err));
+      await load();
     } finally {
       setMoving(false);
     }
   }
 
-  const nested = rows ? nestedRows(rows) : [];
+  const arranging = draft !== null;
+  const shown = arranging ? draft : rows;
+  const nested = shown ? nestedRows(shown) : [];
   const topLevel = nested.filter((r) => r.parent === null).map((r) => r.category);
   const siblingsOf = (parent: Category | null) =>
     parent ? nested.filter((r) => r.parent?.id === parent.id).map((r) => r.category) : topLevel;
+  const dirty = arranging && rows !== null && changedSiblingSets(rows, draft).length > 0;
 
   return (
     <div className="page">
@@ -122,14 +154,25 @@ export function Categories() {
         title="Categories"
         description="Used by the customer Home, Categories and Search screens."
         actions={
+          arranging ? (
+            <>
+              <button type="button" className="button button--ghost" disabled={moving} onClick={() => setDraft(null)}>
+                Cancel
+              </button>
+              <button type="button" className="button" disabled={moving || !dirty} onClick={() => void saveOrder()}>
+                {moving ? 'Saving...' : 'Save order'}
+              </button>
+            </>
+          ) : (
           <>
             <button
               type="button"
-              className={arranging ? 'button' : 'button button--ghost'}
-              aria-pressed={arranging}
-              onClick={() => setArranging((v) => !v)}
+              className="button button--ghost"
+              aria-pressed={false}
+              disabled={!rows || rows.length < 2}
+              onClick={() => setDraft(rows ? [...rows] : [])}
             >
-              {arranging ? 'Done arranging' : 'Arrange'}
+              Arrange
             </button>
             <button
               type="button"
@@ -142,13 +185,14 @@ export function Categories() {
               Add category
             </button>
           </>
+          )
         }
       />
 
       {arranging ? (
         <p className="page__note" role="status">
           Customers see categories in this order. Move a category up or down, or to the top; sub-categories move
-          within their category. Each move is saved straight away.
+          within their category. Tap Save order when you are done.
         </p>
       ) : null}
 
@@ -170,7 +214,10 @@ export function Categories() {
             const siblings = siblingsOf(parent);
             const index = siblings.findIndex((c) => c.id === category.id);
             return (
-            <li key={category.id} className={`cat-row cat-row--flat${parent ? ' cat-row--child' : ''}`}>
+            <li
+              key={category.id}
+              className={`cat-row cat-row--flat cat-row--stacked${parent ? ' cat-row--child' : ''}${arranging ? ' cat-row--arranging' : ''}`}
+            >
               {/* The customer app draws this in a CIRCLE, so the row shows it
                   as one too: a picture that looks right in a square preview
                   and loses its subject in a circle is the whole reason to
@@ -186,13 +233,20 @@ export function Categories() {
                 <p className="cat-row__title">{category.name}</p>
                 {parent ? <p className="cat-row__parent">{`In ${parent.name}`}</p> : null}
                 <p className="cat-row__meta">{category.slug}</p>
-                {category.description ? <p className="cat-row__meta">{category.description}</p> : null}
+                {category.description ? <p className="cat-row__meta cat-row__desc">{category.description}</p> : null}
+                <p className="cat-row__meta">{markupRowText(category, shown ?? [], globalMarkup)}</p>
+                {markupProductCountText(category.markup_product_count, category.markup_percent != null) ? (
+                  <p className="cat-row__meta">
+                    {markupProductCountText(category.markup_product_count, category.markup_percent != null)}
+                  </p>
+                ) : null}
                 <div className="cat-row__badges">
                   <Badge tone={category.is_active ? 'active' : 'inactive'}>{category.is_active ? 'Active' : 'Inactive'}</Badge>
                   {category.offer_active && category.offer_percent != null ? (
                     <span className="offer-tag">{offerPercentLabel(category.offer_percent)}</span>
                   ) : null}
-                  <span className="cat-row__order">Order {category.display_order}</span>
+                  <span className="cat-row__order">{`${category.product_count ?? 0} ${category.product_count === 1 ? 'product' : 'products'}`}</span>
+                  {arranging ? <span className="cat-row__order">{`Place ${index + 1} of ${siblings.length}`}</span> : null}
                 </div>
               </div>
               {arranging ? (
@@ -203,7 +257,7 @@ export function Categories() {
                       className="button button--ghost button--sm"
                       aria-label={`Move ${category.name} to the top`}
                       disabled={moving || index <= 0}
-                      onClick={() => void moveCategory(category, siblings, 0)}
+                      onClick={() => moveCategory(category, 0)}
                     >
                       Top
                     </button>
@@ -212,7 +266,7 @@ export function Categories() {
                       className="button button--ghost button--sm"
                       aria-label={`Move ${category.name} up`}
                       disabled={moving || index <= 0}
-                      onClick={() => void moveCategory(category, siblings, index - 1)}
+                      onClick={() => moveCategory(category, index - 1)}
                     >
                       ↑
                     </button>
@@ -221,18 +275,11 @@ export function Categories() {
                       className="button button--ghost button--sm"
                       aria-label={`Move ${category.name} down`}
                       disabled={moving || index < 0 || index >= siblings.length - 1}
-                      onClick={() => void moveCategory(category, siblings, index + 1)}
+                      onClick={() => moveCategory(category, index + 1)}
                     >
                       ↓
                     </button>
                   </div>
-                  <Link
-                    className="button button--ghost button--sm"
-                    to={`/catalog/categories/${category.id}/arrange`}
-                    aria-label={`Arrange products in ${category.name}`}
-                  >
-                    Arrange products
-                  </Link>
                 </div>
               ) : (
               <div className="cat-row__actions">
@@ -281,6 +328,10 @@ export function Categories() {
       )}
 
       <p className="page__note">Deactivate a category to hide it for a while; delete it to retire it for good.</p>
+      <p className="page__note">
+        A category with no markup uses its parent category&apos;s, else the{' '}
+        <Link to="/more#default-markup">global default markup</Link>.
+      </p>
 
       {editing ? (
         <CategoryDialog
@@ -397,6 +448,53 @@ function DeleteCategoryDialog({
 }
 
 /**
+ * A row's markup in a few words: its own ("Markup 25%"), else where it comes
+ * from ("Markup: parent Grocery 15%" / "Markup: global 20%").
+ */
+export function markupRowText(category: Category, all: Category[], globalMarkup: number | null): string {
+  if (category.markup_percent !== null && category.markup_percent !== undefined) {
+    return `Markup ${percentText(Number(category.markup_percent))}`;
+  }
+  const inherited = inheritedMarkup(category.id, all, globalMarkup);
+  if (inherited.source === 'PARENT_CATEGORY_MARKUP') {
+    return `Markup: parent ${inherited.categoryName} ${percentText(inherited.percent)}`;
+  }
+  return globalMarkup === null ? 'Markup: global' : `Markup: global ${percentText(globalMarkup)}`;
+}
+
+/** The sibling set (same parent) under `parentId` within `list`, in list order. */
+function siblingSet(list: Category[], parentId: string | null): Category[] {
+  const ids = new Set(list.map((c) => c.id));
+  return list.filter((c) => (c.parent_id && ids.has(c.parent_id) ? c.parent_id : null) === parentId);
+}
+
+/** `list` with `category` moved to position `target` among its siblings (other rows keep their places). */
+export function moveAmongSiblings(list: Category[], category: Category, target: number): Category[] {
+  const ids = new Set(list.map((c) => c.id));
+  const parentId = category.parent_id && ids.has(category.parent_id) ? category.parent_id : null;
+  const siblings = siblingSet(list, parentId);
+  const from = siblings.findIndex((c) => c.id === category.id);
+  if (from < 0 || target < 0 || target >= siblings.length || target === from) return list;
+  const reordered = siblings.filter((c) => c.id !== category.id);
+  reordered.splice(target, 0, category);
+  const siblingIds = new Set(siblings.map((c) => c.id));
+  let next = 0;
+  return list.map((c) => (siblingIds.has(c.id) ? reordered[next++]! : c));
+}
+
+/** The sibling sets (as id lists) whose order differs between `before` and `after`. */
+export function changedSiblingSets(before: Category[], after: Category[]): string[][] {
+  const parents = new Set<string | null>([null, ...after.map((c) => c.parent_id ?? null)]);
+  const out: string[][] = [];
+  for (const parentId of parents) {
+    const a = siblingSet(before, parentId).map((c) => c.id);
+    const b = siblingSet(after, parentId).map((c) => c.id);
+    if (b.length > 0 && a.join(',') !== b.join(',')) out.push(b);
+  }
+  return out;
+}
+
+/**
  * Top-level categories in list order, each followed by its sub-categories.
  * A child whose parent is not in the list shows as top level.
  */
@@ -452,6 +550,10 @@ function CategoryDialog({
   const parentOptions = categories.filter((c) => !c.parent_id && c.id !== category?.id);
   const hasChildren = category ? categories.some((c) => c.parent_id === category.id) : false;
   const presetParent = !category && presetParentId ? categories.find((c) => c.id === presetParentId) ?? null : null;
+  const [markup, setMarkup] = useState(
+    category?.markup_percent === null || category?.markup_percent === undefined ? '' : String(category.markup_percent)
+  );
+  const [markupError, setMarkupError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -464,6 +566,12 @@ function CategoryDialog({
       return;
     }
     setOrderError(null);
+    const markupParsed = parseMarkupPercent(markup);
+    if ('error' in markupParsed) {
+      setMarkupError(markupParsed.error);
+      return;
+    }
+    setMarkupError(null);
     if (name.trim().length < 2) {
       setError('Name must be at least 2 characters.');
       return;
@@ -479,6 +587,8 @@ function CategoryDialog({
         image_focal_y: focal.y,
         display_order: order.value,
         is_active: isActive,
+        // null = use the parent category's markup, else the global one.
+        markup_percent: markupParsed.value,
       };
       // Only sent when it changed: re-sending the same group would append
       // the category at the end of that group again.
@@ -564,6 +674,27 @@ function CategoryDialog({
             ) : null}
           </select>
         </Field>
+        <Field
+          label="Markup %"
+          hint="Blank = use the parent category's markup, or the global markup if there is none"
+          error={markupError ?? undefined}
+        >
+          <input
+            className="input"
+            inputMode="decimal"
+            value={markup}
+            aria-invalid={markupError ? true : undefined}
+            onChange={(e) => {
+              setMarkup(e.target.value);
+              setMarkupError(null);
+            }}
+          />
+        </Field>
+        {category && markupProductCountText(category.markup_product_count, category.markup_percent != null) ? (
+          <p className="form__note">
+            {`${markupProductCountText(category.markup_product_count, category.markup_percent != null)}. Products with a fixed price or their own markup are not affected; changing it reprices these at once.`}
+          </p>
+        ) : null}
         <Field label="Display order" error={orderError ?? undefined}>
           <input
             className="input"

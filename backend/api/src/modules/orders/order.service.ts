@@ -1,6 +1,6 @@
 import { orderRepository, CreateOrderData } from './order.repository.js';
 import { CreateOrderInput, OrderQueryInput } from './order.schema.js';
-import { calculateSellingPrice } from '../pricing/index.js';
+import { recordableMarkupPercent, resolveSellingPrice } from '../pricing/index.js';
 import { assertWithinServiceZone } from './delivery-zone.js';
 import { orderingClock } from '../../utils/time.js';
 import { buildSlots, storeClosedMessage, storeStatusAt, STORE_TIMEZONE } from '../../utils/store-hours.js';
@@ -157,13 +157,20 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
       );
     }
 
-    const priceResult = calculateSellingPrice({
+    // Migration 044: a fixed price, or cost x (product, category, parent
+    // category, global) markup - the same rule as v_product_catalog.
+    const catalogRow = categoryOffers.get(prod.id);
+    const priceResult = resolveSellingPrice({
       purchaseCost: Number(prod.purchase_cost),
-      customMarkupPercent: prod.custom_markup_percent !== null ? Number(prod.custom_markup_percent) : null,
-      defaultMarkupPercent: defaultMarkup,
+      pricingMode: prod.pricing_mode,
+      fixedSellingPrice: prod.fixed_selling_price,
+      productMarkupPercent: prod.custom_markup_percent,
+      categoryMarkupPercent: catalogRow?.category_markup_percent ?? null,
+      parentCategoryMarkupPercent: catalogRow?.parent_category_markup_percent ?? null,
+      globalMarkupPercent: defaultMarkup,
     });
 
-    const unitPrice = effectivePrice({ ...prod, ...categoryOffers.get(prod.id) }, priceResult.sellingPrice);
+    const unitPrice = effectivePrice({ ...prod, ...catalogRow }, priceResult.sellingPrice);
     const lineSubtotal = Number((unitPrice * item.quantity).toFixed(2));
     subtotalAmount += lineSubtotal;
 
@@ -174,7 +181,7 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
       unit_snapshot: prod.unit,
       unit_selling_price: unitPrice,
       estimated_unit_cost: Number(Number(prod.purchase_cost).toFixed(2)),
-      markup_percentage_applied: priceResult.effectiveMarkupPercent,
+      markup_percentage_applied: recordableMarkupPercent(priceResult.effectiveMarkupPercent),
       quantity: item.quantity,
       subtotal: lineSubtotal,
     } as CreateOrderData['items'][number];

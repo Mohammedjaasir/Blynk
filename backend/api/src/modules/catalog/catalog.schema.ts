@@ -53,6 +53,13 @@ export const productQuerySchema = z.object({
 
 export type ProductQueryInput = z.infer<typeof productQuerySchema>;
 
+/** A markup %: 0..999.99, at most 2 decimals (products NUMERIC(5,2), categories CHECK). */
+const markupPercent = z
+  .number({ invalid_type_error: 'Markup must be a number' })
+  .min(0, 'Markup cannot be negative')
+  .max(999.99, 'Markup cannot exceed 999.99%')
+  .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'Markup can have at most 2 decimals');
+
 // ----------------------------------------------------------------------------
 // 2. CATEGORY ADMIN SCHEMAS
 // ----------------------------------------------------------------------------
@@ -78,6 +85,9 @@ export const createCategorySchema = z.object({
   group_sort_order: z.number().int().min(0).max(100000).optional(),
   // Migration 026: the category this one sits inside (null = top level).
   parent_id: z.string().uuid('parent_id must be a category id').nullable().optional(),
+  // Migration 044 (owner, 2026-10-13): the markup for MARKUP products in
+  // this category without their own; null/blank = the parent's, else global.
+  markup_percent: markupPercent.nullable().optional(),
 });
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
@@ -122,7 +132,7 @@ const focalPercent = z
   .min(0, 'Focal point must be between 0 and 100')
   .max(100, 'Focal point must be between 0 and 100');
 
-export const createProductSchema = z.object({
+const productBaseSchema = z.object({
   category_id: z.string().uuid('category_id must be a valid UUID'),
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(255),
   slug: z
@@ -152,6 +162,18 @@ export const createProductSchema = z.object({
     .max(999.99, 'Markup cannot exceed 999.99%')
     .nullable()
     .optional(),
+  // Migration 044 (owner, 2026-10-13): how the selling price is set.
+  // MARKUP (default): cost x (custom markup, else category, parent, global).
+  // FIXED: fixed_selling_price exactly (required, above 0, when FIXED; a
+  // price below cost is allowed and answered with a price_warning).
+  pricing_mode: z.enum(['MARKUP', 'FIXED'], { errorMap: () => ({ message: "pricing_mode must be 'MARKUP' or 'FIXED'" }) }).optional(),
+  fixed_selling_price: z
+    .number({ invalid_type_error: 'Selling price must be a number' })
+    .positive('Selling price must be above 0')
+    .max(99_999_999.99, 'Selling price cannot exceed 99,999,999.99')
+    .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'Selling price can have at most 2 decimals')
+    .nullable()
+    .optional(),
   is_available: z.boolean().default(true).optional(),
   is_active: z.boolean().default(true).optional(),
   // Migration 031 (owner, 2026-10-09): the product on offer at a reduced
@@ -171,9 +193,16 @@ export const createProductSchema = z.object({
     .optional(),
 });
 
+export const createProductSchema = productBaseSchema.superRefine((v, ctx) => {
+  if (v.pricing_mode === 'FIXED' && (v.fixed_selling_price === null || v.fixed_selling_price === undefined)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fixed_selling_price'], message: 'Enter the selling price for a fixed-price product' });
+  }
+});
+
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
-export const updateProductSchema = createProductSchema.partial();
+/** Partial; that a FIXED product ends up with a price is checked on the merged row (catalog.service). */
+export const updateProductSchema = productBaseSchema.partial();
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 
 // ----------------------------------------------------------------------------

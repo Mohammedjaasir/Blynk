@@ -287,6 +287,12 @@ export class NotificationTemplates {
       'markup_percentage_applied',
       'custom_markup_percent',
       'effective_markup',
+      // Migration 044: pricing internals.
+      'effective_markup_percent',
+      'category_markup_percent',
+      'parent_category_markup_percent',
+      'global_markup_percent',
+      'pricing_source',
       'password',
       'otp',
       'otp_hash',

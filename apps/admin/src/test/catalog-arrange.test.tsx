@@ -89,7 +89,7 @@ describe('moved()', () => {
 });
 
 describe('Categories: Arrange mode', () => {
-  it('moves a top-level category down, saving the top-level order only', async () => {
+  it('moves a top-level category down and saves only the top-level order on "Save order"', async () => {
     const user = userEvent.setup();
     const api = mockApi((c) => {
       if (c.method === 'GET' && c.path === '/admin/categories') return ok({ categories: CATEGORIES });
@@ -101,13 +101,45 @@ describe('Categories: Arrange mode', () => {
     expect(screen.getByRole('button', { name: 'Move Grocery up' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Move Milk up' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Move Eggs down' })).toBeDisabled();
+    // Nothing moved yet: nothing to save.
+    expect(screen.getByRole('button', { name: 'Save order' })).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Move Grocery down' }));
+    // The draft shows the new order at once; nothing is sent until Save order.
+    const names = screen.getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[0].textContent);
+    expect(names[0]).toContain('Dairy');
+    expect(names[3]).toContain('Grocery');
+    expect(api.find('PUT', '/admin/categories/order')).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Save order' }));
     await waitFor(() => expect(api.find('PUT', '/admin/categories/order')).toHaveLength(1));
     expect(api.find('PUT', '/admin/categories/order')[0].body).toEqual({ ids: ['c2', 'c1', 'c3'] });
-  });
+    expect(await screen.findByText('Category order saved.')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Arrange' })).toBeInTheDocument();
+  }, 20_000);
 
-  it('"Top" moves a sub-category to the top of its parent; a refusal shows as a toast', async () => {
+  it('several moves in two levels save one request per changed level; Cancel saves nothing', async () => {
+    const user = userEvent.setup();
+    const api = mockApi((c) => {
+      if (c.method === 'GET' && c.path === '/admin/categories') return ok({ categories: CATEGORIES });
+      if (c.method === 'PUT' && c.path === '/admin/categories/order') return ok({ categories: [] });
+      return undefined;
+    });
+    renderAt('/categories');
+    await user.click(await screen.findByRole('button', { name: 'Arrange' }));
+    await user.click(screen.getByRole('button', { name: 'Move Snacks to the top' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.find('PUT', '/admin/categories/order')).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }));
+    await user.click(screen.getByRole('button', { name: 'Move Snacks to the top' }));
+    await user.click(screen.getByRole('button', { name: 'Move Eggs up' }));
+    await user.click(screen.getByRole('button', { name: 'Save order' }));
+    await waitFor(() => expect(api.find('PUT', '/admin/categories/order')).toHaveLength(2));
+    expect(api.find('PUT', '/admin/categories/order').map((c) => c.body)).toEqual([{ ids: ['c3', 'c1', 'c2'] }, { ids: ['c5', 'c4'] }]);
+  }, 20_000);
+
+  it('a refused save shows as a toast and reloads the saved order', async () => {
     const user = userEvent.setup();
     const api = mockApi((c) => {
       if (c.method === 'GET' && c.path === '/admin/categories') return ok({ categories: CATEGORIES });
@@ -118,10 +150,47 @@ describe('Categories: Arrange mode', () => {
     renderAt('/categories');
     await user.click(await screen.findByRole('button', { name: 'Arrange' }));
     await user.click(screen.getByRole('button', { name: 'Move Eggs to the top' }));
+    await user.click(screen.getByRole('button', { name: 'Save order' }));
     await waitFor(() => expect(api.find('PUT', '/admin/categories/order')).toHaveLength(1));
     expect(api.find('PUT', '/admin/categories/order')[0].body).toEqual({ ids: ['c5', 'c4'] });
     expect(await screen.findByText(/Arrange one level at a time/)).toBeInTheDocument();
-  });
+  }, 20_000);
+
+  it('the table lines up: one cell per header in every row, name with its slug, no block-level cells', async () => {
+    mockApi((c) =>
+      c.method === 'GET' && c.path === '/admin/categories'
+        ? ok({ categories: CATEGORIES.map((cat) => ({ ...cat, description: `${cat.name} things`, product_count: 3 })) })
+        : undefined
+    );
+    renderAt('/categories');
+    await screen.findByText('Grocery');
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual(['Name', 'Description', 'Markup', 'Products', 'Status', 'Actions']);
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(CATEGORIES.length);
+    for (const row of rows) {
+      const cells = within(row).getAllByRole('cell');
+      expect(cells).toHaveLength(headers.length);
+      // The root cause of the broken live table: a <td> with a display:block class.
+      for (const cell of cells) expect(cell.className).not.toMatch(/cell__(primary|secondary|note)/);
+    }
+    const dairy = within(rows[1]).getAllByRole('cell');
+    expect(dairy[0]).toHaveTextContent('Dairy');
+    expect(dairy[0]).toHaveTextContent('dairy');
+    expect(dairy[1]).toHaveTextContent('Dairy things');
+    expect(dairy[3]).toHaveTextContent('3');
+    expect(dairy[4]).toHaveTextContent('Active');
+    expect(within(dairy[5]).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    const milk = within(rows[2]).getAllByRole('cell');
+    expect(milk[0]).toHaveTextContent('in Dairy');
+  }, 20_000);
+
+  it('the stylesheet keeps table cells as table cells', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const css = fs.readFileSync(path.resolve(__dirname, '../styles.css'), 'utf8');
+    expect(css).toMatch(/td\.cell__primary,\s*td\.cell__secondary,[\s\S]*?display:\s*table-cell/);
+  }, 20_000);
 
   it('every category links to its Arrange products screen', async () => {
     mockApi((c) => (c.method === 'GET' && c.path === '/admin/categories' ? ok({ categories: CATEGORIES }) : undefined));

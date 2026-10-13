@@ -8,6 +8,7 @@ import type {
   CheckoutSettings,
   CustomerSmsLanguageMode,
   CustomerSmsLanguageSetting,
+  DefaultMarkupSetting,
   DeliveryFeeInput,
   DeliveryFeeMode,
   DeliveryFeeSetting,
@@ -33,6 +34,7 @@ import { formatPercent, parsePercent } from '../lib/riderPay';
 import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
 import { partsLabel, smsParts } from '../lib/smsOffers';
 import { checkoutExtrasPatch } from '../lib/checkoutExtras';
+import { formatPercent as formatMarkup, parseMarkupInput } from '../lib/pricing';
 
 /**
  * Store settings: the delivery fee the customer app charges on new orders
@@ -71,6 +73,8 @@ export function Settings() {
       <PageHeader title="Settings" description="Store-wide values the customer app uses." />
       <StoreScheduleSettings />
       <DeliveryFeeSettingPanel />
+      {/* Global default markup (migration 044; owner, 2026-10-13). */}
+      <DefaultMarkupPanel />
       <CheckoutSettingsPanel />
       {/* Customer SMS language (owner, 2026-10-12). */}
       <CustomerSmsLanguagePanel />
@@ -88,6 +92,98 @@ export function Settings() {
       {/* In-app updates for Blynk Ops and Blynk Rider (owner, 2026-10-12). */}
       <AppUpdatesPanel />
     </>
+  );
+}
+
+/**
+ * Global default markup (migration 044; owner, 2026-10-13; GET/PATCH
+ * /admin/settings/default-markup): the markup for products priced by markup
+ * that have no markup of their own and none on their category or parent
+ * category. Saving reprices those products at once; orders already placed
+ * keep their prices. /settings#default-markup (the Categories page's link)
+ * scrolls here.
+ */
+export function DefaultMarkupPanel() {
+  const toast = useToast();
+  const [current, setCurrent] = useState<DefaultMarkupSetting | null>(null);
+  const [value, setValue] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .getDefaultMarkup()
+      .then((setting) => {
+        if (cancelled) return;
+        setCurrent(setting);
+        setValue(formatMarkup(Number(setting.markup_percent)));
+      })
+      .catch((err) => !cancelled && setLoadError(errorMessage(err, 'Could not load the global default markup.')));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const parsed = parseMarkupInput(value);
+    if ('error' in parsed || parsed.value === null) {
+      setError('error' in parsed ? parsed.error : 'Enter a markup from 0 to 999.99.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await settingsApi.setDefaultMarkup(parsed.value);
+      setCurrent(updated);
+      setValue(formatMarkup(Number(updated.markup_percent)));
+      toast.success(`The global default markup is now ${formatMarkup(Number(updated.markup_percent))}%.`);
+    } catch (err) {
+      const detail =
+        err instanceof ApiError && err.code === 'VALIDATION_ERROR'
+          ? (err.details as Array<{ message?: string }> | undefined)?.[0]?.message
+          : undefined;
+      setError(detail ?? errorMessage(err, 'Could not save the global default markup.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const using = current?.products_using ?? 0;
+  return (
+    <section className="panel" id="default-markup" aria-label="Global default markup">
+      <h2 className="panel__title">Global default markup</h2>
+      {loadError ? (
+        <p className="field__error">{loadError}</p>
+      ) : !current ? (
+        <Spinner label="Loading the global default markup" />
+      ) : (
+        <form className="form" onSubmit={save} noValidate>
+          <p className="panel__body">
+            {`${using} ${using === 1 ? 'product uses' : 'products use'} it`}
+            {current.updated_at ? ` (changed ${new Date(current.updated_at).toLocaleString()})` : ''}.
+          </p>
+          <Field
+            label="Global default markup %"
+            hint="Used by products with no markup of their own and none on their category."
+            error={error ?? undefined}
+          >
+            <input className="input" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />
+          </Field>
+          <p className="form__note">
+            0 to 999.99, up to 2 decimals. Saving reprices those products straight away; fixed-price products and
+            orders already placed keep their prices. Set a markup per category under Categories.
+          </p>
+          <div className="form__actions">
+            <button type="submit" className="button" disabled={saving}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 

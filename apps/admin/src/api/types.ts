@@ -107,6 +107,14 @@ export interface Category {
   offer_percent?: number | null;
   offer_ends_at?: string | null;
   offer_active?: boolean;
+  /**
+   * Category markup (migration 044; owner, 2026-10-13): the markup % for
+   * MARKUP products here without their own; null = the parent's, else the
+   * global default.
+   */
+  markup_percent?: number | null;
+  /** MARKUP products without a custom markup that follow this category (its sub-categories' too, when they have none). */
+  markup_product_count?: number;
 }
 
 /**
@@ -272,8 +280,12 @@ export interface ImportRow {
   category: string;
   unit: string;
   pack_size?: string | null;
-  cost_price: number;
+  /** The purchase cost (the older header cost_price is read into this). */
+  purchase_cost: number;
+  /** Given = FIXED at exactly this price (migration 044). */
   selling_price?: number | null;
+  /** Given = MARKUP with this custom markup; neither = category/parent/global markup. */
+  markup_percent?: number | null;
   sku: string;
   barcode?: string | null;
   description?: string | null;
@@ -284,6 +296,17 @@ export interface ImportRow {
 
 export type ImportStatus = 'created' | 'updated' | 'skipped' | 'error';
 
+/** The price an import row gives the product (migration 044). */
+export interface ImportRowPricing {
+  pricing_mode: PricingMode;
+  pricing_source: PricingSource;
+  purchase_cost: number;
+  selling_price: number;
+  /** MARKUP: the markup used; FIXED: the implied markup over cost (null when the cost is 0). */
+  effective_markup_percent: number | null;  /** Both price cells were empty on an existing SKU: its current pricing is kept. */
+  kept_current?: boolean;
+}
+
 export interface ImportResultRow {
   row: number;
   sku: string | null;
@@ -291,12 +314,29 @@ export interface ImportResultRow {
   product_id?: string;
   message?: string;
   errors?: Array<{ field: string; message: string }>;
+  /** Non-error rows: the resulting selling price and its source. */
+  pricing?: ImportRowPricing;
+  /** Non-blocking notes, e.g. a fixed price below the purchase cost. */
+  warnings?: string[];
 }
 
 export interface ImportResponse {
   dry_run: boolean;
   summary: { created: number; updated: number; skipped: number; errors: number };
   results: ImportResultRow[];
+}
+
+/** How a product's selling price is set (migration 044; owner, 2026-10-13). */
+export type PricingMode = 'MARKUP' | 'FIXED';
+/** Where a product's selling price comes from. */
+export type PricingSource = 'FIXED' | 'PRODUCT_MARKUP' | 'CATEGORY_MARKUP' | 'PARENT_CATEGORY_MARKUP' | 'GLOBAL_MARKUP';
+
+/** GET|PATCH /admin/settings/default-markup. */
+export interface DefaultMarkupSetting {
+  markup_percent: number;
+  updated_at: string | null;
+  /** MARKUP products priced by the global default now. */
+  products_using: number;
 }
 
 /**
@@ -318,9 +358,24 @@ export interface AdminProduct {
   image_url: string | null;
   purchase_cost: number;
   custom_markup_percent: number | null;
-  effective_markup_percent?: number;
+  /**
+   * Selling-price modes (migration 044; owner, 2026-10-13). Optional: an API
+   * from before them leaves these out (= MARKUP).
+   */
+  pricing_mode?: PricingMode;
+  /** Kept (ignored) while the product is in MARKUP mode. */
+  fixed_selling_price?: number | null;
+  category_markup_percent?: number | null;
+  parent_category_markup_percent?: number | null;
+  global_markup_percent?: number | null;
+  /** MARKUP: the markup used; FIXED: the implied markup over cost (null when the cost is 0, negative below cost). */
+  effective_markup_percent?: number | null;
+  pricing_source?: PricingSource;
+  /** The regular selling price. */
   calculated_selling_price?: number;
   selling_price?: number;
+  /** A FIXED price below the purchase cost (a warning; saving is allowed). */
+  price_warning?: { code: 'SELLING_BELOW_COST'; message: string } | null;
   /**
    * Offer price (owner, 2026-10-09): a reduced price customers pay, as
    * stored, with an optional end (ISO). `offer_active` is true only while it

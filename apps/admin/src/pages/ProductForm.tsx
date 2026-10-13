@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { categories as categoriesApi, products as productsApi } from '../api/resources';
-import type { Category } from '../api/types';
+import { categories as categoriesApi, products as productsApi, settings as settingsApi } from '../api/resources';
+import type { Category, PricingMode, PricingSource } from '../api/types';
 import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
 import { ApiError } from '../api/client';
@@ -10,6 +10,17 @@ import { errorMessage, splitServerErrors } from '../lib/apiErrors';
 import { colomboDate, formatDay } from '../lib/coupons';
 import { useImageCleanup } from '../lib/imageCleanup';
 import { formatMoney } from '../lib/orders';
+import {
+  MAX_SELLING_PRICE,
+  formatLkr,
+  formatPercent,
+  inheritedMarkup,
+  markupSourceText,
+  previewPrice,
+  round2 as roundCents,
+  type InheritedMarkup,
+  type PricePreview,
+} from '../lib/pricing';
 
 /** The API's limits (catalog.schema.ts, NUMERIC(5,2) and NUMERIC(10,2)). */
 export const MAX_MARKUP_PERCENT = 999.99;
@@ -23,6 +34,7 @@ const INLINE_FIELDS = [
   'unit',
   'purchase_cost',
   'custom_markup_percent',
+  'fixed_selling_price',
   'offer_price',
   'offer_ends_at',
 ] as const;
@@ -43,6 +55,15 @@ type OfferMode = 'price' | 'off';
 const OFFER_MODES: Array<{ value: OfferMode; label: string }> = [
   { value: 'price', label: 'New price' },
   { value: 'off', label: 'LKR off' },
+];
+/**
+ * How the selling price is set (migration 044; owner, 2026-10-13): Markup =
+ * cost + a markup % (the product's own, else inherited); Fixed price = the
+ * typed price exactly.
+ */
+const PRICING_MODES: Array<{ value: PricingMode; label: string }> = [
+  { value: 'MARKUP', label: 'Markup' },
+  { value: 'FIXED', label: 'Fixed price' },
 ];
 const MONEY_INPUT = /^\d+(\.\d{1,2})?$/;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -65,7 +86,11 @@ interface FormState {
   description: string;
   image_url: string | null;
   purchase_cost: string;
+  /** Markup | Fixed price (migration 044). */
+  pricing_mode: PricingMode;
   custom_markup_percent: string;
+  /** The fixed selling price as typed (Fixed price mode). */
+  fixed_selling_price: string;
   /** Offer price (owner, 2026-10-09); blank = no offer. */
   offer_price: string;
   /** YYYY-MM-DD in Colombo; blank = no end date. */
@@ -88,7 +113,9 @@ const EMPTY: FormState = {
   description: '',
   image_url: null,
   purchase_cost: '',
+  pricing_mode: 'MARKUP',
   custom_markup_percent: '',
+  fixed_selling_price: '',
   offer_price: '',
   offer_ends_on: '',
   offer_mode: 'price',
@@ -97,11 +124,43 @@ const EMPTY: FormState = {
   is_active: true,
 };
 
+/** The saved product's pricing, so an unchanged form shows the server's price. */
+interface StoredPricing {
+  category_id: string;
+  purchase_cost: string;
+  pricing_mode: PricingMode;
+  custom_markup_percent: string;
+  fixed_selling_price: string;
+  price: number | null;
+  source: PricingSource | null;
+  markup: number | null;
+}
+
+/** The preview line's data; `legacy` = an API from before pricing sources (price only). */
+type FormPreview = PricePreview & { legacy?: boolean };
+
+/** The hint under "Custom markup %": what a blank field falls back to. */
+export function inheritHint(inherited: InheritedMarkup, categoryName: string | null): string {
+  const pct = `${formatPercent(inherited.markup)}%`;
+  if (inherited.source === 'CATEGORY_MARKUP') {
+    return `0 to 999.99. Leave blank to use the category markup (${inherited.categoryName} ${pct})`;
+  }
+  if (inherited.source === 'PARENT_CATEGORY_MARKUP') {
+    return `0 to 999.99. Leave blank to use the parent category markup (${inherited.categoryName} ${pct}), as ${
+      categoryName ?? 'the category'
+    } has none`;
+  }
+  return categoryName
+    ? `0 to 999.99. Leave blank to use the category markup, or the global markup (${pct}) as ${categoryName} has none`
+    : `0 to 999.99. Leave blank to use the category markup, or the global markup (${pct}) if the category has none`;
+}
+
 /**
- * Add / edit a product against the existing backend product schema. No
- * field here is invented: purchase cost and markup are the backend's own
- * pricing inputs, and the selling price stays a backend calculation - this
- * form only previews it.
+ * Add / edit a product against the existing backend product schema. The
+ * selling price is set by Markup (cost + the product's markup, else the
+ * category's, parent category's or global markup) or as a Fixed price
+ * (migration 044; owner, 2026-10-13). The server computes and stores it;
+ * this form previews it with the same rules (lib/pricing.ts).
  */
 export function ProductForm() {
   const { id } = useParams();
@@ -115,10 +174,12 @@ export function ProductForm() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
-  const [effectiveMarkup, setEffectiveMarkup] = useState<number | null>(null);
-  // The saved selling price, for the offer check while the preview can't
-  // compute one.
-  const [savedPrice, setSavedPrice] = useState<number | null>(null);
+  // The saved pricing (and price, for the offer check while the preview
+  // can't compute one).
+  const [storedPricing, setStoredPricing] = useState<StoredPricing | null>(null);
+  // Global default markup: the setting, else the product's copy, else 20.
+  const [globalMarkup, setGlobalMarkup] = useState<number | null>(null);
+  const [productGlobalMarkup, setProductGlobalMarkup] = useState<number | null>(null);
   const [storedOffer, setStoredOffer] = useState<StoredOffer>({ price: null, endsAt: null });
   // The image the saved product points at; replaced files are deleted only
   // after a successful save.
@@ -137,6 +198,10 @@ export function ProductForm() {
         );
       })
       .catch(() => setCategories([]));
+    void settingsApi
+      .getDefaultMarkup()
+      .then((setting) => setGlobalMarkup(Number(setting.markup_percent)))
+      .catch(() => setGlobalMarkup(null));
   }, []);
 
   useEffect(() => {
@@ -146,6 +211,15 @@ export function ProductForm() {
       .getAdmin(id)
       .then((product) => {
         if (cancelled) return;
+        const mode: PricingMode = product.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP';
+        const customMarkup =
+          product.custom_markup_percent === null || product.custom_markup_percent === undefined
+            ? ''
+            : String(product.custom_markup_percent);
+        const fixedPrice =
+          product.fixed_selling_price === null || product.fixed_selling_price === undefined
+            ? ''
+            : String(product.fixed_selling_price);
         setForm({
           category_id: product.category_id,
           name: product.name,
@@ -156,11 +230,9 @@ export function ProductForm() {
           description: product.description ?? '',
           image_url: product.image_url,
           purchase_cost: String(product.purchase_cost ?? ''),
-          custom_markup_percent:
-            product.custom_markup_percent === null ||
-            product.custom_markup_percent === undefined
-              ? ''
-              : String(product.custom_markup_percent),
+          pricing_mode: mode,
+          custom_markup_percent: customMarkup,
+          fixed_selling_price: fixedPrice,
           offer_price:
             product.offer_price === null || product.offer_price === undefined
               ? ''
@@ -171,8 +243,17 @@ export function ProductForm() {
           is_available: product.is_available,
           is_active: product.is_active,
         });
-        setEffectiveMarkup(product.effective_markup_percent ?? null);
-        setSavedPrice(product.calculated_selling_price ?? null);
+        setStoredPricing({
+          category_id: product.category_id,
+          purchase_cost: String(product.purchase_cost ?? ''),
+          pricing_mode: mode,
+          custom_markup_percent: customMarkup,
+          fixed_selling_price: fixedPrice,
+          price: product.calculated_selling_price ?? product.selling_price ?? null,
+          source: product.pricing_source ?? null,
+          markup: product.effective_markup_percent ?? null,
+        });
+        setProductGlobalMarkup(product.global_markup_percent ?? null);
         setStoredOffer({ price: product.offer_price ?? null, endsAt: product.offer_ends_at ?? null });
         setOriginalImage(product.image_url ?? null);
       })
@@ -185,28 +266,74 @@ export function ProductForm() {
     };
   }, [id]);
 
+  const selectedCategory = categories.find((c) => c.id === form.category_id) ?? null;
+  const inherited = useMemo(
+    () => inheritedMarkup(form.category_id, categories, globalMarkup ?? productGlobalMarkup),
+    [form.category_id, categories, globalMarkup, productGlobalMarkup]
+  );
+
   /**
-   * Preview only. The backend recomputes this from purchase cost and the
-   * effective markup (custom, else the category/global default), and its
-   * value is the one customers see.
+   * Preview only - the server computes the price on save. While the pricing
+   * inputs are as saved, this is the server's own price and source.
    */
-  const previewPrice = useMemo(() => {
-    const cost = Number(form.purchase_cost);
-    const markup =
-      form.custom_markup_percent.trim() !== ''
-        ? Number(form.custom_markup_percent)
-        : effectiveMarkup;
-    if (!Number.isFinite(cost) || markup === null || !Number.isFinite(markup)) {
-      return null;
+  const preview = useMemo<FormPreview | null>(() => {
+    const cost = form.purchase_cost.trim() === '' ? NaN : Number(form.purchase_cost);
+    const stored = storedPricing;
+    const unchanged =
+      stored !== null &&
+      stored.price !== null &&
+      stored.category_id === form.category_id &&
+      stored.purchase_cost === form.purchase_cost.trim() &&
+      stored.pricing_mode === form.pricing_mode &&
+      (form.pricing_mode === 'FIXED'
+        ? stored.fixed_selling_price === form.fixed_selling_price.trim()
+        : stored.custom_markup_percent === form.custom_markup_percent.trim());
+    if (unchanged && stored.price !== null) {
+      const source = stored.source ?? (form.pricing_mode === 'FIXED' ? 'FIXED' : null);
+      const parent = selectedCategory?.parent_id
+        ? categories.find((c) => c.id === selectedCategory.parent_id) ?? null
+        : null;
+      return {
+        mode: form.pricing_mode,
+        source: source ?? 'GLOBAL_MARKUP',
+        price: stored.price,
+        markup: source ? stored.markup : null,
+        categoryName:
+          source === 'CATEGORY_MARKUP'
+            ? selectedCategory?.name ?? null
+            : source === 'PARENT_CATEGORY_MARKUP'
+              ? parent?.name ?? null
+              : null,
+        lossPerUnit: Number.isFinite(cost) && stored.price < cost ? roundCents(cost - stored.price) : null,
+        legacy: source === null,
+      };
     }
-    return cost * (1 + markup / 100);
-  }, [form.purchase_cost, form.custom_markup_percent, effectiveMarkup]);
+    const markupText = form.custom_markup_percent.trim();
+    const fixedText = form.fixed_selling_price.trim();
+    return previewPrice({
+      cost,
+      mode: form.pricing_mode,
+      fixedPrice: fixedText === '' ? null : Number(fixedText),
+      customMarkup: markupText === '' ? null : Number(markupText),
+      inherited,
+    });
+  }, [form, storedPricing, inherited, selectedCategory, categories]);
 
   /** The selling price the offer must beat: the preview, else the saved one. */
   const sellingPrice = useMemo(() => {
-    const price = previewPrice ?? savedPrice;
-    return price === null ? null : Math.round(price * 100) / 100;
-  }, [previewPrice, savedPrice]);
+    const price = preview?.price ?? storedPricing?.price ?? null;
+    return price === null || !Number.isFinite(price) ? null : Math.round(price * 100) / 100;
+  }, [preview, storedPricing]);
+
+  /** Markup | Fixed price. Switching to Fixed with no price starts from the current one. */
+  function setPricingMode(mode: PricingMode) {
+    if (mode === form.pricing_mode) return;
+    if (mode === 'FIXED' && form.fixed_selling_price.trim() === '' && sellingPrice !== null && sellingPrice > 0) {
+      setForm({ ...form, pricing_mode: 'FIXED', fixed_selling_price: moneyInput(sellingPrice) });
+    } else {
+      setForm({ ...form, pricing_mode: mode });
+    }
+  }
 
   /** What was typed in the active offer field; '' = no offer. */
   const offerText = (form.offer_mode === 'off' ? form.offer_off : form.offer_price).trim();
@@ -265,7 +392,16 @@ export function ProductForm() {
     } else if (cost > MAX_PURCHASE_COST) {
       next.purchase_cost = 'Purchase cost can be at most LKR 99,999,999.99';
     }
-    if (form.custom_markup_percent.trim() !== '') {
+    if (form.pricing_mode === 'FIXED') {
+      const fixed = form.fixed_selling_price.trim();
+      if (fixed === '') {
+        next.fixed_selling_price = 'Enter the selling price for a fixed-price product';
+      } else if (!MONEY_INPUT.test(fixed) || Number(fixed) <= 0) {
+        next.fixed_selling_price = 'Enter a price above 0 with at most 2 decimals';
+      } else if (Number(fixed) > MAX_SELLING_PRICE) {
+        next.fixed_selling_price = 'Selling price can be at most LKR 99,999,999.99';
+      }
+    } else if (form.custom_markup_percent.trim() !== '') {
       const markup = Number(form.custom_markup_percent);
       if (!Number.isFinite(markup) || markup < 0 || markup > MAX_MARKUP_PERCENT) {
         next.custom_markup_percent = 'Markup must be between 0 and 999.99';
@@ -309,13 +445,20 @@ export function ProductForm() {
       description: form.description.trim() || null,
       image_url: form.image_url,
       purchase_cost: Number(form.purchase_cost),
-      custom_markup_percent:
-        form.custom_markup_percent.trim() === ''
-          ? null
-          : Number(form.custom_markup_percent),
       is_available: form.is_available,
       is_active: form.is_active,
     };
+    // Markup sends the custom markup (null = inherit) and leaves the stored
+    // fixed price alone; Fixed price sends the price and leaves the stored
+    // custom markup alone (migration 044).
+    if (form.pricing_mode === 'FIXED') {
+      payload.pricing_mode = 'FIXED';
+      payload.fixed_selling_price = Number(form.fixed_selling_price.trim());
+    } else {
+      payload.pricing_mode = 'MARKUP';
+      payload.custom_markup_percent =
+        form.custom_markup_percent.trim() === '' ? null : Number(form.custom_markup_percent);
+    }
     // Offer fields go only when they changed (owner, 2026-10-09): a cleared
     // price removes the offer (the backend clears its end too), and an
     // unchanged end is resent exactly as stored.
@@ -336,18 +479,20 @@ export function ProductForm() {
 
     setSaving(true);
     try {
-      if (isEditing && id) {
-        await productsApi.update(id, payload);
-        toast.success('Product updated.');
-      } else {
-        await productsApi.create(payload);
-        toast.success('Product created.');
-      }
+      const saved = isEditing && id ? await productsApi.update(id, payload) : await productsApi.create(payload);
+      toast.success(isEditing ? 'Product updated.' : 'Product created.');
+      // A fixed price under cost saves, with the server's warning.
+      if (saved?.price_warning?.message) toast.error(`Saved with a warning: ${saved.price_warning.message}`);
       // Saved: the image it no longer uses (removed or replaced) can go now.
       await images.afterSave([form.image_url]);
       navigate('/products');
     } catch (err) {
       // The offer refusals carry their own codes; show them by their field.
+      if (err instanceof ApiError && err.code === 'FIXED_PRICE_REQUIRED') {
+        setErrors({ fixed_selling_price: err.message });
+        setServerError(null);
+        return;
+      }
       if (err instanceof ApiError && (err.code === 'OFFER_PRICE_NOT_LOWER' || err.code === 'OFFER_END_IN_PAST')) {
         setErrors({ [err.code === 'OFFER_PRICE_NOT_LOWER' ? 'offer_price' : 'offer_ends_at']: err.message });
         setServerError(null);
@@ -450,22 +595,51 @@ export function ProductForm() {
           />
         </section>
 
-        <section className="form__section">
+        <section className="form__section" aria-label="Pricing">
           <h2 className="form__section-title">Pricing</h2>
-          <div className="form__row">
-            <Field label="Purchase cost (LKR)" error={errors.purchase_cost}>
+          <Field label="Purchase cost (LKR)" error={errors.purchase_cost}>
+            <input
+              className="input"
+              inputMode="decimal"
+              value={form.purchase_cost}
+              onChange={(event) =>
+                setForm({ ...form, purchase_cost: event.target.value })
+              }
+            />
+          </Field>
+          <div className="field">
+            <span className="field__label" id="pricing-mode-label">Selling price</span>
+            <div className="segmented" role="group" aria-labelledby="pricing-mode-label">
+              {PRICING_MODES.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={option.value === form.pricing_mode ? 'segmented__item is-selected' : 'segmented__item'}
+                  aria-pressed={option.value === form.pricing_mode}
+                  onClick={() => setPricingMode(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {form.pricing_mode === 'FIXED' ? (
+            <Field
+              label="Selling price (LKR)"
+              hint="Customers pay exactly this. Cost and markup changes do not move it"
+              error={errors.fixed_selling_price}
+            >
               <input
                 className="input"
                 inputMode="decimal"
-                value={form.purchase_cost}
-                onChange={(event) =>
-                  setForm({ ...form, purchase_cost: event.target.value })
-                }
+                value={form.fixed_selling_price}
+                onChange={(event) => setForm({ ...form, fixed_selling_price: event.target.value })}
               />
             </Field>
+          ) : (
             <Field
               label="Custom markup %"
-              hint="0 to 999.99. Leave blank to use the category/global markup"
+              hint={inheritHint(inherited, selectedCategory?.name ?? null)}
               error={errors.custom_markup_percent}
             >
               <input
@@ -477,12 +651,8 @@ export function ProductForm() {
                 }
               />
             </Field>
-          </div>
-          <p className="form__note">
-            {previewPrice === null
-              ? 'Selling price is calculated by the backend when you save.'
-              : `Preview selling price: LKR ${previewPrice.toFixed(2)} (the backend recalculates on save).`}
-          </p>
+          )}
+          <PricePreviewNote preview={preview} mode={form.pricing_mode} />
         </section>
 
         <section className="form__section" aria-label="Offer">
@@ -615,5 +785,49 @@ export function ProductForm() {
         </div>
       </form>
     </>
+  );
+}
+
+/** The live selling price under the pricing fields (the server recalculates on save). */
+function PricePreviewNote({ preview, mode }: { preview: FormPreview | null; mode: PricingMode }) {
+  if (!preview) {
+    return (
+      <p className="form__note" role="status">
+        {mode === 'FIXED'
+          ? 'Enter the purchase cost and the selling price to see the margin.'
+          : 'Enter the purchase cost to see the selling price.'}
+      </p>
+    );
+  }
+  if (preview.legacy) {
+    return (
+      <p className="form__note" role="status">
+        Selling price {formatLkr(preview.price)}
+      </p>
+    );
+  }
+  if (preview.mode === 'FIXED') {
+    return (
+      <>
+        <p className="form__note" role="status">
+          Selling price {formatLkr(preview.price)}
+          {preview.markup === null
+            ? ''
+            : preview.markup < 0
+              ? ` (${formatPercent(-preview.markup)}% below cost)`
+              : ` (${formatPercent(preview.markup)}% over cost)`}
+        </p>
+        {preview.lossPerUnit !== null ? (
+          <p className="field__error" role="alert">
+            Below purchase cost — you lose {formatLkr(preview.lossPerUnit)} per unit. You can still save it.
+          </p>
+        ) : null}
+      </>
+    );
+  }
+  return (
+    <p className="form__note" role="status">
+      Selling price {formatLkr(preview.price)} ({markupSourceText(preview.source, preview.markup, preview.categoryName)})
+    </p>
   );
 }

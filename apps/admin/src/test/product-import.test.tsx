@@ -33,12 +33,12 @@ function readBlob(blob: Blob): Promise<ArrayBuffer> {
   });
 }
 const blobText = async (blob: Blob) => new TextDecoder().decode(await readBlob(blob));
-const GOOD = ['Kotmale Fresh Milk 1L', 'Dairy', 'bottle', '1L', 480, 430, 'KOT-MILK-1L', '4791234567890', '', 'yes', 24, ''];
+const GOOD = ['Kotmale Fresh Milk 1L', 'Dairy', 'bottle', '1L', 430, 480, '', 'KOT-MILK-1L', '4791234567890', '', 'yes', 24, ''];
 
 describe('productImport lib', () => {
   it('the template has exactly the contract columns, in order', async () => {
     expect(TEMPLATE_COLUMNS).toEqual([
-      'name', 'category', 'unit', 'pack_size', 'selling_price', 'cost_price',
+      'name', 'category', 'unit', 'pack_size', 'purchase_cost', 'selling_price', 'markup_percent',
       'sku', 'barcode', 'description', 'tracked', 'opening_stock', 'image_url',
     ]);
     expect(templateCsv().split('\r\n')[0]).toBe(TEMPLATE_COLUMNS.join(','));
@@ -62,8 +62,9 @@ describe('productImport lib', () => {
         category: 'Dairy',
         unit: 'bottle',
         pack_size: '1L',
-        cost_price: 430,
+        purchase_cost: 430,
         selling_price: 480,
+        markup_percent: null,
         sku: 'KOT-MILK-1L',
         barcode: '4791234567890',
         description: null,
@@ -76,19 +77,22 @@ describe('productImport lib', () => {
 
   it('flags missing required fields, bad numbers and inconsistent stock per row', () => {
     const fields = (record: Record<string, unknown>) => validateRow(record, 2).errors.map((e) => e.field);
-    expect(fields({})).toEqual(['name', 'category', 'unit', 'sku', 'cost_price']);
+    expect(fields({})).toEqual(['name', 'category', 'unit', 'sku', 'purchase_cost']);
+    // The older cost_price header still works as the purchase cost.
     const base = { name: 'Milk', category: 'Dairy', unit: 'l', sku: 'M1', cost_price: '100' };
     expect(fields(base)).toEqual([]);
     expect(fields({ ...base, cost_price: 'abc' })).toEqual(['cost_price']);
     expect(fields({ ...base, cost_price: -1 })).toEqual(['cost_price']);
-    expect(fields({ ...base, selling_price: 90 })).toEqual(['selling_price']);
+    // A selling price below cost is allowed now (a FIXED price; the dry run warns).
+    expect(fields({ ...base, selling_price: 90 })).toEqual([]);
+    expect(fields({ ...base, selling_price: 0 })).toEqual(['selling_price']);
     expect(fields({ ...base, tracked: 'maybe' })).toEqual(['tracked']);
     expect(fields({ ...base, opening_stock: 5 })).toEqual(['opening_stock']);
     expect(fields({ ...base, tracked: 'yes', opening_stock: 2.5 })).toEqual(['opening_stock']);
     expect(fields({ ...base, tracked: 'yes', opening_stock: '5' })).toEqual([]);
     expect(fields({ ...base, image_url: 'ftp://x' })).toEqual(['image_url']);
-    // Blank selling price means "store default markup".
-    expect(validateRow({ ...base, selling_price: '' }, 2).data.selling_price).toBeNull();
+    // Blank selling price and markup mean "category / parent / global markup".
+    expect(validateRow({ ...base, selling_price: '' }, 2).data).toMatchObject({ selling_price: null, markup_percent: null, purchase_cost: 100 });
   });
 
   it('skips blank rows, keeps row numbers, and flags duplicate SKUs after the first', () => {
@@ -100,9 +104,9 @@ describe('productImport lib', () => {
 
   it('reports file-level problems', () => {
     expect(rowsFromMatrix([]).fileError).toBe('The file is empty.');
-    expect(rowsFromMatrix([['name', 'unit']]).fileError).toMatch(/Missing columns: category, cost_price, sku/);
+    expect(rowsFromMatrix([['name', 'unit']]).fileError).toMatch(/Missing columns: category, purchase_cost, sku/);
     expect(rowsFromMatrix([HEADER]).fileError).toMatch(/no products/);
-    const many = [HEADER, ...Array.from({ length: 1001 }, (_, i) => [...GOOD.slice(0, 6), `SKU-${i}`, ...GOOD.slice(7)])];
+    const many = [HEADER, ...Array.from({ length: 1001 }, (_, i) => [...GOOD.slice(0, 7), `SKU-${i}`, ...GOOD.slice(8)])];
     expect(rowsFromMatrix(many).fileError).toMatch(/at most 1000/);
   });
 
@@ -114,18 +118,26 @@ describe('productImport lib', () => {
     );
     const fromCsv = await parseImportFile(csv);
     expect(fromCsv.fileError).toBeNull();
-    expect(fromCsv.rows[0]!.data).toMatchObject({ name: 'Milk, fresh', sku: '0042', barcode: '00123', cost_price: 100 });
+    expect(fromCsv.rows[0]!.data).toMatchObject({ name: 'Milk, fresh', sku: '0042', barcode: '00123', purchase_cost: 100 });
 
+    // The template's imported sheet is just the header: the examples live on their own sheet.
     const xlsx = new File([await buildTemplateXlsx()], 'products.xlsx');
     const fromXlsx = await parseImportFile(xlsx);
-    expect(fromXlsx.fileError).toBeNull();
-    expect(fromXlsx.rows[0]!.data).toMatchObject({ sku: 'KOT-MILK-1L', cost_price: 430, selling_price: 480, opening_stock: 24 });
+    expect(fromXlsx.fileError).toBe('The file has a header row but no products.');
+    // A filled-in workbook reads from its first sheet.
+    const XLSX = await loadXlsx();
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([HEADER, GOOD]), 'Products');
+    const filled = new File([XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer], 'products.xlsx');
+    const fromFilled = await parseImportFile(filled);
+    expect(fromFilled.fileError).toBeNull();
+    expect(fromFilled.rows[0]!.data).toMatchObject({ sku: 'KOT-MILK-1L', purchase_cost: 430, selling_price: 480, opening_stock: 24 });
 
     expect((await parseImportFile(new File(['x'], 'products.txt'))).fileError).toBe('Choose an .xlsx or .csv file.');
   });
 
   it('the errors CSV lists client and server errors by row, quoted safely', () => {
-    const { rows } = rowsFromMatrix([HEADER, ['', 'Dairy', 'l', '', '', '', ''], ['Milk, "fresh"', 'Nope', 'l', '', '', 10, 'B2']]);
+    const { rows } = rowsFromMatrix([HEADER, ['', 'Dairy', 'l', '', '', '', '', ''], ['Milk, "fresh"', 'Nope', 'l', '', 10, '', '', 'B2']]);
     const csv = errorsCsv(rows, {
       dry_run: false,
       summary: { created: 0, updated: 0, skipped: 0, errors: 1 },
@@ -135,7 +147,7 @@ describe('productImport lib', () => {
       'row,sku,name,field,message',
       '2,,,name,Name is required.',
       '2,,,sku,SKU is required.',
-      '2,,,cost_price,Cost price is required.',
+      '2,,,purchase_cost,Purchase cost is required.',
       '3,B2,"Milk, ""fresh""",category,"Unknown category ""Nope"""',
       '',
     ]);
@@ -198,9 +210,9 @@ describe('Import products page', () => {
     );
     const csv = [
       TEMPLATE_COLUMNS.join(','),
-      'Kotmale Fresh Milk 1L,Dairy,bottle,1L,480,430,KOT-MILK-1L,,,yes,24,',
-      'Mystery,Nope,pack,,,100,MYS-1,,,,,',
-      ',Dairy,pack,,,100,NONAME,,,,,',
+      'Kotmale Fresh Milk 1L,Dairy,bottle,1L,430,480,,KOT-MILK-1L,,,yes,24,',
+      'Mystery,Nope,pack,,100,,,MYS-1,,,,,',
+      ',Dairy,pack,,100,,,NONAME,,,,,',
     ].join('\n');
     await user.upload(screen.getByLabelText(/Spreadsheet/), new File([csv], 'products.csv', { type: 'text/csv' }));
 
@@ -218,7 +230,7 @@ describe('Import products page', () => {
     expect(real.body.rows).toEqual([
       {
         row: 2, name: 'Kotmale Fresh Milk 1L', category: 'Dairy', unit: 'bottle', pack_size: '1L',
-        cost_price: 430, selling_price: 480, sku: 'KOT-MILK-1L', barcode: null, description: null,
+        purchase_cost: 430, selling_price: 480, markup_percent: null, sku: 'KOT-MILK-1L', barcode: null, description: null,
         tracked: 'yes', opening_stock: 24, image_url: null,
       },
     ]);
@@ -243,7 +255,7 @@ describe('Import products page', () => {
       </MemoryRouter>
     );
     await user.upload(screen.getByLabelText(/Spreadsheet/), new File(['title,price\nMilk,10\n'], 'bad.csv', { type: 'text/csv' }));
-    expect(await screen.findByText(/Missing columns: name, category, unit, cost_price, sku/)).toBeInTheDocument();
+    expect(await screen.findByText(/Missing columns: name, category, unit, purchase_cost, sku/)).toBeInTheDocument();
     expect(calls).toHaveLength(0);
   });
 });

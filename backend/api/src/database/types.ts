@@ -227,6 +227,11 @@ export interface CategoriesTable {
   offer_percent: ColumnType<string | null, number | string | null | undefined, number | string | null>;
   /** Migration 033: when the category offer stops; null runs until removed. */
   offer_ends_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  /**
+   * Migration 044 (owner, 2026-10-13): the markup for MARKUP products in this
+   * category (0..999.99) without their own; null = the parent's, else global.
+   */
+  markup_percent: ColumnType<string | null, number | string | null | undefined, number | string | null>;
 }
 
 /** Migration 025: a heading on the customer home over a grid of category tiles. */
@@ -275,6 +280,13 @@ export interface ProductsTable {
    */
   offer_price: ColumnType<number | null, number | string | null | undefined, number | string | null>;
   offer_ends_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  /**
+   * Migration 044 (owner, 2026-10-13): how the selling price is set - 'MARKUP'
+   * (cost x markup; custom, else category, parent, global) or 'FIXED'
+   * (fixed_selling_price exactly). Rule: src/modules/pricing/index.ts.
+   */
+  pricing_mode: ColumnType<'MARKUP' | 'FIXED', 'MARKUP' | 'FIXED' | undefined, 'MARKUP' | 'FIXED'>;
+  fixed_selling_price: ColumnType<string | null, number | string | null | undefined, number | string | null>;
   /**
    * Migration 035 (owner, 2026-10-10): the product's place in its category,
    * 1..n, set by the Arrange products screen. NULL = not arranged (after the
@@ -623,7 +635,8 @@ export interface ProductCatalogView {
   image_url: string | null;
   purchase_cost: ColumnType<number, number | string, number | string>;
   custom_markup_percent: ColumnType<number | null, number | string | null, number | string | null>;
-  effective_markup_percent: ColumnType<number, number | string, number | string>;
+  /** Migration 044: for FIXED, the implied markup over cost (null when the cost is 0). */
+  effective_markup_percent: ColumnType<number | null, number | string, number | string>;
   calculated_selling_price: ColumnType<number, number | string, number | string>;
   is_available: boolean;
   is_active: boolean;
@@ -640,6 +653,14 @@ export interface ProductCatalogView {
   category_offer_ends_at: Date | null;
   /** Migration 035 (owner, 2026-10-10): products.display_order. */
   display_order: number | null;
+  // Migration 044: how the price is set and where the markup came from.
+  // Staff reads only - never sent to customers.
+  pricing_mode: 'MARKUP' | 'FIXED';
+  fixed_selling_price: ColumnType<string | null, never, never>;
+  category_markup_percent: ColumnType<string | null, never, never>;
+  parent_category_markup_percent: ColumnType<string | null, never, never>;
+  global_markup_percent: ColumnType<string | null, never, never>;
+  pricing_source: 'FIXED' | 'PRODUCT_MARKUP' | 'CATEGORY_MARKUP' | 'PARENT_CATEGORY_MARKUP' | 'GLOBAL_MARKUP';
 }
 
 export interface SuppliersTable {

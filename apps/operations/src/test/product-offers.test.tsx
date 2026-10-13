@@ -32,6 +32,9 @@ function product(overrides: Partial<AdminProduct> = {}): AdminProduct {
     image_url: null,
     purchase_cost: 200,
     custom_markup_percent: null,
+    pricing_mode: 'MARKUP',
+    category_markup_percent: 25,
+    pricing_source: 'CATEGORY_MARKUP',
     effective_markup_percent: 25,
     calculated_selling_price: 250,
     selling_price: 250,
@@ -44,7 +47,8 @@ function product(overrides: Partial<AdminProduct> = {}): AdminProduct {
   };
 }
 
-const CATEGORY = { id: 'c1', name: 'Rice', slug: 'rice', description: null, image_url: null, display_order: 1, is_active: true };
+// Rice carries a 25% markup (migration 044), so the form previews 200 x 1.25 = 250.
+const CATEGORY = { id: 'c1', name: 'Rice', slug: 'rice', description: null, image_url: null, display_order: 1, is_active: true, markup_percent: 25 };
 
 function openForm(existing: AdminProduct) {
   return renderAs(ADMIN_WITH_RIDER, `/catalog/products/${existing.id}`, {
@@ -157,7 +161,7 @@ describe('Product form - offer', () => {
         error: { code: 'OFFER_PRICE_NOT_LOWER', message: 'The offer price must be lower than the selling price (LKR 240.00).' },
       }),
     });
-    // No preview here, so the saved price (250) is the client-side yardstick.
+    // The form previews 250 (Rice 25%), so 245 passes the client check and the server's refusal shows.
     await user.type(await screen.findByLabelText(/^Offer price \(LKR\)/), '245');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(

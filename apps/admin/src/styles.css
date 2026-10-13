@@ -316,6 +316,87 @@ body {
   justify-content: flex-end;
 }
 
+/* The cell__* helpers are block-level for spans INSIDE a cell. Put on a <td>
+   itself, display:block takes the cell out of the table grid: the cells
+   stack in the first column and the header row no longer lines up (the
+   Categories table on the live site, 2026-10-13). A cell always stays a
+   table cell. */
+td.cell__primary,
+td.cell__secondary,
+td.cell__note,
+th.cell__primary,
+th.cell__secondary {
+  display: table-cell;
+}
+
+/* Many actions wrap onto a second line instead of widening the row. */
+.row-actions--wrap {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.cell__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* At most two lines of a long description. */
+.cell__clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Categories (2026-10-13): fixed column widths so every row lines up under its header. */
+.categories-table {
+  table-layout: fixed;
+}
+
+.categories-table .categories-table__name {
+  width: 24%;
+}
+
+.categories-table .categories-table__desc {
+  width: 22%;
+}
+
+.categories-table .categories-table__markup {
+  width: 13%;
+}
+
+.categories-table .categories-table__count {
+  width: 9%;
+}
+
+.categories-table .categories-table__status {
+  width: 10%;
+}
+
+.categories-table .categories-table__actions {
+  width: 22%;
+}
+
+.categories-table td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.categories-table th:nth-child(4),
+.categories-table td:nth-child(4) {
+  padding-right: 18px;
+}
+
+.categories-table .arrange-position {
+  align-self: center;
+  margin-right: 4px;
+}
+
+.table-wrap .categories-table {
+  min-width: 980px;
+}
+
 .order-cell {
   display: flex;
   align-items: center;
@@ -1924,6 +2005,24 @@ body {
 
 .import__row--error td:first-child {
   box-shadow: inset 3px 0 0 var(--danger);
+}
+
+/* Selling-price modes (migration 044): the import's pricing rules and warnings. */
+.import__rules {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+}
+
+.import__warning {
+  color: var(--danger);
+  font-size: var(--text-meta);
+}
+
+.price-source {
+  display: block;
+  margin-top: 2px;
 }
 
 /* -------------------------------------------- sales, coupons, customers, cash */

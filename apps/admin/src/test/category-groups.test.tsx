@@ -341,8 +341,9 @@ describe('category form Inside category select (sub-categories)', () => {
     api();
     renderPage(<Categories />);
     await screen.findByText('Dairy');
-    const names = screen.getAllByRole('row').slice(1).map((r) => r.querySelector('td')!.textContent);
-    expect(names).toEqual(['Bakery', '↳ Bread in Bakery', '↳ Cakes in Bakery', 'Dairy']);
+    // The Name cell: the name (with ↳ for a sub-category), its slug, and "in Bakery".
+    const names = screen.getAllByRole('row').slice(1).map((r) => r.querySelector('td .cell__primary')!.textContent);
+    expect(names).toEqual(['Bakery', '↳ Bread', '↳ Cakes', 'Dairy']);
     expect(screen.getAllByText('in Bakery')).toHaveLength(2);
   });
 

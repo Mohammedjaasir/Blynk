@@ -1,4 +1,6 @@
 import type { ImportRow, ImportRowResult } from '../api/types';
+import { TEMPLATE_COLUMNS, buildTemplateWorkbook } from './importTemplate';
+import { MAX_MARKUP_PERCENT, MAX_SELLING_PRICE, markupPrice, pricingSourceLabel, type PricingSource } from './pricing';
 
 /**
  * Bulk product import (spreadsheet -> `POST /admin/products/import`).
@@ -14,25 +16,25 @@ import type { ImportRow, ImportRowResult } from '../api/types';
  * before anything is sent, not as the source of truth.
  */
 
-/** Exact header text, in this order (API contract §4). */
-export const TEMPLATE_COLUMNS = [
-  'name',
-  'category',
-  'unit',
-  'pack_size',
-  'selling_price',
-  'cost_price',
-  'sku',
-  'barcode',
-  'description',
-  'tracked',
-  'opening_stock',
-  'image_url',
-] as const;
+/**
+ * Exact header text, in this order (API contract §4; pricing columns since
+ * migration 044, owner 2026-10-13). Pricing per row:
+ *   selling_price filled  -> FIXED at exactly that price;
+ *   markup_percent filled -> MARKUP with that product markup;
+ *   neither               -> a new product: MARKUP on the category / parent /
+ *                            global markup; an existing SKU keeps its pricing.
+ * Both filled is an error.
+ */
+export { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS } from './importTemplate';
 
-export type ImportColumn = (typeof TEMPLATE_COLUMNS)[number];
+export type TemplateColumn = (typeof TEMPLATE_COLUMNS)[number];
+/** The older header for purchase_cost, still read (the server accepts it too). */
+export const LEGACY_COST_COLUMN = 'cost_price';
+export type ImportColumn = TemplateColumn | typeof LEGACY_COST_COLUMN;
+const KNOWN_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, LEGACY_COST_COLUMN];
 
-const REQUIRED_COLUMNS: ImportColumn[] = ['name', 'category', 'unit', 'cost_price', 'sku'];
+/** Required; purchase_cost may come as the older cost_price instead. */
+const REQUIRED_COLUMNS: TemplateColumn[] = ['name', 'category', 'unit', 'purchase_cost', 'sku'];
 
 /** The API accepts 1..1000 rows per request. */
 export const MAX_IMPORT_ROWS = 1000;
@@ -103,20 +105,38 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
   const unit = need('unit');
   const sku = need('sku');
 
-  const cost = number(cells.cost_price);
-  if (cost === null) errors.push({ field: 'cost_price', message: 'cost_price is required.' });
-  else if (Number.isNaN(cost)) errors.push({ field: 'cost_price', message: 'cost_price must be a number.' });
-  else if (cost < 0) errors.push({ field: 'cost_price', message: 'cost_price cannot be negative.' });
-  else if (!hasTwoDecimalsAtMost(cost)) errors.push({ field: 'cost_price', message: 'cost_price can have at most 2 decimals.' });
+  // purchase_cost, or the older cost_price header; both filled must agree.
+  const purchaseCost = number(cells.purchase_cost);
+  const costPrice = number(cells[LEGACY_COST_COLUMN]);
+  const cost = purchaseCost ?? costPrice;
+  const costField = purchaseCost !== null ? 'purchase_cost' : costPrice !== null ? LEGACY_COST_COLUMN : 'purchase_cost';
+  if (cost === null) errors.push({ field: 'purchase_cost', message: 'purchase_cost is required.' });
+  else if (Number.isNaN(cost)) errors.push({ field: costField, message: `${costField} must be a number.` });
+  else if (cost < 0) errors.push({ field: costField, message: `${costField} cannot be negative.` });
+  else if (cost > MAX_SELLING_PRICE) errors.push({ field: costField, message: `${costField} is too large.` });
+  else if (!hasTwoDecimalsAtMost(cost)) errors.push({ field: costField, message: `${costField} can have at most 2 decimals.` });
+  else if (purchaseCost !== null && costPrice !== null && purchaseCost !== costPrice)
+    errors.push({ field: 'purchase_cost', message: 'purchase_cost and cost_price differ; fill only one of them.' });
 
+  // selling_price = FIXED price; markup_percent = product markup; never both.
+  // A selling price below the cost is allowed (the server reports a warning).
   const selling = number(cells.selling_price);
-  if (selling !== null) {
+  const markup = number(cells.markup_percent);
+  if (selling !== null && markup !== null) {
+    errors.push({ field: 'selling_price', message: 'Give either selling_price or markup_percent, not both.' });
+  } else if (selling !== null) {
     if (Number.isNaN(selling)) errors.push({ field: 'selling_price', message: 'selling_price must be a number.' });
-    else if (selling < 0) errors.push({ field: 'selling_price', message: 'selling_price cannot be negative.' });
+    else if (selling <= 0) errors.push({ field: 'selling_price', message: 'selling_price must be more than 0.' });
+    else if (selling > MAX_SELLING_PRICE) errors.push({ field: 'selling_price', message: 'selling_price is too large.' });
     else if (!hasTwoDecimalsAtMost(selling))
       errors.push({ field: 'selling_price', message: 'selling_price can have at most 2 decimals.' });
-    else if (cost !== null && !Number.isNaN(cost) && selling < cost)
-      errors.push({ field: 'selling_price', message: 'selling_price cannot be below cost_price.' });
+  } else if (markup !== null) {
+    if (Number.isNaN(markup)) errors.push({ field: 'markup_percent', message: 'markup_percent must be a number.' });
+    else if (markup < 0) errors.push({ field: 'markup_percent', message: 'markup_percent cannot be negative.' });
+    else if (markup > MAX_MARKUP_PERCENT)
+      errors.push({ field: 'markup_percent', message: `markup_percent can be at most ${MAX_MARKUP_PERCENT}.` });
+    else if (!hasTwoDecimalsAtMost(markup))
+      errors.push({ field: 'markup_percent', message: 'markup_percent can have at most 2 decimals.' });
   }
 
   const trackedValue = tracked(cells.tracked);
@@ -140,8 +160,9 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
     category,
     unit,
     pack_size: text(cells.pack_size),
-    cost_price: cost !== null && !Number.isNaN(cost) ? cost : 0,
+    purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : 0,
     selling_price: selling !== null && !Number.isNaN(selling) ? selling : null,
+    markup_percent: markup !== null && !Number.isNaN(markup) ? markup : null,
     sku,
     barcode: text(cells.barcode),
     description: text(cells.description),
@@ -165,12 +186,14 @@ export function parseSheet(matrix: Cell[][]): ParsedSheet {
   const ignoredColumns: string[] = [];
   header.forEach((h, i) => {
     if (!h) return;
-    if ((TEMPLATE_COLUMNS as readonly string[]).includes(h)) {
+    if (KNOWN_COLUMNS.includes(h)) {
       if (!index.has(h as ImportColumn)) index.set(h as ImportColumn, i);
     } else ignoredColumns.push(h);
   });
 
-  const missing = REQUIRED_COLUMNS.filter((c) => !index.has(c));
+  const missing = REQUIRED_COLUMNS.filter(
+    (c) => !index.has(c) && !(c === 'purchase_cost' && index.has(LEGACY_COST_COLUMN))
+  );
   if (matrix.length === 0 || header.every((h) => !h)) {
     return { rows: [], fileErrors: ['The file is empty. Start from the template.'], ignoredColumns };
   }
@@ -235,6 +258,40 @@ export function errorsCsv(parsed: ParsedImportRow[], results: ImportRowResult[] 
   return lines.map((l) => l.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }
 
+/**
+ * The selling price and its source for one preview row: the dry run's word
+ * when the server answered (authoritative), else what the file says - a
+ * fixed price, or a product markup worked out on the cost - and for a row
+ * that inherits its markup, no price until the server says which applies.
+ */
+export function rowPricing(
+  data: ImportRow,
+  server: ImportRowResult | undefined
+): { price: number | null; source: PricingSource | null; label: string; warnings: string[] } {
+  if (server?.pricing) {
+    const kept = server.pricing.kept_current ? ' (current pricing kept)' : '';
+    return {
+      price: server.pricing.selling_price,
+      source: server.pricing.pricing_source,
+      label: `${pricingSourceLabel(server.pricing.pricing_source)}${kept}`,
+      warnings: server.warnings ?? [],
+    };
+  }
+  const warnings = server?.warnings ?? [];
+  if (data.selling_price !== null && data.selling_price !== undefined) {
+    return { price: data.selling_price, source: 'FIXED', label: pricingSourceLabel('FIXED'), warnings };
+  }
+  if (data.markup_percent !== null && data.markup_percent !== undefined) {
+    return {
+      price: markupPrice(data.purchase_cost, data.markup_percent),
+      source: 'PRODUCT_MARKUP',
+      label: pricingSourceLabel('PRODUCT_MARKUP'),
+      warnings,
+    };
+  }
+  return { price: null, source: null, label: 'Category / global markup (new) or current pricing (existing)', warnings };
+}
+
 /** Human summary of one server result for the preview table. */
 export function resultLabel(r: ImportRowResult | undefined): string {
   if (!r) return '';
@@ -277,29 +334,14 @@ export async function readImportFile(file: File): Promise<Cell[][]> {
   return XLSX.utils.sheet_to_json<Cell[]>(workbook.Sheets[first], { header: 1, defval: null, blankrows: true, raw: true });
 }
 
-/** The template: a "Products" sheet with only the header row (so nothing
- * sample-looking can be imported by accident) plus a "How to fill" sheet. */
+/**
+ * The template (lib/importTemplate.ts, identical in the Admin site): a
+ * "Products" sheet with only the header row (so nothing sample-looking can be
+ * imported by accident), a "How to fill" sheet and an "Examples" sheet.
+ */
 export async function buildTemplateBlob(): Promise<Blob> {
   const XLSX = await import('xlsx');
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[...TEMPLATE_COLUMNS]]), 'Products');
-  const notes = [
-    ['column', 'required', 'what to write'],
-    ['name', 'yes', 'Product name customers see, e.g. Kotmale Fresh Milk 1L'],
-    ['category', 'yes', 'An existing category name or slug'],
-    ['unit', 'yes', 'e.g. 1 L, 500 g, each'],
-    ['pack_size', 'no', 'e.g. 6 x 1 L'],
-    ['selling_price', 'no', 'LKR; blank uses the store default markup; not below cost_price'],
-    ['cost_price', 'yes', 'LKR you pay, 0 or more, up to 2 decimals'],
-    ['sku', 'yes', 'Unique code; an existing SKU is updated with this row'],
-    ['barcode', 'no', ''],
-    ['description', 'no', ''],
-    ['tracked', 'no', 'yes to count stock, no (or blank) to source on order'],
-    ['opening_stock', 'no', 'Whole number; only with tracked = yes; only used for new products'],
-    ['image_url', 'no', 'https:// link to the product photo'],
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(notes), 'How to fill');
-  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+  const out = buildTemplateWorkbook(XLSX);
   return new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 

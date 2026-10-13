@@ -19,8 +19,13 @@ import {
   assertCategoryOfferAllowed,
   assertOfferAllowed,
   publicOffer,
-  sellingPriceFor,
 } from './catalog.offers.js';
+import {
+  countProductsFollowingCategory,
+  priceForProduct,
+  productsFollowingEachCategory,
+  staffPricing,
+} from './catalog.pricing.js';
 import type { CategoryOfferInput } from './catalog.schema.js';
 
 export interface CustomerProductDto {
@@ -86,11 +91,20 @@ function adminOffer(product: {
   };
 }
 
-/** Admin/Operations: a category's offer as stored, plus whether it runs right now (migration 033). */
-function adminCategoryOffer<T extends { offer_percent: unknown; offer_ends_at: Date | string | null }>(category: T) {
+/**
+ * Admin/Operations: a category's offer as stored, plus whether it runs right
+ * now (migration 033), and its markup (migration 044; null = parent's, else
+ * global) with how many products follow it (markupProducts, when known).
+ */
+function adminCategoryOffer<T extends { offer_percent: unknown; offer_ends_at: Date | string | null; markup_percent?: unknown }>(
+  category: T,
+  markupProducts?: number
+) {
   const percent = category.offer_percent === null || category.offer_percent === undefined ? null : Number(category.offer_percent);
   return {
     ...category,
+    markup_percent: category.markup_percent === null || category.markup_percent === undefined ? null : Number(category.markup_percent),
+    ...(markupProducts !== undefined ? { markup_product_count: markupProducts } : {}),
     offer_percent: percent,
     offer_ends_at: category.offer_ends_at ? new Date(category.offer_ends_at).toISOString() : null,
     offer_active: activeCategoryOffer({ offer_percent: percent, offer_ends_at: category.offer_ends_at }).offer_percent !== null,
@@ -175,7 +189,8 @@ export class CatalogService {
   // --------------------------------------------------------------------------
 
   async listCategoriesAdmin(isActive?: boolean) {
-    return (await catalogRepository.findAllCategories(isActive)).map(adminCategoryOffer);
+    const [categories, following] = await Promise.all([catalogRepository.findAllCategories(isActive), productsFollowingEachCategory()]);
+    return categories.map((c) => adminCategoryOffer(c, following.get(c.id) ?? 0));
   }
 
   /**
@@ -266,7 +281,17 @@ export class CatalogService {
       image_focal_x: input.image_focal_x,
       image_focal_y: input.image_focal_y,
       parent_id: input.parent_id ?? null,
+      markup_percent: input.markup_percent ?? null,
     });
+
+    if (actor && input.markup_percent !== undefined && input.markup_percent !== null) {
+      await writeAudit(db, actor, {
+        action: 'CATEGORY_MARKUP_SET',
+        entityType: 'CATEGORY',
+        entityId: created.id,
+        newValues: { markup_percent: input.markup_percent },
+      });
+    }
 
     if (placement && actor) {
       await writeAudit(db, actor, {
@@ -278,7 +303,7 @@ export class CatalogService {
     }
 
     logger.info({ categoryId: created.id, slug: created.slug }, 'Category created by admin');
-    return adminCategoryOffer(created);
+    return adminCategoryOffer(created, await countProductsFollowingCategory(created.id));
   }
 
   async updateCategoryAdmin(id: string, input: UpdateCategoryInput, actor?: AuditActor) {
@@ -328,7 +353,21 @@ export class CatalogService {
       ...(input.image_focal_x !== undefined ? { image_focal_x: input.image_focal_x } : {}),
       ...(input.image_focal_y !== undefined ? { image_focal_y: input.image_focal_y } : {}),
       ...(input.parent_id !== undefined ? { parent_id: input.parent_id } : {}),
+      ...(input.markup_percent !== undefined ? { markup_percent: input.markup_percent } : {}),
     });
+
+    // Migration 044: a category markup change reprices every MARKUP product
+    // that follows it at once (v_product_catalog). Audited.
+    const oldMarkup = existing.markup_percent === null || existing.markup_percent === undefined ? null : Number(existing.markup_percent);
+    if (actor && input.markup_percent !== undefined && input.markup_percent !== oldMarkup) {
+      await writeAudit(db, actor, {
+        action: 'CATEGORY_MARKUP_SET',
+        entityType: 'CATEGORY',
+        entityId: id,
+        oldValues: { markup_percent: oldMarkup },
+        newValues: { markup_percent: input.markup_percent },
+      });
+    }
 
     if (
       placement &&
@@ -345,7 +384,7 @@ export class CatalogService {
     }
 
     logger.info({ categoryId: id }, 'Category updated by admin');
-    return updated ? adminCategoryOffer(updated) : updated;
+    return updated ? adminCategoryOffer(updated, await countProductsFollowingCategory(id)) : updated;
   }
 
   // --------------------------------------------------------------------------
@@ -463,17 +502,8 @@ export class CatalogService {
         ...product,
         image_focal_x: clampFocal(product.image_focal_x),
         image_focal_y: clampFocal(product.image_focal_y),
-        purchase_cost: Number(Number(product.purchase_cost).toFixed(2)),
-        custom_markup_percent:
-          product.custom_markup_percent !== null
-            ? Number(product.custom_markup_percent)
-            : null,
-        effective_markup_percent: Number(
-          Number(product.effective_markup_percent).toFixed(2)
-        ),
-        calculated_selling_price: Number(
-          Number(product.calculated_selling_price).toFixed(2)
-        ),
+        // Migration 044: cost, mode, markups, pricing_source, selling price, price_warning.
+        ...staffPricing(product),
         ...adminOffer(product),
       })),
       pagination: { page, limit },
@@ -490,11 +520,8 @@ export class CatalogService {
       ...product,
       image_focal_x: clampFocal(product.image_focal_x),
       image_focal_y: clampFocal(product.image_focal_y),
-      purchase_cost: Number(Number(product.purchase_cost).toFixed(2)),
-      custom_markup_percent:
-        product.custom_markup_percent !== null ? Number(product.custom_markup_percent) : null,
-      effective_markup_percent: Number(Number(product.effective_markup_percent).toFixed(2)),
-      calculated_selling_price: Number(Number(product.calculated_selling_price).toFixed(2)),
+      // Migration 044: cost, mode, markups, pricing_source, selling price, price_warning.
+      ...staffPricing(product),
       ...adminOffer(product),
     };
   }
@@ -534,11 +561,21 @@ export class CatalogService {
     }
 
     // 3b. Offer (migration 031): below the selling price, ending in the future.
+    // The selling price follows the migration 044 rule (fixed, or cost x
+    // custom/category/parent/global markup).
+    const pricingMode = input.pricing_mode ?? 'MARKUP';
     const offerPrice = input.offer_price ?? null;
     if (offerPrice !== null) {
+      const price = await priceForProduct({
+        categoryId: input.category_id,
+        purchaseCost: input.purchase_cost,
+        pricingMode,
+        fixedSellingPrice: input.fixed_selling_price ?? null,
+        customMarkupPercent: input.custom_markup_percent ?? null,
+      });
       assertOfferAllowed({
         offerPrice,
-        sellingPrice: await sellingPriceFor(input.purchase_cost, input.custom_markup_percent ?? null),
+        sellingPrice: price.sellingPrice,
         endsAt: input.offer_ends_at ?? null,
         endsAtChanged: true,
       });
@@ -561,6 +598,8 @@ export class CatalogService {
       image_focal_y: input.image_focal_y ?? 50,
       purchase_cost: input.purchase_cost,
       custom_markup_percent: input.custom_markup_percent,
+      pricing_mode: pricingMode,
+      fixed_selling_price: input.fixed_selling_price ?? null,
       is_available: input.is_available ?? true,
       is_active: input.is_active ?? true,
       offer_price: offerPrice,
@@ -629,17 +668,42 @@ export class CatalogService {
     const endsAtChanged =
       input.offer_ends_at !== undefined &&
       (input.offer_ends_at === null ? existingEnds !== null : new Date(input.offer_ends_at).toISOString() !== existingEnds);
-    const costTouched = input.purchase_cost !== undefined || input.custom_markup_percent !== undefined;
+    // Migration 044: the pricing after this edit (fixed price, or cost x
+    // custom/category/parent/global markup in the product's new category).
+    const pricingMode = input.pricing_mode ?? existing.pricing_mode ?? 'MARKUP';
+    const fixedSellingPrice =
+      input.fixed_selling_price !== undefined
+        ? input.fixed_selling_price
+        : existing.fixed_selling_price === null || existing.fixed_selling_price === undefined
+          ? null
+          : Number(existing.fixed_selling_price);
+    if (pricingMode === 'FIXED' && fixedSellingPrice === null) {
+      throw new AppError('Enter the selling price for a fixed-price product.', 400, 'FIXED_PRICE_REQUIRED', {
+        field: 'fixed_selling_price',
+      });
+    }
+    const costTouched =
+      input.purchase_cost !== undefined ||
+      input.custom_markup_percent !== undefined ||
+      input.pricing_mode !== undefined ||
+      input.fixed_selling_price !== undefined ||
+      (input.category_id !== undefined && input.category_id !== existing.category_id);
     if (offerPrice !== null && (input.offer_price !== undefined || costTouched || endsAtChanged)) {
       const sellingPrice = costTouched
-        ? await sellingPriceFor(
-            input.purchase_cost ?? Number(existing.purchase_cost),
-            input.custom_markup_percent !== undefined
-              ? input.custom_markup_percent
-              : existing.custom_markup_percent === null
-                ? null
-                : Number(existing.custom_markup_percent)
-          )
+        ? (
+            await priceForProduct({
+              categoryId: input.category_id ?? existing.category_id,
+              purchaseCost: input.purchase_cost ?? Number(existing.purchase_cost),
+              pricingMode,
+              fixedSellingPrice,
+              customMarkupPercent:
+                input.custom_markup_percent !== undefined
+                  ? input.custom_markup_percent
+                  : existing.custom_markup_percent === null
+                    ? null
+                    : Number(existing.custom_markup_percent),
+            })
+          ).sellingPrice
         : Number(Number(existing.calculated_selling_price).toFixed(2));
       assertOfferAllowed({ offerPrice, sellingPrice, endsAt: offerEnds, endsAtChanged });
     }
@@ -661,6 +725,8 @@ export class CatalogService {
       ...(input.custom_markup_percent !== undefined
         ? { custom_markup_percent: input.custom_markup_percent }
         : {}),
+      ...(input.pricing_mode !== undefined ? { pricing_mode: input.pricing_mode } : {}),
+      ...(input.fixed_selling_price !== undefined ? { fixed_selling_price: input.fixed_selling_price } : {}),
       ...(input.is_available !== undefined ? { is_available: input.is_available } : {}),
       ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
       ...(offerChanged ? { offer_price: offerPrice, offer_ends_at: offerEnds } : {}),

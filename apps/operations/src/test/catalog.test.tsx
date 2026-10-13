@@ -405,12 +405,12 @@ describe('Product form', () => {
 
 // ------------------------------------------------------------------ Categories
 describe('Categories', () => {
-  it('lists categories with their real slug/order/status', async () => {
-    const c = category({ name: 'Bakery', slug: 'bakery', display_order: 3, is_active: false });
+  it('lists categories with their real slug/product count/status', async () => {
+    const c = category({ name: 'Bakery', slug: 'bakery', display_order: 3, is_active: false, product_count: 3 });
     renderAs(ADMIN_WITH_RIDER, '/catalog/categories', { 'GET /admin/categories': () => ok({ categories: [c] }) });
     expect(await screen.findByText('Bakery')).toBeInTheDocument();
     expect(screen.getByText('bakery')).toBeInTheDocument();
-    expect(screen.getByText('Order 3')).toBeInTheDocument();
+    expect(screen.getByText('3 products')).toBeInTheDocument();
     expect(screen.getByText('Inactive')).toBeInTheDocument();
   });
 

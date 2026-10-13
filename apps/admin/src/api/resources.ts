@@ -27,6 +27,7 @@ import type {
   Combo,
   ComboInput,
   CustomerProduct,
+  DefaultMarkupSetting,
   DeliveryFeeInput,
   DeliveryFeeSetting,
   CheckoutSettings,
@@ -315,6 +316,15 @@ export const products = {
 
 // -------------------------------------------------------------- settings
 export const settings = {
+  /** Global default markup (migration 044; owner, 2026-10-13): products with no markup of their own and none on their category. */
+  getDefaultMarkup: () => apiRequest<DefaultMarkupSetting>('/admin/settings/default-markup'),
+
+  setDefaultMarkup: (markupPercent: number) =>
+    apiRequest<DefaultMarkupSetting>('/admin/settings/default-markup', {
+      method: 'PATCH',
+      body: { markup_percent: markupPercent },
+    }),
+
   getDeliveryFee: () => apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee'),
 
   /** A number = only the flat fee (the old body); an object = any of fee_lkr / fee_mode / tiers / max_fee_lkr (owner, 2026-10-10). */

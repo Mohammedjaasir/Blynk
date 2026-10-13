@@ -22,6 +22,7 @@ import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
 import { smsLanguagePreview } from '../notifications/sms-language.preview.js';
+import { defaultMarkupSettings, updateDefaultMarkupSchema } from '../catalog/catalog.pricing.js';
 
 export const configurationRouter = Router();
 
@@ -139,6 +140,38 @@ adminSettingsRouter.patch(
     try {
       const input = updateRiderCommissionSchema.parse(req.body);
       res.json({ success: true, data: await settingsService.setRiderCommission(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Global default markup (migration 044; owner, 2026-10-13): the markup for
+// MARKUP products with no markup of their own and none on their category or
+// parent category. Audited (DEFAULT_MARKUP_UPDATED); every product priced by
+// it changes at once (v_product_catalog). Orders already placed keep the
+// prices snapshotted on them.
+adminSettingsRouter.get(
+  '/settings/default-markup',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await defaultMarkupSettings.get() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/default-markup',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateDefaultMarkupSchema.parse(req.body);
+      res.json({ success: true, data: await defaultMarkupSettings.set(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

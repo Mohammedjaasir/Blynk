@@ -8,6 +8,8 @@ import { lockInventoryRow, recordStockMovement } from '../inventory/stock-ledger
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { slugify } from './catalog.schema.js';
 import { generateUniqueSlug } from './catalog.slugs.js';
+import { resolveSellingPrice, type PricingMode, type PricingSource } from '../pricing/index.js';
+import { getGlobalMarkup } from './catalog.pricing.js';
 
 /**
  * Bulk product import (Admin site and Ops app).
@@ -19,18 +21,30 @@ import { generateUniqueSlug } from './catalog.slugs.js';
  * - Idempotent on SKU. A SKU that already exists (live, not deleted) is
  *   UPDATED from the row; a row that would change nothing is SKIPPED. So
  *   importing the same file twice creates nothing the second time.
- * - On an update, blank optional cells (pack size, selling price, barcode,
- *   description, tracked, image URL) leave the stored value alone: a blank
- *   cell never wipes data. The required columns always apply.
+ * - On an update, blank optional cells (pack size, barcode, description,
+ *   tracked, image URL) leave the stored value alone: a blank cell never
+ *   wipes data. The required columns always apply.
  * - opening_stock only applies when the product is created. For an existing
  *   product stock moves through the Inventory screens (restock/adjust), so an
  *   import can never silently rewrite a count.
  * - The category must already exist (matched by name or slug, ignoring case);
  *   an import never invents categories from typos.
- * - Pricing uses the backend's own inputs: cost_price is the purchase cost;
- *   selling_price, when given, becomes the product's custom markup
- *   ((selling / cost - 1) * 100, 2 decimals - the stored price is recomputed
- *   from it and can differ by a cent). Blank means the store default markup.
+ * - Pricing (migration 044; owner, 2026-10-13). purchase_cost (or the older
+ *   header cost_price) is the purchase cost. Then:
+ *     selling_price given  -> FIXED at exactly that price (a price below cost
+ *                             is allowed and reported as a warning);
+ *     markup_percent given -> MARKUP with that custom markup;
+ *     neither              -> a NEW product: MARKUP with no custom markup, so
+ *                             the category / parent / global markup applies;
+ *                             an EXISTING product keeps its current pricing
+ *                             (mode, fixed price, custom markup) - like every
+ *                             other blank cell (owner, 2026-10-13).
+ *   Both given is an error ("give either selling_price or markup_percent").
+ *   FIXED leaves a stored custom markup alone and MARKUP leaves a stored
+ *   fixed price alone (both ignored while unused), so re-importing the same
+ *   file changes nothing. Before 044 a selling_price became a derived custom
+ *   markup; it is now the fixed price itself. Every row's result (dry run
+ *   too) carries the resulting selling price and its source.
  * - Every row runs in its own transaction: a bad row is reported and never
  *   blocks the others. dry_run validates against the database and reports
  *   what would happen without writing anything.
@@ -49,6 +63,17 @@ export type ImportProductsInput = z.infer<typeof importProductsSchema>;
 
 export type ImportStatus = 'created' | 'updated' | 'skipped' | 'error';
 
+export interface ImportRowPricing {
+  pricing_mode: PricingMode;
+  pricing_source: PricingSource;
+  purchase_cost: number;
+  selling_price: number;
+  /** MARKUP: the markup used; FIXED: the implied markup over cost (null when the cost is 0). */
+  effective_markup_percent: number | null;
+  /** True when both price cells were blank on an existing product, so its current pricing is kept. */
+  kept_current?: boolean;
+}
+
 export interface ImportRowResult {
   row: number;
   sku: string | null;
@@ -56,6 +81,10 @@ export interface ImportRowResult {
   product_id?: string;
   message?: string;
   errors?: Array<{ field: string; message: string }>;
+  /** Migration 044: the price this row gives the product (created/updated/skipped rows). */
+  pricing?: ImportRowPricing;
+  /** Non-blocking notes, e.g. a fixed price below the purchase cost. */
+  warnings?: string[];
 }
 
 interface CleanRow {
@@ -66,6 +95,7 @@ interface CleanRow {
   pack_size?: string;
   cost_price: number;
   selling_price?: number;
+  markup_percent?: number;
   sku: string;
   barcode?: string;
   description?: string;
@@ -108,7 +138,6 @@ function yesNo(value: unknown): boolean | undefined | null {
   return null; // present but unreadable
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
 const hasAtMost2Decimals = (n: number) => Math.abs(Math.round(n * 100) - n * 100) < 1e-6;
 
 function isHttpUrl(value: string): boolean {
@@ -134,8 +163,13 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
   const barcode = text(raw.barcode);
   const description = text(raw.description);
   const imageUrl = text(raw.image_url);
-  const cost = numberCell(raw.cost_price);
+  // purchase_cost is the template header since migration 044; cost_price is
+  // the older one and still accepted. When both are filled they must agree.
+  const purchaseCostCell = numberCell(raw.purchase_cost);
+  const costPriceCell = numberCell(raw.cost_price);
+  const cost = purchaseCostCell !== undefined ? purchaseCostCell : costPriceCell;
   const selling = numberCell(raw.selling_price);
+  const markup = numberCell(raw.markup_percent);
   const tracked = yesNo(raw.tracked);
   const opening = numberCell(raw.opening_stock);
 
@@ -160,24 +194,28 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
   }
   if (imageUrl && !isHttpUrl(imageUrl)) errors.push({ field: 'image_url', message: 'Image URL must be a valid http(s) URL' });
 
-  if (cost === undefined) errors.push({ field: 'cost_price', message: 'Cost price is required' });
-  else if (!Number.isFinite(cost)) errors.push({ field: 'cost_price', message: 'Cost price must be a number' });
-  else if (cost < 0) errors.push({ field: 'cost_price', message: 'Cost price cannot be negative' });
-  else if (cost > 99_999_999.99) errors.push({ field: 'cost_price', message: 'Cost price is too large' });
-  else if (!hasAtMost2Decimals(cost)) errors.push({ field: 'cost_price', message: 'Cost price can have at most 2 decimals' });
+  const costField = purchaseCostCell !== undefined ? 'purchase_cost' : 'cost_price';
+  if (cost === undefined) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required' });
+  else if (!Number.isFinite(cost)) errors.push({ field: costField, message: 'Purchase cost must be a number' });
+  else if (cost < 0) errors.push({ field: costField, message: 'Purchase cost cannot be negative' });
+  else if (cost > 99_999_999.99) errors.push({ field: costField, message: 'Purchase cost is too large' });
+  else if (!hasAtMost2Decimals(cost)) errors.push({ field: costField, message: 'Purchase cost can have at most 2 decimals' });
+  else if (costPriceCell !== undefined && purchaseCostCell !== undefined && costPriceCell !== purchaseCostCell) {
+    errors.push({ field: 'purchase_cost', message: 'purchase_cost and cost_price differ; fill only one of them' });
+  }
 
-  if (selling !== undefined) {
+  if (selling !== undefined && markup !== undefined) {
+    errors.push({ field: 'selling_price', message: 'Give either selling_price or markup_percent, not both' });
+  } else if (selling !== undefined) {
     if (!Number.isFinite(selling)) errors.push({ field: 'selling_price', message: 'Selling price must be a number' });
-    else if (selling < 0) errors.push({ field: 'selling_price', message: 'Selling price cannot be negative' });
+    else if (selling <= 0) errors.push({ field: 'selling_price', message: 'Selling price must be above 0' });
+    else if (selling > 99_999_999.99) errors.push({ field: 'selling_price', message: 'Selling price is too large' });
     else if (!hasAtMost2Decimals(selling)) errors.push({ field: 'selling_price', message: 'Selling price can have at most 2 decimals' });
-    else if (cost !== undefined && Number.isFinite(cost) && cost >= 0) {
-      if (selling < cost) errors.push({ field: 'selling_price', message: 'Selling price cannot be below the cost price' });
-      else if (cost === 0 && selling > 0) {
-        errors.push({ field: 'selling_price', message: 'Set a cost price above 0 to use a selling price' });
-      } else if (cost > 0 && round2((selling / cost - 1) * 100) > 999.99) {
-        errors.push({ field: 'selling_price', message: 'Selling price is more than 10 times the cost price' });
-      }
-    }
+  } else if (markup !== undefined) {
+    if (!Number.isFinite(markup)) errors.push({ field: 'markup_percent', message: 'Markup must be a number' });
+    else if (markup < 0) errors.push({ field: 'markup_percent', message: 'Markup cannot be negative' });
+    else if (markup > 999.99) errors.push({ field: 'markup_percent', message: 'Markup cannot exceed 999.99%' });
+    else if (!hasAtMost2Decimals(markup)) errors.push({ field: 'markup_percent', message: 'Markup can have at most 2 decimals' });
   }
 
   if (tracked === null) errors.push({ field: 'tracked', message: 'Tracked must be yes or no' });
@@ -205,6 +243,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
       pack_size: packSize,
       cost_price: cost!,
       selling_price: selling,
+      markup_percent: markup,
       sku: sku!,
       barcode,
       description,
@@ -215,11 +254,57 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
   };
 }
 
-/** The custom markup a selling price stands for; undefined when none was given. */
-function markupFor(row: CleanRow): number | undefined {
-  if (row.selling_price === undefined) return undefined;
-  if (row.cost_price === 0) return 0;
-  return round2((row.selling_price / row.cost_price - 1) * 100);
+type RowPricing = { mode: PricingMode; fixed: number | null; markup: number | null };
+
+/** Both price cells blank: an existing product keeps its pricing (owner, 2026-10-13). */
+const noPriceCells = (row: CleanRow) => row.selling_price === undefined && row.markup_percent === undefined;
+
+/** An existing product's stored pricing. */
+function storedPricing(existing: Pick<ExistingProduct, 'pricing_mode' | 'fixed_selling_price' | 'custom_markup_percent'>): RowPricing {
+  return {
+    mode: existing.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP',
+    fixed: existing.fixed_selling_price === null ? null : Number(existing.fixed_selling_price),
+    markup: existing.custom_markup_percent === null ? null : Number(existing.custom_markup_percent),
+  };
+}
+
+/**
+ * How the row prices the product (see the module comment). A new product
+ * with both price cells blank uses the category/parent/global markup; an
+ * existing one keeps whatever pricing it has.
+ */
+function pricingFor(row: CleanRow, existing?: RowPricing): RowPricing {
+  if (row.selling_price !== undefined) return { mode: 'FIXED', fixed: row.selling_price, markup: null };
+  if (row.markup_percent !== undefined) return { mode: 'MARKUP', fixed: null, markup: row.markup_percent };
+  return existing ?? { mode: 'MARKUP', fixed: null, markup: null };
+}
+
+/** The markups a category gives its products: its own, else its live parent's. */
+type CategoryMarkups = Map<string, { own: number | null; parent: number | null }>;
+
+/** The price the row gives the product, with a warning when a fixed price is below cost. */
+function pricingResult(row: CleanRow, categoryId: string, markups: CategoryMarkups, globalMarkup: number, existing?: RowPricing) {
+  const want = pricingFor(row, existing);
+  const inherited = markups.get(categoryId);
+  const price = resolveSellingPrice({
+    purchaseCost: row.cost_price,
+    pricingMode: want.mode,
+    fixedSellingPrice: want.fixed,
+    productMarkupPercent: want.markup,
+    categoryMarkupPercent: inherited?.own ?? null,
+    parentCategoryMarkupPercent: inherited?.parent ?? null,
+    globalMarkupPercent: globalMarkup,
+  });
+  const pricing: ImportRowPricing = {
+    pricing_mode: price.pricingMode,
+    pricing_source: price.pricingSource,
+    purchase_cost: price.purchaseCost,
+    selling_price: price.sellingPrice,
+    effective_markup_percent: price.effectiveMarkupPercent,
+  };
+  // Both price cells blank on an existing product: its pricing is kept as it is.
+  pricing.kept_current = existing !== undefined && noPriceCells(row);
+  return { pricing, ...(price.warning ? { warnings: [price.warning.message] } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +319,8 @@ type ExistingProduct = {
   pack_size: string | null;
   purchase_cost: number | string;
   custom_markup_percent: number | string | null;
+  pricing_mode: string;
+  fixed_selling_price: number | string | null;
   barcode: string | null;
   description: string | null;
   image_url: string | null;
@@ -248,9 +335,17 @@ function changesFor(row: CleanRow, categoryId: string, existing: ExistingProduct
   if (row.unit !== existing.unit) changes.unit = row.unit;
   if (row.pack_size !== undefined && row.pack_size !== existing.pack_size) changes.pack_size = row.pack_size;
   if (Number(existing.purchase_cost) !== row.cost_price) changes.purchase_cost = row.cost_price;
-  const markup = markupFor(row);
-  const currentMarkup = existing.custom_markup_percent === null ? null : Number(existing.custom_markup_percent);
-  if (markup !== undefined && markup !== currentMarkup) changes.custom_markup_percent = markup;
+  const want = pricingFor(row, storedPricing(existing));
+  if (want.mode !== existing.pricing_mode) changes.pricing_mode = want.mode;
+  if (noPriceCells(row)) {
+    // Blank price cells change nothing (owner, 2026-10-13).
+  } else if (want.mode === 'FIXED') {
+    const currentFixed = existing.fixed_selling_price === null ? null : Number(existing.fixed_selling_price);
+    if (want.fixed !== currentFixed) changes.fixed_selling_price = want.fixed;
+  } else {
+    const currentMarkup = existing.custom_markup_percent === null ? null : Number(existing.custom_markup_percent);
+    if (want.markup !== currentMarkup) changes.custom_markup_percent = want.markup;
+  }
   if (row.barcode !== undefined && row.barcode !== existing.barcode) changes.barcode = row.barcode;
   if (row.description !== undefined && row.description !== existing.description) changes.description = row.description;
   if (row.image_url !== undefined && row.image_url !== existing.image_url) changes.image_url = row.image_url;
@@ -278,6 +373,8 @@ async function findExisting(executor: Transaction<Database> | typeof db, sku: st
       'p.pack_size',
       'p.purchase_cost',
       'p.custom_markup_percent',
+      'p.pricing_mode',
+      'p.fixed_selling_price',
       'p.barcode',
       'p.description',
       'p.image_url',
@@ -318,16 +415,20 @@ async function setTracking(trx: Transaction<Database>, productId: string, mode: 
 export async function importProducts(input: ImportProductsInput, actorId: string) {
   const dryRun = input.dry_run === true;
 
-  const categories = await db
-    .selectFrom('categories')
-    .select(['id', 'name', 'slug'])
-    .where('deleted_at', 'is', null)
-    .execute();
+  const [categories, globalMarkup] = await Promise.all([
+    db.selectFrom('categories').select(['id', 'name', 'slug', 'parent_id', 'markup_percent']).where('deleted_at', 'is', null).execute(),
+    getGlobalMarkup(),
+  ]);
   const categoryByKey = new Map<string, string>();
   for (const c of categories) {
     categoryByKey.set(c.slug.toLowerCase(), c.id);
     categoryByKey.set(c.name.trim().toLowerCase(), c.id);
   }
+  // Migration 044: what each category's products inherit (v_product_catalog's rule).
+  const ownMarkup = new Map(categories.map((c) => [c.id, c.markup_percent === null ? null : Number(c.markup_percent)]));
+  const markups: CategoryMarkups = new Map(
+    categories.map((c) => [c.id, { own: ownMarkup.get(c.id) ?? null, parent: c.parent_id ? ownMarkup.get(c.parent_id) ?? null : null }])
+  );
 
   const results: ImportRowResult[] = [];
   const seenSkus = new Map<string, number>();
@@ -358,7 +459,9 @@ export async function importProducts(input: ImportProductsInput, actorId: string
       const outcome = dryRun
         ? await planRow(row, categoryId, slugsUsed)
         : await db.transaction().execute((trx) => applyRow(trx, row, categoryId!, slugsUsed, actorId));
-      results.push({ row: row.row, sku: row.sku, ...outcome });
+      const { existingPricing, ...result } = outcome as typeof outcome & { existingPricing?: RowPricing };
+      const priced = pricingResult(row, categoryId, markups, globalMarkup, existingPricing);
+      results.push({ row: row.row, sku: row.sku, ...result, ...priced });
     } catch (err) {
       const message =
         err instanceof AppError
@@ -403,6 +506,7 @@ async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>
   return {
     status: changed ? ('updated' as const) : ('skipped' as const),
     product_id: existing.id,
+    existingPricing: storedPricing(existing),
     ...(row.opening_stock ? { message: 'Opening stock is ignored for an existing product' } : {}),
   };
 }
@@ -412,7 +516,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
 
   if (!existing) {
     const slug = await pickSlug(trx, row, slugsUsed);
-    const markup = markupFor(row);
+    const want = pricingFor(row);
     const created = await trx
       .insertInto('products')
       .values({
@@ -426,7 +530,9 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
         description: row.description ?? null,
         image_url: row.image_url ?? null,
         purchase_cost: row.cost_price,
-        custom_markup_percent: markup ?? null,
+        custom_markup_percent: want.markup,
+        pricing_mode: want.mode,
+        fixed_selling_price: want.fixed,
         is_available: true,
         is_active: true,
       })
@@ -454,7 +560,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
   const changes = changesFor(row, categoryId, existing);
   const tracking = trackingChange(row, existing);
   if (Object.keys(changes).length === 0 && tracking === null) {
-    return { status: 'skipped' as const, product_id: existing.id };
+    return { status: 'skipped' as const, product_id: existing.id, existingPricing: storedPricing(existing) };
   }
   if (Object.keys(changes).length > 0) {
     await trx
@@ -467,6 +573,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
   return {
     status: 'updated' as const,
     product_id: existing.id,
+    existingPricing: storedPricing(existing),
     ...(row.opening_stock ? { message: 'Opening stock is ignored for an existing product' } : {}),
   };
 }

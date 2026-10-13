@@ -2,12 +2,13 @@ import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { categories as categoriesApi, categoryGroups as groupsApi } from '../api/resources';
+import { categories as categoriesApi, categoryGroups as groupsApi, settings as settingsApi } from '../api/resources';
 import type { Category, CategoryGroup } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, Field, Spinner, useToast } from '../components/ui';
 import { endOfDay, validateCategoryOffer } from '../lib/combos';
 import { colomboDate, formatDay } from '../lib/coupons';
+import { formatPercent, inheritedMarkup, parseMarkupInput } from '../lib/pricing';
 
 /**
  * Categories: create, edit, activate/deactivate and delete.
@@ -19,16 +20,28 @@ import { colomboDate, formatDay } from '../lib/coupons';
  * Sub-categories (one level): a category can sit inside a top-level one
  * ("Bread" in "Bakery"). The list shows each child right under its parent.
  *
- * Arrange (owner, 2026-10-10): "Arrange" switches the Actions column to
- * Top / ↑ / ↓ - top-level categories among themselves, sub-categories
- * within their parent. Each move is saved at once (PUT
- * /admin/categories/order; the server writes display_order 10, 20, 30...)
- * and the list reloads. "Arrange products" opens a category's product order.
+ * Arrange (owner, 2026-10-10; reworked 2026-10-13): "Arrange" switches the
+ * last column to Top / ↑ / ↓ - top-level categories among themselves,
+ * sub-categories within their parent. Moves change a draft; "Save order"
+ * sends one PUT /admin/categories/order per sibling set that changed (the
+ * server writes display_order 10, 20, 30...), "Cancel" drops the draft.
+ * "Arrange products" opens a category's product order.
+ *
+ * Layout (2026-10-13): table cells never carry the block-level cell__*
+ * classes themselves - a <td> with display:block falls out of the table
+ * grid, which stacked Name/slug/description in the first column and pushed
+ * the Status/Actions columns (and the Arrange buttons) off the row. The
+ * texts sit in spans inside the cells instead.
  *
  * "+ Add sidebar item" (owner, 2026-10-10) on each top-level row opens the
  * Add category form with "Inside category" already set to that row, so
  * Bakery's sidebar items (Bread, Cakes...) take one tap each. Sub-categories
  * are one level only, so sub-category rows don't get the button.
+ *
+ * Markup % (migration 044; owner, 2026-10-13): the markup for MARKUP
+ * products in the category without their own; blank = the parent
+ * category's, else the global default (Settings). Saving reprices every
+ * product that follows it straight away.
  */
 export const SIDEBAR_ITEM_HINT = "Shows in this category's left sidebar in the app";
 
@@ -45,8 +58,11 @@ export function Categories() {
   // For the edit form's Group select; without category groups on the API
   // the select just offers "None".
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
-  const [arranging, setArranging] = useState(false);
+  // Arrange: the order being edited (null = not arranging). Saved with "Save order".
+  const [draft, setDraft] = useState<Category[] | null>(null);
   const [moving, setMoving] = useState(false);
+  // The global default markup, for "Global 20%" on rows without a markup.
+  const [globalMarkup, setGlobalMarkup] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -64,6 +80,10 @@ export function Categories() {
       .list()
       .then((r) => setGroups(r.groups))
       .catch(() => setGroups([]));
+    settingsApi
+      .getDefaultMarkup()
+      .then((setting) => setGlobalMarkup(Number(setting.markup_percent)))
+      .catch(() => setGlobalMarkup(null));
   }, [load]);
 
   async function toggleActive(category: Category) {
@@ -78,27 +98,45 @@ export function Categories() {
     }
   }
 
-  /** Moves `category` to `target` among its siblings and saves that order. */
-  async function moveCategory(category: Category, siblings: Category[], target: number) {
-    const from = siblings.findIndex((c) => c.id === category.id);
-    if (from < 0 || target < 0 || target >= siblings.length || target === from) return;
-    const next = siblings.filter((c) => c.id !== category.id);
-    next.splice(target, 0, category);
+  /** Arrange: starts a draft of the current order (nothing is saved until "Save order"). */
+  function startArranging() {
+    setDraft(rows ? [...rows] : []);
+  }
+
+  /** Moves `category` to position `target` among its siblings, in the draft only. */
+  function moveCategory(category: Category, target: number) {
+    setDraft((current) => (current ? moveAmongSiblings(current, category, target) : current));
+  }
+
+  /** "Save order": one PUT /admin/categories/order per sibling set that changed. */
+  async function saveOrder() {
+    if (!draft || !rows) return;
+    const sets = changedSiblingSets(rows, draft);
+    if (sets.length === 0) {
+      setDraft(null);
+      return;
+    }
     setMoving(true);
     try {
-      await categoriesApi.reorder(next.map((c) => c.id));
+      for (const ids of sets) await categoriesApi.reorder(ids);
+      toast.success('Category order saved.');
+      setDraft(null);
       await load();
     } catch (err) {
       toast.error(errorMessage(err, 'Could not save the new order.'));
+      await load();
     } finally {
       setMoving(false);
     }
   }
 
-  const nested = rows ? nestedRows(rows) : [];
+  const arranging = draft !== null;
+  const shown = arranging ? draft : rows;
+  const nested = shown ? nestedRows(shown) : [];
   const topLevel = nested.filter((r) => r.parent === null).map((r) => r.category);
   const siblingsOf = (parent: Category | null) =>
     parent ? nested.filter((r) => r.parent?.id === parent.id).map((r) => r.category) : topLevel;
+  const dirty = arranging && rows !== null && changedSiblingSets(rows, draft).length > 0;
 
   return (
     <>
@@ -106,33 +144,45 @@ export function Categories() {
         title="Categories"
         description="Used by the customer Home, Categories and Search screens."
         actions={
-          <>
-            <button
-              type="button"
-              className={arranging ? 'button' : 'button button--ghost'}
-              aria-pressed={arranging}
-              onClick={() => setArranging((v) => !v)}
-            >
-              {arranging ? 'Done arranging' : 'Arrange'}
-            </button>
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                setNewParentId(null);
-                setEditing('new');
-              }}
-            >
-              Add category
-            </button>
-          </>
+          arranging ? (
+            <>
+              <button type="button" className="button button--ghost" disabled={moving} onClick={() => setDraft(null)}>
+                Cancel
+              </button>
+              <button type="button" className="button" disabled={moving || !dirty} onClick={() => void saveOrder()}>
+                {moving ? 'Saving...' : 'Save order'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="button button--ghost"
+                aria-pressed={false}
+                disabled={!rows || rows.length < 2}
+                onClick={startArranging}
+              >
+                Arrange
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  setNewParentId(null);
+                  setEditing('new');
+                }}
+              >
+                Add category
+              </button>
+            </>
+          )
         }
       />
 
       {arranging ? (
         <p className="form__note" role="status">
           Customers see categories in this order. Move a category up or down, or to the top; sub-categories move
-          within their category. Each move is saved straight away.
+          within their category. Press Save order when you are done.
         </p>
       ) : null}
 
@@ -140,156 +190,164 @@ export function Categories() {
 
       {rows === null ? (
         <Spinner label="Loading categories" />
+      ) : rows.length === 0 ? (
+        <p className="empty">No categories yet. Add the first one.</p>
       ) : (
         <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Slug</th>
-              <th scope="col">Description</th>
-              <th scope="col" className="num">Order</th>
-              <th scope="col">Status</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {nested.map(({ category, parent }) => {
-              const siblings = siblingsOf(parent);
-              const index = siblings.findIndex((c) => c.id === category.id);
-              return (
-              <tr key={category.id} className={parent ? 'row--child' : undefined}>
-                <td className="cell__primary">
-                  {parent ? (
-                    <>
-                      <span aria-hidden="true">{'↳ '}</span>
-                      {category.name}
-                      <span className="cell__note">{` in ${parent.name}`}</span>
-                    </>
-                  ) : (
-                    category.name
-                  )}
-                </td>
-                <td className="cell__secondary">{category.slug}</td>
-                <td className="cell__secondary">{category.description ?? '-'}</td>
-                <td className="num">{category.display_order}</td>
-                <td>
-                  <Badge tone={category.is_active ? 'active' : 'inactive'}>
-                    {category.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                  {/* Category offer, while it runs (owner, 2026-10-09). */}
-                  {category.offer_active && category.offer_percent != null ? (
-                    <span className="cell__secondary">
-                      <Badge tone="offer">{`${category.offer_percent}% off`}</Badge>
-                    </span>
-                  ) : null}
-                </td>
-                <td>
-                  {arranging ? (
-                    <div className="row-actions">
-                      <button
-                        type="button"
-                        className="button button--ghost button--sm"
-                        aria-label={`Move ${category.name} to the top`}
-                        disabled={moving || index <= 0}
-                        onClick={() => void moveCategory(category, siblings, 0)}
-                      >
-                        Top
-                      </button>
-                      <button
-                        type="button"
-                        className="button button--ghost button--sm"
-                        aria-label={`Move ${category.name} up`}
-                        disabled={moving || index <= 0}
-                        onClick={() => void moveCategory(category, siblings, index - 1)}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        className="button button--ghost button--sm"
-                        aria-label={`Move ${category.name} down`}
-                        disabled={moving || index < 0 || index >= siblings.length - 1}
-                        onClick={() => void moveCategory(category, siblings, index + 1)}
-                      >
-                        ↓
-                      </button>
-                      <Link
-                        className="button button--ghost button--sm"
-                        to={`/categories/${category.id}/arrange`}
-                        aria-label={`Arrange products in ${category.name}`}
-                      >
-                        Arrange products
-                      </Link>
-                    </div>
-                  ) : (
-                  <div className="row-actions">
-                    <button
-                      type="button"
-                      className="button button--ghost button--sm"
-                      onClick={() => setEditing(category)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--ghost button--sm"
-                      onClick={() => setOffering(category)}
-                      aria-label={`Offer for ${category.name}`}
-                    >
-                      Offer
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--ghost button--sm"
-                      onClick={() => void toggleActive(category)}
-                    >
-                      {category.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--ghost button--sm"
-                      onClick={() => setDeleting(category)}
-                      aria-label={`Delete ${category.name}`}
-                    >
-                      Delete
-                    </button>
-                    {/* Top-level rows only: sub-categories are one level deep (owner, 2026-10-10). */}
-                    {!parent && !category.parent_id ? (
-                      <button
-                        type="button"
-                        className="button button--ghost button--sm"
-                        title={SIDEBAR_ITEM_HINT}
-                        aria-label={`+ Add sidebar item to ${category.name}`}
-                        onClick={() => {
-                          setNewParentId(category.id);
-                          setEditing('new');
-                        }}
-                      >
-                        + Add sidebar item
-                      </button>
-                    ) : null}
-                    <Link
-                      className="button button--ghost button--sm"
-                      to={`/categories/${category.id}/arrange`}
-                      aria-label={`Arrange products in ${category.name}`}
-                    >
-                      Arrange products
-                    </Link>
-                  </div>
-                  )}
-                </td>
+          <table className="table categories-table">
+            <colgroup>
+              <col className="categories-table__name" />
+              <col className="categories-table__desc" />
+              <col className="categories-table__markup" />
+              <col className="categories-table__count" />
+              <col className="categories-table__status" />
+              <col className="categories-table__actions" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Description</th>
+                <th scope="col">Markup</th>
+                <th scope="col" className="num">
+                  Products
+                </th>
+                <th scope="col">Status</th>
+                <th scope="col">{arranging ? 'Order' : 'Actions'}</th>
               </tr>
-              );
-            })}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {nested.map(({ category, parent }) => {
+                const siblings = siblingsOf(parent);
+                const index = siblings.findIndex((c) => c.id === category.id);
+                return (
+                  <tr key={category.id} className={parent ? 'row--child' : undefined}>
+                    <td>
+                      <span className="cell__primary">
+                        {parent ? <span aria-hidden="true">{'↳ '}</span> : null}
+                        {category.name}
+                      </span>
+                      <span className="cell__secondary mono">{category.slug}</span>
+                      {parent ? <span className="cell__note">{`in ${parent.name}`}</span> : null}
+                    </td>
+                    <td>
+                      <span className="cell__secondary cell__clamp">{category.description || '—'}</span>
+                    </td>
+                    <td>
+                      <MarkupCell category={category} categories={shown ?? []} globalMarkup={globalMarkup} />
+                    </td>
+                    <td className="num">{category.product_count ?? 0}</td>
+                    <td>
+                      <div className="cell__badges">
+                        <Badge tone={category.is_active ? 'active' : 'inactive'}>
+                          {category.is_active ? 'Active' : 'Inactive'}
+                        </Badge>
+                        {/* Category offer, while it runs (owner, 2026-10-09). */}
+                        {category.offer_active && category.offer_percent != null ? (
+                          <Badge tone="offer">{`${category.offer_percent}% off`}</Badge>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td>
+                      {arranging ? (
+                        <div className="row-actions">
+                          <span className="cell__secondary arrange-position">{`${index + 1} of ${siblings.length}`}</span>
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            aria-label={`Move ${category.name} to the top`}
+                            disabled={moving || index <= 0}
+                            onClick={() => moveCategory(category, 0)}
+                          >
+                            Top
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            aria-label={`Move ${category.name} up`}
+                            disabled={moving || index <= 0}
+                            onClick={() => moveCategory(category, index - 1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            aria-label={`Move ${category.name} down`}
+                            disabled={moving || index < 0 || index >= siblings.length - 1}
+                            onClick={() => moveCategory(category, index + 1)}
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="row-actions row-actions--wrap">
+                          <button type="button" className="button button--ghost button--sm" onClick={() => setEditing(category)}>
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            onClick={() => setOffering(category)}
+                            aria-label={`Offer for ${category.name}`}
+                          >
+                            Offer
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            onClick={() => void toggleActive(category)}
+                          >
+                            {category.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            onClick={() => setDeleting(category)}
+                            aria-label={`Delete ${category.name}`}
+                          >
+                            Delete
+                          </button>
+                          {/* Top-level rows only: sub-categories are one level deep (owner, 2026-10-10). */}
+                          {!parent && !category.parent_id ? (
+                            <button
+                              type="button"
+                              className="button button--ghost button--sm"
+                              title={SIDEBAR_ITEM_HINT}
+                              aria-label={`+ Add sidebar item to ${category.name}`}
+                              onClick={() => {
+                                setNewParentId(category.id);
+                                setEditing('new');
+                              }}
+                            >
+                              + Add sidebar item
+                            </button>
+                          ) : null}
+                          <Link
+                            className="button button--ghost button--sm"
+                            to={`/categories/${category.id}/arrange`}
+                            aria-label={`Arrange products in ${category.name}`}
+                          >
+                            Arrange products
+                          </Link>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
       <p className="form__note">
         Deactivate a category to hide it for a while; delete it to retire it
         for good (its products move to another category first).
+      </p>
+      <p className="form__note">
+        Markup: products priced by markup without their own use their category&apos;s markup, else the parent
+        category&apos;s, else the global default markup{globalMarkup === null ? '' : ` (${formatPercent(globalMarkup)}%)`}{' '}
+        set under <Link to="/settings#default-markup">Settings</Link>. Fixed-price products are not affected.
       </p>
 
       {deleting && rows ? (
@@ -322,6 +380,7 @@ export function Categories() {
           initialParentId={editing === 'new' ? newParentId : null}
           groups={groups}
           categories={rows ?? []}
+          globalMarkup={globalMarkup}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -331,6 +390,75 @@ export function Categories() {
       ) : null}
     </>
   );
+}
+
+const productsText = (n: number) => `${n} ${n === 1 ? 'product' : 'products'}`;
+
+/**
+ * The list's Markup cell: "25%" when the category has its own, else what it
+ * inherits ("Parent 15%" / "Global 20%"), with how many products follow it.
+ */
+function MarkupCell({
+  category,
+  categories,
+  globalMarkup,
+}: {
+  category: Category;
+  categories: Category[];
+  globalMarkup: number | null;
+}) {
+  const own = category.markup_percent;
+  const count = category.markup_product_count;
+  let label: string;
+  if (own !== null && own !== undefined) {
+    label = `${formatPercent(Number(own))}%`;
+  } else {
+    const inherited = inheritedMarkup(category.id, categories, globalMarkup);
+    label =
+      inherited.source === 'PARENT_CATEGORY_MARKUP'
+        ? `Parent ${formatPercent(inherited.markup)}%`
+        : globalMarkup === null
+          ? 'Global'
+          : `Global ${formatPercent(inherited.markup)}%`;
+  }
+  return (
+    <>
+      <span className={own !== null && own !== undefined ? 'cell__primary' : 'cell__secondary'}>{label}</span>
+      {count !== undefined ? <span className="cell__secondary">{`used by ${productsText(count)}`}</span> : null}
+    </>
+  );
+}
+
+/** The sibling set (same parent) of `category` within `list`, in list order. */
+function siblingSet(list: Category[], parentId: string | null): Category[] {
+  const ids = new Set(list.map((c) => c.id));
+  return list.filter((c) => (c.parent_id && ids.has(c.parent_id) ? c.parent_id : null) === parentId);
+}
+
+/** `list` with `category` moved to position `target` among its siblings (other rows keep their places). */
+export function moveAmongSiblings(list: Category[], category: Category, target: number): Category[] {
+  const ids = new Set(list.map((c) => c.id));
+  const parentId = category.parent_id && ids.has(category.parent_id) ? category.parent_id : null;
+  const siblings = siblingSet(list, parentId);
+  const from = siblings.findIndex((c) => c.id === category.id);
+  if (from < 0 || target < 0 || target >= siblings.length || target === from) return list;
+  const reordered = siblings.filter((c) => c.id !== category.id);
+  reordered.splice(target, 0, category);
+  const siblingIds = new Set(siblings.map((c) => c.id));
+  let next = 0;
+  return list.map((c) => (siblingIds.has(c.id) ? reordered[next++]! : c));
+}
+
+/** The sibling sets (as id lists) whose order differs between `before` and `after`. */
+export function changedSiblingSets(before: Category[], after: Category[]): string[][] {
+  const parents = new Set<string | null>([null, ...after.map((c) => c.parent_id ?? null)]);
+  const out: string[][] = [];
+  for (const parentId of parents) {
+    const a = siblingSet(before, parentId).map((c) => c.id);
+    const b = siblingSet(after, parentId).map((c) => c.id);
+    if (b.length > 0 && a.join(',') !== b.join(',')) out.push(b);
+  }
+  return out;
 }
 
 /**
@@ -355,6 +483,7 @@ function CategoryDialog({
   initialParentId: presetParentId = null,
   groups,
   categories,
+  globalMarkup = null,
   onClose,
   onSaved,
 }: {
@@ -364,6 +493,8 @@ function CategoryDialog({
   groups: CategoryGroup[];
   /** Every category, for the "Inside category" select. */
   categories: Category[];
+  /** The global default markup (null = not known). */
+  globalMarkup?: number | null;
   onClose(): void;
   onSaved(): void | Promise<void>;
 }) {
@@ -384,6 +515,18 @@ function CategoryDialog({
   const presetParent = !category && presetParentId ? categories.find((c) => c.id === presetParentId) ?? null : null;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Markup % (migration 044): blank = the parent's, else the global default.
+  const [markup, setMarkup] = useState(
+    category?.markup_percent === null || category?.markup_percent === undefined ? '' : String(category.markup_percent)
+  );
+  const [markupError, setMarkupError] = useState<string | null>(null);
+  const parentCategory = parentId ? categories.find((c) => c.id === parentId) ?? null : null;
+  const parentMarkup = parentCategory?.markup_percent;
+  const fallbackText =
+    parentMarkup !== null && parentMarkup !== undefined
+      ? `${parentCategory!.name}'s ${formatPercent(Number(parentMarkup))}%`
+      : `the global markup${globalMarkup === null ? '' : ` (${formatPercent(globalMarkup)}%)`}`;
+  const followers = category?.markup_product_count;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -391,6 +534,12 @@ function CategoryDialog({
       setError('Name must be at least 2 characters.');
       return;
     }
+    const parsedMarkup = parseMarkupInput(markup);
+    if ('error' in parsedMarkup) {
+      setMarkupError(parsedMarkup.error);
+      return;
+    }
+    setMarkupError(null);
     setSaving(true);
     setError(null);
     try {
@@ -399,6 +548,8 @@ function CategoryDialog({
         description: description.trim() || null,
         display_order: Number(displayOrder) || 0,
         is_active: isActive,
+        // null = use the parent category's markup, else the global default.
+        markup_percent: parsedMarkup.value,
       };
       // Only sent when it changed: re-sending the same group would append
       // the category at the end of that group again.
@@ -474,6 +625,21 @@ function CategoryDialog({
             ) : null}
           </select>
         </Field>
+        <Field
+          label="Markup %"
+          hint={`0 to 999.99. Leave blank to use ${fallbackText}. Products with their own markup or a fixed price keep it.`}
+          error={markupError ?? undefined}
+        >
+          <input className="input" inputMode="decimal" value={markup} onChange={(e) => setMarkup(e.target.value)} />
+        </Field>
+        {followers !== undefined ? (
+          <p className="form__note" role="status">
+            {markup.trim() === ''
+              ? `${productsText(followers)} follow the parent/global markup.`
+              : `${productsText(followers)} ${followers === 1 ? 'uses' : 'use'} this markup.`}{' '}
+            Saving reprices them straight away.
+          </p>
+        ) : null}
         <Field label="Display order">
           <input
             className="input"

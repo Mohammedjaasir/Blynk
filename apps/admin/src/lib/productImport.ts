@@ -12,44 +12,23 @@ import type { ImportResponse, ImportRow } from '../api/types';
  * before a round trip.
  */
 
-/** Exact template header text, in order (API contract §4). */
-export const TEMPLATE_COLUMNS = [
-  'name',
-  'category',
-  'unit',
-  'pack_size',
-  'selling_price',
-  'cost_price',
-  'sku',
-  'barcode',
-  'description',
-  'tracked',
-  'opening_stock',
-  'image_url',
-] as const;
+import { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS, buildTemplateWorkbook } from './importTemplate';
+
+export { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS };
 
 export type TemplateColumn = (typeof TEMPLATE_COLUMNS)[number];
+/** Every header the import reads: the template's plus the older cost_price (= purchase_cost). */
+export type ImportColumn = TemplateColumn | 'cost_price';
+const READ_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, 'cost_price'];
 
-const REQUIRED_COLUMNS: TemplateColumn[] = ['name', 'category', 'unit', 'cost_price', 'sku'];
+/** Required columns; purchase_cost may be the older cost_price instead. */
+const REQUIRED_COLUMNS: TemplateColumn[] = ['name', 'category', 'unit', 'purchase_cost', 'sku'];
 
 /** The API accepts 1..1000 rows per request. */
 export const MAX_IMPORT_ROWS = 1000;
-
-/** An example row for the template (clearly sample data). */
-export const TEMPLATE_EXAMPLE: Record<TemplateColumn, string | number> = {
-  name: 'Kotmale Fresh Milk 1L',
-  category: 'Dairy',
-  unit: 'bottle',
-  pack_size: '1L',
-  selling_price: 480,
-  cost_price: 430,
-  sku: 'KOT-MILK-1L',
-  barcode: '4791234567890',
-  description: 'Fresh pasteurised milk',
-  tracked: 'yes',
-  opening_stock: 24,
-  image_url: '',
-};
+/** The API's markup and price limits (catalog.import.ts). */
+export const MAX_IMPORT_MARKUP = 999.99;
+export const MAX_IMPORT_PRICE = 99_999_999.99;
 
 export interface FieldError {
   field: string;
@@ -62,6 +41,9 @@ export interface ValidatedRow {
   data: ImportRow;
   errors: FieldError[];
 }
+
+/** Two decimals at most (the API's money and markup columns). */
+const atMost2Decimals = (n: number) => Math.abs(Math.round(n * 100) - n * 100) < 1e-6;
 
 export interface ParseResult {
   rows: ValidatedRow[];
@@ -90,10 +72,10 @@ const normaliseHeader = (h: unknown) => cellText(h).toLowerCase().replace(/\s+/g
 
 // -------------------------------------------------------------- validation
 /** Check one spreadsheet row and shape it for the API. */
-export function validateRow(record: Partial<Record<TemplateColumn, unknown>>, row: number): ValidatedRow {
+export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row: number): ValidatedRow {
   const errors: FieldError[] = [];
-  const text = (key: TemplateColumn) => cellText(record[key]);
-  const optional = (key: TemplateColumn) => text(key) || null;
+  const text = (key: ImportColumn) => cellText(record[key]);
+  const optional = (key: ImportColumn) => text(key) || null;
 
   const name = text('name');
   const category = text('category');
@@ -105,18 +87,37 @@ export function validateRow(record: Partial<Record<TemplateColumn, unknown>>, ro
   if (!unit) errors.push({ field: 'unit', message: 'Unit is required.' });
   if (!sku) errors.push({ field: 'sku', message: 'SKU is required.' });
 
-  const cost = cellNumber(record.cost_price);
-  if (cost === null) errors.push({ field: 'cost_price', message: 'Cost price is required.' });
-  else if (Number.isNaN(cost)) errors.push({ field: 'cost_price', message: 'Cost price must be a number.' });
-  else if (cost < 0) errors.push({ field: 'cost_price', message: 'Cost price cannot be negative.' });
-  else if (cost > 99_999_999.99) errors.push({ field: 'cost_price', message: 'Cost price can be at most 99,999,999.99.' });
+  // purchase_cost, or the older cost_price; both filled must agree.
+  const purchaseCell = cellNumber(record.purchase_cost);
+  const costPriceCell = cellNumber(record.cost_price);
+  const cost = purchaseCell !== null ? purchaseCell : costPriceCell;
+  const costField = purchaseCell === null && costPriceCell !== null ? 'cost_price' : 'purchase_cost';
+  if (cost === null) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required.' });
+  else if (Number.isNaN(cost)) errors.push({ field: costField, message: 'Purchase cost must be a number.' });
+  else if (cost < 0) errors.push({ field: costField, message: 'Purchase cost cannot be negative.' });
+  else if (cost > MAX_IMPORT_PRICE) errors.push({ field: costField, message: 'Purchase cost can be at most 99,999,999.99.' });
+  else if (!atMost2Decimals(cost)) errors.push({ field: costField, message: 'Purchase cost can have at most 2 decimals.' });
+  else if (costPriceCell !== null && purchaseCell !== null && costPriceCell !== purchaseCell) {
+    errors.push({ field: 'purchase_cost', message: 'purchase_cost and cost_price differ; fill only one of them.' });
+  }
 
+  // selling_price = FIXED; markup_percent = MARKUP with that markup; neither
+  // = the category / parent / global markup. Both is an error. A price below
+  // cost is allowed (the dry run reports it as a warning).
   const selling = cellNumber(record.selling_price);
-  if (selling !== null) {
+  const markup = cellNumber(record.markup_percent);
+  if (selling !== null && markup !== null) {
+    errors.push({ field: 'selling_price', message: 'Give either selling_price or markup_percent, not both.' });
+  } else if (selling !== null) {
     if (Number.isNaN(selling)) errors.push({ field: 'selling_price', message: 'Selling price must be a number.' });
-    else if (cost !== null && !Number.isNaN(cost) && selling < cost) {
-      errors.push({ field: 'selling_price', message: 'Selling price cannot be below the cost price.' });
-    }
+    else if (selling <= 0) errors.push({ field: 'selling_price', message: 'Selling price must be above 0.' });
+    else if (selling > MAX_IMPORT_PRICE) errors.push({ field: 'selling_price', message: 'Selling price can be at most 99,999,999.99.' });
+    else if (!atMost2Decimals(selling)) errors.push({ field: 'selling_price', message: 'Selling price can have at most 2 decimals.' });
+  } else if (markup !== null) {
+    if (Number.isNaN(markup)) errors.push({ field: 'markup_percent', message: 'Markup must be a number.' });
+    else if (markup < 0 || markup > MAX_IMPORT_MARKUP) {
+      errors.push({ field: 'markup_percent', message: 'Markup must be between 0 and 999.99.' });
+    } else if (!atMost2Decimals(markup)) errors.push({ field: 'markup_percent', message: 'Markup can have at most 2 decimals.' });
   }
 
   const trackedText = text('tracked').toLowerCase();
@@ -147,8 +148,9 @@ export function validateRow(record: Partial<Record<TemplateColumn, unknown>>, ro
     category,
     unit,
     pack_size: optional('pack_size'),
-    cost_price: cost !== null && !Number.isNaN(cost) ? cost : 0,
+    purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : 0,
     selling_price: selling !== null && !Number.isNaN(selling) ? selling : null,
+    markup_percent: markup !== null && !Number.isNaN(markup) ? markup : null,
     sku,
     barcode: optional('barcode'),
     description: optional('description'),
@@ -168,7 +170,9 @@ export function rowsFromMatrix(matrix: unknown[][]): ParseResult {
   if (headerIndex < 0) return { rows: [], fileError: 'The file is empty.' };
 
   const header = matrix[headerIndex]!.map(normaliseHeader);
-  const missing = REQUIRED_COLUMNS.filter((c) => !header.includes(c));
+  const missing = REQUIRED_COLUMNS.filter(
+    (c) => !header.includes(c) && !(c === 'purchase_cost' && header.includes('cost_price'))
+  );
   if (missing.length) {
     return {
       rows: [],
@@ -180,9 +184,9 @@ export function rowsFromMatrix(matrix: unknown[][]): ParseResult {
   for (let i = headerIndex + 1; i < matrix.length; i += 1) {
     const cells = matrix[i] ?? [];
     if (!cells.some((c) => cellText(c) !== '')) continue;
-    const record: Partial<Record<TemplateColumn, unknown>> = {};
+    const record: Partial<Record<ImportColumn, unknown>> = {};
     header.forEach((key, col) => {
-      if ((TEMPLATE_COLUMNS as readonly string[]).includes(key)) record[key as TemplateColumn] = cells[col];
+      if (READ_COLUMNS.includes(key)) record[key as ImportColumn] = cells[col];
     });
     rows.push(validateRow(record, i + 1));
   }
@@ -250,16 +254,14 @@ export async function parseImportFile(file: File): Promise<ParseResult> {
   return rowsFromMatrix(matrix);
 }
 
-/** The template as an .xlsx file: the exact header row plus one example. */
+/**
+ * The template as an .xlsx file (lib/importTemplate.ts, identical in the Ops
+ * app): a "Products" sheet with only the header row - the one sheet an
+ * import reads - then "How to fill" and "Examples".
+ */
 export async function buildTemplateXlsx(): Promise<Blob> {
   const XLSX = await loadXlsx();
-  const sheet = XLSX.utils.aoa_to_sheet([
-    [...TEMPLATE_COLUMNS],
-    TEMPLATE_COLUMNS.map((c) => TEMPLATE_EXAMPLE[c]),
-  ]);
-  const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, 'Products');
-  const out = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+  const out = buildTemplateWorkbook(XLSX);
   return new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
@@ -271,9 +273,8 @@ function csvCell(value: unknown): string {
 
 export const toCsv = (rows: unknown[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
 
-/** The template as CSV (no SheetJS needed). */
-export const templateCsv = () =>
-  toCsv([[...TEMPLATE_COLUMNS], TEMPLATE_COLUMNS.map((c) => TEMPLATE_EXAMPLE[c])]);
+/** The template as CSV: the header row only (a CSV has one sheet, so no examples that could be imported). */
+export const templateCsv = () => toCsv([[...TEMPLATE_COLUMNS]]);
 
 /**
  * One line per problem: rows the browser rejected and rows the API

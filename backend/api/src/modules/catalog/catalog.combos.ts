@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { recordableMarkupPercent } from '../pricing/index.js';
 import type { Transaction } from 'kysely';
 import { z } from 'zod';
 import { db } from '../../database/connection.js';
@@ -308,7 +309,8 @@ export async function loadCombos(executor: Executor, ids?: string[], now: Date =
           in_stock: available === null || available >= i.quantity,
           stock_available: available,
           purchase_cost: Number(Number(i.purchase_cost).toFixed(2)),
-          effective_markup_percent: listed ? Number(Number(i.effective_markup_percent).toFixed(2)) : 0,
+          // Migration 044: a FIXED product's implied markup, clamped for order_items (NUMERIC(5,2)).
+          effective_markup_percent: listed ? recordableMarkupPercent(i.effective_markup_percent) : 0,
         };
       });
     const price = Number(Number(c.price).toFixed(2));

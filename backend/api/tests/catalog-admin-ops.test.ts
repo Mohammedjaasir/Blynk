@@ -362,13 +362,15 @@ describe('Bulk product import', () => {
     );
     expect(res.status).toBe(200);
     expect(res.body.data.dry_run).toBe(true);
-    expect(res.body.data.summary).toEqual({ created: 2, updated: 0, skipped: 0, errors: 4 });
+    // Migration 044: a selling price below cost (row 7) is a warning now, not an error.
+    expect(res.body.data.summary).toEqual({ created: 3, updated: 0, skipped: 0, errors: 3 });
     const byRow = Object.fromEntries(res.body.data.results.map((r: any) => [r.row, r]));
     expect(byRow[2].status).toBe('created');
     expect(byRow[4].errors.map((e: any) => e.field).sort()).toEqual(['cost_price', 'name', 'sku', 'unit']);
     expect(byRow[5].errors[0]).toMatchObject({ field: 'sku', message: expect.stringContaining('row 2') });
     expect(byRow[6].errors[0].field).toBe('opening_stock');
-    expect(byRow[7].errors[0].field).toBe('selling_price');
+    expect(byRow[7]).toMatchObject({ status: 'created', pricing: { pricing_mode: 'FIXED', selling_price: 8 } });
+    expect(byRow[7].warnings[0]).toMatch(/below the purchase cost/);
     expect((await pool.query('SELECT 1 FROM products WHERE sku LIKE $1', [`${PREFIX}IMP-%-${stamp}`])).rowCount).toBe(0);
   });
 
@@ -378,7 +380,10 @@ describe('Bulk product import', () => {
     expect(res.body.data.summary).toEqual({ created: 2, updated: 0, skipped: 0, errors: 0 });
 
     const milk = (await pool.query('SELECT * FROM v_product_catalog WHERE sku = $1', [sku('A')])).rows[0];
-    expect(Number(milk.custom_markup_percent)).toBe(20);
+    // Migration 044: a selling_price cell is the product's FIXED price (it used to become a derived markup).
+    expect(milk.pricing_mode).toBe('FIXED');
+    expect(Number(milk.fixed_selling_price)).toBe(480);
+    expect(milk.custom_markup_percent).toBeNull();
     expect(Number(milk.calculated_selling_price)).toBe(480);
     const inv = (await pool.query('SELECT id, tracking_mode, quantity_on_hand FROM inventory WHERE product_id = $1', [milk.id])).rows[0];
     expect(inv).toMatchObject({ tracking_mode: 'TRACKED', quantity_on_hand: 12 });

@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { catalog } from '../../api/resources';
 import type { ImportResult, ImportRowResult } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
-import { Spinner } from '../../components/ui';
+import { Badge, Spinner } from '../../components/ui';
 import { catalogErrorMessage } from '../../lib/catalog';
 import {
   TEMPLATE_COLUMNS,
+  PRICING_RULES,
   buildTemplateBlob,
   downloadBlob,
   errorsCsv,
@@ -15,6 +16,7 @@ import {
   parseSheet,
   readImportFile,
   resultLabel,
+  rowPricing,
   type ParsedSheet,
 } from '../../lib/productImport';
 
@@ -160,6 +162,14 @@ export function ProductImport() {
         <p className="card__note">
           1. Download the template and fill one product per row. Columns: <span className="mono">{TEMPLATE_COLUMNS.join(', ')}</span>.
         </p>
+        <div className="card__note" aria-label="How prices are set">
+          <p>How each row is priced:</p>
+          <ul>
+            {PRICING_RULES.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </div>
         <button type="button" className="button button--ghost" onClick={() => void downloadTemplate()} disabled={templateBusy}>
           {templateBusy ? <Spinner label="Building template" /> : 'Download template'}
         </button>
@@ -209,7 +219,8 @@ export function ProductImport() {
                   <th>SKU</th>
                   <th>Category</th>
                   <th>Cost</th>
-                  <th>Selling</th>
+                  <th>Selling price</th>
+                  <th>Price from</th>
                   <th>Check</th>
                 </tr>
               </thead>
@@ -217,18 +228,27 @@ export function ProductImport() {
                 {sheet.rows.map((r) => {
                   const server = dryByRow.get(r.row);
                   const bad = r.errors.length > 0 || server?.status === 'error';
+                  const pricing = rowPricing(r.data, server);
                   return (
                     <tr key={r.row} className={bad ? 'import-table__row--bad' : undefined}>
                       <td className="mono">{r.row}</td>
                       <td>{r.data.name}</td>
                       <td className="mono">{r.data.sku}</td>
                       <td>{r.data.category}</td>
-                      <td className="mono">{r.data.cost_price}</td>
-                      <td className="mono">{r.data.selling_price ?? '—'}</td>
+                      <td className="mono">{r.data.purchase_cost.toFixed(2)}</td>
+                      <td className="mono">{bad || pricing.price === null ? '—' : pricing.price.toFixed(2)}</td>
+                      <td>{bad ? '—' : <Badge tone="muted">{pricing.label}</Badge>}</td>
                       <td>
                         {r.errors.length > 0
                           ? r.errors.map((e) => `${e.field}: ${e.message}`).join(' ')
                           : resultLabel(server)}
+                        {!bad && pricing.warnings.length > 0
+                          ? pricing.warnings.map((w) => (
+                              <span key={w} className="import-table__warning">
+                                {` Warning: ${w}`}
+                              </span>
+                            ))
+                          : null}
                       </td>
                     </tr>
                   );

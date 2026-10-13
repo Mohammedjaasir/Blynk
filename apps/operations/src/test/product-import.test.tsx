@@ -31,11 +31,11 @@ afterEach(() => {
 });
 
 const CSV = [
-  'name,category,unit,pack_size,selling_price,cost_price,sku,barcode,description,tracked,opening_stock,image_url',
-  'Kotmale Fresh Milk 1L,Dairy,1 L,,,300,KOT-1L,,,yes,10,',
-  'Bad Row,Dairy,,,,abc,BAD-1,,,,,',
-  'Unknown Cat,Toys,each,,,100,TOY-1,,,,,',
-  'Butter,Dairy,200 g,,450,400,BUT-200,,,no,,',
+  'name,category,unit,pack_size,purchase_cost,selling_price,markup_percent,sku,barcode,description,tracked,opening_stock,image_url',
+  'Kotmale Fresh Milk 1L,Dairy,1 L,,300,,,KOT-1L,,,yes,10,',
+  'Bad Row,Dairy,,,abc,,,BAD-1,,,,,',
+  'Unknown Cat,Toys,each,,100,,,TOY-1,,,,,',
+  'Butter,Dairy,200 g,,400,450,,BUT-200,,,no,,',
 ].join('\r\n');
 
 function summarize(rows: ImportRow[], dryRun: boolean): ImportResult {
@@ -73,8 +73,9 @@ describe('Product import', () => {
       category: 'Dairy',
       unit: '1 L',
       pack_size: null,
-      cost_price: 300,
+      purchase_cost: 300,
       selling_price: null,
+      markup_percent: null,
       sku: 'KOT-1L',
       barcode: null,
       description: null,
@@ -114,7 +115,7 @@ describe('Product import', () => {
     const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/products/import');
     const input = await screen.findByLabelText('2. Choose the filled .xlsx or .csv file');
     await user.upload(input, new File(['name,unit\r\nMilk,1 L\r\n'], 'p.csv', { type: 'text/csv' }));
-    expect(await screen.findByText(/Missing columns: category, cost_price, sku/, undefined, { timeout: 10_000 })).toBeInTheDocument();
+    expect(await screen.findByText(/Missing columns: category, purchase_cost, sku/, undefined, { timeout: 10_000 })).toBeInTheDocument();
     expect(api.find('POST', '/admin/products/import')).toHaveLength(0);
     expect(screen.queryByRole('button', { name: /^Import \d/ })).not.toBeInTheDocument();
   }, 30_000);
@@ -125,6 +126,96 @@ describe('Product import', () => {
     await user.click(await screen.findByRole('button', { name: 'Download template' }));
     await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1), { timeout: 10_000 });
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+  }, 30_000);
+});
+
+describe('Product import: selling-price modes (migration 044)', () => {
+  /** A dry run shaped like the server's: pricing + warnings on every non-error row. */
+  function priced(rows: ImportRow[], dryRun: boolean): ImportResult {
+    const results = rows.map((r) => {
+      if (r.selling_price != null) {
+        const warnings =
+          r.selling_price < r.purchase_cost
+            ? [`The selling price LKR ${r.selling_price.toFixed(2)} is below the purchase cost LKR ${r.purchase_cost.toFixed(2)}.`]
+            : [];
+        return {
+          row: r.row!,
+          sku: r.sku,
+          status: 'created' as const,
+          pricing: { pricing_mode: 'FIXED' as const, pricing_source: 'FIXED' as const, purchase_cost: r.purchase_cost, selling_price: r.selling_price, effective_markup_percent: null },
+          warnings,
+        };
+      }
+      if (r.markup_percent != null) {
+        return {
+          row: r.row!,
+          sku: r.sku,
+          status: 'created' as const,
+          pricing: { pricing_mode: 'MARKUP' as const, pricing_source: 'PRODUCT_MARKUP' as const, purchase_cost: r.purchase_cost, selling_price: 130, effective_markup_percent: r.markup_percent },
+        };
+      }
+      return {
+        row: r.row!,
+        sku: r.sku,
+        status: 'skipped' as const,
+        pricing: { pricing_mode: 'MARKUP' as const, pricing_source: 'CATEGORY_MARKUP' as const, purchase_cost: r.purchase_cost, selling_price: 125, effective_markup_percent: 25 },
+      };
+    });
+    const count = (st: string) => results.filter((x) => x.status === st).length;
+    return { dry_run: dryRun, summary: { created: count('created'), updated: 0, skipped: count('skipped'), errors: 0 }, results };
+  }
+
+  it('explains the three pricing rules on the screen', async () => {
+    renderAs(ADMIN_WITH_RIDER, '/catalog/products/import');
+    const rules = await screen.findByLabelText('How prices are set');
+    expect(rules).toHaveTextContent(/selling_price filled: the product gets that FIXED selling price, exactly/);
+    expect(rules).toHaveTextContent(/markup_percent filled: the selling price is purchase_cost \+ that markup/);
+    expect(rules).toHaveTextContent(/Both empty on a NEW product: the category markup applies, else its parent category markup, else the global default markup/);
+    expect(rules).toHaveTextContent(/Both empty on an EXISTING product \(same SKU\): its current pricing is kept/);
+    expect(rules).toHaveTextContent(/not both/);
+    expect(rules).toHaveTextContent(/Older files that have only selling_price now set a FIXED price/);
+    expect(screen.getByText(/purchase_cost, selling_price, markup_percent/)).toBeInTheDocument();
+  });
+
+  it('previews each row\'s selling price, its source and below-cost warnings; both columns filled is a row error', async () => {
+    const user = userEvent.setup();
+    const { api } = renderAs(ADMIN_WITH_RIDER, '/catalog/products/import', {
+      'POST /admin/products/import': (call) => ok(priced(call.body.rows, call.body.dry_run)),
+    });
+    // An older file: cost_price instead of purchase_cost still works.
+    const csv = [
+      'name,category,unit,cost_price,selling_price,markup_percent,sku',
+      'Fixed Milk,Dairy,1 L,100,90,,FIX-1',
+      'Markup Rice,Rice,1 kg,100,,30,MRK-1',
+      'Plain Rice,Rice,1 kg,100,,,CAT-1',
+      'Both Given,Rice,1 kg,100,120,30,BOTH-1',
+    ].join('\r\n');
+    const input = await screen.findByLabelText('2. Choose the filled .xlsx or .csv file');
+    await user.upload(input, new File([csv], 'old.csv', { type: 'text/csv' }));
+
+    await waitFor(() => expect(api.find('POST', '/admin/products/import')).toHaveLength(1), { timeout: 10_000 });
+    const dry = api.find('POST', '/admin/products/import')[0].body;
+    // The both-given row never goes; the rest are sent with purchase_cost.
+    expect(dry.rows.map((r: ImportRow) => r.sku)).toEqual(['FIX-1', 'MRK-1', 'CAT-1']);
+    expect(dry.rows[0]).toMatchObject({ purchase_cost: 100, selling_price: 90, markup_percent: null });
+    expect(dry.rows[0]).not.toHaveProperty('cost_price');
+    expect(dry.rows[1]).toMatchObject({ purchase_cost: 100, selling_price: null, markup_percent: 30 });
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Selling price' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Price from' })).toBeInTheDocument();
+    const row = (sku: string) => within(table).getByText(sku).closest('tr') as HTMLElement;
+    await waitFor(() => expect(within(row('FIX-1')).getByText('Fixed')).toBeInTheDocument());
+    expect(within(row('FIX-1')).getByText('90.00')).toBeInTheDocument();
+    // Below cost is a warning, not an error: the row is still imported.
+    expect(within(row('FIX-1')).getByText(/Warning: The selling price LKR 90.00 is below the purchase cost LKR 100.00./)).toBeInTheDocument();
+    expect(within(row('MRK-1')).getByText('Product markup')).toBeInTheDocument();
+    expect(within(row('MRK-1')).getByText('130.00')).toBeInTheDocument();
+    expect(within(row('CAT-1')).getByText('Category markup')).toBeInTheDocument();
+    expect(within(row('CAT-1')).getByText('125.00')).toBeInTheDocument();
+    expect(within(row('BOTH-1')).getByText(/selling_price: Give either selling_price or markup_percent, not both\./)).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: 'Import 3 products' })).toBeEnabled();
   }, 30_000);
 });
 
@@ -145,7 +236,7 @@ describe('Product import: request size', () => {
       'POST /admin/products/import': (call) => ok(summarize(call.body.rows, call.body.dry_run)),
     });
     const longText = 'x'.repeat(1500);
-    const rows = Array.from({ length: 800 }, (_, i) => `Product ${i},Dairy,1 L,,,300,SKU-${i},,${longText},,,`);
+    const rows = Array.from({ length: 800 }, (_, i) => `Product ${i},Dairy,1 L,,300,,,SKU-${i},,${longText},,,`);
     const big = [CSV.split('\r\n')[0], ...rows].join('\r\n');
     const input = await screen.findByLabelText('2. Choose the filled .xlsx or .csv file');
     await user.upload(input, new File([big], 'big.csv', { type: 'text/csv' }));

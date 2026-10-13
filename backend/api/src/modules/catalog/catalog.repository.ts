@@ -154,6 +154,7 @@ export class CatalogRepository {
     group_id?: string | null;
     group_sort_order?: number;
     parent_id?: string | null;
+    markup_percent?: number | null;
   }) {
     const [record] = await db
       .insertInto('categories')
@@ -169,6 +170,7 @@ export class CatalogRepository {
         group_id: data.group_id ?? null,
         group_sort_order: data.group_sort_order ?? 0,
         parent_id: data.parent_id ?? null,
+        markup_percent: data.markup_percent ?? null,
       })
       .returningAll()
       .execute();
@@ -196,6 +198,8 @@ export class CatalogRepository {
       /** Migration 033: set only through the category offer endpoints. */
       offer_percent?: number | null;
       offer_ends_at?: string | Date | null;
+      /** Migration 044: the category markup (null = parent's, else global). */
+      markup_percent?: number | null;
     }
   ) {
     const [record] = await db
@@ -472,6 +476,8 @@ export class CatalogRepository {
     image_focal_y?: number;
     purchase_cost: number;
     custom_markup_percent?: number | null;
+    pricing_mode?: 'MARKUP' | 'FIXED';
+    fixed_selling_price?: number | null;
     is_available?: boolean;
     is_active?: boolean;
     offer_price?: number | null;
@@ -495,6 +501,8 @@ export class CatalogRepository {
         image_focal_y: data.image_focal_y ?? 50,
         purchase_cost: data.purchase_cost,
         custom_markup_percent: data.custom_markup_percent ?? null,
+        pricing_mode: data.pricing_mode ?? 'MARKUP',
+        fixed_selling_price: data.fixed_selling_price ?? null,
         is_available: data.is_available ?? true,
         is_active: data.is_active ?? true,
         offer_price: data.offer_price ?? null,
@@ -525,6 +533,8 @@ export class CatalogRepository {
       image_focal_y?: number;
       purchase_cost?: number;
       custom_markup_percent?: number | null;
+      pricing_mode?: 'MARKUP' | 'FIXED';
+      fixed_selling_price?: number | null;
       is_available?: boolean;
       is_active?: boolean;
       offer_price?: number | null;

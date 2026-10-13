@@ -5,6 +5,7 @@ import type {
   AppUpdatePolicySetting,
   AppUpdatesSetting,
   DoctorsAccessSetting,
+  DefaultMarkupSetting,
   Coupon,
   CouponInput,
   RiderTripsSetting,
@@ -1090,6 +1091,13 @@ export const settings = {
     get: () => apiRequest<CustomerSmsLanguageSetting>('/admin/settings/customer-sms-language'),
     update: (body: { mode?: CustomerSmsLanguageMode; fallback?: SmsLanguageCode }) =>
       apiRequest<CustomerSmsLanguageSetting>('/admin/settings/customer-sms-language', { method: 'PATCH', body }),
+  },
+  /** Global default markup (migration 044; owner, 2026-10-13): products with
+   * no markup of their own and none on their category use it. Audited. */
+  defaultMarkup: {
+    get: () => apiRequest<DefaultMarkupSetting>('/admin/settings/default-markup'),
+    update: (markup_percent: number) =>
+      apiRequest<DefaultMarkupSetting>('/admin/settings/default-markup', { method: 'PATCH', body: { markup_percent } }),
   },
   /** The % of the standard delivery fee a commission rider earns, unless
    * they have their own (owner, 2026-10-09). */
