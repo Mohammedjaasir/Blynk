@@ -15,7 +15,16 @@ import { CartProvider } from '@/lib/cart';
 
 SplashScreen.preventAutoHideAsync();
 
+/**
+ * On a computer the page's phones-only gate (public/index.html, carried over from the
+ * Flutter shop) shows "Blynk is a phone app" instead; the app then does not start at all.
+ */
 export default function RootLayout() {
+  const gated = typeof window !== 'undefined' && (window as { blynkDesktopGate?: boolean }).blynkDesktopGate === true;
+  return gated ? null : <AppShell />;
+}
+
+function AppShell() {
   const [loaded] = useFonts({
     Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold, Outfit_800ExtraBold,
     BowlbyOne_400Regular, Anton_400Regular,
