@@ -28,10 +28,12 @@ function DrawCheck({ size = 26, delay = 0 }: { size?: number; delay?: number }) 
 /**
  * The cart's green fee banner. At rest it is a rounded pill under the back row;
  * once you scroll it bursts out to a full-bleed header (a light sweep wipes
- * across), then cycles two slides: "MANDI PRICE MATCH ✓" and "₹0 Packaging /
- * Platform fee", each line rising in on a stagger while the mascot slides in.
+ * across), then cycles two slides: "FREE DELIVERY / FIRST N ORDERS ✓" (or
+ * "CASH ON DELIVERY ✓" while free deliveries are off) and "LKR 0 packaging /
+ * platform fee" (Blynk charges neither), each line rising in on a stagger while
+ * the mascot slides in.
  */
-export function FeeHeader({ scrollY, topInset, backRowH }: { scrollY: SharedValue<number>; topInset: number; backRowH: number }) {
+export function FeeHeader({ scrollY, topInset, backRowH, freeCount }: { scrollY: SharedValue<number>; topInset: number; backRowH: number; freeCount: number }) {
   const { width } = useWindowDimensions();
   const ex = useSharedValue(0);
   const wipe = useSharedValue(0);
@@ -80,8 +82,8 @@ export function FeeHeader({ scrollY, topInset, backRowH }: { scrollY: SharedValu
       <Animated.View style={[styles.wipe, wipeA]} />
       {/* collapsed pill content */}
       <Animated.View style={[styles.pill, pillA]}>
-        <Text style={styles.pillTxt}>₹0 Packaging Fee  ·  ₹0 Platform fee</Text>
-        <Text style={styles.pillMascot}>🧑‍🌾</Text>
+        <Text style={styles.pillTxt}>No packaging fee  ·  No platform fee</Text>
+        <Text style={styles.pillMascot}>🛵</Text>
       </Animated.View>
 
       {expanded && (
@@ -89,20 +91,20 @@ export function FeeHeader({ scrollY, topInset, backRowH }: { scrollY: SharedValu
           {slide === 0 ? (
             <Animated.View key="s0" exiting={FadeOut.duration(200)} style={styles.slide}>
               <View>
-                <Animated.Text entering={FadeInDown.delay(250).duration(380)} style={styles.big}>MANDI PRICE</Animated.Text>
+                <Animated.Text entering={FadeInDown.delay(250).duration(380)} style={styles.big}>{freeCount > 0 ? 'FREE DELIVERY' : 'CASH ON'}</Animated.Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Animated.Text entering={FadeInDown.delay(420).duration(380)} style={styles.big}>MATCH</Animated.Text>
+                  <Animated.Text entering={FadeInDown.delay(420).duration(380)} style={styles.big}>{freeCount > 0 ? `FIRST ${freeCount} ORDER${freeCount > 1 ? 'S' : ''}` : 'DELIVERY'}</Animated.Text>
                   <Animated.View entering={FadeIn.delay(520)}>
                     <DrawCheck delay={560} />
                   </Animated.View>
                 </View>
               </View>
-              <Animated.Text entering={FadeInRight.delay(300).springify().mass(1).energyThreshold(1e-4).damping(12)} style={styles.mascot}>🧑‍🌾</Animated.Text>
+              <Animated.Text entering={FadeInRight.delay(300).springify().mass(1).energyThreshold(1e-4).damping(12)} style={styles.mascot}>🛵</Animated.Text>
             </Animated.View>
           ) : (
             <Animated.View key="s1" exiting={FadeOut.duration(200)} style={styles.slide}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Animated.Text entering={FadeInDown.springify().mass(1).energyThreshold(1e-4).damping(11)} style={styles.zero}>₹0</Animated.Text>
+                <Animated.Text entering={FadeInDown.springify().mass(1).energyThreshold(1e-4).damping(11)} style={styles.zero}>LKR 0</Animated.Text>
                 <View>
                   <Animated.Text entering={FadeInDown.delay(180).duration(350)} style={styles.feeLine}>Packaging fee</Animated.Text>
                   <Animated.Text entering={FadeInDown.delay(330).duration(350)} style={styles.feeLine}>Platform fee</Animated.Text>
@@ -119,14 +121,14 @@ export function FeeHeader({ scrollY, topInset, backRowH }: { scrollY: SharedValu
 
 const styles = StyleSheet.create({
   box: { position: 'absolute', backgroundColor: C.green, overflow: 'hidden', zIndex: 20 },
-  wipe: { position: 'absolute', top: -20, bottom: -20, width: 160, backgroundColor: '#3DDC63' },
+  wipe: { position: 'absolute', top: -20, bottom: -20, width: 160, backgroundColor: '#2FA544' },
   pill: { ...StyleSheet.absoluteFill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   pillTxt: { color: C.yellow, fontFamily: F.bold, fontSize: 13 },
   pillMascot: { position: 'absolute', right: 6, bottom: -6, fontSize: 30 },
   full: { ...StyleSheet.absoluteFill },
   slide: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
   big: { fontFamily: F.condensed, fontSize: 26, color: C.yellow, lineHeight: 30, letterSpacing: 0.5 },
-  zero: { fontFamily: F.condensed, fontSize: 48, color: C.yellow, lineHeight: 56 },
+  zero: { fontFamily: F.condensed, fontSize: 44, color: C.yellow, lineHeight: 56 },
   feeLine: { fontFamily: F.semi, fontSize: 17, color: C.yellow, lineHeight: 21 },
   mascot: { fontSize: 54, marginBottom: -10 },
 });

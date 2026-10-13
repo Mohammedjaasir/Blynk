@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { withSpring } from '@/lib/motion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, G, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Path, Rect } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import { BackIcon, PinIcon, SearchIcon } from '@/components/icons';
 import { PressScale, Pulse, Skeleton, tap, Tooltip } from '@/components/ui';
@@ -17,19 +17,19 @@ import { cartActions } from '@/lib/cart';
 import { C, F } from '@/lib/theme';
 
 const MAP = 1400;
-const PLACES = [
-  { name: 'Vaiyapuri Nagar', line: 'Vaiyapuri Nagar, Kurumbapalayam, Tamil Nadu, India' },
-  { name: 'SNS College Road', line: 'SNS College Rd, Kurumbapalayam, Coimbatore, Tamil Nadu' },
-  { name: 'Nandhi Temple Street', line: 'Nandhi Temple St, Saravanampatti, Coimbatore' },
-  { name: 'Lakeview Residency', line: 'Lakeview Residency, Kalapatti, Coimbatore, Tamil Nadu' },
-  { name: 'Mill Road', line: 'Mill Rd, Ganapathy, Coimbatore, Tamil Nadu' },
-];
+
+/*
+ * An honest preview: the street map is a drawing, not a real map of Dharga Town, and
+ * nothing is looked up or sent. Real address search and pin placement arrive with
+ * ordering. Confirming keeps a "pin preview" address on this device only.
+ */
+const PREVIEW = { name: 'Dharga Town (map preview)', line: 'Exact address search arrives with ordering. Nothing is sent from this screen.' };
 
 export default function Address() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { setAddress } = cartActions;
-  const [place, setPlace] = useState<(typeof PLACES)[number] | null>(null);
+  const [place, setPlace] = useState<typeof PREVIEW | null>(null);
   const [tip, setTip] = useState(true);
 
   const tx = useSharedValue(0);
@@ -41,10 +41,7 @@ export default function Address() {
   const tiles = useSharedValue(0);
 
   const lookup = () =>
-    setTimeout(() => {
-      const i = Math.abs(Math.round(tx.get() / 90) * 3 + Math.round(ty.get() / 90)) % PLACES.length;
-      setPlace(PLACES[i]);
-    }, 650);
+    setTimeout(() => setPlace(PREVIEW), 650);
   const resolve = () => {
     setPlace(null);
     lookup();
@@ -91,7 +88,7 @@ export default function Address() {
 
   const confirm = () => {
     if (!place) return;
-    setAddress({ title: 'Home', line: place.line });
+    setAddress({ title: 'Home (preview)', line: 'Dharga Town · pin preview, not verified' });
     router.back();
   };
 
@@ -130,7 +127,7 @@ export default function Address() {
       {/* search */}
       <View style={[styles.search, { top: insets.top + 8 }]}>
         <PressScale onPress={() => router.back()} style={{ padding: 4 }}><BackIcon size={20} /></PressScale>
-        <Text style={styles.searchTxt}>Search an area or address</Text>
+        <Text style={styles.searchTxt}>Address search opens soon</Text>
         <SearchIcon size={18} color={C.sub} />
       </View>
 
@@ -141,7 +138,7 @@ export default function Address() {
           <Text style={styles.currentTxt}>Current location</Text>
         </PressScale>
         <View style={styles.card}>
-          <Text style={styles.cardHint}>{place ? 'Place the pin at exact delivery location' : 'Order will be delivered here'}</Text>
+          <Text style={styles.cardHint}>Map preview · not a real map of your area</Text>
           {place ? (
             <Animated.View key={place.name} entering={FadeIn.duration(250)}>
               <Text style={styles.placeName}>📍 {place.name}</Text>
@@ -156,7 +153,7 @@ export default function Address() {
           {place && (
             <Animated.View entering={FadeInDown.springify().mass(1).energyThreshold(1e-4).damping(15)}>
               <PressScale onPress={confirm} style={styles.cta} haptic>
-                <Text style={styles.ctaTxt}>Confirm & proceed</Text>
+                <Text style={styles.ctaTxt}>Confirm preview & proceed</Text>
               </PressScale>
             </Animated.View>
           )}
@@ -166,7 +163,7 @@ export default function Address() {
   );
 }
 
-/** Hand-drawn street map: blocks, roads, a park, a lake and a few labels. */
+/** Illustrative street drawing (not real streets): blocks, roads, a park and a lake. */
 function FakeMap() {
   const roads = [
     'M0 420 L1400 380', 'M0 760 L1400 820', 'M0 1080 L1400 1040', 'M300 0 L340 1400', 'M690 0 L710 1400',
@@ -189,15 +186,6 @@ function FakeMap() {
         <Path d={roads[1]} strokeWidth={8} />
         <Path d={roads[4]} strokeWidth={8} />
       </G>
-      {[
-        ['SNS College of Nursing', 470, 560], ['Vaiyapuri Nagar', 560, 660], ['Nandhi Temple', 150, 820],
-        ['Lakeview Residency', 860, 470], ['Annai Mess', 380, 900], ['SNS Spine', 1080, 320], ['Green Park', 835, 600],
-      ].map(([t, x, y]) => (
-        <G key={t as string}>
-          <Circle cx={(x as number) - 10} cy={(y as number) - 4} r={5} fill="#9AA3AE" />
-          <SvgText x={x as number} y={y as number} fontSize={15} fill="#6B7380">{t as string}</SvgText>
-        </G>
-      ))}
     </Svg>
   );
 }

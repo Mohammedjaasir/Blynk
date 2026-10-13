@@ -1,29 +1,33 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import { withSpring } from '@/lib/motion';
 import Svg, { Defs, LinearGradient as SvgGrad, Polygon, Stop } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
+import { formatLkr } from '@/blynk/lib/money';
 import { C, F } from '@/lib/theme';
 import { ArrowRight } from './icons';
 import { PressScale } from './ui';
 
-const ABDUCTEES = ['🥑', '🍉', '🥦', '🍞', '🧀', '🍓'];
+/** Shown in the beam only until real product photos arrive. */
+const FALLBACK = ['🥦', '🍞', '🥛', '🍌'];
 
-/** Each title letter rocks on its own phase — the "BROKE HOURS" jelly wobble. */
+/** Each title letter rocks on its own phase — the jelly wobble. */
 function WobbleWord({ word, delay }: { word: string; delay: number }) {
+  // long words (DELIVERY, GROCERIES) step down so they fit beside the UFO
+  const size = word.length > 5 ? 25 : 34;
   return (
     <View style={{ flexDirection: 'row' }}>
       {word.split('').map((ch, i) => (
-        <WobbleLetter key={i} ch={ch} delay={delay + i * 90} />
+        <WobbleLetter key={i} ch={ch} delay={delay + i * 90} size={size} />
       ))}
     </View>
   );
 }
-function WobbleLetter({ ch, delay }: { ch: string; delay: number }) {
+function WobbleLetter({ ch, delay, size }: { ch: string; delay: number; size: number }) {
   const r = useSharedValue(0);
   useEffect(() => {
     r.value = withDelay(
@@ -32,7 +36,7 @@ function WobbleLetter({ ch, delay }: { ch: string; delay: number }) {
     );
   }, []);
   const a = useAnimatedStyle(() => ({ transform: [{ rotate: `${r.value * 7}deg` }, { translateY: Math.abs(r.value) * -2 }] }));
-  return <Animated.Text style={[styles.title, a]}>{ch}</Animated.Text>;
+  return <Animated.Text style={[styles.title, { fontSize: size, lineHeight: Math.round(size * 1.3) }, a]}>{ch}</Animated.Text>;
 }
 
 /** A ✦ that blinks in, spins and vanishes. */
@@ -45,14 +49,22 @@ function Sparkle({ x, y, delay, size = 12 }: { x: number; y: number; delay: numb
   return <Animated.Text style={[{ position: 'absolute', left: x, top: y, fontSize: size, color: C.yellow }, a]}>✦</Animated.Text>;
 }
 
-export function Banner() {
+/**
+ * Home's hero. "FREE DELIVERY / on your first N orders" while Blynk's free deliveries
+ * are on (otherwise "FRESH GROCERIES"), "Groceries starting at" the cheapest effective
+ * price in the catalogue, and the UFO beam abducts real product photos.
+ */
+export function Banner({ images, minPrice, freeCount, onOrderNow }: {
+  images: string[]; minPrice: number | null; freeCount: number; onOrderNow?: () => void;
+}) {
   const [idx, setIdx] = useState(0);
+  const count = images.length || FALLBACK.length;
   const ufo = useSharedValue(0);
   const beam = useSharedValue(0.6);
   const item = useSharedValue(1); // 1 = resting on ground, 0 = inside the UFO
   const nudge = useSharedValue(0);
 
-  const next = () => setIdx((i) => (i + 1) % ABDUCTEES.length);
+  const next = () => setIdx((i) => i + 1);
 
   useEffect(() => {
     ufo.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
@@ -82,27 +94,32 @@ export function Banner() {
   const arrowA = useAnimatedStyle(() => ({ transform: [{ translateX: nudge.value }] }));
 
   return (
-    <LinearGradient colors={[C.purple, C.purpleLight, '#2A0752']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.wrap}>
+    <LinearGradient colors={[C.purple, C.purpleLight, '#11131D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.wrap}>
       {/* starfield */}
       <Sparkle x={150} y={18} delay={0} size={8} />
       <Sparkle x={330} y={120} delay={700} size={9} />
       <Sparkle x={205} y={136} delay={1200} size={7} />
 
       <View style={{ flex: 1 }}>
-        <WobbleWord word="SAVER" delay={0} />
+        <WobbleWord key={freeCount > 0 ? 'free' : 'fresh'} word={freeCount > 0 ? 'FREE' : 'FRESH'} delay={0} />
         <View style={{ marginTop: -10 }}>
-          <WobbleWord word="HOURS" delay={450} />
+          <WobbleWord key={freeCount > 0 ? 'del' : 'groc'} word={freeCount > 0 ? 'DELIVERY' : 'GROCERIES'} delay={450} />
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-          <Text style={styles.sub}>Groceries starting at </Text>
-          <View>
-            <Text style={[styles.sub, { color: C.yellow, fontSize: 15 }]}>₹9</Text>
-            <Sparkle x={-6} y={-8} delay={300} size={10} />
-            <Sparkle x={18} y={-4} delay={900} size={8} />
-            <Sparkle x={14} y={14} delay={1500} size={7} />
+        {freeCount > 0 && (
+          <Text style={styles.sub}>on your first {freeCount} order{freeCount > 1 ? 's' : ''}</Text>
+        )}
+        {minPrice != null && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+            <Text style={styles.sub}>Groceries starting at </Text>
+            <View>
+              <Text style={[styles.sub, { color: C.yellow, fontSize: 15 }]}>{formatLkr(minPrice)}</Text>
+              <Sparkle x={-6} y={-8} delay={300} size={10} />
+              <Sparkle x={18} y={-4} delay={900} size={8} />
+              <Sparkle x={14} y={14} delay={1500} size={7} />
+            </View>
           </View>
-        </View>
-        <PressScale style={styles.cta} haptic>
+        )}
+        <PressScale style={styles.cta} haptic onPress={onOrderNow}>
           <Text style={styles.ctaTxt}>ORDER NOW</Text>
           <Animated.View style={arrowA}>
             <ArrowRight size={12} color={C.ink} />
@@ -115,15 +132,21 @@ export function Banner() {
           <Svg width={120} height={110}>
             <Defs>
               <SvgGrad id="b" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor="#FF8CE0" stopOpacity="0.95" />
-                <Stop offset="1" stopColor="#FFD1F3" stopOpacity="0.15" />
+                <Stop offset="0" stopColor={C.yellow} stopOpacity="0.95" />
+                <Stop offset="1" stopColor="#FFF8D6" stopOpacity="0.15" />
               </SvgGrad>
             </Defs>
             <Polygon points="48,0 72,0 120,110 0,110" fill="url(#b)" />
           </Svg>
         </Animated.View>
         <Animated.Text style={[styles.ufo, ufoA]}>🛸</Animated.Text>
-        <Animated.Text style={[styles.item, itemA]}>{ABDUCTEES[idx]}</Animated.Text>
+        {images.length > 0 ? (
+          <Animated.View style={[styles.itemImgWrap, itemA]}>
+            <Image source={{ uri: images[idx % count] }} resizeMode="contain" style={styles.itemImg} />
+          </Animated.View>
+        ) : (
+          <Animated.Text style={[styles.item, itemA]}>{FALLBACK[idx % count]}</Animated.Text>
+        )}
       </View>
     </LinearGradient>
   );
@@ -145,4 +168,6 @@ const styles = StyleSheet.create({
   ufo: { fontSize: 50, position: 'absolute', top: -2, right: 20 },
   beam: { position: 'absolute', top: 36, right: 12 },
   item: { position: 'absolute', bottom: 2, right: 34, fontSize: 64 },
+  itemImgWrap: { position: 'absolute', bottom: 2, right: 26, width: 82, height: 82, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' },
+  itemImg: { width: 70, height: 70 },
 });

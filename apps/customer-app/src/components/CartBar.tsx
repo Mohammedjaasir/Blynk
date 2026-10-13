@@ -6,6 +6,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { withSpring } from '@/lib/motion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatLkr } from '@/blynk/lib/money';
+import { useFreeDeliveryUnlocked } from '@/blynk/store/freeDelivery';
 import { useCartSelect } from '@/lib/cart';
 import { C, F } from '@/lib/theme';
 import { CartIcon } from './icons';
@@ -14,14 +16,16 @@ import { Confetti, PressScale, RollingText } from './ui';
 export const CART_BAR_H = 56;
 
 /**
- * Green "n Items | ₹x — View Cart" bar. Slides up on first add, its numbers roll,
+ * Green "n items | LKR x — View cart" bar. Slides up on first add, its numbers roll,
  * it jiggles on every add, and when free delivery unlocks a strip unfurls on top
- * of it while confetti bursts out of the bar.
+ * of it while confetti bursts out of the bar. "Unlocked" comes from Blynk's
+ * new-customer free deliveries (no public basket threshold exists); see freeDelivery.ts.
  */
 export function CartBar() {
   const count = useCartSelect((c) => c.count);
   const total = useCartSelect((c) => c.total);
-  const freeDelivery = useCartSelect((c) => c.freeDelivery);
+  const freeCount = useFreeDeliveryUnlocked();
+  const freeDelivery = freeCount > 0;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const jiggle = useSharedValue(0);
@@ -56,16 +60,16 @@ export function CartBar() {
       >
         <PressScale onPress={() => router.push('/cart')} style={styles.bar} scaleTo={0.97} haptic>
           <Animated.View style={[styles.strip, stripA]}>
-            <Text style={styles.stripTxt}>Yay! You&apos;ve unlocked FREE Delivery</Text>
+            <Text style={styles.stripTxt}>Yay! FREE delivery on your first {freeCount} order{freeCount > 1 ? 's' : ''}</Text>
           </Animated.View>
           <View style={styles.row}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <RollingText text={`${count} Item${count > 1 ? 's' : ''}`} numeric={count} style={styles.txt} />
+              <RollingText text={`${count} item${count > 1 ? 's' : ''}`} numeric={count} style={styles.txt} />
               <Text style={styles.txt}>  |  </Text>
-              <RollingText text={`₹${total}`} numeric={total} style={styles.txt} />
+              <RollingText text={formatLkr(total)} numeric={total} style={styles.txt} />
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.txt}>View Cart</Text>
+              <Text style={styles.txt}>View cart</Text>
               <CartIcon size={16} />
             </View>
           </View>

@@ -15,6 +15,9 @@ import { withSpring } from '@/lib/motion';
 import Svg, { Circle, Defs, Path, Text as SvgText, TextPath } from 'react-native-svg';
 import { cartActions, useCartSelect } from '@/lib/cart';
 import { flip, pulse, startClocks, sway } from '@/lib/clock';
+import type { Product } from '@/blynk/api/types';
+import { formatLkr } from '@/blynk/lib/money';
+import { isOfferActive, savingsPerUnit } from '@/blynk/lib/pricing';
 import { C, F } from '@/lib/theme';
 import { ChevronIcon, CloseIcon } from './icons';
 
@@ -144,40 +147,48 @@ export function Hearts({ size = 12, still }: { size?: number; still?: boolean })
 }
 
 /**
- * Flips between "Other stores ₹x–y" and "Our app: n% lower" like the original card footer.
- * Both lines are always mounted and driven by one app-wide UI-thread clock, so the
- * flip costs no React renders no matter how many cards are on screen.
+ * The card's price footer. When an offer is running AND Admin's "show offer savings"
+ * switch is on, it flips between "Offer price" and "You save LKR n" like the original
+ * card footer. Otherwise it is static text. Both lines are always mounted and driven by
+ * one app-wide UI-thread clock, so the flip costs no React renders on any number of cards.
  */
-export function SavingsTicker({ otherMin, otherMax, pct, forceOurs }: { otherMin: number; otherMax: number; pct: number; forceOurs?: boolean }) {
+export function PriceTicker({ product, showSavings, forceSave }: { product: Product; showSavings: boolean; forceSave?: boolean }) {
   useEffect(startClocks, []);
-  const forced = useSharedValue(forceOurs ? 1 : 0);
+  const offer = isOfferActive(product);
+  const save = savingsPerUnit(product);
+  const flips = offer && showSavings && save > 0;
+  const forced = useSharedValue(forceSave ? 1 : 0);
   useEffect(() => {
-    forced.set(withTiming(forceOurs ? 1 : 0, { duration: 220 }));
-  }, [forceOurs]);
+    forced.set(withTiming(forceSave ? 1 : 0, { duration: 220 }));
+  }, [forceSave]);
   const ours = useAnimatedStyle(() => {
-    const v = Math.max(flip.value, forced.value);
+    const v = flips ? Math.max(flip.value, forced.value) : 0;
     return { opacity: v, transform: [{ translateY: (1 - v) * 12 }] };
   });
   const other = useAnimatedStyle(() => {
-    const v = Math.max(flip.value, forced.value);
+    const v = flips ? Math.max(flip.value, forced.value) : 0;
     return { opacity: 1 - v, transform: [{ translateY: -v * 12 }] };
   });
+  if (!offer) return <View style={styles.ticker} />;
   return (
     <View style={styles.ticker}>
       <Animated.View style={[styles.tickRow, other]}>
-        <Text style={{ fontSize: 9, color: C.faint }}>👀</Text>
-        <Text numberOfLines={1} style={[styles.tickTxt, { color: C.sub }]}>Other stores: ₹{otherMin}–{otherMax}</Text>
-      </Animated.View>
-      <Animated.View style={[styles.tickRow, ours]}>
         <Hearts size={10} still />
-        <Text numberOfLines={1} style={[styles.tickTxt, { color: C.pink, fontFamily: F.semi }]}>Our app: {pct}% lower</Text>
+        <Text numberOfLines={1} style={[styles.tickTxt, { color: C.pink, fontFamily: F.semi }]}>Offer price</Text>
       </Animated.View>
+      {flips && (
+        <Animated.View style={[styles.tickRow, ours]}>
+          <Hearts size={10} still />
+          <Text numberOfLines={1} style={[styles.tickTxt, { color: C.pink, fontFamily: F.semi }]}>You save {formatLkr(save)}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
 
 /* ---------- "+"  →  "− 1 +" stepper (width springs open) ---------- */
-export function AddButton({ id, storeId, compact }: { id: string; storeId?: string; compact?: boolean }) {
+export function AddButton({ product, compact }: { product: Product; compact?: boolean }) {
+  const id = product.id;
   const q = useCartSelect((c) => c.qty[id] ?? 0);
   const { add, remove } = cartActions;
   const open = useSharedValue(q > 0 ? 1 : 0);
@@ -200,7 +211,7 @@ export function AddButton({ id, storeId, compact }: { id: string; storeId?: stri
   return (
     <Animated.View style={[styles.add, { height: H, borderRadius: H / 2 }, box]}>
       <Animated.View pointerEvents={q > 0 ? 'none' : 'auto'} style={[StyleSheet.absoluteFill, styles.center, plusOnly]}>
-        <Pressable hitSlop={8} onPress={() => { bump(); add(id, storeId); }} style={[StyleSheet.absoluteFill, styles.center]}>
+        <Pressable hitSlop={8} onPress={() => { bump(); add(product); }} style={[StyleSheet.absoluteFill, styles.center]}>
           <Text style={styles.plus}>+</Text>
         </Pressable>
       </Animated.View>
@@ -209,7 +220,7 @@ export function AddButton({ id, storeId, compact }: { id: string; storeId?: stri
           <Text style={styles.stepTxt}>−</Text>
         </Pressable>
         <RollingText text={String(Math.max(q, 1))} numeric={q} style={styles.qty} />
-        <Pressable hitSlop={6} onPress={() => { bump(); add(id, storeId); }} style={styles.stepBtn}>
+        <Pressable hitSlop={6} onPress={() => { bump(); add(product); }} style={styles.stepBtn}>
           <Text style={styles.stepTxt}>+</Text>
         </Pressable>
       </Animated.View>
@@ -217,7 +228,8 @@ export function AddButton({ id, storeId, compact }: { id: string; storeId?: stri
   );
 }
 
-/* ---------- Rotating "EVERYDAY LOWEST PRICE" rubber stamp ---------- */
+/* ---------- Rotating "FREE DELIVERY" rubber stamp ---------- */
+/** Only shown while Blynk's free deliveries are switched on; callers hide it otherwise. */
 export function StampBadge({ size = 58, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
   useEffect(startClocks, []);
   const a = useAnimatedStyle(() => ({ transform: [{ rotate: `${-18 + sway.value * 8}deg` }, { scale: 1 + sway.value * 0.04 }] }));
@@ -231,17 +243,17 @@ export function StampBadge({ size = 58, style }: { size?: number; style?: StyleP
         <Circle cx={32} cy={32} r={30} stroke={C.pink} strokeWidth={1.5} fill="none" strokeDasharray="3 2" />
         <Circle cx={32} cy={32} r={18} stroke={C.pink} strokeWidth={1} fill="none" />
         <SvgText fill={C.pink} fontSize={7} fontWeight="bold" letterSpacing={1.2}>
-          <TextPath href="#arc">EVERYDAY • LOWEST • PRICE •</TextPath>
+          <TextPath href="#arc">FREE • DELIVERY • BLYNK •</TextPath>
         </SvgText>
-        <SvgText x={32} y={30} fill={C.pink} fontSize={7} fontWeight="bold" textAnchor="middle">LOWEST</SvgText>
-        <SvgText x={32} y={39} fill={C.pink} fontSize={7} fontWeight="bold" textAnchor="middle">PRICE</SvgText>
+        <SvgText x={32} y={30} fill={C.pink} fontSize={7} fontWeight="bold" textAnchor="middle">FREE</SvgText>
+        <SvgText x={32} y={39} fill={C.pink} fontSize={5.6} fontWeight="bold" textAnchor="middle">DELIVERY</SvgText>
       </Svg>
     </Animated.View>
   );
 }
 
 /* ---------- Confetti burst (physics: initial velocity + gravity) ---------- */
-const CONFETTI_COLORS = [C.pink, C.yellow, '#3B82F6', C.green, '#FF6B35', '#9B5DE5'];
+const CONFETTI_COLORS = [C.pink, C.yellow, '#3B82F6', C.green, '#FF6B35', C.purpleLight];
 function Piece({ seed, originX, originY }: { seed: number; originX: number; originY: number }) {
   const p = useSharedValue(0);
   const rnd = (k: number) => {

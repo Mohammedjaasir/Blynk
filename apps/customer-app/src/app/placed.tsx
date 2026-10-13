@@ -14,7 +14,11 @@ import { C, F } from '@/lib/theme';
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-/** Order placed: ring draws, tick draws, badge pops, confetti rains. */
+/**
+ * Order placed: ring draws, tick draws, badge pops, confetti rains.
+ * Kept for the ordering phase but UNREACHABLE today: nothing navigates here, because
+ * this app does not place orders yet ("Place order" shows "Ordering from the new app opens soon").
+ */
 export default function Placed() {
   const { width, height } = useWindowDimensions();
   const { clear } = cartActions;
@@ -47,7 +51,7 @@ export default function Placed() {
         </Svg>
       </Animated.View>
       <Animated.Text entering={FadeInDown.delay(700)} style={styles.title}>Order placed!</Animated.Text>
-      <Animated.Text entering={FadeInDown.delay(820)} style={styles.sub}>Your tokri is being packed 🧺{'\n'}Arriving in ~15 mins</Animated.Text>
+      <Animated.Text entering={FadeInDown.delay(820)} style={styles.sub}>Your Blynk order is being packed 🧺</Animated.Text>
       <Animated.View entering={FadeInDown.delay(1000)}>
         <PressScale onPress={() => router.dismissTo('/home')} style={styles.cta} haptic>
           <Text style={styles.ctaTxt}>Back to home</Text>

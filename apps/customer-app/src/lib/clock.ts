@@ -5,8 +5,8 @@ import { Easing, makeMutable, withDelay, withRepeat, withSequence, withTiming } 
  * animation, a handful of shared values loop once on the UI thread and every
  * component just reads them inside useAnimatedStyle. Zero React re-renders.
  */
-export const flip = makeMutable(0); // 0 = "Other stores", 1 = "Our app" (eases between)
-export const pulse = makeMutable(1); // heartbeat scale for the pink hearts
+export const flip = makeMutable(0); // 0 = "Offer price", 1 = "You save LKR n" (eases between)
+export const pulse = makeMutable(1); // heartbeat scale for the green hearts
 export const sway = makeMutable(0); // slow 0↔1 for rubber stamps
 
 let started = false;

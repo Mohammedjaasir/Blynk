@@ -9,6 +9,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { CatalogProvider } from '@/blynk/catalog/CatalogContext';
+import { StoreProvider } from '@/blynk/store/StoreContext';
 import { CartProvider } from '@/lib/cart';
 
 SplashScreen.preventAutoHideAsync();
@@ -27,17 +29,22 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <CartProvider>
-          <StatusBar style="auto" />
-          <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#fff' } }}>
-            <Stack.Screen name="index" options={{ animation: 'none' }} />
-            <Stack.Screen name="home" options={{ animation: 'fade' }} />
-            <Stack.Screen name="opening" options={{ animation: 'fade' }} />
-            <Stack.Screen name="store/[id]" options={{ animation: 'fade' }} />
-            <Stack.Screen name="cart" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="otp" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="address" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="placed" options={{ animation: 'fade', gestureEnabled: false }} />
-          </Stack>
+          <StoreProvider>
+            <CatalogProvider>
+              <StatusBar style="auto" />
+              <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#fff' } }}>
+                <Stack.Screen name="index" options={{ animation: 'none' }} />
+                <Stack.Screen name="home" options={{ animation: 'fade' }} />
+                <Stack.Screen name="opening" options={{ animation: 'fade' }} />
+                <Stack.Screen name="store/[id]" options={{ animation: 'fade' }} />
+                <Stack.Screen name="search" options={{ animation: 'fade' }} />
+                <Stack.Screen name="cart" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="otp" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="address" options={{ animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="placed" options={{ animation: 'fade', gestureEnabled: false }} />
+              </Stack>
+            </CatalogProvider>
+          </StoreProvider>
         </CartProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

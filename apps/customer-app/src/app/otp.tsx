@@ -13,8 +13,6 @@ import { PressScale, tap } from '@/components/ui';
 import { cartActions } from '@/lib/cart';
 import { C, F } from '@/lib/theme';
 
-const CODE = '904467';
-
 export default function Otp() {
   const { phone } = useLocalSearchParams<{ phone: string }>();
   const insets = useSafeAreaInsets();
@@ -27,39 +25,40 @@ export default function Otp() {
   const en = useSharedValue(0);
   const shake = useSharedValue(0);
 
+  /*
+   * Preview only: this phase makes no POST, so no OTP is sent and nothing is verified.
+   * Verify shows an honest notice (the banner that used to fake an SMS), keeps the number
+   * on this device only, and returns to the cart so the rest of the flow can be seen.
+   */
   const verify = (code: string) => {
-    if (code !== CODE) {
+    if (code.length !== 6) {
       shake.set(withSequence(...[10, -10, 8, -8, 0].map((v) => withTiming(v, { duration: 55 }))));
       return;
     }
+    tap();
     setVerifying(true);
-    setTimeout(() => {
-      setPhone(phone ?? '');
-      router.back();
-    }, 900);
+    setSms(true);
   };
 
   const enter = (code: string) => {
     setOtp(code);
     en.set(withTiming(code.length === 6 ? 1 : 0, { duration: 250 }));
-    if (code.length === 6) verify(code);
   };
 
   useEffect(() => {
     const t = setInterval(() => setSecs((s) => (s > 0 ? s - 1 : 0)), 1000);
-    const a = setTimeout(() => setSms(true), 2200);
-    return () => { clearInterval(t); clearTimeout(a); };
+    return () => clearInterval(t);
   }, []);
 
-  // SMS retriever: banner drops, then the code types itself in
+  // notice drops, stays long enough to read, then we head back to the cart
   useEffect(() => {
     if (!sms) return;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    timers.push(setTimeout(() => {
-      CODE.split('').forEach((_, i) => timers.push(setTimeout(() => { enter(CODE.slice(0, i + 1)); tap(); }, i * 110)));
-    }, 1100));
-    timers.push(setTimeout(() => setSms(false), 2400));
-    return () => timers.forEach(clearTimeout);
+    const a = setTimeout(() => setSms(false), 2600);
+    const b = setTimeout(() => {
+      setPhone(phone ?? '');
+      router.back();
+    }, 2900);
+    return () => { clearTimeout(a); clearTimeout(b); };
   }, [sms]);
 
 
@@ -73,8 +72,8 @@ export default function Otp() {
         <PressScale onPress={() => router.back()} style={{ padding: 4, alignSelf: 'flex-start' }}><BackIcon color="#fff" /></PressScale>
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <View>
-            <Text style={styles.title}>Verify Details</Text>
-            <Text style={styles.sub}>OTP sent to +91-{phone}</Text>
+            <Text style={styles.title}>Verify details</Text>
+            <Text style={styles.sub}>Enter the 6-digit code for +94 {phone}</Text>
           </View>
           <PhoneArt />
         </View>
@@ -102,18 +101,17 @@ export default function Otp() {
         </Text>
         <PressScale disabled={otp.length < 6} onPress={() => verify(otp)}>
           <Animated.View style={[styles.cta, btn]}>
-            {verifying ? <Spinner /> : <Text style={styles.ctaTxt}>{otp.length === 6 ? 'Verify and Proceed' : 'Enter OTP'}</Text>}
+            {verifying ? <Spinner /> : <Text style={styles.ctaTxt}>{otp.length === 6 ? 'Verify and proceed' : 'Enter OTP'}</Text>}
           </Animated.View>
         </PressScale>
       </Pressable>
 
       {sms && (
         <Animated.View entering={SlideInUp.springify().mass(1).energyThreshold(1e-4).damping(16)} exiting={SlideOutUp.duration(260)} style={[styles.sms, { top: insets.top + 6 }]}>
-          <View style={styles.smsAvatar}><Text style={{ color: '#fff', fontFamily: F.bold }}>T</Text></View>
+          <View style={styles.smsAvatar}><Text style={{ color: '#fff', fontFamily: F.bold }}>B</Text></View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.smsFrom}>TOKRI · now</Text>
-            <Text style={styles.smsBody} numberOfLines={2}>Use OTP {CODE} to log into your tokri account. Do not share it with anyone.</Text>
-            <View style={styles.copy}><Text style={styles.copyTxt}>⧉  {CODE}</Text></View>
+            <Text style={styles.smsFrom}>Blynk · preview</Text>
+            <Text style={styles.smsBody} numberOfLines={3}>Phone sign-in opens soon. No code was sent and nothing was verified; your number stays on this device.</Text>
           </View>
         </Animated.View>
       )}
@@ -164,7 +162,7 @@ function Spinner() {
 const styles = StyleSheet.create({
   head: { backgroundColor: C.green, paddingHorizontal: 16, paddingBottom: 0, gap: 10 },
   title: { color: '#fff', fontFamily: F.bold, fontSize: 18 },
-  sub: { color: '#E0F5E5', fontFamily: F.regular, fontSize: 12, marginTop: 2, marginBottom: 14 },
+  sub: { color: '#DDF2E1', fontFamily: F.regular, fontSize: 12, marginTop: 2, marginBottom: 14 },
   phone: { width: 56, height: 78, borderWidth: 2, borderBottomWidth: 0, borderColor: C.yellow, borderTopLeftRadius: 10, borderTopRightRadius: 10, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
   notch: { position: 'absolute', top: 6, width: 14, height: 3, borderRadius: 2, backgroundColor: C.yellow },
   xx: { color: C.yellow, fontFamily: F.bold, fontSize: 8 },
@@ -182,9 +180,7 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 10, right: 10, backgroundColor: '#2B2A2E', borderRadius: 18, padding: 14, flexDirection: 'row', gap: 12,
     shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12, elevation: 12,
   },
-  smsAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#9B5DE5', alignItems: 'center', justifyContent: 'center' },
+  smsAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
   smsFrom: { color: '#fff', fontFamily: F.semi, fontSize: 13 },
   smsBody: { color: '#ddd', fontFamily: F.regular, fontSize: 12, marginTop: 2 },
-  copy: { alignSelf: 'flex-start', marginTop: 8, borderWidth: 1, borderColor: '#777', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  copyTxt: { color: '#fff', fontFamily: F.medium, fontSize: 12 },
 });
