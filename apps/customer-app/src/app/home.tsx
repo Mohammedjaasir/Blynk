@@ -348,8 +348,15 @@ export default function Home() {
                     {live && live.aisles.length === 0 && (
                       <Text style={styles.empty}>{filters.length ? 'Nothing matches these filters right now.' : "We're stocking the shelves. Check back shortly."}</Text>
                     )}
+                    {/* The promo band follows the 3rd aisle, or the last one when the store has fewer
+                        (owner, 2026-10-13: the live store has two categories and the band never showed). */}
                     {live?.aisles.map((a, i) => (
-                      <AisleCard key={a.cat.id} aisle={a} freeStamp={live.free > 0} promo={granted && i === PROMO_AFTER - 1 ? live.promo : null} />
+                      <AisleCard
+                        key={a.cat.id}
+                        aisle={a}
+                        freeStamp={live.free > 0}
+                        promo={i === Math.min(PROMO_AFTER, live.aisles.length) - 1 ? live.promo : null}
+                      />
                     ))}
                   </>
                 )}
