@@ -11,6 +11,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SessionEffects } from '@/blynk/account/SessionEffects';
 import { CatalogProvider } from '@/blynk/catalog/CatalogContext';
+// reads ?ref= and #/p/<id> from the page address before the router moves it on
+import { ShareStartup } from '@/blynk/share/ShareStartup';
 import { StoreProvider } from '@/blynk/store/StoreContext';
 import { CartProvider } from '@/lib/cart';
 
@@ -58,6 +60,7 @@ function AppShell() {
               </Stack>
               {/* session end cleanup, web push, the app-wide notice (src/blynk/account) */}
               <SessionEffects />
+              <ShareStartup />
             </CatalogProvider>
           </StoreProvider>
         </CartProvider>

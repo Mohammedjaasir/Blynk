@@ -1,7 +1,8 @@
 import { memo, useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
 import type { Product } from '@/blynk/api/types';
+import { openProduct } from '@/blynk/catalog/openProduct';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
@@ -48,7 +49,8 @@ export const ProductCard = memo(function ProductCard({
   const ea = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }], opacity: pop.value }));
   const line = sub ?? (wide ? undefined : x?.store);
   return (
-    <View style={{ width }}>
+    // the whole card opens the product page; the "+" inside keeps its own tap
+    <Pressable style={{ width }} onPress={() => openProduct(p)} accessibilityRole="link" accessibilityLabel={p.name}>
       <View style={[styles.img, { width, height: h, borderRadius: wide ? 10 : 14 }]}>
         <Animated.View style={[ea, !p.is_available && { opacity: 0.45 }]}>
           {x?.emoji ? (
@@ -98,7 +100,7 @@ export const ProductCard = memo(function ProductCard({
       ) : (
         <PriceTicker product={p} showSavings={showSavings} forceSave={inCart} />
       )}
-    </View>
+    </Pressable>
   );
 });
 

@@ -26,6 +26,8 @@ import {
   BagBadge, CheckBoxIcon, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
+import { DoctorsHomeEntry } from '@/blynk/doctors/DoctorsHomeEntry';
+import { BirthdayOfferBanner } from '@/blynk/rewards/BirthdayOfferBanner';
 import { SPLASH_LOGO, SPLASH_LOGO_H, SPLASH_LOGO_W } from '@/lib/splash';
 import { PressScale, RollingText, Skeleton, StampBadge } from '@/components/ui';
 import {
@@ -342,6 +344,14 @@ export default function Home() {
                       ))}
                     </ScrollView>
                   </>
+                )}
+
+                {/* live: the birthday gift (only while it applies) and Channel doctors (Flutter home) */}
+                {!DEMO && (
+                  <View style={{ paddingHorizontal: 15, marginTop: 16, gap: 10 }}>
+                    <BirthdayOfferBanner />
+                    <DoctorsHomeEntry />
+                  </View>
                 )}
 
                 {granted && (DEMO || !!live?.vs) && <VsSection live={live?.vs ?? null} />}
