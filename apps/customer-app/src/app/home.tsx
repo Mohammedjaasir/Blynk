@@ -457,15 +457,8 @@ function LocationRow({ locating, dark, name, address }: { locating: boolean; dar
   );
 }
 
-/** "Search for 'Burger'" — the quoted word rolls up to the next name every 1.5 s. */
+/** "Search for 'Burger'": every 2 s the quoted name slides up and the next one slides in from below. */
 function SearchBar({ phase, hints }: { phase: Phase; hints: string[] }) {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    // owner: a new name about every 1.5 s
-    const t = setInterval(() => setI((n) => n + 1), 1500);
-    return () => clearInterval(t);
-  }, []);
-  const hint = hints[i % hints.length];
   const grey = phase === 'locating' || phase === 'skeleton';
   return (
     <PressScale
@@ -474,11 +467,49 @@ function SearchBar({ phase, hints }: { phase: Phase; hints: string[] }) {
       scaleTo={0.98}
     >
       <SearchIcon size={18} color="#55555C" stroke={2} />
-      <View style={{ flexDirection: 'row', flexShrink: 1 }}>
-        <Text style={styles.searchTxt}>{'Search for '}</Text>
-        <RollingText text={`'${hint}'`} style={styles.searchTxt} />
+      <View style={{ flexDirection: 'row', flexShrink: 1, alignItems: 'center' }}>
+        <Text style={[styles.searchTxt, { lineHeight: HINT_LH }]}>{'Search for '}</Text>
+        <SlideUpHints hints={hints} />
       </View>
     </PressScale>
+  );
+}
+
+const HINT_LH = 20;
+/**
+ * A column of the hints (first one repeated at the end) moves up one line at a time. On reaching
+ * the repeated first line it snaps back to the top; both lines read the same, so the loop is seamless.
+ */
+function SlideUpHints({ hints }: { hints: string[] }) {
+  const y = useSharedValue(0);
+  const step = useSharedValue(0);
+  const list = hints.length ? [...hints, hints[0]] : [''];
+  const n = hints.length;
+  useEffect(() => {
+    if (n < 2) return;
+    step.value = 0;
+    y.value = 0;
+    const t = setInterval(() => {
+      const next = step.value + 1;
+      step.value = next;
+      y.value = withTiming(-next * HINT_LH, { duration: 420, easing: Easing.out(Easing.cubic) }, (done) => {
+        if (done && next >= n) {
+          step.value = 0;
+          y.value = 0; // seamless: the repeated first line sits where the real first line is
+        }
+      });
+    }, 2000);
+    return () => clearInterval(t);
+  }, [n, hints.join('|')]);
+  const a = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+  return (
+    <View style={{ height: HINT_LH, overflow: 'hidden', flexShrink: 1 }}>
+      <Animated.View style={a}>
+        {list.map((h, k) => (
+          <Text key={k} numberOfLines={1} style={[styles.searchTxt, { lineHeight: HINT_LH, height: HINT_LH }]}>{`'${h}'`}</Text>
+        ))}
+      </Animated.View>
+    </View>
   );
 }
 
