@@ -4,6 +4,7 @@ import { getCategories, getProducts } from '../api/catalog';
 import type { Category, Product } from '../api/types';
 import { ApiError } from '../api/client';
 import ProductCard from '../components/ProductCard';
+import { goBack } from '../lib/goBack';
 import ErrorState from '../components/ErrorState';
 import { SkeletonRail } from '../components/Skeleton';
 import rider from '../assets/rider.png';
@@ -23,7 +24,7 @@ export default function Aisle() {
       .catch((e) => setError(e instanceof ApiError ? e : new ApiError('Something went wrong.', 0)));
   };
   useEffect(load, [slug]);
-  const back = () => (window.history.length > 1 ? nav(-1) : nav('/'));
+  const back = () => goBack(nav);
 
   if (error) return <section className="screen"><ErrorState error={error} onRetry={load} /></section>;
   if (!state) return <section className="screen"><div className="sk" style={{ height: 146 }} /><SkeletonRail /></section>;

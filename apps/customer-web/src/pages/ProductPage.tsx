@@ -6,6 +6,7 @@ import { ApiError } from '../api/client';
 import { formatLkr } from '../lib/money';
 import { isOfferActive, effectivePrice } from '../lib/pricing';
 import AddButton from '../components/AddButton';
+import { goBack } from '../lib/goBack';
 import ErrorState from '../components/ErrorState';
 
 export default function ProductPage() {
@@ -23,7 +24,7 @@ export default function ProductPage() {
     <section className="screen">
       <div className="sc">
         <div style={{ position: 'relative', background: 'linear-gradient(160deg,#F7F7F9,#ECEDF1)', height: 340 }}>
-          <button className="rb" onClick={() => nav(-1)} aria-label="Back" style={{ position: 'absolute', left: 16, top: 14 }}>←</button>
+          <button className="rb" onClick={() => goBack(nav)} aria-label="Back" style={{ position: 'absolute', left: 16, top: 14 }}>←</button>
           {p.image_url && <img src={p.image_url} alt="" style={{ width: '70%', height: '80%', objectFit: 'contain', margin: '30px auto 0' }} />}
         </div>
         <div style={{ padding: '16px' }}>

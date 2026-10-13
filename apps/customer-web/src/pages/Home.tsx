@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getProducts, getHomeGroups, getPromotions } from '../api/catalog';
+import { getHomeGroups, getPromotions } from '../api/catalog';
 import type { Product, Category, Promotion } from '../api/types';
 import { ApiError } from '../api/client';
 import { effectivePrice, isOfferActive } from '../lib/pricing';
@@ -9,14 +9,12 @@ import ProductCard from '../components/ProductCard';
 import CategoryTiles from '../components/CategoryTiles';
 import PromoBanner from '../components/PromoBanner';
 import { SkeletonRail } from '../components/Skeleton';
+import { loadAllProducts } from '../lib/loadAllProducts';
+import SearchHint from '../components/SearchHint';
 import ErrorState from '../components/ErrorState';
 
 async function loadAll() {
-  const first = await getProducts({ page: 1, limit: 100 });
-  let products = first.products;
-  for (let page = 2; page <= Math.min(first.pagination.total_pages, 20); page++) {
-    products = products.concat((await getProducts({ page, limit: 100 })).products);
-  }
+  const products = await loadAllProducts();
   const [{ groups }, { promotions }] = await Promise.all([getHomeGroups(), getPromotions().catch(() => ({ promotions: [] as Promotion[] }))]);
   const categories: Category[] = groups.flatMap((g) => g.categories);
   return { products, categories, promotions };
@@ -47,7 +45,7 @@ export default function Home() {
       <div className="sc">
         <div className="h-top">
           <div className="loc"><span className="pin" /><div className="grow"><div className="t">Dharga Town</div><div className="s">Groceries delivered within 4 km</div></div></div>
-          <Link to="/search" className="search" style={{ textDecoration: 'none' }}>Search for 'Milk'</Link>
+          <Link to="/search" className="search" style={{ textDecoration: 'none' }}><SearchHint names={(data?.products ?? []).slice(0, 6).map((p) => p.name)} /></Link>
           <PromoBanner promotions={data?.promotions ?? []} products={data?.products ?? []} minPrice={view?.min ?? null} firstCategory={data?.categories[0]?.slug} categories={data?.categories} />
         </div>
         <div className="stk">{data && <CategoryTiles categories={data.categories} products={data.products} />}</div>

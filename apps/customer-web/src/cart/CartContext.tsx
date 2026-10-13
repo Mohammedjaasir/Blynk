@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Product } from '../api/types';
-import { loadCart, saveCart, setQuantity, quantityOf, itemCount, subtotal, type CartState } from './cartStore';
+import { loadCart, saveCart, reconcile, setQuantity, quantityOf, itemCount, subtotal, type CartState } from './cartStore';
 
-interface CartApi { state: CartState; add(p: Product): void; remove(p: Product): void; setQty(p: Product, n: number): void; replaceState(s: CartState): void; qty(id: string): number; count: number; subtotal: number }
+interface CartApi { state: CartState; add(p: Product): void; remove(p: Product): void; setQty(p: Product, n: number): void; replaceState(s: CartState): void; reconcileWith(products: Product[]): void; qty(id: string): number; count: number; subtotal: number }
 const Ctx = createContext<CartApi | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
@@ -14,6 +14,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     remove: (p) => setState((s) => setQuantity(s, p, quantityOf(s, p.id) - 1)),
     setQty: (p, n) => setState((s) => setQuantity(s, p, n)),
     replaceState: (s) => setState(s),
+    reconcileWith: (products) => setState((s) => reconcile(s, products)),
     qty: (id) => quantityOf(state, id),
     count: itemCount(state),
     subtotal: subtotal(state),

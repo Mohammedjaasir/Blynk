@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getProducts } from '../api/catalog';
 import type { Product } from '../api/types';
+import { ApiError } from '../api/client';
+import { goBack } from '../lib/goBack';
+import ErrorState from '../components/ErrorState';
+import { SkeletonRail } from '../components/Skeleton';
 import ProductCard from '../components/ProductCard';
 
 const KEY = 'blynk.web.recentSearches';
@@ -15,21 +19,28 @@ export default function Search() {
   const [q, setQ] = useState('');
   const [res, setRes] = useState<{ items: Product[]; total: number } | null>(null);
   const [recent, setRecent] = useState(readRecent);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [tick, setTick] = useState(0);
+  const seq = useRef(0);
   useEffect(() => {
     const term = q.trim();
-    if (!term) { setRes(null); return; }
+    const id = ++seq.current;
+    setError(null);
+    if (!term) { setRes(null); setLoading(false); return; }
+    setLoading(true);
     const t = setTimeout(() => {
       getProducts({ search: term, category_slug: cat, page: 1, limit: 40 })
-        .then((r) => { setRes({ items: r.products, total: r.pagination.total }); remember(term); setRecent(readRecent()); })
-        .catch(() => setRes({ items: [], total: 0 }));
+        .then((r) => { if (id !== seq.current) return; setRes({ items: r.products, total: r.pagination.total }); setLoading(false); remember(term); setRecent(readRecent()); })
+        .catch((e) => { if (id !== seq.current) return; setRes(null); setLoading(false); setError(e instanceof ApiError ? e : new ApiError('Something went wrong.', 0)); });
     }, 350);
     return () => clearTimeout(t);
-  }, [q, cat]);
+  }, [q, cat, tick]);
   return (
     <section className="screen">
       <div className="row" style={{ display: 'flex', gap: 10, padding: '14px 16px' }}>
-        <button onClick={() => nav(-1)} aria-label="Back">←</button>
-        <input type="search" role="searchbox" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search groceries & essentials" className="ss" style={{ flex: 1, border: 0, outline: 0 }} />
+        <button onClick={() => goBack(nav)} aria-label="Back">←</button>
+        <input type="search" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search groceries & essentials" className="ss" style={{ flex: 1, border: 0, outline: 0 }} />
       </div>
       <div className="sc">
         {!q.trim() && recent.length > 0 && (
@@ -38,9 +49,11 @@ export default function Search() {
             <div className="fl" style={{ padding: '10px 0', flexWrap: 'wrap' }}>{recent.map((r) => <button key={r} className="chip" onClick={() => setQ(r)}>{r}</button>)}</div>
           </div>
         )}
-        {res && res.total > 0 && <div style={{ padding: '4px 16px', color: 'var(--t2)', fontSize: 13 }}>{res.total === 1 ? '1 result' : `${res.total} results`}</div>}
-        {res && res.total > 0 && <div className="grid">{res.items.map((p) => <ProductCard key={p.id} product={p} />)}</div>}
-        {res && res.total === 0 && <div style={{ textAlign: 'center', padding: 40 }}><h2 style={{ fontSize: 17 }}>No results for "{q.trim()}"</h2><p style={{ color: 'var(--t2)', fontSize: 14, marginTop: 6 }}>Check the spelling or browse the aisles.</p><Link to="/" className="big" style={{ marginTop: 16, textDecoration: 'none' }}>Browse the shop</Link></div>}
+        {loading && <SkeletonRail />}
+        {error && <ErrorState error={error} onRetry={() => setTick((n) => n + 1)} />}
+        {!loading && !error && res && res.total > 0 && <div style={{ padding: '4px 16px', color: 'var(--t2)', fontSize: 13 }}>{res.total === 1 ? '1 result' : `${res.total} results`}</div>}
+        {!loading && !error && res && res.total > 0 && <div className="grid">{res.items.map((p) => <ProductCard key={p.id} product={p} />)}</div>}
+        {!loading && !error && res && res.total === 0 && <div style={{ textAlign: 'center', padding: 40 }}><h2 style={{ fontSize: 17 }}>No results for "{q.trim()}"</h2><p style={{ color: 'var(--t2)', fontSize: 14, marginTop: 6 }}>Check the spelling or browse the aisles.</p><Link to="/" className="big" style={{ marginTop: 16, textDecoration: 'none' }}>Browse the shop</Link></div>}
       </div>
     </section>
   );
