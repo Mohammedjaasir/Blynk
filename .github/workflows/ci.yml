@@ -73,9 +73,25 @@ jobs:
         run: npm run build
 
       - name: Run Database Migrations (Compiled Node runner)
+        # The migration runner loads src/config/env, which refuses to start without the
+        # JWT and OTP secrets; without them this step failed before any test ran.
+        # Same throwaway CI-only values as the test step below.
         env:
           DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/blynk_db
+          JWT_ACCESS_SECRET: dev_jwt_access_secret_change_me_in_production_min_32_chars!
+          JWT_REFRESH_SECRET: dev_jwt_refresh_secret_change_me_in_production_min_32_chars!
+          OTP_SECRET: dev_otp_hmac_secret_min_32_chars_random_string!
         run: npm run migrate:up:prod
+
+      - name: Seed Development Data (Compiled)
+        # The suites expect the dev seed (store DHARGA-01, admin, customer, catalogue); on a fresh
+        # database they failed with "No customer user in seed data" and missing foreign keys.
+        env:
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/blynk_db
+          JWT_ACCESS_SECRET: dev_jwt_access_secret_change_me_in_production_min_32_chars!
+          JWT_REFRESH_SECRET: dev_jwt_refresh_secret_change_me_in_production_min_32_chars!
+          OTP_SECRET: dev_otp_hmac_secret_min_32_chars_random_string!
+        run: npm run seed:prod
 
       - name: Run Full Vitest Test Suite (Regression & Deployment Verification)
         env:

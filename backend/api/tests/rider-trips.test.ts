@@ -41,14 +41,28 @@ describe('Rider trips, suggestions and My day', () => {
     staff: generateAccessToken(staff),
   };
 
+  // Every point is placed relative to the store's own coordinates (read in beforeAll), so the
+  // suite holds wherever the hub sits: the dev seed's clock-tower centre or an older local one.
   // Drop-off pins: A and A2 about 0.7 km apart, FAR about 3 km from both (inside the 4 km zone).
-  const PIN_A = { lat: 6.4351, lng: 80.0243 };
-  const PIN_A2 = { lat: 6.44, lng: 80.028 };
-  const PIN_FAR = { lat: 6.4382, lng: 80.055 };
+  type Pin = { lat: number; lng: number };
+  let hub: Pin = { lat: 0, lng: 0 };
+  const at = (dLat: number, dLng: number): Pin => ({
+    lat: Number((hub.lat + dLat).toFixed(6)),
+    lng: Number((hub.lng + dLng).toFixed(6)),
+  });
+  let PIN_A: Pin;
+  let PIN_A2: Pin;
+  let PIN_FAR: Pin;
   const addresses: Record<string, string> = {};
   const createdOrders: string[] = [];
 
   beforeAll(async () => {
+    hub = (
+      await pool.query('SELECT latitude::float AS lat, longitude::float AS lng FROM dark_stores WHERE id = $1', [DARK_STORE])
+    ).rows[0];
+    PIN_A = at(-0.0031, -0.0031);
+    PIN_A2 = at(0.0018, 0.0006);
+    PIN_FAR = at(0, 0.0276);
     for (const r of riders) {
       await pool.query(`INSERT INTO users (id, phone, full_name, role) VALUES ($1, $2, $3, 'RIDER')`, [r.userId, r.phone, r.name]);
       await pool.query(
@@ -159,9 +173,9 @@ describe('Rider trips, suggestions and My day', () => {
       const fixture = await packedOrder();
       // near: 0.3 km from the store, 2 min ago. far: about 4 km, 5 min ago.
       // unknown: a point 40 min old (stale). busy: free of location but holding one order.
-      await givePoint(near, fixture.id, { lat: 6.4382, lng: 80.0301 }, 2);
-      await givePoint(far, fixture.id, { lat: 6.47, lng: 80.04 }, 5);
-      await givePoint(unknown, fixture.id, { lat: 6.4382, lng: 80.0275 }, 40);
+      await givePoint(near, fixture.id, at(0, 0.0027), 2);
+      await givePoint(far, fixture.id, at(0.0318, 0.0126), 5);
+      await givePoint(unknown, fixture.id, at(0, 0.0001), 40);
       const held = await packedOrder('A2');
       expect((await assign(held.id, busy.riderId)).status).toBe(200);
 
