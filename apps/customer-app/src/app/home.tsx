@@ -18,7 +18,7 @@ import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice } from '@/blynk/lib/pricing';
 import { freeDeliveryCount } from '@/blynk/lib/storeText';
 import { useStore } from '@/blynk/store/StoreContext';
-import { Banner } from '@/components/Banner';
+import { Banner, BANNER_TOP } from '@/components/Banner';
 import { CART_BAR, CartBar } from '@/components/CartBar';
 import { ClosedBanner } from '@/components/ClosedBanner';
 import {
@@ -189,10 +189,10 @@ export default function Home() {
   const statusA = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       y.value, [headerH.value - 80, headerH.value - 10],
-      [interpolateColor(ink.value, [0, 1], ['#FFFFFF', C.purple]), '#FFFFFF'],
+      [interpolateColor(ink.value, [0, 1], ['#FFFFFF', BANNER_TOP]), '#FFFFFF'],
     ),
   }));
-  const headerA = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(ink.value, [0, 1], ['#FFFFFF', C.purple]) }));
+  const headerA = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(ink.value, [0, 1], ['#FFFFFF', BANNER_TOP]) }));
   const bannerA = useAnimatedStyle(() => ({ height: bannerOpen.value * BANNER_H, opacity: interpolate(bannerOpen.value, [0, 0.35, 1], [0, 0.7, 1]) }));
   const chipsA = useAnimatedStyle(() => ({ top: catH.value, opacity: stuckChips.value, shadowOpacity: stuckChips.value * 0.09 }));
   const stickyShadow = useAnimatedStyle(() => {

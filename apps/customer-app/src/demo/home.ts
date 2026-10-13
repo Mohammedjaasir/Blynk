@@ -36,7 +36,7 @@ export const BANNER = {
   line: 'Groceries starting at ₹49',
   accent: '₹49',
   /** What the beam abducts in turn: grocery stand-ins in the video's slot (owner: no photos). */
-  emojis: ['🥛', '🍞', '🍎', '🥚', '🥦', '🍌'],
+  emojis: ['🍞', '🍎', '🥕', '🥚', '🥦', '🍌'],
 };
 
 /** Before location is granted the rail has no "FROM" tags and a different order. */

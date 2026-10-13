@@ -25,13 +25,16 @@ import { PressScale } from './ui';
  *   P−380 ms dish is sucked back up the beam while the saucer swings, then the next one drops
  */
 const H = 183;
-const ITEM = 116;
+const ITEM = 86;
 const TEXT_W = 196;
 const P = 2600; // ms per dish
 
+/** The banner's top purple. Home paints its header the same, so header and banner read as one block, as in the reference. */
+export const BANNER_TOP = '#2E0C66';
+
 /** Reference palette, sampled off the frames. */
 const V = {
-  bg: ['#2A0A62', '#300C6C', '#3A1380'] as const,
+  bg: ['#2E0C66', '#300C6C', '#3A1380'] as const,
   glow: '#6A3AA8',
   cloud: '#250854',
   pink: '#F04FB2',
@@ -245,7 +248,7 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
       { rotate: `${14 + bob.value * 5 + swing.value * 16}deg` },
     ],
   }));
-  const beamA = useAnimatedStyle(() => ({ opacity: 0.75 + bob.value * 0.2 - swing.value * 0.25 }));
+  const beamA = useAnimatedStyle(() => ({ opacity: 0.85 + bob.value * 0.15 - swing.value * 0.3 }));
   const itemA = useAnimatedStyle(() => ({
     opacity: item.value < 0.04 ? 0 : 1,
     transform: [
@@ -316,15 +319,21 @@ export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
 
       <View style={styles.stage} pointerEvents="none">
         <Animated.View style={[styles.beam, beamA]}>
-          <Svg width={176} height={150}>
+          {/* warm cone straight out of the saucer's light ring, fanning down-left over the item */}
+          <Svg width={210} height={H}>
             <Defs>
-              <SvgGrad id="bBeam" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor="#FFE3EE" stopOpacity="0.72" />
-                <Stop offset="0.5" stopColor="#E9B9E8" stopOpacity="0.32" />
-                <Stop offset="1" stopColor="#C79BEF" stopOpacity="0.06" />
+              <SvgGrad id="bBeam" x1="0.8" y1="0" x2="0.35" y2="1">
+                <Stop offset="0" stopColor="#FFE9A6" stopOpacity="1" />
+                <Stop offset="0.45" stopColor="#F4C2D6" stopOpacity="0.62" />
+                <Stop offset="1" stopColor="#C89DF0" stopOpacity="0.18" />
+              </SvgGrad>
+              <SvgGrad id="bCore" x1="0.8" y1="0" x2="0.4" y2="1">
+                <Stop offset="0" stopColor="#FFFBE6" stopOpacity="0.85" />
+                <Stop offset="1" stopColor="#FFE9F4" stopOpacity="0" />
               </SvgGrad>
             </Defs>
-            <Polygon points="112,0 140,0 146,150 14,150" fill="url(#bBeam)" />
+            <Polygon points="138,44 172,50 194,183 14,183" fill="url(#bBeam)" />
+            <Polygon points="148,46 166,49 160,150 92,150" fill="url(#bCore)" />
           </Svg>
         </Animated.View>
         {cur && (
@@ -380,10 +389,10 @@ const styles = StyleSheet.create({
   ctaTxt: { fontFamily: F.black, fontSize: 12, color: V.ctaText, letterSpacing: 0.6 },
   moon: { position: 'absolute', left: 184, top: 34, width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
   stage: { position: 'absolute', right: 0, top: 0, width: 180, height: H },
-  beam: { position: 'absolute', right: 4, top: 42 },
+  beam: { position: 'absolute', left: -30, top: 0 },
   saucer: { position: 'absolute', right: 8, top: 12 },
-  item: { position: 'absolute', right: 50, bottom: 20, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
+  item: { position: 'absolute', right: 66, bottom: 10, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
   // web: the reference's soft shadow under the floating dish
   itemImg: { width: ITEM, height: ITEM, filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
-  itemEmoji: { fontSize: 108, lineHeight: 124, textAlign: 'center', filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
+  itemEmoji: { fontSize: 74, lineHeight: 88, textAlign: 'center', filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
 });
