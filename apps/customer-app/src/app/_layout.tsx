@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SessionEffects } from '@/blynk/account/SessionEffects';
 import { CatalogProvider } from '@/blynk/catalog/CatalogContext';
 import { StoreProvider } from '@/blynk/store/StoreContext';
 import { CartProvider } from '@/lib/cart';
@@ -55,6 +56,8 @@ function AppShell() {
                 <Stack.Screen name="address" options={{ animation: 'fade', animationDuration: 110 }} />
                 <Stack.Screen name="placed" options={{ animation: 'fade', gestureEnabled: false }} />
               </Stack>
+              {/* session end cleanup, web push, the app-wide notice (src/blynk/account) */}
+              <SessionEffects />
             </CatalogProvider>
           </StoreProvider>
         </CartProvider>

@@ -1,6 +1,6 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { ApiError } from '@/blynk/api/client';
-import { authErrorText, cleanReferral, needsNewCode, parseBirthday, referralOk, validName } from './forms';
+import { authErrorText, cleanReferral, isAccountRefusal, needsNewCode, parseBirthday, REFUSED_FALLBACK, referralOk, validName } from './forms';
 
 test('a name needs 2+ characters with a letter, trimmed, at most 60', () => {
   expect(validName('  Nimal   Perera ')).toBe('Nimal Perera');
@@ -39,4 +39,31 @@ test('error copy uses the backend details', () => {
   expect(needsNewCode(new ApiError('x', 410, 'OTP_EXPIRED'))).toBe(true);
   expect(needsNewCode(new ApiError('x', 401, 'INVALID_OTP', { remaining_attempts: 2 }))).toBe(false);
   expect(needsNewCode(new ApiError('x', 401, 'INVALID_OTP'))).toBe(true);
+});
+
+describe('sign-in refusals (Flutter shows the server words)', () => {
+  test('Admin / Inventory numbers, pending and rejected riders, disabled staff: the server message', () => {
+    const cases: [string, string, number][] = [
+      ['EMAIL_SIGN_IN_REQUIRED', 'This account signs in with email and password.', 403],
+      ['RIDER_PENDING_APPROVAL', 'Your application is waiting for approval.', 403],
+      ['RIDER_APPLICATION_REJECTED', "Your application wasn't approved.", 403],
+      ['INVALID_CREDENTIALS', 'Sign-in failed. Check your details or ask your store admin.', 401],
+      ['ACCOUNT_DEACTIVATED', 'Your account has been deactivated. Please contact support.', 403],
+    ];
+    for (const [code, message, status] of cases) {
+      const e = new ApiError(message, status, code);
+      expect(authErrorText(e)).toBe(message);
+      expect(isAccountRefusal(e)).toBe(true);
+    }
+  });
+
+  test('without a server message the backend wording is the fallback', () => {
+    expect(authErrorText(new ApiError('Request failed.', 403, 'EMAIL_SIGN_IN_REQUIRED'))).toBe(REFUSED_FALLBACK.EMAIL_SIGN_IN_REQUIRED);
+    expect(authErrorText(new ApiError('', 403, 'RIDER_PENDING_APPROVAL'))).toBe('Your application is waiting for approval.');
+  });
+
+  test('a wrong code is not an account refusal', () => {
+    expect(isAccountRefusal(new ApiError('Invalid OTP code. 2 attempt(s) remaining.', 401, 'INVALID_OTP'))).toBe(false);
+    expect(isAccountRefusal(new Error('x'))).toBe(false);
+  });
 });

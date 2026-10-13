@@ -487,7 +487,8 @@ function LocationRow({ locating, dark, name, address, onPress }: {
         )}
       </View>
       </Pressable>
-      <PressScale onPress={() => router.push('/orders')} style={{ padding: 6, marginRight: -6 }}>
+      {/* the profile: orders, addresses, SMS settings, help, log out (src/app/account.tsx) */}
+      <PressScale onPress={() => router.push('/account')} style={{ padding: 6, marginRight: -6 }}>
         <MenuIcon size={22} color={fg} stroke={2.3} />
       </PressScale>
     </View>

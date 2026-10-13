@@ -127,3 +127,59 @@ test('needsRegistration: signed in with an empty or whitespace full_name', async
   a.updateUser({ full_name: 'Kamala' });
   expect(a.needsRegistration(a.getSession())).toBe(false);
 });
+
+test('a refresh that fails on the server side (5xx) or offline keeps the customer signed in', async () => {
+  const a = await load();
+  a.signIn(verify());
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(503, { success: false, error: { code: 'UNAVAILABLE', message: 'down' } }));
+  await expect(a.authed(async () => { throw new a.ApiError('expired', 401); })).rejects.toMatchObject({ status: 503 });
+  expect(a.getSession()).not.toBeNull();
+  vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
+  await expect(a.authed(async () => { throw new a.ApiError('expired', 401); })).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+  expect(a.getSession()).not.toBeNull();
+});
+
+test('a 403 refresh (account deactivated, staff disabled) ends the session as "rejected", once', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(403, { success: false, error: { code: 'ACCOUNT_DEACTIVATED', message: 'inactive' } }));
+  const a = await load();
+  a.signIn(verify());
+  const ended: string[] = [];
+  a.onSessionEnd((s, reason) => ended.push(`${s.user.id}:${reason}`));
+  await Promise.all([
+    a.authed(async () => { throw new a.ApiError('expired', 401); }).catch(() => undefined),
+    a.authed(async () => { throw new a.ApiError('expired', 401); }).catch(() => undefined),
+  ]);
+  expect(a.getSession()).toBeNull();
+  expect(ended).toEqual(['u1:rejected']);
+});
+
+test('revalidateSession refreshes the stored user from GET /auth/me (riders and Operations keep shopping)', async () => {
+  const a = await load();
+  a.signIn(verify());
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(200, {
+    success: true, data: { id: 'u1', phone: '+94771234567', role: 'RIDER', full_name: 'Nimal P', email: null },
+  }));
+  await a.revalidateSession();
+  expect(f).toHaveBeenCalledWith(`${API_BASE_URL}/auth/me`, expect.anything());
+  expect(a.getSession()?.user).toMatchObject({ role: 'RIDER', full_name: 'Nimal P' });
+});
+
+test('revalidateSession ignores an answer for another user and never throws offline', async () => {
+  const a = await load();
+  a.signIn(verify());
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(200, { success: true, data: { id: 'someone-else', role: 'ADMIN', full_name: 'X' } }));
+  await a.revalidateSession();
+  expect(a.getSession()?.user).toMatchObject({ id: 'u1', role: 'CUSTOMER' });
+  vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
+  await expect(a.revalidateSession()).resolves.toBeUndefined();
+  expect(a.getSession()).not.toBeNull();
+});
+
+test('freshAccessToken: reuses a token another call already refreshed, else refreshes once', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(200, { success: true, data: { access_token: 'a2', refresh_token: 'r2' } }));
+  const a = await load();
+  a.signIn(verify());
+  expect(await a.freshAccessToken('a1')).toBe('a2');
+  expect(await a.freshAccessToken('a1')).toBe('a2'); // a1 is stale now: no second refresh
+  expect(f).toHaveBeenCalledTimes(1);
+});
