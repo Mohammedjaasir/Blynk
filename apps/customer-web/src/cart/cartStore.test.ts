@@ -39,3 +39,23 @@ test('reconcile refreshes prices and marks vanished or unavailable products', ()
   expect(s.lines.find((l) => l.product.id === sugar.id)!.product.is_available).toBe(false);
   expect(subtotal(s)).toBe(500);
 });
+
+test('NaN quantity never creates a line', () => {
+  const s = setQuantity({ lines: [] }, milk, NaN);
+  expect(s.lines).toEqual([]);
+  expect(setQuantity(setQuantity({ lines: [] }, milk, 2), milk, NaN).lines).toEqual([]);
+});
+
+test('loadCart drops lines with a bad price or availability', () => {
+  const bad = [
+    { product: { ...milk, selling_price: undefined }, quantity: 1 },
+    { product: { ...milk, id: 'b2', selling_price: '540' }, quantity: 1 },
+    { product: { ...milk, id: 'b3', offer_price: 'x' }, quantity: 1 },
+    { product: { ...milk, id: 'b4', is_available: 'yes' }, quantity: 1 },
+    { product: sugar, quantity: 2 },
+  ];
+  localStorage.setItem(CART_KEY, JSON.stringify({ v: 1, lines: bad }));
+  const s = loadCart();
+  expect(s.lines.map((l) => l.product.id)).toEqual([sugar.id]);
+  expect(subtotal(s)).toBe(506);
+});

@@ -1,13 +1,28 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { Product, Promotion } from '../api/types';
+import type { Category, Product, Promotion } from '../api/types';
 import { formatLkr } from '../lib/money';
 import { useStore } from '../store/StoreContext';
 import logoMark from '../assets/logo-mark.png';
 
-interface Props { promotions: Promotion[]; products: Product[]; minPrice: number | null; firstCategory?: string }
+interface Props { promotions: Promotion[]; products: Product[]; minPrice: number | null; firstCategory?: string; categories?: Category[] }
 
-export default function PromoBanner({ promotions, products, minPrice, firstCategory }: Props) {
+/** Where a tapped promotion goes; null when it has no destination. */
+export function promoPath(p: Promotion, categories: Category[]): string | null {
+  const v = p.cta_destination_value;
+  switch (p.cta_destination_type) {
+    case 'CATEGORY': {
+      if (!v) return null;
+      const c = categories.find((x) => x.id === v || x.slug === v);
+      return `/aisle/${encodeURIComponent(c ? c.slug : v)}`;
+    }
+    case 'PRODUCT': return v ? `/p/${encodeURIComponent(v)}` : null;
+    case 'CATALOG': return '/';
+    default: return null;
+  }
+}
+
+export default function PromoBanner({ promotions, products, minPrice, firstCategory, categories = [] }: Props) {
   const store = useStore();
   const nav = useNavigate();
   const images = products.map((p) => p.image_url).filter((u): u is string => !!u).slice(0, 5);
@@ -21,7 +36,9 @@ export default function PromoBanner({ promotions, products, minPrice, firstCateg
 
   const promo = promotions.find((p) => p.image_url);
   if (promo) {
-    return <img className="banner-img" src={promo.image_url!} alt={promo.title ?? 'Offer'} style={{ display: 'block', width: 'calc(100% + 32px)', margin: '4px -16px 0', height: 180, objectFit: 'cover' }} />;
+    const img = <img className="banner-img" src={promo.image_url!} alt={promo.title ?? 'Offer'} style={{ display: 'block', width: 'calc(100% + 32px)', margin: '4px -16px 0', height: 180, objectFit: 'cover' }} />;
+    const dest = promoPath(promo, categories);
+    return dest ? <Link to={dest} style={{ display: 'block' }}>{img}</Link> : img;
   }
 
   const headline = store?.new_customer_free_deliveries.enabled ? 'FREE DELIVERY' : 'FRESH GROCERIES';

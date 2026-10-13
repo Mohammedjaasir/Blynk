@@ -48,7 +48,7 @@ export default function Home() {
         <div className="h-top">
           <div className="loc"><span className="pin" /><div className="grow"><div className="t">Dharga Town</div><div className="s">Groceries delivered within 4 km</div></div></div>
           <Link to="/search" className="search" style={{ textDecoration: 'none' }}>Search for 'Milk'</Link>
-          <PromoBanner promotions={data?.promotions ?? []} products={data?.products ?? []} minPrice={view?.min ?? null} firstCategory={data?.categories[0]?.slug} />
+          <PromoBanner promotions={data?.promotions ?? []} products={data?.products ?? []} minPrice={view?.min ?? null} firstCategory={data?.categories[0]?.slug} categories={data?.categories} />
         </div>
         <div className="stk">{data && <CategoryTiles categories={data.categories} products={data.products} />}</div>
         {error && <ErrorState error={error} onRetry={load} />}

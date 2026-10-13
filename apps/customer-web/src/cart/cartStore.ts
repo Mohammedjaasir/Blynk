@@ -6,14 +6,22 @@ export const MAX_QTY = 100;
 export type CartLine = { product: Product; quantity: number };
 export type CartState = { lines: CartLine[] };
 
-const clamp = (n: number) => Math.max(0, Math.min(MAX_QTY, Math.floor(n)));
+const clamp = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.min(MAX_QTY, Math.floor(n))) : 0);
+
+const finite = (n: unknown) => typeof n === 'number' && Number.isFinite(n);
+function validLine(l: CartLine): boolean {
+  const p = l?.product;
+  return !!p && typeof p.id === 'string' && finite(p.selling_price)
+    && (p.offer_price === null || p.offer_price === undefined || finite(p.offer_price))
+    && typeof p.is_available === 'boolean' && finite(l.quantity);
+}
 
 export function loadCart(): CartState {
   try {
     const raw = JSON.parse(localStorage.getItem(CART_KEY) ?? 'null');
     if (!raw || raw.v !== 1 || !Array.isArray(raw.lines)) return { lines: [] };
     const lines = raw.lines
-      .filter((l: CartLine) => l && l.product && typeof l.product.id === 'string' && Number.isFinite(l.quantity))
+      .filter((l: CartLine) => validLine(l))
       .map((l: CartLine) => ({ product: l.product, quantity: clamp(l.quantity) }))
       .filter((l: CartLine) => l.quantity > 0);
     return { lines };
