@@ -5,6 +5,7 @@ import { CartProvider } from './cart/CartContext';
 import Home from './pages/Home';
 import Aisle from './pages/Aisle';
 import ProductPage from './pages/ProductPage';
+import Search from './pages/Search';
 
 export default function App() {
   if (typeof window !== 'undefined' && isDesktopBlocked(window.innerWidth, window.location.search)) return <PhoneOnly />;
@@ -16,6 +17,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/aisle/:slug" element={<Aisle />} />
             <Route path="/p/:id" element={<ProductPage />} />
+            <Route path="/search" element={<Search />} />
             <Route path="*" element={<div />} />
           </Routes>
         </div>
