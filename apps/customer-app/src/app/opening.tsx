@@ -76,7 +76,7 @@ export default function Opening() {
             <Svg width={ART_W + 20} height={ART_H + 20}>
               <AnimatedRect
                 x={10} y={10} width={ART_W} height={ART_H} rx={RX} ry={RX}
-                stroke={C.pink} strokeWidth={3.2} strokeLinecap="round" fill="none"
+                stroke={C.brandDeep} strokeWidth={3.2} strokeLinecap="round" fill="none"
                 strokeDasharray={[DASH, PERIM / 2 - DASH]}
                 animatedProps={arcs}
               />
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   line: { height: 1.4, borderRadius: 1, backgroundColor: '#D3D3D3' },
   dish: { width: 34, height: 28, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center', marginRight: 3 },
   titleWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  big: { fontFamily: F.black, color: C.pink, fontSize: 16.5, lineHeight: 21, letterSpacing: -0.2 },
+  big: { fontFamily: F.black, color: C.brandText, fontSize: 16.5, lineHeight: 21, letterSpacing: -0.2 },
   subWrap: { position: 'absolute', alignSelf: 'center', overflow: 'hidden' },
   small: { fontFamily: F.medium, color: '#1A171D', fontSize: 15.5 },
   band: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 60, overflow: 'hidden' },

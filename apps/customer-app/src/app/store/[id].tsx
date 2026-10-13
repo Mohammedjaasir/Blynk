@@ -258,7 +258,7 @@ export default function StoreScreen() {
           <Text style={styles.name}>{name}</Text>
           {DEMO ? <View style={styles.metaRow}>
             <Text style={styles.star}>★</Text>
-            <Text style={[styles.meta, { color: C.green }]}> {STORE.rating.toFixed(1)}</Text>
+            <Text style={[styles.meta, { color: C.ink, fontFamily: F.bold }]}> {STORE.rating.toFixed(1)}</Text>
             <View style={styles.sep} />
             <Text style={styles.meta}>{STORE.eta}</Text>
             <View style={styles.sep} />
@@ -619,13 +619,13 @@ const styles = StyleSheet.create({
   stamp: { position: 'absolute', right: -14, top: -6 },
   name: { fontFamily: F.bold, fontSize: 21, color: '#1C1C1C', lineHeight: 25, marginRight: 120 },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 9 },
-  star: { color: C.green, fontSize: 13 },
+  star: { color: C.brandDeep, fontSize: 13 },
   meta: { fontFamily: F.regular, fontSize: 13.5, color: '#717171' },
   sep: { width: 1, height: 14, backgroundColor: '#DCDCDC', marginHorizontal: 8 },
   rule: { height: 1, backgroundColor: '#EAEAEA', marginTop: 15 },
   offerRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14 },
   iconBox: { width: 29, alignItems: 'center' },
-  offer: { fontFamily: F.bold, fontSize: 14.5, color: C.pink, letterSpacing: -0.1 },
+  offer: { fontFamily: F.bold, fontSize: 14.5, color: C.brandText, letterSpacing: -0.1 },
   offerVs: { fontFamily: F.semi, textTransform: 'none' },
   offerSub: { fontFamily: F.regular, fontSize: 13, color: '#8A8A8A', marginTop: 1 },
   search: {
@@ -638,13 +638,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: '#E2E2E2',
     borderRadius: 17, paddingHorizontal: 12, height: 34, backgroundColor: '#fff',
   },
-  chipOn: { borderColor: C.pink, backgroundColor: C.pinkSoft },
+  chipOn: { borderColor: C.brandDeep, backgroundColor: C.brand },
   chipTxt: { fontFamily: F.regular, fontSize: 14, color: '#333' },
   toggleBox: { width: 38, height: 16, justifyContent: 'center' },
   track: { position: 'absolute', left: 13, right: 0, height: 8, borderRadius: 4, backgroundColor: '#E6E6E6' },
   knob: { position: 'absolute', left: 0, width: 16, height: 16, borderRadius: 3, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: PAD, height: 52 },
-  sectionTxt: { fontFamily: F.bold, color: C.pink, fontSize: 13.5, flexShrink: 1 },
+  sectionTxt: { fontFamily: F.bold, color: C.brandText, fontSize: 13.5, flexShrink: 1 },
   dishRow: { flexDirection: 'row', gap: GAP },
   emptyTxt: { fontFamily: F.regular, color: C.sub, fontSize: 13, textAlign: 'center', paddingVertical: 30, paddingHorizontal: 20 },
   floatRow: { position: 'absolute', left: PAD, right: PAD, flexDirection: 'row', justifyContent: 'space-between' },
@@ -681,8 +681,8 @@ const styles = StyleSheet.create({
   pairPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   pairPrice: { fontFamily: F.regular, fontSize: 12, color: '#6B6B6B' },
   pairMrp: { fontFamily: F.regular, fontSize: 11.5, color: '#9A9A9A', textDecorationLine: 'line-through' },
-  ratingPill: { backgroundColor: C.greenTint, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
-  ratingTxt: { fontFamily: F.semi, fontSize: 10.5, color: C.green },
+  ratingPill: { backgroundColor: C.brandTint, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
+  ratingTxt: { fontFamily: F.semi, fontSize: 10.5, color: C.brandText },
   pairImg: { width: 107, height: 117, backgroundColor: C.tile, alignItems: 'center', justifyContent: 'center' },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
   menuCard: { position: 'absolute', right: 23, width: 300, backgroundColor: '#0A0A0A', borderRadius: 18, paddingVertical: 10 },
@@ -691,6 +691,6 @@ const styles = StyleSheet.create({
   upper: { textTransform: 'uppercase' },
   missingBack: { margin: PAD, backgroundColor: '#F2F2F4' },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 18, padding: 24 },
-  missingBtn: { backgroundColor: C.green, borderRadius: 14, paddingHorizontal: 26, paddingVertical: 12 },
-  missingTxt: { color: '#fff', fontFamily: F.bold, fontSize: 15 },
+  missingBtn: { backgroundColor: C.brand, borderRadius: 14, paddingHorizontal: 26, paddingVertical: 12 },
+  missingTxt: { color: C.brandInk, fontFamily: F.bold, fontSize: 15 },
 });
