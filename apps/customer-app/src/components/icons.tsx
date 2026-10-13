@@ -33,9 +33,10 @@ export const NavIcon = ({ size = 16, color = '#222' }: P) => (
   </Svg>
 );
 
-export const MenuIcon = ({ size = 22, color = '#fff' }: P) => (
+/** Three equal bars, as on the reference's home header. */
+export const MenuIcon = ({ size = 22, color = '#fff', stroke = 2.2 }: P) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M4 6h16M4 12h16M9 18h11" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M3 5h18M3 12h18M3 19h18" stroke={color} strokeWidth={stroke} strokeLinecap="round" />
   </Svg>
 );
 
@@ -85,5 +86,93 @@ export const PinIcon = ({ size = 34, color = '#0B9A2C' }: P) => (
   <Svg width={size} height={size * 1.25} viewBox="0 0 32 40">
     <Path d="M16 39c0 0 13-14.5 13-24A13 13 0 003 15c0 9.5 13 24 13 24z" fill={color} />
     <Circle cx={16} cy={15} r={5.5} fill="#fff" />
+  </Svg>
+);
+
+/** Cross-hair "locate" mark (location permission bar). */
+export const LocateIcon = ({ size = 16, color = '#fff', stroke = 1.8 }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx={12} cy={12} r={7.5} stroke={color} strokeWidth={stroke} />
+    <Circle cx={12} cy={12} r={2.6} fill={color} />
+    <Path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" stroke={color} strokeWidth={stroke} strokeLinecap="round" />
+  </Svg>
+);
+
+/** Filled five-point star. */
+export const StarIcon = ({ size = 10, color = '#1B7A35' }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Path d="M12 2.2l2.95 6.3 6.85.8-5.1 4.7 1.4 6.8L12 17.4l-6.1 3.4 1.4-6.8-5.1-4.7 6.85-.8z" fill={color} />
+  </Svg>
+);
+
+/** White star in a filled circle (store rating row). */
+export const StarBadge = ({ size = 13, color = '#1B7A35' }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Circle cx={12} cy={12} r={12} fill={color} />
+    <Path d="M12 5.2l2 4.2 4.6.55-3.4 3.15.95 4.55L12 15.4l-4.15 2.25.95-4.55-3.4-3.15 4.6-.55z" fill="#fff" />
+  </Svg>
+);
+
+/** Scalloped discount seal with a "%" (free-delivery row). */
+export const OfferBadge = ({ size = 13, color = '#1B7A35' }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Path
+      d="M12 1l2.4 1.9 3-.4 1.1 2.9 2.9 1.1-.4 3L23 12l-1.9 2.4.4 3-2.9 1.1-1.1 2.9-3-.4L12 23l-2.4-1.9-3 .4-1.1-2.9-2.9-1.1.4-3L1 12l1.9-2.4-.4-3 2.9-1.1 1.1-2.9 3 .4z"
+      fill={color}
+    />
+    <Path d="M8.5 15.5l7-7" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
+    <Circle cx={9} cy={9} r={1.5} fill="#fff" />
+    <Circle cx={15} cy={15} r={1.5} fill="#fff" />
+  </Svg>
+);
+
+/**
+ * The reference's "eyes" mark (29 x 20): two round eyes glancing left; `filled` turns the
+ * pupils into hearts ("Our app"). `size` is the height.
+ */
+export const HeartsIcon = ({ size = 14, color = '#0C831F', filled = false, pupil = '#3A3A40' }: P & { filled?: boolean; pupil?: string }) => {
+  const heart = (cx: number, cy: number) =>
+    `M${cx} ${cy + 3.6}c-2.6-1.7-4.3-3.3-4.3-5.2a2.15 2.15 0 0 1 4.3-.6a2.15 2.15 0 0 1 4.3.6c0 1.9-1.7 3.5-4.3 5.2z`;
+  return (
+    <Svg width={size * 1.45} height={size} viewBox="0 0 29 20">
+      <Circle cx={9.6} cy={10} r={8.6} fill="#fff" stroke={color} strokeWidth={1.7} />
+      <Circle cx={19.4} cy={10} r={8.6} fill="#fff" stroke={color} strokeWidth={1.7} />
+      {filled ? (
+        <>
+          <Path d={heart(9.6, 10.4)} fill={color} />
+          <Path d={heart(19.4, 10.4)} fill={color} />
+        </>
+      ) : (
+        <>
+          <Circle cx={7.6} cy={10.6} r={3.9} fill={pupil} />
+          <Circle cx={17.4} cy={10.6} r={3.9} fill={pupil} />
+        </>
+      )}
+    </Svg>
+  );
+};
+
+/** Non-veg mark: triangle in a rounded square. */
+export const NonVegMark = ({ color = '#D8344A', size = 11 }: { color?: string; size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 12 12">
+    <Rect x={0.75} y={0.75} width={10.5} height={10.5} rx={2} fill="none" stroke={color} strokeWidth={1.3} />
+    <Path d="M6 3l3 5.2H3z" fill={color} />
+  </Svg>
+);
+
+/** Outlined check box (promo band). */
+export const CheckBoxIcon = ({ size = 14, color = '#FFE141', stroke = 2 }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x={2.5} y={2.5} width={19} height={19} rx={4} stroke={color} strokeWidth={stroke} />
+    <Path d="M7 12.5l3.2 3.2L17 8.6" stroke={color} strokeWidth={stroke + 0.4} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+/** Two sliders (the first filter chip). */
+export const SlidersIcon = ({ size = 16, color = '#333' }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 8h11M20 8h1M3 16h3M12 16h9" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+    <Circle cx={17} cy={8} r={2.6} stroke={color} strokeWidth={1.8} />
+    <Circle cx={9} cy={16} r={2.6} stroke={color} strokeWidth={1.8} />
   </Svg>
 );

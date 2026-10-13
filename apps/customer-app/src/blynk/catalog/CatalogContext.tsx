@@ -8,6 +8,7 @@ import { startCatalogLive } from '../lib/catalogLive';
 import { loadAllProducts } from '../lib/loadAllProducts';
 import { effectivePrice } from '../lib/pricing';
 import { appHidden } from '../lib/visibility';
+import { DEMO } from '@/demo/mode';
 
 export interface CatalogData {
   products: Product[];
@@ -50,6 +51,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<ApiError | null>(null);
   const seq = useRef(0);
   const refresh = useCallback(async () => {
+    if (DEMO) return true;
     const n = ++seq.current;
     try {
       const d = await loadAll();
@@ -64,6 +66,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   }, []);
   useEffect(() => {
+    if (DEMO) return; // design mock: screens read src/demo/*, nothing is fetched
     void Promise.resolve().then(refresh); // first load, off the effect's synchronous path
     return startCatalogLive(() => void refresh(), appHidden);
   }, [refresh]);

@@ -5,6 +5,8 @@ import { Pressable, StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } fr
 import Animated, {
   Easing,
   interpolate,
+  type SharedValue,
+  withDelay,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -14,12 +16,12 @@ import Animated, {
 import { withSpring } from '@/lib/motion';
 import Svg, { Circle, Defs, Path, Text as SvgText, TextPath } from 'react-native-svg';
 import { cartActions, useCartSelect } from '@/lib/cart';
-import { flip, pulse, startClocks, sway } from '@/lib/clock';
+import { flip, startClocks, sway } from '@/lib/clock';
 import type { Product } from '@/blynk/api/types';
 import { formatLkr } from '@/blynk/lib/money';
 import { isOfferActive, savingsPerUnit } from '@/blynk/lib/pricing';
 import { C, F } from '@/lib/theme';
-import { ChevronIcon, CloseIcon } from './icons';
+import { ChevronIcon, CloseIcon, HeartsIcon } from './icons';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -134,15 +136,28 @@ export function useTicker() {
   return n;
 }
 
-/** `still` skips the heartbeat — used on product cards, where dozens would beat at once. */
-export function Hearts({ size = 12, still }: { size?: number; still?: boolean }) {
-  useEffect(startClocks, []);
-  const a = useAnimatedStyle(() => (still ? {} : { transform: [{ scale: pulse.value }] }));
+/**
+ * The reference's "eyes" mark: outlined eyes that pop into heart-eyes a moment after they
+ * appear (and stay). `still` shows the heart-eyes straight away. Height is about 1.33 x size.
+ */
+export function Hearts({ size = 12, still, color = C.pink }: { size?: number; still?: boolean; color?: string }) {
+  const h = Math.round(size * 1.33);
+  const v = useSharedValue(still ? 1 : 0);
+  useEffect(() => {
+    if (!still) v.value = withDelay(500, withTiming(1, { duration: 260, easing: Easing.out(Easing.back(3)) }));
+  }, []);
+  return <EyesPop h={h} color={color} v={v} />;
+}
+
+/** Eyes -> heart-eyes, driven by `v` (0 -> 1) with a small scale pop as the hearts land. */
+function EyesPop({ h, color, v, pupil }: { h: number; color: string; v: SharedValue<number>; pupil?: string }) {
+  const eyes = useAnimatedStyle(() => ({ opacity: 1 - Math.min(1, v.value) }));
+  const love = useAnimatedStyle(() => ({ opacity: Math.min(1, v.value), transform: [{ scale: 0.7 + 0.3 * v.value }] }));
   return (
-    <Animated.View style={[{ flexDirection: 'row' }, a]}>
-      <Text style={{ fontSize: size, color: C.pink }}>♥</Text>
-      <Text style={{ fontSize: size, color: C.pink, marginLeft: -size * 0.35 }}>♥</Text>
-    </Animated.View>
+    <View style={{ width: h * 1.45, height: h }}>
+      <Animated.View style={[StyleSheet.absoluteFill, eyes]}><HeartsIcon size={h} color={color} pupil={pupil} /></Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, love]}><HeartsIcon size={h} color={color} filled /></Animated.View>
+    </View>
   );
 }
 
@@ -187,53 +202,144 @@ export function PriceTicker({ product, showSavings, forceSave }: { product: Prod
 }
 
 /* ---------- "+"  →  "− 1 +" stepper (width springs open) ---------- */
-export function AddButton({ product, compact }: { product: Product; compact?: boolean }) {
+export function AddButton({ product, compact, big }: { product: Product; compact?: boolean; big?: boolean }) {
   const id = product.id;
   const q = useCartSelect((c) => c.qty[id] ?? 0);
   const { add, remove } = cartActions;
   const open = useSharedValue(q > 0 ? 1 : 0);
   const pop = useSharedValue(1);
-  const W = compact ? 76 : 84;
-  const H = compact ? 26 : 28;
+  const fill = useSharedValue(q > 0 ? 1 : 0);
+  // big: the reference's dish-card "+" (33 pt circle) that opens leftwards into a 96 pt "− 1 +".
+  const W = big ? 96 : compact ? 76 : 84;
+  const H = big ? 32 : compact ? 26 : 28;
   useEffect(() => {
-    open.value = withSpring(q > 0 ? 1 : 0, { damping: 15, stiffness: 220 });
+    // big (the reference's dish card, 0:30.8): the pill snaps open leftwards in ~100 ms and
+    // the "−" and count fade in behind it; the others keep the springy open
+    open.value = big
+      ? withTiming(q > 0 ? 1 : 0, { duration: 110, easing: Easing.out(Easing.quad) })
+      : withSpring(q > 0 ? 1 : 0, { damping: 15, stiffness: 220 });
+    fill.value = q > 0 ? withDelay(big ? 60 : 0, withTiming(1, { duration: big ? 220 : 160 })) : withTiming(0, { duration: 120 });
   }, [q > 0]);
   const box = useAnimatedStyle(() => ({
     width: interpolate(open.value, [0, 1], [H, W]),
     transform: [{ scale: pop.value }],
   }));
-  const plusOnly = useAnimatedStyle(() => ({ opacity: 1 - open.value, transform: [{ rotate: `${open.value * 90}deg` }] }));
-  const stepper = useAnimatedStyle(() => ({ opacity: open.value }));
+  const plusOnly = useAnimatedStyle(() => (big
+    ? { opacity: 1 - open.value }
+    : { opacity: 1 - open.value, transform: [{ rotate: `${open.value * 90}deg` }] }));
+  const stepper = useAnimatedStyle(() => ({ opacity: big ? (open.value > 0.02 ? 1 : 0) : open.value }));
+  const inner = useAnimatedStyle(() => ({ opacity: big ? fill.value : 1 }));
   const bump = () => {
     pop.set(withSequence(withTiming(1.12, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 300 })));
     tap();
   };
   return (
-    <Animated.View style={[styles.add, { height: H, borderRadius: H / 2 }, box]}>
+    <Animated.View style={[styles.add, { height: H, borderRadius: H / 2 }, big && styles.addBig, box]}>
       <Animated.View pointerEvents={q > 0 ? 'none' : 'auto'} style={[StyleSheet.absoluteFill, styles.center, plusOnly]}>
-        <Pressable hitSlop={8} onPress={() => { bump(); add(product); }} style={[StyleSheet.absoluteFill, styles.center]}>
-          <Text style={styles.plus}>+</Text>
+        <Pressable
+          hitSlop={8}
+          onPress={() => { bump(); add(product); }}
+          style={({ pressed }) => [StyleSheet.absoluteFill, styles.center, big && pressed && { backgroundColor: 'rgba(0,0,0,0.12)' }]}
+        >
+          {big ? <PlusGlyph size={14} /> : <Text style={styles.plus}>+</Text>}
         </Pressable>
       </Animated.View>
-      <Animated.View pointerEvents={q > 0 ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, styles.stepRow, stepper]}>
-        <Pressable hitSlop={6} onPress={() => { tap(); remove(id); }} style={styles.stepBtn}>
-          <Text style={styles.stepTxt}>−</Text>
-        </Pressable>
-        <RollingText text={String(Math.max(q, 1))} numeric={q} style={styles.qty} />
+      <Animated.View pointerEvents={q > 0 ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, styles.stepRow, big && { paddingHorizontal: 5 }, stepper]}>
+        <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'space-between', paddingLeft: 3, paddingRight: 17 }, inner]}>
+          <Pressable hitSlop={6} onPress={() => { tap(); remove(id); }} style={styles.stepBtn}>
+            <Text style={[styles.stepTxt, big && styles.stepTxtBig]}>−</Text>
+          </Pressable>
+          <RollingText text={String(Math.max(q, 1))} numeric={q} style={[styles.qty, big && styles.qtyBig]} />
+        </Animated.View>
         <Pressable hitSlop={6} onPress={() => { bump(); add(product); }} style={styles.stepBtn}>
-          <Text style={styles.stepTxt}>+</Text>
+          {big ? <PlusGlyph size={11} /> : <Text style={styles.stepTxt}>+</Text>}
         </Pressable>
       </Animated.View>
     </Animated.View>
   );
 }
 
+/** Thin geometric "+" (the reference's add button draws it, it is not a font glyph). */
+function PlusGlyph({ size, color = C.pink }: { size: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 14 14">
+      <Path d="M7 1v12M1 7h12" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/**
+ * The reference's dish-card footer: "Other apps: ₹199–209" first, then, a moment after the
+ * card comes into view, it rolls up into "Our app: 50% lower" and stays there. In the cart
+ * (`forceSave`) it shows "Our app" straight away.
+ */
+export function DemoTicker({ other, lowerPct, seen = true, forceSave, money, delay = 1600 }: {
+  other?: [number, number]; lowerPct?: number; seen?: boolean; forceSave?: boolean;
+  money: (n: number) => string; delay?: number;
+}) {
+  const v = useSharedValue(forceSave ? 1 : 0);
+  const [flipped, setFlipped] = useState(false);
+  useEffect(() => {
+    if (!seen || flipped || !lowerPct) return;
+    const t = setTimeout(() => setFlipped(true), delay);
+    return () => clearTimeout(t);
+  }, [seen, flipped, lowerPct, delay]);
+  useEffect(() => {
+    v.set(withTiming(flipped || forceSave ? 1 : 0, { duration: 280, easing: Easing.out(Easing.cubic) }));
+  }, [flipped, forceSave]);
+  const otherA = useAnimatedStyle(() => ({ opacity: 1 - v.value, transform: [{ translateY: -v.value * 18 }] }));
+  const oursA = useAnimatedStyle(() => ({ opacity: v.value, transform: [{ translateY: (1 - v.value) * 18 }] }));
+  if (!other && !lowerPct) return <View style={styles.dTicker} />;
+  return (
+    <View style={styles.dTicker}>
+      {other && (
+        <Animated.View style={[styles.dRow, otherA]}>
+          <HeartsIcon size={13} color="#8A8A8F" pupil="#6A6A70" />
+          <Text numberOfLines={1} style={styles.dOther}>Other apps: {money(other[0])}–{money(other[1]).replace('₹', '')}</Text>
+        </Animated.View>
+      )}
+      {!!lowerPct && (
+        <Animated.View style={[styles.dRow, oursA]}>
+          <EyesPop h={13} color={C.pink} v={v} />
+          <Text numberOfLines={1} style={styles.dOurs}>Our app: {lowerPct}% lower</Text>
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
 /* ---------- Rotating "FREE DELIVERY" rubber stamp ---------- */
 /** Only shown while Blynk's free deliveries are switched on; callers hide it otherwise. */
-export function StampBadge({ size = 58, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
+export function StampBadge({ size = 58, style, variant = 'lowest' }: {
+  size?: number; style?: StyleProp<ViewStyle>;
+  /** 'lowest' (default): the reference's "EVERYDAY - LOWEST PRICE - EVERYDAY" stamp. 'free': Blynk's free-delivery stamp. */
+  variant?: 'free' | 'lowest';
+}) {
   useEffect(startClocks, []);
   const a = useAnimatedStyle(() => ({ transform: [{ rotate: `${-18 + sway.value * 8}deg` }, { scale: 1 + sway.value * 0.04 }] }));
   const R = 24;
+  if (variant === 'lowest') {
+    return (
+      <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: size, height: size, opacity: 0.32 }, style, a]} pointerEvents="none">
+        <Svg width={size} height={size} viewBox="0 0 64 64">
+          <Defs>
+            <Path id="stTop" d="M 7.5 32 A 24.5 24.5 0 0 1 56.5 32" />
+            <Path id="stBot" d="M 6 32 A 26 26 0 0 0 58 32" />
+          </Defs>
+          <Circle cx={32} cy={32} r={30.5} stroke={C.pink} strokeWidth={1.3} fill="none" />
+          <Circle cx={32} cy={32} r={18.5} stroke={C.pink} strokeWidth={1} fill="none" />
+          <SvgText fill={C.pink} fontSize={7.4} fontWeight="bold" letterSpacing={1.1} textAnchor="middle">
+            <TextPath href="#stTop" startOffset="50%">EVERYDAY</TextPath>
+          </SvgText>
+          <SvgText fill={C.pink} fontSize={7.4} fontWeight="bold" letterSpacing={1.1} textAnchor="middle">
+            <TextPath href="#stBot" startOffset="50%">EVERYDAY</TextPath>
+          </SvgText>
+          <Path d="M 1 25.5 L 63 25.5 L 60 32 L 63 38.5 L 1 38.5 L 4 32 Z" fill={C.pink} />
+          <SvgText x={32} y={34.6} fill="#fff" fontSize={7.6} fontWeight="bold" textAnchor="middle" letterSpacing={0.3}>LOWEST PRICE</SvgText>
+        </Svg>
+      </Animated.View>
+    );
+  }
   return (
     <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: size, height: size, opacity: 0.55 }, style, a]} pointerEvents="none">
       <Svg width={size} height={size} viewBox="0 0 64 64">
@@ -384,11 +490,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
+  addBig: { borderWidth: 1.4, shadowOpacity: 0.16, shadowRadius: 5 },
   plus: { color: C.pink, fontSize: 18, lineHeight: 20, fontFamily: F.bold, marginTop: -1 },
   stepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
   stepBtn: { width: 22, alignItems: 'center' },
   stepTxt: { color: C.pink, fontSize: 16, fontFamily: F.bold },
   qty: { color: C.pink, fontSize: 13, fontFamily: F.bold },
+  stepTxtBig: { fontSize: 18, fontFamily: F.medium, lineHeight: 20 },
+  qtyBig: { fontSize: 13, fontFamily: F.medium, color: C.pink },
+  dTicker: { height: 16, overflow: 'hidden', alignSelf: 'stretch', marginTop: 5 },
+  dRow: { position: 'absolute', left: 0, right: 0, top: 0, height: 16, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  dOther: { fontSize: 11.5, fontFamily: F.regular, color: '#77777C', flexShrink: 1 },
+  dOurs: { fontSize: 12, fontFamily: F.semi, color: C.pink, flexShrink: 1 },
   tri: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   tip: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.ink, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, gap: 8 },
   tipTxt: { color: C.white, fontSize: 11.5, fontFamily: F.medium },

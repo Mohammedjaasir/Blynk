@@ -70,7 +70,10 @@ export const cartActions = {
   setQty: (p: Product, n: number) => setLines(setQuantity(state(), p, n)),
   /** Keep prices and availability in step with a fresh catalogue. */
   reconcileWith: (products: Product[]) => {
-    if (snap.lines.length) setLines(reconcile(state(), products));
+    if (!snap.lines.length) return;
+    // design-mock lines (ids "demo-...") are not in Blynk's catalogue: leave them as they are
+    const fresh = reconcile(state(), products);
+    setLines({ lines: fresh.lines.map((l, i) => (snap.lines[i].product.id.startsWith('demo-') ? snap.lines[i] : l)) });
   },
   setPhone: (phone: string) => set({ phone }),
   setAddress: (address: Address) => set({ address }),

@@ -35,12 +35,12 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#fff' } }}>
                 <Stack.Screen name="index" options={{ animation: 'none' }} />
                 <Stack.Screen name="home" options={{ animation: 'fade' }} />
-                <Stack.Screen name="opening" options={{ animation: 'fade' }} />
-                <Stack.Screen name="store/[id]" options={{ animation: 'fade' }} />
+                <Stack.Screen name="opening" options={{ animation: 'slide_from_right', animationDuration: 150 }} />
+                <Stack.Screen name="store/[id]" options={{ animation: 'fade', animationDuration: 100 }} />
                 <Stack.Screen name="search" options={{ animation: 'fade' }} />
-                <Stack.Screen name="cart" options={{ animation: 'slide_from_right' }} />
-                <Stack.Screen name="otp" options={{ animation: 'slide_from_right' }} />
-                <Stack.Screen name="address" options={{ animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="cart" options={{ animation: 'fade', animationDuration: 120 }} />
+                <Stack.Screen name="otp" options={{ animation: 'none' }} />
+                <Stack.Screen name="address" options={{ animation: 'fade', animationDuration: 110 }} />
                 <Stack.Screen name="placed" options={{ animation: 'fade', gestureEnabled: false }} />
               </Stack>
             </CatalogProvider>

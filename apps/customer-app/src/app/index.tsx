@@ -1,68 +1,43 @@
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-
-const LOGO = require('../../assets/logo-mark.png');
-import Animated, {
-  Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming,
-} from 'react-native-reanimated';
-import { withSpring } from '@/lib/motion';
-import { C, F } from '@/lib/theme';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { C } from '@/lib/theme';
 
 /**
- * Splash — mirrors the original: the launcher icon grows into a full-screen green
- * card (container transform), the Blynk logo hops and the wordmark pops, then everything fades into Home
- * which is already showing its "Locating…" skeleton underneath.
+ * Splash, as in the reference (0:03.8–0:04.6): the launcher icon grows into a plain green
+ * card that fills the screen (a container transform, corners easing from icon-round to the
+ * screen's own), holds for a beat, then Home takes over: the green fades off there while
+ * the page rises into place (see `fromSplash` in home.tsx).
  */
 export default function Splash() {
   const { width, height } = useWindowDimensions();
   const grow = useSharedValue(0);
-  const logo = useSharedValue(0);
-  const basket = useSharedValue(0);
 
   useEffect(() => {
-    grow.value = withTiming(1, { duration: 420, easing: Easing.bezier(0.2, 0.9, 0.1, 1) });
-    logo.value = withDelay(260, withSpring(1, { damping: 10, stiffness: 140 }));
-    basket.value = withDelay(
-      520,
-      withSequence(
-        withTiming(-14, { duration: 180, easing: Easing.out(Easing.quad) }),
-        withSpring(0, { damping: 6, stiffness: 260 }),
-      ),
-    );
-    const t = setTimeout(() => router.replace('/home'), 1350);
+    grow.value = withTiming(1, { duration: 300, easing: Easing.bezier(0.2, 0, 0, 1) });
+    const t = setTimeout(() => router.replace('/home'), 820);
     return () => clearTimeout(t);
   }, []);
 
-  const card = useAnimatedStyle(() => ({
-    width: interpolate(grow.value, [0, 1], [64, width]),
-    height: interpolate(grow.value, [0, 1], [64, height]),
-    borderRadius: interpolate(grow.value, [0, 1], [18, 0]),
-  }));
-  const word = useAnimatedStyle(() => ({ opacity: logo.value, transform: [{ scale: interpolate(logo.value, [0, 1], [0.6, 1]) }] }));
-  const bk = useAnimatedStyle(() => ({ transform: [{ translateY: basket.value }, { rotate: `${basket.value * -0.8}deg` }] }));
+  const card = useAnimatedStyle(() => {
+    const icon = 58;
+    return {
+      width: interpolate(grow.value, [0, 1], [icon, width]),
+      height: interpolate(grow.value, [0, 1], [icon, height]),
+      borderRadius: interpolate(grow.value, [0, 0.8, 1], [16, 26, 0]),
+      opacity: interpolate(grow.value, [0, 0.15, 1], [0.6, 1, 1]),
+    };
+  });
 
   return (
     <View style={styles.root}>
       <Animated.View style={[styles.card, card]} />
-      <Animated.View style={[styles.center, word]}>
-        <Animated.View style={[styles.logoTile, bk]}>
-          <Animated.Image source={LOGO} resizeMode="contain" style={styles.logo} accessibilityLabel="Blynk" />
-        </Animated.View>
-        <Text style={styles.word}>Blynk</Text>
-        {/* Blynk's own tagline, from the customer app's HomeBrandTagline (Flutter). */}
-        <Text style={styles.tag}>Your daily essentials, simplified</Text>
-      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  card: { position: 'absolute', backgroundColor: C.green },
-  center: { alignItems: 'center' },
-  logoTile: { width: 76, height: 76, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  logo: { width: 56, height: 64 },
-  word: { fontFamily: F.display, fontSize: 46, color: C.yellow, marginTop: 4, letterSpacing: 1 },
-  tag: { fontFamily: F.semi, color: '#fff', opacity: 0.9, fontSize: 14, marginTop: 4 },
+  card: { backgroundColor: C.green },
 });

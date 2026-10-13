@@ -18,7 +18,7 @@ import { PressScale } from './ui';
  * 390 pt phone). Layout, sizes and timings are measured off those frames; the reference's
  * purple becomes Blynk ink, its pink extrusion / saucer becomes Blynk green, yellow stays.
  */
-const H = 152; // banner height in the reference
+const H = 183; // banner height in the reference (search bar bottom → white page)
 const EXTRUDE = C.green; // the 3D slab under the title letters and the CTA
 const ITEM = 112; // floating product box (the sandwich is ~120 × 110 in the frames)
 const TEXT_W = 196; // left column, clear of the beam
@@ -26,7 +26,7 @@ const TEXT_W = 196; // left column, clear of the beam
 /** One title word: per-letter face + green slab, each letter rocking on its own phase. */
 function WobbleWord({ word, color, delay }: { word: string; color: string; delay: number }) {
   // Bowlby One averages ~0.82 em per capital; fit the word into the left column.
-  const size = Math.min(32, Math.floor(TEXT_W / (word.length * 0.82)));
+  const size = Math.min(36, Math.floor(TEXT_W / (word.length * 0.82)));
   return (
     <View style={{ flexDirection: 'row' }}>
       {word.split('').map((ch, i) => (
@@ -130,7 +130,7 @@ function SubLine({ text, accent }: { text: string; accent: string | null }) {
   }));
   const parts = accent ? text.split(accent) : [text];
   return (
-    <Animated.View style={[{ marginTop: 6, alignSelf: 'flex-start' }, a]}>
+    <Animated.View style={[{ marginTop: -3, alignSelf: 'flex-start' }, a]}>
       <Text style={styles.sub} numberOfLines={1}>
         {parts[0]}
         {accent && <Text style={{ color: C.yellow }}>{accent}</Text>}
@@ -147,10 +147,13 @@ function SubLine({ text, accent }: { text: string; accent: string | null }) {
  * "Groceries from" the cheapest effective price. The beam abducts real product photos,
  * cut out of their backgrounds on the fly.
  */
-export function Banner({ images, minPrice, freeCount, onOrderNow }: {
+export function Banner({ images, minPrice, freeCount, onOrderNow, demo }: {
   images: string[]; minPrice: number | null; freeCount: number; onOrderNow?: () => void;
+  /** Design mock: the reference's own copy, with emoji stand-ins for the abducted dishes. */
+  demo?: { title: [string, string]; line: string; accent: string; emojis: string[] };
 }) {
-  const items = useCutouts(images);
+  const cutouts = useCutouts(demo ? [] : images);
+  const items = demo ? demo.emojis : cutouts;
   const [idx, setIdx] = useState(0);
   const ufo = useSharedValue(0);
   const beam = useSharedValue(0);
@@ -159,11 +162,12 @@ export function Banner({ images, minPrice, freeCount, onOrderNow }: {
 
   const price = minPrice != null ? formatLkr(minPrice) : null;
   const lines = useMemo(() => {
+    if (demo) return [demo.line];
     const l: string[] = [];
     if (freeCount > 0) l.push(`On your first ${freeCount} order${freeCount > 1 ? 's' : ''}`);
     if (price) l.push(`Groceries starting at ${price}`);
     return l;
-  }, [freeCount, price]);
+  }, [freeCount, price, demo]);
   const line = useRoll(lines);
 
   const next = () => setIdx((i) => i + 1);
@@ -199,6 +203,8 @@ export function Banner({ images, minPrice, freeCount, onOrderNow }: {
   const arrowA = useAnimatedStyle(() => ({ transform: [{ translateX: nudge.value }] }));
 
   const free = freeCount > 0;
+  const [w1, w2] = demo ? demo.title : free ? ['FREE', 'DELIVERY'] : ['FRESH', 'GROCERIES'];
+  const accent = demo ? demo.accent : price;
   const cur = items.length ? items[idx % items.length] : null;
 
   return (
@@ -219,11 +225,11 @@ export function Banner({ images, minPrice, freeCount, onOrderNow }: {
       <Sparkle x={168} y={130} delay={900} size={7} color="#fff" />
 
       <View style={styles.copy}>
-        <WobbleWord key={free ? 'free' : 'fresh'} word={free ? 'FREE' : 'FRESH'} color="#fff" delay={0} />
+        <WobbleWord key={w1} word={w1} color="#fff" delay={0} />
         <View style={{ marginTop: -4 }}>
-          <WobbleWord key={free ? 'del' : 'groc'} word={free ? 'DELIVERY' : 'GROCERIES'} color={C.yellow} delay={380} />
+          <WobbleWord key={w2} word={w2} color={C.yellow} delay={380} />
         </View>
-        {line && <SubLine key={line} text={line} accent={line.includes(price ?? '\u0000') ? price : null} />}
+        {line && <SubLine key={line} text={line} accent={line.includes(accent ?? '\u0000') ? accent : null} />}
         <PressScale style={styles.ctaWrap} haptic onPress={onOrderNow}>
           <View style={styles.ctaSlab} />
           <View style={styles.cta}>
@@ -250,7 +256,11 @@ export function Banner({ images, minPrice, freeCount, onOrderNow }: {
         </Animated.View>
         {cur && (
           <Animated.View style={[styles.item, itemA]}>
-            <Image source={{ uri: cur }} resizeMode="contain" style={styles.itemImg} />
+            {demo ? (
+              <Text style={styles.itemEmoji}>{cur}</Text>
+            ) : (
+              <Image source={{ uri: cur }} resizeMode="contain" style={styles.itemImg} />
+            )}
           </Animated.View>
         )}
         <Animated.View style={[styles.saucer, ufoA]}>
@@ -279,22 +289,23 @@ function useCutouts(images: string[]) {
 
 const styles = StyleSheet.create({
   wrap: { height: H, overflow: 'hidden', flexDirection: 'row' },
-  copy: { paddingLeft: 24, paddingTop: 18, width: TEXT_W + 24, zIndex: 2 },
+  copy: { paddingLeft: 24, paddingTop: 30, width: TEXT_W + 24, zIndex: 2 },
   title: { fontFamily: F.display, color: '#fff', includeFontPadding: false },
   slab: { position: 'absolute', left: 1.5, top: 2.5, color: EXTRUDE },
   sub: { fontFamily: F.bold, color: '#F4F2FA', fontSize: 13.5, letterSpacing: 0.3 },
   underline: { height: 2, borderRadius: 1, backgroundColor: '#fff', opacity: 0.85, marginTop: 1, transformOrigin: 'left' },
-  ctaWrap: { marginTop: 10, alignSelf: 'flex-start' },
+  ctaWrap: { marginTop: 13, alignSelf: 'flex-start' },
   ctaSlab: { position: 'absolute', left: 0, right: 0, top: 3, bottom: -3, borderRadius: 16, backgroundColor: EXTRUDE },
   cta: {
-    flexDirection: 'row', alignItems: 'center', gap: 7,
-    backgroundColor: C.yellow, paddingHorizontal: 15, height: 28, borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: C.yellow, paddingHorizontal: 12, height: 28, borderRadius: 16,
   },
   ctaTxt: { fontFamily: F.black, fontSize: 12, color: C.ink, letterSpacing: 0.6 },
   stage: { position: 'absolute', right: 0, top: 0, width: 170, height: H },
   beam: { position: 'absolute', right: 0, top: 24 },
-  saucer: { position: 'absolute', right: 6, top: -16 },
-  item: { position: 'absolute', right: 46, bottom: 4, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
+  saucer: { position: 'absolute', right: 16, top: 10 },
+  item: { position: 'absolute', right: 52, bottom: 14, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
   // web: the reference's soft shadow under the floating product
   itemImg: { width: ITEM, height: ITEM, filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
+  itemEmoji: { fontSize: 108, lineHeight: 124, textAlign: 'center', filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
 });
