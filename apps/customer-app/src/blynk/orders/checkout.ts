@@ -1,5 +1,7 @@
 import type { CartLine } from '@/blynk/cart/cartStore';
+import { formatLkr } from '@/blynk/lib/money';
 import { storage } from '@/blynk/lib/storage';
+import { rewardsSummary, type DiscountKind } from '@/blynk/checkout/rewards';
 import type { CheckoutInfo, CouponPreview, PlaceOrderBody } from './types';
 
 /*
@@ -19,9 +21,15 @@ export function orderItems(lines: CartLine[]): PlaceOrderBody['items'] {
 /** Everything that makes this checkout a different order. Same signature = same idempotency key. */
 export function checkoutSignature(args: {
   items: PlaceOrderBody['items']; addressId: string; coupon?: string | null; note?: string | null;
+  /** The rest of the body that makes it a different order: slot, points, receiver, needs help. */
+  extra?: Pick<PlaceOrderBody, 'delivery_slot_start' | 'use_points' | 'for_someone_else' | 'recipient' | 'needs_help'>;
 }): string {
   const items = [...args.items].sort((a, b) => a.product_id.localeCompare(b.product_id)).map((i) => `${i.product_id}x${i.quantity}`).join(',');
-  return [items, args.addressId, args.coupon ?? '', (args.note ?? '').trim()].join('|');
+  const x = args.extra;
+  const more = x && (x.delivery_slot_start || x.use_points || x.for_someone_else || x.needs_help)
+    ? [x.delivery_slot_start ?? '', x.use_points ? 'P' : '', x.for_someone_else ? `R:${x.recipient?.name ?? ''}:${x.recipient?.phone ?? ''}` : '', x.needs_help ? 'H' : ''].join(';')
+    : null;
+  return [items, args.addressId, args.coupon ?? '', (args.note ?? '').trim(), ...(more ? [more] : [])].join('|');
 }
 
 /** 128 random bits as hex (the server allows up to 128 characters). */
@@ -66,8 +74,13 @@ export interface CheckoutBill {
   /** "Add LKR X more for free delivery" (basket amount switched on and not reached). */
   basketRemaining: number | null;
   basketMin: number | null;
-  /** Coupon / birthday / referral discount from the coupon preview (0 without one). */
+  /** The one discount (coupon, birthday gift or referral reward; estimated without a coupon). */
   discount: number;
+  discountKind: DiscountKind;
+  /** "Use points": the estimated points and their value (0 when off or not usable). */
+  points: { points: number; value: number };
+  /** Blynk Points this order earns once delivered (estimate). */
+  earn: number;
   /** null while the fee is unknown. */
   toPay: number | null;
   distanceKm: number | null;
@@ -75,23 +88,28 @@ export interface CheckoutBill {
 }
 
 /** The bill from the cart's item total and the server's quote (and an applied coupon preview). */
-export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coupon?: CouponPreview | null): CheckoutBill {
+export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coupon?: CouponPreview | null, usePoints = false): CheckoutBill {
   const basket = quote?.basket_free_delivery;
   const basketApplies = basket?.enabled === true && basket.applies === true;
   const newCustomer = !basketApplies && quote?.free_delivery?.applies === true;
   const fee = quote ? quote.delivery_fee_lkr : null;
-  // the preview's total already picks the larger of coupon, birthday gift and referral reward
-  const shownDiscount = coupon ? Math.max(0, round2(coupon.subtotal + coupon.delivery_fee - coupon.total)) : 0;
+  // one discount only: the coupon preview carries the server's choice; without one the
+  // larger of the birthday gift and the referral reward is assumed; points come on top
+  const r = rewardsSummary({ subtotal: itemTotal, deliveryFee: fee ?? 0, quote, coupon, usePoints });
   return {
     itemTotal: round2(itemTotal),
     deliveryFee: fee,
     standardFee: quote ? quote.standard_delivery_fee_lkr : null,
     freeReason: basketApplies ? 'BASKET' : newCustomer ? 'NEW_CUSTOMER' : null,
     freeRemaining: newCustomer ? quote!.free_delivery.remaining : 0,
-    basketRemaining: basket?.enabled && basket.applies === false && basket.remaining_lkr != null && basket.remaining_lkr > 0 ? basket.remaining_lkr : null,
+    // worked out from this basket (the quote may lag a quantity change by a moment)
+    basketRemaining: basket?.enabled && !basketApplies && basket.min_subtotal_lkr > itemTotal ? round2(basket.min_subtotal_lkr - itemTotal) : null,
     basketMin: basket?.enabled ? basket.min_subtotal_lkr : null,
-    discount: shownDiscount,
-    toPay: fee === null ? null : Math.max(0, round2(itemTotal + fee - shownDiscount)),
+    discount: r.discount.amount,
+    discountKind: r.discount.kind,
+    points: r.points,
+    earn: r.earn,
+    toPay: fee === null ? null : r.toPay,
     distanceKm: quote?.delivery_fee_mode === 'DISTANCE_TIERS' ? quote.delivery_distance_km : null,
     distanceEstimated: quote?.delivery_distance_estimated === true,
   };
@@ -101,3 +119,19 @@ export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coup
 let lastPlaced: import('./types').Order | null = null;
 export const rememberPlaced = (o: import('./types').Order) => { lastPlaced = o; };
 export const placedFromMemory = (id: string) => (lastPlaced && lastPlaced.id === id ? lastPlaced : null);
+
+/** How far the basket is towards free delivery by the basket amount, 0..1. */
+export function basketProgress(itemTotal: number, min: number | null): number {
+  if (!min || min <= 0) return 0;
+  return Math.max(0, Math.min(1, itemTotal / min));
+}
+
+/** The line under a FREE delivery fee (the Flutter shop's wording). */
+export function freeDeliveryNote(bill: CheckoutBill, count: number): string | null {
+  if (bill.freeReason === 'BASKET' && bill.basketMin) return `Free delivery on orders of ${formatLkr(bill.basketMin)} or more.`;
+  if (bill.freeReason === 'NEW_CUSTOMER') return `Free delivery — ${bill.freeRemaining} of ${count} free ${count === 1 ? 'delivery' : 'deliveries'} left.`;
+  return null;
+}
+
+/** "Add LKR 450 more for free delivery". */
+export const basketPrompt = (remaining: number) => `Add ${formatLkr(remaining)} more for free delivery`;

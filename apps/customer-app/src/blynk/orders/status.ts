@@ -115,3 +115,42 @@ export function itemTitle(name: string, unit: string | null | undefined): string
   if (!unit || !unit.trim() || squash(name).includes(squash(unit))) return name;
   return `${name} · ${unit.trim()}`;
 }
+
+/* ---- the order screen's rules (the Flutter shop's order_summary_screen.dart) ---- */
+
+/** The proof-of-delivery code shows only while OUT_FOR_DELIVERY and the server sent it. */
+export const showsDeliveryCode = (o: Pick<Order, 'order_status' | 'delivery_code'>) =>
+  o.order_status === 'OUT_FOR_DELIVERY' && typeof o.delivery_code === 'string' && o.delivery_code.length > 0;
+
+/** Before pickup there is no code yet: say where it will appear. */
+export const showsDeliveryCodeComing = (o: Pick<Order, 'order_status'>) =>
+  o.order_status === 'PLACED' || o.order_status === 'PACKED' || o.order_status === 'ITEM_UNAVAILABLE';
+
+export const CODE_COMING = 'Your 4-digit delivery code appears here when the rider picks up your order. We also send it by SMS.';
+
+/** The rider is at the door: no map, but the customer can still call them. */
+export const riderArrived = (o: Pick<Order, 'order_status' | 'delivery'>) =>
+  o.order_status === 'OUT_FOR_DELIVERY' && o.delivery?.assignment_status === 'ARRIVED_AT_CUSTOMER';
+
+/** The line under an item the store could not supply or replaced. */
+export function itemCaption(itemStatus: string): { text: string; struck: boolean; problem: boolean } | null {
+  if (itemStatus === 'UNAVAILABLE') return { text: 'Unavailable — not charged', struck: true, problem: true };
+  if (itemStatus === 'SUBSTITUTED') return { text: 'Replaced by the store', struck: false, problem: false };
+  return null;
+}
+
+/** "14 Oct, 8:00 AM – 10:00 AM" for a booked slot; null for as soon as possible. */
+export function slotWindowText(from: string | null | undefined, until: string | null | undefined): string | null {
+  const start = orderTime(from);
+  if (!start) return null;
+  const end = orderTime(until);
+  if (!end) return start;
+  // same day: only the end time after the dash
+  const [d1, t1] = start.split(', ');
+  const [d2, t2] = end.split(', ');
+  return d1 === d2 ? `${d1}, ${t1} – ${t2}` : `${start} – ${end}`;
+}
+
+/** Cancel is offered only while the server says so (CUSTOMER_CANCEL from PLACED or PACKED). */
+export const CANCELLABLE: readonly string[] = ['PLACED', 'PACKED'];
+export const mayCancel = (o: Pick<Order, 'order_status' | 'can_cancel'>) => o.can_cancel === true && CANCELLABLE.includes(o.order_status);

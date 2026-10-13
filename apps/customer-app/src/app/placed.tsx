@@ -10,6 +10,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { formatLkr } from '@/blynk/lib/money';
 import { getOrder } from '@/blynk/orders/api';
 import { placedFromMemory } from '@/blynk/orders/checkout';
+import { slotWindowText } from '@/blynk/orders/status';
 import type { Order } from '@/blynk/orders/types';
 import { Confetti, PressScale } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
@@ -64,13 +65,27 @@ export default function Placed() {
         </Svg>
       </Animated.View>
       <Animated.Text entering={FadeInDown.delay(700)} style={styles.title}>Order placed!</Animated.Text>
-      <Animated.Text entering={FadeInDown.delay(820)} style={styles.sub}>Your Blynk order is being packed 🧺</Animated.Text>
+      <Animated.Text entering={FadeInDown.delay(820)} style={styles.sub}>
+        {!DEMO && order?.scheduled_for ? "We'll deliver at the time you picked 🧺" : 'Your Blynk order is being packed 🧺'}
+      </Animated.Text>
       {!DEMO && order && (
         <Animated.View entering={FadeInDown.delay(900)} style={styles.facts}>
           <View style={styles.factRow}>
             <Text style={styles.factLabel}>Order number</Text>
             <Text style={styles.factValue} selectable>{order.order_number}</Text>
           </View>
+          {!!slotWindowText(order.scheduled_for, order.scheduled_until) && (
+            <View style={styles.factRow}>
+              <Text style={styles.factLabel}>Delivery time</Text>
+              <Text style={styles.factValue}>{slotWindowText(order.scheduled_for, order.scheduled_until)}</Text>
+            </View>
+          )}
+          {order.ordered_for_someone_else === true && !!order.delivery_recipient_name && (
+            <View style={styles.factRow}>
+              <Text style={styles.factLabel}>For</Text>
+              <Text style={styles.factValue}>{order.delivery_recipient_name}</Text>
+            </View>
+          )}
           <View style={styles.factRow}>
             <Text style={styles.factLabel}>Amount</Text>
             <Text style={styles.factValue}>{formatLkr(order.total_amount)} · Cash on delivery</Text>

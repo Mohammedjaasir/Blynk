@@ -16,6 +16,9 @@ async function load() {
   return { ...api, ...errors, ...client };
 }
 
+// the first test loads fresh modules, which is slow on a busy machine
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeEach(() => { vi.stubGlobal('localStorage', new MemoryStorage()); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -71,4 +74,39 @@ test('listOrders and getOrder read the customer endpoints', async () => {
   const cancelled = await cancelOrder('o1');
   expect(f.mock.calls[2][0]).toBe(`${API_BASE_URL}/orders/o1/cancel`);
   expect(cancelled.can_cancel).toBe(false);
+});
+
+test('placeOrder sends the full checkout body as given (slot, points, receiver, note, needs help, coupon)', async () => {
+  const { placeOrder } = await load();
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(201, { success: true, data: { order, is_idempotent_replay: false } }));
+  const body = {
+    address_id: 'a1', items: [{ product_id: 'p1', quantity: 2 }], idempotency_key: 'app_k', coupon_code: 'SAVE10',
+    delivery_note: 'Gate 12', delivery_slot_start: '2026-10-14T02:30:00.000Z', use_points: true,
+    for_someone_else: true, recipient: { name: 'Amma', phone: '+94771234567' }, needs_help: true,
+  };
+  await placeOrder(body);
+  expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string)).toEqual(body);
+});
+
+test('getDeliverySlots reads GET /orders/slots and drops bad rows', async () => {
+  const { getDeliverySlots, API_BASE_URL } = await load();
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(200, { success: true, data: {
+    enabled: true, asap_available: true, is_open_now: true, slots: [
+      { start: '2026-10-14T02:30:00.000Z', end: '2026-10-14T04:30:00.000Z', day_label: 'Tomorrow', time_label: '8-10 AM', label: 'Tomorrow 8-10 AM', remaining: 2, available: true },
+      { nope: true },
+    ] } }));
+  const s = await getDeliverySlots();
+  expect(f.mock.calls[0][0]).toBe(`${API_BASE_URL}/orders/slots`);
+  expect((f.mock.calls[0][1] as RequestInit).headers).toMatchObject({ Authorization: 'Bearer a1' });
+  expect(s.slots).toHaveLength(1);
+  expect(s.asap_available).toBe(true);
+});
+
+test('cancelOrder sends a reason only when it is long enough', async () => {
+  const { cancelOrder } = await load();
+  const f = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json(200, { success: true, data: { order: { ...order, order_status: 'CANCELLED', can_cancel: false } } }));
+  await cancelOrder('o1', 'no');
+  await cancelOrder('o1', ' Ordered by mistake ');
+  expect((f.mock.calls[0][1] as RequestInit).body).toBe('{}');
+  expect((f.mock.calls[1][1] as RequestInit).body).toBe(JSON.stringify({ reason: 'Ordered by mistake' }));
 });

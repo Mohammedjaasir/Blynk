@@ -14,6 +14,10 @@ export type PlaceErrorAction =
   /** The coupon stopped applying: drop it. */
   | 'coupon'
   | 'closed'
+  /** The picked delivery slot went (full or no longer offered): reload the slots, pick again. */
+  | 'slot'
+  /** Staff switched "For someone else" off: reload checkout-info, which hides it. */
+  | 'details'
   | 'signin'
   | 'retry'
   | null;
@@ -32,8 +36,9 @@ const COPY: Record<string, PlaceErrorCopy> = {
   STORE_UNAVAILABLE: { title: "We can't take orders right now", message: "We can't take orders right now. Try again in a little while.", action: 'retry' },
   PRODUCT_UNAVAILABLE: { title: 'Item unavailable', message: "An item in your cart isn't available right now. Remove it and try again.", action: 'reconcile' },
   PRODUCT_NOT_FOUND: { title: 'Item unavailable', message: "An item in your cart isn't available anymore. Remove it and try again.", action: 'reconcile' },
-  SLOT_UNAVAILABLE: { title: 'Delivery time unavailable', message: "That delivery time isn't available any more. Try again.", action: 'retry' },
-  SLOT_FULL: { title: 'Delivery time full', message: 'That delivery time is full. Try again.', action: 'retry' },
+  SLOT_UNAVAILABLE: { title: 'Delivery time unavailable', message: "That delivery time isn't available any more. Pick another time.", action: 'slot' },
+  SLOT_FULL: { title: 'Delivery time full', message: 'That delivery time is full. Pick another time.', action: 'slot' },
+  FOR_SOMEONE_ELSE_DISABLED: { title: "Can't send to someone else", message: 'Ordering for someone else is not available right now.', action: 'details' },
   COUPON_NOT_FOUND: { title: 'Coupon not found', message: "That coupon code doesn't exist.", action: 'coupon' },
   COUPON_INACTIVE: { title: 'Coupon unavailable', message: 'That coupon is no longer available.', action: 'coupon' },
   COUPON_NOT_STARTED: { title: 'Coupon not active yet', message: "That coupon isn't active yet.", action: 'coupon' },
@@ -47,13 +52,16 @@ const COPY: Record<string, PlaceErrorCopy> = {
   RATE_LIMITED: { title: 'Too many tries', message: 'Too many tries. Wait a moment, then try again.', action: 'retry' },
 };
 
+const SERVER_WORDED = new Set(['STORE_CLOSED', 'SLOT_UNAVAILABLE', 'SLOT_FULL', 'FOR_SOMEONE_ELSE_DISABLED']);
+
 /** Clear copy for any failure of POST /orders (or the coupon preview). */
 export function placeErrorCopy(e: unknown): PlaceErrorCopy {
   if (!(e instanceof ApiError)) return { title: 'Something went wrong', message: 'Something went wrong. Try again.', action: 'retry' };
   const known = e.code ? COPY[e.code] : undefined;
   if (known) {
-    // the server's STORE_CLOSED sentence names when the store opens again
-    if (e.code === 'STORE_CLOSED' && e.message && e.message !== 'Request failed.') return { ...known, message: e.message };
+    // the server's own sentence for these (the Flutter shop's serverWordedOrderRefusals):
+    // STORE_CLOSED names when the store opens again, the slot ones say what to do
+    if (e.code && SERVER_WORDED.has(e.code) && e.message && e.message !== 'Request failed.') return { ...known, message: e.message };
     return known;
   }
   if (e.status === 401) return { title: 'Log in needed', message: 'Please sign in again to place your order.', action: 'signin' };
