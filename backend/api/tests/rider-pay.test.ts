@@ -21,7 +21,12 @@ const today = DateTime.now().setZone('Asia/Colombo').toISODate()!;
 const startedAt = new Date();
 
 const pinnedCheckout = checkoutSettings.read;
-let savedCommissionRow: { value: unknown; description: string | null } | null = null;
+// Every store-wide setting that changes what a rider earns is cleared for the run and put back
+// afterwards, so values saved locally from Admin/Ops (a FIXED default model, a rain boost, daily
+// targets) cannot leak into this suite's expectations. rider_commission came first; the rest
+// arrived with migration 038.
+const PAY_KEYS = ['rider_commission', 'rider_pay_model', 'rider_rain_boost', 'rider_bonus_rules'];
+let savedPayRows: { key: string; value: unknown; description: string | null }[] = [];
 let productId = '';
 let commission: { riderId: string; token: string };
 let company: { riderId: string; token: string };
@@ -63,9 +68,10 @@ async function deliveredOrder(rider: { riderId: string; token: string }, free: b
 }
 
 beforeAll(async () => {
-  savedCommissionRow =
-    (await pool.query("SELECT value, description FROM system_configurations WHERE key = 'rider_commission'")).rows[0] ?? null;
-  await pool.query("DELETE FROM system_configurations WHERE key = 'rider_commission'");
+  savedPayRows = (
+    await pool.query('SELECT key, value, description FROM system_configurations WHERE key = ANY($1::text[])', [PAY_KEYS])
+  ).rows;
+  await pool.query('DELETE FROM system_configurations WHERE key = ANY($1::text[])', [PAY_KEYS]);
   await fx.setup();
   productId = (await fx.product({ tracked: false })).productId;
   commission = await fx.tempRider('pay-commission');
@@ -74,11 +80,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   checkoutSettings.read = pinnedCheckout;
-  await pool.query("DELETE FROM system_configurations WHERE key = 'rider_commission'");
-  if (savedCommissionRow) {
-    await pool.query("INSERT INTO system_configurations (key, value, description) VALUES ('rider_commission', $1, $2)", [
-      JSON.stringify(savedCommissionRow.value),
-      savedCommissionRow.description,
+  await pool.query('DELETE FROM system_configurations WHERE key = ANY($1::text[])', [PAY_KEYS]);
+  for (const row of savedPayRows) {
+    await pool.query('INSERT INTO system_configurations (key, value, description) VALUES ($1, $2, $3)', [
+      row.key,
+      JSON.stringify(row.value),
+      row.description,
     ]);
   }
   const riderIds = [commission?.riderId, company?.riderId, pendingRiderId].filter(Boolean);
