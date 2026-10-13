@@ -68,3 +68,12 @@ Place order shows "Ordering from the new app opens soon" (ordering is wired in a
 
 The table maps the original recording's moments; in the Blynk build the copy and data in each
 moment were changed to what Blynk can back (see `.superpowers/sdd/tokri-wiring/report.md`).
+
+## Design-mock vs live mode
+
+- **Default (`EXPO_PUBLIC_DEMO` unset): design-mock mode.** Every screen shows the Toing reference video's own content from `src/demo/*`, and nothing is fetched.
+- **`EXPO_PUBLIC_DEMO=0`: live mode.** The same screens show real Blynk data. Prices, offers, fees, free deliveries, hours and open/closed all come from `/api/v1`, which Admin and Ops control. This mode makes GET requests only.
+
+`EXPO_PUBLIC_*` values are baked in at build time. After switching modes, always rebuild with `--clear`, or Metro serves the old mode from its cache:
+
+    EXPO_PUBLIC_DEMO=0 EXPO_PUBLIC_API_BASE_URL=https://blynk-api.valgrowlabs.com/api/v1 npx expo export -p web --clear --output-dir dist
