@@ -76,7 +76,8 @@ export function CartBar() {
 
   useEffect(() => {
     strip.value = withSpring(freeDelivery ? 1 : 0, { damping: 18, stiffness: 170 });
-    if (freeDelivery && !wasFree.current) setBurst(Date.now());
+    // live: the strip is an offer line for new customers, not an unlock, so no confetti
+    if (DEMO && freeDelivery && !wasFree.current) setBurst(Date.now());
     wasFree.current = freeDelivery;
   }, [freeDelivery]);
 
@@ -85,7 +86,9 @@ export function CartBar() {
   const rowA = useAnimatedStyle(() => ({ height: CART_BAR.h + (ROW_STRIP - CART_BAR.h) * strip.value }));
 
   if (count === 0) return null;
-  const freeLine = DEMO ? "Yay! You've unlocked Free Delivery" : `Yay! FREE delivery on your first ${freeCount} order${freeCount > 1 ? 's' : ''}`;
+  // live: /store only says new customers get N free deliveries; it cannot tell whether this
+  // shopper is one, so the strip states the offer and promises nothing
+  const freeLine = DEMO ? "Yay! You've unlocked Free Delivery" : `Free delivery on your first ${freeCount} order${freeCount > 1 ? 's' : ''} for new customers`;
   return (
     <>
       {/* the page fades to white behind the bar */}

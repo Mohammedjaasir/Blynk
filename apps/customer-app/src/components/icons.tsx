@@ -113,6 +113,15 @@ export const StarBadge = ({ size = 13, color = '#1B7A35' }: P) => (
   </Svg>
 );
 
+/** White shopping bag in a filled circle (an aisle's item-count row, live mode). */
+export const BagBadge = ({ size = 13, color = '#1B7A35' }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Circle cx={12} cy={12} r={12} fill={color} />
+    <Rect x={7} y={9.5} width={10} height={8.5} rx={2} fill="#fff" />
+    <Path d="M9.6 10V8.4a2.4 2.4 0 014.8 0V10" stroke="#fff" strokeWidth={1.6} fill="none" />
+  </Svg>
+);
+
 /** Scalloped discount seal with a "%" (free-delivery row). */
 export const OfferBadge = ({ size = 13, color = '#1B7A35' }: P) => (
   <Svg width={size} height={size} viewBox="0 0 24 24">

@@ -85,7 +85,8 @@ export const ProductCard = memo(function ProductCard({
       <View style={styles.priceRow}>
         {offer ? (
           <>
-            <Text style={styles.mrp}>{money(p.selling_price)}</Text>
+            {/* live: the struck regular price only while Admin's show_offer_savings is on (as in the cart) */}
+            {(DEMO || showSavings) && <Text style={styles.mrp}>{money(p.selling_price)}</Text>}
             <View style={styles.pill}><Text style={styles.pillTxt}>{money(effectivePrice(p))}</Text></View>
           </>
         ) : (

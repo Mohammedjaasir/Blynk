@@ -2,7 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, interpolate, interpolateColor, SlideOutDown,
   useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withDelay, withRepeat,
@@ -12,19 +12,30 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import type { Product } from '@/blynk/api/types';
+import { useCatalog } from '@/blynk/catalog/CatalogContext';
+import { FILTERS as LIVE_FILTERS, toggle, type FilterId } from '@/blynk/lib/filters';
+import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice } from '@/blynk/lib/pricing';
+import { freeDeliveryCount } from '@/blynk/lib/storeText';
+import { useStore } from '@/blynk/store/StoreContext';
 import { Banner } from '@/components/Banner';
 import { CART_BAR, CartBar } from '@/components/CartBar';
+import { ClosedBanner } from '@/components/ClosedBanner';
 import {
-  CheckBoxIcon, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
+  BagBadge, CheckBoxIcon, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
 import { PressScale, RollingText, Skeleton, StampBadge } from '@/components/ui';
 import {
   BANNER, CATEGORIES, CATEGORIES_PRE, FEES, FILTERS, LOCATION, LOCATION_SHEET, MEALS, MEALS_PRE, PROMO, PROMO_AFTER,
-  SEARCH_HINTS, STORES, STORES_BY_CATEGORY, VS, type DemoCategory, type DemoFilter, type DemoStore,
+  SEARCH_HINTS, STORES, STORES_BY_CATEGORY, VS, type DemoFilter, type DemoStore,
 } from '@/demo/home';
+import {
+  LIVE_LOCATION_NAME, LIVE_LOCATION_SHEET, liveAddress, liveAisles, liveBanner, liveFees, liveHints, livePromo, liveRail,
+  liveUnder, liveVs, UNDER_LKR, type LiveAisleCard, type LiveVs,
+} from '@/demo/homeLive';
 import { extraOf } from '@/demo/extras';
+import { DEMO } from '@/demo/mode';
 import { rupees } from '@/demo/money';
 import { withSpring } from '@/lib/motion';
 import { useCartSelect } from '@/lib/cart';
@@ -40,7 +51,19 @@ import { C, F } from '@/lib/theme';
  *   pre-grant: 60 % black scrim + black "Location Permission is Off" bar
  *   GRANT   bar slides away, page reloads the same way, then the green fee strip rises
  *   scroll  categories (+ filter chips) stick; fee strip hides; black "Search" pill springs up
+ *
+ * Live (DEMO = false): the same layout and motion over Blynk's catalogue and GET /store
+ * (src/demo/homeLive.ts), so Admin and Ops stay in control. Restaurants become aisles,
+ * "Meals under ₹99" becomes "Under LKR 300", and every slot without true data (ratings,
+ * ETAs, "% lower", "Other apps", "Ad", the "lowest price" stamp) is hidden.
  */
+
+const money = (n: number) => (DEMO ? rupees(n) : formatLkr(n));
+
+/** A category-rail tile: the video's emoji (demo) or the aisle's photo (live). */
+type RailCat = { id: string; name: string; from: number | null; emoji?: string; image?: string | null };
+type Chip = { id: string; label: string; hearts?: boolean; caret?: boolean };
+const LIVE_CHIPS: Chip[] = LIVE_FILTERS.map((f) => ({ ...f, hearts: f.id === 'offer' }));
 
 const CAT_W = 90; // one category slot (the reference's tiles sit 90 pt apart)
 const TILE_W = 81;
@@ -58,14 +81,19 @@ let fromSplash = true;
 export default function Home() {
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
-  const [phase, setPhase] = useState<Phase>('locating');
+  const [timedPhase, setPhase] = useState<Phase>('locating');
   const [granted, setGranted] = useState(false);
   const [cat, setCat] = useState('all');
-  const [filters, setFilters] = useState<DemoFilter[]>([]);
+  const [filters, setFilters] = useState<string[]>([]);
   const [past, setPast] = useState(false);
   const [chipsOn, setChipsOn] = useState(false);
   const count = useCartSelect((c) => c.count);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const { data, error, refresh } = useCatalog();
+  const store = useStore();
+  // live: hold the skeleton until the catalogue is in (demo content is always there)
+  const ready = DEMO || !!data;
+  const phase: Phase = !ready && (timedPhase === 'content' || timedPhase === 'banner') ? 'skeleton' : timedPhase;
 
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const y = useSharedValue(0);
@@ -177,9 +205,28 @@ export default function Home() {
   const splashA = useAnimatedStyle(() => ({ opacity: splash.value }));
   const riseA = useAnimatedStyle(() => ({ transform: [{ translateY: rise.value * screenH * 0.32 }] }));
 
-  const cats = granted ? CATEGORIES : CATEGORIES_PRE;
-  const meals = granted ? MEALS : MEALS_PRE;
-  const stores = useMemo(() => filterStores(cat, filters), [cat, filters]);
+  const live = useMemo(() => {
+    if (DEMO) return null;
+    const on = filters as FilterId[];
+    return {
+      rail: liveRail(data) as RailCat[],
+      under: liveUnder(data, cat, on),
+      aisles: liveAisles(data, store, cat, on),
+      vs: liveVs(data, store),
+      promo: livePromo(store),
+      fees: liveFees(store),
+      banner: liveBanner(data, store),
+      hints: liveHints(data),
+      free: freeDeliveryCount(store),
+    };
+  }, [data, store, cat, filters]);
+
+  const cats: RailCat[] = live ? live.rail : granted ? CATEGORIES : CATEGORIES_PRE;
+  const meals = live ? live.under : granted ? MEALS : MEALS_PRE;
+  const stores = useMemo(() => (DEMO ? filterStores(cat, filters as DemoFilter[]) : []), [cat, filters]);
+  const fees = live ? live.fees : FEES;
+  const sheet = DEMO ? LOCATION_SHEET : LIVE_LOCATION_SHEET;
+  const feedError = !DEMO && !data && !!error && timedPhase !== 'locating';
 
   const grant = () => {
     // Asking the browser is fine; the position never leaves this device in this phase.
@@ -197,7 +244,8 @@ export default function Home() {
   const toExplore = () => {
     scrollRef.current?.scrollTo({ y: Math.max(0, feedY.get() + exploreY.get() - catH.get() - 52), animated: true });
   };
-  const toggleFilter = (f: DemoFilter) => setFilters((s) => (s.includes(f) ? s.filter((x) => x !== f) : [...s, f]));
+  const toggleFilter = (f: string) => setFilters((s) => toggle(s, f));
+  const chips: readonly Chip[] = DEMO ? FILTERS : LIVE_CHIPS;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -216,10 +264,19 @@ export default function Home() {
         >
           {/* 0 — header: white while locating, ink once the banner unfolds */}
           <Animated.View onLayout={(e) => headerH.set(e.nativeEvent.layout.height)} style={headerA}>
-            <LocationRow locating={phase === 'locating'} dark={dark} />
-            <SearchBar phase={phase} />
+            <LocationRow
+              locating={phase === 'locating'}
+              dark={dark}
+              name={DEMO ? LOCATION.name : LIVE_LOCATION_NAME}
+              address={DEMO ? LOCATION.address : liveAddress(store)}
+            />
+            <SearchBar phase={phase} hints={live ? (live.hints.length ? live.hints : ['groceries']) : SEARCH_HINTS} />
+            {/* live: /store says the store is closed (hidden in the design mock, which loads no store) */}
+            <ClosedBanner style={styles.closed} />
             <Animated.View style={[{ overflow: 'hidden' }, bannerA]}>
-              {dark && <Banner images={[]} minPrice={null} freeCount={0} onOrderNow={toExplore} demo={BANNER} />}
+              {dark && (live
+                ? <Banner images={live.banner.images} minPrice={live.banner.minPrice} freeCount={live.banner.freeCount} onOrderNow={toExplore} />
+                : <Banner images={[]} minPrice={null} freeCount={0} onOrderNow={toExplore} demo={BANNER} />)}
             </Animated.View>
           </Animated.View>
 
@@ -237,34 +294,55 @@ export default function Home() {
 
           {/* 2 — feed */}
           <View>
-            {loading ? (
+            {feedError ? (
+              <ErrorBox message={error.message} onRetry={() => void refresh()} />
+            ) : loading ? (
               <FeedSkeleton />
             ) : (
               <Animated.View key={granted ? 'post' : 'pre'} entering={FadeIn.duration(260)}>
-                <View style={styles.sectionHead}>
-                  <Text style={styles.h2}>Meals under ₹99</Text>
-                  <Pressable onPress={toExplore} hitSlop={8} style={styles.seeAll}>
-                    <Text style={styles.seeAllTxt}>See All</Text>
-                    <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={15} color="#4A4A50" stroke={2.2} /></View>
-                  </Pressable>
+                {meals.length > 0 && (
+                  <>
+                    <View style={styles.sectionHead}>
+                      <Text style={styles.h2}>{DEMO ? 'Meals under ₹99' : `Under ${formatLkr(UNDER_LKR)}`}</Text>
+                      <Pressable onPress={toExplore} hitSlop={8} style={styles.seeAll}>
+                        <Text style={styles.seeAllTxt}>See All</Text>
+                        <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={15} color="#4A4A50" stroke={2.2} /></View>
+                      </Pressable>
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 15 }}>
+                      {meals.map((p, i) => (
+                        <ProductCard key={p.id} product={p} index={i} width={MEAL_W} sub={DEMO ? undefined : p.category_name} />
+                      ))}
+                    </ScrollView>
+                  </>
+                )}
+
+                {granted && (DEMO || !!live?.vs) && <VsSection live={live?.vs ?? null} />}
+
+                <View onLayout={(e) => chipsY.set(e.nativeEvent.layout.y)} style={{ marginTop: granted && (DEMO || !!live?.vs) ? 2 : 16 }}>
+                  <FilterChips items={chips} on={filters} onToggle={toggleFilter} />
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 15 }}>
-                  {meals.map((p, i) => (
-                    <ProductCard key={p.id} product={p} index={i} width={MEAL_W} />
-                  ))}
-                </ScrollView>
+                <Text onLayout={(e) => exploreY.set(e.nativeEvent.layout.y)} style={styles.explore}>
+                  {DEMO ? 'Explore all restaurants' : 'Explore all aisles'}
+                </Text>
 
-                {granted && <VsSection />}
-
-                <View onLayout={(e) => chipsY.set(e.nativeEvent.layout.y)} style={{ marginTop: granted ? 2 : 16 }}>
-                  <FilterChips on={filters} onToggle={toggleFilter} />
-                </View>
-                <Text onLayout={(e) => exploreY.set(e.nativeEvent.layout.y)} style={styles.explore}>Explore all restaurants</Text>
-
-                {stores.length === 0 && <Text style={styles.empty}>No restaurants match these filters.</Text>}
-                {stores.map((s, i) => (
-                  <StoreCard key={s.id} store={s} y={y} feedY={feedY} screenH={screenH} promo={granted && i === PROMO_AFTER - 1} />
-                ))}
+                {DEMO ? (
+                  <>
+                    {stores.length === 0 && <Text style={styles.empty}>No restaurants match these filters.</Text>}
+                    {stores.map((s, i) => (
+                      <StoreCard key={s.id} store={s} y={y} feedY={feedY} screenH={screenH} promo={granted && i === PROMO_AFTER - 1} />
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {live && live.aisles.length === 0 && (
+                      <Text style={styles.empty}>{filters.length ? 'Nothing matches these filters right now.' : "We're stocking the shelves. Check back shortly."}</Text>
+                    )}
+                    {live?.aisles.map((a, i) => (
+                      <AisleCard key={a.cat.id} aisle={a} freeStamp={live.free > 0} promo={granted && i === PROMO_AFTER - 1 ? live.promo : null} />
+                    ))}
+                  </>
+                )}
               </Animated.View>
             )}
           </View>
@@ -272,7 +350,7 @@ export default function Home() {
 
         {/* filter chips pinned under the stuck categories (an overlay, so nothing below shifts) */}
         <Animated.View pointerEvents={chipsOn ? 'auto' : 'none'} style={[styles.chipsPinned, chipsA]}>
-          <FilterChips on={filters} onToggle={toggleFilter} />
+          <FilterChips items={chips} on={filters} onToggle={toggleFilter} />
         </Animated.View>
       </Animated.View>
 
@@ -290,7 +368,7 @@ export default function Home() {
       {/* fee strip (after location is granted) */}
       <Animated.View style={[styles.feeStripWrap, stripA]} pointerEvents="none">
         <LinearGradient colors={[C.green, C.greenDark]} style={[styles.feeStrip, { paddingBottom: insets.bottom + 27 }]}>
-          {FEES.map(([c, l]) => (
+          {fees.map(([c, l]) => (
             <View key={l} style={styles.fee}>
               <View style={styles.coin}><Text style={styles.coinTxt}>{c}</Text></View>
               <Text style={styles.feeTxt} numberOfLines={1}>{l}</Text>
@@ -308,17 +386,17 @@ export default function Home() {
             <View style={{ flex: 1 }}>
               <View style={styles.locTitleRow}>
                 <LocateIcon size={15} color="#fff" />
-                <Text style={styles.locTitle}>{LOCATION_SHEET.title}</Text>
+                <Text style={styles.locTitle}>{sheet.title}</Text>
               </View>
-              <Text style={styles.locSub}>{LOCATION_SHEET.sub}</Text>
+              <Text style={styles.locSub}>{sheet.sub}</Text>
             </View>
             <PressScale onPress={grant} style={styles.grant} haptic>
-              <Text style={styles.grantTxt}>{LOCATION_SHEET.cta}</Text>
+              <Text style={styles.grantTxt}>{sheet.cta}</Text>
             </PressScale>
           </View>
           <Pressable onPress={() => router.push('/address')} style={styles.locManual}>
             <SearchIcon size={17} color={C.green} />
-            <Text style={styles.locManualTxt}>{LOCATION_SHEET.manual}</Text>
+            <Text style={styles.locManualTxt}>{sheet.manual}</Text>
           </Pressable>
         </Animated.View>
       )}
@@ -346,7 +424,7 @@ function filterStores(cat: string, filters: DemoFilter[]): DemoStore[] {
     .filter((s) => s.dishes.length > 0);
 }
 
-function LocationRow({ locating, dark }: { locating: boolean; dark: boolean }) {
+function LocationRow({ locating, dark, name, address }: { locating: boolean; dark: boolean; name: string; address: string | null }) {
   const spin = useSharedValue(0);
   useEffect(() => {
     spin.value = locating ? withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1) : withSpring(0);
@@ -360,12 +438,12 @@ function LocationRow({ locating, dark }: { locating: boolean; dark: boolean }) {
       </Animated.View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-          <RollingText text={locating ? 'Locating ...' : LOCATION.name} style={[styles.locName, { color: fg }]} />
+          <RollingText text={locating ? 'Locating ...' : name} style={[styles.locName, { color: fg }]} />
           <ChevronIcon size={13} color={dark ? '#D9D6E8' : '#55555C'} stroke={2.2} />
         </View>
-        {!locating && (
+        {!locating && !!address && (
           <Animated.Text entering={FadeIn.duration(250)} numberOfLines={1} style={[styles.locAddr, { color: dark ? '#CFCBE0' : '#55555C' }]}>
-            {LOCATION.address}
+            {address}
           </Animated.Text>
         )}
       </View>
@@ -377,14 +455,14 @@ function LocationRow({ locating, dark }: { locating: boolean; dark: boolean }) {
 }
 
 /** "Search for 'Burger'" — the quoted word rolls up to the next dish now and then. */
-function SearchBar({ phase }: { phase: Phase }) {
+function SearchBar({ phase, hints }: { phase: Phase; hints: string[] }) {
   const [i, setI] = useState(0);
   useEffect(() => {
     const first = setTimeout(() => setI(1), 2200);
     const t = setInterval(() => setI((n) => n + 1), 9000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, []);
-  const hint = SEARCH_HINTS[i % SEARCH_HINTS.length];
+  const hint = hints[i % hints.length];
   const grey = phase === 'locating' || phase === 'skeleton';
   return (
     <PressScale
@@ -404,7 +482,7 @@ function SearchBar({ phase }: { phase: Phase }) {
 /** Stuck to the top, the rail tightens: tiles 86 → 78 pt, top padding 11 → 8 (0:16.5). */
 const SQUEEZE = TILE_H - 78;
 function CategoryRail({ items, value, onChange, stuck }: {
-  items: DemoCategory[]; value: string; onChange: (id: string) => void; stuck: SharedValue<number>;
+  items: RailCat[]; value: string; onChange: (id: string) => void; stuck: SharedValue<number>;
 }) {
   const idx = Math.max(0, items.findIndex((c) => c.id === value));
   const x = useSharedValue(idx * CAT_W);
@@ -425,7 +503,7 @@ function CategoryRail({ items, value, onChange, stuck }: {
   );
 }
 
-function CategoryItem({ c, active, onPress, stuck }: { c: DemoCategory; active: boolean; onPress: () => void; stuck: SharedValue<number> }) {
+function CategoryItem({ c, active, onPress, stuck }: { c: RailCat; active: boolean; onPress: () => void; stuck: SharedValue<number> }) {
   const b = useSharedValue(0);
   useEffect(() => {
     if (active) b.value = withSequence(withTiming(-6, { duration: 140 }), withSpring(0, { damping: 6, stiffness: 300 }));
@@ -439,10 +517,14 @@ function CategoryItem({ c, active, onPress, stuck }: { c: DemoCategory; active: 
     <PressScale onPress={onPress} style={styles.cat} haptic>
       <Animated.View style={[{ alignItems: 'center' }, h]}>
       <Animated.View style={[styles.catImg, a]}>
-        <Text style={{ fontSize: 40, lineHeight: 48 }}>{c.emoji}</Text>
+        {c.emoji ? (
+          <Text style={{ fontSize: 40, lineHeight: 48 }}>{c.emoji}</Text>
+        ) : (
+          <Photo uri={c.image ?? null} name={c.name} size={46} />
+        )}
       </Animated.View>
       {c.from != null ? (
-        <View style={styles.fromTag}><Text style={styles.fromTxt}>FROM {rupees(c.from)}</Text></View>
+        <View style={styles.fromTag}><Text style={styles.fromTxt}>FROM {money(c.from)}</Text></View>
       ) : (
         <View style={{ height: 6 }} />
       )}
@@ -452,19 +534,19 @@ function CategoryItem({ c, active, onPress, stuck }: { c: DemoCategory; active: 
   );
 }
 
-function FilterChips({ on, onToggle }: { on: DemoFilter[]; onToggle: (f: DemoFilter) => void }) {
+function FilterChips({ items, on, onToggle }: { items: readonly Chip[]; on: string[]; onToggle: (f: string) => void }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 8, paddingVertical: 6, alignItems: 'center' }}>
       <View style={[styles.chip, { width: 38, paddingHorizontal: 0, justifyContent: 'center' }]}><SlidersIcon size={17} color="#3A3A40" /></View>
-      {FILTERS.map((f) => {
+      {items.map((f) => {
         const active = on.includes(f.id);
         return (
           <PressScale key={f.id} onPress={() => onToggle(f.id)} style={[styles.chip, active && styles.chipOn]}>
-            {'hearts' in f && (
+            {f.hearts && (
               <View style={styles.chipHearts}><HeartsIcon size={15} color={C.pink} filled /></View>
             )}
             <Text style={[styles.chipTxt, active && { color: C.pink }]}>{f.label}</Text>
-            {'caret' in f && <ChevronIcon size={14} color="#3A3A40" stroke={2.2} />}
+            {f.caret && <ChevronIcon size={14} color="#3A3A40" stroke={2.2} />}
           </PressScale>
         );
       })}
@@ -485,19 +567,42 @@ function Wave({ color, flip }: { color: string; flip?: boolean }) {
   );
 }
 
-/** "BLYNK vs OTHER APPS / 40-60% LOWER PRICES" with its store tile(s). */
-function VsSection() {
+/**
+ * "BLYNK vs OTHER APPS / 40-60% LOWER PRICES" with its store tile(s). Live: Blynk's fees and
+ * free deliveries over tiles of products on offer (else aisles), true copy only.
+ */
+function VsSection({ live }: { live: LiveVs | null }) {
+  const kicker = live ? live.kicker : VS.kicker;
   return (
     <View style={{ marginTop: 34 }}>
       <Wave color={C.greenTint} />
       <LinearGradient colors={[C.greenTint, '#F5FBF6', '#FFFFFF']} style={{ paddingTop: 12, paddingBottom: 6 }}>
         <View style={styles.vsKicker}>
           <HeartsIcon size={15} color={C.pink} pupil="#3A3A40" />
-          <Text style={styles.vsSmall}>{VS.kicker[0]} <Text style={styles.vsVs}>{VS.kicker[1]}</Text> {VS.kicker[2]}</Text>
+          <Text style={styles.vsSmall}>{kicker[0]} <Text style={styles.vsVs}>{kicker[1]}</Text> {kicker[2]}</Text>
         </View>
-        <Text style={styles.vsBig}>{VS.title}</Text>
+        <Text style={styles.vsBig}>{live ? live.title : VS.title}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 14, marginTop: 10 }}>
-          {VS.tiles.map((t) => (
+          {live?.tiles.map((t) => (
+            <PressScale key={t.id} scaleTo={0.97} onPress={() => t.aisle && openAisle(t.aisle)} style={{ width: MEAL_W }}>
+              <View style={styles.vsTile}>
+                <Photo uri={t.image} name={t.name} size={MEAL_W * 0.86} />
+                <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.vsShade} />
+                <Text style={styles.vsItems}>{t.overlay[0]}{'\n'}{t.overlay[1]}</Text>
+              </View>
+              <Text style={styles.vsName} numberOfLines={1}>{t.name}</Text>
+              {!!t.line && (
+                <Text style={[styles.vsMetaTxt, t.strike && styles.vsStrike]} numberOfLines={1}>{t.line}</Text>
+              )}
+              {!!t.save && (
+                <View style={[styles.vsMeta, { marginTop: 7 }]}>
+                  <HeartsIcon size={12} color={C.pink} filled />
+                  <Text style={[styles.vsTags, { marginTop: 0, color: C.pink, fontFamily: F.semi }]}>{t.save}</Text>
+                </View>
+              )}
+            </PressScale>
+          ))}
+          {!live && VS.tiles.map((t) => (
             <PressScale key={t.id} scaleTo={0.97} onPress={() => openAisle({ slug: 'olio99', name: t.name })} style={{ width: MEAL_W }}>
               <View style={styles.vsTile}>
                 <Text style={{ fontSize: 76 }}>{t.emoji}</Text>
@@ -569,8 +674,52 @@ const StoreCard = memo(function StoreCard({ store: s, y, feedY, screenH, promo }
   );
 });
 
-/** Green band with scalloped edges: the reference's "Offline Menu Price Match / ₹0 fees". */
-function PromoBand() {
+/**
+ * Live: the video's restaurant card as a Blynk aisle. Same layout; the rating / ETA row
+ * becomes the item count and delivery hours, the free-delivery row says what /store says,
+ * the "% LOWER PRICES" line is a running category offer, and there is no "Ad" tag. The
+ * stamp is Blynk's free-delivery stamp, shown only while Ops has free deliveries on.
+ */
+const AisleCard = memo(function AisleCard({ aisle: a, freeStamp, promo }: {
+  aisle: LiveAisleCard; freeStamp: boolean;
+  /** The green promo band follows this card. */
+  promo: { line1: string | null; fees: string[] } | null;
+}) {
+  return (
+    <View>
+      <PressScale scaleTo={0.985} onPress={() => openAisle(a.cat)} style={styles.store}>
+        {freeStamp && <StampBadge size={74} variant="free" style={styles.stamp} />}
+        {!!a.offer && <Text style={styles.lower}>{a.offer}</Text>}
+        <View style={styles.storeNameRow}>
+          <Text style={styles.storeName} numberOfLines={1}>{a.cat.name}</Text>
+        </View>
+        <View style={styles.metaRow}>
+          <BagBadge size={12} color={C.green} />
+          <Text style={styles.meta}>{a.meta}</Text>
+        </View>
+        <View style={[styles.metaRow, { marginTop: 4 }]}>
+          <OfferBadge size={12} color={C.green} />
+          <Text style={[styles.meta, { fontSize: 11.5, flexShrink: 1 }]}>{a.delivery}</Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginHorizontal: -15, marginTop: 12 }}
+          contentContainerStyle={{ gap: 12, paddingHorizontal: 15 }}
+        >
+          {a.items.slice(0, 10).map((p: Product, i) => (
+            <ProductCard key={p.id} product={p} width={DISH_W} height={DISH_H} index={i} showRating={false} />
+          ))}
+        </ScrollView>
+      </PressScale>
+      {promo && <PromoBand live={promo} />}
+    </View>
+  );
+});
+
+/** Green band with scalloped edges: the reference's "Offline Menu Price Match / ₹0 fees" (live: Blynk's own). */
+function PromoBand({ live }: { live?: { line1: string | null; fees: string[] } }) {
+  const band = live ?? PROMO;
   const w = useSharedValue(0);
   useEffect(() => {
     w.value = withRepeat(withSequence(withTiming(1, { duration: 220 }), withTiming(-1, { duration: 220 }), withTiming(1, { duration: 220 }), withTiming(0, { duration: 220 }), withTiming(0, { duration: 1400 })), -1);
@@ -580,12 +729,14 @@ function PromoBand() {
     <View style={{ marginTop: 2, marginBottom: 22 }}>
       <Wave color="#14A02C" />
       <LinearGradient colors={['#14A02C', C.green]} style={styles.promo}>
+        {!!band.line1 && (
+          <View style={[styles.promoRow, { marginBottom: 9 }]}>
+            <CheckBoxIcon size={14} color={C.yellow} />
+            <Text style={styles.promoTxt}>{band.line1}</Text>
+          </View>
+        )}
         <View style={styles.promoRow}>
-          <CheckBoxIcon size={14} color={C.yellow} />
-          <Text style={styles.promoTxt}>{PROMO.line1}</Text>
-        </View>
-        <View style={[styles.promoRow, { marginTop: 9 }]}>
-          {PROMO.fees.map((f) => (
+          {band.fees.map((f) => (
             <View key={f} style={[styles.promoRow, { marginRight: 12 }]}>
               <CheckBoxIcon size={14} color={C.yellow} />
               <Text style={styles.promoTxt}>{f}</Text>
@@ -596,6 +747,25 @@ function PromoBand() {
       </LinearGradient>
       <Wave color={C.green} flip />
     </View>
+  );
+}
+
+/** Live: a category or product photo, or its initial while it is missing or fails to load. */
+function Photo({ uri, name, size }: { uri: string | null; name: string; size: number }) {
+  const [failed, setFailed] = useState(false);
+  if (uri && !failed) {
+    return <Image source={{ uri }} accessibilityLabel={name} resizeMode="contain" onError={() => setFailed(true)} style={{ width: size, height: size }} />;
+  }
+  return <Text style={[styles.initial, { fontSize: Math.round(size * 0.5) }]}>{name.trim().charAt(0).toUpperCase() || '·'}</Text>;
+}
+
+/** Live: the catalogue could not load. */
+function ErrorBox({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Animated.View entering={FadeIn.duration(250)} style={styles.errorBox}>
+      <Text style={[styles.h2, { textAlign: 'center' }]}>{message}</Text>
+      <PressScale onPress={onRetry} style={styles.retry} haptic><Text style={styles.retryTxt}>Try again</Text></PressScale>
+    </Animated.View>
   );
 }
 
@@ -628,6 +798,7 @@ const styles = StyleSheet.create({
   searchGrey: { backgroundColor: '#F2F0F5' },
   searchLine: { borderColor: '#E3E3E8' },
   searchTxt: { fontFamily: F.regular, color: '#5A5A60', fontSize: 15 },
+  closed: { marginHorizontal: 15, marginTop: 12 },
   sticky: { backgroundColor: '#fff', shadowColor: '#000', shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
   chipsPinned: {
     position: 'absolute', left: 0, right: 0, backgroundColor: '#fff', paddingBottom: 4,
@@ -680,6 +851,11 @@ const styles = StyleSheet.create({
   vsMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 0 },
   vsMetaTxt: { fontFamily: F.regular, fontSize: 12, color: '#3A3A40' },
   vsTags: { fontFamily: F.regular, fontSize: 12, color: '#77777C', marginTop: 0 },
+  vsStrike: { color: '#77777C', textDecorationLine: 'line-through' },
+  initial: { fontFamily: F.bold, color: C.faint },
+  errorBox: { padding: 24, alignItems: 'center', gap: 12 },
+  retry: { backgroundColor: C.green, borderRadius: 14, paddingHorizontal: 22, paddingVertical: 11 },
+  retryTxt: { color: '#fff', fontFamily: F.bold, fontSize: 14 },
   promo: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 16, overflow: 'hidden' },
   promoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   promoTxt: { color: '#fff', fontFamily: F.semi, fontSize: 14 },
