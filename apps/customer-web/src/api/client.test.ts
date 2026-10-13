@@ -21,14 +21,14 @@ test('throws ApiError with the server code and message', async () => {
 
 test('maps a network failure to NETWORK_ERROR', async () => {
   vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
-  const err = await apiRequest('/x').catch((e: ApiError) => e);
+  const err = (await apiRequest('/x').catch((e) => e)) as ApiError;
   expect(err).toBeInstanceOf(ApiError);
   expect(err.code).toBe('NETWORK_ERROR');
 });
 
 test('a 5xx never leaks server text', async () => {
   mockFetch(500, { success: false, error: { code: 'INTERNAL', message: 'stack trace here' } });
-  const err = await apiRequest('/x').catch((e: ApiError) => e);
+  const err = (await apiRequest('/x').catch((e) => e)) as ApiError;
   expect(err.message).toBe("Something went wrong on our side. Please try again.");
 });
 
