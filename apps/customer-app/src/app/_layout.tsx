@@ -40,6 +40,9 @@ export default function RootLayout() {
                 <Stack.Screen name="search" options={{ animation: 'fade' }} />
                 <Stack.Screen name="cart" options={{ animation: 'fade', animationDuration: 120 }} />
                 <Stack.Screen name="otp" options={{ animation: 'none' }} />
+                {/* first sign-in: no way back out of registration */}
+                <Stack.Screen name="register" options={{ animation: 'fade', animationDuration: 120, gestureEnabled: false }} />
+                <Stack.Screen name="birthday" options={{ animation: 'fade', animationDuration: 120, gestureEnabled: false }} />
                 <Stack.Screen name="address" options={{ animation: 'fade', animationDuration: 110 }} />
                 <Stack.Screen name="placed" options={{ animation: 'fade', gestureEnabled: false }} />
               </Stack>

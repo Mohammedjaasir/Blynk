@@ -37,3 +37,29 @@ test('a 5xx never leaks server text', async () => {
   const err = (await apiRequest('/x').catch((e) => e)) as ApiError;
   expect(err.message).toBe('Something went wrong on our side. Please try again.');
 });
+
+test('POST sends a JSON body and the Bearer token', async () => {
+  const f = mockFetch(200, { success: true, data: { ok: 1 } });
+  const { apiPost } = await import('./client');
+  await expect(apiPost('/auth/otp/request', { phone: '+94771234567' }, 'tok')).resolves.toEqual({ ok: 1 });
+  const init = f.mock.calls[0][1] as RequestInit;
+  expect(init.method).toBe('POST');
+  expect(init.body).toBe(JSON.stringify({ phone: '+94771234567' }));
+  expect(init.headers).toMatchObject({ Authorization: 'Bearer tok', 'Content-Type': 'application/json' });
+});
+
+test('PATCH without a token sends no Authorization header', async () => {
+  const f = mockFetch(200, { success: true, data: {} });
+  const { apiPatch } = await import('./client');
+  await apiPatch('/me', { full_name: 'Nimal' });
+  const init = f.mock.calls[0][1] as RequestInit;
+  expect(init.method).toBe('PATCH');
+  expect(init.headers).not.toHaveProperty('Authorization');
+});
+
+test('a 5xx keeps its code (OTP_DELIVERY_FAILED) for the screen to explain', async () => {
+  mockFetch(502, { success: false, error: { code: 'OTP_DELIVERY_FAILED', message: 'provider said no' } });
+  const err = (await apiRequest('/x').catch((e) => e)) as ApiError;
+  expect(err.code).toBe('OTP_DELIVERY_FAILED');
+  expect(err.message).not.toContain('provider');
+});

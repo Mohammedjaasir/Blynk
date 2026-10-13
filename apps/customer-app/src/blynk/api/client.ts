@@ -9,16 +9,34 @@ export class ApiError extends Error {
   }
 }
 
-/** This phase of the app only reads (catalogue and store), so the client only does GET. */
-interface Options { signal?: AbortSignal }
+export type Method = 'GET' | 'POST' | 'PATCH';
+
+interface Options {
+  signal?: AbortSignal;
+  /** GET when omitted (the catalogue and store reads). */
+  method?: Method;
+  /** Sent as JSON. Only for POST and PATCH. */
+  body?: unknown;
+  /** Bearer access token for signed-in calls. */
+  token?: string | null;
+}
 
 export async function apiRequest<T>(path: string, opts: Options = {}): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
   opts.signal?.addEventListener('abort', () => ctrl.abort());
+  const method = opts.method ?? 'GET';
+  const init: RequestInit = { method, signal: ctrl.signal };
+  const headers: Record<string, string> = {};
+  if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
+  if (method !== 'GET' && opts.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(opts.body);
+  }
+  if (Object.keys(headers).length) init.headers = headers;
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, { method: 'GET', signal: ctrl.signal });
+    res = await fetch(`${API_BASE_URL}${path}`, init);
   } catch {
     const timedOut = ctrl.signal.aborted && !opts.signal?.aborted;
     throw new ApiError(
@@ -33,6 +51,16 @@ export async function apiRequest<T>(path: string, opts: Options = {}): Promise<T
   let payload: { success?: boolean; data?: unknown; error?: { code?: string; message?: string; details?: unknown } } = {};
   try { payload = text ? JSON.parse(text) : {}; } catch { /* non-JSON body */ }
   if (res.ok && payload.success !== false) return payload.data as T;
-  if (res.status >= 500) throw new ApiError('Something went wrong on our side. Please try again.', res.status, payload.error?.code);
+  // 502 OTP_DELIVERY_FAILED is a 5xx the customer must understand; keep its code, not the server text
+  if (res.status >= 500) throw new ApiError('Something went wrong on our side. Please try again.', res.status, payload.error?.code, payload.error?.details);
   throw new ApiError(payload.error?.message ?? 'Request failed.', res.status, payload.error?.code, payload.error?.details);
 }
+
+export const apiPost = <T>(path: string, body: unknown, token?: string | null, signal?: AbortSignal) =>
+  apiRequest<T>(path, { method: 'POST', body, token, signal });
+
+export const apiPatch = <T>(path: string, body: unknown, token?: string | null, signal?: AbortSignal) =>
+  apiRequest<T>(path, { method: 'PATCH', body, token, signal });
+
+export const apiGet = <T>(path: string, token?: string | null, signal?: AbortSignal) =>
+  apiRequest<T>(path, { token, signal });

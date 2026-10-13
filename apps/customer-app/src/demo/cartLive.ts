@@ -1,5 +1,5 @@
 /*
- * Live (DEMO=false) content for the cart, login, OTP and address screens. Everything here is
+ * Live (DEMO=false) content for the cart, login, OTP, registration, birthday and address screens. Everything here is
  * either true Blynk copy or derived from GET /store, which Admin/Ops control. No taxes,
  * distances, ratings or invented savings: a slot with nothing true to say is hidden.
  */
@@ -72,11 +72,41 @@ export const LIVE = {
   countryFlag: '🇱🇰',
   countryCode: '+94',
   phoneDigits: 9,
-  phoneOk: (n: string) => /^7\d{8}$/.test(n),
-  // OTP: nothing is sent or checked in this phase
-  otpSentTo: (phone: string) => `Preview only: no code is sent to +94 ${phone}`,
-  otpNote: 'Phone sign-in opens with ordering. Any 6 digits continue the preview.',
-  otpCta: 'Continue preview',
+  sending: 'Sending code…',
+  // OTP: POST /auth/otp/request sends a 6-digit code by SMS; it is checked by /auth/otp/verify
+  otpSentTo: (phone: string) => `OTP sent to ${phone}`,
+  resendIn: (s: number) => `Resend OTP in ${s} s`,
+  resend: 'Resend OTP',
+  resending: 'Sending a new code…',
+  resent: 'A new code is on its way.',
+  verifying: 'Verifying…',
+  devCode: (code: string) => `Dev code: ${code}`,
+  devFill: 'Tap to fill',
+  // first sign-in: registration (the account has no name yet), then an optional birthday
+  register: {
+    title: 'Welcome to Blynk',
+    signedInAs: (phone: string) => `Signed in with ${phone}`,
+    heading: "What's your name?",
+    sub: 'So your rider knows who to hand your order to.',
+    nameLabel: 'Your name',
+    nameHint: 'e.g. Nimal Perera',
+    referralLabel: 'Referral code (optional)',
+    referralHelp: "Got a friend's code? Enter it for a reward on your first order.",
+    referralBad: 'Referral codes are 3 to 32 letters and numbers.',
+    cta: 'Continue',
+    saving: 'Saving…',
+  },
+  birthday: {
+    title: 'Tell us your birthday for a gift',
+    body: "Get a little something off one order in your birthday week. It's optional, and you can change it any time in Profile.",
+    day: 'DD',
+    month: 'MM',
+    year: 'YYYY',
+    bad: 'Enter a real date of birth.',
+    save: 'Save birthday',
+    saving: 'Saving…',
+    skip: 'Skip',
+  },
   // address: a drawing, not a real map; no place names are invented
   address: {
     search: 'Address search opens with ordering',

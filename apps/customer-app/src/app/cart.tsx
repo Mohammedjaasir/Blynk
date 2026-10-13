@@ -11,6 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import type { Product } from '@/blynk/api/types';
+import { requestOtp } from '@/blynk/auth/api';
+import { setPendingOtp } from '@/blynk/auth/flow';
+import { authErrorText } from '@/blynk/auth/forms';
+import { toE164 } from '@/blynk/auth/phone';
+import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
@@ -31,7 +36,11 @@ import { C, F } from '@/lib/theme';
 /*
  * Cart, read frame by frame off the reference (video 0:41–1:20). All copy and fees are the
  * video's mock content (src/demo/cart.ts); the item lines come from the cart store.
- * Login, OTP and address stay local previews: nothing is sent, nothing is ordered.
+ * Design mock: login, OTP and address are local previews; nothing is sent, nothing is ordered.
+ *
+ * Live: "Proceed with phone number" signs in for real (OTP by SMS, then registration on the
+ * first sign-in); the signed-in state is a registered Blynk session (src/blynk/auth/session.ts).
+ * Address stays a preview and ordering is the next phase.
  *
  * Live mode (DEMO=false) keeps the layout and motion but every value is Blynk's own: lines and
  * totals from the cart store at effective (offer-aware) LKR prices, unavailable lines flagged,
@@ -57,7 +66,11 @@ const SK = '#E3E3E8';
 export default function Cart() {
   const insets = useSafeAreaInsets();
   const cart = useCart();
-  const { lines, total, mrpTotal, count, phone, address } = cart;
+  const { lines, total, mrpTotal, count, address } = cart;
+  // signed in: design mock keeps the local number; live is a registered Blynk session
+  const session = useSession();
+  const midRegistration = !DEMO && needsRegistration(session);
+  const phone = DEMO ? cart.phone : (session && !midRegistration ? session.user.phone : null);
   const store = useStore();
   const { data: catalog, refresh } = useCatalog();
   const closedNow = useStoreClosed() && !DEMO;
@@ -284,7 +297,7 @@ export default function Cart() {
           <Animated.View key="login" exiting={FadeOut.duration(150)}>
             <Text style={styles.bottomTitle}>{COPY.almost}</Text>
             <Text style={styles.bottomSub}>{COPY.almostSub}</Text>
-            <PressScale onPress={() => setLogin(true)} haptic style={{ marginTop: 24 }} scaleTo={0.95}>
+            <PressScale onPress={() => (midRegistration ? router.push('/register') : setLogin(true))} haptic style={{ marginTop: 24 }} scaleTo={0.95}>
               <View style={styles.cta}><Text style={styles.ctaTxt}>{COPY.proceedPhone}</Text></View>
             </PressScale>
           </Animated.View>
@@ -608,11 +621,18 @@ function LiveBillCard({ bill, itemTotal, mrpTotal }: { bill: LiveBill; itemTotal
   );
 }
 
-/** Login bottom sheet: floating "Mobile Number" label; Continue lights up at 10 digits (live: +94 and 9). */
+/**
+ * Login bottom sheet: floating "Mobile Number" label; Continue lights up at 10 digits (live: +94
+ * and a valid 9-digit Sri Lankan mobile). Live: Continue asks Blynk to SMS a code
+ * (POST /auth/otp/request); its errors show in the sheet.
+ */
 function LoginSheet({ onClose }: { onClose: () => void }) {
   const [num, setNum] = useState('');
-  // live: Sri Lankan mobiles, 9 digits after +94 (a leading 0 is dropped); nothing is sent
-  const ready = DEMO ? /^\d{10}$/.test(num) : LIVE.phoneOk(num);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // live: Sri Lankan mobiles, 9 digits after +94 (a leading 0 is dropped)
+  const e164 = DEMO ? null : toE164(num);
+  const ready = DEMO ? /^\d{10}$/.test(num) : num.length === LIVE.phoneDigits && !!e164;
   const lift = useSharedValue(0);
   const en = useSharedValue(0);
   const rise = useSharedValue(0);
@@ -630,9 +650,24 @@ function LoginSheet({ onClose }: { onClose: () => void }) {
   }));
   const btn = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(en.value, [0, 1], [C.brandSoft, C.brand]) }));
   const submit = () => {
-    Keyboard.dismiss();
-    onClose();
-    router.push({ pathname: '/otp', params: { phone: num } });
+    if (DEMO) {
+      Keyboard.dismiss();
+      onClose();
+      router.push({ pathname: '/otp', params: { phone: num } });
+      return;
+    }
+    if (!e164 || sending) return;
+    setSending(true);
+    setError(null);
+    requestOtp(e164)
+      .then((r) => {
+        setPendingOtp(e164, r.dev_otp);
+        Keyboard.dismiss();
+        onClose();
+        router.push({ pathname: '/otp', params: { phone: e164 } });
+      })
+      .catch((e) => setError(authErrorText(e)))
+      .finally(() => setSending(false));
   };
   return (
     <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(150)} style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }]}>
@@ -652,7 +687,11 @@ function LoginSheet({ onClose }: { onClose: () => void }) {
               ref={input}
               autoFocus
               value={num}
-              onChangeText={(t) => setNum(DEMO ? t.replace(/\D/g, '').slice(0, 10) : t.replace(/\D/g, '').replace(/^0/, '').slice(0, LIVE.phoneDigits))}
+              onChangeText={(t) => {
+                setNum(DEMO ? t.replace(/\D/g, '').slice(0, 10) : t.replace(/\D/g, '').replace(/^0/, '').slice(0, LIVE.phoneDigits));
+                setError(null);
+              }}
+              onSubmitEditing={() => ready && submit()}
               keyboardType="number-pad"
               style={styles.phoneInput}
               maxLength={10}
@@ -660,8 +699,9 @@ function LoginSheet({ onClose }: { onClose: () => void }) {
             />
           </View>
         </Pressable>
-        <PressScale disabled={!ready} onPress={submit} haptic scaleTo={0.96}>
-          <Animated.View style={[styles.cta, btn]}><Text style={[styles.ctaTxt, { fontSize: 14.5 }]}>{COPY.continue}</Text></Animated.View>
+        {!!error && <Text style={styles.sheetErr} accessibilityRole="alert">{error}</Text>}
+        <PressScale disabled={!ready || sending} onPress={submit} haptic scaleTo={0.96}>
+          <Animated.View style={[styles.cta, btn]}><Text style={[styles.ctaTxt, { fontSize: 14.5 }]}>{sending ? LIVE.sending : COPY.continue}</Text></Animated.View>
         </PressScale>
         <Text style={styles.terms}>
           By clicking, I accept the <Text style={styles.link}>privacy policy</Text> and <Text style={styles.link}>terms of use</Text>
@@ -798,6 +838,7 @@ const styles = StyleSheet.create({
   sheet: { alignSelf: 'stretch', height: 547, backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingHorizontal: 15, paddingTop: 16 },
   sheetTitle: { fontFamily: F.semi, fontSize: 17.5, color: INK, lineHeight: 22 },
   sheetSub: { fontFamily: F.regular, fontSize: 12, color: '#6E6E76', marginTop: 0, lineHeight: 16 },
+  sheetErr: { fontFamily: F.medium, fontSize: 12, color: C.problem, lineHeight: 16, marginTop: -18, marginBottom: 12 },
   phoneRow: { flexDirection: 'row', alignItems: 'flex-end', height: 36, marginTop: 19, marginBottom: 28 },
   ccBox: { flexDirection: 'row', alignItems: 'center', height: 26, gap: 8, width: 84 },
   flag: { fontSize: 14 },
