@@ -34,7 +34,7 @@ export default function RootLayout() {
               <StatusBar style="auto" />
               <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#fff' } }}>
                 <Stack.Screen name="index" options={{ animation: 'none' }} />
-                <Stack.Screen name="home" options={{ animation: 'fade' }} />
+                <Stack.Screen name="home" options={{ animation: 'none' }} />
                 <Stack.Screen name="opening" options={{ animation: 'slide_from_right', animationDuration: 150 }} />
                 <Stack.Screen name="store/[id]" options={{ animation: 'fade', animationDuration: 100 }} />
                 <Stack.Screen name="search" options={{ animation: 'fade' }} />

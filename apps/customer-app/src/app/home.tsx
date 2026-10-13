@@ -25,6 +25,7 @@ import {
   BagBadge, CheckBoxIcon, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
+import { SPLASH_LOGO, SPLASH_LOGO_H, SPLASH_LOGO_W } from '@/lib/splash';
 import { PressScale, RollingText, Skeleton, StampBadge } from '@/components/ui';
 import {
   BANNER, CATEGORIES, CATEGORIES_PRE, FEES, FILTERS, LOCATION, LOCATION_SHEET, MEALS, MEALS_PRE, PROMO, PROMO_AFTER,
@@ -132,7 +133,8 @@ export default function Home() {
   useEffect(() => {
     if (fromSplash) {
       fromSplash = false;
-      splash.set(withTiming(0, { duration: 330, easing: Easing.out(Easing.quad) }));
+      // the remaining 38 % of the original 1.1 s sequence, ease-in cubic
+      splash.set(withTiming(0, { duration: 420, easing: Easing.in(Easing.cubic) }));
       rise.set(withTiming(0, { duration: 340, easing: Easing.out(Easing.cubic) }));
     }
     load({ name: 550, content: 950, banner: 1170 });
@@ -206,6 +208,11 @@ export default function Home() {
   const pillA = useAnimatedStyle(() => ({ opacity: pill.value, transform: [{ translateY: (1 - pill.value) * 80 }, { scale: 0.8 + pill.value * 0.2 }] }));
   const scrimA = useAnimatedStyle(() => ({ opacity: scrim.value * 0.6 }));
   const splashA = useAnimatedStyle(() => ({ opacity: splash.value }));
+  // the original's exit curve: lift 28, grow 6 % on top of the 5 % breath, fade out
+  const splashLogoA = useAnimatedStyle(() => {
+    const exit = 1 - splash.value;
+    return { opacity: splash.value, transform: [{ translateY: -28 * exit }, { scale: 1.05 * (1 + 0.06 * exit) }] };
+  });
   const riseA = useAnimatedStyle(() => ({ transform: [{ translateY: rise.value * screenH * 0.32 }] }));
 
   const live = useMemo(() => {
@@ -404,8 +411,10 @@ export default function Home() {
         </Animated.View>
       )}
 
-      {/* the splash's yellow card, fading off as the page rises in */}
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: C.brand }, splashA]} />
+      {/* the old Blynk intro's exit: white with the logo lifting away while the page shows through */}
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splashCover, splashA]}>
+        <Animated.Image source={SPLASH_LOGO} resizeMode="contain" style={[styles.splashLogo, splashLogoA]} />
+      </Animated.View>
     </View>
   );
 }
@@ -821,6 +830,8 @@ function FeedSkeleton() {
 }
 
 const styles = StyleSheet.create({
+  splashCover: { backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  splashLogo: { height: SPLASH_LOGO_H, width: SPLASH_LOGO_W },
   locRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 15, paddingRight: 16, paddingTop: 18, gap: 8 },
   navDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.yellow, alignItems: 'center', justifyContent: 'center' },
   locName: { fontFamily: F.bold, fontSize: 17, letterSpacing: -0.1 },
