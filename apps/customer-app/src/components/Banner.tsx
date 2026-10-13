@@ -376,6 +376,6 @@ const styles = StyleSheet.create({
   stage: { position: 'absolute', right: 0, top: 0, width: 180, height: H },
   beam: { position: 'absolute', left: -30, top: 0 },
   saucer: { position: 'absolute', right: 8, top: 12 },
-  item: { position: 'absolute', right: 30, bottom: 36, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
+  item: { position: 'absolute', right: 30, bottom: 20, width: ITEM, height: ITEM, alignItems: 'center', justifyContent: 'center' },
   itemEmoji: { fontSize: 74, lineHeight: 88, textAlign: 'center', filter: 'drop-shadow(0px 10px 9px rgba(0,0,0,0.45))' } as object,
 });
