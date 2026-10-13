@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { loadAllProducts } from '../lib/loadAllProducts';
 import { goBack } from '../lib/goBack';
 import { useCart } from '../cart/CartContext';
@@ -10,6 +10,7 @@ import { effectivePrice, isOfferActive } from '../lib/pricing';
 
 export default function Cart() {
   const nav = useNavigate();
+  const loc = useLocation();
   const cart = useCart();
   const store = useStore();
   const [refreshFailed, setRefreshFailed] = useState(false);
@@ -30,13 +31,13 @@ export default function Cart() {
   const sub = subtotal(cart.state), reg = regularTotal(cart.state), saved = Math.round((reg - sub) * 100) / 100;
   const showSavings = store?.show_offer_savings === true;
   const free = store?.new_customer_free_deliveries.enabled ? store.new_customer_free_deliveries.count : 0;
-  const feeText = free > 0 ? `FREE · first ${free} orders` : store?.delivery_fee_mode === 'FLAT' && store.delivery_fee_lkr != null ? formatLkr(store.delivery_fee_lkr) : 'Calculated at checkout';
+  const feeText = free > 0 ? `FREE · first ${free} deliveries` : store?.delivery_fee_mode === 'FLAT' && store.delivery_fee_lkr != null ? formatLkr(store.delivery_fee_lkr) : 'Calculated at checkout';
   return (
     <section className="screen" style={{ background: 'var(--bg)' }}>
       <div className="sc">
-        <div className="c-top"><button onClick={() => goBack(nav)} aria-label="Back">←</button><span>Blynk · Dharga Town store</span></div>
+        <div className="c-top"><button onClick={() => goBack(nav, loc.key)} aria-label="Back">←</button><span>Blynk · Dharga Town store</span></div>
         {refreshFailed && <div role="status" style={{ margin: '10px 16px', fontSize: 13, color: 'var(--problem)' }}>Couldn't refresh prices. Check your connection.</div>}
-        <div className="strip">{free > 0 ? `Free delivery on your first ${free} orders` : 'Cash on delivery'}</div>
+        <div className="strip">{free > 0 ? `Free delivery on your first ${free} deliveries` : 'Cash on delivery'}</div>
         <div className="cbox">
           {cart.state.lines.map((l) => (
             <div className="li" key={l.product.id}>

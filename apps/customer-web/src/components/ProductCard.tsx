@@ -12,9 +12,9 @@ export default function ProductCard({ product: p, width }: { product: Product; w
   return (
     <Link to={`/p/${p.id}`} className="pc" style={{ width, textDecoration: 'none', color: 'inherit' }}>
       <div className="im">
-        {offer && <span className="tag">{pct}% OFF</span>}
+        {offer && pct >= 1 && <span className="tag">{pct}% OFF</span>}
         {p.image_url && (
-          <img src={p.image_url} alt="" loading="lazy"
+          <img src={p.image_url} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
             style={{ objectPosition: `${p.image_focal_x ?? 50}% ${p.image_focal_y ?? 50}%`, opacity: p.is_available ? 1 : 0.45 }} />
         )}
         <span className="unit">{p.unit}</span>
@@ -27,7 +27,7 @@ export default function ProductCard({ product: p, width }: { product: Product; w
           {offer ? (<><s>{formatLkr(p.selling_price)}</s><span className="hl">{formatLkr(effectivePrice(p))}</span></>) : <span className="pl">{formatLkr(p.selling_price)}</span>}
         </div>
       ) : <div className="pr" style={{ color: 'var(--t3)' }}>Unavailable</div>}
-      {offer && store?.show_offer_savings === true && <div className="sv">You save {formatLkr(savingsPerUnit(p))}</div>}
+      {offer && p.is_available && store?.show_offer_savings === true && <div className="sv">You save {formatLkr(savingsPerUnit(p))}</div>}
     </Link>
   );
 }

@@ -40,7 +40,7 @@ export function setQuantity(s: CartState, product: Product, qty: number): CartSt
   const lines = [...s.lines]; lines[i] = line; return { lines };
 }
 export const quantityOf = (s: CartState, id: string) => s.lines.find((l) => l.product.id === id)?.quantity ?? 0;
-export const itemCount = (s: CartState) => s.lines.reduce((a, l) => a + l.quantity, 0);
+export const itemCount = (s: CartState) => s.lines.filter((l) => l.product.is_available).reduce((a, l) => a + l.quantity, 0);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 export const subtotal = (s: CartState, now = new Date()) =>
   round2(s.lines.filter((l) => l.product.is_available).reduce((a, l) => a + effectivePrice(l.product, now) * l.quantity, 0));

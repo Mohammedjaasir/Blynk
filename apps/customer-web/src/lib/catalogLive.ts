@@ -7,6 +7,6 @@ export function startCatalogLive(onChange: () => void): () => void {
     es = new EventSource(`${API_BASE_URL}/catalog/events`);
     es.addEventListener('catalog', () => onChange());
   } catch { /* no SSE: the poll still runs */ }
-  const poll = setInterval(onChange, 30_000);
+  const poll = setInterval(() => { if (!document.hidden) onChange(); }, 30_000);
   return () => { clearInterval(poll); es?.close(); };
 }

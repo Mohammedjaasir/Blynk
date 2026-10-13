@@ -1,6 +1,6 @@
 import type { NavigateFunction } from 'react-router-dom';
 
-/** Back, or the shop when there is no history to go back to (e.g. opened from a shared link). */
-export function goBack(nav: NavigateFunction) {
-  if (window.history.length > 1) nav(-1); else nav('/');
+/** Back, or the shop when this is the first screen of the app (e.g. opened from a shared link). */
+export function goBack(nav: NavigateFunction, locationKey: string) {
+  if (locationKey === 'default') nav('/'); else nav(-1);
 }

@@ -3,11 +3,11 @@ import type { Category, Product } from '../api/types';
 import { formatLkr } from '../lib/money';
 import { effectivePrice } from '../lib/pricing';
 
-export default function CategoryTiles({ categories, products }: { categories: Category[]; products: Product[] }) {
+export default function CategoryTiles({ categories, products, topOf = (id) => id }: { categories: Category[]; products: Product[]; topOf?: (id: string) => string }) {
   return (
     <div className="cats">
       {categories.map((c) => {
-        const own = products.filter((p) => p.category_id === c.id && p.is_available);
+        const own = products.filter((p) => topOf(p.category_id) === c.id && p.is_available);
         const min = own.length ? Math.min(...own.map((p) => effectivePrice(p))) : null;
         return (
           <Link key={c.id} to={`/aisle/${c.slug}`} className="ct" style={{ textDecoration: 'none', color: 'inherit' }}>

@@ -17,7 +17,7 @@ test('shows product details and an Add button', async () => {
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Kotmale Fresh Milk 1L' })).toBeInTheDocument());
   expect(screen.getByText('Available')).toBeInTheDocument();
   expect(screen.getByText(/Offer ends/)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Add Kotmale Fresh Milk 1L' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add to cart' })).toBeInTheDocument();
 });
 
 test('404 shows product no longer available', async () => {

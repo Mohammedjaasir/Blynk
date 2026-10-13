@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import type { Category, Product, Promotion } from '../api/types';
 import { formatLkr } from '../lib/money';
 import { useStore } from '../store/StoreContext';
-import logoMark from '../assets/logo-mark.png';
+import logoMark from '../assets/logo-mark.webp';
 
 interface Props { promotions: Promotion[]; products: Product[]; minPrice: number | null; firstCategory?: string; categories?: Category[] }
 

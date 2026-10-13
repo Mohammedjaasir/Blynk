@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getProducts } from '../api/catalog';
 import type { Product } from '../api/types';
 import { ApiError } from '../api/client';
@@ -14,6 +14,7 @@ const remember = (q: string) => { try { localStorage.setItem(KEY, JSON.stringify
 
 export default function Search() {
   const nav = useNavigate();
+  const loc = useLocation();
   const [params] = useSearchParams();
   const cat = params.get('c') ?? undefined;
   const [q, setQ] = useState('');
@@ -39,13 +40,13 @@ export default function Search() {
   return (
     <section className="screen">
       <div className="row" style={{ display: 'flex', gap: 10, padding: '14px 16px' }}>
-        <button onClick={() => goBack(nav)} aria-label="Back">←</button>
-        <input type="search" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search groceries & essentials" className="ss" style={{ flex: 1, border: 0, outline: 0 }} />
+        <button onClick={() => goBack(nav, loc.key)} aria-label="Back">←</button>
+        <input type="search" aria-label="Search products" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search groceries & essentials" className="ss" style={{ flex: 1, border: 0, outline: 0 }} />
       </div>
       <div className="sc">
         {!q.trim() && recent.length > 0 && (
           <div style={{ padding: '0 16px' }}>
-            <div className="stt" style={{ padding: 0 }}><h2 style={{ fontSize: 16 }}>Recent searches</h2><button onClick={() => { localStorage.removeItem(KEY); setRecent([]); }}>Clear</button></div>
+            <div className="stt" style={{ padding: 0 }}><h2 style={{ fontSize: 16 }}>Recent searches</h2><button onClick={() => { try { localStorage.removeItem(KEY); } catch { /* blocked */ } setRecent([]); }}>Clear</button></div>
             <div className="fl" style={{ padding: '10px 0', flexWrap: 'wrap' }}>{recent.map((r) => <button key={r} className="chip" onClick={() => setQ(r)}>{r}</button>)}</div>
           </div>
         )}

@@ -9,7 +9,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let alive = true;
     const load = () => getStore().then((d) => alive && setS(d)).catch(() => {});
     void load();
-    const t = setInterval(load, 30_000);
+    const t = setInterval(() => { if (!document.hidden) void load(); }, 30_000);
     const vis = () => document.visibilityState === 'visible' && load();
     document.addEventListener('visibilitychange', vis);
     return () => { alive = false; clearInterval(t); document.removeEventListener('visibilitychange', vis); };

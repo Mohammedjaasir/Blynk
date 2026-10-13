@@ -82,7 +82,7 @@
 .pc .nm{font-size:15px;font-weight:500;line-height:1.25;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .pr{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:14px;flex-wrap:wrap}
 .pr s{color:var(--strike)}
-.pr .hl{background:var(--green-t);color:var(--green);font-weight:700;border-radius:5px;padding:0 5px}
+.pr .hl,.amt .hl{background:var(--green-t);color:var(--green);font-weight:700;border-radius:5px;padding:0 5px}
 .pr .pl{font-weight:500}
 .sv{display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:600;color:var(--green);margin-top:3px}
 .sv .i{width:13px;height:13px;stroke-width:2.6}
@@ -151,7 +151,9 @@
 .inter .t2{color:#5C5F66;font-size:15px;font-weight:500;margin-top:60px}
 .s-hero{height:146px;position:relative;overflow:hidden;flex:none}
 .s-hero img{width:100%;height:100%;object-fit:cover}
-.s-hero .rb{position:absolute;top:14px;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.35);color:#fff;display:grid;place-items:center;z-index:2}
+.rb{width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.35);color:#fff;display:grid;place-items:center;z-index:2}
+.s-hero .rb{position:absolute;top:14px}
+.foot .add{position:static}
 .s-hero .rb .i{width:20px;height:20px}
 .s-body{background:#fff;border-radius:22px 22px 0 0;margin-top:-26px;position:relative;padding:18px 16px 0}
 .s-body h1{font-size:23px;font-weight:700;line-height:1.15;padding-right:76px}

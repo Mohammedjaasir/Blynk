@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getCategories, getProducts } from '../api/catalog';
 import type { Category, Product } from '../api/types';
 import { ApiError } from '../api/client';
@@ -7,24 +7,33 @@ import ProductCard from '../components/ProductCard';
 import { goBack } from '../lib/goBack';
 import ErrorState from '../components/ErrorState';
 import { SkeletonRail } from '../components/Skeleton';
-import rider from '../assets/rider.png';
+import { useStore } from '../store/StoreContext';
+import { formatHours, formatOfferEnd } from '../lib/storeText';
+import rider from '../assets/rider.webp';
 
 export default function Aisle() {
   const { slug = '' } = useParams();
   const nav = useNavigate();
-  const [state, setState] = useState<{ cat: Category | null; kids: Category[]; items: Product[] } | null>(null);
+  const loc = useLocation();
+  const [state, setState] = useState<{ cat: Category | null; kids: Category[]; items: Product[]; total: number } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const store = useStore();
+  const slugRef = useRef(slug);
+  slugRef.current = slug;
   const load = () => {
+    const mine = slug;
+    const current = () => mine === slugRef.current; // ignore answers for an aisle we've already left
     setError(null); setState(null);
     Promise.all([getCategories(), getProducts({ category_slug: slug, page: 1, limit: 100 })])
-      .then(([{ categories }, { products }]) => {
+      .then(([{ categories }, { products, pagination }]) => {
+        if (!current()) return;
         const cat = categories.find((c) => c.slug === slug) ?? null;
-        setState({ cat, kids: cat ? categories.filter((c) => c.parent_id === cat.id) : [], items: products });
+        setState({ cat, kids: cat ? categories.filter((c) => c.parent_id === cat.id) : [], items: products, total: pagination?.total ?? products.length });
       })
-      .catch((e) => setError(e instanceof ApiError ? e : new ApiError('Something went wrong.', 0)));
+      .catch((e) => { if (current()) setError(e instanceof ApiError ? e : new ApiError('Something went wrong.', 0)); });
   };
   useEffect(load, [slug]);
-  const back = () => goBack(nav);
+  const back = () => goBack(nav, loc.key);
 
   if (error) return <section className="screen"><ErrorState error={error} onRetry={load} /></section>;
   if (!state) return <section className="screen"><div className="sk" style={{ height: 146 }} /><SkeletonRail /></section>;
@@ -36,9 +45,9 @@ export default function Aisle() {
         <div className="s-hero">{c.image_url && <img src={c.image_url} alt="" />}<button className="rb" style={{ left: 16 }} onClick={back} aria-label="Back">←</button></div>
         <div className="s-body">
           <h1>{c.name} at Blynk</h1>
-          <div className="s-meta"><span>{state.items.length} items</span><span className="bar" /><span>8 AM – 9 PM</span></div>
+          <div className="s-meta"><span>{state.total} items</span>{formatHours(store) && <><span className="bar" /><span>{formatHours(store)}</span></>}</div>
           {c.offer_percent != null && (
-            <div className="s-off"><div><div className="k">{c.offer_percent}% LOWER PRICES ON EVERYTHING HERE</div>{c.offer_ends_at && <div className="s">until {new Date(c.offer_ends_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>}</div></div>
+            <div className="s-off"><div><div className="k">{c.offer_percent}% LOWER PRICES ON EVERYTHING HERE</div>{c.offer_ends_at && <div className="s">until {formatOfferEnd(c.offer_ends_at)}</div>}</div></div>
           )}
           <Link to={`/search?c=${c.slug}`} className="ss" style={{ textDecoration: 'none' }}>Search in {c.name}</Link>
           {state.kids.length > 0 && <div className="fl" style={{ padding: '12px 0' }}>{state.kids.map((k) => <Link key={k.id} className="chip" to={`/aisle/${k.slug}`}>{k.name}</Link>)}</div>}

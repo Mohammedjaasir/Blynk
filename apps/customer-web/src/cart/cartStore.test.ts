@@ -59,3 +59,8 @@ test('loadCart drops lines with a bad price or availability', () => {
   expect(s.lines.map((l) => l.product.id)).toEqual([sugar.id]);
   expect(subtotal(s)).toBe(506);
 });
+
+test('itemCount ignores unavailable lines so it agrees with the subtotal', () => {
+  const s = setQuantity(setQuantity({ lines: [] }, sugar, 2), milk, 1);
+  expect(itemCount(reconcile(s, [sugar]))).toBe(2);
+});

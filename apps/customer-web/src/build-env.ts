@@ -2,11 +2,11 @@
  * Build-time guard (imported by vite.config.ts, never by the app). A
  * production bundle has its API address compiled in, so a missing value
  * would silently fall back to the client's development default
- * (http://localhost:4000) and a rider's phone would talk to itself. Fail the
+ * (http://localhost:4000) and a phone would talk to itself. Fail the
  * build instead.
  *
- * Development values (a LAN address over http for a device test, the dev
- * rider phone) belong in .env.development.local, used by `vite` and by
+ * Development values (a LAN address over http for a device test)
+ * belong in .env.development.local, used by `vite` and by
  * `vite build --mode development`.
  */
 export function productionApiProblem(value: string | undefined): string | null {

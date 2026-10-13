@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import PhoneOnly, { isDesktopBlocked } from './pages/PhoneOnly';
 import { StoreProvider } from './store/StoreContext';
 import { CartProvider } from './cart/CartContext';
@@ -22,7 +22,7 @@ export default function App() {
             <Route path="/search" element={<Search />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/login" element={<div style={{ padding: 40, textAlign: 'center' }}>Sign-in comes in the next update.</div>} />
-            <Route path="*" element={<div />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <CartBar />
         </div>

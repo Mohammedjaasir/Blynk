@@ -35,3 +35,11 @@ test('an unknown slug shows not found', async () => {
   mount('nope');
   await waitFor(() => expect(screen.getByText("This aisle isn't available")).toBeInTheDocument());
 });
+
+test('aisle header uses store hours and the server total', async () => {
+  vi.spyOn(catalog, 'getCategories').mockResolvedValue({ categories: [dairy] });
+  vi.spyOn(catalog, 'getProducts').mockResolvedValue({ products: [milk], pagination: { page: 1, limit: 100, total: 130, total_pages: 2 } });
+  mount('dairy-eggs');
+  await waitFor(() => expect(screen.getByText('130 items')).toBeInTheDocument());
+  expect(screen.getByText('8 AM – 9 PM')).toBeInTheDocument();
+});

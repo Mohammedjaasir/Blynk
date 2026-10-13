@@ -25,7 +25,7 @@ test('shows lines, savings, free delivery and the guest footer', async () => {
   mount(saving);
   expect(screen.getByText('Kotmale Fresh Milk 1L')).toBeInTheDocument();
   expect(screen.getByText('LKR 54 saved with offer prices')).toBeInTheDocument();
-  expect(screen.getByText('FREE · first 2 orders')).toBeInTheDocument();
+  expect(screen.getByText('FREE · first 2 deliveries')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Proceed with phone number' })).toBeInTheDocument();
 });
 
@@ -52,7 +52,7 @@ test('savings card and struck item total only show when show_offer_savings is on
   const { unmount } = mount(store);
   expect(screen.queryByText(/saved with offer prices/)).toBeNull();
   expect((screen.getByText('Item total').nextSibling as HTMLElement).querySelector('s')).toBeNull();
-  expect(screen.getByText('FREE · first 2 orders')).toBeInTheDocument();
+  expect(screen.getByText('FREE · first 2 deliveries')).toBeInTheDocument();
   unmount();
   mount(saving);
   expect(screen.getByText('LKR 54 saved with offer prices')).toBeInTheDocument();

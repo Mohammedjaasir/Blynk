@@ -1,4 +1,4 @@
-import logo from '../assets/logo-mark.png';
+import logo from '../assets/logo-mark.webp';
 
 export function isDesktopBlocked(width: number, search: string): boolean {
   if (new URLSearchParams(search).get('desktop') === '1') return false;
