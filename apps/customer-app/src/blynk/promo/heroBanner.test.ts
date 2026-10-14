@@ -16,18 +16,44 @@ describe('hero banner render model', () => {
     for (const config of [undefined, null]) {
       expect(resolveHero(config, { minPrice: 253, freeCount: 2 }, now)).toEqual({
         title: ['FREE', 'DELIVERY'],
-        lines: ['On your first 2 orders', 'Groceries starting at LKR 253'],
+        lines: ['First 2 orders for new customers', 'Groceries starting at LKR 253'],
         accent: 'LKR 253',
         items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]),
         cta: 'ORDER NOW',
         link: null,
         custom: false,
+        fit: true,
       });
     }
     const fresh = resolveHero(null, { minPrice: null, freeCount: 0 }, now);
     expect(fresh.title).toEqual(['FRESH', 'GROCERIES']);
     expect(fresh.lines).toEqual([]);
-    expect(resolveHero(null, { minPrice: 100, freeCount: 1 }, now).lines[0]).toBe('On your first 1 order');
+    expect(resolveHero(null, { minPrice: 100, freeCount: 1 }, now).lines[0]).toBe('First order for new customers');
+  });
+
+  it("AUTO follows the signed-in customer's own free deliveries left", () => {
+    const one = resolveHero(null, { minPrice: 253, freeCount: 1, freeKind: 'personal' }, now);
+    expect(one.title).toEqual(['FREE', 'DELIVERY']);
+    expect(one.lines).toEqual(['1 free delivery left', 'Groceries starting at LKR 253']);
+    expect(one.fit).toBe(false);
+    expect(resolveHero(null, { minPrice: 253, freeCount: 2, freeKind: 'personal' }, now).lines[0]).toBe('2 free deliveries left');
+    // none left (or not known yet): FRESH GROCERIES and no free-delivery line
+    const none = resolveHero(null, { minPrice: 253, freeCount: 0, freeKind: 'none' }, now);
+    expect(none.title).toEqual(['FRESH', 'GROCERIES']);
+    expect(none.lines).toEqual(['Groceries starting at LKR 253']);
+    expect(none.fit).toBe(false);
+  });
+
+  it('CUSTOM {free_count}: the personal count signed in, the store count "for new customers" for a guest', () => {
+    const lines = ['First {free_count} deliveries free'];
+    expect(resolveHero(custom({ lines }), { minPrice: 253, freeCount: 1, freeKind: 'personal' }, now).lines).toEqual(['First 1 deliveries free']);
+    expect(resolveHero(custom({ lines }), { minPrice: 253, freeCount: 2, freeKind: 'new-customer' }, now).lines).toEqual(['First 2 deliveries free for new customers']);
+    // the owner already said who it is for: not said twice
+    expect(resolveHero(custom({ lines: ['New customers: {free_count} free'] }), { minPrice: 253, freeCount: 2 }, now).lines).toEqual(['New customers: 2 free']);
+    // none left: the line is skipped, the owner's title stays
+    const m = resolveHero(custom({ lines }), { minPrice: 253, freeCount: 0, freeKind: 'none' }, now);
+    expect(m.lines).toEqual([]);
+    expect(m.title).toEqual(['WEEKEND', 'DEALS']);
   });
 
   it('CUSTOM: Admin / Ops words with the cheapest price filled in, their items and button', () => {
@@ -39,11 +65,12 @@ describe('hero banner render model', () => {
     expect(m.cta).toBe('SHOP NOW');
     expect(m.link).toBeNull(); // the app's own: scroll to the aisles
     expect(m.custom).toBe(true);
+    expect(m.fit).toBe(true);
   });
 
   it('a line whose token has no value is skipped', () => {
     expect(fillHeroTokens('First {free_count} deliveries free', { minPrice: 10, freeCount: 0 })).toBeNull();
-    expect(fillHeroTokens('First {free_count} deliveries free', { minPrice: 10, freeCount: 3 })).toBe('First 3 deliveries free');
+    expect(fillHeroTokens('First {free_count} deliveries free', { minPrice: 10, freeCount: 3, freeKind: 'personal' })).toBe('First 3 deliveries free');
     expect(fillHeroTokens('From {min_price}', { minPrice: null, freeCount: 3 })).toBeNull();
     expect(fillHeroTokens('From {min_price}', { minPrice: 1250, freeCount: 0 })).toBe('From LKR 1,250');
     const m = resolveHero(custom({ lines: ['First {free_count} free', 'From {min_price}'] }), { minPrice: null, freeCount: 0 }, now);

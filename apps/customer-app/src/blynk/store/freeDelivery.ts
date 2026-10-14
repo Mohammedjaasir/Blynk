@@ -1,15 +1,20 @@
 import { useCartSelect } from '@/lib/cart';
-import { freeDeliveryCount } from '../lib/storeText';
-import { useStore } from './StoreContext';
+import type { FreeClaim } from './freeClaim';
+import { NO_CLAIM } from './freeClaim';
+import { useFreeClaim } from './useFreeClaim';
 
 /**
- * Blynk exposes no basket free-delivery threshold on a public GET (it lives in the
- * signed-in checkout-info), so the "unlocked" moment comes from the new-customer
- * free deliveries: unlocked once the cart has items while that switch is on.
- * Returns the number of free deliveries (0 when off or the cart is empty).
+ * The cart bar's free-delivery strip once the cart has items: a guest sees the new-customer
+ * offer, a signed-in customer only the free deliveries they still have (useFreeClaim).
+ * Returns the claim (count 0 when nothing may be said or the cart is empty).
  */
-export function useFreeDeliveryUnlocked(): number {
-  const store = useStore();
+export function useFreeDeliveryClaimWithItems(): FreeClaim {
+  const claim = useFreeClaim();
   const hasItems = useCartSelect((c) => c.count > 0);
-  return hasItems ? freeDeliveryCount(store) : 0;
+  return hasItems ? claim : NO_CLAIM;
+}
+
+/** The number of free deliveries the strip may mention (0 when off, used up, unknown or the cart is empty). */
+export function useFreeDeliveryUnlocked(): number {
+  return useFreeDeliveryClaimWithItems().count;
 }

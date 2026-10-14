@@ -187,14 +187,19 @@ The purple / pink / yellow are the owner's choice: **no colour fields**.
 ```
 
 Tokens in a sub-line: `{min_price}` = the cheapest available product's
-effective price ("LKR 253"), `{free_count}` = new-customer free deliveries
-("2"). Any other `{...}` is refused. The app fills them in; a line whose token
-has no value (no products / free deliveries off) is skipped.
+effective price ("LKR 253"), `{free_count}` = the free deliveries this customer
+may be told about: a signed-in customer's own free deliveries left (checkout-info),
+a guest's the store's new-customer count, with " for new customers" added unless
+the line already says so. Any other `{...}` is refused. The app fills them in; a
+line whose token has no value (no products / none left / free deliveries off) is
+skipped.
 
 AUTO (no row, a malformed row, mode AUTO, or a CUSTOM banner outside its
-schedule) is exactly the banner the app always drew: "FREE / DELIVERY" while
-new-customer free deliveries are on, else "FRESH / GROCERIES"; sub-lines "On
-your first N order(s)" and "Groceries starting at <price>"; the six AUTO items;
+schedule): "FREE / DELIVERY" while this customer may be told of free deliveries
+(a guest: the new-customer offer; signed in: at least one left), else "FRESH /
+GROCERIES"; sub-lines "First N orders for new customers" (guest) or "N free
+deliveries left" / "1 free delivery left" (signed in), and "Groceries starting at
+<price>"; the six AUTO items;
 ORDER NOW scrolls to the aisles. Switching back to AUTO keeps the custom fields
 for next time; "Reset to automatic" saves the defaults above.
 

@@ -7,7 +7,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { formatLkr } from '@/blynk/lib/money';
-import { useFreeDeliveryUnlocked } from '@/blynk/store/freeDelivery';
+import { claimPromoLine } from '@/blynk/store/freeClaim';
+import { useFreeDeliveryClaimWithItems } from '@/blynk/store/freeDelivery';
 import { DEMO } from '@/demo/mode';
 import { rupees } from '@/demo/money';
 import { STORE } from '@/demo/store';
@@ -43,8 +44,8 @@ function TrolleyIcon({ size = 18, color = C.brandInk }: { size?: number; color?:
 
 /** Demo mode: the reference unlocks free delivery from a ₹129 basket. */
 function useStripOn(total: number, count: number) {
-  const live = useFreeDeliveryUnlocked();
-  return DEMO ? (count > 0 && total >= STORE.freeDeliveryAbove ? 1 : 0) : live;
+  const live = useFreeDeliveryClaimWithItems();
+  return DEMO ? { count: count > 0 && total >= STORE.freeDeliveryAbove ? 1 : 0, line: null } : { count: live.count, line: claimPromoLine(live) };
 }
 
 /**
@@ -56,8 +57,8 @@ function useStripOn(total: number, count: number) {
 export function CartBar() {
   const count = useCartSelect((c) => c.count);
   const total = useCartSelect((c) => c.total);
-  const freeCount = useStripOn(total, count);
-  const freeDelivery = freeCount > 0;
+  const freeStrip = useStripOn(total, count);
+  const freeDelivery = freeStrip.count > 0;
   // inside the tabs the tab bar already keeps clear of the home indicator
   const insets = { bottom: useBottomInset() };
   const { width, height } = useWindowDimensions();
@@ -87,9 +88,9 @@ export function CartBar() {
   const rowA = useAnimatedStyle(() => ({ height: CART_BAR.h + (ROW_STRIP - CART_BAR.h) * strip.value }));
 
   if (count === 0) return null;
-  // live: /store only says new customers get N free deliveries; it cannot tell whether this
-  // shopper is one, so the strip states the offer and promises nothing
-  const freeLine = DEMO ? "Yay! You've unlocked Free Delivery" : `Free delivery on your first ${freeCount} order${freeCount > 1 ? 's' : ''} for new customers`;
+  // live: a guest sees the new-customer offer; a signed-in customer only the free deliveries
+  // checkout-info says they still have (src/blynk/store/freeClaim.ts)
+  const freeLine = DEMO ? "Yay! You've unlocked Free Delivery" : freeStrip.line ?? '';
   return (
     <>
       {/* the page fades to white behind the bar */}

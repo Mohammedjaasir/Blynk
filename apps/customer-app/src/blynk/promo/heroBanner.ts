@@ -10,13 +10,21 @@ import { formatLkr } from '../lib/money';
  *   config undefined / null  -> AUTO: the automatic words the banner always had
  *   config object (CUSTOM)   -> Admin / Ops' words, with {min_price} / {free_count} filled in;
  *                               after its ends_at (a cached /store) it is AUTO again
+ *
+ * Free deliveries follow the customer's own claim (src/blynk/store/freeClaim.ts): a guest hears
+ * the store's new-customer offer, always "for new customers"; a signed-in customer only the
+ * free deliveries they still have. FREE / FRESH and the sub-line in AUTO, and the {free_count}
+ * token in CUSTOM, all read the same claim.
  */
 
 /** Customer-facing words (kept together for the Sinhala / Tamil phase). */
 export const HERO_COPY = {
   titleFree: ['FREE', 'DELIVERY'] as [string, string],
   titleFresh: ['FRESH', 'GROCERIES'] as [string, string],
-  firstOrders: (n: number) => `On your first ${n} order${n > 1 ? 's' : ''}`,
+  /** Guest: the store's new-customer offer. */
+  newCustomers: (n: number) => (n === 1 ? 'First order for new customers' : `First ${n} orders for new customers`),
+  /** Signed in: this customer's own free deliveries left. */
+  left: (n: number) => (n === 1 ? '1 free delivery left' : `${n} free deliveries left`),
   startingAt: (price: string) => `Groceries starting at ${price}`,
   cta: 'ORDER NOW',
 };
@@ -44,37 +52,56 @@ export interface HeroModel {
   /** Where ORDER NOW goes; null = the app's own (scroll down to the aisles). */
   link: PromoDestination | null;
   custom: boolean;
+  /** Sub-lines may shrink to fit and run past the title column (CUSTOM, or AUTO's longer guest line). */
+  fit: boolean;
 }
 
-export interface HeroFacts { minPrice: number | null; freeCount: number }
+export interface HeroFacts {
+  minPrice: number | null;
+  /** The free deliveries this customer may be told about (useFreeClaim): 0 = none. */
+  freeCount: number;
+  /** Whose count it is: 'personal' (signed in, their own left) or the store's offer for new customers (default). */
+  freeKind?: 'personal' | 'new-customer' | 'none';
+}
+
+const NEW_CUSTOMERS = /new customer/i;
 
 /** A sub-line with its tokens filled in; null when a token has no value (the line is skipped). */
 export function fillHeroTokens(line: string, facts: HeroFacts): string | null {
   let missing = false;
+  let usedFree = false;
   const out = line.replace(/\{(min_price|free_count)\}/g, (_, t: string) => {
     if (t === 'min_price') {
       if (facts.minPrice == null) missing = true;
       return facts.minPrice != null ? formatLkr(facts.minPrice) : '';
     }
     if (!(facts.freeCount > 0)) missing = true;
+    usedFree = true;
     return facts.freeCount > 0 ? String(facts.freeCount) : '';
   });
-  return missing ? null : out;
+  if (missing) return null;
+  // a guest hears the store's offer, so it is said to be for new customers
+  if (usedFree && facts.freeKind !== 'personal' && !NEW_CUSTOMERS.test(out)) return `${out} for new customers`;
+  return out;
 }
 
 function autoHero(facts: HeroFacts): HeroModel {
   const price = facts.minPrice != null ? formatLkr(facts.minPrice) : null;
   const lines: string[] = [];
-  if (facts.freeCount > 0) lines.push(HERO_COPY.firstOrders(facts.freeCount));
+  const free = facts.freeCount > 0 && facts.freeKind !== 'none';
+  const personal = facts.freeKind === 'personal';
+  if (free) lines.push(personal ? HERO_COPY.left(facts.freeCount) : HERO_COPY.newCustomers(facts.freeCount));
   if (price) lines.push(HERO_COPY.startingAt(price));
   return {
-    title: facts.freeCount > 0 ? HERO_COPY.titleFree : HERO_COPY.titleFresh,
+    title: free ? HERO_COPY.titleFree : HERO_COPY.titleFresh,
     lines,
     accent: price,
     items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]!),
     cta: HERO_COPY.cta,
     link: null,
     custom: false,
+    // the guest line ("First 2 orders for new customers") is longer than the 196 pt column
+    fit: free && !personal,
   };
 }
 
@@ -105,6 +132,7 @@ export function resolveHero(config: PublicHeroBanner | null | undefined, facts: 
     cta,
     link,
     custom: true,
+    fit: true,
   };
 }
 

@@ -176,21 +176,24 @@ function useRoll(lines: string[]) {
 
 /**
  * Home's hero. Design mock: the reference's own copy and emoji dishes. Live, AUTO (the
- * default): "FREE / DELIVERY" while Blynk's new-customer free deliveries are on (otherwise
- * "FRESH / GROCERIES"), the sub-line rolls between the terms and "Groceries starting at" the
+ * default): "FREE / DELIVERY" while this customer may be told of free deliveries (a guest: the
+ * new-customer offer; signed in: their own left), otherwise "FRESH / GROCERIES"; the sub-line
+ * rolls between that line and "Groceries starting at" the
  * cheapest effective price, and the beam lifts illustrated grocery items. Live, CUSTOM (GET
  * /store `hero_banner`, set in Admin / Ops): their two words, sub-lines, button and items,
  * with the same animation (src/blynk/promo/heroBanner.ts, docs/promo-surfaces.md §3).
  */
-export function Banner({ minPrice, freeCount, onOrderNow, demo, hero }: {
+export function Banner({ minPrice, freeCount, freeKind, onOrderNow, demo, hero }: {
   /** Kept for callers; the banner no longer shows product photos. */
   images?: string[]; minPrice: number | null; freeCount: number; onOrderNow?: () => void;
+  /** Whose free deliveries freeCount is (useFreeClaim): a guest's new-customer offer by default. */
+  freeKind?: 'personal' | 'new-customer' | 'none';
   /** Design mock: the reference's own copy, with emoji stand-ins for the abducted dishes. */
   demo?: { title: [string, string]; line: string; accent: string; emojis: string[] };
   /** GET /store `hero_banner`: Admin / Ops' custom banner; null / missing = automatic. */
   hero?: PublicHeroBanner | null;
 }) {
-  const model = useMemo(() => (demo ? null : resolveHero(hero, { minPrice, freeCount })), [demo, hero, minPrice, freeCount]);
+  const model = useMemo(() => (demo ? null : resolveHero(hero, { minPrice, freeCount, freeKind })), [demo, hero, minPrice, freeCount, freeKind]);
   // Illustrated grocery items in both modes (owner: no real product photos in the banner).
   const items = demo ? demo.emojis : model!.items;
   const [idx, setIdx] = useState(0);
@@ -270,7 +273,7 @@ export function Banner({ minPrice, freeCount, onOrderNow, demo, hero }: {
   const accent = demo ? demo.accent : model!.accent;
   const link = model?.link ?? null;
   const ctaText = demo ? HERO_COPY.cta : model!.cta;
-  const subSize = line ? heroSubSize(line, !!model?.custom) : 15;
+  const subSize = line ? heroSubSize(line, !!model?.fit) : 15;
   const cur = items.length ? items[idx % items.length] : null;
   const parts = line && accent && line.includes(accent) ? line.split(accent) : null;
 
@@ -298,9 +301,9 @@ export function Banner({ minPrice, freeCount, onOrderNow, demo, hero }: {
         <View style={{ marginTop: -5, marginLeft: -7 }}>
           <WaveWord key={`b${w2}`} word={w2} color={V.yellow} wave={wave} offset={w1.length + 0.6} clockO />
         </View>
-        {/* a custom line may run 44 pt past the column (it shrinks to end before the item) */}
+        {/* a custom (or the guest's longer) line may run 44 pt past the column (it shrinks to end before the item) */}
         {line && (
-          <View style={[styles.subWrap, model?.custom && { marginRight: HERO_LAYOUT.textW - HERO_LAYOUT.subRoom }]}>
+          <View style={[styles.subWrap, model?.fit && { marginRight: HERO_LAYOUT.textW - HERO_LAYOUT.subRoom }]}>
             <Text style={[styles.sub, subSize !== 15 && { fontSize: subSize }]} numberOfLines={1}>
               {parts ? <>{parts[0]}{accent}{parts[1]}</> : line}
             </Text>

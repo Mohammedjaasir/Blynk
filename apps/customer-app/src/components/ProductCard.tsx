@@ -88,18 +88,22 @@ export const ProductCard = memo(function ProductCard({
         <Text style={styles.name} numberOfLines={2}>{x?.veg != null ? '     ' : ''}{p.name}</Text>
       </View>
       {!x && !!unitText(p) && <Text style={styles.unit} numberOfLines={1}>{unitText(p)}</Text>}
+      {/*
+        Offer (owner, 2026-10-09 / 2026-10-14): the offer price first and prominent, then the regular
+        price struck through. The row wraps, so on a narrow tile the struck price drops to its own
+        line instead of being cut off. Sized products: the offer range, then the cheapest size's
+        regular price struck. Live, the struck price shows while Admin's show_offer_savings is on
+        (as in the cart).
+      */}
       <View style={styles.priceRow}>
         {sized ? (
           <Text style={[styles.price, offer && styles.priceOffer]} numberOfLines={1}>{priceText(p, { compact: width < 116, money })}</Text>
         ) : offer ? (
-          <>
-            {/* live: the struck regular price only while Admin's show_offer_savings is on (as in the cart) */}
-            {(DEMO || showSavings) && <Text style={styles.mrp}>{money(p.selling_price)}</Text>}
-            <View style={styles.pill}><Text style={styles.pillTxt}>{money(effectivePrice(p))}</Text></View>
-          </>
+          <View style={styles.pill}><Text style={styles.pillTxt} numberOfLines={1}>{money(effectivePrice(p))}</Text></View>
         ) : (
           <Text style={styles.price}>{money(effectivePrice(p))}</Text>
         )}
+        {offer && (DEMO || showSavings) && <Text style={styles.mrp} numberOfLines={1}>{money(p.selling_price)}</Text>}
       </View>
       {!!lead && <Text style={styles.lead} numberOfLines={1}>{lead}</Text>}
       {x ? (
@@ -132,9 +136,9 @@ const styles = StyleSheet.create({
   mark: { position: 'absolute', left: 0, top: 3 },
   name: { fontSize: 13.5, fontFamily: F.medium, color: '#1E1E24', lineHeight: 17 },
   unit: { fontSize: 10, color: C.sub, fontFamily: F.regular, marginTop: 1 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, minHeight: 20 },
-  mrp: { fontSize: 13, color: '#9A9AA0', textDecorationLine: 'line-through', fontFamily: F.regular },
-  pill: { backgroundColor: C.brandSoft, borderRadius: 9, paddingHorizontal: 5, height: 20, justifyContent: 'center' },
+  priceRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 5, rowGap: 1, marginTop: 3, minHeight: 20 },
+  mrp: { fontSize: 12.5, lineHeight: 17, color: '#8A8A90', textDecorationLine: 'line-through', fontFamily: F.regular, flexShrink: 0 },
+  pill: { backgroundColor: C.brandSoft, borderRadius: 9, paddingHorizontal: 5, height: 20, justifyContent: 'center', flexShrink: 0 },
   pillTxt: { fontSize: 13.5, color: C.brandInk, fontFamily: F.semi },
   price: { fontSize: 13.5, color: '#1E1E24', fontFamily: F.regular },
   priceOffer: { color: C.brandText, fontFamily: F.semi },
