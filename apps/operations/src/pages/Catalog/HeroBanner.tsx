@@ -1,0 +1,391 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { catalog, settings } from '../../api/resources';
+import type { Category, CategoryGroup, HeroBannerFields, HeroBannerSetting } from '../../api/types';
+import { HeroBannerPreview } from '../../components/HeroBannerPreview';
+import { PageHeader } from '../../components/Layout';
+import { Field, Spinner } from '../../components/ui';
+import { catalogErrorMessage } from '../../lib/catalog';
+import {
+  DEFAULT_HERO,
+  HERO_ITEMS,
+  HERO_LIMITS,
+  HERO_STATUS_TEXT,
+  HERO_TOKENS,
+  heroPayload,
+  heroPreviewModel,
+  heroProblem,
+  heroStatus,
+} from '../../lib/heroBanner';
+import { fromLocalInput, toLocalInput } from '../../lib/promoBand';
+import { describeLink, LinkPicker } from './PromoBand';
+
+/**
+ * Home banner: the purple hero banner at the top of the customer app's Home
+ * (saucer lifting illustrated groceries, two jumping words, a rolling
+ * sub-line, ORDER NOW). Automatic by default (the app's own words); Custom
+ * sets the words, sub-lines, button and items - with the banner playing live
+ * beside the form exactly as the app plays it. Admin has the same editor
+ * (apps/admin/src/pages/HeroBanner.tsx); this is Blynk Ops' own copy.
+ */
+export function HeroBanner() {
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saved, setSaved] = useState<HeroBannerSetting | null>(null);
+  const [draft, setDraft] = useState<HeroBannerFields>(DEFAULT_HERO);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [groups, setGroups] = useState<CategoryGroup[]>([]);
+  const [productName, setProductName] = useState<string | null>(null);
+
+  const adopt = useCallback((s: HeroBannerSetting) => {
+    setSaved(s);
+    setDraft(heroFieldsOf(s));
+    setProductName(s.cta_target?.level === 'PRODUCT' ? s.cta_target.name : null);
+  }, []);
+
+  useEffect(() => {
+    settings.heroBanner
+      .get()
+      .then((s) => {
+        adopt(s);
+        setLoadError(null);
+      })
+      .catch((err) => setLoadError(catalogErrorMessage(err)));
+    void catalog.categories.list().then(setCategories).catch(() => setCategories([]));
+    void catalog.categoryGroups
+      .list()
+      .then((r) => setGroups(r.groups ?? []))
+      .catch(() => setGroups([]));
+  }, [adopt]);
+
+  const set = <K extends keyof HeroBannerFields>(key: K, value: HeroBannerFields[K]) =>
+    setDraft((d) => ({ ...d, [key]: value }));
+
+  const model = useMemo(() => heroPreviewModel(draft), [draft]);
+  const problem = heroProblem(draft);
+  const dirty = saved ? JSON.stringify(heroPayload(draft)) !== JSON.stringify(heroPayload(heroFieldsOf(saved))) : false;
+  const status = heroStatus(draft);
+  const custom = draft.mode === 'CUSTOM';
+
+  async function save(body: HeroBannerFields, message: string) {
+    setError(null);
+    setNotice(null);
+    const issue = heroProblem(body);
+    if (issue) {
+      setError(issue);
+      return;
+    }
+    setSaving(true);
+    try {
+      adopt(await settings.heroBanner.update(heroPayload(body)));
+      setNotice(message);
+    } catch (err) {
+      setError(catalogErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loadError) {
+    return (
+      <div className="page">
+        <PageHeader title="Home banner" />
+        <p className="field__error" role="alert">
+          {loadError}
+        </p>
+      </div>
+    );
+  }
+  if (!saved) return <Spinner label="Loading the Home banner" />;
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Home banner"
+        description="The purple banner at the top of the customer app's Home. Automatic writes its own words; Custom uses yours. Changes reach the app within a minute of saving."
+        actions={
+          <span className="band-status" data-status={status === 'AUTO' ? 'OFF' : status} data-testid="hero-status">
+            {HERO_STATUS_TEXT[status]}
+          </span>
+        }
+      />
+      {notice ? (
+        <p className="form__note" role="status">
+          {notice}
+        </p>
+      ) : null}
+
+      <div className="band-editor">
+        <form
+          className="band-editor__form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save(draft, 'Home banner saved.');
+          }}
+        >
+          <HeroBannerForm
+            draft={draft}
+            set={set}
+            setDraft={setDraft}
+            categories={categories}
+            groups={groups}
+            productName={productName}
+            setProductName={setProductName}
+          />
+
+          {error || problem ? (
+            <p className="field__error" role="alert">
+              {error ?? problem}
+            </p>
+          ) : null}
+
+          <div className="band-save-bar">
+            <button
+              type="button"
+              className="button button--ghost"
+              disabled={saving}
+              onClick={() => void save(DEFAULT_HERO, 'Home banner back to automatic.')}
+            >
+              Reset to automatic
+            </button>
+            <button type="button" className="button button--ghost" disabled={!dirty || saving} onClick={() => adopt(saved)}>
+              Discard changes
+            </button>
+            <button type="submit" className="button" disabled={!dirty || saving || !!problem}>
+              {saving ? <Spinner label="Saving" /> : 'Save'}
+            </button>
+          </div>
+        </form>
+
+        <aside className="band-editor__preview" aria-label="Live preview">
+          <h3 className="editor__legend">Live preview</h3>
+          <HeroBannerPreview
+            model={model}
+            linkText={custom ? describeLink(draft, saved, categories, groups, productName) : null}
+          />
+          <p className="preview-note" style={{ marginTop: 6 }}>
+            The preview fills the tokens with sample values (cheapest price LKR 253, 2 free deliveries); the app uses the live ones.
+          </p>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+export const heroFieldsOf = (s: HeroBannerSetting): HeroBannerFields => ({
+  mode: s.mode,
+  title_1: s.title_1,
+  title_2: s.title_2,
+  lines: s.lines,
+  cta_label: s.cta_label,
+  cta_destination_type: s.cta_destination_type,
+  cta_destination_value: s.cta_destination_value,
+  items: s.items,
+  starts_at: s.starts_at,
+  ends_at: s.ends_at,
+});
+
+/** The editor's fields (no save bar), so both apps share the same wording and order. */
+function HeroBannerForm({
+  draft,
+  set,
+  setDraft,
+  categories,
+  groups,
+  productName,
+  setProductName,
+}: {
+  draft: HeroBannerFields;
+  set<K extends keyof HeroBannerFields>(key: K, value: HeroBannerFields[K]): void;
+  setDraft(fn: (d: HeroBannerFields) => HeroBannerFields): void;
+  categories: Category[];
+  groups: CategoryGroup[];
+  productName: string | null;
+  setProductName(name: string | null): void;
+}) {
+  const custom = draft.mode === 'CUSTOM';
+  const updateLine = (i: number, v: string) => set('lines', draft.lines.map((x, j) => (j === i ? v : x)));
+  return (
+    <>
+      <section className="editor__section">
+        <h3 className="editor__legend">Words</h3>
+        <div className="hero-mode" role="group" aria-label="Banner words">
+          <button type="button" aria-pressed={!custom} onClick={() => set('mode', 'AUTO')}>
+            Automatic
+          </button>
+          <button type="button" aria-pressed={custom} onClick={() => set('mode', 'CUSTOM')}>
+            Custom
+          </button>
+        </div>
+        <p className="field__hint">
+          {custom
+            ? 'Your words below. Outside the schedule (if you set one) the banner goes back to automatic.'
+            : 'Automatic: "FREE DELIVERY" while new customers get free deliveries, otherwise "FRESH GROCERIES"; the line under it rolls between the offer and "Groceries starting at" the cheapest price.'}
+        </p>
+      </section>
+
+      {custom ? (
+        <>
+          <section className="editor__section">
+            <h3 className="editor__legend">Title</h3>
+            <p className="field__hint">Two big words that jump letter by letter, shown in capitals. Up to {HERO_LIMITS.titleChars} characters each so they fit every phone.</p>
+            <div className="form__row">
+              <Field label="First word (white)">
+                <input
+                  className="input"
+                  value={draft.title_1}
+                  maxLength={HERO_LIMITS.titleChars}
+                  onChange={(e) => set('title_1', e.target.value)}
+                  placeholder="e.g. WEEKEND"
+                />
+              </Field>
+              <Field label="Second word (yellow)">
+                <input
+                  className="input"
+                  value={draft.title_2}
+                  maxLength={HERO_LIMITS.titleChars}
+                  onChange={(e) => set('title_2', e.target.value)}
+                  placeholder="e.g. DEALS"
+                />
+              </Field>
+            </div>
+          </section>
+
+          <section className="editor__section">
+            <h3 className="editor__legend">Sub-lines</h3>
+            <p className="field__hint">
+              1 to {HERO_LIMITS.lines} short lines that take turns every 3.2 s under the title (up to {HERO_LIMITS.lineChars} characters; long lines are drawn smaller).
+            </p>
+            <div className="hero-tokens" data-testid="hero-tokens">
+              You can use these tokens in a line:
+              <ul>
+                {HERO_TOKENS.map((t) => (
+                  <li key={t.token}>
+                    <code>{t.token}</code> - {t.meaning}
+                  </li>
+                ))}
+              </ul>
+              A line whose token has no value right now (no free deliveries on, or no products) is skipped.
+            </div>
+            <div className="band-list" style={{ marginTop: 8 }}>
+              {draft.lines.map((line, i) => (
+                <div className="band-list__row" key={i}>
+                  <input
+                    className="input"
+                    aria-label={`Sub-line ${i + 1}`}
+                    value={line}
+                    maxLength={HERO_LIMITS.lineChars}
+                    placeholder="e.g. Groceries starting at {min_price}"
+                    onChange={(e) => updateLine(i, e.target.value)}
+                  />
+                  <span className="band-count">
+                    {line.trim().length}/{HERO_LIMITS.lineChars}
+                  </span>
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    aria-label={`Remove sub-line ${i + 1}`}
+                    disabled={draft.lines.length <= 1}
+                    onClick={() => set('lines', draft.lines.filter((_, j) => j !== i))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              {draft.lines.length < HERO_LIMITS.lines ? (
+                <button
+                  type="button"
+                  className="button button--ghost button--sm"
+                  style={{ alignSelf: 'flex-start' }}
+                  onClick={() => set('lines', [...draft.lines, ''])}
+                >
+                  Add sub-line
+                </button>
+              ) : (
+                <span className="field__hint">That is the most ({HERO_LIMITS.lines}).</span>
+              )}
+            </div>
+          </section>
+
+          <section className="editor__section">
+            <h3 className="editor__legend">Button</h3>
+            <Field label="Button text" hint={`Up to ${HERO_LIMITS.ctaChars} characters, shown in capitals`}>
+              <input
+                className="input"
+                value={draft.cta_label}
+                maxLength={HERO_LIMITS.ctaChars}
+                onChange={(e) => set('cta_label', e.target.value)}
+              />
+            </Field>
+            <LinkPicker
+              draft={draft}
+              categories={categories}
+              groups={groups}
+              productName={productName}
+              label="The button opens"
+              noneLabel="Scroll down to the aisles (as today)"
+              onChange={(type, value, name) => {
+                setDraft((d) => ({ ...d, cta_destination_type: type, cta_destination_value: value }));
+                setProductName(name ?? null);
+              }}
+            />
+          </section>
+
+          <section className="editor__section">
+            <h3 className="editor__legend">Items in the beam</h3>
+            <p className="field__hint">The saucer lifts these one after another (illustrations only). Pick at least one.</p>
+            <div className="band-choices" role="group" aria-label="Items in the beam">
+              {HERO_ITEMS.map((item) => {
+                const on = draft.items.includes(item.key);
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className="band-choice"
+                    aria-pressed={on}
+                    onClick={() =>
+                      set(
+                        'items',
+                        on ? draft.items.filter((k) => k !== item.key) : HERO_ITEMS.map((x) => x.key).filter((k) => k === item.key || draft.items.includes(k))
+                      )
+                    }
+                  >
+                    <span className="band-choice__emoji" aria-hidden="true">
+                      {item.emoji}
+                    </span>
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="editor__section">
+            <h3 className="editor__legend">Schedule</h3>
+            <div className="form__row">
+              <Field label="Starts" hint="Optional - leave empty to start straight away">
+                <input
+                  className="input"
+                  type="datetime-local"
+                  aria-label="Starts"
+                  value={toLocalInput(draft.starts_at)}
+                  onChange={(e) => set('starts_at', fromLocalInput(e.target.value))}
+                />
+              </Field>
+              <Field label="Ends" hint="Optional - after it the banner is automatic again">
+                <input
+                  className="input"
+                  type="datetime-local"
+                  aria-label="Ends"
+                  value={toLocalInput(draft.ends_at)}
+                  onChange={(e) => set('ends_at', fromLocalInput(e.target.value))}
+                />
+              </Field>
+            </div>
+          </section>
+        </>
+      ) : null}
+    </>
+  );
+}

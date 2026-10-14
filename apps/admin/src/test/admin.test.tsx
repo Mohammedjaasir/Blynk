@@ -412,6 +412,8 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Promotions' })).toBeInTheDocument();
     // Home promo band (owner, 2026-10-14).
     expect(screen.getByRole('link', { name: 'Promo band' })).toBeInTheDocument();
+    // Home hero banner (the purple banner at the top of Home).
+    expect(screen.getByRole('link', { name: 'Home banner' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Feedback' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Staff accounts' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Rider requests' })).toBeInTheDocument();
@@ -434,7 +436,7 @@ describe('admin scope', () => {
     // Referrals (owner, 2026-10-10) brings the sidebar to 21 links.
     // Bulk upload (Excel) link (owner, 2026-10-12) brings the sidebar to 22 links.
     expect(screen.getByRole('link', { name: 'Bulk upload (Excel)' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(23);
+    expect(screen.getAllByRole('link')).toHaveLength(24);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

@@ -5,7 +5,9 @@ import Animated, {
   Easing, SharedValue, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, LinearGradient as SvgGrad, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { formatLkr } from '@/blynk/lib/money';
+import type { PublicHeroBanner } from '@/blynk/api/types';
+import { HERO_COPY, HERO_LAYOUT, heroSubSize, heroWaveSpan, heroWordSize, resolveHero } from '@/blynk/promo/heroBanner';
+import { openPromoDestination } from '@/lib/nav';
 import { withSpring } from '@/lib/motion';
 import { F } from '@/lib/theme';
 import { ArrowRight } from './icons';
@@ -27,9 +29,6 @@ const H = 183;
 const ITEM = 86;
 const TEXT_W = 196;
 const P = 2600; // ms per dish
-
-/** What the beam lifts in live mode: illustrated grocery stand-ins, never product photos. */
-const GROCERY_ITEMS = ['🍞', '🍎', '🥕', '🥚', '🥦', '🍌'];
 
 /** The banner's top purple. Home paints its header the same, so header and banner read as one block, as in the reference. */
 export const BANNER_TOP = '#2E0C66';
@@ -55,7 +54,7 @@ function WaveWord({ word, color, wave, offset, clockO }: {
   word: string; color: string; wave: SharedValue<number>; offset: number; clockO?: boolean;
 }) {
   // Bowlby One averages ~0.82 em per capital; fit the word into the left column.
-  const size = Math.min(36, Math.floor(TEXT_W / (word.length * 0.82)));
+  const size = heroWordSize(word);
   return (
     <View style={{ flexDirection: 'row' }}>
       {word.split('').map((ch, i) => (
@@ -176,19 +175,24 @@ function useRoll(lines: string[]) {
 }
 
 /**
- * Home's hero. Design mock: the reference's own copy and emoji dishes. Live: "FREE /
- * DELIVERY" while Blynk's new-customer free deliveries are on (otherwise "FRESH /
- * GROCERIES"), the sub-line rolls between the terms and "Groceries starting at" the
- * cheapest effective price, and the beam lifts illustrated grocery items.
+ * Home's hero. Design mock: the reference's own copy and emoji dishes. Live, AUTO (the
+ * default): "FREE / DELIVERY" while Blynk's new-customer free deliveries are on (otherwise
+ * "FRESH / GROCERIES"), the sub-line rolls between the terms and "Groceries starting at" the
+ * cheapest effective price, and the beam lifts illustrated grocery items. Live, CUSTOM (GET
+ * /store `hero_banner`, set in Admin / Ops): their two words, sub-lines, button and items,
+ * with the same animation (src/blynk/promo/heroBanner.ts, docs/promo-surfaces.md §3).
  */
-export function Banner({ minPrice, freeCount, onOrderNow, demo }: {
+export function Banner({ minPrice, freeCount, onOrderNow, demo, hero }: {
   /** Kept for callers; the banner no longer shows product photos. */
   images?: string[]; minPrice: number | null; freeCount: number; onOrderNow?: () => void;
   /** Design mock: the reference's own copy, with emoji stand-ins for the abducted dishes. */
   demo?: { title: [string, string]; line: string; accent: string; emojis: string[] };
+  /** GET /store `hero_banner`: Admin / Ops' custom banner; null / missing = automatic. */
+  hero?: PublicHeroBanner | null;
 }) {
+  const model = useMemo(() => (demo ? null : resolveHero(hero, { minPrice, freeCount })), [demo, hero, minPrice, freeCount]);
   // Illustrated grocery items in both modes (owner: no real product photos in the banner).
-  const items = demo ? demo.emojis : GROCERY_ITEMS;
+  const items = demo ? demo.emojis : model!.items;
   const [idx, setIdx] = useState(0);
 
   const bob = useSharedValue(0);
@@ -200,15 +204,10 @@ export function Banner({ minPrice, freeCount, onOrderNow, demo }: {
   const sweep = useSharedValue(0);
   const nudge = useSharedValue(0);
 
-  const price = minPrice != null ? formatLkr(minPrice) : null;
-  const lines = useMemo(() => {
-    if (demo) return [demo.line];
-    const l: string[] = [];
-    if (freeCount > 0) l.push(`On your first ${freeCount} order${freeCount > 1 ? 's' : ''}`);
-    if (price) l.push(`Groceries starting at ${price}`);
-    return l;
-  }, [freeCount, price, demo]);
+  const lines = useMemo(() => (demo ? [demo.line] : model!.lines), [demo, model]);
   const line = useRoll(lines);
+  const [w1, w2] = demo ? demo.title : model!.title;
+  const span = demo ? 1 : heroWaveSpan([w1, w2]);
 
   useEffect(() => {
     bob.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
@@ -230,7 +229,7 @@ export function Banner({ minPrice, freeCount, onOrderNow, demo }: {
     // the moon only shows up every other dish in the reference
     if (idx % 2 === 1) moon.value = withDelay(1100, withSequence(withSpring(1, { damping: 9, stiffness: 220 }), withDelay(420, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }))));
     wave.value = 0;
-    wave.value = withDelay(1100, withTiming(1, { duration: 1000, easing: Easing.linear }));
+    wave.value = withDelay(1100, withTiming(span, { duration: 1000 * span, easing: Easing.linear }));
     if (items.length < 2) {
       const t = setTimeout(() => setIdx((i) => i + 1), P);
       return () => clearTimeout(t);
@@ -242,7 +241,7 @@ export function Banner({ minPrice, freeCount, onOrderNow, demo }: {
     }, P - 380);
     const nextT = setTimeout(() => setIdx((i) => i + 1), P - 120);
     return () => { clearTimeout(exit); clearTimeout(nextT); };
-  }, [idx, items.length]);
+  }, [idx, items.length, span]);
 
   const ufoA = useAnimatedStyle(() => ({
     transform: [
@@ -268,9 +267,10 @@ export function Banner({ minPrice, freeCount, onOrderNow, demo }: {
   }));
   const arrowA = useAnimatedStyle(() => ({ transform: [{ translateX: nudge.value }] }));
 
-  const free = freeCount > 0;
-  const [w1, w2] = demo ? demo.title : free ? ['FREE', 'DELIVERY'] : ['FRESH', 'GROCERIES'];
-  const accent = demo ? demo.accent : price;
+  const accent = demo ? demo.accent : model!.accent;
+  const link = model?.link ?? null;
+  const ctaText = demo ? HERO_COPY.cta : model!.cta;
+  const subSize = line ? heroSubSize(line, !!model?.custom) : 15;
   const cur = items.length ? items[idx % items.length] : null;
   const parts = line && accent && line.includes(accent) ? line.split(accent) : null;
 
@@ -298,9 +298,10 @@ export function Banner({ minPrice, freeCount, onOrderNow, demo }: {
         <View style={{ marginTop: -5, marginLeft: -7 }}>
           <WaveWord key={`b${w2}`} word={w2} color={V.yellow} wave={wave} offset={w1.length + 0.6} clockO />
         </View>
+        {/* a custom line may run 44 pt past the column (it shrinks to end before the item) */}
         {line && (
-          <View style={styles.subWrap}>
-            <Text style={styles.sub} numberOfLines={1}>
+          <View style={[styles.subWrap, model?.custom && { marginRight: HERO_LAYOUT.textW - HERO_LAYOUT.subRoom }]}>
+            <Text style={[styles.sub, subSize !== 15 && { fontSize: subSize }]} numberOfLines={1}>
               {parts ? <>{parts[0]}{accent}{parts[1]}</> : line}
             </Text>
             <Animated.View style={[styles.underline, lineA]}>
@@ -309,10 +310,10 @@ export function Banner({ minPrice, freeCount, onOrderNow, demo }: {
             {parts && <Firework f={fire} />}
           </View>
         )}
-        <PressScale style={styles.ctaWrap} haptic onPress={onOrderNow}>
+        <PressScale style={styles.ctaWrap} haptic onPress={link ? () => openPromoDestination(link) : onOrderNow}>
           <View style={styles.ctaSlab} />
           <View style={styles.cta}>
-            <Text style={styles.ctaTxt}>ORDER NOW</Text>
+            <Text style={styles.ctaTxt}>{ctaText}</Text>
             <Animated.View style={arrowA}>
               <ArrowRight size={13} color={V.ctaText} />
             </Animated.View>

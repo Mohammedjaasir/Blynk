@@ -110,6 +110,10 @@ export function Layout() {
               <NavLink to="/promo-band" className="nav__item">
                 Promo band
               </NavLink>
+              {/* Home hero banner (the purple banner at the top of Home). */}
+              <NavLink to="/home-banner" className="nav__item">
+                Home banner
+              </NavLink>
               <NavLink to="/coupons" className="nav__item">
                 Coupons
               </NavLink>

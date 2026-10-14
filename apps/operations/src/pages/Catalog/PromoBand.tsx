@@ -481,8 +481,10 @@ function TextList({
   );
 }
 
+/** The link fields a promo surface stores (promo band, hero banner). */
+type LinkFields = Pick<PromoBandFields, 'cta_destination_type' | 'cta_destination_value'>;
 type LinkKind = '' | 'ALL' | 'MAIN' | 'CATEGORY' | 'PRODUCT';
-const linkKindOf = (d: PromoBandFields): LinkKind =>
+const linkKindOf = (d: LinkFields): LinkKind =>
   d.cta_destination_type === 'CATALOG'
     ? d.cta_destination_value
       ? 'MAIN'
@@ -493,15 +495,22 @@ const linkKindOf = (d: PromoBandFields): LinkKind =>
         ? 'PRODUCT'
         : '';
 
-/** Where a tap goes: the same levels as a promotion (Main / Category / Sub-category / Product / whole catalog). */
-function LinkPicker({
+/**
+ * Where a tap goes: the same levels as a promotion (Main / Category / Sub-category / Product /
+ * whole catalog). Shared with the hero banner editor.
+ */
+export function LinkPicker({
   draft,
   categories,
   groups,
   productName,
   onChange,
+  label = 'The band opens',
+  noneLabel = 'Nothing (informational)',
 }: {
-  draft: PromoBandFields;
+  draft: LinkFields;
+  label?: string;
+  noneLabel?: string;
   categories: Category[];
   groups: CategoryGroup[];
   productName: string | null;
@@ -511,7 +520,7 @@ function LinkPicker({
   const value = draft.cta_destination_value ?? '';
   return (
     <>
-      <Field label="The band opens">
+      <Field label={label}>
         <select
           className="input"
           value={kind}
@@ -520,7 +529,7 @@ function LinkPicker({
             onChange(k === 'ALL' || k === 'MAIN' ? 'CATALOG' : k === '' ? null : k, null);
           }}
         >
-          <option value="">Nothing (informational)</option>
+          <option value="">{noneLabel}</option>
           <option value="ALL">Whole catalog (all products)</option>
           <option value="MAIN">A main section (home heading)</option>
           <option value="CATEGORY">A category or sub-category</option>
@@ -564,10 +573,10 @@ function LinkPicker({
   );
 }
 
-/** "the category Rice" etc. for the preview note; null = no link. */
-function describeLink(
-  d: PromoBandFields,
-  saved: PromoBandSetting,
+/** "the category Rice" etc. for the preview note; null = no link. Shared with the hero banner editor. */
+export function describeLink(
+  d: LinkFields,
+  saved: LinkFields & { cta_target: PromotionTarget | null },
   categories: Category[],
   groups: CategoryGroup[],
   productName: string | null

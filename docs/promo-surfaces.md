@@ -14,6 +14,7 @@ narrower). Colours are Blynk's (`apps/customer-app/src/lib/theme.ts`).
 | --- | --- | --- | --- |
 | Promo band | `src/components/PromoBand.tsx` (render model: `src/blynk/promo/promoBand.ts`) | Admin `/promo-band`, Ops `Catalog -> Promo band` (`PromoBandEditor`, `PromoBandPreview`) | `GET/PATCH /admin/settings/promo-band`, public `GET /store` -> `promo_band` |
 | Carousel | `src/components/PromoCarousel.tsx` (look + timings: `src/blynk/promo/carousel.ts`) - **not yet wired into Home** | Admin `/promotions`, Ops `Catalog -> Promotions` (`PromoCarouselPreview` in the editor and above the list) | `promotions` table, `GET /promotions`, `/admin/promotions` |
+| Hero banner | `src/components/Banner.tsx` (render model: `src/blynk/promo/heroBanner.ts`) | Admin `/home-banner`, Ops `Catalog -> Home banner` (`HeroBanner`, `HeroBannerPreview`) | `GET/PATCH /admin/settings/hero-banner`, public `GET /store` -> `hero_banner` |
 
 ---
 
@@ -157,3 +158,83 @@ Tap: the CTA pill (or the whole ARTWORK card without a label) follows
 `cta_target` exactly like the band (section 1); a promotion without a target, or
 with a switched-off one, is not tappable and draws no pill. The app's carousel is
 `src/components/PromoCarousel.tsx` over `src/blynk/promo/carousel.ts`.
+
+---
+
+## 3. Hero banner (Home banner)
+
+The purple banner at the very top of Home (the header above it is painted the
+same purple): a pink saucer whose beam lifts illustrated grocery items one
+after another, two big words jumping letter by letter, a rolling sub-line with
+a sweeping underline and a firework round the price, and the ORDER NOW button.
+The purple / pink / yellow are the owner's choice: **no colour fields**.
+
+### Data (system_configurations `hero_banner`, no migration)
+
+```jsonc
+{
+  "mode": "AUTO",                  // AUTO (default) = the app's own words | CUSTOM = the fields below
+  "title_1": "FRESH",              // 1-12 chars, shown (and stored) in capitals, white
+  "title_2": "GROCERIES",          // 1-12 chars, yellow
+  "lines": ["Groceries starting at {min_price}"], // 1-4 rolling sub-lines, 2-40 chars
+  "cta_label": "ORDER NOW",        // 1-16 chars, capitals
+  "cta_destination_type": null,    // null = scroll down to the aisles (today) | CATEGORY | PRODUCT | CATALOG
+  "cta_destination_value": null,   // as the promo band / promotions (category slug, product id, group id)
+  "items": ["bread", "apple", "carrot", "egg", "broccoli", "banana"], // 1+ of milk bread apple carrot egg broccoli banana
+  "starts_at": null,               // optional; outside the window the app shows AUTO
+  "ends_at": null
+}
+```
+
+Tokens in a sub-line: `{min_price}` = the cheapest available product's
+effective price ("LKR 253"), `{free_count}` = new-customer free deliveries
+("2"). Any other `{...}` is refused. The app fills them in; a line whose token
+has no value (no products / free deliveries off) is skipped.
+
+AUTO (no row, a malformed row, mode AUTO, or a CUSTOM banner outside its
+schedule) is exactly the banner the app always drew: "FREE / DELIVERY" while
+new-customer free deliveries are on, else "FRESH / GROCERIES"; sub-lines "On
+your first N order(s)" and "Groceries starting at <price>"; the six AUTO items;
+ORDER NOW scrolls to the aisles. Switching back to AUTO keeps the custom fields
+for next time; "Reset to automatic" saves the defaults above.
+
+`GET /store` -> `hero_banner`: `null` = AUTO; otherwise `{ mode: "CUSTOM",
+title: [w1, w2], lines (tokens unfilled), cta_label, cta_target, items, ends_at }`.
+`cta_target` is the resolved target (`null` when none, deleted or switched off:
+the button then scrolls to the aisles). An older API without the field = AUTO.
+Customer-facing default words live in `HERO_COPY` (`src/blynk/promo/heroBanner.ts`)
+for the Sinhala / Tamil phase.
+
+### Layout (390 pt; unchanged)
+
+- Height 183. Text column: 24 left padding, 26 top, **196 pt** wide.
+- Title words: Bowlby One, size `min(36, floor(196 / (letters x 0.82)))` - 12
+  letters = 19 pt, so the longest word still fits the column on a 360 pt phone
+  (the column keeps its width; the saucer starts 260 pt from the left there).
+  Second word 5 pt up, 7 pt left; pink extrusion -2.5 / +3.5.
+- Sub-line: Outfit Bold 15, tracking 0.8, one line. AUTO: always 15 pt. A custom
+  line may run 44 pt past the column (240 pt) and shrinks (half-points, at the
+  least 10.5 pt) to end within 220 pt, before the item, also at 360 pt.
+- CTA: 28 high pill, 13 sides, Outfit ExtraBold 12, pink slab 4 pt under.
+- Stage (right 180 x 183): beam, item (86 x 86, right 30, bottom 20; emoji 74),
+  saucer (92 x 56, right 8, top 12).
+
+### Motion (per item cycle, P = 2600 ms; identical in both modes)
+
+| Time | Motion |
+| --- | --- |
+| 0 | item drops down the beam (spring damping 12 / stiffness 150; the first item starts resting) |
+| 300 ms | underline sweeps under the sub-line (480 ms), holds 1500 ms, fades 300 ms |
+| 550 ms | firework round the price (620 ms), when the line contains it |
+| 1100 ms | letters jump one after another (~75 ms apart, 7 pt up, +-13 deg); every other item the moon pops in |
+| P - 380 | item is sucked back up (230 ms) while the saucer swings (only with 2+ items) |
+| P - 120 | next item (P with a single item) |
+| loops | saucer / beam / item bob 1300 ms; clouds drift 14 pt over 9 s; CTA arrow nudges every 1560 ms; sub-lines roll every 3200 ms |
+
+Long titles: the letter wave runs at the same speed until the last letter has
+jumped (it used to stop after 1 s, leaving a letter past the 13th mid-jump in
+"FRESH GROCERIES"; short titles are unchanged). Reduced motion (Reanimated's
+system setting): loops still, one-off effects jump to their end; items still
+change every cycle and lines still roll. The staff previews (`HeroBannerPreview`)
+play the same with CSS; they fill the tokens with sample values (LKR 253, 2).
+

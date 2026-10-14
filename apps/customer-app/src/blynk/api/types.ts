@@ -97,6 +97,11 @@ export interface StoreInfo {
    * outside its schedule); missing (an older API) = the band's built-in look.
    */
   promo_band?: PublicPromoBand | null;
+  /**
+   * Home hero banner, set in Admin and Ops (docs/promo-surfaces.md §3). An object = their
+   * custom words while live; null or missing (an older API) = the automatic banner.
+   */
+  hero_banner?: PublicHeroBanner | null;
 }
 
 /** Where a promo surface goes when tapped: the same resolved target a promotion carries. */
@@ -111,5 +116,17 @@ export interface PublicPromoBand {
   item: { kind: 'NONE' | 'ILLUSTRATED' | 'IMAGE'; illustration: string | null; image_url: string | null };
   mascot: 'WAVE' | 'RIDE' | 'OFF';
   cta_target: PromoTarget | null;
+  ends_at: string | null;
+}
+
+/** GET /store `hero_banner`: the custom hero banner (tokens {min_price} / {free_count} are filled in by the app). */
+export interface PublicHeroBanner {
+  mode: 'CUSTOM';
+  title: [string, string];
+  lines: string[];
+  cta_label: string;
+  /** Where the button goes; null = the app's own (scroll to the aisles). */
+  cta_target: PromoTarget | null;
+  items: string[];
   ends_at: string | null;
 }

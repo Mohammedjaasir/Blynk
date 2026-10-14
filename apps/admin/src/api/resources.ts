@@ -96,6 +96,8 @@ import type {
   CategoryImportTemplate,
   PromoBandFields,
   PromoBandSetting,
+  HeroBannerFields,
+  HeroBannerSetting,
 } from './types';
 
 /**
@@ -569,6 +571,14 @@ export const promoBand = {
   get: () => apiRequest<PromoBandSetting>('/admin/settings/promo-band'),
   update: (body: Partial<PromoBandFields>) =>
     apiRequest<PromoBandSetting>('/admin/settings/promo-band', { method: 'PATCH', body: { ...body } }),
+};
+
+// ------------------------------------------------------------ hero banner
+/** Home hero banner (the purple banner at the top of Home): any subset of fields per PATCH. */
+export const heroBanner = {
+  get: () => apiRequest<HeroBannerSetting>('/admin/settings/hero-banner'),
+  update: (body: Partial<HeroBannerFields>) =>
+    apiRequest<HeroBannerSetting>('/admin/settings/hero-banner', { method: 'PATCH', body: { ...body } }),
 };
 
 // ---------------------------------------------------------------- orders
