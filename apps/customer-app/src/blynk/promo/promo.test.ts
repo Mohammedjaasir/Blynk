@@ -3,7 +3,7 @@ import type { Promotion, PublicPromoBand } from '../api/types';
 import {
   BAND_DEFAULT_COLORS, bandHeadlineRows, bandLink, bandTextWidth, resolvePromoBand,
 } from './promoBand';
-import { autoAdvances, carouselOrder, isDarkHex, nextSlide, slideLook } from './carousel';
+import { autoAdvances, carouselOrder, carouselSlides, isDarkHex, nextSlide, slideLook } from './carousel';
 
 const fallback = { line1: 'Free delivery on your first 2 orders', fees: ['No Platform Fee', 'No Packaging Fee'] };
 const config = (over: Partial<PublicPromoBand> = {}): PublicPromoBand => ({
@@ -49,7 +49,7 @@ describe('promo band render model', () => {
       colors: { start: '#1A1D2E', end: '#2A2E45', text: '#FFE141' },
       item: { kind: 'ILLUSTRATED', emoji: '🍞' },
       mascot: 'RIDE',
-      link: { kind: 'aisle', slug: 'rice', name: 'Rice' },
+      link: { kind: 'category', slug: 'rice', sub: null },
     });
   });
 
@@ -70,12 +70,14 @@ describe('promo band render model', () => {
       .toEqual({ kind: 'IMAGE', uri: 'https://cdn/x.png' });
   });
 
-  it('links: category, sub-category (its parent aisle), product, main / catalog (search)', () => {
+  it('links like a carousel banner: category screen, sub-category in its parent, product, categories screen', () => {
+    expect(bandLink(target({}))).toEqual({ kind: 'category', slug: 'rice', sub: null });
     expect(bandLink(target({ level: 'SUB_CATEGORY', slug: 'basmati', name: 'Basmati', parent_slug: 'rice', parent_name: 'Rice' })))
-      .toEqual({ kind: 'aisle', slug: 'rice', name: 'Rice' });
+      .toEqual({ kind: 'category', slug: 'rice', sub: 'basmati' });
     expect(bandLink(target({ level: 'PRODUCT', id: 'p-9' }))).toEqual({ kind: 'product', id: 'p-9' });
-    expect(bandLink(target({ level: 'MAIN', id: 'g1', slug: null }))).toEqual({ kind: 'search' });
-    expect(bandLink(target({ level: 'CATALOG', id: null, slug: null }))).toEqual({ kind: 'search' });
+    expect(bandLink(target({ level: 'MAIN', id: 'g1', slug: null }))).toEqual({ kind: 'categories', group: 'g1' });
+    expect(bandLink(target({ level: 'CATALOG', id: null, slug: null }))).toEqual({ kind: 'categories', group: null });
+    expect(bandLink(target({ is_active: false }))).toBeNull();
     expect(bandLink(null)).toBeNull();
   });
 
@@ -116,7 +118,7 @@ describe('carousel slide look', () => {
     expect(art.foreground).toBeNull();
     expect(art.cta).toBeNull();
     expect(art.wholeCardTap).toBe(true);
-    expect(art.link).toEqual({ kind: 'aisle', slug: 'rice', name: 'Rice' });
+    expect(art.link).toEqual({ kind: 'category', slug: 'rice', sub: null });
   });
 
   it('a button needs a label and a destination; older APIs link from the stored value', () => {
@@ -134,6 +136,8 @@ describe('carousel slide look', () => {
   it('order, wrap-around and auto-advance rules', () => {
     const rows = [promo({ id: 'a', display_order: 20 }), promo({ id: 'b', display_order: 10 }), promo({ id: 'c', display_order: 10 })];
     expect(carouselOrder(rows).map((r) => r.id)).toEqual(['b', 'c', 'a']);
+    // nothing to draw (no title, no picture) is left out
+    expect(carouselSlides([...rows, promo({ id: 'blank', title: ' ', display_order: 0 })]).map((r) => r.id)).toEqual(['b', 'c', 'a']);
     expect(nextSlide(2, 3)).toBe(0);
     expect(nextSlide(0, 0)).toBe(0);
     expect(autoAdvances(3, false)).toBe(true);

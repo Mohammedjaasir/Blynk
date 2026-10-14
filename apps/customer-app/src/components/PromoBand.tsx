@@ -1,5 +1,4 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
@@ -14,7 +13,7 @@ import {
 import { useStore } from '@/blynk/store/StoreContext';
 import { PROMO } from '@/demo/home';
 import { DEMO } from '@/demo/mode';
-import { openAisle } from '@/lib/nav';
+import { openPromoDestination } from '@/lib/nav';
 import { F } from '@/lib/theme';
 import { CheckBoxIcon } from './icons';
 import { PressScale } from './ui';
@@ -41,11 +40,7 @@ export function PromoBand({ live }: { live?: BandFallback }) {
 
 const PROMO_FALLBACK: BandFallback = { line1: PROMO.line1, fees: PROMO.fees };
 
-function go(link: BandLink) {
-  if (link.kind === 'aisle') openAisle({ slug: link.slug, name: link.name });
-  else if (link.kind === 'product') router.push({ pathname: '/p/[id]', params: { id: link.id } });
-  else router.push('/search');
-}
+const go = (link: BandLink) => openPromoDestination(link);
 
 /** Draws a resolved band (also what a design review renders directly). */
 export function PromoBandView({ model }: { model: PromoBandModel }) {
@@ -61,7 +56,8 @@ export function PromoBandView({ model }: { model: PromoBandModel }) {
         {model.lines.length > 0 && (
           <View style={[styles.row, { marginBottom: model.ticks.length ? 9 : 0, maxWidth: textW, alignItems: 'flex-start' }]}>
             <View style={{ marginTop: 2 }}><CheckBoxIcon size={14} color={ink} /></View>
-            <SlidingLines lines={model.lines} color={ink} rows={rows} />
+            {/* keyed by the headlines: new copy starts again from the first line */}
+            <SlidingLines key={model.lines.join('\n')} lines={model.lines} color={ink} rows={rows} />
           </View>
         )}
         {model.ticks.length > 0 && (
@@ -93,7 +89,6 @@ function SlidingLines({ lines, color, rows }: { lines: string[]; color: string; 
   const key = lines.join('\n');
 
   useEffect(() => {
-    setI(0);
     y.value = 0;
     o.value = 1;
     if (lines.length < 2) return;

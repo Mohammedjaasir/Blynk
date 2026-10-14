@@ -24,13 +24,13 @@ import { Banner, BANNER_TOP } from '@/components/Banner';
 import { CART_BAR, CartBar } from '@/components/CartBar';
 import { ClosedBanner } from '@/components/ClosedBanner';
 import {
-  BagBadge, CheckBoxIcon, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
+  BagBadge, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
 import { PromoBand } from '@/components/PromoBand';
 import { DoctorsHomeEntry } from '@/blynk/doctors/DoctorsHomeEntry';
 import { HomeCategoryGroups } from '@/blynk/catalog/HomeCategoryGroups';
-import { PromoCarousel } from '@/blynk/catalog/PromoCarousel';
+import { PromoCarousel } from '@/components/PromoCarousel';
 import { UsualsRow } from '@/blynk/rewards/UsualsRow';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { ComboRail } from '@/blynk/combos/ComboViews';
@@ -38,7 +38,7 @@ import { BirthdayOfferBanner } from '@/blynk/rewards/BirthdayOfferBanner';
 import { SPLASH_LOGO, SPLASH_LOGO_H, SPLASH_LOGO_W } from '@/lib/splash';
 import { PressScale, RollingText, Skeleton, StampBadge } from '@/components/ui';
 import {
-  BANNER, CATEGORIES, CATEGORIES_PRE, FEES, FILTERS, LOCATION, LOCATION_SHEET, MEALS, MEALS_PRE, PROMO, PROMO_AFTER,
+  BANNER, CATEGORIES, CATEGORIES_PRE, FEES, FILTERS, LOCATION, LOCATION_SHEET, MEALS, MEALS_PRE, PROMO_AFTER,
   SEARCH_HINTS, STORES, STORES_BY_CATEGORY, VS, type DemoFilter, type DemoStore,
 } from '@/demo/home';
 import {
@@ -340,7 +340,7 @@ export default function Home() {
                     Channel doctors, then every Main as a section of category tiles with "All categories" */}
                 {!DEMO && <OfflineBanner onRetry={() => void refresh()} style={{ marginHorizontal: 15, marginTop: 12 }} />}
                 {!DEMO && <BirthdayOfferBanner style={{ marginHorizontal: 15, marginTop: 12 }} />}
-                {!DEMO && !!data && <PromoCarousel promotions={data.promotions} width={screenW} />}
+                {!DEMO && !!data && <PromoCarousel promotions={data.promotions} style={{ marginTop: 14 }} />}
                 {!DEMO && <UsualsRow />}
                 {!DEMO && <DoctorsHomeEntry style={{ marginHorizontal: 15, marginTop: 18 }} />}
                 {!DEMO && !!data && <HomeCategoryGroups tree={data.tree} width={screenW} />}

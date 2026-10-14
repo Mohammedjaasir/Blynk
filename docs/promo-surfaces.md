@@ -96,9 +96,12 @@ off. An older API without the field = today's look.
 | Beam | opacity 0.85 <-> 1 with the item's bob. |
 | Reduced motion | no loops, no drop, no slide: headlines swap in place every 2800 ms. |
 
-Tap: the whole band is a button when `cta_target` is set (CATEGORY opens the
-aisle, SUB_CATEGORY opens its parent aisle, PRODUCT opens `/p/<id>`, MAIN and
-CATALOG open search).
+Tap: the whole band is a button when `cta_target` is set. It goes where a
+carousel banner with the same target goes (`src/blynk/catalog/promoTarget.ts`):
+CATEGORY opens `/category/<slug>`, SUB_CATEGORY opens its parent's screen with
+it selected in the sidebar, PRODUCT opens `/p/<id>`, MAIN opens the categories
+screen at that group and CATALOG the categories screen. A switched-off target
+is not tappable.
 
 ---
 
@@ -149,3 +152,8 @@ width (151 pt) x 150 pt.
 Order: `display_order` ascending (ties: as the API lists them); only active
 promotions are shown. The staff preview inserts the slide being edited at its
 display order so the whole carousel can be watched in sequence.
+
+Tap: the CTA pill (or the whole ARTWORK card without a label) follows
+`cta_target` exactly like the band (section 1); a promotion without a target, or
+with a switched-off one, is not tappable and draws no pill. The app's carousel is
+`src/components/PromoCarousel.tsx` over `src/blynk/promo/carousel.ts`.

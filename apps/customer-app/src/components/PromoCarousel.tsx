@@ -1,14 +1,14 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming,
 } from 'react-native-reanimated';
 import type { Promotion } from '@/blynk/api/types';
-import { autoAdvances, CAROUSEL as K, carouselOrder, nextSlide, slideLook, type SlideLook } from '@/blynk/promo/carousel';
-import type { BandLink } from '@/blynk/promo/promoBand';
-import { openAisle } from '@/lib/nav';
+import type { PromoDestination } from '@/blynk/catalog/promoTarget';
+import { autoAdvances, CAROUSEL as K, carouselSlides, nextSlide, slideLook, type SlideLook } from '@/blynk/promo/carousel';
+import { PROMO } from '@/blynk/ui/strings';
+import { openPromoDestination } from '@/lib/nav';
 import { F } from '@/lib/theme';
 
 /*
@@ -16,29 +16,31 @@ import { F } from '@/lib/theme';
  * live previews in Admin and Ops: a 2:1 card (360 x 180 at 390 pt), 4 s per slide, a 450 ms
  * push to the next one (carrying on forward after the last), the new slide's words, picture
  * and button easing in, a swipe pauses it for 4 s, and "reduce motion" stops the auto-advance
- * and every animation. Not wired into Home yet - Home's owner adopts it.
+ * and every animation. A tap follows the banner's cta_target (src/blynk/catalog/promoTarget.ts:
+ * MAIN / CATALOG the categories screen, CATEGORY / SUB_CATEGORY the category screen, PRODUCT the
+ * product page); a banner without one is not tappable.
  */
-
-function go(link: BandLink) {
-  if (link.kind === 'aisle') openAisle({ slug: link.slug, name: link.name });
-  else if (link.kind === 'product') router.push({ pathname: '/p/[id]', params: { id: link.id } });
-  else router.push('/search');
-}
 
 const EASE = Easing.bezier(0.65, 0, 0.35, 1);
 
-export function PromoCarousel({ promotions, onOpen = go }: { promotions: Promotion[]; onOpen?: (link: BandLink) => void }) {
+export function PromoCarousel({ promotions, onOpen = openPromoDestination, style }: {
+  promotions: Promotion[]; onOpen?: (to: PromoDestination) => void; style?: StyleProp<ViewStyle>;
+}) {
   const { width: screenW } = useWindowDimensions();
   const W = screenW - K.gutter * 2;
-  const slides = useMemo(() => carouselOrder(promotions).map((p) => ({ id: p.id, look: slideLook(p) })), [promotions]);
+  const slides = useMemo(() => carouselSlides(promotions).map((p) => ({ id: p.id, look: slideLook(p) })), [promotions]);
   const n = slides.length;
   const reduced = useReducedMotion();
-  const [idx, setIdx] = useState(0);
-  const [prev, setPrev] = useState<number | null>(null);
-  const [paused, setPaused] = useState(false);
+  const [at, setIdx] = useState(0);
+  const [prevAt, setPrev] = useState<number | null>(null);
+  // when the list shrinks under the shown slide, start again from the first
+  const idx = at < n ? at : 0;
+  const prev = prevAt != null && prevAt < n && at < n ? prevAt : null;
+  /** Swipes and dot taps so far: each one restarts the auto-advance wait. */
+  const [touches, setTouches] = useState(0);
+  const seenTouches = useRef(0);
   const p = useSharedValue(1);
   const dir = useSharedValue(1);
-  const resume = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const change = (to: number, d: 1 | -1) => {
     if (n < 2) return;
@@ -50,21 +52,16 @@ export function PromoCarousel({ promotions, onOpen = go }: { promotions: Promoti
     p.value = withTiming(1, { duration: K.change, easing: EASE });
   };
 
-  useEffect(() => { if (idx >= n) { setIdx(0); setPrev(null); } }, [n]);
-
-  // auto-advance
+  // auto-advance: a slide holds K.hold; after a touch it waits K.resumeAfterTouch from that touch
   useEffect(() => {
-    if (!autoAdvances(n, reduced) || paused) return;
-    const t = setTimeout(() => change(nextSlide(idx, n), 1), K.hold);
+    if (!autoAdvances(n, reduced)) return;
+    const afterTouch = touches !== seenTouches.current;
+    seenTouches.current = touches;
+    const t = setTimeout(() => change(nextSlide(idx, n), 1), afterTouch ? Math.max(K.hold, K.resumeAfterTouch) : K.hold);
     return () => clearTimeout(t);
-  }, [idx, n, reduced, paused]);
+  }, [idx, n, reduced, touches]);
 
-  useEffect(() => () => { if (resume.current) clearTimeout(resume.current); }, []);
-  const touched = () => {
-    setPaused(true);
-    if (resume.current) clearTimeout(resume.current);
-    resume.current = setTimeout(() => setPaused(false), K.resumeAfterTouch);
-  };
+  const touched = () => setTouches((c) => c + 1);
 
   const pan = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy),
@@ -82,7 +79,7 @@ export function PromoCarousel({ promotions, onOpen = go }: { promotions: Promoti
   const cur = slides[Math.min(idx, n - 1)]!;
   const old = prev != null && prev !== idx ? slides[prev] : undefined;
   return (
-    <View>
+    <View style={style} accessibilityLabel={PROMO.carousel}>
       <View style={[styles.card, { width: W, height: K.height }]} {...pan.panHandlers}>
         {old && (
           <Animated.View key={`p${old.id}`} style={[StyleSheet.absoluteFill, prevA]}>
@@ -101,7 +98,7 @@ export function PromoCarousel({ promotions, onOpen = go }: { promotions: Promoti
               hitSlop={6}
               accessibilityRole="tab"
               accessibilityState={{ selected: i === idx }}
-              accessibilityLabel={`Promotion ${i + 1} of ${n}`}
+              accessibilityLabel={PROMO.slideOf(i + 1, n)}
               onPress={() => { touched(); if (i !== idx) change(i, i > idx ? 1 : -1); }}
               style={[styles.dot, i === idx && styles.dotOn]}
             />
@@ -113,7 +110,7 @@ export function PromoCarousel({ promotions, onOpen = go }: { promotions: Promoti
 }
 
 /** One slide, drawn from its look; `animate` plays the entrance. */
-function Slide({ look, w, animate, onOpen }: { look: SlideLook; w: number; animate: boolean; onOpen: (l: BandLink) => void }) {
+function Slide({ look, w, animate, onOpen }: { look: SlideLook; w: number; animate: boolean; onOpen: (to: PromoDestination) => void }) {
   const t = useSharedValue(animate ? 0 : 1);
   const f = useSharedValue(animate ? 0 : 1);
   const c = useSharedValue(animate ? 0 : 1);

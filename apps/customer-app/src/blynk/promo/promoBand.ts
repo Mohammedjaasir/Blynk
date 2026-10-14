@@ -1,4 +1,5 @@
 import type { PromoTarget, PublicPromoBand } from '../api/types';
+import { promoDestination, type PromoDestination } from '../catalog/promoTarget';
 
 /*
  * The Home promo band's render model (docs/promo-surfaces.md §1). Pure, so it is tested in
@@ -38,10 +39,8 @@ export const BAND_LAYOUT = {
 } as const;
 
 export type BandItem = { kind: 'NONE' } | { kind: 'ILLUSTRATED'; emoji: string } | { kind: 'IMAGE'; uri: string };
-export type BandLink =
-  | { kind: 'aisle'; slug: string; name: string }
-  | { kind: 'product'; id: string }
-  | { kind: 'search' };
+/** Where a tap goes: the same destinations as a carousel banner (src/blynk/catalog/promoTarget.ts). */
+export type BandLink = PromoDestination;
 
 export interface PromoBandModel {
   /** The sliding headlines (one = static; none = no headline row). */
@@ -60,24 +59,13 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const clean = (xs: unknown): string[] =>
   Array.isArray(xs) ? xs.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim()) : [];
 
-/** Where a tap goes: a category or sub-category's aisle, a product page, or search for the whole catalog. */
+/**
+ * Where a tap goes (cta_target): CATEGORY its category screen, SUB_CATEGORY its parent's screen
+ * with it selected in the sidebar, PRODUCT the product page, MAIN / CATALOG the categories screen.
+ * null, or a switched-off target: the band is not tappable.
+ */
 export function bandLink(t: PromoTarget | null | undefined): BandLink | null {
-  if (!t) return null;
-  switch (t.level) {
-    case 'CATEGORY':
-      return t.slug ? { kind: 'aisle', slug: t.slug, name: t.name ?? '' } : null;
-    case 'SUB_CATEGORY':
-      // its parent's aisle, where the sub-category sits in the sidebar
-      if (t.parent_slug) return { kind: 'aisle', slug: t.parent_slug, name: t.parent_name ?? t.name ?? '' };
-      return t.slug ? { kind: 'aisle', slug: t.slug, name: t.name ?? '' } : null;
-    case 'PRODUCT':
-      return t.id ? { kind: 'product', id: t.id } : null;
-    case 'MAIN':
-    case 'CATALOG':
-      return { kind: 'search' };
-    default:
-      return null;
-  }
+  return t ? promoDestination({ cta_target: t, cta_destination_type: null, cta_destination_value: null }) : null;
 }
 
 export function resolvePromoBand(config: PublicPromoBand | null | undefined, fallback: BandFallback): PromoBandModel | null {

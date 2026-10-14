@@ -57,24 +57,7 @@ export function destinationHref(d: PromoDestination) {
   }
 }
 
-/* ---- the carousel's timing (Flutter HomeScreenCarousel) ---- */
-
-/** A banner stays this long before the next one slides in. */
-export const AUTO_ADVANCE_MS = 3000;
-/** After a swipe or touch, auto-advance waits this long before resuming (WCAG 2.2.2). */
-export const RESUME_AFTER_TOUCH_MS = 4000;
-
-/** Auto-advance only with more than one banner and when the OS does not ask for reduced motion. */
-export const shouldAutoAdvance = (count: number, reducedMotion: boolean) => count > 1 && !reducedMotion;
-
-/** The next slide, wrapping round to the first. */
-export const nextSlide = (index: number, count: number) => (count > 0 ? (index + 1) % count : 0);
-
-/** The slide nearest a horizontal scroll offset (clamped to the list). */
-export function slideAt(offsetX: number, slideWidth: number, count: number): number {
-  if (count <= 0 || slideWidth <= 0) return 0;
-  return Math.max(0, Math.min(count - 1, Math.round(offsetX / slideWidth)));
-}
+/* The carousel's timing and slide look: src/blynk/promo/carousel.ts (docs/promo-surfaces.md section 2). */
 
 /** Banners worth showing: an image, or a title over a coloured card. */
 export function visiblePromotions<T extends Pick<Promotion, 'image_url' | 'background_image_url' | 'title' | 'display_order'>>(list: T[]): T[] {

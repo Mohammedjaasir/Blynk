@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -15,6 +15,7 @@ import { applyFilters, FILTERS, type FilterId } from '@/blynk/lib/filters';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
 import { hasVariants, priceText } from '@/blynk/catalog/variants';
+import { categoryHref } from '@/blynk/catalog/tree';
 import { useFreeDeliveryUnlocked } from '@/blynk/store/freeDelivery';
 import { useStore } from '@/blynk/store/StoreContext';
 import { CART_BAR, CartBar } from '@/components/CartBar';
@@ -70,11 +71,22 @@ function applyDemoFilters(items: Product[], on: Filter[]): Product[] {
 const toggleIn = <T,>(list: T[], v: T): T[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
 /**
+ * /store/<slug> is the old aisle link. Live it opens the category screen (/category/<slug>, with
+ * the sub-category sidebar) so old links and bookmarks keep working; the design mock (DEMO)
+ * keeps the video's store page below.
+ */
+export default function StoreRoute() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  if (!DEMO) return <Redirect href={id ? categoryHref(id) : '/home'} />;
+  return <StoreScreen />;
+}
+
+/**
  * The aisle screen. Design mock (DEMO): any id shows the video's "Ovenfresh Cakes And
  * Desserts". Live: the aisle is the Blynk category whose slug is `id`, its sections are
  * its sub-categories, and every store value comes from GET /store (Admin / Ops).
  */
-export default function StoreScreen() {
+function StoreScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, error, refresh } = useCatalog();
   const store = useStore();

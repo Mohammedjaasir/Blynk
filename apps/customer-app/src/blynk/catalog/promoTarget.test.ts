@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Promotion, PromotionTarget } from '../api/types';
 import {
-  AUTO_ADVANCE_MS, destinationHref, nextSlide, promoDestination, RESUME_AFTER_TOUCH_MS, shouldAutoAdvance, slideAt, visiblePromotions,
+  destinationHref, promoDestination, visiblePromotions,
 } from './promoTarget';
 
 const target = (t: Partial<PromotionTarget>): PromotionTarget => ({
@@ -63,25 +63,6 @@ describe('promotion cta_target routing', () => {
 });
 
 describe('promotions carousel', () => {
-  it('auto-advances only with several banners and without reduced motion', () => {
-    expect(shouldAutoAdvance(3, false)).toBe(true);
-    expect(shouldAutoAdvance(3, true)).toBe(false);
-    expect(shouldAutoAdvance(1, false)).toBe(false);
-    expect(AUTO_ADVANCE_MS).toBe(3000);
-    expect(RESUME_AFTER_TOUCH_MS).toBeGreaterThan(AUTO_ADVANCE_MS);
-  });
-
-  it('wraps round and maps a scroll offset to a slide', () => {
-    expect(nextSlide(0, 3)).toBe(1);
-    expect(nextSlide(2, 3)).toBe(0);
-    expect(nextSlide(0, 0)).toBe(0);
-    expect(slideAt(0, 360, 3)).toBe(0);
-    expect(slideAt(370, 360, 3)).toBe(1);
-    expect(slideAt(5000, 360, 3)).toBe(2);
-    expect(slideAt(-20, 360, 3)).toBe(0);
-    expect(slideAt(100, 0, 3)).toBe(0);
-  });
-
   it('shows banners with something to draw, in display order', () => {
     const list = [
       promo({ id: 'b', display_order: 2, title: 'Second' }),

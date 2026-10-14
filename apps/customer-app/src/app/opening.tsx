@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
@@ -7,6 +7,7 @@ import Animated, {
 import Svg, { Rect } from 'react-native-svg';
 import type { Product } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
+import { categoryHref } from '@/blynk/catalog/tree';
 import { ProductImage } from '@/components/ProductImage';
 import { DEMO } from '@/demo/mode';
 import { OPENING } from '@/demo/store';
@@ -34,7 +35,17 @@ const LIVE_SUB = 'Opening aisle to explore...';
 
 type Course = { name: string; emoji?: string; product?: Product | null };
 
-export default function Opening() {
+/**
+ * The old aisle intro link (/opening?id=<slug>). Live, categories open straight on their screen
+ * (/category/<slug>); the design mock keeps the video's menu interstitial.
+ */
+export default function OpeningRoute() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  if (!DEMO) return <Redirect href={id ? categoryHref(id) : '/home'} />;
+  return <Opening />;
+}
+
+function Opening() {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const { data } = useCatalog();
   const { width, height } = useWindowDimensions();

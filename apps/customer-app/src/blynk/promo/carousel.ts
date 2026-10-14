@@ -1,5 +1,5 @@
 import type { Promotion } from '../api/types';
-import { bandLink, type BandLink } from './promoBand';
+import { promoDestination, visiblePromotions, type PromoDestination } from '../catalog/promoTarget';
 
 /*
  * The promotion carousel's slide look and timings (docs/promo-surfaces.md §2). Pure, so it is
@@ -43,7 +43,8 @@ export interface SlideLook {
   /** ARTWORK without a label: the whole card is the button. */
   wholeCardTap: boolean;
   foreground: string | null;
-  link: BandLink | null;
+  /** Where a tap goes (cta_target routing, src/blynk/catalog/promoTarget.ts); null = not tappable. */
+  link: PromoDestination | null;
 }
 
 /** The app's luminance check (< 0.45 = dark), as the staff previews use. */
@@ -76,7 +77,7 @@ export function slideLook(p: Promotion): SlideLook {
   }
   const artwork = background.kind === 'artwork';
   const dark = background.kind === 'image' || isDarkHex(background.kind === 'gradient' ? background.from : background.kind === 'solid' ? background.color : null);
-  const link = p.cta_destination_type ? bandLink(p.cta_target) ?? fallbackLink(p) : null;
+  const link = promoDestination(p);
   const label = p.cta_label?.trim() || null;
   return {
     background,
@@ -85,7 +86,7 @@ export function slideLook(p: Promotion): SlideLook {
     subtitle: p.subtitle?.trim() || null,
     titleColor: dark ? '#FFFFFF' : '#12151F',
     subtitleColor: dark ? 'rgba(255,255,255,0.82)' : '#4B5364',
-    cta: label && p.cta_destination_type ? label : null,
+    cta: label && link ? label : null,
     ctaColors: dark || artwork ? { bg: '#FFE141', text: '#1A1D2E' } : { bg: '#1A1D2E', text: '#FFFFFF' },
     wholeCardTap: artwork && !label && !!link,
     foreground: artwork ? null : p.image_url,
@@ -93,14 +94,8 @@ export function slideLook(p: Promotion): SlideLook {
   };
 }
 
-/** An older API without cta_target: the stored type and value. */
-function fallbackLink(p: Promotion): BandLink | null {
-  const v = p.cta_destination_value;
-  if (p.cta_destination_type === 'CATEGORY' && v) return { kind: 'aisle', slug: v, name: p.title ?? '' };
-  if (p.cta_destination_type === 'PRODUCT' && v) return { kind: 'product', id: v };
-  if (p.cta_destination_type === 'CATALOG') return { kind: 'search' };
-  return null;
-}
+/** Slides worth drawing (an image, or a title over a colour), in carousel order. */
+export const carouselSlides = (rows: readonly Promotion[]): Promotion[] => carouselOrder(visiblePromotions([...rows]));
 
 /** Slides in carousel order: display_order ascending, ties as listed. */
 export function carouselOrder<T extends Pick<Promotion, 'display_order'>>(rows: readonly T[]): T[] {
