@@ -1121,6 +1121,33 @@ export interface PromoBandSetting extends PromoBandFields {
   updated_at: string | null;
 }
 
+/**
+ * Home hero banner (backend modules/configuration/hero-banner.ts,
+ * docs/promo-surfaces.md §3): GET|PATCH /admin/settings/hero-banner.
+ * AUTO = the app's automatic words; CUSTOM = these.
+ */
+export type HeroBannerMode = 'AUTO' | 'CUSTOM';
+export type HeroBannerItem = 'milk' | 'bread' | 'apple' | 'carrot' | 'egg' | 'broccoli' | 'banana';
+export interface HeroBannerFields {
+  mode: HeroBannerMode;
+  title_1: string;
+  title_2: string;
+  /** 1-4 rolling sub-lines; tokens {min_price} and {free_count}. */
+  lines: string[];
+  cta_label: string;
+  /** null = the app's own (scroll down to the aisles). */
+  cta_destination_type: 'CATEGORY' | 'PRODUCT' | 'CATALOG' | null;
+  cta_destination_value: string | null;
+  items: HeroBannerItem[];
+  starts_at: string | null;
+  ends_at: string | null;
+}
+export interface HeroBannerSetting extends HeroBannerFields {
+  cta_target: PromotionTarget | null;
+  status: 'AUTO' | 'LIVE' | 'SCHEDULED' | 'ENDED';
+  updated_at: string | null;
+}
+
 export type PromotionTargetLevel = 'MAIN' | 'CATEGORY' | 'SUB_CATEGORY' | 'PRODUCT' | 'CATALOG';
 
 export interface PromotionTarget {

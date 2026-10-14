@@ -110,6 +110,8 @@ import type {
   VariantDeleteResult,
   PromoBandFields,
   PromoBandSetting,
+  HeroBannerFields,
+  HeroBannerSetting,
 } from './types';
 // Rider documents (owner, 2026-10-10).
 import type {
@@ -1223,6 +1225,12 @@ export const settings = {
     get: () => apiRequest<PromoBandSetting>('/admin/settings/promo-band'),
     update: (body: Partial<PromoBandFields>) =>
       apiRequest<PromoBandSetting>('/admin/settings/promo-band', { method: 'PATCH', body: { ...body } }),
+  },
+  /** Home hero banner (the purple banner at the top of Home): any subset of fields per PATCH. Audited. */
+  heroBanner: {
+    get: () => apiRequest<HeroBannerSetting>('/admin/settings/hero-banner'),
+    update: (body: Partial<HeroBannerFields>) =>
+      apiRequest<HeroBannerSetting>('/admin/settings/hero-banner', { method: 'PATCH', body: { ...body } }),
   },
   doctorsAccess: {
     get: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),

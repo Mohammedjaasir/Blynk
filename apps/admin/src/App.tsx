@@ -21,6 +21,7 @@ import { ProductImport } from './pages/ProductImport';
 import { Products } from './pages/Products';
 import { Promotions } from './pages/Promotions';
 import { PromoBand } from './pages/PromoBand';
+import { HeroBanner } from './pages/HeroBanner';
 import { Sales } from './pages/Sales';
 import { OrderMap } from './pages/OrderMap';
 import { PurchaseList } from './pages/PurchaseList';
@@ -93,6 +94,8 @@ export function AppRoutes() {
         <Route path="promotions" element={<AdminOnly><Promotions /></AdminOnly>} />
         {/* Home promo band (owner, 2026-10-14): the animated band, with a live preview. */}
         <Route path="promo-band" element={<AdminOnly><PromoBand /></AdminOnly>} />
+        {/* Home hero banner: the purple banner at the top of Home, with a live preview. */}
+        <Route path="home-banner" element={<AdminOnly><HeroBanner /></AdminOnly>} />
         <Route path="sales" element={<AdminOnly><Sales /></AdminOnly>} />
         {/* Delivery heat map and purchase list (owner, 2026-10-10). */}
         <Route path="order-map" element={<AdminOnly><OrderMap /></AdminOnly>} />

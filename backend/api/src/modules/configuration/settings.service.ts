@@ -7,6 +7,7 @@ import { STORE_TIMEZONE, displayHours, storeStatusAt } from '../../utils/store-h
 import { storeSchedule } from './store-schedule.js';
 import { doctorsAccess, doctorsShown } from './doctors-access.js';
 import { promoBandService } from './promo-band.js';
+import { heroBannerService } from './hero-banner.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { publicOnlinePayment } from '../payments/gateway-settings.js';
@@ -820,6 +821,9 @@ export class SettingsService {
       // Home promo band (owner, 2026-10-14): set in Admin and Ops; null while
       // it is switched off or outside its schedule (promo-band.ts).
       promo_band: await promoBandService.readPublic(now),
+      // Home hero banner: Admin's / Ops' custom words while live; null = the
+      // app's automatic banner (AUTO, or outside its schedule) (hero-banner.ts).
+      hero_banner: await heroBannerService.readPublic(now),
     };
   }
 }

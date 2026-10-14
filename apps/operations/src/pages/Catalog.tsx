@@ -50,6 +50,8 @@ export function Catalog() {
   const [dentalClinicCount, setDentalClinicCount] = useState<number | null>(null);
   // Home promo band (owner, 2026-10-14): its live / off state, not a count.
   const [bandStatus, setBandStatus] = useState<string | null>(null);
+  // Home hero banner: automatic or custom.
+  const [heroStatus, setHeroStatus] = useState<string | null>(null);
 
   useEffect(() => {
     // `GET /admin/products` has no count and no `total`, so this reads every
@@ -73,6 +75,10 @@ export function Catalog() {
       .get()
       .then((b) => setBandStatus(b.status === 'LIVE' ? 'Live' : b.status === 'OFF' ? 'Off' : b.status === 'SCHEDULED' ? 'Later' : 'Ended'))
       .catch(() => setBandStatus(null));
+    void settings.heroBanner
+      .get()
+      .then((h) => setHeroStatus(h.status === 'AUTO' ? 'Auto' : h.status === 'LIVE' ? 'Custom' : h.status === 'SCHEDULED' ? 'Later' : 'Ended'))
+      .catch(() => setHeroStatus(null));
     void dental.clinics.list().then((rows) => setDentalClinicCount(rows.length)).catch(() => setDentalClinicCount(null));
   }, []);
 
@@ -108,6 +114,12 @@ export function Catalog() {
           <Link className="cat-hub__card" to="/catalog/promo-band">
             <span className="cat-hub__title">Promo band</span>
             <span className="cat-hub__count">{bandStatus ?? '—'}</span>
+          </Link>
+        </li>
+        <li>
+          <Link className="cat-hub__card" to="/catalog/home-banner">
+            <span className="cat-hub__title">Home banner</span>
+            <span className="cat-hub__count">{heroStatus ?? '—'}</span>
           </Link>
         </li>
         <li>

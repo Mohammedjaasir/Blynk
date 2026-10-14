@@ -19,6 +19,7 @@ import {
 } from './store-schedule.js';
 import { doctorsAccessService, updateDoctorsAccessSchema } from './doctors-access.js';
 import { promoBandService, updatePromoBandSchema } from './promo-band.js';
+import { heroBannerService, updateHeroBannerSchema } from './hero-banner.js';
 import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
@@ -339,6 +340,40 @@ adminSettingsRouter.patch(
     try {
       const input = updatePromoBandSchema.parse(req.body);
       res.json({ success: true, data: await promoBandService.set(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Home hero banner: the purple banner at the top of the customer app's Home
+// (saucer, two jumping title words, rolling sub-line, ORDER NOW). AUTO = the
+// app's automatic words (the default); CUSTOM = Admin's / Operations' words,
+// sub-lines with {min_price} / {free_count}, button, items and an optional
+// schedule. Any subset of fields per PATCH; the merged banner is validated as
+// a whole. Audited (HERO_BANNER_UPDATED). Customers read it from GET /store
+// (`hero_banner`). See modules/configuration/hero-banner.ts.
+adminSettingsRouter.get(
+  '/settings/hero-banner',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await heroBannerService.get() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/hero-banner',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateHeroBannerSchema.parse(req.body);
+      res.json({ success: true, data: await heroBannerService.set(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

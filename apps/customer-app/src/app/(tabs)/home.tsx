@@ -303,7 +303,7 @@ export default function Home() {
             <ClosedBanner style={styles.closed} />
             <Animated.View style={[{ overflow: 'hidden' }, bannerA]}>
               {dark && (live
-                ? <Banner images={live.banner.images} minPrice={live.banner.minPrice} freeCount={live.banner.freeCount} onOrderNow={toExplore} />
+                ? <Banner images={live.banner.images} minPrice={live.banner.minPrice} freeCount={live.banner.freeCount} onOrderNow={toExplore} hero={store?.hero_banner} />
                 : <Banner images={[]} minPrice={null} freeCount={0} onOrderNow={toExplore} demo={BANNER} />)}
             </Animated.View>
           </Animated.View>

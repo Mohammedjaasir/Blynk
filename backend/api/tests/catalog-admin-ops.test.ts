@@ -221,8 +221,12 @@ describe('Delivery fee setting and GET /store', () => {
     expect(res.status).toBe(200);
     // Home promo band (owner, 2026-10-14): whatever the stored row says, or
     // null while off - its own contract is tests/promo-band.test.ts.
-    const { promo_band: promoBand, ...facts } = res.body.data;
+    // Home hero banner: null while AUTO (the default), else the custom banner -
+    // its own contract is tests/hero-banner.test.ts.
+    const { promo_band: promoBand, hero_banner: heroBanner, ...facts } = res.body.data;
     expect(promoBand === null || typeof promoBand === 'object').toBe(true);
+    expect('hero_banner' in res.body.data).toBe(true);
+    expect(heroBanner === null || heroBanner.mode === 'CUSTOM').toBe(true);
     expect(facts).toEqual({
       delivery_fee_lkr: expect.any(Number),
       // Per-km tiers (owner, 2026-10-10): FLAT here; the tier table is never public.
