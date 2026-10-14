@@ -1,6 +1,7 @@
 import { ApiError, apiDelete, apiGet, apiPost } from '@/blynk/api/client';
 import type { Combo, Product } from '@/blynk/api/types';
 import { authed, getSession } from '@/blynk/auth/session';
+import { normalizeProductExtras } from './variants';
 
 /*
  * The product page's calls (Flutter ProductProvider.loadProductDetail / setNotifyMe).
@@ -22,7 +23,8 @@ export async function fetchProductDetail(id: string, signal?: AbortSignal): Prom
   const { notify_me_subscribed, ...product } = p;
   const n = (v: unknown) => (typeof v === 'string' ? Number(v) : v);
   return {
-    product: { ...product, selling_price: n(product.selling_price) as number, offer_price: product.offer_price == null ? null : (n(product.offer_price) as number) },
+    // variants, price range and lead time normalised too (migration 045)
+    product: normalizeProductExtras({ ...product, selling_price: n(product.selling_price) as number, offer_price: product.offer_price == null ? null : (n(product.offer_price) as number) }),
     notifyMe: notify_me_subscribed === true,
   };
 }

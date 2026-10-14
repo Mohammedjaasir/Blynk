@@ -97,10 +97,12 @@ export default function OrderStatus() {
         fetchCombos: () => getCombos().then((x) => x.combos ?? []),
         comboQty: (cid) => getCartSnapshot().comboQty[cid] ?? 0,
         addCombo: cartActions.addCombo,
-        addProduct: (p, n) => {
-          const before = getCartSnapshot().qty[p.id] ?? 0;
-          cartActions.setQty(p, before + n);
-          return (getCartSnapshot().qty[p.id] ?? 0) - before;
+        addProduct: (p, n, v) => {
+          // per line: the product, or one size of it (migration 045)
+          const key = v ? `${p.id}:${v.id}` : p.id;
+          const before = getCartSnapshot().lineQty[key] ?? 0;
+          cartActions.setQty(p, before + n, v);
+          return (getCartSnapshot().lineQty[key] ?? 0) - before;
         },
       });
       const m = reorderMessage(r);

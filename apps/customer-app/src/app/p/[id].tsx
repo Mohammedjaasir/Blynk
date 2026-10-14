@@ -6,7 +6,12 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCombos } from '@/blynk/api/catalog';
 import { ApiError } from '@/blynk/api/client';
-import type { Combo, Product } from '@/blynk/api/types';
+import type { Combo, Product, ProductVariant } from '@/blynk/api/types';
+import { lineKey } from '@/blynk/cart/cartStore';
+import { recallDetail, rememberDetail } from '@/blynk/catalog/sizePicker';
+import {
+  deliveredFromText, hasVariants, priceText, selectVariant, VARIANT_COPY, variantOnOffer, variantPrice, variantPriced,
+} from '@/blynk/catalog/variants';
 import { useSession } from '@/blynk/auth/session';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import {
@@ -50,7 +55,9 @@ export default function ProductPage() {
   const [toast, showToast] = useToast();
 
   const listed = useMemo(() => recallProduct(id) ?? data?.products.find((p) => p.id === id) ?? null, [id, data]);
-  const [fresh, setFresh] = useState<Product | null>(null);
+  // a size picker / earlier visit may already hold this product with its sizes
+  const [fresh, setFresh] = useState<Product | null>(() => recallDetail(id));
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [gone, setGone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notify, setNotify] = useState(false);
@@ -62,7 +69,13 @@ export default function ProductPage() {
     if (DEMO || !id) return;
     const n = ++seq.current;
     fetchProductDetail(id)
-      .then((d) => { if (n === seq.current) { setFresh(d.product); setNotify(d.notifyMe); setGone(false); setError(null); } })
+      .then((d) => {
+        if (n !== seq.current) return;
+        setFresh(d.product); setNotify(d.notifyMe); setGone(false); setError(null);
+        // sizes (migration 045): remembered for the size picker, and the cart's size lines refreshed
+        rememberDetail(d.product);
+        cartActions.syncVariants(d.product);
+      })
       .catch((e) => {
         if (n !== seq.current) return;
         if (isProductGone(e)) setGone(true);
@@ -82,6 +95,14 @@ export default function ProductPage() {
 
   const product = gone ? null : fresh ?? listed;
   const showSavings = DEMO || store?.show_offer_savings === true;
+  // sold in sizes: chips pick one; the price, stock and Add are that size's
+  const sized = !!product && hasVariants(product);
+  const variants = product?.variants ?? [];
+  const variant = sized ? selectVariant(variants, pickedId) : null;
+  const priced = variant ? variantPriced(variant) : product;
+  const onOffer = variant ? variantOnOffer(variant) : !!product && isOfferActive(product);
+  const orderable = !!product && product.is_available && (!variant || variant.is_available);
+  const lead = product && !DEMO ? deliveredFromText(product) : null;
 
   const share = async () => {
     if (!product) return;
@@ -151,17 +172,24 @@ export default function ProductPage() {
               <Text style={styles.name} accessibilityRole="header">{product.name}</Text>
               {!!unitLine(product) && <Text style={styles.unit}>{unitLine(product)}</Text>}
 
-              <View style={styles.priceRow}>
-                <Text style={styles.price}>{formatLkr(effectivePrice(product))}</Text>
-                {isOfferActive(product) && showSavings && <Text style={styles.mrp}>{formatLkr(product.selling_price)}</Text>}
-                {isOfferActive(product) && showSavings && savingsPerUnit(product) > 0 && (
-                  <Text style={styles.save}>Save {formatLkr(savingsPerUnit(product))}</Text>
-                )}
-                <Badge tone={product.is_available ? 'positive' : 'neutral'} label={product.is_available ? 'Available' : 'Currently unavailable'} />
-              </View>
-              {isOfferActive(product) && !!product.offer_ends_at && (
-                <Text style={styles.ends}>Offer ends {orderTime(product.offer_ends_at)}</Text>
+              {sized && (
+                <SizeChips variants={variants} selected={variant?.id ?? null} onPick={setPickedId} />
               )}
+
+              <View style={styles.priceRow}>
+                <Text style={styles.price}>
+                  {variant ? formatLkr(variantPrice(variant)) : sized ? priceText(product) : formatLkr(effectivePrice(product))}
+                </Text>
+                {onOffer && showSavings && priced && <Text style={styles.mrp}>{formatLkr(priced.selling_price)}</Text>}
+                {onOffer && showSavings && priced && savingsPerUnit(priced) > 0 && (
+                  <Text style={styles.save}>Save {formatLkr(savingsPerUnit(priced))}</Text>
+                )}
+                <Badge tone={orderable ? 'positive' : 'neutral'} label={orderable ? 'Available' : VARIANT_COPY.soldOut} />
+              </View>
+              {onOffer && !!priced?.offer_ends_at && (
+                <Text style={styles.ends}>Offer ends {orderTime(priced.offer_ends_at)}</Text>
+              )}
+              {!!lead && <Text style={styles.lead}>{lead}</Text>}
 
               {!product.is_available && !DEMO && (
                 <View style={{ marginTop: 16 }}>
@@ -198,7 +226,7 @@ export default function ProductPage() {
             </Animated.View>
           </ScrollView>
 
-          <CtaBar product={product} bottom={insets.bottom} />
+          <CtaBar product={product} sized={sized} variant={variant} bottom={insets.bottom} />
         </>
       )}
       {toast}
@@ -240,26 +268,70 @@ function ComboRow({ combo: c, showSavings }: { combo: Combo; showSavings: boolea
   );
 }
 
-/** The one bottom bar: "n in cart", Add to cart (a − n + stepper once added) and View cart. */
-function CtaBar({ product, bottom }: { product: Product; bottom: number }) {
-  const q = useCartSelect((c) => c.qty[product.id] ?? 0);
+/** The size chips (50 g, 100 g, 250 g...): a sold-out size stays listed, greyed out. */
+function SizeChips({ variants, selected, onPick }: { variants: ProductVariant[]; selected: string | null; onPick: (id: string) => void }) {
+  if (!variants.length) {
+    return (
+      <View style={[styles.chips, { marginTop: 16 }]} accessibilityLabel="Loading sizes">
+        <Skeleton w={64} h={36} r={18} /><Skeleton w={64} h={36} r={18} /><Skeleton w={64} h={36} r={18} />
+      </View>
+    );
+  }
+  return (
+    <View style={{ marginTop: 16 }}>
+      <Text style={styles.chipsTitle}>{VARIANT_COPY.sizes}</Text>
+      <View style={styles.chips} accessibilityRole="radiogroup">
+        {variants.map((v) => {
+          const on = v.id === selected;
+          return (
+            <PressScale key={v.id} onPress={() => onPick(v.id)} scaleTo={0.95}>
+              <View
+                style={[styles.chip, on && styles.chipOn, !v.is_available && styles.chipOut]}
+                accessible
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`${v.label}, ${formatLkr(variantPrice(v))}${v.is_available ? '' : `, ${VARIANT_COPY.soldOut}`}`}
+              >
+                <Text style={[styles.chipLabel, !v.is_available && { color: C.sub }]}>{v.label}</Text>
+                <Text style={[styles.chipPrice, !v.is_available && { color: C.faint }]}>
+                  {v.is_available ? formatLkr(variantPrice(v)) : VARIANT_COPY.soldOut}
+                </Text>
+              </View>
+            </PressScale>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The one bottom bar: "n in cart", Add to cart (a − n + stepper once added) and View cart. For a
+ * product sold in sizes it is the chosen size's line ("Add 100 g to cart", "✓ 2 × 100 g in cart").
+ */
+function CtaBar({ product, sized, variant, bottom }: { product: Product; sized: boolean; variant: ProductVariant | null; bottom: number }) {
+  const key = lineKey(product.id, variant?.id);
+  const q = useCartSelect((c) => (sized && !variant ? 0 : c.lineQty[key] ?? 0));
   const hasCart = useCartSelect((c) => c.count > 0);
+  const soldOut = !product.is_available || (!!variant && !variant.is_available);
   return (
     <View style={[styles.bar, { paddingBottom: bottom + 12 }]}>
-      {q > 0 && <Animated.Text entering={FadeIn.duration(160)} style={styles.inCart}>✓ {q} in cart</Animated.Text>}
+      {q > 0 && <Animated.Text entering={FadeIn.duration(160)} style={styles.inCart}>✓ {variant ? `${q} × ${variant.label}` : q} in cart</Animated.Text>}
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1 }}>
-          {!product.is_available ? (
-            <Button label="Currently unavailable" disabled kind="secondary" />
+          {soldOut ? (
+            <Button label={VARIANT_COPY.soldOut} disabled kind="secondary" />
+          ) : sized && !variant ? (
+            <Button label={VARIANT_COPY.chooseSize} disabled kind="secondary" />
           ) : q === 0 ? (
-            <Button label="Add to cart" onPress={() => cartActions.add(product)} />
+            <Button label={VARIANT_COPY.addToCart(variant?.label ?? null)} onPress={() => cartActions.add(product, variant)} />
           ) : (
             <View style={styles.stepper}>
-              <PressScale onPress={() => cartActions.remove(product.id)} style={styles.stepBtn} haptic>
+              <PressScale onPress={() => cartActions.remove(key)} style={styles.stepBtn} haptic>
                 <Text style={styles.stepTxt} accessibilityLabel="Remove one">−</Text>
               </PressScale>
               <Text style={styles.stepQty}>{q}</Text>
-              <PressScale onPress={() => cartActions.add(product)} style={styles.stepBtn} haptic>
+              <PressScale onPress={() => cartActions.add(product, variant)} style={styles.stepBtn} haptic>
                 <Text style={styles.stepTxt} accessibilityLabel="Add one">+</Text>
               </PressScale>
             </View>
@@ -287,6 +359,14 @@ const styles = StyleSheet.create({
   mrp: { fontFamily: F.regular, fontSize: 15, color: '#9A9AA0', textDecorationLine: 'line-through' },
   save: { fontFamily: F.semi, fontSize: 12.5, color: C.greenDark },
   ends: { fontFamily: F.regular, fontSize: 12.5, color: C.sub, marginTop: 6 },
+  lead: { fontFamily: F.semi, fontSize: 13, color: C.brandText, marginTop: 8 },
+  chipsTitle: { fontFamily: F.semi, fontSize: 13, color: C.sub, marginBottom: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { minWidth: 74, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12, borderWidth: 1.5, borderColor: C.line, backgroundColor: C.white, alignItems: 'center' },
+  chipOn: { borderColor: C.brandDeep, backgroundColor: C.brandTint },
+  chipOut: { backgroundColor: C.bg, borderStyle: 'dashed' },
+  chipLabel: { fontFamily: F.bold, fontSize: 14, color: C.ink },
+  chipPrice: { fontFamily: F.regular, fontSize: 11.5, color: C.text, marginTop: 1 },
   hint: { fontFamily: F.regular, fontSize: 12, color: C.sub, marginTop: 6 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
   section: { fontFamily: F.bold, fontSize: 16, color: C.ink },

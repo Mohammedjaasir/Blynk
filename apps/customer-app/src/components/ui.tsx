@@ -16,6 +16,9 @@ import Animated, {
 import { withSpring } from '@/lib/motion';
 import Svg, { Circle, Defs, Path, Text as SvgText, TextPath } from 'react-native-svg';
 import { cartActions, useCartSelect } from '@/lib/cart';
+import { keyOf } from '@/blynk/cart/cartStore';
+import { openSizePicker } from '@/blynk/catalog/sizePicker';
+import { hasVariants } from '@/blynk/catalog/variants';
 import { flip, startClocks, sway } from '@/lib/clock';
 import type { Product } from '@/blynk/api/types';
 import { formatLkr } from '@/blynk/lib/money';
@@ -201,11 +204,24 @@ export function PriceTicker({ product, showSavings, forceSave }: { product: Prod
   );
 }
 
-/* ---------- "+"  →  "− 1 +" stepper (width springs open) ---------- */
+/*
+ * ---------- "+"  →  "− 1 +" stepper (width springs open) ----------
+ * A product sold in sizes (has_variants, migration 045) never adds straight away: "+" opens the
+ * size picker. Its count is all sizes together; "−" takes one off when only one size is in the
+ * cart, else it opens the picker too (the customer says which size).
+ */
 export function AddButton({ product, compact, big }: { product: Product; compact?: boolean; big?: boolean }) {
   const id = product.id;
   const q = useCartSelect((c) => c.qty[id] ?? 0);
-  const { add, remove } = cartActions;
+  const sized = hasVariants(product);
+  const sizeKeys = useCartSelect((c) => (sized ? c.lines.filter((l) => l.product.id === id).map(keyOf).join('|') : ''));
+  const add = (p: Product) => (sized ? openSizePicker(p) : cartActions.add(p));
+  const remove = (key: string) => {
+    if (!sized) return cartActions.remove(key);
+    const keys = sizeKeys ? sizeKeys.split('|') : [];
+    if (keys.length === 1) cartActions.remove(keys[0]);
+    else openSizePicker(product);
+  };
   const open = useSharedValue(q > 0 ? 1 : 0);
   const pop = useSharedValue(1);
   const fill = useSharedValue(q > 0 ? 1 : 0);

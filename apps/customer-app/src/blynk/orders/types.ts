@@ -41,6 +41,20 @@ export interface CheckoutInfo {
     enabled: boolean; balance: number; value_lkr: number; earn_points?: number; earn_per_lkr?: number;
     lkr_per_point?: number; min_redeem_points?: number; max_redeem_percent?: number; [k: string]: unknown;
   };
+  /**
+   * Migration 045: with ?product_ids= the cart's longest delivery lead time and its first
+   * delivery day. asap_allowed false = the customer must pick a slot on/after that day.
+   */
+  delivery_lead?: DeliveryLead;
+}
+
+export interface DeliveryLead {
+  lead_days: number;
+  /** YYYY-MM-DD (Asia/Colombo). */
+  earliest_delivery_date: string | null;
+  /** "Fri 16 Oct". */
+  earliest_delivery_label: string | null;
+  asap_allowed: boolean;
 }
 
 /** POST /orders/validate-coupon data.coupon. */
@@ -67,6 +81,9 @@ export interface OrderItem {
   subtotal: number;
   item_status: string;
   order_combo_id?: string | null;
+  /** Migration 045: the size ordered and its label ("100 g"); null for a product without sizes. */
+  variant_id?: string | null;
+  variant_label_snapshot?: string | null;
 }
 
 /** One combo pack line of an order (order_combos; its items carry order_combo_id). */
@@ -140,7 +157,8 @@ export interface OrderList {
 /** The POST /orders body this app sends (a subset of createOrderSchema). */
 export interface PlaceOrderBody {
   address_id: string;
-  items: { product_id: string; quantity: number }[];
+  /** variant_id (migration 045): the size picked; required for a product with variants. */
+  items: { product_id: string; variant_id?: string; quantity: number }[];
   /** Combo packs (migration 033): the server charges the combo price. */
   combos?: { combo_id: string; quantity: number }[];
   idempotency_key: string;

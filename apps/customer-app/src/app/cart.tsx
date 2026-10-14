@@ -12,7 +12,12 @@ import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import { getCombos } from '@/blynk/api/catalog';
 import type { Product } from '@/blynk/api/types';
-import type { ComboLine } from '@/blynk/cart/cartStore';
+import { keyOf, lineAvailable, lineKey, linePriced, lineUnitPrice, needsVariant, type CartLine, type ComboLine } from '@/blynk/cart/cartStore';
+import { fetchProductDetail } from '@/blynk/catalog/product';
+import { openSizePicker, rememberDetail } from '@/blynk/catalog/sizePicker';
+import { hasVariants, priceText, VARIANT_COPY } from '@/blynk/catalog/variants';
+import { LeadTimeCard } from '@/blynk/checkout/LeadTimeCard';
+import { canOrderWithLead, cartLead, cartProductIds, LEAD_COPY, leadState, slotsFromLead } from '@/blynk/checkout/leadTime';
 import { requestOtp } from '@/blynk/auth/api';
 import { setPendingOtp } from '@/blynk/auth/flow';
 import { authErrorText } from '@/blynk/auth/forms';
@@ -26,13 +31,13 @@ import { couponAppliedNote, couponErrorText, couponInputError, discountLabel, no
 import { BirthdayBanner, DeliveryDetailsCard, RewardsCard, SlotPickerCard } from '@/blynk/checkout/CheckoutSections';
 import { detailsBody, detailsProblem, EMPTY_DETAILS, type CheckoutDetails } from '@/blynk/checkout/details';
 import { birthdayOf, canRedeem, pointsOf, referralOf } from '@/blynk/checkout/rewards';
-import { availableSlot, canOrderNow, SLOT_COPY, slotForOrder, type DeliverySlots } from '@/blynk/checkout/slots';
+import { availableSlot, SLOT_COPY, slotForOrder, type DeliverySlots } from '@/blynk/checkout/slots';
 import { getCheckoutInfo, getDeliverySlots, placeOrder, previewCoupon } from '@/blynk/orders/api';
 import {
   basketProgress, basketPrompt, checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, freeDeliveryNote, orderCombos, orderItems,
   rememberPlaced, type CheckoutBill,
 } from '@/blynk/orders/checkout';
-import { OUTSIDE_AREA, placeErrorCopy, refusedProduct, type PlaceErrorCopy } from '@/blynk/orders/errors';
+import { OUTSIDE_AREA, placeErrorCopy, refusedProduct, stockRefusal, stockRefusalNote, type PlaceErrorCopy } from '@/blynk/orders/errors';
 import type { CheckoutInfo, CouponPreview } from '@/blynk/orders/types';
 import { formatLkr } from '@/blynk/lib/money';
 import { requestPushPermission } from '@/blynk/push';
@@ -47,7 +52,7 @@ import { BILL, COPY, MEAL_PICKS, rupee } from '@/demo/cart';
 import { LIVE, liveBill, liveOfferRows, type LiveBill } from '@/demo/cartLive';
 import { DEMO } from '@/demo/mode';
 import { withSpring } from '@/lib/motion';
-import { cartActions, useCart, useCartSelect } from '@/lib/cart';
+import { cartActions, getCartSnapshot, useCart, useCartSelect } from '@/lib/cart';
 import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 
@@ -129,6 +134,10 @@ export default function Cart() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsTick, setSlotsTick] = useState(0);
   const [pickedRaw, setPickedSlot] = useState<string | null>(null);
+  // delivery lead time (migration 045): the cart's products go with the slots / checkout-info calls
+  const productIds = cartProductIds(lines, cart.combos);
+  const idsKey = productIds.join(',');
+  const cartLeadNow = cartLead(lines, cart.combos);
   const [quote, setQuote] = useState<CheckoutInfo | null>(null);
   const [quoteFailed, setQuoteFailed] = useState(false);
   const [quoteTick, setQuoteTick] = useState(0);
@@ -144,23 +153,26 @@ export default function Cart() {
   const forOthers = quoteFor?.order_for_someone_else;
   const allowForOthers = forOthers?.enabled === true;
   const storeOpen = !closedNow;
-  // slots are asked for once the store says they are on, or while closed (a slot may still be booked)
-  const slotsWanted = !DEMO && !!addrId && (store?.delivery_slots_enabled === true || closedNow);
-  const slotsOn = slots?.enabled === true;
+  // slots are asked for once the store says they are on, while closed (a slot may still be booked),
+  // or when the cart holds an item with a lead time (it can only go in a slot)
+  const slotsWanted = !DEMO && !!addrId && (store?.delivery_slots_enabled === true || closedNow || cartLeadNow.days > 0);
+  const lead = leadState({ cart: cartLeadNow, slots, quote: quoteFor });
+  const shownSlots = slotsFromLead(slots, lead);
+  const slotsOn = shownSlots?.enabled === true;
   // a picked slot that filled up (or is no longer offered) is dropped: the customer picks again
-  const pickedSlot = pickedRaw && slots && !availableSlot(slots, pickedRaw) ? null : pickedRaw;
-  const orderable = canOrderNow({ storeOpen, slots: slotsOn ? slots : null, picked: pickedSlot });
+  const pickedSlot = pickedRaw && shownSlots && !availableSlot(shownSlots, pickedRaw) ? null : pickedRaw;
+  const orderable = canOrderWithLead({ storeOpen, slots: slotsOn ? shownSlots : null, picked: pickedSlot, lead });
 
   useEffect(() => {
     if (!slotsWanted) return;
     const ctrl = new AbortController();
     void Promise.resolve().then(() => { if (!ctrl.signal.aborted) setSlotsLoading(true); });
-    getDeliverySlots(ctrl.signal)
+    getDeliverySlots(ctrl.signal, productIds)
       .then((s) => { setSlots(s); setSlotsFailed(false); })
       .catch(() => { if (!ctrl.signal.aborted) setSlotsFailed(true); })
       .finally(() => { if (!ctrl.signal.aborted) setSlotsLoading(false); });
     return () => ctrl.abort();
-  }, [slotsWanted, slotsTick]);
+  }, [slotsWanted, slotsTick, idsKey]);
 
 
   // the fee for the chosen address and this basket (refetched when either changes)
@@ -169,7 +181,7 @@ export default function Cart() {
     const ctrl = new AbortController();
     const t = setTimeout(() => {
       setQuoteFailed(false);
-      getCheckoutInfo(addrId, total, ctrl.signal)
+      getCheckoutInfo(addrId, total, ctrl.signal, productIds)
         .then((q) => setQuote(q))
         .catch((e) => {
           if (ctrl.signal.aborted) return;
@@ -217,7 +229,7 @@ export default function Cart() {
       return;
     }
     const more = detailsBody(details, allowForOthers);
-    const slotStart = slotsOn ? slotForOrder(slots, pickedSlot) : undefined;
+    const slotStart = slotsOn ? slotForOrder(shownSlots, pickedSlot) : undefined;
     // the switch shows only while points can be used; the server decides how many
     const pointsOn = usePoints && canRedeem(pointsOf(quoteFor));
     const extra = {
@@ -251,7 +263,18 @@ export default function Cart() {
     } catch (e) {
       const copy = placeErrorCopy(e);
       const gone = refusedProduct(e);
-      setPlaceErr(gone?.name ? { ...copy, message: `${gone.name} isn't available right now. Remove it and try again.` } : copy);
+      // sold out / only N left / a size (migration 045): the cart follows the refusal at once
+      const refusal = stockRefusal(e);
+      if (refusal) {
+        cartActions.applyRefusal(refusal);
+        // the message stays with the updated cart (a changed basket clears an old refusal)
+        const after = getCartSnapshot();
+        const sigAfter = checkoutSignature({ items: orderItems(after.lines), combos: orderCombos(after.combos), addressId: '' });
+        setPlaceErrState({ copy: { ...copy, message: `${copy.message} ${stockRefusalNote(refusal)}` }, for: `${addrId}|${sigAfter}` });
+      } else {
+        setPlaceErr(gone?.name ? { ...copy, message: `${gone.name} isn't available right now. Remove it and try again.` } : copy);
+      }
+      if (copy.action === 'stock') { void refresh(); refreshCombos(); }
       // fresh prices and availability: the catalogue reconciles the cart lines
       if (copy.action === 'reconcile') { void refresh(); refreshCombos(); }
       if (copy.action === 'coupon') { setCoupon(null); setCouponErr(couponErrorText(e)); }
@@ -273,6 +296,8 @@ export default function Cart() {
     }
     // live: fresh prices and availability for what is in the cart (the catalogue reconciles the cart)
     if (lines.length) void refresh().then((ok) => setRefreshFailed(!ok));
+    // size lines: each product's sizes re-read for their own price and stock (the list has none)
+    refreshVariantLines(lines);
     if (cart.combos.length) refreshCombos();
     return () => clearTimeout(a);
   }, []);
@@ -347,7 +372,7 @@ export default function Cart() {
           <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, styles.itemsCard]}>
             {/* combo packs first (Flutter _CartComboList), each with what is inside */}
             {!DEMO && cart.combos.map((l) => <ComboCartLine key={`combo-${l.combo.id}`} line={l} />)}
-            {lines.map(({ product: p, quantity }) => (DEMO ? (
+            {lines.map(({ product: p, quantity, variant }) => (DEMO ? (
               <Animated.View key={p.id} exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={styles.itemRow}>
                 <VegMark size={11} color={C.veg} />
                 <Text style={styles.itemName} numberOfLines={1}>{p.name}</Text>
@@ -358,7 +383,7 @@ export default function Cart() {
                 </View>
               </Animated.View>
             ) : (
-              <LiveLine key={p.id} product={p} qty={quantity} showSavings={store?.show_offer_savings === true} />
+              <LiveLine key={lineKey(p.id, variant?.id)} line={{ product: p, quantity, variant }} showSavings={store?.show_offer_savings === true} />
             )))}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={{ marginTop: 9 }}>
               <PressScale onPress={goBack} style={styles.chip}>
@@ -411,16 +436,21 @@ export default function Cart() {
           </Animated.View>
         )}
 
+        {/* delivery lead time: which item needs days, its first delivery day (or that slots are off) */}
+        {!DEMO && checkout && <LeadTimeCard lead={lead} />}
+
         {/* delivery time: only while staff have slots on (GET /orders/slots) */}
         {!DEMO && checkout && slotsWanted && (
           <SlotPickerCard
-            slots={slots}
+            slots={shownSlots}
             failed={slotsFailed}
             loading={slotsLoading}
             storeOpen={storeOpen}
             picked={pickedSlot}
             onPick={setPickedSlot}
             onRetry={() => setSlotsTick((n) => n + 1)}
+            asapAllowed={lead.asapAllowed}
+            note={lead.days > 0 ? LEAD_COPY.slotNote(lead.dateLabel) : null}
           />
         )}
 
@@ -531,7 +561,9 @@ export default function Cart() {
             onRetryQuote={() => setQuoteTick((n) => n + 1)}
             closedNow={closedNow}
             orderable={orderable}
-            closedHint={!closedNow || !slotsOn ? null : pickedSlot ? SLOT_COPY.slotPickedHint : SLOT_COPY.pickSlotHint}
+            closedHint={lead.days > 0 && !lead.blocked ? (pickedSlot ? SLOT_COPY.slotPickedHint : LEAD_COPY.pickSlot(lead.dateLabel))
+              : !closedNow || !slotsOn ? null : pickedSlot ? SLOT_COPY.slotPickedHint : SLOT_COPY.pickSlotHint}
+            blockedLabel={lead.blocked ? LEAD_COPY.blockedCta : lead.days > 0 ? LEAD_COPY.pickCta : null}
             canOrder={hasLines}
             placing={placing}
             error={placeErr}
@@ -582,13 +614,15 @@ export default function Cart() {
 /* ------------------------------------------------------------------ */
 
 /** Black-outlined "−  1  +" pill used on the cart lines (60 × 26). */
-function Stepper({ product, qty }: { product: Product; qty: number }) {
+function Stepper({ product, qty, variant }: { product: Product; qty: number; variant?: CartLine['variant'] }) {
   const { add, remove } = cartActions;
+  // a size line steps that size only
+  const key = keyOf({ product, variant });
   return (
     <View style={styles.stepper}>
-      <Pressable hitSlop={6} onPress={() => { tap(); remove(product.id); }} style={styles.stepBtn}><Text style={styles.stepSign}>-</Text></Pressable>
+      <Pressable hitSlop={6} onPress={() => { tap(); remove(key); }} style={styles.stepBtn}><Text style={styles.stepSign}>-</Text></Pressable>
       <Animated.Text key={qty} entering={FadeIn.duration(150)} style={styles.stepQty}>{qty}</Animated.Text>
-      <Pressable hitSlop={6} onPress={() => { tap(); add(product); }} style={styles.stepBtn}><Text style={styles.stepSign}>+</Text></Pressable>
+      <Pressable hitSlop={6} onPress={() => { tap(); add(product, variant); }} style={styles.stepBtn}><Text style={styles.stepSign}>+</Text></Pressable>
     </View>
   );
 }
@@ -705,7 +739,7 @@ function MealCard({ ready }: { ready: boolean }) {
 function MealAdd({ product }: { product: Product }) {
   const q = useCartSelect((c) => c.qty[product.id] ?? 0);
   return (
-    <PressScale haptic onPress={() => cartActions.add(product)} style={[styles.mealPlus, q > 0 && { backgroundColor: C.brand, borderColor: C.brandDeep }]} scaleTo={0.85}>
+    <PressScale haptic onPress={() => (hasVariants(product) ? openSizePicker(product) : cartActions.add(product))} style={[styles.mealPlus, q > 0 && { backgroundColor: C.brand, borderColor: C.brandDeep }]} scaleTo={0.85}>
       <Text style={[styles.mealPlusTxt, q > 0 && { color: C.brandInk, fontSize: 11 }]}>{q > 0 ? q : '+'}</Text>
     </PressScale>
   );
@@ -745,28 +779,46 @@ function HurrayModal({ onClose, sub }: { onClose: () => void; sub: string }) {
 
 /* ---------- live mode (DEMO=false) pieces ---------- */
 
-/** One cart line at Blynk's effective LKR price; an unavailable line is flagged with a Remove button. */
-function LiveLine({ product: p, qty, showSavings }: { product: Product; qty: number; showSavings: boolean }) {
+/**
+ * One cart line at Blynk's effective LKR price (a size at its own price, its label under the
+ * name); an unavailable line ("Sold out", or a size to pick again) is flagged with a Remove button.
+ */
+function LiveLine({ line, showSavings }: { line: CartLine; showSavings: boolean }) {
+  const { product: p, quantity: qty, variant } = line;
+  const ok = lineAvailable(line);
+  const priced = linePriced(line);
   // the struck regular price shows only while Admin's show_offer_savings is on
-  const offer = showSavings && p.is_available && isOfferActive(p);
+  const offer = showSavings && ok && isOfferActive(priced);
+  const why = needsVariant(line) ? VARIANT_COPY.pickSizeAgain : variant || p.is_available === false ? VARIANT_COPY.soldOut : LIVE.unavailable;
   return (
-    <Animated.View exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={styles.itemRow}>
-      <ProductImage product={p} size={30} radius={6} style={!p.is_available && { opacity: 0.45 }} />
+    <Animated.View exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={[styles.itemRow, variant && { height: undefined, minHeight: 50, paddingVertical: 6 }]}>
+      <ProductImage product={p} size={30} radius={6} style={!ok && { opacity: 0.45 }} />
       <View style={{ flex: 1, marginLeft: 6 }}>
-        <Text style={[styles.itemName, { marginLeft: 0 }, !p.is_available && { color: '#8A8A90' }]} numberOfLines={1}>{p.name}</Text>
-        {!p.is_available && <Text style={styles.unavail}>{LIVE.unavailable}</Text>}
+        <Text style={[styles.itemName, { marginLeft: 0 }, !ok && { color: '#8A8A90' }]} numberOfLines={1}>{p.name}</Text>
+        {!!variant && <Text style={styles.variantLabel} numberOfLines={1}>{variant.label}</Text>}
+        {!ok && <Text style={styles.unavail}>{why}</Text>}
       </View>
-      {p.is_available ? (
-        <Stepper product={p} qty={qty} />
+      {ok ? (
+        <Stepper product={p} qty={qty} variant={variant} />
       ) : (
-        <PressScale onPress={() => cartActions.setQty(p, 0)} style={styles.removeBtn}><Text style={styles.removeTxt}>{LIVE.remove}</Text></PressScale>
+        <PressScale onPress={() => cartActions.setQty(p, 0, variant)} style={styles.removeBtn}><Text style={styles.removeTxt}>{LIVE.remove}</Text></PressScale>
       )}
       <View style={[styles.priceCol, { width: 78 }]}>
-        {offer && <Text style={styles.itemStrike}>{formatLkr(round2(p.selling_price * qty))}</Text>}
-        {p.is_available && <Text style={[styles.itemPrice, { fontSize: 13 }]}>{formatLkr(round2(effectivePrice(p) * qty))}</Text>}
+        {offer && <Text style={styles.itemStrike}>{formatLkr(round2(priced.selling_price * qty))}</Text>}
+        {ok && <Text style={[styles.itemPrice, { fontSize: 13 }]}>{formatLkr(round2(lineUnitPrice(line) * qty))}</Text>}
       </View>
     </Animated.View>
   );
+}
+
+/** The cart's size lines: each of those products re-read (GET /catalog/products/:id) for its sizes' price and stock. */
+function refreshVariantLines(lines: CartLine[]) {
+  const ids = [...new Set(lines.filter((l) => l.variant && !l.product.id.startsWith('demo-')).map((l) => l.product.id))].slice(0, 20);
+  for (const id of ids) {
+    fetchProductDetail(id)
+      .then((d) => { rememberDetail(d.product); cartActions.syncVariants(d.product); })
+      .catch(() => undefined);
+  }
 }
 
 /** Fresh combo packs (GET /combos) for the combo lines in the cart: price, items, sold out. */
@@ -826,7 +878,7 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
               <Skeleton w={69} h={64} r={8} />
             )}
             <Text style={[styles.mealName, { marginTop: 5 }]} numberOfLines={2}>{p.name}</Text>
-            <Text style={[styles.mealPrice, isOfferActive(p) && { color: C.brandText }]}>{formatLkr(effectivePrice(p))}</Text>
+            <Text style={[styles.mealPrice, isOfferActive(p) && { color: C.brandText }]} numberOfLines={1}>{hasVariants(p) ? priceText(p, { compact: true }) : formatLkr(effectivePrice(p))}</Text>
           </View>
         ))}
       </View>
@@ -992,12 +1044,14 @@ function CouponCard({ coupon, error, onApply, onRemove }: {
  * The signed-in bottom panel: where the order goes (the address book's chosen address, with
  * Change), then "Place order" for the server-quoted total. Refusals show here with their copy.
  */
-function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow, orderable, closedHint, canOrder, placing, error, onPlace }: {
+function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow, orderable, closedHint, blockedLabel, canOrder, placing, error, onPlace }: {
   loc: DeliveryLocation; checkout: CheckoutBill | null; quoteFailed: boolean; onRetryQuote: () => void; closedNow: boolean;
   /** Open for ASAP, or a picked delivery slot with room (a closed store can still take a slot). */
   orderable: boolean;
   /** While closed with slots on: "Pick a delivery time above…" / "We'll deliver at the time you picked." */
   closedHint: string | null;
+  /** The button's words while the cart can't go now for a lead time (pick a slot / remove the item). */
+  blockedLabel?: string | null;
   canOrder: boolean; placing: boolean; error: PlaceErrorCopy | null; onPlace: () => void;
 }) {
   const a = loc.address;
@@ -1034,7 +1088,7 @@ function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow
   }
   const toPay = checkout?.toPay ?? null;
   const disabled = !canOrder || !orderable || placing || toPay === null;
-  const label = !orderable ? (closedNow && closedHint ? 'Pick a delivery time' : LIVE.closedCta)
+  const label = !orderable ? (blockedLabel ?? (closedNow && closedHint ? 'Pick a delivery time' : LIVE.closedCta))
     : placing ? 'Placing your order…'
       : toPay === null ? (quoteFailed ? 'Delivery fee unavailable' : 'Getting the delivery fee…')
         : `Place order  |  ${formatLkr(toPay)}`;
@@ -1322,6 +1376,7 @@ const styles = StyleSheet.create({
   warn: { fontFamily: F.medium, fontSize: 12, color: C.problem, marginHorizontal: 23, marginBottom: 10 },
   comboInside: { fontFamily: F.regular, fontSize: 11, color: '#8A8A90', marginTop: 1, lineHeight: 14 },
   unavail: { fontFamily: F.semi, fontSize: 11, color: C.problem, marginTop: 1 },
+  variantLabel: { fontFamily: F.medium, fontSize: 11.5, color: C.sub, marginTop: 1 },
   removeBtn: { height: 26, paddingHorizontal: 10, borderRadius: 13, borderWidth: 1.2, borderColor: C.problem, justifyContent: 'center' },
   removeTxt: { fontFamily: F.semi, fontSize: 11.5, color: C.problem },
   errBox: { backgroundColor: '#FDF1EF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14, borderWidth: 1, borderColor: '#F3D2CC' },

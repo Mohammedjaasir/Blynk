@@ -41,17 +41,36 @@ export function parseOrder(raw: Order): Order {
 
 export function parseCheckoutInfo(raw: CheckoutInfo): CheckoutInfo {
   const dist = raw.delivery_distance_km;
+  const lead = raw.delivery_lead;
   return {
     ...raw,
     delivery_fee_lkr: n(raw.delivery_fee_lkr),
     standard_delivery_fee_lkr: n(raw.standard_delivery_fee_lkr),
     delivery_distance_km: dist === null || dist === undefined ? null : n(dist),
+    ...(lead && typeof lead === 'object' ? {
+      delivery_lead: {
+        lead_days: Math.max(0, Math.floor(n(lead.lead_days))),
+        earliest_delivery_date: typeof lead.earliest_delivery_date === 'string' ? lead.earliest_delivery_date : null,
+        earliest_delivery_label: typeof lead.earliest_delivery_label === 'string' ? lead.earliest_delivery_label : null,
+        asap_allowed: lead.asap_allowed !== false,
+      },
+    } : {}),
   };
 }
 
-/** GET /orders/checkout-info: the fee for this address (and, with the subtotal, the basket free delivery). */
-export async function getCheckoutInfo(addressId: string, subtotal: number, signal?: AbortSignal): Promise<CheckoutInfo> {
-  const q = `address_id=${encodeURIComponent(addressId)}&subtotal=${Math.max(0, Math.round(subtotal * 100) / 100)}`;
+/** `product_ids=a,b,c` (migration 045: the server works out the cart's longest lead time); '' for none. */
+export function productIdsQuery(ids: readonly string[] | undefined): string {
+  const list = [...new Set((ids ?? []).filter((id) => !!id && !id.startsWith('demo-')))].slice(0, 100);
+  return list.length ? `product_ids=${list.map(encodeURIComponent).join(',')}` : '';
+}
+
+/**
+ * GET /orders/checkout-info: the fee for this address (and, with the subtotal, the basket free
+ * delivery; with the cart's product ids, its delivery lead time).
+ */
+export async function getCheckoutInfo(addressId: string, subtotal: number, signal?: AbortSignal, productIds?: readonly string[]): Promise<CheckoutInfo> {
+  const ids = productIdsQuery(productIds);
+  const q = `address_id=${encodeURIComponent(addressId)}&subtotal=${Math.max(0, Math.round(subtotal * 100) / 100)}${ids ? `&${ids}` : ''}`;
   return parseCheckoutInfo(await authed((t) => apiGet<CheckoutInfo>(`/orders/checkout-info?${q}`, t, signal)));
 }
 
@@ -64,9 +83,13 @@ export async function previewCoupon(
   return coupon;
 }
 
-/** GET /orders/slots: scheduled delivery on/off, whether ASAP is allowed now, and the windows with room. */
-export async function getDeliverySlots(signal?: AbortSignal): Promise<DeliverySlots> {
-  const raw = await authed((t) => apiGet<unknown>('/orders/slots', t, signal));
+/**
+ * GET /orders/slots: scheduled delivery on/off, whether ASAP is allowed now, and the windows with
+ * room. With the cart's product ids the server applies its longest lead time (migration 045).
+ */
+export async function getDeliverySlots(signal?: AbortSignal, productIds?: readonly string[]): Promise<DeliverySlots> {
+  const ids = productIdsQuery(productIds);
+  const raw = await authed((t) => apiGet<unknown>(`/orders/slots${ids ? `?${ids}` : ''}`, t, signal));
   const parsed = parseSlots(raw);
   if (!parsed) throw new ApiError("We couldn't load delivery times.", 500, 'BAD_SLOTS');
   return parsed;

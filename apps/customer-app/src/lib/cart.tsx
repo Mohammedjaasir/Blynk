@@ -1,16 +1,20 @@
 import { ReactNode, useSyncExternalStore } from 'react';
 import type { Combo, Product } from '@/blynk/api/types';
 import {
-  comboQuantityOf, itemCount, loadCart, quantityOf, reconcile, reconcileCombos, regularTotal, saveCart, setComboQuantity, setQuantity,
-  subtotal, type CartLine, type CartState, type ComboLine,
+  applyRefusal, comboQuantityOf, itemCount, keyOf, lineAvailable, lineQuantityOf, loadCart, reconcile, reconcileCombos, reconcileVariants,
+  regularTotal, saveCart, setComboQuantity, setQuantity, subtotal, type CartLine, type CartState, type CartVariant, type ComboLine,
+  type LineRefusal,
 } from '@/blynk/cart/cartStore';
 
 type Address = { title: string; line: string };
 
 type Snapshot = {
-  /** Cart lines keyed by Blynk product id, with enough product data to render (and persist). */
+  /** Cart lines keyed by product (+ size), with enough product data to render (and persist). */
   lines: CartLine[];
+  /** Units per product id, all its sizes together (a card's "in cart"). */
   qty: Record<string, number>;
+  /** Units per line key (`lineKey(productId, variantId)`): one size of a product. */
+  lineQty: Record<string, number>;
   /** Combo pack lines (owner, 2026-10-09), in the order they were first added. */
   combos: ComboLine[];
   /** Packs per combo id. */
@@ -28,21 +32,26 @@ type Snapshot = {
   address: Address | null;
 };
 
-function derive(state: CartState): Pick<Snapshot, 'lines' | 'qty' | 'combos' | 'comboQty' | 'count' | 'total' | 'mrpTotal' | 'unavailable'> {
+function derive(state: CartState): Pick<Snapshot, 'lines' | 'qty' | 'lineQty' | 'combos' | 'comboQty' | 'count' | 'total' | 'mrpTotal' | 'unavailable'> {
   const qty: Record<string, number> = {};
-  for (const l of state.lines) qty[l.product.id] = l.quantity;
+  const lineQty: Record<string, number> = {};
+  for (const l of state.lines) {
+    qty[l.product.id] = (qty[l.product.id] ?? 0) + l.quantity;
+    lineQty[keyOf(l)] = l.quantity;
+  }
   const combos = state.combos ?? [];
   const comboQty: Record<string, number> = {};
   for (const l of combos) comboQty[l.combo.id] = l.quantity;
   return {
     lines: state.lines,
     qty,
+    lineQty,
     combos,
     comboQty,
     count: itemCount(state),
     total: subtotal(state),
     mrpTotal: regularTotal(state),
-    unavailable: state.lines.filter((l) => !l.product.is_available).length + combos.filter((l) => !l.combo.is_available).length,
+    unavailable: state.lines.filter((l) => !lineAvailable(l)).length + combos.filter((l) => !l.combo.is_available).length,
   };
 }
 
@@ -74,12 +83,25 @@ export const getCartSnapshot = () => snap;
 const state = (): CartState => ({ lines: snap.lines, combos: snap.combos });
 
 export const cartActions = {
-  add: (p: Product) => setLines(setQuantity(state(), p, quantityOf(state(), p.id) + 1)),
-  remove: (id: string) => {
-    const line = snap.lines.find((l) => l.product.id === id);
-    if (line) setLines(setQuantity(state(), line.product, line.quantity - 1));
+  /** One more of a product, or of one size of it (`v`). */
+  add: (p: Product, v?: CartVariant | null) => setLines(setQuantity(state(), p, lineQuantityOf(state(), keyOf({ product: p, variant: v })) + 1, v)),
+  /** One less of a line: `key` is the product id, or `lineKey(productId, variantId)` for a size. */
+  remove: (key: string) => {
+    const line = snap.lines.find((l) => keyOf(l) === key);
+    if (line) setLines(setQuantity(state(), line.product, line.quantity - 1, line.variant));
   },
-  setQty: (p: Product, n: number) => setLines(setQuantity(state(), p, n)),
+  setQty: (p: Product, n: number, v?: CartVariant | null) => setLines(setQuantity(state(), p, n, v)),
+  /** A product page / size picker answer: fresh prices and stock for that product's size lines. */
+  syncVariants: (p: Product) => {
+    if (!snap.lines.some((l) => l.product.id === p.id)) return;
+    const next = reconcileVariants(state(), p);
+    if (next.lines !== snap.lines) setLines(next);
+  },
+  /** POST /orders refused a line (sold out, only N left, size needed): the cart follows. */
+  applyRefusal: (r: LineRefusal) => {
+    const next = applyRefusal(state(), r);
+    if (next.lines !== snap.lines) setLines(next);
+  },
   /** One more pack of a combo (at most 20 packs, 20 different combos); the snapshot becomes `c`. */
   addCombo: (c: Combo) => setLines(setComboQuantity(state(), c, comboQuantityOf(state(), c.id) + 1)),
   removeCombo: (c: Combo) => setLines(setComboQuantity(state(), c, comboQuantityOf(state(), c.id) - 1)),
