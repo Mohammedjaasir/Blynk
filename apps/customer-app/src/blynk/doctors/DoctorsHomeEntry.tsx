@@ -5,11 +5,14 @@ import { useStore } from '@/blynk/store/StoreContext';
 import { ChevronIcon } from '@/components/icons';
 import { PressScale } from '@/components/ui';
 import { C, F } from '@/lib/theme';
+import { doctorsVisible } from './access';
 import { ToothGlyph } from './glyphs';
 
-/** Home's "Channel doctors" row (Flutter DentalHomeEntry): opens the clinic list. */
+/** Home's "Channel doctors" row (Flutter DentalHomeEntry): opens the clinic list. Hidden while GET /store says doctors_enabled false. */
 export function DoctorsHomeEntry({ style }: { style?: StyleProp<ViewStyle> }) {
-  const town = townFromHub(useStore()?.hub_name);
+  const store = useStore();
+  const town = townFromHub(store?.hub_name);
+  if (!doctorsVisible(store)) return null;
   return (
     <PressScale onPress={() => router.push('/doctors')} scaleTo={0.98} style={style}>
       <View

@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
@@ -8,6 +8,8 @@ import { getProducts } from '@/blynk/api/catalog';
 import { ApiError } from '@/blynk/api/client';
 import type { Product } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
+import { categoriesHref, categoryHref } from '@/blynk/catalog/tree';
+import { CATEGORIES } from '@/blynk/ui/strings';
 import {
   addRecentSearch, clearRecentSearches, loadRecentSearches, normalizeSearch, saveRecentSearches, SEARCH_MAX,
 } from '@/blynk/catalog/recentSearches';
@@ -191,7 +193,8 @@ export default function Search() {
                 <>
                   <Text style={[styles.h2, { marginTop: recent.length ? 22 : 0, marginBottom: 10 }]}>Browse categories</Text>
                   <View style={styles.wrap}>
-                    {aisles.map((a) => <Chip key={a.id} label={a.name} onPress={() => openAisle(a)} />)}
+                    {aisles.map((a) => <Chip key={a.id} label={a.name} onPress={() => (DEMO ? openAisle(a) : router.push(categoryHref(a.slug)))} />)}
+                    {!DEMO && <Chip label={CATEGORIES.allCategories} onPress={() => router.push(categoriesHref())} />}
                   </View>
                 </>
               )}

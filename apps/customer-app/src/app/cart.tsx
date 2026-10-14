@@ -26,6 +26,10 @@ import { couponAppliedNote, couponErrorText, couponInputError, discountLabel, no
 import { BirthdayBanner, DeliveryDetailsCard, RewardsCard, SlotPickerCard } from '@/blynk/checkout/CheckoutSections';
 import { detailsBody, detailsProblem, EMPTY_DETAILS, type CheckoutDetails } from '@/blynk/checkout/details';
 import { birthdayOf, canRedeem, pointsOf, referralOf } from '@/blynk/checkout/rewards';
+import { savingsHeader } from '@/blynk/checkout/savings';
+import { CLEAR_CART } from '@/blynk/ui/strings';
+import { accountStyles as A, Button as SheetButton, Sheet } from '@/blynk/account/ui';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { availableSlot, canOrderNow, SLOT_COPY, slotForOrder, type DeliverySlots } from '@/blynk/checkout/slots';
 import { getCheckoutInfo, getDeliverySlots, placeOrder, previewCoupon } from '@/blynk/orders/api';
 import {
@@ -107,6 +111,7 @@ export default function Cart() {
   const [instr, setInstr] = useState(false);
   const [veil, setVeil] = useState(false);
   const [notice, setNotice] = useState(0);
+  const [confirmClear, setConfirmClear] = useState(false);
   const prevPhone = useRef(phone);
 
   /* ---- live checkout (signed in): address, quote, coupon, place order ---- */
@@ -337,6 +342,7 @@ export default function Cart() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + FEE.contentTop, paddingBottom: 200 + bottomPad }}
       >
+        {!DEMO && <OfflineBanner onRetry={() => void refresh()} style={{ marginHorizontal: 15, marginBottom: 15 }} />}
         {!DEMO && <ClosedBanner style={{ marginHorizontal: 15, marginBottom: 15 }} />}
         {!DEMO && refreshFailed && <Text style={styles.warn}>{LIVE.refreshFailed}</Text>}
         {/* the birthday gift, while the server says it applies (signed in, with an address) */}
@@ -508,7 +514,11 @@ export default function Cart() {
         backRow={(
           <View style={styles.backRow}>
             <PressScale onPress={goBack} style={{ padding: 2 }}><BackIcon size={20} color={TEXT} stroke={1.8} /></PressScale>
-            <Text style={styles.backTitle} numberOfLines={1}>{DEMO ? COPY.storeName : LIVE.storeTitle(store)}</Text>
+            <Text style={[styles.backTitle, { flex: 1 }]} numberOfLines={1}>{DEMO ? COPY.storeName : LIVE.storeTitle(store)}</Text>
+            {/* Clear cart (Flutter ClearCartSheet): in the header, asks first */}
+            <Pressable onPress={() => setConfirmClear(true)} hitSlop={8} accessibilityRole="button" style={styles.clearBtn}>
+              <Text style={styles.clearTxt}>{CLEAR_CART.button}</Text>
+            </Pressable>
           </View>
         )}
       />
@@ -575,6 +585,16 @@ export default function Cart() {
 
       {hurray && <HurrayModal onClose={closeHurray} sub={DEMO ? COPY.hurraySub : LIVE.hurraySub(live.freeCount)} />}
       {login && <LoginSheet onClose={() => setLogin(false)} />}
+      {confirmClear && (
+        <Sheet label={CLEAR_CART.title} onClose={() => setConfirmClear(false)}>
+          <Text style={A.sheetTitle}>{CLEAR_CART.title}</Text>
+          <Text style={A.body}>{CLEAR_CART.message}</Text>
+          <View style={A.pair}>
+            <SheetButton label={CLEAR_CART.cancel} kind="secondary" onPress={() => setConfirmClear(false)} style={{ flex: 1 }} />
+            <SheetButton label={CLEAR_CART.confirm} kind="danger" onPress={() => { setConfirmClear(false); cartActions.clear(); }} style={{ flex: 1 }} />
+          </View>
+        </Sheet>
+      )}
     </View>
   );
 }
@@ -850,7 +870,10 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount }
   const free = quoted ? checkout!.freeReason !== null : bill.freeCount > 0;
   const toPay = quoted ? (checkout!.toPay as number) : bill.toPay;
   const feeKnown = quoted || bill.feeKnown;
-  const toPayRegular = round2(toPay + bill.saved);
+  // the header counts every saving: offer prices (while shown), the coupon / birthday / referral discount and points
+  const head = savingsHeader({
+    offerSaved: bill.saved, showOfferSavings: bill.showSaved, discount: checkout?.discount ?? 0, pointsValue: checkout?.points.value ?? 0, toPay,
+  });
   const distance = quoted && checkout!.distanceKm != null ? ` · ${checkout!.distanceEstimated ? '~' : ''}${checkout!.distanceKm.toFixed(1)} km` : '';
   const feeRight = !checkout ? (
     <Text style={[styles.billR, free && { color: C.brandText }]}>{bill.feeText}</Text>
@@ -877,10 +900,10 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount }
         <View style={styles.sq}><ReceiptGlyph /></View>
         <View>
           <Text style={styles.payLine}>
-            To Pay {bill.showSaved && <Text style={styles.payStrike}>{formatLkr(toPayRegular)} </Text>}{formatLkr(toPay)}
+            To Pay {head.show && <Text style={styles.payStrike}>{formatLkr(head.before)} </Text>}{formatLkr(toPay)}
           </Text>
-          <Text style={[styles.savedTxt, !bill.showSaved && { color: '#6E6E76' }]}>
-            {bill.showSaved ? `${formatLkr(bill.saved)} saved on the total!` : feeKnown ? 'Includes the delivery fee' : 'Delivery fee confirmed at checkout'}
+          <Text style={[styles.savedTxt, !head.show && { color: '#6E6E76' }]}>
+            {head.show ? `${formatLkr(head.saved)} saved on the total!` : feeKnown ? 'Includes the delivery fee' : 'Delivery fee confirmed at checkout'}
           </Text>
         </View>
       </View>
@@ -1220,6 +1243,8 @@ const ReceiptGlyph = () => (
 const styles = StyleSheet.create({
   backRow: { flexDirection: 'row', alignItems: 'center', height: 38, paddingLeft: 14, gap: 11 },
   backTitle: { fontFamily: F.regular, color: '#6E6E76', fontSize: 12 },
+  clearBtn: { paddingHorizontal: 14, height: 38, justifyContent: 'center' },
+  clearTxt: { fontFamily: F.semi, color: C.problem, fontSize: 12.5 },
   card: { backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 15, marginHorizontal: 15, marginBottom: 15 },
   itemsCard: { paddingTop: 8, paddingBottom: 14, paddingHorizontal: 0, overflow: 'hidden' },
   itemRow: { flexDirection: 'row', alignItems: 'center', height: 47, paddingLeft: 15, paddingRight: 15 },

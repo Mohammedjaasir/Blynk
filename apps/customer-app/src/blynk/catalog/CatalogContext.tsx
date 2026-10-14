@@ -2,11 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { cartActions } from '@/lib/cart';
 import { getCategories, getHomeGroups, getPromotions } from '../api/catalog';
 import { ApiError } from '../api/client';
-import type { Category, Product, Promotion } from '../api/types';
+import type { Category, HomeGroup, Product, Promotion } from '../api/types';
 import { ancestorsOf, topLevelOf } from '../lib/categories';
 import { startCatalogLive } from '../lib/catalogLive';
 import { loadAllProducts } from '../lib/loadAllProducts';
 import { effectivePrice } from '../lib/pricing';
+import { buildCategoryTree, type MainNode } from './tree';
 import { appHidden } from '../lib/visibility';
 import { DEMO } from '@/demo/mode';
 
@@ -17,6 +18,10 @@ export interface CatalogData {
   /** Every category (sub-categories included). */
   categories: Category[];
   promotions: Promotion[];
+  /** GET /catalog/home-groups as sent: the Mains with their top-level category tiles. */
+  groups: HomeGroup[];
+  /** Main -> Category -> Sub-category (docs/api/catalog-tools.md), for Home and the categories screen. */
+  tree: MainNode[];
   /** Any category id -> its top-level aisle id. */
   topOf: (id: string) => string;
   /** Any category id -> its chain up to the top level, nearest first. */
@@ -33,7 +38,10 @@ async function loadAll(): Promise<CatalogData> {
   const aisles: Category[] = groups.flatMap((g) => g.categories);
   // Home groups list top-level categories only; products can sit in a child category, so roll them up.
   const categories = all.length ? all : aisles;
-  return { products, aisles, categories, promotions, topOf: topLevelOf(categories), chainOf: ancestorsOf(categories) };
+  return {
+    products, aisles, categories, promotions, groups, tree: buildCategoryTree(groups, categories),
+    topOf: topLevelOf(categories), chainOf: ancestorsOf(categories),
+  };
 }
 
 interface CatalogApi {

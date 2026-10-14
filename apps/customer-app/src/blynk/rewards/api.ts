@@ -6,6 +6,7 @@ import {
   parseBirthdayOffer, parsePoints, parseReferral, REFERRAL_NOT_A_CODE, referralAppliedText,
   type BirthdayOffer, type PointsInfo, type ReferralInfo,
 } from './models';
+import { parseUsuals, type Usuals } from './usuals';
 
 /* Signed-in reward calls (Bearer; authed() refreshes once on a 401). */
 
@@ -99,4 +100,13 @@ export async function applyPendingReferral(apply: (code: string) => Promise<Appl
   } finally {
     syncing = false;
   }
+}
+
+// ---------------------------------------------------------------- your usuals
+
+/** GET /me/usuals (signed in): the last not-cancelled order's products at today's prices. */
+export async function fetchUsuals(signal?: AbortSignal): Promise<Usuals> {
+  const u = parseUsuals(await authed((t) => apiGet<unknown>('/me/usuals', t, signal)));
+  if (!u) throw new ApiError('Usuals were not returned by the server.', 500);
+  return u;
 }

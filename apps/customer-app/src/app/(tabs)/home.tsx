@@ -9,6 +9,7 @@ import Animated, {
   withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomInset } from '@/lib/tabs';
 import Svg, { Path } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useHomeLocation } from '@/blynk/address/homeLocation';
@@ -27,6 +28,10 @@ import {
 } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
 import { DoctorsHomeEntry } from '@/blynk/doctors/DoctorsHomeEntry';
+import { HomeCategoryGroups } from '@/blynk/catalog/HomeCategoryGroups';
+import { PromoCarousel } from '@/blynk/catalog/PromoCarousel';
+import { UsualsRow } from '@/blynk/rewards/UsualsRow';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { ComboRail } from '@/blynk/combos/ComboViews';
 import { BirthdayOfferBanner } from '@/blynk/rewards/BirthdayOfferBanner';
 import { SPLASH_LOGO, SPLASH_LOGO_H, SPLASH_LOGO_W } from '@/lib/splash';
@@ -48,7 +53,7 @@ import { openAisle } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 
 /** Blynk's rider illustration: the promo band's waving mascot (owner: illustrated, not a photo). */
-const RIDER = require('../../assets/rider.png');
+const RIDER = require('../../../assets/rider.png');
 
 /*
  * Home, matched frame by frame to the reference recording (0:04–0:31). All content is the
@@ -88,7 +93,9 @@ let fromSplash = true;
 
 export default function Home() {
   const insets = useSafeAreaInsets();
-  const { height: screenH } = useWindowDimensions();
+  // inside the tabs the tab bar keeps clear of the home indicator
+  const bottomInset = useBottomInset();
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const [timedPhase, setPhase] = useState<Phase>('locating');
   // live: where to deliver (header row, first-launch sheet); a spot chosen earlier keeps the sheet closed
   const here = useHomeLocation(useStore());
@@ -108,7 +115,8 @@ export default function Home() {
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const y = useSharedValue(0);
   const headerH = useSharedValue(400);
-  const catH = useSharedValue(TILE_H + 16);
+  // live: the Mains are sections in the feed (HomeCategoryGroups), so there is no sticky rail
+  const catH = useSharedValue(DEMO ? TILE_H + 16 : 0);
   const chipsY = useSharedValue(99999);
   const exploreY = useSharedValue(0);
   const feedY = useSharedValue(0);
@@ -313,7 +321,7 @@ export default function Home() {
           {/* 1 — sticky: categories (+ filter chips once the inline row scrolls under) */}
           {/* plain View: RN's sticky-header wrapper copies & freezes this child's style, so no animated styles here */}
           <View>
-            {!loading && (
+            {!loading && DEMO && (
               <Animated.View style={[styles.sticky, stickyShadow]}>
                 <View onLayout={(e) => catH.set(e.nativeEvent.layout.height)}>
                   <CategoryRail key={granted ? 'post' : 'pre'} items={cats} value={cat} onChange={setCat} stuck={stuckCats} />
@@ -330,6 +338,14 @@ export default function Home() {
               <FeedSkeleton />
             ) : (
               <Animated.View key={granted ? 'post' : 'pre'} entering={FadeIn.duration(260)}>
+                {/* live, in the Flutter home's order: connection notice, birthday gift, promotions, your usuals,
+                    Channel doctors, then every Main as a section of category tiles with "All categories" */}
+                {!DEMO && <OfflineBanner onRetry={() => void refresh()} style={{ marginHorizontal: 15, marginTop: 12 }} />}
+                {!DEMO && <BirthdayOfferBanner style={{ marginHorizontal: 15, marginTop: 12 }} />}
+                {!DEMO && !!data && <PromoCarousel promotions={data.promotions} width={screenW} />}
+                {!DEMO && <UsualsRow />}
+                {!DEMO && <DoctorsHomeEntry style={{ marginHorizontal: 15, marginTop: 18 }} />}
+                {!DEMO && !!data && <HomeCategoryGroups tree={data.tree} width={screenW} />}
                 {meals.length > 0 && (
                   <>
                     <View style={styles.sectionHead}>
@@ -347,13 +363,6 @@ export default function Home() {
                   </>
                 )}
 
-                {/* live: the birthday gift (only while it applies) and Channel doctors (Flutter home) */}
-                {!DEMO && (
-                  <View style={{ paddingHorizontal: 15, marginTop: 16, gap: 10 }}>
-                    <BirthdayOfferBanner />
-                    <DoctorsHomeEntry />
-                  </View>
-                )}
                 {/* live: Combo packs (Flutter home combo rail; GET /combos, nothing until one is live) */}
                 {!DEMO && <ComboRail style={{ marginTop: 20 }} />}
 
@@ -405,7 +414,7 @@ export default function Home() {
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }, scrimA]} />
 
       {/* floating "Search" pill */}
-      <Animated.View pointerEvents="box-none" style={[styles.pillWrap, { bottom: insets.bottom + 17 + (count > 0 ? CART_BAR.h + CART_BAR.bottom : 0) }, pillA]}>
+      <Animated.View pointerEvents="box-none" style={[styles.pillWrap, { bottom: bottomInset + 17 + (count > 0 ? CART_BAR.h + CART_BAR.bottom : 0) }, pillA]}>
         <PressScale onPress={() => router.push('/search')} style={styles.pill} haptic>
           <SearchIcon size={14} color="#fff" stroke={2.4} />
           <Text style={styles.pillTxt}>Search</Text>
@@ -414,7 +423,7 @@ export default function Home() {
 
       {/* fee strip (after location is granted) */}
       <Animated.View style={[styles.feeStripWrap, stripA]} pointerEvents="none">
-        <LinearGradient colors={[C.brand, C.brandDeep]} style={[styles.feeStrip, { paddingBottom: insets.bottom + 27 }]}>
+        <LinearGradient colors={[C.brand, C.brandDeep]} style={[styles.feeStrip, { paddingBottom: bottomInset + 27 }]}>
           {fees.map(([c, l]) => (
             <View key={l} style={styles.fee}>
               <View style={styles.coin}><Text style={styles.coinTxt}>{c}</Text></View>
@@ -428,7 +437,7 @@ export default function Home() {
 
       {/* location permission bar */}
       {!granted && (
-        <Animated.View exiting={SlideOutDown.duration(300)} style={[styles.locSheet, { paddingBottom: insets.bottom }]}>
+        <Animated.View exiting={SlideOutDown.duration(300)} style={[styles.locSheet, { paddingBottom: bottomInset }]}>
           <View style={styles.locDark}>
             <View style={{ flex: 1 }}>
               <View style={styles.locTitleRow}>
