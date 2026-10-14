@@ -108,6 +108,8 @@ import type {
   SetStockResult,
   StaffVariant,
   VariantDeleteResult,
+  PromoBandFields,
+  PromoBandSetting,
 } from './types';
 // Rider documents (owner, 2026-10-10).
 import type {
@@ -1215,6 +1217,12 @@ export const settings = {
     get: () => apiRequest<AppShareLinks>('/admin/settings/app-share-links'),
     update: (body: { app: 'ops' | 'rider'; enabled: boolean; hours?: number }) =>
       apiRequest<AppShareLinks>('/admin/settings/app-share-links', { method: 'PATCH', body }),
+  },
+  /** Home promo band (owner, 2026-10-14): any subset of fields per PATCH. Audited. */
+  promoBand: {
+    get: () => apiRequest<PromoBandSetting>('/admin/settings/promo-band'),
+    update: (body: Partial<PromoBandFields>) =>
+      apiRequest<PromoBandSetting>('/admin/settings/promo-band', { method: 'PATCH', body: { ...body } }),
   },
   doctorsAccess: {
     get: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),

@@ -90,6 +90,7 @@ describe('Admin app access', () => {
       'Combo packs',
       'Purchase list',
       'Promotions',
+      'Promo band',
       'Coupons',
       'Referrals',
       'Customers',

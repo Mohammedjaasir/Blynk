@@ -27,6 +27,7 @@ import {
   BagBadge, CheckBoxIcon, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
+import { PromoBand } from '@/components/PromoBand';
 import { DoctorsHomeEntry } from '@/blynk/doctors/DoctorsHomeEntry';
 import { HomeCategoryGroups } from '@/blynk/catalog/HomeCategoryGroups';
 import { PromoCarousel } from '@/blynk/catalog/PromoCarousel';
@@ -51,9 +52,6 @@ import { withSpring } from '@/lib/motion';
 import { useCartSelect } from '@/lib/cart';
 import { openAisle } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
-
-/** Blynk's rider illustration: the promo band's waving mascot (owner: illustrated, not a photo). */
-const RIDER = require('../../../assets/rider.png');
 
 /*
  * Home, matched frame by frame to the reference recording (0:04–0:31). All content is the
@@ -811,38 +809,7 @@ const AisleCard = memo(function AisleCard({ aisle: a, freeStamp, promo }: {
   );
 });
 
-/** Yellow band with scalloped edges: the reference's "Offline Menu Price Match / ₹0 fees" (live: Blynk's own). */
-function PromoBand({ live }: { live?: { line1: string | null; fees: string[] } }) {
-  const band = live ?? PROMO;
-  const w = useSharedValue(0);
-  useEffect(() => {
-    w.value = withRepeat(withSequence(withTiming(1, { duration: 220 }), withTiming(-1, { duration: 220 }), withTiming(1, { duration: 220 }), withTiming(0, { duration: 220 }), withTiming(0, { duration: 1400 })), -1);
-  }, []);
-  const a = useAnimatedStyle(() => ({ transform: [{ rotate: `${w.value * 10}deg` }] }));
-  return (
-    <View style={{ marginTop: 2, marginBottom: 22 }}>
-      <Wave color={C.brand} />
-      <LinearGradient colors={[C.brand, C.brandDeep]} style={styles.promo}>
-        {!!band.line1 && (
-          <View style={[styles.promoRow, { marginBottom: 9 }]}>
-            <CheckBoxIcon size={14} color={C.brandInk} />
-            <Text style={styles.promoTxt}>{band.line1}</Text>
-          </View>
-        )}
-        <View style={styles.promoRow}>
-          {band.fees.map((f) => (
-            <View key={f} style={[styles.promoRow, { marginRight: 12 }]}>
-              <CheckBoxIcon size={14} color={C.brandInk} />
-              <Text style={styles.promoTxt}>{f}</Text>
-            </View>
-          ))}
-        </View>
-        <Animated.Image source={RIDER} resizeMode="contain" style={[styles.mascot, a]} />
-      </LinearGradient>
-      <Wave color={C.brandDeep} flip />
-    </View>
-  );
-}
+/* The yellow promo band lives in src/components/PromoBand.tsx (Admin / Ops edit it; docs/promo-surfaces.md). */
 
 /** Live: a category or product photo, or its initial while it is missing or fails to load. */
 function Photo({ uri, name, size }: { uri: string | null; name: string; size: number }) {

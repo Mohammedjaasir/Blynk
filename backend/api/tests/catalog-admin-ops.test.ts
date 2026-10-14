@@ -219,7 +219,11 @@ describe('Delivery fee setting and GET /store', () => {
   it('GET /store is public and reports real store facts', async () => {
     const res = await request(app).get('/api/v1/store');
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({
+    // Home promo band (owner, 2026-10-14): whatever the stored row says, or
+    // null while off - its own contract is tests/promo-band.test.ts.
+    const { promo_band: promoBand, ...facts } = res.body.data;
+    expect(promoBand === null || typeof promoBand === 'object').toBe(true);
+    expect(facts).toEqual({
       delivery_fee_lkr: expect.any(Number),
       // Per-km tiers (owner, 2026-10-10): FLAT here; the tier table is never public.
       delivery_fee_mode: 'FLAT',
@@ -227,6 +231,8 @@ describe('Delivery fee setting and GET /store', () => {
       hub_name: expect.any(String),
       delivery_hours: { start: '08:00', end: '21:00', timezone: 'Asia/Colombo' },
       radius_km: expect.any(Number),
+      // The delivery-area map's centre (customer app, 2026-10-14): the active store's location.
+      store_location: { lat: expect.any(Number), lng: expect.any(Number) },
       coupons_enabled: expect.any(Boolean),
       new_customer_free_deliveries: { enabled: expect.any(Boolean), count: expect.any(Number), since: expect.any(String) },
       show_offer_savings: expect.any(Boolean),

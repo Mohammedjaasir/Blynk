@@ -6,6 +6,7 @@ import { DateTime } from 'luxon';
 import { STORE_TIMEZONE, displayHours, storeStatusAt } from '../../utils/store-hours.js';
 import { storeSchedule } from './store-schedule.js';
 import { doctorsAccess, doctorsShown } from './doctors-access.js';
+import { promoBandService } from './promo-band.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { publicOnlinePayment } from '../payments/gateway-settings.js';
@@ -816,6 +817,9 @@ export class SettingsService {
       doctors_enabled: doctorsShown(doctors),
       // PayHere (migration 047; owner, 2026-10-14): whether "Pay online" is offered.
       online_payment: await publicOnlinePayment(),
+      // Home promo band (owner, 2026-10-14): set in Admin and Ops; null while
+      // it is switched off or outside its schedule (promo-band.ts).
+      promo_band: await promoBandService.readPublic(now),
     };
   }
 }

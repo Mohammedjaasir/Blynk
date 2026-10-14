@@ -92,4 +92,24 @@ export interface StoreInfo {
   doctors_require_sign_in: boolean;
   /** Doctor channelling shown to customers (2026-10-14). false: hide the doctors section. Absent on an older backend. */
   doctors_enabled?: boolean;
+  /**
+   * Home promo band, set in Admin and Ops (docs/promo-surfaces.md). null = hidden (off or
+   * outside its schedule); missing (an older API) = the band's built-in look.
+   */
+  promo_band?: PublicPromoBand | null;
+}
+
+/** Where a promo surface goes when tapped: the same resolved target a promotion carries. */
+export type PromoTarget = PromotionTarget;
+
+/** GET /store `promo_band`: the band as the app should draw it now. */
+export interface PublicPromoBand {
+  lines: string[];
+  ticks: string[];
+  background: string;
+  colors: { start: string; end: string; text: string };
+  item: { kind: 'NONE' | 'ILLUSTRATED' | 'IMAGE'; illustration: string | null; image_url: string | null };
+  mascot: 'WAVE' | 'RIDE' | 'OFF';
+  cta_target: PromoTarget | null;
+  ends_at: string | null;
 }

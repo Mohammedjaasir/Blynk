@@ -11,6 +11,9 @@ import {
 import { ImageUploader } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { PromotionPreview } from '../../components/PromotionPreview';
+import { PromoCarouselPreview } from '../../components/PromoCarouselPreview';
+import { carouselWithDraft } from '../../lib/promoCarousel';
+import { Link } from 'react-router-dom';
 import { Badge, ConfirmDialog, EmptyState, Field, Spinner } from '../../components/ui';
 import {
   MAX_PROMOTION_ORDER,
@@ -108,9 +111,15 @@ export function Promotions() {
         title="Home promotions"
         description="Active promotions appear in the customer Home carousel, in this order."
         actions={
-          <button type="button" className="button" onClick={() => setEditing('new')}>
-            Add promotion
-          </button>
+          <>
+            {/* The animated band after the third aisle (owner, 2026-10-14). */}
+            <Link to="/catalog/promo-band" className="button button--ghost">
+              Edit promo band
+            </Link>
+            <button type="button" className="button" onClick={() => setEditing('new')}>
+              Add promotion
+            </button>
+          </>
         }
       />
 
@@ -199,6 +208,7 @@ export function Promotions() {
       {editing ? (
         <PromotionDialog
           promotion={editing === 'new' ? null : editing}
+          allRows={rows ?? []}
           categories={categories}
           groups={groups}
           onClose={() => setEditing(null)}
@@ -229,9 +239,15 @@ export function Promotions() {
  * draft preview above (which renders local, unsaved form state). Real data
  * only: if the call fails, the strip is simply omitted rather than showing
  * a stale or fabricated view (common.md rule 7).
+ *
+ * 2026-10-14 (owner: "make sure promotional banner edit option like this
+ * animation in the ops and admin"): the cards are still listed, and "Watch
+ * the carousel" plays them in a phone at the app's real size, moving exactly
+ * as the new customer app's carousel moves (docs/promo-surfaces.md).
  */
 function LivePreviewStrip() {
   const [live, setLive] = useState<Promotion[] | null>(null);
+  const [watching, setWatching] = useState(false);
 
   useEffect(() => {
     void catalog.promotions
@@ -245,6 +261,19 @@ function LivePreviewStrip() {
   return (
     <section className="promo-live" aria-label="What customers see now">
       <h2 className="section-label">What customers see now</h2>
+      <button
+        type="button"
+        className="button button--ghost button--sm"
+        aria-expanded={watching}
+        onClick={() => setWatching((w) => !w)}
+      >
+        {watching ? 'Hide carousel preview' : 'Watch the carousel'}
+      </button>
+      {watching ? (
+        <div className="carousel-strip">
+          <PromoCarouselPreview promotions={live} label="The Home carousel, as customers see it" />
+        </div>
+      ) : null}
       <div className="promo-live__row">
         {live.map((promotion) => (
           <div key={promotion.id} className="promo-live__item">
@@ -270,12 +299,15 @@ const EMPTY_BACKGROUND: BackgroundValue = {
 
 function PromotionDialog({
   promotion,
+  allRows,
   categories,
   groups,
   onClose,
   onSaved,
 }: {
   promotion: Promotion | null;
+  /** Every promotion, for the whole-carousel preview. */
+  allRows: Promotion[];
   categories: Category[];
   groups: CategoryGroup[];
   onClose(): void;
@@ -313,6 +345,8 @@ function PromotionDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
+  // Live preview: this slide on its own, or in its place in the carousel.
+  const [previewAll, setPreviewAll] = useState(false);
 
   const isArtwork = background.background_type === 'ARTWORK';
 
@@ -555,7 +589,31 @@ function PromotionDialog({
 
         <section className="editor__section">
           <h3 className="editor__legend">Customer preview</h3>
-          <PromotionPreview promotion={draft} />
+          <div className="preview-controls" role="group" aria-label="Preview">
+            <button
+              type="button"
+              className="button button--ghost button--sm"
+              aria-pressed={!previewAll}
+              onClick={() => setPreviewAll(false)}
+            >
+              This slide
+            </button>
+            <button
+              type="button"
+              className="button button--ghost button--sm"
+              aria-pressed={previewAll}
+              onClick={() => setPreviewAll(true)}
+            >
+              Whole carousel
+            </button>
+          </div>
+          {/* Plays in the app's phone size, moving as the carousel moves; updates as you type. */}
+          <PromoCarouselPreview
+            promotions={previewAll ? carouselWithDraft(allRows, draft) : [draft]}
+            focusId={draft.id}
+            loopSingle={!previewAll}
+            label="This promotion in the customer app"
+          />
         </section>
 
         <section className="editor__section">
@@ -612,7 +670,7 @@ function initialTargetKind(promotion: Promotion | null): TargetKind {
  * after typing) and pick one. Switched-off products are listed too - a
  * banner can be prepared before the product goes live.
  */
-function TargetProductPicker({
+export function TargetProductPicker({
   selectedId,
   selectedName,
   onPick,

@@ -80,13 +80,14 @@ describe('ARTWORK promotions', () => {
     const dialog = screen.getByRole('dialog', { name: 'Promotion' });
     expect(within(dialog).getByRole('button', { name: 'Designed banner (full picture)' })).toHaveAttribute('aria-pressed', 'true');
 
-    // The preview draws the banner full-bleed at its focal point, with no headline over it.
-    const preview = dialog.querySelector('.promo-preview[data-background="artwork"]') as HTMLElement;
+    // The live carousel preview (owner, 2026-10-14) draws the banner full-bleed
+    // at its focal point, with no headline over it.
+    const preview = dialog.querySelector('.pc-bg[data-background="artwork"]') as HTMLElement;
     expect(preview).not.toBeNull();
     expect(preview.style.backgroundImage).toContain(ARTWORK_URL);
     expect(preview.style.backgroundImage).not.toContain('gradient');
     expect(preview.style.backgroundPosition).toBe('50% 20%');
-    expect(within(preview).queryByText('Avurudu sale')).toBeNull();
+    expect(within(dialog.querySelector('.pc-card') as HTMLElement).queryByText('Avurudu sale')).toBeNull();
 
     // A destination with no button label is fine for ARTWORK.
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
