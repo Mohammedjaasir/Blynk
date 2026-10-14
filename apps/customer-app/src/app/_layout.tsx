@@ -17,6 +17,7 @@ import { installConnectivity } from '@/blynk/lib/connectivity';
 import { ShareStartup } from '@/blynk/share/ShareStartup';
 import { StoreProvider } from '@/blynk/store/StoreContext';
 import { SizePickerHost } from '@/components/SizePicker';
+import { SplashHandoverHost } from '@/components/SplashHandover';
 import { ConfigProblemScreen } from '@/components/ConfigProblem';
 import { DEMO } from '@/demo/mode';
 import { CartProvider } from '@/lib/cart';
@@ -81,6 +82,8 @@ function AppShell() {
               <ShareStartup />
               {/* the size picker for products sold in sizes (migration 045) */}
               <SizePickerHost />
+              {/* the launch intro's exit, over the whole window and everything in it (src/lib/splash.ts) */}
+              <SplashHandoverHost />
             </CatalogProvider>
           </StoreProvider>
         </CartProvider>

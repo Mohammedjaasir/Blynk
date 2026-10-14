@@ -35,7 +35,7 @@ import { UsualsRow } from '@/blynk/rewards/UsualsRow';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { ComboRail } from '@/blynk/combos/ComboViews';
 import { BirthdayOfferBanner } from '@/blynk/rewards/BirthdayOfferBanner';
-import { SPLASH_LOGO, SPLASH_LOGO_H, SPLASH_LOGO_W } from '@/lib/splash';
+import { splashHandover } from '@/lib/splash';
 import { PressScale, RollingText, Skeleton, StampBadge } from '@/components/ui';
 import {
   BANNER, CATEGORIES, CATEGORIES_PRE, FEES, FILTERS, LOCATION, LOCATION_SHEET, MEALS, MEALS_PRE, PROMO_AFTER,
@@ -57,7 +57,7 @@ import { C, F } from '@/lib/theme';
  * Home, matched frame by frame to the reference recording (0:04–0:31). All content is the
  * video's own (src/demo/home.ts); colours follow Blynk's mapping (purple → ink, pink → Blynk yellow).
  *
- *   0:04.5  splash yellow fades off while the page rises into place, header WHITE, "Locating …"
+ *   0:04.5  the intro's white cover lifts off (SplashHandoverHost) while the page rises into place, header WHITE, "Locating …"
  *   0:05.1  location name rolls in     0:05.5  skeleton → content     0:05.7  ink header + banner unfold
  *   pre-grant: 60 % black scrim + black "Location Permission is Off" bar
  *   GRANT   bar slides away, page reloads the same way, then the yellow fee strip rises
@@ -86,9 +86,6 @@ const BANNER_H = 183;
 
 type Phase = 'locating' | 'skeleton' | 'content' | 'banner';
 
-/** The splash hands over to Home once per app launch. */
-let fromSplash = true;
-
 export default function Home() {
   const insets = useSafeAreaInsets();
   // inside the tabs the tab bar keeps clear of the home indicator
@@ -104,6 +101,8 @@ export default function Home() {
   const [chipsOn, setChipsOn] = useState(false);
   const count = useCartSelect((c) => c.count);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // opened by the intro: the page rises into place while the intro's cover lifts away above it
+  const [fromSplash] = useState(splashHandover.homeRisePending);
   const { data, error, refresh } = useCatalog();
   const store = useStore();
   // live: hold the skeleton until the catalogue is in (demo content is always there)
@@ -126,7 +125,6 @@ export default function Home() {
   const ink = useSharedValue(0); // header white → ink
   const bannerOpen = useSharedValue(0);
   const scrim = useSharedValue(granted ? 0 : 1);
-  const splash = useSharedValue(fromSplash ? 1 : 0);
   const rise = useSharedValue(fromSplash ? 1 : 0);
 
   const loading = phase === 'locating' || phase === 'skeleton';
@@ -143,10 +141,10 @@ export default function Home() {
   };
 
   useEffect(() => {
+    // the intro's cover (SplashHandoverHost, over the whole window) lifts away now
+    splashHandover.release();
     if (fromSplash) {
-      fromSplash = false;
-      // the remaining 38 % of the original 1.1 s sequence, ease-in cubic
-      splash.set(withTiming(0, { duration: 420, easing: Easing.in(Easing.cubic) }));
+      splashHandover.clearHomeRise();
       rise.set(withTiming(0, { duration: 340, easing: Easing.out(Easing.cubic) }));
     }
     load({ name: 550, content: 950, banner: 1170 });
@@ -219,12 +217,6 @@ export default function Home() {
   const stripA = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - strip.value * (1 - cartOn.value)) * 130 }] }));
   const pillA = useAnimatedStyle(() => ({ opacity: pill.value, transform: [{ translateY: (1 - pill.value) * 80 }, { scale: 0.8 + pill.value * 0.2 }] }));
   const scrimA = useAnimatedStyle(() => ({ opacity: scrim.value * 0.6 }));
-  const splashA = useAnimatedStyle(() => ({ opacity: splash.value }));
-  // the original's exit curve: lift 28, grow 6 % on top of the 5 % breath, fade out
-  const splashLogoA = useAnimatedStyle(() => {
-    const exit = 1 - splash.value;
-    return { opacity: splash.value, transform: [{ translateY: -28 * exit }, { scale: 1.05 * (1 + 0.06 * exit) }] };
-  });
   const riseA = useAnimatedStyle(() => ({ transform: [{ translateY: rise.value * screenH * 0.32 }] }));
 
   const live = useMemo(() => {
@@ -454,11 +446,6 @@ export default function Home() {
           </Pressable>
         </Animated.View>
       )}
-
-      {/* the old Blynk intro's exit: white with the logo lifting away while the page shows through */}
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splashCover, splashA]}>
-        <Animated.Image source={SPLASH_LOGO} resizeMode="contain" style={[styles.splashLogo, splashLogoA]} />
-      </Animated.View>
     </View>
   );
 }
@@ -848,8 +835,6 @@ function FeedSkeleton() {
 }
 
 const styles = StyleSheet.create({
-  splashCover: { backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  splashLogo: { height: SPLASH_LOGO_H, width: SPLASH_LOGO_W },
   locRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 15, paddingRight: 16, paddingTop: 18, gap: 8 },
   locTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   navDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.yellow, alignItems: 'center', justifyContent: 'center' },

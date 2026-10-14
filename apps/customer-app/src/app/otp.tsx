@@ -7,7 +7,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { requestOtp, verifyOtp } from '@/blynk/auth/api';
-import { demoFlow, devOtpFor, returnToCart, setPendingOtp } from '@/blynk/auth/flow';
+import { demoFlow, devOtpFor, finishSignIn, setPendingOtp } from '@/blynk/auth/flow';
+import { GATE_PARAMS, isFromGate } from '@/blynk/auth/gate';
 import { authErrorText, needsNewCode } from '@/blynk/auth/forms';
 import { formatPhone } from '@/blynk/auth/phone';
 import { needsRegistration, signIn } from '@/blynk/auth/session';
@@ -30,11 +31,13 @@ const RESEND_SECS = 30;
  * registration (/register, then /birthday), afterwards it returns straight to the cart.
  * Live: the code was sent by POST /auth/otp/request (from the login sheet). Six digits verify it
  * (POST /auth/otp/verify) and sign in; a new account (no name yet) goes on to /register, a
- * returning customer goes back to the cart. "Resend OTP" waits 30 s. A non-production backend
+ * returning customer goes back to the cart (from the start gate's login: on to the shop). "Resend OTP" waits 30 s. A non-production backend
  * returns its code as dev_otp, offered as a tap-to-fill chip; nothing is ever filled without it.
  */
 export default function Otp() {
-  const { phone = '' } = useLocalSearchParams<{ phone: string }>();
+  const { phone = '', gate: gateParam } = useLocalSearchParams<{ phone: string; gate?: string }>();
+  // opened by the start gate's login: a finished sign-in goes on to the shop (finishSignIn)
+  const gate = isFromGate(gateParam);
   const insets = useSafeAreaInsets();
   const [otp, setOtp] = useState('');
   const [secs, setSecs] = useState(DEMO ? 25 : RESEND_SECS);
@@ -79,8 +82,8 @@ export default function Otp() {
     verifyOtp(phone, otp)
       .then((r) => {
         const s = signIn(r);
-        if (needsRegistration(s)) router.replace('/register');
-        else returnToCart();
+        if (needsRegistration(s)) router.replace(gate ? { pathname: '/register', params: GATE_PARAMS } : '/register');
+        else finishSignIn(gate);
       })
       .catch((e) => {
         if (!mounted.current) return;
@@ -113,7 +116,8 @@ export default function Otp() {
 
   const back = () => {
     if (busy) return;
-    if (router.canGoBack()) router.back();
+    if (gate) router.replace({ pathname: '/login', params: GATE_PARAMS });
+    else if (router.canGoBack()) router.back();
     else router.replace('/cart');
   };
 

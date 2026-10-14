@@ -14,3 +14,12 @@ export const demoFlow = { registered: false };
 
 /** Back to the cart the customer came from (or to it, when the page was reloaded). */
 export const returnToCart = () => (router.canGoBack() ? router.back() : router.replace('/cart'));
+
+/**
+ * A sign-in (and registration) is finished: back to whoever opened the login, or, when the start
+ * gate opened it after the launch intro (`?gate=1`), on to the shop, as Flutter's SessionGate.
+ */
+export const finishSignIn = (gate: boolean) => (gate ? router.replace('/home') : returnToCart());
+
+/** Where a signed-out or already-registered visit to the sign-in steps goes instead. */
+export const leaveSignIn = (gate: boolean) => router.replace(gate ? '/home' : '/cart');

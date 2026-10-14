@@ -35,7 +35,9 @@
     </script>
     <!-- GTM-HEAD-END -->
     <!-- Installable shop: same manifest id (/app/) as the Flutter shop, so existing
-         home-screen installs update in place. -->
+         home-screen installs update in place. Its background_color and theme_color are white
+         (owner, 2026-10-14): Android paints the installed app's launch screen in them before
+         this page loads, and the old brand yellow there flashed before the white intro. -->
     <link rel="manifest" href="/app/manifest.json" />
     <meta name="theme-color" content="#2E0C66" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -44,7 +46,8 @@
     <link rel="apple-touch-icon" href="/app/icons/Icon-192.png" />
     <link rel="preconnect" href="https://blynk-api.valgrowlabs.com" crossorigin />
     <style id="expo-reset">
-      html, body { height: 100%; }
+      /* white from the very first frame, under the white intro (no colour before the app draws) */
+      html, body { height: 100%; background-color: #FFFFFF; }
       body { overflow: hidden; }
       #root { display: flex; height: 100%; flex: 1; }
     </style>
@@ -94,6 +97,13 @@
       if (installed || closed || !(isIOS || isAndroid)) return;
       var bar = document.getElementById('bi-bar'), text = document.getElementById('bi-text');
       var btn = document.getElementById('bi-install'), arrow = document.getElementById('bi-arrow');
+      // the launch intro ends about 1.1 s after the app starts drawing; 2.5 s from the page's start
+      // leaves room for loading the app first
+      var INTRO_MS = 2500;
+      function afterIntro(fn) {
+        var left = INTRO_MS - (window.performance && performance.now ? performance.now() : INTRO_MS);
+        if (left > 0) setTimeout(fn, left); else fn();
+      }
       function show(html, opts) {
         text.innerHTML = html;
         btn.hidden = !opts.button;
@@ -116,7 +126,9 @@
       window.addEventListener('beforeinstallprompt', function (e) {
         e.preventDefault();
         prompt = e;
-        show('Get the Blynk app on your Home Screen.', { button: true });
+        // never over the white launch intro (owner, 2026-10-14): Chrome can offer this while
+        // the intro is still on screen, and the bar carries the yellow Install button
+        afterIntro(function () { if (prompt) show('Get the Blynk app on your Home Screen.', { button: true }); });
       });
       btn.addEventListener('click', function () {
         if (!prompt) return;

@@ -10,6 +10,8 @@ import { takePendingRoute } from './startup';
  * Mounted once at the root (renders nothing but a short toast):
  * - a shared link's route (`/app/#/p/<id>`, read at start-up) opens on top of Home once Home
  *   shows, like the Flutter shop's generateInitialRoutes (intro, then shop, then the product);
+ *   when the start gate shows the login instead, it opens on top of the login (Flutter's
+ *   SessionGate pendingProductId), so a shared product is never held behind the gate;
  * - when someone signs in, a friend's code kept from a `?ref=` link is applied once
  *   (Flutter PendingReferralSync), with a short toast on success; refusals are quiet.
  */
@@ -20,7 +22,7 @@ export function ShareStartup() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    if (path !== '/home') return;
+    if (path !== '/home' && path !== '/login') return;
     const route = takePendingRoute();
     if (route) router.push(route as never);
   }, [path]);

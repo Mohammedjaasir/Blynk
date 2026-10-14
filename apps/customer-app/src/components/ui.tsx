@@ -32,11 +32,11 @@ export const tap = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).
 
 /* ---------- Press feedback: every tappable surface squishes like the original ---------- */
 export function PressScale({
-  children, onPress, style, scaleTo = 0.95, disabled, haptic = false, hitSlop, accessibilityLabel, accessibilityRole,
+  children, onPress, style, scaleTo = 0.95, disabled, haptic = false, hitSlop, accessibilityLabel, accessibilityRole, accessibilityHint,
 }: {
   children: ReactNode; onPress?: () => void; style?: StyleProp<ViewStyle>;
   scaleTo?: number; disabled?: boolean; haptic?: boolean;
-  hitSlop?: number; accessibilityLabel?: string; accessibilityRole?: 'button' | 'link' | 'tab';
+  hitSlop?: number; accessibilityLabel?: string; accessibilityRole?: 'button' | 'link' | 'tab'; accessibilityHint?: string;
 }) {
   const s = useSharedValue(1);
   const a = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
@@ -46,6 +46,7 @@ export function PressScale({
       hitSlop={hitSlop}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole}
+      accessibilityHint={accessibilityHint}
       onPressIn={() => s.set(withSpring(scaleTo, { damping: 18, stiffness: 420 }))}
       onPressOut={() => s.set(withSpring(1, { damping: 12, stiffness: 300 }))}
       onPress={() => {

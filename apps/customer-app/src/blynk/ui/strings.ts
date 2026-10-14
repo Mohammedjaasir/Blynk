@@ -74,3 +74,10 @@ export const DOCTORS_OFF = {
   myAppointments: 'My appointments',
   goToShop: 'Go to shop',
 } as const;
+
+/** The start gate's login (Flutter SessionGate + LoginScreen's Skip, owner 2026-10-14). */
+export const LOGIN_GATE = {
+  skip: 'Skip for now',
+  /** Read by a screen reader after the Skip button. */
+  skipHint: 'Opens the shop. You can log in later from Profile.',
+} as const;

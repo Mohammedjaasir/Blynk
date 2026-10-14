@@ -6,7 +6,8 @@ import Animated, { FadeIn, interpolateColor, useAnimatedStyle, useSharedValue, w
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '@/blynk/api/client';
 import { applyReferral, getReferral, saveProfile } from '@/blynk/auth/api';
-import { demoFlow } from '@/blynk/auth/flow';
+import { demoFlow, leaveSignIn } from '@/blynk/auth/flow';
+import { GATE_PARAMS, isFromGate } from '@/blynk/auth/gate';
 import { authErrorText, cleanReferral, NAME_ERROR, NAME_MAX, referralOk, validName } from '@/blynk/auth/forms';
 import { formatPhone } from '@/blynk/auth/phone';
 import { getSession, needsRegistration } from '@/blynk/auth/session';
@@ -29,7 +30,9 @@ const R = LIVE.register;
  * Design mock: no network; Continue keeps the number on this device and previews /birthday.
  */
 export default function Register() {
-  const { phone = '' } = useLocalSearchParams<{ phone: string }>();
+  const { phone = '', gate: gateParam } = useLocalSearchParams<{ phone: string; gate?: string }>();
+  // the start gate's sign-in: the birthday step goes on to the shop when done
+  const gate = isFromGate(gateParam);
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
@@ -54,7 +57,7 @@ export default function Register() {
     if (DEMO) return;
     const s = getSession();
     // a reload after registration, or a signed-out visit: nothing to register here
-    if (!s || !needsRegistration(s)) { router.replace('/cart'); return; }
+    if (!s || !needsRegistration(s)) { leaveSignIn(gate); return; }
     getReferral()
       .then((r) => { if (mounted.current) setShowReferral(!!r?.enabled && !!r?.can_apply_code); })
       .catch(() => undefined); // the field is optional: hide it when the info cannot be read
@@ -88,11 +91,11 @@ export default function Register() {
       }
       stage = 'name';
       await saveProfile({ full_name: full });
-      router.replace('/birthday');
+      router.replace(gate ? { pathname: '/birthday', params: GATE_PARAMS } : '/birthday');
     } catch (e) {
       if (!mounted.current) return;
       const c = e instanceof ApiError ? e.code : undefined;
-      if (c === 'UNAUTHENTICATED') router.replace('/cart');
+      if (c === 'UNAUTHENTICATED') leaveSignIn(gate);
       else if (c === 'VALIDATION_ERROR' && stage === 'referral') setError(R.referralBad);
       else if (c === 'VALIDATION_ERROR') setNameError(NAME_ERROR);
       else setError(authErrorText(e));

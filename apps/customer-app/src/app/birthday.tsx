@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -5,7 +6,8 @@ import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTimin
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '@/blynk/api/client';
 import { saveProfile } from '@/blynk/auth/api';
-import { returnToCart } from '@/blynk/auth/flow';
+import { finishSignIn } from '@/blynk/auth/flow';
+import { isFromGate } from '@/blynk/auth/gate';
 import { authErrorText, parseBirthday } from '@/blynk/auth/forms';
 import { PressScale } from '@/components/ui';
 import { LIVE } from '@/demo/cartLive';
@@ -18,10 +20,13 @@ const B = LIVE.birthday;
  * The optional birthday prompt, shown once, right after registration. Same visual language as
  * "Verify Details". "Save birthday" stays pale and disabled until a real date is typed
  * (DD / MM / YYYY, age 5 to 120, never in the future: the backend's rule).
- * Live: PATCH /me {date_of_birth}. Design mock: no network. Both return to the cart.
+ * Live: PATCH /me {date_of_birth}. Design mock: no network. Both return to the cart (after the
+ * start gate's sign-in, `?gate=1`: on to the shop).
  */
 export default function Birthday() {
   const insets = useSafeAreaInsets();
+  const gate = isFromGate(useLocalSearchParams<{ gate?: string }>().gate);
+  const returnToCart = () => finishSignIn(gate);
   const [d, setD] = useState('');
   const [m, setM] = useState('');
   const [y, setY] = useState('');
