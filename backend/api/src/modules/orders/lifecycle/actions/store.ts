@@ -1,6 +1,6 @@
 import { sql } from 'kysely';
 import { AppError } from '../../../../middleware/error.middleware.js';
-import { lockInventoryRows, recordStockMovement } from '../../../inventory/stock-ledger.js';
+import { lockStockRows, recordStockMovement, stockKeyOf, type StockKey } from '../../../inventory/stock-ledger.js';
 import { CATALOGUE, ITEM_WORK_STATES, packingBlockers } from '../catalogue.js';
 import { enqueueCustomerSms } from '../notify.js';
 import { recomputeOrderDiscount } from '../../../coupons/coupon.service.js';
@@ -106,27 +106,35 @@ async function sourcePendingItems(trx: Trx, order: OrderRow, items: ItemRow[], a
   const pending = items.filter((i) => i.item_status === 'PENDING');
   if (pending.length === 0) return;
 
-  const needed = new Map<string, { quantity: number; name: string }>();
+  // Migration 045: per product-level row or variant row (a variant's own stock).
+  const needed = new Map<string, { quantity: number; name: string; key: StockKey }>();
   for (const it of pending) {
-    const prev = needed.get(it.product_id);
-    needed.set(it.product_id, { quantity: (prev?.quantity ?? 0) + it.quantity, name: it.product_name_snapshot });
+    const key: StockKey = { product_id: it.product_id, variant_id: it.variant_id ?? null };
+    const prev = needed.get(stockKeyOf(key));
+    const name = it.variant_label_snapshot ? `${it.product_name_snapshot} ${it.variant_label_snapshot}` : it.product_name_snapshot;
+    needed.set(stockKeyOf(key), { quantity: (prev?.quantity ?? 0) + it.quantity, name, key });
   }
-  const tracked = (await lockInventoryRows(trx, order.dark_store_id, [...needed.keys()])).filter(
-    (row) => row.tracking_mode === 'TRACKED'
-  );
-  for (const row of tracked) {
-    const need = needed.get(row.product_id)!;
+  const lockedRows = await lockStockRows(trx, order.dark_store_id, [...needed.values()].map((n) => n.key));
+  const tracked = [...lockedRows.entries()].filter(([, row]) => row.tracking_mode === 'TRACKED');
+  for (const [key, row] of tracked) {
+    const need = needed.get(key)!;
     if (row.quantity_on_hand < need.quantity) {
       throw new AppError(
         `Not enough stock of ${need.name} to pack this order: ${row.quantity_on_hand} on hand, ${need.quantity} needed.`,
         409,
         'INSUFFICIENT_TRACKED_INVENTORY',
-        { product_id: row.product_id, product_name: need.name, on_hand: row.quantity_on_hand, requested: need.quantity }
+        {
+          product_id: row.product_id,
+          variant_id: row.variant_id ?? null,
+          product_name: need.name,
+          on_hand: row.quantity_on_hand,
+          requested: need.quantity,
+        }
       );
     }
   }
-  for (const row of tracked) {
-    const need = needed.get(row.product_id)!;
+  for (const [key, row] of tracked) {
+    const need = needed.get(key)!;
     await recordStockMovement(trx, {
       inventory: row,
       delta: -need.quantity,

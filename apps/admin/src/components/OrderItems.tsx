@@ -1,5 +1,5 @@
 import type { OrderCombo, OrderItemRow } from '../api/types';
-import { groupOrderItems, type DisplayItem } from '../lib/combos';
+import { groupOrderItems, itemDisplayName, type DisplayItem } from '../lib/combos';
 import { ITEM_STATUS_LABEL, formatMoney } from '../lib/orders';
 
 /**
@@ -21,7 +21,7 @@ export function OrderItems({
   const row = (line: DisplayItem) => (
     <li key={line.key} className={`order-items__row order-items__row--${line.item_status.toLowerCase()}`}>
       <span className="order-items__qty mono">{line.quantity} ×</span>
-      <span className="order-items__name">{line.product_name_snapshot}</span>
+      <span className="order-items__name">{itemDisplayName(line.item)}</span>
       <span className="order-items__status">{ITEM_STATUS_LABEL[line.item_status] ?? line.item_status}</span>
       {renderAction ? renderAction(line.item) : null}
     </li>

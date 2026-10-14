@@ -250,6 +250,10 @@ export class CatalogRepository {
         // Migration 033: the running category offer (own category or its parent).
         'category_offer_percent',
         'category_offer_ends_at',
+        // Migration 045: variants, sellable (never the count) and lead time.
+        'has_variants',
+        'is_orderable',
+        'delivery_lead_days',
       ])
       .where('is_active', '=', true);
 
@@ -261,8 +265,10 @@ export class CatalogRepository {
       query = query.where('category_id', 'in', categoryIdsForSlug(params.category_slug));
     }
 
+    // Migration 045: "available" means orderable now - switched on, and in
+    // stock when tracked (or, with variants, at least one variant is).
     if (params.is_available !== undefined) {
-      query = query.where('is_available', '=', params.is_available);
+      query = query.where('is_orderable', '=', params.is_available);
     }
 
     if (params.on_offer) {
@@ -308,8 +314,10 @@ export class CatalogRepository {
       query = query.where('category_id', 'in', categoryIdsForSlug(params.category_slug));
     }
 
+    // Migration 045: "available" means orderable now - switched on, and in
+    // stock when tracked (or, with variants, at least one variant is).
     if (params.is_available !== undefined) {
-      query = query.where('is_available', '=', params.is_available);
+      query = query.where('is_orderable', '=', params.is_available);
     }
 
     if (params.on_offer) {
@@ -365,6 +373,10 @@ export class CatalogRepository {
         // Migration 033: the running category offer (own category or its parent).
         'category_offer_percent',
         'category_offer_ends_at',
+        // Migration 045: variants, sellable (never the count) and lead time.
+        'has_variants',
+        'is_orderable',
+        'delivery_lead_days',
       ])
       .where('is_active', '=', true);
 
@@ -447,6 +459,16 @@ export class CatalogRepository {
       .executeTakeFirst();
   }
 
+  /** Migration 045: a live variant using this SKU (product and variant SKUs never collide). */
+  async findVariantBySku(sku: string) {
+    return await db
+      .selectFrom('product_variants')
+      .select(['id', 'product_id'])
+      .where('sku', '=', sku)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+  }
+
   /**
    * Finds a product by its unique URL slug.
    */
@@ -480,6 +502,7 @@ export class CatalogRepository {
     fixed_selling_price?: number | null;
     is_available?: boolean;
     is_active?: boolean;
+    delivery_lead_days?: number;
     offer_price?: number | null;
     offer_ends_at?: string | null;
   }) {
@@ -505,6 +528,7 @@ export class CatalogRepository {
         fixed_selling_price: data.fixed_selling_price ?? null,
         is_available: data.is_available ?? true,
         is_active: data.is_active ?? true,
+        delivery_lead_days: data.delivery_lead_days ?? 0,
         offer_price: data.offer_price ?? null,
         offer_ends_at: data.offer_ends_at ?? null,
       })
@@ -537,6 +561,7 @@ export class CatalogRepository {
       fixed_selling_price?: number | null;
       is_available?: boolean;
       is_active?: boolean;
+      delivery_lead_days?: number;
       offer_price?: number | null;
       offer_ends_at?: string | null;
     }

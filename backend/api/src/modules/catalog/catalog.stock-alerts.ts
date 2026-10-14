@@ -41,7 +41,7 @@ async function customerVisibleProduct(id: string) {
   if (!UUID.test(id)) throw new AppError('Product not found.', 404, 'PRODUCT_NOT_FOUND');
   const product = await db
     .selectFrom('v_product_catalog')
-    .select(['id', 'is_available', 'is_active'])
+    .select(['id', 'is_available', 'is_active', 'is_orderable'])
     .where('id', '=', id)
     .where('is_active', '=', true)
     .executeTakeFirst();
@@ -54,7 +54,9 @@ export const stockAlertController = {
   async subscribe(req: Request, res: Response, next: NextFunction) {
     try {
       const product = await customerVisibleProduct(String(req.params.id));
-      if (product.is_available) {
+      // Migration 045: "available" is orderable now - a tracked product whose
+      // stock ran out (or whose variants all did) can be subscribed to.
+      if (product.is_orderable) {
         throw new AppError('This product is available now.', 409, 'PRODUCT_AVAILABLE', { product_id: product.id });
       }
       await stockAlertRepository.subscribe(req.user!.id, product.id);

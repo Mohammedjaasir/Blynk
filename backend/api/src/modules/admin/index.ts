@@ -228,6 +228,15 @@ adminRouter.patch(
   inventoryController.setLowStockThreshold.bind(inventoryController)
 );
 
+// The product form's Stock section (migration 045; owner, 2026-10-14):
+// tracking, count and low-stock level of a product or variant in one call.
+adminRouter.put(
+  '/inventory/:productId/stock',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  inventoryController.setStock.bind(inventoryController)
+);
+
 // Restock, write-off and stock-take: Inventory (PACKING_STAFF) receives
 // stock too (owner decision 2026-10-06). Mode and threshold stay ADMIN/OPERATIONS.
 adminRouter.post(

@@ -9,7 +9,9 @@ import { categoryOptions } from '../lib/categoryTree';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 import { formatMoney } from '../lib/orders';
-import { PRICING_SOURCE_LABEL, formatPercent } from '../lib/pricing';
+import { PRICING_SOURCE_LABEL, formatPercent, formatPriceRange } from '../lib/pricing';
+import { leadTimeText } from '../lib/stock';
+import { StockChip } from '../components/ProductVariants';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -194,12 +196,33 @@ export function Products() {
                   <span className="cell__secondary">
                     {product.sku} · {product.unit}
                   </span>
+                  {/* Variants, stock and lead time (migration 045). */}
+                  {product.has_variants || product.stock?.tracked || (product.delivery_lead_days ?? 0) > 0 ? (
+                    <span className="pv-chips">
+                      {product.has_variants ? (
+                        <span className="pv-chip">
+                          {product.variant_count ?? 0} {(product.variant_count ?? 0) === 1 ? 'variant' : 'variants'}
+                        </span>
+                      ) : null}
+                      {!product.has_variants ? <StockChip stock={product.stock} /> : null}
+                      {(product.delivery_lead_days ?? 0) > 0 ? (
+                        <span className="pv-chip pv-chip--lead" title="Delivery lead time">
+                          Delivery {leadTimeText(product.delivery_lead_days)}
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : null}
                 </td>
                 <td>{product.category_name ?? categoryName(product.category_id)}</td>
                 <td className="num">
-                  LKR {Number(product.calculated_selling_price ?? product.selling_price ?? 0).toFixed(2)}
+                  {product.has_variants && product.price_min != null && product.price_max != null ? (
+                    // A product with variants: the range of its variants' prices.
+                    <span className="cell__primary">{formatPriceRange(Number(product.price_min), Number(product.price_max))}</span>
+                  ) : (
+                    <>LKR {Number(product.calculated_selling_price ?? product.selling_price ?? 0).toFixed(2)}</>
+                  )}
                   {/* How the price is set (migration 044; owner, 2026-10-13). */}
-                  {product.pricing_source ? (
+                  {product.pricing_source && !product.has_variants ? (
                     <span className="price-source" title={pricingTitle(product)}>
                       <Badge tone="muted">{PRICING_SOURCE_LABEL[product.pricing_source] ?? product.pricing_source}</Badge>
                     </span>

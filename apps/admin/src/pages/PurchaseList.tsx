@@ -3,7 +3,7 @@ import { insights, type PurchaseList as PurchaseListData, type PurchaseSupplierG
 import { PageHeader } from '../components/Layout';
 import { EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
-import { lineCost, lineName, purchaseCsv, purchaseText, whatsappUrl, type PurchaseLine } from '../lib/insights';
+import { lineCost, lineKey, lineName, purchaseCsv, purchaseText, whatsappUrl, type PurchaseLine } from '../lib/insights';
 import { formatMoney } from '../lib/orders';
 import { downloadBlob } from '../lib/productImport';
 
@@ -28,7 +28,7 @@ export function PurchaseList() {
       .then((d) => {
         if (!live) return;
         setData(d);
-        setQty(Object.fromEntries(d.items.map((i) => [i.product_id, i.suggested_quantity])));
+        setQty(Object.fromEntries(d.items.map((i) => [lineKey(i), i.suggested_quantity])));
       })
       .catch((err) => live && setError(errorMessage(err, 'Could not load the purchase list.')));
     return () => {
@@ -36,7 +36,7 @@ export function PurchaseList() {
     };
   }, []);
 
-  const linesOf = (g: PurchaseSupplierGroup): PurchaseLine[] => g.items.map((item) => ({ item, quantity: qty[item.product_id] ?? item.suggested_quantity }));
+  const linesOf = (g: PurchaseSupplierGroup): PurchaseLine[] => g.items.map((item) => ({ item, quantity: qty[lineKey(item)] ?? item.suggested_quantity }));
   const allLines = data ? data.suppliers.flatMap(linesOf) : [];
   const allText = data
     ? data.suppliers
@@ -54,8 +54,8 @@ export function PurchaseList() {
     }
   }
 
-  const setQuantity = (productId: string, value: number) =>
-    setQty((q) => ({ ...q, [productId]: Math.max(0, Math.min(99999, Math.round(value) || 0)) }));
+  const setQuantity = (key: string, value: number) =>
+    setQty((q) => ({ ...q, [key]: Math.max(0, Math.min(99999, Math.round(value) || 0)) }));
 
   return (
     <>
@@ -145,10 +145,10 @@ export function PurchaseList() {
                         </thead>
                         <tbody>
                           {lines.map(({ item, quantity }) => (
-                            <tr key={item.product_id} className={quantity === 0 ? 'is-muted' : undefined}>
+                            <tr key={lineKey(item)} className={quantity === 0 ? 'is-muted' : undefined}>
                               <td>
                                 {lineName(item)}
-                                <span className="cell__secondary"> · {item.product_sku}</span>
+                                <span className="cell__secondary"> · {item.variant_sku || item.product_sku}</span>
                                 {item.stock_state === 'OUT' ? <span className="zone-tag zone-tag--outside">Out</span> : null}
                               </td>
                               <td className="num mono">{item.quantity_available}</td>
@@ -158,9 +158,9 @@ export function PurchaseList() {
                                 <input
                                   className="input input--qty"
                                   inputMode="numeric"
-                                  aria-label={`${item.product_name} quantity`}
+                                  aria-label={`${item.display_name || item.product_name} quantity`}
                                   value={quantity}
-                                  onChange={(e) => setQuantity(item.product_id, Number(e.target.value.replace(/\D/g, '')))}
+                                  onChange={(e) => setQuantity(lineKey(item), Number(e.target.value.replace(/\D/g, '')))}
                                 />
                               </td>
                               <td className="num mono">{formatMoney(item.unit_cost)}</td>

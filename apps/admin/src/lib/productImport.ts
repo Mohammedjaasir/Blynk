@@ -12,20 +12,19 @@ import type { ImportResponse, ImportRow } from '../api/types';
  * before a round trip.
  */
 
-import { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS, buildTemplateWorkbook } from './importTemplate';
+import { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS, VARIANT_RULES, buildTemplateWorkbook } from './importTemplate';
 
-export { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS };
+export { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS, VARIANT_RULES };
 
 export type TemplateColumn = (typeof TEMPLATE_COLUMNS)[number];
 /**
- * Every header the import reads: the template's, the older cost_price
- * (= purchase_cost) and the optional sub_category (owner, 2026-10-14: the
- * sidebar item inside `category`; "Rice & Flour > Rice" in the category cell
- * works too). The shared template (importTemplate.ts, identical in the Ops
- * app) does not list sub_category; a file may add the column.
+ * Every header the import reads: the template's (including the optional
+ * sub_category, owner 2026-10-14: the sidebar item inside `category`; "Rice &
+ * Flour > Rice" in the category cell works too) and the older cost_price
+ * (= purchase_cost).
  */
-export type ImportColumn = TemplateColumn | 'cost_price' | 'sub_category';
-const READ_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, 'cost_price', 'sub_category'];
+export type ImportColumn = TemplateColumn | 'cost_price';
+const READ_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, 'cost_price'];
 
 /** Header spellings read as sub_category ("Sub-category", "Subcategory", "Sidebar"). */
 const HEADER_ALIASES: Record<string, string> = {
@@ -44,6 +43,8 @@ const REQUIRED_COLUMNS: TemplateColumn[] = ['name', 'category', 'unit', 'purchas
 
 /** The API accepts 1..1000 rows per request. */
 export const MAX_IMPORT_ROWS = 1000;
+/** products.delivery_lead_days: whole days 0..30 (migration 045). */
+export const MAX_IMPORT_LEAD_DAYS = 30;
 /** The API's markup and price limits (catalog.import.ts). */
 export const MAX_IMPORT_MARKUP = 999.99;
 export const MAX_IMPORT_PRICE = 99_999_999.99;
@@ -102,11 +103,34 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
   const category = text('category');
   const unit = text('unit');
   const sku = text('sku');
-  if (!name) errors.push({ field: 'name', message: 'Name is required.' });
-  else if (name.length < 2) errors.push({ field: 'name', message: 'Name must be at least 2 characters.' });
-  if (!category) errors.push({ field: 'category', message: 'Category is required.' });
-  if (!unit) errors.push({ field: 'unit', message: 'Unit is required.' });
-  if (!sku) errors.push({ field: 'sku', message: 'SKU is required.' });
+  // Migration 045: a row with variant or parent_sku filled is a VARIANT of
+  // the product whose SKU is parent_sku; name / category / unit come from
+  // that product and its own sku is optional.
+  const parentSku = text('parent_sku');
+  const variant = text('variant');
+  const isVariant = Boolean(parentSku || variant);
+  if (isVariant) {
+    if (!parentSku) errors.push({ field: 'parent_sku', message: "A variant row needs parent_sku (the product's SKU)." });
+    if (!variant) errors.push({ field: 'variant', message: 'A variant row needs the variant name, e.g. 100 g or 3 pack.' });
+    else if (variant.length > 64) errors.push({ field: 'variant', message: 'The variant name must be at most 64 characters.' });
+    if (sku && (sku.length < 3 || sku.length > 64)) errors.push({ field: 'sku', message: 'A variant SKU must be 3 to 64 characters.' });
+    else if (sku && parentSku && sku.toLowerCase() === parentSku.toLowerCase()) {
+      errors.push({ field: 'sku', message: "A variant's SKU must differ from its product's SKU (or leave it blank)." });
+    }
+  } else {
+    if (!name) errors.push({ field: 'name', message: 'Name is required.' });
+    else if (name.length < 2) errors.push({ field: 'name', message: 'Name must be at least 2 characters.' });
+    if (!category) errors.push({ field: 'category', message: 'Category is required.' });
+    if (!unit) errors.push({ field: 'unit', message: 'Unit is required.' });
+    if (!sku) errors.push({ field: 'sku', message: 'SKU is required.' });
+  }
+
+  // delivery_lead_days: product rows only, whole days 0..30 (blank = 0 for
+  // a new product, unchanged for an existing one). Variant rows ignore it.
+  const leadCell = isVariant ? null : cellNumber(record.delivery_lead_days);
+  if (leadCell !== null && (Number.isNaN(leadCell) || !Number.isInteger(leadCell) || leadCell < 0 || leadCell > MAX_IMPORT_LEAD_DAYS)) {
+    errors.push({ field: 'delivery_lead_days', message: 'Delivery lead time must be whole days from 0 to 30.' });
+  }
 
   // purchase_cost, or the older cost_price; both filled must agree.
   const purchaseCell = cellNumber(record.purchase_cost);
@@ -167,7 +191,8 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
     row,
     name,
     category,
-    ...(optional('sub_category') ? { sub_category: text('sub_category') } : {}),
+    // A variant row takes its category from the product.
+    ...(!isVariant && optional('sub_category') ? { sub_category: text('sub_category') } : {}),
     unit,
     pack_size: optional('pack_size'),
     purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : 0,
@@ -179,6 +204,9 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
     tracked,
     opening_stock: stock !== null && !Number.isNaN(stock) ? stock : null,
     image_url: imageUrl,
+    parent_sku: parentSku || null,
+    variant: variant || null,
+    delivery_lead_days: leadCell !== null && !Number.isNaN(leadCell) ? leadCell : null,
   };
   return { row, data, errors };
 }
@@ -219,12 +247,21 @@ export function rowsFromMatrix(matrix: unknown[][]): ParseResult {
   }
 
   const seen = new Map<string, number>();
+  const seenVariants = new Map<string, number>();
   for (const r of rows) {
     const key = r.data.sku.toLowerCase();
-    if (!key) continue;
-    const first = seen.get(key);
-    if (first !== undefined) r.errors.push({ field: 'sku', message: `Same SKU as row ${first}.` });
-    else seen.set(key, r.row);
+    if (key) {
+      const first = seen.get(key);
+      if (first !== undefined) r.errors.push({ field: 'sku', message: `Same SKU as row ${first}.` });
+      else seen.set(key, r.row);
+    }
+    // The same variant twice (product SKU + variant name, ignoring case).
+    if (r.data.parent_sku && r.data.variant) {
+      const vKey = `${r.data.parent_sku.toLowerCase()}|${r.data.variant.toLowerCase()}`;
+      const firstVariant = seenVariants.get(vKey);
+      if (firstVariant !== undefined) r.errors.push({ field: 'variant', message: `Same variant as row ${firstVariant}.` });
+      else seenVariants.set(vKey, r.row);
+    }
   }
   return { rows, fileError: null };
 }
@@ -298,6 +335,17 @@ export const toCsv = (rows: unknown[][]) => rows.map((r) => r.map(csvCell).join(
 /** The template as CSV: the header row only (a CSV has one sheet, so no examples that could be imported). */
 export const templateCsv = () => toCsv([[...TEMPLATE_COLUMNS]]);
 
+/** "Variant 100 g of CHILLI-PWD". */
+export function variantName(variant: string, parentSku: string): string {
+  return `Variant ${variant || '?'} of ${parentSku || '?'}`;
+}
+
+/** A row's name for lists: the product name, or "Variant 100 g of CHILLI-PWD" on a variant row. */
+export function rowName(data: ImportRow): string {
+  if (data.parent_sku || data.variant) return variantName(data.variant ?? '', data.parent_sku ?? '');
+  return data.name;
+}
+
 /**
  * One line per problem: rows the browser rejected and rows the API
  * reported as 'error'. Columns: row, sku, name, field, message.
@@ -306,12 +354,16 @@ export function errorsCsv(rows: ValidatedRow[], response: ImportResponse | null)
   const lines: unknown[][] = [];
   const byRow = new Map(rows.map((r) => [r.row, r]));
   for (const r of rows) {
-    for (const e of r.errors) lines.push([r.row, r.data.sku, r.data.name, e.field, e.message]);
+    for (const e of r.errors) lines.push([r.row, r.data.sku, rowName(r.data), e.field, e.message]);
   }
   for (const result of response?.results ?? []) {
     if (result.status !== 'error') continue;
     const source = byRow.get(result.row);
-    const name = source?.data.name ?? '';
+    const name = source
+      ? rowName(source.data)
+      : result.kind === 'variant'
+        ? variantName(result.variant ?? '', result.parent_sku ?? '')
+        : '';
     const sku = result.sku ?? source?.data.sku ?? '';
     if (result.errors?.length) {
       for (const e of result.errors) lines.push([result.row, sku, name, e.field, e.message]);

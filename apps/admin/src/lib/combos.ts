@@ -108,7 +108,7 @@ export function comboProblems(form: { name: string; price: string; picks: Readon
 }
 
 // ------------------------------------------------------- orders with combos
-/** One displayed item line; duplicate lines of a product within a combo are merged. */
+/** One displayed item line; duplicate lines of a product (and variant) within a combo are merged. */
 export interface DisplayItem {
   key: string;
   /** The first underlying row (for actions such as Mark unavailable). */
@@ -121,6 +121,19 @@ export interface DisplayItem {
 export interface GroupedOrderItems {
   combos: Array<{ combo: OrderCombo; items: DisplayItem[] }>;
   loose: DisplayItem[];
+}
+
+/**
+ * "Chilli Powder · 100 g": the product name with the variant label
+ * (migration 045) when the line is a variant and the name does not already
+ * say it. unit_snapshot equals the label on variant lines, so it is not
+ * shown again.
+ */
+export function itemDisplayName(item: Pick<OrderItemRow, 'product_name_snapshot' | 'variant_label_snapshot'>): string {
+  const name = item.product_name_snapshot;
+  const label = item.variant_label_snapshot?.trim();
+  if (!label || name.toLowerCase().includes(label.toLowerCase())) return name;
+  return `${name} · ${label}`;
 }
 
 const asDisplay = (item: OrderItemRow): DisplayItem => ({
@@ -144,7 +157,7 @@ export function groupOrderItems(items: ReadonlyArray<OrderItemRow>, combos: Read
     const byKey = new Map<string, DisplayItem>();
     for (const item of items) {
       if (item.order_combo_id !== combo.id) continue;
-      const key = `${item.product_id ?? item.product_name_snapshot}|${item.item_status}`;
+      const key = `${item.product_id ?? item.product_name_snapshot}|${item.variant_id ?? ''}|${item.item_status}`;
       const existing = byKey.get(key);
       if (existing) {
         existing.quantity += item.quantity;

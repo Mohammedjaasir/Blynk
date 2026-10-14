@@ -113,7 +113,7 @@ export function publicOffer(product: OfferFields & CategoryOfferFields, sellingP
  * running ones) that takes at least a cent off.
  */
 export function activeOfferWhere(eb: ExpressionBuilder<Database, 'v_product_catalog'>) {
-  return eb.or([
+  const productOffer = eb.or([
     eb.and([
       eb('offer_price', 'is not', null),
       eb.or([eb('offer_ends_at', 'is', null), eb('offer_ends_at', '>', sql<Date>`now()`)]),
@@ -124,6 +124,24 @@ export function activeOfferWhere(eb: ExpressionBuilder<Database, 'v_product_cata
       eb(sql`round(calculated_selling_price * (1 - category_offer_percent / 100.0), 2)`, '<', sql`calculated_selling_price`),
     ]),
   ]);
+  // Migration 045: a product with variants is on offer when one of its
+  // active variants is (its own offer price, or the category's %).
+  const variantOffer = eb(
+    'id',
+    'in',
+    eb
+      .selectFrom('v_product_variant_catalog as pv')
+      .select('pv.product_id')
+      .where('pv.is_active', '=', true)
+      .where(
+        sql<boolean>`(
+          (pv.offer_price IS NOT NULL AND (pv.offer_ends_at IS NULL OR pv.offer_ends_at > now()) AND pv.offer_price < pv.calculated_selling_price)
+          OR (pv.category_offer_percent IS NOT NULL
+              AND round(pv.calculated_selling_price * (1 - pv.category_offer_percent / 100.0), 2) < pv.calculated_selling_price)
+        )`
+      )
+  );
+  return eb.or([eb.and([eb('has_variants', '=', false), productOffer]), eb.and([eb('has_variants', '=', true), variantOffer])]);
 }
 
 /**

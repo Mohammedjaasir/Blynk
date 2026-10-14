@@ -8,7 +8,7 @@ import { lockInventoryRow, recordStockMovement } from '../inventory/stock-ledger
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { slugify } from './catalog.schema.js';
 import { generateUniqueSlug } from './catalog.slugs.js';
-import { resolveSellingPrice, type PricingMode, type PricingSource } from '../pricing/index.js';
+import { resolveSellingPrice, resolveVariantPrice, type PricingMode, type PricingSource, type VariantPricingSource } from '../pricing/index.js';
 import { getGlobalMarkup } from './catalog.pricing.js';
 
 /**
@@ -53,6 +53,21 @@ import { getGlobalMarkup } from './catalog.pricing.js';
  * - Every row runs in its own transaction: a bad row is reported and never
  *   blocks the others. dry_run validates against the database and reports
  *   what would happen without writing anything.
+ * - delivery_lead_days (migration 045): whole days 0..30 before the product
+ *   can be delivered; blank = 0 for a new product, unchanged for an existing.
+ * - Variants (migration 045; owner, 2026-10-14). A row with `variant` filled
+ *   is a VARIANT row of the product whose SKU is in `parent_sku` (that
+ *   product may be created by a product row of the same file). Variant rows
+ *   need parent_sku, variant (its label, e.g. "100 g") and purchase_cost;
+ *   name / category / unit are taken from the product (and may be left
+ *   blank). sku and barcode are the variant's own (optional). Pricing works
+ *   as for products: selling_price = FIXED, markup_percent = the variant's
+ *   own markup, both blank = a NEW variant follows the product / category /
+ *   parent / global markup and an EXISTING one keeps its pricing. tracked /
+ *   opening_stock are the variant's own stock (opening stock only when the
+ *   variant is created). Idempotent: a variant is matched by its product and
+ *   label (ignoring case), so re-importing changes nothing. Product rows are
+ *   applied first, then variant rows; results come back in file order.
  */
 
 export const MAX_IMPORT_ROWS = 1000;
@@ -70,7 +85,7 @@ export type ImportStatus = 'created' | 'updated' | 'skipped' | 'error';
 
 export interface ImportRowPricing {
   pricing_mode: PricingMode;
-  pricing_source: PricingSource;
+  pricing_source: PricingSource | VariantPricingSource;
   purchase_cost: number;
   selling_price: number;
   /** MARKUP: the markup used; FIXED: the implied markup over cost (null when the cost is 0). */
@@ -83,6 +98,11 @@ export interface ImportRowResult {
   row: number;
   sku: string | null;
   status: ImportStatus;
+  /** Migration 045: 'variant' for a variant row (with its parent SKU and label). */
+  kind?: 'product' | 'variant';
+  parent_sku?: string;
+  variant?: string;
+  variant_id?: string;
   product_id?: string;
   message?: string;
   errors?: Array<{ field: string; message: string }>;
@@ -109,6 +129,8 @@ interface CleanRow {
   tracked?: boolean;
   opening_stock?: number;
   image_url?: string;
+  /** Migration 045: blank = 0 for a new product, unchanged for an existing one. */
+  delivery_lead_days?: number;
 }
 
 type FieldError = { field: string; message: string };
@@ -180,6 +202,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
   const markup = numberCell(raw.markup_percent);
   const tracked = yesNo(raw.tracked);
   const opening = numberCell(raw.opening_stock);
+  const leadDays = numberCell(raw.delivery_lead_days);
 
   if (!name) errors.push({ field: 'name', message: 'Name is required' });
   else if (name.length < 2) errors.push({ field: 'name', message: 'Name must be at least 2 characters' });
@@ -238,6 +261,10 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
     }
   }
 
+  if (leadDays !== undefined && (!Number.isInteger(leadDays) || leadDays < 0 || leadDays > 30)) {
+    errors.push({ field: 'delivery_lead_days', message: 'Delivery lead time must be whole days from 0 to 30' });
+  }
+
   if (errors.length > 0) return { row: null, rowNo, sku: sku ?? null, errors };
   return {
     rowNo,
@@ -259,6 +286,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
       tracked: tracked ?? undefined,
       opening_stock: opening,
       image_url: imageUrl,
+      delivery_lead_days: leadDays,
     },
   };
 }
@@ -334,6 +362,7 @@ type ExistingProduct = {
   description: string | null;
   image_url: string | null;
   tracking_mode: string | null;
+  delivery_lead_days: number;
 };
 
 /** The product columns a row would change on an existing product (blank cells change nothing). */
@@ -358,6 +387,9 @@ function changesFor(row: CleanRow, categoryId: string, existing: ExistingProduct
   if (row.barcode !== undefined && row.barcode !== existing.barcode) changes.barcode = row.barcode;
   if (row.description !== undefined && row.description !== existing.description) changes.description = row.description;
   if (row.image_url !== undefined && row.image_url !== existing.image_url) changes.image_url = row.image_url;
+  if (row.delivery_lead_days !== undefined && row.delivery_lead_days !== Number(existing.delivery_lead_days ?? 0)) {
+    changes.delivery_lead_days = row.delivery_lead_days;
+  }
   return changes;
 }
 
@@ -372,7 +404,7 @@ async function findExisting(executor: Transaction<Database> | typeof db, sku: st
   let query = executor
     .selectFrom('products as p')
     .leftJoin('inventory as inv', (join) =>
-      join.onRef('inv.product_id', '=', 'p.id').on('inv.dark_store_id', '=', DEFAULT_DARK_STORE_ID)
+      join.onRef('inv.product_id', '=', 'p.id').on('inv.dark_store_id', '=', DEFAULT_DARK_STORE_ID).on('inv.variant_id', 'is', null)
     )
     .select([
       'p.id',
@@ -387,12 +419,19 @@ async function findExisting(executor: Transaction<Database> | typeof db, sku: st
       'p.barcode',
       'p.description',
       'p.image_url',
+      'p.delivery_lead_days',
       'inv.tracking_mode',
     ])
     .where('p.sku', '=', sku)
     .where('p.deleted_at', 'is', null);
   if (lock) query = query.forUpdate(['p']);
   return (await query.executeTakeFirst()) as ExistingProduct | undefined;
+}
+
+/** Migration 045: a new product's SKU must not be a variant's. */
+async function assertSkuNotAVariant(executor: Transaction<Database> | typeof db, sku: string) {
+  const hit = await executor.selectFrom('product_variants').select('id').where('sku', '=', sku).where('deleted_at', 'is', null).executeTakeFirst();
+  if (hit) throw new AppError(`SKU '${sku}' is already used by a product variant`, 409, 'PRODUCT_SKU_EXISTS');
 }
 
 async function slugTaken(executor: Transaction<Database> | typeof db, slug: string) {
@@ -438,8 +477,17 @@ export async function importProducts(input: ImportProductsInput, actorId: string
   const results: ImportRowResult[] = [];
   const seenSkus = new Map<string, number>();
   const slugsUsed = new Set<string>();
+  // Migration 045: variant rows run after every product row, so a product
+  // created by this file exists (or, in a dry run, is planned) before its
+  // variants. What each product row decided, for its variant rows' prices.
+  const variantRows: Array<{ raw: Record<string, unknown>; index: number }> = [];
+  const parents = new Map<string, ParentInfo>();
 
   for (const [index, raw] of input.rows.entries()) {
+    if (isVariantRow(raw)) {
+      variantRows.push({ raw, index });
+      continue;
+    }
     const checked = validateImportRow(raw, index);
     const errors = [...checked.errors];
     const row = checked.row;
@@ -467,7 +515,12 @@ export async function importProducts(input: ImportProductsInput, actorId: string
         : await db.transaction().execute((trx) => applyRow(trx, row, categoryId!, slugsUsed, actorId));
       const { existingPricing, ...result } = outcome as typeof outcome & { existingPricing?: RowPricing };
       const priced = pricingResult(row, categoryId, markups, globalMarkup, existingPricing);
-      results.push({ row: row.row, sku: row.sku, ...result, ...priced });
+      results.push({ row: row.row, sku: row.sku, kind: 'product', ...result, ...priced });
+      parents.set(row.sku, {
+        productId: (result as { product_id?: string }).product_id ?? null,
+        categoryId,
+        customMarkup: pricingFor(row, existingPricing).markup,
+      });
     } catch (err) {
       const message =
         err instanceof AppError
@@ -479,6 +532,11 @@ export async function importProducts(input: ImportProductsInput, actorId: string
       results.push({ row: row.row, sku: row.sku, status: 'error', message, errors: [{ field: 'row', message }] });
     }
   }
+
+  for (const { raw, index } of variantRows) {
+    results.push(await importVariantRow(raw, index, { dryRun, actorId, parents, markups, globalMarkup, seenSkus }));
+  }
+  results.sort((a, b) => a.row - b.row);
 
   const summary = { created: 0, updated: 0, skipped: 0, errors: 0 };
   for (const r of results) {
@@ -550,6 +608,7 @@ async function pickSlug(executor: Transaction<Database> | typeof db, row: CleanR
 async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>) {
   const existing = await findExisting(db, row.sku, false);
   if (!existing) {
+    await assertSkuNotAVariant(db, row.sku);
     slugsUsed.add(await pickSlug(db, row, slugsUsed));
     return { status: 'created' as const };
   }
@@ -566,6 +625,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
   const existing = await findExisting(trx, row.sku, true);
 
   if (!existing) {
+    await assertSkuNotAVariant(trx, row.sku);
     const slug = await pickSlug(trx, row, slugsUsed);
     const want = pricingFor(row);
     const created = await trx
@@ -586,6 +646,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
         fixed_selling_price: want.fixed,
         is_available: true,
         is_active: true,
+        delivery_lead_days: row.delivery_lead_days ?? 0,
       })
       .returning('id')
       .executeTakeFirstOrThrow();
@@ -627,4 +688,330 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
     existingPricing: storedPricing(existing),
     ...(row.opening_stock ? { message: 'Opening stock is ignored for an existing product' } : {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Variant rows (migration 045)
+// ---------------------------------------------------------------------------
+
+/** What a product row of this file decided (or null productId when only planned, in a dry run). */
+interface ParentInfo {
+  productId: string | null;
+  categoryId: string;
+  customMarkup: number | null;
+}
+
+/** A row is a variant row when its `variant` or `parent_sku` cell is filled. */
+export function isVariantRow(raw: Record<string, unknown>): boolean {
+  return text(raw.variant) !== undefined || text(raw.parent_sku) !== undefined;
+}
+
+interface CleanVariantRow {
+  row: number;
+  parent_sku: string;
+  label: string;
+  sku?: string;
+  barcode?: string;
+  cost_price: number;
+  selling_price?: number;
+  markup_percent?: number;
+  tracked?: boolean;
+  opening_stock?: number;
+}
+
+/** The variant row's cells (the variant form's limits). */
+export function validateVariantRow(
+  raw: Record<string, unknown>,
+  index: number
+): { row: CleanVariantRow | null; rowNo: number; errors: FieldError[]; parentSku: string | null; label: string | null; sku: string | null } {
+  const errors: FieldError[] = [];
+  const rowNoRaw = Number(raw.row);
+  const rowNo = Number.isInteger(rowNoRaw) && rowNoRaw > 0 ? rowNoRaw : index + 2;
+  const parentSku = text(raw.parent_sku);
+  const label = text(raw.variant);
+  const sku = text(raw.sku);
+  const barcode = text(raw.barcode);
+  const purchaseCostCell = numberCell(raw.purchase_cost);
+  const costPriceCell = numberCell(raw.cost_price);
+  const cost = purchaseCostCell !== undefined ? purchaseCostCell : costPriceCell;
+  const selling = numberCell(raw.selling_price);
+  const markup = numberCell(raw.markup_percent);
+  const tracked = yesNo(raw.tracked);
+  const opening = numberCell(raw.opening_stock);
+
+  if (!parentSku) errors.push({ field: 'parent_sku', message: "A variant row needs parent_sku (the product's SKU)" });
+  if (!label) errors.push({ field: 'variant', message: 'A variant row needs the variant name, e.g. 100 g or 3 pack' });
+  else if (label.length > 64) errors.push({ field: 'variant', message: 'The variant name must be at most 64 characters' });
+  if (sku && (sku.length < 3 || sku.length > 64)) errors.push({ field: 'sku', message: 'A variant SKU must be 3 to 64 characters' });
+  if (sku && parentSku && sku === parentSku) errors.push({ field: 'sku', message: "A variant's SKU must differ from its product's SKU (or leave it blank)" });
+  if (barcode && barcode.length > 64) errors.push({ field: 'barcode', message: 'Barcode must be at most 64 characters' });
+
+  if (cost === undefined) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required' });
+  else if (!Number.isFinite(cost)) errors.push({ field: 'purchase_cost', message: 'Purchase cost must be a number' });
+  else if (cost < 0) errors.push({ field: 'purchase_cost', message: 'Purchase cost cannot be negative' });
+  else if (cost > 99_999_999.99) errors.push({ field: 'purchase_cost', message: 'Purchase cost is too large' });
+  else if (!hasAtMost2Decimals(cost)) errors.push({ field: 'purchase_cost', message: 'Purchase cost can have at most 2 decimals' });
+
+  if (selling !== undefined && markup !== undefined) {
+    errors.push({ field: 'selling_price', message: 'Give either selling_price or markup_percent, not both' });
+  } else if (selling !== undefined) {
+    if (!Number.isFinite(selling) || selling <= 0) errors.push({ field: 'selling_price', message: 'Selling price must be a number above 0' });
+    else if (selling > 99_999_999.99) errors.push({ field: 'selling_price', message: 'Selling price is too large' });
+    else if (!hasAtMost2Decimals(selling)) errors.push({ field: 'selling_price', message: 'Selling price can have at most 2 decimals' });
+  } else if (markup !== undefined) {
+    if (!Number.isFinite(markup) || markup < 0 || markup > 999.99) errors.push({ field: 'markup_percent', message: 'Markup must be between 0 and 999.99' });
+    else if (!hasAtMost2Decimals(markup)) errors.push({ field: 'markup_percent', message: 'Markup can have at most 2 decimals' });
+  }
+
+  if (tracked === null) errors.push({ field: 'tracked', message: 'Tracked must be yes or no' });
+  if (opening !== undefined) {
+    if (!Number.isInteger(opening) || opening < 0) errors.push({ field: 'opening_stock', message: 'Opening stock must be a whole number, 0 or more' });
+    else if (opening > 100_000) errors.push({ field: 'opening_stock', message: 'Opening stock is too large' });
+    else if (opening > 0 && tracked !== true) errors.push({ field: 'opening_stock', message: 'Opening stock needs tracked = yes' });
+  }
+
+  const base = { rowNo, errors, parentSku: parentSku ?? null, label: label ?? null, sku: sku ?? null };
+  if (errors.length > 0) return { ...base, row: null };
+  return {
+    ...base,
+    row: {
+      row: rowNo,
+      parent_sku: parentSku!,
+      label: label!,
+      sku,
+      barcode,
+      cost_price: cost!,
+      selling_price: selling,
+      markup_percent: markup,
+      tracked: tracked ?? undefined,
+      opening_stock: opening,
+    },
+  };
+}
+
+type ExistingVariant = {
+  id: string;
+  label: string;
+  sku: string | null;
+  barcode: string | null;
+  purchase_cost: string | number;
+  pricing_mode: string;
+  fixed_selling_price: string | number | null;
+  custom_markup_percent: string | number | null;
+  tracking_mode: string | null;
+};
+
+function variantRowPricing(row: CleanVariantRow, existing?: ExistingVariant): RowPricing {
+  if (row.selling_price !== undefined) return { mode: 'FIXED', fixed: row.selling_price, markup: null };
+  if (row.markup_percent !== undefined) return { mode: 'MARKUP', fixed: null, markup: row.markup_percent };
+  if (existing) return storedPricing(existing);
+  return { mode: 'MARKUP', fixed: null, markup: null };
+}
+
+function variantChanges(row: CleanVariantRow, existing: ExistingVariant) {
+  const changes: Record<string, unknown> = {};
+  if (row.label !== existing.label) changes.label = row.label;
+  if (row.sku !== undefined && row.sku !== existing.sku) changes.sku = row.sku;
+  if (row.barcode !== undefined && row.barcode !== existing.barcode) changes.barcode = row.barcode;
+  if (Number(existing.purchase_cost) !== row.cost_price) changes.purchase_cost = row.cost_price;
+  if (row.selling_price !== undefined || row.markup_percent !== undefined) {
+    const want = variantRowPricing(row, existing);
+    if (want.mode !== existing.pricing_mode) changes.pricing_mode = want.mode;
+    if (want.mode === 'FIXED') {
+      if (want.fixed !== (existing.fixed_selling_price === null ? null : Number(existing.fixed_selling_price))) changes.fixed_selling_price = want.fixed;
+    } else if (want.markup !== (existing.custom_markup_percent === null ? null : Number(existing.custom_markup_percent))) {
+      changes.custom_markup_percent = want.markup;
+    }
+  }
+  return changes;
+}
+
+async function findExistingVariant(executor: Transaction<Database> | typeof db, productId: string, label: string, lock: boolean) {
+  let q = executor
+    .selectFrom('product_variants as v')
+    .leftJoin('inventory as inv', (join) =>
+      join.onRef('inv.variant_id', '=', 'v.id').on('inv.dark_store_id', '=', DEFAULT_DARK_STORE_ID)
+    )
+    .select([
+      'v.id',
+      'v.label',
+      'v.sku',
+      'v.barcode',
+      'v.purchase_cost',
+      'v.pricing_mode',
+      'v.fixed_selling_price',
+      'v.custom_markup_percent',
+      'inv.tracking_mode',
+    ])
+    .where('v.product_id', '=', productId)
+    .where('v.deleted_at', 'is', null)
+    .where((eb) => eb(eb.fn('lower', [eb.fn('btrim', ['v.label'])]), '=', label.trim().toLowerCase()));
+  if (lock) q = q.forUpdate(['v']);
+  return (await q.executeTakeFirst()) as ExistingVariant | undefined;
+}
+
+async function variantSkuTaken(executor: Transaction<Database> | typeof db, sku: string, exceptVariantId?: string) {
+  let q = executor.selectFrom('product_variants').select('id').where('sku', '=', sku).where('deleted_at', 'is', null);
+  if (exceptVariantId) q = q.where('id', '!=', exceptVariantId);
+  if (await q.executeTakeFirst()) return true;
+  return !!(await executor.selectFrom('products').select('id').where('sku', '=', sku).where('deleted_at', 'is', null).executeTakeFirst());
+}
+
+async function setVariantTracking(trx: Transaction<Database>, productId: string, variantId: string, mode: 'TRACKED' | 'UNTRACKED') {
+  const existing = await lockInventoryRow(trx, DEFAULT_DARK_STORE_ID, productId, variantId);
+  if (existing) {
+    await trx.updateTable('inventory').set({ tracking_mode: mode, updated_at: new Date() }).where('id', '=', existing.id).execute();
+  } else {
+    await trx
+      .insertInto('inventory')
+      .values({ dark_store_id: DEFAULT_DARK_STORE_ID, product_id: productId, variant_id: variantId, tracking_mode: mode })
+      .execute();
+  }
+}
+
+async function importVariantRow(
+  raw: Record<string, unknown>,
+  index: number,
+  ctx: {
+    dryRun: boolean;
+    actorId: string;
+    parents: Map<string, ParentInfo>;
+    markups: CategoryMarkups;
+    globalMarkup: number;
+    seenSkus: Map<string, number>;
+  }
+): Promise<ImportRowResult> {
+  const checked = validateVariantRow(raw, index);
+  const errors = [...checked.errors];
+  const head = {
+    row: checked.rowNo,
+    sku: checked.sku,
+    kind: 'variant' as const,
+    ...(checked.parentSku ? { parent_sku: checked.parentSku } : {}),
+    ...(checked.label ? { variant: checked.label } : {}),
+  };
+  const row = checked.row;
+  if (row?.sku) {
+    const first = ctx.seenSkus.get(row.sku);
+    if (first !== undefined) errors.push({ field: 'sku', message: `SKU ${row.sku} is already used on row ${first} of this file` });
+    else ctx.seenSkus.set(row.sku, row.row);
+  }
+  if (!row || errors.length) return { ...head, status: 'error', message: errors[0]?.message, errors };
+
+  try {
+    // The parent: a product row of this file, else an existing product.
+    const fromFile = ctx.parents.get(row.parent_sku);
+    const stored = await db
+      .selectFrom('products')
+      .select(['id', 'category_id', 'custom_markup_percent'])
+      .where('sku', '=', row.parent_sku)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (!stored && !fromFile) {
+      const message = `No product with SKU '${row.parent_sku}' (add its product row above, or create it first)`;
+      return { ...head, status: 'error', message, errors: [{ field: 'parent_sku', message }] };
+    }
+    const categoryId = fromFile?.categoryId ?? stored!.category_id;
+    const productMarkup = fromFile ? fromFile.customMarkup : stored!.custom_markup_percent === null ? null : Number(stored!.custom_markup_percent);
+    const productId = stored?.id ?? null;
+
+    const existing = productId ? await findExistingVariant(db, productId, row.label, false) : undefined;
+    if (row.sku && (await variantSkuTaken(db, row.sku, existing?.id))) {
+      const message = `SKU '${row.sku}' is already used by another product or variant`;
+      return { ...head, status: 'error', message, errors: [{ field: 'sku', message }] };
+    }
+
+    const want = variantRowPricing(row, existing);
+    const inherited = ctx.markups.get(categoryId);
+    const price = resolveVariantPrice({
+      purchaseCost: row.cost_price,
+      pricingMode: want.mode,
+      fixedSellingPrice: want.fixed,
+      variantMarkupPercent: want.markup,
+      productMarkupPercent: productMarkup,
+      categoryMarkupPercent: inherited?.own ?? null,
+      parentCategoryMarkupPercent: inherited?.parent ?? null,
+      globalMarkupPercent: ctx.globalMarkup,
+    });
+    const pricing: ImportRowPricing = {
+      pricing_mode: price.pricingMode,
+      pricing_source: price.pricingSource,
+      purchase_cost: price.purchaseCost,
+      selling_price: price.sellingPrice,
+      effective_markup_percent: price.effectiveMarkupPercent,
+      kept_current: existing !== undefined && row.selling_price === undefined && row.markup_percent === undefined,
+    };
+    const priced = { pricing, ...(price.warning ? { warnings: [price.warning.message] } : {}) };
+    const trackingWant = row.tracked === undefined ? null : row.tracked ? 'TRACKED' : 'UNTRACKED';
+    const ignoredStock = existing && row.opening_stock ? { message: 'Opening stock is ignored for an existing variant' } : {};
+
+    if (existing) {
+      const changes = variantChanges(row, existing);
+      const trackingChange = trackingWant !== null && trackingWant !== (existing.tracking_mode ?? 'UNTRACKED') ? trackingWant : null;
+      const changed = Object.keys(changes).length > 0 || trackingChange !== null;
+      if (!changed) return { ...head, status: 'skipped', product_id: productId!, variant_id: existing.id, ...priced, ...ignoredStock };
+      if (!ctx.dryRun) {
+        await db.transaction().execute(async (trx) => {
+          const locked = await findExistingVariant(trx, productId!, row.label, true);
+          if (!locked) throw new AppError('The variant changed while importing; try again.', 409, 'VARIANT_CHANGED');
+          if (Object.keys(changes).length) {
+            await trx.updateTable('product_variants').set({ ...changes, updated_at: new Date() }).where('id', '=', locked.id).execute();
+          }
+          if (trackingChange) await setVariantTracking(trx, productId!, locked.id, trackingChange);
+        });
+      }
+      return { ...head, status: 'updated', product_id: productId!, variant_id: existing.id, ...priced, ...ignoredStock };
+    }
+
+    if (ctx.dryRun) return { ...head, status: 'created', ...(productId ? { product_id: productId } : {}), ...priced };
+
+    const variantId = await db.transaction().execute(async (trx) => {
+      const sortRow = await trx
+        .selectFrom('product_variants')
+        .select((eb) => eb.fn.coalesce(eb.fn.max('sort_order'), eb.val(-1)).as('m'))
+        .where('product_id', '=', productId!)
+        .where('deleted_at', 'is', null)
+        .executeTakeFirst();
+      const created = await trx
+        .insertInto('product_variants')
+        .values({
+          product_id: productId!,
+          label: row.label,
+          sku: row.sku ?? null,
+          barcode: row.barcode ?? null,
+          sort_order: Number(sortRow?.m ?? -1) + 1,
+          purchase_cost: row.cost_price,
+          pricing_mode: want.mode,
+          fixed_selling_price: want.fixed,
+          custom_markup_percent: want.markup,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      if (row.tracked) {
+        await setVariantTracking(trx, productId!, created.id, 'TRACKED');
+        if (row.opening_stock && row.opening_stock > 0) {
+          const inventory = await lockInventoryRow(trx, DEFAULT_DARK_STORE_ID, productId!, created.id);
+          await recordStockMovement(trx, {
+            inventory: inventory!,
+            delta: row.opening_stock,
+            type: 'PURCHASE_RESTOCK',
+            orderId: null,
+            actorId: ctx.actorId,
+            notes: 'Opening stock (product import, variant)',
+          });
+        }
+      }
+      return created.id;
+    });
+    return { ...head, status: 'created', product_id: productId!, variant_id: variantId, ...priced };
+  } catch (err) {
+    const message =
+      err instanceof AppError
+        ? err.message
+        : (err as { code?: string }).code === '23505'
+          ? 'Another variant already uses this name or SKU (try again, or change it)'
+          : 'This row could not be saved';
+    if (!(err instanceof AppError)) logger.warn({ err, row: head.row, sku: head.sku }, 'Variant import row failed');
+    return { ...head, status: 'error', message, errors: [{ field: 'row', message }] };
+  }
 }

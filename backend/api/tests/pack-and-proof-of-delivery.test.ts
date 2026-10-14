@@ -65,12 +65,16 @@ describe('Pack without sourcing', () => {
   });
 
   it('refuses the whole pack with a 409 naming the product that is short, and changes nothing', async () => {
-    const short = await fx.product({ onHand: 1 });
+    // Migration 045: an order can no longer ask for more than is left, so the
+    // shelf comes up short AFTER the order (a unit written off as damaged);
+    // the pack still refuses rather than take stock that is not there.
+    const short = await fx.product({ onHand: 2 });
     const fine = await fx.product({ onHand: 5 });
     const order = await fx.placeOrder([
       { product_id: fine.productId, quantity: 2 },
       { product_id: short.productId, quantity: 2 },
     ]);
+    expect((await fx.adjust(short.productId, 'DAMAGE_WRITE_OFF', -1)).status).toBe(200);
     const name = (await pool.query('SELECT name FROM products WHERE id = $1', [short.productId])).rows[0].name;
 
     const res = await fx.pack(order.id);

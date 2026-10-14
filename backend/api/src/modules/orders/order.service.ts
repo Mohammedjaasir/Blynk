@@ -1,6 +1,7 @@
 import { orderRepository, CreateOrderData } from './order.repository.js';
 import { CreateOrderInput, OrderQueryInput } from './order.schema.js';
-import { recordableMarkupPercent, resolveSellingPrice } from '../pricing/index.js';
+import { recordableMarkupPercent, resolveSellingPrice, resolveVariantPrice } from '../pricing/index.js';
+import { leadForCart, leadInfo, leadTimeRequiresSlotError, slotBeforeLeadTimeError, type CartLead } from './lead-time.js';
 import { assertWithinServiceZone } from './delivery-zone.js';
 import { orderingClock } from '../../utils/time.js';
 import { buildSlots, storeClosedMessage, storeStatusAt, STORE_TIMEZONE } from '../../utils/store-hours.js';
@@ -138,9 +139,18 @@ export function sanitizeCustomerOrder(order: any) {
  * combo line plus its items, whose unit prices share that price
  * (catalog.combos priceComboLines). Items come back loose first, then each
  * combo's items tagged with `combo_index` into `combos`.
+ *
+ * Variants (migration 045; owner, 2026-10-14): a line naming variant_id is
+ * priced as that variant (its fixed price, or its cost x its own / the
+ * product's / category / parent / global markup; its own offer or the
+ * category's, the lower), snapshots the variant label, and its estimated cost
+ * is the variant's. A product with live variants must be ordered by variant
+ * (400 VARIANT_REQUIRED); a variant that is switched off, deleted or not of
+ * that product is refused (400 VARIANT_UNAVAILABLE / VARIANT_NOT_FOUND).
  */
 export async function priceCart(items: CreateOrderInput['items'], comboLines: NonNullable<CreateOrderInput['combos']> = []) {
-  const productIds = items.map((it) => it.product_id);
+  // Migration 045: two variants of one product are two lines of the same product.
+  const productIds = [...new Set(items.map((it) => it.product_id))];
   const products = productIds.length ? await orderRepository.findProductsByIds(productIds) : [];
 
   if (products.length !== productIds.length) {
@@ -150,6 +160,8 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
   const productMap = new Map(products.map((p) => [p.id, p]));
   const defaultMarkup = productIds.length ? await orderRepository.getDefaultMarkup() : 0;
   const categoryOffers = await orderRepository.findCategoryOffers(productIds);
+  const variantIds = items.map((it) => it.variant_id).filter((v): v is string => !!v);
+  const variantMap = new Map((await orderRepository.findVariantsByIds(variantIds)).map((v) => [v.id, v]));
 
   let subtotalAmount = 0;
   const orderItemsData = items.map((item) => {
@@ -167,9 +179,70 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
       );
     }
 
+    const catalogRow = categoryOffers.get(prod.id);
+
+    // Migration 045: a variant line is priced as the variant.
+    if (item.variant_id) {
+      const variant = variantMap.get(item.variant_id);
+      if (!variant || variant.product_id !== prod.id) {
+        throw new AppError(`That size of '${prod.name}' is no longer sold.`, 400, 'VARIANT_NOT_FOUND', {
+          product_id: prod.id,
+          variant_id: item.variant_id,
+        });
+      }
+      if (!variant.is_active || !variant.is_available) {
+        throw new AppError(`'${prod.name} ${variant.label}' is currently unavailable.`, 400, 'VARIANT_UNAVAILABLE', {
+          product_id: prod.id,
+          variant_id: variant.id,
+          name: prod.name,
+          label: variant.label,
+        });
+      }
+      const variantPrice = resolveVariantPrice({
+        purchaseCost: Number(variant.purchase_cost),
+        pricingMode: variant.pricing_mode,
+        fixedSellingPrice: variant.fixed_selling_price,
+        variantMarkupPercent: variant.custom_markup_percent,
+        productMarkupPercent: prod.custom_markup_percent,
+        categoryMarkupPercent: catalogRow?.category_markup_percent ?? null,
+        parentCategoryMarkupPercent: catalogRow?.parent_category_markup_percent ?? null,
+        globalMarkupPercent: defaultMarkup,
+      });
+      const variantUnit = effectivePrice(
+        {
+          offer_price: variant.offer_price,
+          offer_ends_at: variant.offer_ends_at,
+          category_offer_percent: catalogRow?.category_offer_percent ?? null,
+          category_offer_ends_at: catalogRow?.category_offer_ends_at ?? null,
+        },
+        variantPrice.sellingPrice
+      );
+      const variantSubtotal = Number((variantUnit * item.quantity).toFixed(2));
+      subtotalAmount += variantSubtotal;
+      return {
+        product_id: prod.id,
+        variant_id: variant.id,
+        variant_label_snapshot: variant.label,
+        product_name_snapshot: prod.name,
+        sku_snapshot: variant.sku ?? prod.sku,
+        // The variant's label ('100 g') is its unit on the packing list and bill.
+        unit_snapshot: variant.label,
+        unit_selling_price: variantUnit,
+        estimated_unit_cost: Number(Number(variant.purchase_cost).toFixed(2)),
+        markup_percentage_applied: recordableMarkupPercent(variantPrice.effectiveMarkupPercent),
+        quantity: item.quantity,
+        subtotal: variantSubtotal,
+      } as CreateOrderData['items'][number];
+    }
+    if (catalogRow?.has_variants) {
+      throw new AppError(`Please choose a size or pack of '${prod.name}'.`, 400, 'VARIANT_REQUIRED', {
+        product_id: prod.id,
+        name: prod.name,
+      });
+    }
+
     // Migration 044: a fixed price, or cost x (product, category, parent
     // category, global) markup - the same rule as v_product_catalog.
-    const catalogRow = categoryOffers.get(prod.id);
     const priceResult = resolveSellingPrice({
       purchaseCost: Number(prod.purchase_cost),
       pricingMode: prod.pricing_mode,
@@ -239,13 +312,21 @@ export class OrderService {
     const now = orderingClock.now();
     const schedule = await storeSchedule.read();
     const status = storeStatusAt(schedule, now);
+    // Delivery lead time (migration 045; owner, 2026-10-14): the longest of
+    // the cart's items; with one, only a slot on/after today + N days.
+    const lead: CartLead = await leadForCart(input.items, input.combos ?? []);
     let slot: { start: Date; until: Date; label: string } | null = null;
     if (input.delivery_slot_start) {
       // A chosen slot must be one GET /orders/slots offers right now (slots
       // on, an open day, past the lead time, not while closed by staff).
       // Capacity is re-checked under the slot lock in the transaction.
       const wanted = Date.parse(input.delivery_slot_start);
-      const offered = schedule.slots.enabled ? buildSlots(schedule, now).find((s) => Date.parse(s.start) === wanted) : undefined;
+      const offered = schedule.slots.enabled
+        ? buildSlots(schedule, now, new Map(), { leadDays: lead.lead_days }).find((s) => Date.parse(s.start) === wanted)
+        : undefined;
+      if (!offered && lead.lead_days > 0 && schedule.slots.enabled && buildSlots(schedule, now).some((s) => Date.parse(s.start) === wanted)) {
+        throw slotBeforeLeadTimeError(now, lead);
+      }
       if (!offered) {
         throw new AppError(
           schedule.slots.enabled
@@ -257,6 +338,9 @@ export class OrderService {
         );
       }
       slot = { start: new Date(offered.start), until: new Date(offered.end), label: offered.label };
+    } else if (lead.lead_days > 0) {
+      // "As soon as possible" cannot deliver an item that needs N days.
+      throw leadTimeRequiresSlotError(now, lead, schedule.slots.enabled);
     } else if (!status.is_open_now) {
       // As soon as possible needs the store open; with slots on, a slot can
       // still be booked while closed (e.g. tonight for tomorrow morning).
@@ -457,7 +541,7 @@ export class OrderService {
    * Per-km tiers (owner, 2026-10-10): ?address_id= gives the fee for that
    * address (the cart's chosen one); without it, the default address's.
    */
-  async getCheckoutInfo(customerId: string, addressId?: string, subtotal?: number) {
+  async getCheckoutInfo(customerId: string, addressId?: string, subtotal?: number, lead: CartLead = { lead_days: 0, product_name: null }) {
     const [settings, fee, birthdaySetting] = await Promise.all([
       checkoutSettings.read(),
       this.quoteForCustomer(customerId, addressId),
@@ -489,6 +573,10 @@ export class OrderService {
       birthday_offer: publicBirthdayStatus(birthday),
       // PayHere (migration 047): whether checkout offers "Pay online".
       online_payment: await publicOnlinePayment(),
+      // Migration 045 (owner, 2026-10-14): with ?product_ids= the cart's
+      // longest delivery lead time and its first delivery day; asap_allowed
+      // false means the customer must pick a slot on/after that day.
+      delivery_lead: leadInfo(orderingClock.now(), lead),
       // Owner, 2026-10-10: referral_reward (applied automatically when it is
       // the larger discount) and points (balance + the program's numbers).
       ...(await checkoutRewardsInfo(db, customerId, charged)),

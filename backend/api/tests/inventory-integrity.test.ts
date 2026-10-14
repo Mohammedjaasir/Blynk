@@ -453,9 +453,12 @@ describe('Inventory integrity', () => {
 
     it('two orders racing for the last units: one wins, stock never goes negative', async () => {
       await repeat(REPS, async () => {
-        const t = await fx.product({ onHand: 3 });
+        // Migration 045: both orders must fit the stock when placed; a unit is
+        // then written off, so only one of them can still be sourced.
+        const t = await fx.product({ onHand: 4 });
         const o1 = await fx.placeOrder([{ product_id: t.productId, quantity: 2 }]);
         const o2 = await fx.placeOrder([{ product_id: t.productId, quantity: 2 }]);
+        expect((await fx.adjust(t.productId, 'DAMAGE_WRITE_OFF', -1)).status).toBe(200);
         const results = await Promise.all([fx.source(o1.id, o1.itemIds[0]), fx.source(o2.id, o2.itemIds[0])]);
         noServerError(...results);
         expect(results.map((r) => r.status).sort()).toEqual([200, 409]);

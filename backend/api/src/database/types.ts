@@ -295,12 +295,44 @@ export interface ProductsTable {
    * arranged ones, A-Z).
    */
   display_order: ColumnType<number | null, number | null | undefined, number | null>;
+  /**
+   * Migration 045 (owner, 2026-10-14): the earliest delivery is today + N
+   * days (0 = same day / as soon as possible). Variants inherit it.
+   */
+  delivery_lead_days: ColumnType<number, number | undefined, number>;
+}
+
+/**
+ * Migration 045 (owner, 2026-10-14): a product's sizes/packs ('50 g', '3 pack'),
+ * each with its own cost, pricing, offer and stock. Price rule:
+ * src/modules/pricing/index.ts resolveVariantPrice.
+ */
+export interface ProductVariantsTable {
+  id: Generated<string>;
+  product_id: string;
+  label: string;
+  sku: string | null;
+  barcode: string | null;
+  sort_order: Generated<number>;
+  purchase_cost: ColumnType<string, number | string, number | string>;
+  pricing_mode: ColumnType<'MARKUP' | 'FIXED', 'MARKUP' | 'FIXED' | undefined, 'MARKUP' | 'FIXED'>;
+  fixed_selling_price: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  custom_markup_percent: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  offer_price: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  offer_ends_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  is_active: Generated<boolean>;
+  is_available: Generated<boolean>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  deleted_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 export interface InventoryTable {
   id: Generated<string>;
   dark_store_id: string;
   product_id: string;
+  /** Migration 045: the variant this stock row counts; null = the product-level row. */
+  variant_id: ColumnType<string | null, string | null | undefined, string | null>;
   tracking_mode: Generated<InventoryTrackingMode>;
   quantity_on_hand: Generated<number>;
   quantity_reserved: Generated<number>;
@@ -418,6 +450,9 @@ export interface OrderItemsTable {
   created_at: Generated<Date>;
   /** Migration 033: the combo line this item was packed for; null for a loose item. */
   order_combo_id: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Migration 045: the variant ordered (null = the product itself) and its label then. */
+  variant_id: ColumnType<string | null, string | null | undefined, string | null>;
+  variant_label_snapshot: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 /** Migration 033 (owner, 2026-10-09): a combo pack - several products at one price. */
@@ -436,8 +471,12 @@ export interface CombosTable {
 }
 
 export interface ComboItemsTable {
+  /** Migration 045: surrogate key (was PRIMARY KEY (combo_id, product_id)). */
+  id: Generated<string>;
   combo_id: string;
   product_id: string;
+  /** Migration 045: a specific variant of the product; null = the product itself. */
+  variant_id: ColumnType<string | null, string | null | undefined, string | null>;
   quantity: number;
   sort_order: Generated<number>;
 }
@@ -704,6 +743,63 @@ export interface ProductCatalogView {
   parent_category_markup_percent: ColumnType<string | null, never, never>;
   global_markup_percent: ColumnType<string | null, never, never>;
   pricing_source: 'FIXED' | 'PRODUCT_MARKUP' | 'CATEGORY_MARKUP' | 'PARENT_CATEGORY_MARKUP' | 'GLOBAL_MARKUP';
+  // Migration 045. stock_* are staff reads only; customers get is_orderable
+  // (as is_available), never a count.
+  delivery_lead_days: number;
+  has_variants: boolean;
+  stock_tracked: boolean;
+  stock_sellable: number | null;
+  is_orderable: boolean;
+}
+
+/** Migration 045: each live variant of a live product, priced (resolveVariantPrice's SQL twin). */
+export interface ProductVariantCatalogView {
+  id: string;
+  product_id: string;
+  label: string;
+  sku: string | null;
+  barcode: string | null;
+  sort_order: number;
+  purchase_cost: ColumnType<string, never, never>;
+  pricing_mode: 'MARKUP' | 'FIXED';
+  fixed_selling_price: ColumnType<string | null, never, never>;
+  custom_markup_percent: ColumnType<string | null, never, never>;
+  product_markup_percent: ColumnType<string | null, never, never>;
+  category_markup_percent: ColumnType<string | null, never, never>;
+  parent_category_markup_percent: ColumnType<string | null, never, never>;
+  global_markup_percent: ColumnType<string | null, never, never>;
+  effective_markup_percent: ColumnType<string | null, never, never>;
+  calculated_selling_price: ColumnType<string, never, never>;
+  pricing_source: 'FIXED' | 'VARIANT_MARKUP' | 'PRODUCT_MARKUP' | 'CATEGORY_MARKUP' | 'PARENT_CATEGORY_MARKUP' | 'GLOBAL_MARKUP';
+  offer_price: ColumnType<string | null, never, never>;
+  offer_ends_at: Date | null;
+  category_offer_percent: ColumnType<string | null, never, never>;
+  category_offer_ends_at: Date | null;
+  is_active: boolean;
+  is_available: boolean;
+  product_is_active: boolean;
+  product_is_available: boolean;
+  delivery_lead_days: number;
+  created_at: Date;
+  updated_at: Date;
+  stock_tracked: boolean;
+  stock_sellable: number | null;
+  is_orderable: boolean;
+}
+
+/** Migration 045: inventory rows with units in open (unpacked) orders and what is left to sell. */
+export interface InventoryStockView {
+  inventory_id: string;
+  dark_store_id: string;
+  product_id: string;
+  variant_id: string | null;
+  tracking_mode: InventoryTrackingMode;
+  quantity_on_hand: number;
+  quantity_reserved: number;
+  low_stock_threshold: number;
+  updated_at: Date;
+  quantity_in_open_orders: number;
+  quantity_sellable: number;
 }
 
 export interface SuppliersTable {
@@ -988,6 +1084,7 @@ export interface Database {
   categories: CategoriesTable;
   category_groups: CategoryGroupsTable;
   products: ProductsTable;
+  product_variants: ProductVariantsTable;
   promotions: PromotionsTable;
   inventory: InventoryTable;
   inventory_adjustments: InventoryAdjustmentsTable;
@@ -1027,6 +1124,8 @@ export interface Database {
   device_tokens: DeviceTokensTable;
   stock_alerts: StockAlertsTable;
   v_product_catalog: ProductCatalogView;
+  v_product_variant_catalog: ProductVariantCatalogView;
+  v_inventory_stock: InventoryStockView;
   referral_codes: ReferralCodesTable;
   referrals: ReferralsTable;
   referral_rewards: ReferralRewardsTable;

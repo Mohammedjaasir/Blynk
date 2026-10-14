@@ -176,6 +176,14 @@ const productBaseSchema = z.object({
     .optional(),
   is_available: z.boolean().default(true).optional(),
   is_active: z.boolean().default(true).optional(),
+  // Migration 045 (owner, 2026-10-14): "items that can only be delivered
+  // after two days or some days". 0 = same day / as soon as possible.
+  delivery_lead_days: z
+    .number({ invalid_type_error: 'Delivery lead time must be a number of days' })
+    .int('Delivery lead time must be whole days')
+    .min(0, 'Delivery lead time cannot be negative')
+    .max(30, 'Delivery lead time can be at most 30 days')
+    .optional(),
   // Migration 031 (owner, 2026-10-09): the product on offer at a reduced
   // price; null removes the offer. That it is below the selling price, and a
   // new end date in the future, is checked by the service (catalog.offers.ts).

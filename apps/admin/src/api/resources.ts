@@ -21,6 +21,10 @@ import type {
   RiderOption,
   RiderSuggestions,
   AdminProduct,
+  SetStockInput,
+  SetStockResult,
+  StaffVariant,
+  VariantDeleteResult,
   AuthUser,
   Category,
   CategoryDeleteResult,
@@ -345,6 +349,50 @@ export const products = {
     apiRequest<ImportResponse>('/admin/products/import', {
       method: 'POST',
       body: { rows, dry_run: dryRun },
+    }),
+
+  // Variants (migration 045; owner, 2026-10-14): sizes / packs with their own
+  // price and stock. Inactive ones are listed too.
+  listVariants: (productId: string) =>
+    apiRequest<{ variants: StaffVariant[] }>(`/admin/products/${productId}/variants`).then((data) => data.variants),
+
+  /** Create body may carry track_stock / stock_count / low_stock_threshold. */
+  createVariant: (productId: string, input: Record<string, unknown>) =>
+    apiRequest<{ variant: StaffVariant }>(`/admin/products/${productId}/variants`, {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.variant),
+
+  /** Any subset of the create fields except the stock ones (use inventory.setStock). */
+  updateVariant: (productId: string, variantId: string, input: Record<string, unknown>) =>
+    apiRequest<{ variant: StaffVariant }>(`/admin/products/${productId}/variants/${variantId}`, {
+      method: 'PATCH',
+      body: input,
+    }).then((data) => data.variant),
+
+  /** Never ordered: removed (HARD); ordered: archived (SOFT). */
+  removeVariant: (productId: string, variantId: string) =>
+    apiRequest<VariantDeleteResult>(`/admin/products/${productId}/variants/${variantId}`, { method: 'DELETE' }),
+
+  /** Every live variant id once, in the new order. */
+  reorderVariants: (productId: string, variantIds: string[]) =>
+    apiRequest<{ variants: StaffVariant[] }>(`/admin/products/${productId}/variants/order`, {
+      method: 'PUT',
+      body: { variant_ids: variantIds },
+    }).then((data) => data.variants),
+};
+
+// ------------------------------------------------------------- inventory
+export const inventory = {
+  /**
+   * The product form's Stock section in one call (migration 045): tracking,
+   * the count and the low-stock level of a product, or of one of its
+   * variants with `variant_id`.
+   */
+  setStock: (productId: string, input: SetStockInput) =>
+    apiRequest<SetStockResult>(`/admin/inventory/${productId}/stock`, {
+      method: 'PUT',
+      body: { ...input },
     }),
 };
 

@@ -11,6 +11,7 @@ import { idParamSchema } from './catalog.schema.js';
 import { arrangeController } from './catalog.arrange.js';
 import { removeImagesController } from './catalog.remove-images.js';
 import { categoryImportController } from './catalog.category-import.js';
+import { variantsController } from './catalog.variants.js';
 
 // A malformed :id is a 400 VALIDATION_ERROR, never a Postgres uuid cast 500.
 const validId = validate({ params: idParamSchema });
@@ -79,6 +80,13 @@ adminCatalogRouter.get('/products/remove-images/preview', requireAuth, requireRo
 adminCatalogRouter.post('/products/remove-images', requireAuth, requireRoles('ADMIN'), removeImagesController.remove);
 adminCatalogRouter.get('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.listProductsAdmin.bind(catalogController));
 adminCatalogRouter.get('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.getProductByIdAdmin.bind(catalogController));
+// Variants (migration 045; owner, 2026-10-14): sizes/packs with their own
+// cost, pricing, offer and stock. /variants/order before /variants/:variantId.
+adminCatalogRouter.get('/products/:id/variants', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, variantsController.list);
+adminCatalogRouter.post('/products/:id/variants', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, variantsController.create);
+adminCatalogRouter.put('/products/:id/variants/order', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, variantsController.reorder);
+adminCatalogRouter.patch('/products/:id/variants/:variantId', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), variantsController.update);
+adminCatalogRouter.delete('/products/:id/variants/:variantId', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), variantsController.remove);
 adminCatalogRouter.post('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createProductAdmin.bind(catalogController));
 adminCatalogRouter.patch('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.updateProductAdmin.bind(catalogController));
 adminCatalogRouter.delete('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.deleteProductAdmin.bind(catalogController));
@@ -109,3 +117,4 @@ export * from './catalog.combos.js';
 export * from './catalog.arrange.js';
 export * from './catalog.remove-images.js';
 export * from './catalog.category-import.js';
+export * from './catalog.variants.js';

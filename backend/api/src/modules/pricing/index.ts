@@ -159,6 +159,35 @@ export function resolveSellingPrice(input: ResolvePriceInput): ResolvedPrice {
 }
 
 /**
+ * Variants (migration 045; owner, 2026-10-14): a variant's price follows the
+ * same rule with ONE extra markup at the front of the chain:
+ *   FIXED  - the variant's fixed_selling_price.
+ *   MARKUP - variant cost x (1 + m / 100) with m = the variant's own markup,
+ *            else the product's custom markup, else category, parent
+ *            category, global (v_product_variant_catalog is the SQL twin).
+ */
+export const VARIANT_PRICING_SOURCES = ['VARIANT_MARKUP', ...PRICING_SOURCES] as const;
+export type VariantPricingSource = (typeof VARIANT_PRICING_SOURCES)[number];
+
+export interface ResolveVariantPriceInput extends ResolvePriceInput {
+  variantMarkupPercent?: number | string | null;
+}
+
+export interface ResolvedVariantPrice extends Omit<ResolvedPrice, 'pricingSource'> {
+  pricingSource: VariantPricingSource;
+}
+
+export function resolveVariantPrice(input: ResolveVariantPriceInput): ResolvedVariantPrice {
+  const own = present(input.variantMarkupPercent);
+  const resolved = resolveSellingPrice({
+    ...input,
+    productMarkupPercent: own ? input.variantMarkupPercent : input.productMarkupPercent,
+  });
+  const source: VariantPricingSource = resolved.pricingMode === 'MARKUP' && own ? 'VARIANT_MARKUP' : resolved.pricingSource;
+  return { ...resolved, pricingSource: source };
+}
+
+/**
  * order_items.markup_percentage_applied is NUMERIC(5,2) NOT NULL: the markup
  * to snapshot on an order line. A FIXED product's implied markup can be
  * negative, null (cost 0) or beyond 999.99 (a tiny cost), so it is clamped

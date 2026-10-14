@@ -1,4 +1,4 @@
-import type { Category, PricingMode, PricingSource } from '../api/types';
+import type { Category, PricingMode, PricingSource, VariantPricingSource } from '../api/types';
 
 /**
  * Selling-price modes and category markup (migration 044; owner, 2026-10-13).
@@ -54,8 +54,9 @@ export function formatLkr(n: number): string {
   return `LKR ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export const PRICING_SOURCE_LABEL: Record<PricingSource, string> = {
+export const PRICING_SOURCE_LABEL: Record<VariantPricingSource, string> = {
   FIXED: 'Fixed',
+  VARIANT_MARKUP: 'Variant markup',
   PRODUCT_MARKUP: 'Product markup',
   CATEGORY_MARKUP: 'Category markup',
   PARENT_CATEGORY_MARKUP: 'Parent category markup',
@@ -180,4 +181,102 @@ export function parseMarkupInput(text: string): { value: number | null } | { err
   const value = Number(raw);
   if (value > MAX_MARKUP_PERCENT) return { error: 'Markup must be between 0 and 999.99' };
   return { value };
+}
+
+// ------------------------------------------------------------------ variants
+/**
+ * Variants (migration 045; owner, 2026-10-14): the twin of the backend's
+ * resolveVariantPrice (pricing/index.ts) - the product rule with ONE extra
+ * markup at the front of the chain:
+ *   FIXED  - the variant's fixed selling price, to the cent.
+ *   MARKUP - variant cost x (1 + m / 100) to the cent, m = the variant's own
+ *            markup, else the product's custom markup, else the category's,
+ *            else the parent category's, else the global default (20%).
+ * Returns null where the server would refuse (no valid cost, a FIXED price
+ * not above 0, a negative markup) instead of throwing.
+ */
+export interface ResolveVariantPriceInput {
+  purchaseCost: number | string | null | undefined;
+  pricingMode?: PricingMode | string | null;
+  fixedSellingPrice?: number | string | null;
+  variantMarkupPercent?: number | string | null;
+  productMarkupPercent?: number | string | null;
+  categoryMarkupPercent?: number | string | null;
+  parentCategoryMarkupPercent?: number | string | null;
+  globalMarkupPercent?: number | string | null;
+}
+
+export interface ResolvedVariantPrice {
+  pricingMode: PricingMode;
+  pricingSource: VariantPricingSource;
+  purchaseCost: number;
+  sellingPrice: number;
+  /** MARKUP: the markup used. FIXED: the implied markup over cost (null when the cost is 0). */
+  effectiveMarkupPercent: number | null;
+  /** FIXED below cost: LKR lost per unit; else null (a warning, never a block). */
+  lossPerUnit: number | null;
+}
+
+/** The backend's `present`: a finite number, not null / undefined / blank text. */
+const given = (v: unknown): v is number | string =>
+  v !== null && v !== undefined && !(typeof v === 'string' && v.trim() === '') && Number.isFinite(Number(v));
+
+export function resolveVariantPrice(input: ResolveVariantPriceInput): ResolvedVariantPrice | null {
+  if (!given(input.purchaseCost)) return null;
+  const cost = Number(input.purchaseCost);
+  if (cost < 0) return null;
+
+  if (input.pricingMode === 'FIXED') {
+    if (!given(input.fixedSellingPrice) || !(Number(input.fixedSellingPrice) > 0)) return null;
+    const price = round2(Number(input.fixedSellingPrice));
+    return {
+      pricingMode: 'FIXED',
+      pricingSource: 'FIXED',
+      purchaseCost: cost,
+      sellingPrice: price,
+      effectiveMarkupPercent: marginPercent(cost, price),
+      lossPerUnit: price < cost ? round2(cost - price) : null,
+    };
+  }
+
+  let markup: number;
+  let source: VariantPricingSource;
+  if (given(input.variantMarkupPercent)) {
+    markup = Number(input.variantMarkupPercent);
+    source = 'VARIANT_MARKUP';
+  } else if (given(input.productMarkupPercent)) {
+    markup = Number(input.productMarkupPercent);
+    source = 'PRODUCT_MARKUP';
+  } else if (given(input.categoryMarkupPercent)) {
+    markup = Number(input.categoryMarkupPercent);
+    source = 'CATEGORY_MARKUP';
+  } else if (given(input.parentCategoryMarkupPercent)) {
+    markup = Number(input.parentCategoryMarkupPercent);
+    source = 'PARENT_CATEGORY_MARKUP';
+  } else {
+    markup = given(input.globalMarkupPercent) ? Number(input.globalMarkupPercent) : FALLBACK_GLOBAL_MARKUP;
+    source = 'GLOBAL_MARKUP';
+  }
+  if (markup < 0) return null;
+  return {
+    pricingMode: 'MARKUP',
+    pricingSource: source,
+    purchaseCost: cost,
+    sellingPrice: markupPrice(cost, markup),
+    effectiveMarkupPercent: markup,
+    lossPerUnit: null,
+  };
+}
+
+/** Where a variant's markup comes from: "variant markup 30%", "product markup 25%", ... */
+export function variantSourceText(source: VariantPricingSource, markup: number | null): string {
+  const pct = markup === null ? '' : ` ${formatPercent(markup)}%`;
+  if (source === 'VARIANT_MARKUP') return `variant markup${pct}`;
+  return markupSourceText(source, markup, null);
+}
+
+/** "LKR 50 - 350", or "LKR 50" when both ends are the same. */
+export function formatPriceRange(min: number, max: number): string {
+  const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return min === max ? `LKR ${fmt(min)}` : `LKR ${fmt(min)} - ${fmt(max)}`;
 }
