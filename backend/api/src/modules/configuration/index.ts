@@ -18,6 +18,7 @@ import {
   updateStoreSmsSchema,
 } from './store-schedule.js';
 import { doctorsAccessService, updateDoctorsAccessSchema } from './doctors-access.js';
+import { promoBandService, updatePromoBandSchema } from './promo-band.js';
 import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
@@ -305,6 +306,39 @@ adminSettingsRouter.patch(
     try {
       const input = updateDoctorsAccessSchema.parse(req.body);
       res.json({ success: true, data: await doctorsAccessService.set(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Home promo band (owner, 2026-10-14: "make sure promotional banner edit
+// option like this animation in the ops and admin"): the customer app's
+// animated yellow band - headlines, ticked points, colours, item in the beam,
+// mascot, link and schedule. Any subset of fields per PATCH; the merged band
+// is validated as a whole. Audited (PROMO_BAND_UPDATED). Customers read it
+// from GET /store (`promo_band`). See modules/configuration/promo-band.ts.
+adminSettingsRouter.get(
+  '/settings/promo-band',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await promoBandService.get() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/promo-band',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updatePromoBandSchema.parse(req.body);
+      res.json({ success: true, data: await promoBandService.set(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

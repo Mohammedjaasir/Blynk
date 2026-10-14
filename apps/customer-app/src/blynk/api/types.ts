@@ -17,6 +17,8 @@ export interface Promotion {
   background_image_url: string | null; background_focal_x: number; background_focal_y: number;
   cta_label: string | null;
   cta_destination_type: 'CATEGORY' | 'PRODUCT' | 'CATALOG' | null; cta_destination_value: string | null;
+  /** The resolved destination (null when it points at nothing); missing on older APIs. */
+  cta_target?: PromoTarget | null;
   display_order: number;
 }
 export interface ComboItem {
@@ -39,4 +41,29 @@ export interface StoreInfo {
   is_open_now: boolean; closed_kind: 'OPEN' | 'OUTSIDE_HOURS' | 'CLOSED_DAY' | 'HOLIDAY' | 'CLOSED_NOW';
   closed_reason: string | null; next_open_at: string | null; reopens_at?: string | null; delivery_slots_enabled: boolean;
   doctors_require_sign_in: boolean;
+  /**
+   * Home promo band, set in Admin and Ops (docs/promo-surfaces.md). null = hidden (off or
+   * outside its schedule); missing (an older API) = the band's built-in look.
+   */
+  promo_band?: PublicPromoBand | null;
+}
+
+/** Where a promo surface goes when tapped (the API's resolved promotion target). */
+export interface PromoTarget {
+  level: 'MAIN' | 'CATEGORY' | 'SUB_CATEGORY' | 'PRODUCT' | 'CATALOG';
+  id: string | null; slug: string | null; name: string | null;
+  parent_id: string | null; parent_slug: string | null; parent_name: string | null;
+  is_active: boolean | null;
+}
+
+/** GET /store `promo_band`: the band as the app should draw it now. */
+export interface PublicPromoBand {
+  lines: string[];
+  ticks: string[];
+  background: string;
+  colors: { start: string; end: string; text: string };
+  item: { kind: 'NONE' | 'ILLUSTRATED' | 'IMAGE'; illustration: string | null; image_url: string | null };
+  mascot: 'WAVE' | 'RIDE' | 'OFF';
+  cta_target: PromoTarget | null;
+  ends_at: string | null;
 }

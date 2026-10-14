@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { catalog, dental, inventory as inventoryApi } from '../api/resources';
+import { catalog, dental, inventory as inventoryApi, settings } from '../api/resources';
 import { PageHeader } from '../components/Layout';
 import { isOrderableButOut, stockState } from '../lib/inventory';
 
@@ -48,6 +48,8 @@ export function Catalog() {
   const [comboCount, setComboCount] = useState<number | null>(null);
   const [inventoryAttentionCount, setInventoryAttentionCount] = useState<number | null>(null);
   const [dentalClinicCount, setDentalClinicCount] = useState<number | null>(null);
+  // Home promo band (owner, 2026-10-14): its live / off state, not a count.
+  const [bandStatus, setBandStatus] = useState<string | null>(null);
 
   useEffect(() => {
     // `GET /admin/products` has no count and no `total`, so this reads every
@@ -67,6 +69,10 @@ export function Catalog() {
       .list({ low_stock_only: true, limit: 100 })
       .then((r) => setInventoryAttentionCount(r.inventory.filter((row) => stockState(row).kind !== 'IN_STOCK' || isOrderableButOut(row)).length))
       .catch(() => setInventoryAttentionCount(null));
+    void settings.promoBand
+      .get()
+      .then((b) => setBandStatus(b.status === 'LIVE' ? 'Live' : b.status === 'OFF' ? 'Off' : b.status === 'SCHEDULED' ? 'Later' : 'Ended'))
+      .catch(() => setBandStatus(null));
     void dental.clinics.list().then((rows) => setDentalClinicCount(rows.length)).catch(() => setDentalClinicCount(null));
   }, []);
 
@@ -96,6 +102,12 @@ export function Catalog() {
           <Link className="cat-hub__card" to="/catalog/promotions">
             <span className="cat-hub__title">Home promotions</span>
             <span className="cat-hub__count">{promotionCount === null ? '—' : promotionCount}</span>
+          </Link>
+        </li>
+        <li>
+          <Link className="cat-hub__card" to="/catalog/promo-band">
+            <span className="cat-hub__title">Promo band</span>
+            <span className="cat-hub__count">{bandStatus ?? '—'}</span>
           </Link>
         </li>
         <li>

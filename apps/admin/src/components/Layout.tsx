@@ -106,6 +106,10 @@ export function Layout() {
               <NavLink to="/promotions" className="nav__item">
                 Promotions
               </NavLink>
+              {/* Home promo band (owner, 2026-10-14). */}
+              <NavLink to="/promo-band" className="nav__item">
+                Promo band
+              </NavLink>
               <NavLink to="/coupons" className="nav__item">
                 Coupons
               </NavLink>

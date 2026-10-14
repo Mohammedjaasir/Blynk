@@ -603,6 +603,36 @@ export interface Promotion {
  * MAIN = a category group (stored CATALOG + group id), CATALOG = the whole
  * catalog, CATEGORY / SUB_CATEGORY = stored CATEGORY + slug, PRODUCT = id.
  */
+/**
+ * Home promo band (owner, 2026-10-14; backend modules/configuration/promo-band.ts,
+ * docs/promo-surfaces.md): GET|PATCH /admin/settings/promo-band.
+ */
+export type PromoBandBackground = 'YELLOW' | 'YELLOW_SOFT' | 'CREAM' | 'WHITE' | 'INK' | 'GREEN';
+export type PromoBandTextColor = 'INK' | 'WHITE' | 'YELLOW' | 'BROWN' | 'GREEN';
+export type PromoBandMascot = 'WAVE' | 'RIDE' | 'OFF';
+export type PromoBandItemKind = 'NONE' | 'ILLUSTRATED' | 'IMAGE';
+export interface PromoBandFields {
+  enabled: boolean;
+  lines: string[];
+  ticks: string[];
+  background: PromoBandBackground;
+  /** null = automatic (the most readable colour). */
+  text_color: PromoBandTextColor | null;
+  item_kind: PromoBandItemKind;
+  item_illustration: string | null;
+  item_image_url: string | null;
+  mascot: PromoBandMascot;
+  cta_destination_type: 'CATEGORY' | 'PRODUCT' | 'CATALOG' | null;
+  cta_destination_value: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+export interface PromoBandSetting extends PromoBandFields {
+  cta_target: PromotionTarget | null;
+  status: 'LIVE' | 'OFF' | 'SCHEDULED' | 'ENDED';
+  updated_at: string | null;
+}
+
 export interface PromotionTarget {
   level: 'MAIN' | 'CATEGORY' | 'SUB_CATEGORY' | 'PRODUCT' | 'CATALOG';
   id: string | null;

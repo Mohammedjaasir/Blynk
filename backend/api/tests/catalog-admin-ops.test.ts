@@ -219,7 +219,11 @@ describe('Delivery fee setting and GET /store', () => {
   it('GET /store is public and reports real store facts', async () => {
     const res = await request(app).get('/api/v1/store');
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({
+    // Home promo band (owner, 2026-10-14): whatever the stored row says, or
+    // null while off - its own contract is tests/promo-band.test.ts.
+    const { promo_band: promoBand, ...facts } = res.body.data;
+    expect(promoBand === null || typeof promoBand === 'object').toBe(true);
+    expect(facts).toEqual({
       delivery_fee_lkr: expect.any(Number),
       // Per-km tiers (owner, 2026-10-10): FLAT here; the tier table is never public.
       delivery_fee_mode: 'FLAT',
@@ -244,6 +248,8 @@ describe('Delivery fee setting and GET /store', () => {
       doctors_require_sign_in: false,
       // Show doctor channelling to customers (owner, 2026-10-14): on by default.
       doctors_enabled: true,
+      // Migration 047 (owner, 2026-10-14): PayHere "Pay online".
+      online_payment: expect.objectContaining({ provider: 'PAYHERE', enabled: expect.any(Boolean) }),
     });
   });
 

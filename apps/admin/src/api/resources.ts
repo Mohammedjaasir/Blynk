@@ -90,6 +90,8 @@ import type {
   CategoryImportInput,
   CategoryImportResult,
   CategoryImportTemplate,
+  PromoBandFields,
+  PromoBandSetting,
 } from './types';
 
 /**
@@ -511,6 +513,14 @@ export const promotions = {
     apiRequest<{ promotions: Promotion[] }>('/promotions', { auth: false }).then(
       (data) => data.promotions
     ),
+};
+
+// ------------------------------------------------------------ promo band
+/** Home promo band (owner, 2026-10-14): any subset of fields per PATCH. */
+export const promoBand = {
+  get: () => apiRequest<PromoBandSetting>('/admin/settings/promo-band'),
+  update: (body: Partial<PromoBandFields>) =>
+    apiRequest<PromoBandSetting>('/admin/settings/promo-band', { method: 'PATCH', body: { ...body } }),
 };
 
 // ---------------------------------------------------------------- orders

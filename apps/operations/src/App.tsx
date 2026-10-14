@@ -13,6 +13,7 @@ import { ProductForm } from './pages/Catalog/ProductForm';
 import { ProductImport } from './pages/Catalog/ProductImport';
 import { Products } from './pages/Catalog/Products';
 import { Promotions } from './pages/Catalog/Promotions';
+import { PromoBand } from './pages/Catalog/PromoBand';
 import { DeliverMyself } from './pages/DeliverMyself';
 import { Detail as DeliveryDetail } from './pages/Delivery/Detail';
 import { MyDay as DeliveryMyDay } from './pages/Delivery/MyDay';
@@ -150,6 +151,8 @@ export function AppRoutes() {
         <Route path="catalog/categories/:id/arrange" element={<ArrangeProducts />} />
         <Route path="catalog/category-groups" element={<CategoryGroups />} />
         <Route path="catalog/promotions" element={<Promotions />} />
+        {/* Home promo band (owner, 2026-10-14): the animated band, with a live preview. */}
+        <Route path="catalog/promo-band" element={<PromoBand />} />
         <Route path="catalog/combos" element={<Combos />} />
         <Route path="catalog/inventory" element={<InventoryOverview />} />
         <Route path="catalog/inventory/stock" element={<InventoryStock />} />
