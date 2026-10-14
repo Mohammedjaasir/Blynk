@@ -4,7 +4,7 @@ import { deliveriesApi } from '../api/resources';
 import type { DeliverySummary } from '../api/types';
 import { Banner } from '../components/Banner';
 import { Header } from '../components/Header';
-import { nextAction, splitQueue, statusLabel, statusTone } from '../lib/delivery';
+import { isPaidOnline, nextAction, PAID_ONLINE_NOTE, splitQueue, statusLabel, statusTone } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
 import { formatMoney, formatScheduledSlot, shortOrderNumber } from '../lib/format';
 import { syncTrackingFromList } from '../lib/tracker-session';
@@ -96,7 +96,7 @@ export function Queue() {
                             <span className="row__slot">{formatScheduledSlot(d.scheduled_for, d.scheduled_until)}</span>
                           ) : null}
                         </span>
-                        <span className="row__amount">{formatMoney(d.total_amount)}</span>
+                        <span className="row__amount">{isPaidOnline(d) ? 'Paid online' : formatMoney(d.total_amount)}</span>
                       </Link>
                     </li>
                   ))}
@@ -161,6 +161,8 @@ function NowSlip({ delivery: d }: { delivery: DeliverySummary }) {
           <span className="slip__cash-label">Cash to collect</span>
           <span className="slip__cash-amount">{formatMoney(d.total_amount)}</span>
         </p>
+      ) : isPaidOnline(d) ? (
+        <p className="slip__cash slip__cash--paid">{PAID_ONLINE_NOTE}</p>
       ) : null}
       <Link to={`/deliveries/${d.delivery_id}`} className="primary" aria-label={`Open delivery #${number}`}>
         Open delivery
@@ -217,6 +219,8 @@ function TripView({ stops }: { stops: TripStop[] }) {
                   <span className="slip__cash-label">Cash to collect</span>
                   <span className="slip__cash-amount">{formatMoney(d.total_amount)}</span>
                 </p>
+              ) : isPaidOnline(d) ? (
+                <p className="slip__cash slip__cash--paid">{PAID_ONLINE_NOTE}</p>
               ) : null}
               <Link
                 to={`/deliveries/${d.delivery_id}`}

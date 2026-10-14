@@ -8,6 +8,7 @@ import { adminDentalRouter } from '../dental/index.js';
 import { adminFeedbackRouter } from '../feedback/index.js';
 import { adminStaffRouter } from '../staff/index.js';
 import { adminSettingsRouter } from '../configuration/index.js';
+import { adminPaymentGatewayRouter } from '../payments/index.js';
 import { adminBirthdaysRouter } from '../birthday/index.js';
 import { adminCouponsRouter } from '../coupons/index.js';
 import { adminReportsRouter } from '../reports/index.js';
@@ -68,6 +69,10 @@ adminRouter.use(adminRiderPayRouter);
 
 // Store settings (delivery fee). ADMIN and OPERATIONS, guarded inside.
 adminRouter.use(adminSettingsRouter);
+
+// PayHere online payments (migration 047): ADMIN and OPERATIONS, credentials
+// ADMIN only - guarded inside.
+adminRouter.use(adminPaymentGatewayRouter);
 
 // Birthdays this week (migration 034; owner, 2026-10-09): ADMIN and
 // OPERATIONS, guarded inside.

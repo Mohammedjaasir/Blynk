@@ -30,6 +30,8 @@ import { effectivePrice } from '../catalog/catalog.offers.js';
 import { looseQuantities, priceComboLines } from '../catalog/catalog.combos.js';
 // Refer a friend and Blynk Points (owner, 2026-10-10; migration 037).
 import { checkoutRewardsInfo, previewReferral } from '../loyalty/order-rewards.js';
+// PayHere online payments (migration 047; owner, 2026-10-14).
+import { isReady, paymentGateway, publicOnlinePayment } from '../payments/gateway-settings.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -103,6 +105,12 @@ export function customerCanCancel(status: OrderStatus): boolean {
   return CATALOGUE.CUSTOMER_CANCEL.from.includes(status);
 }
 
+/** The customer's view of the payment row: no gateway_response, no refund flag internals. */
+export function sanitizeCustomerPayment(payment: any) {
+  const { gateway_response, transaction_reference, ...safe } = payment;
+  return safe;
+}
+
 export function sanitizeCustomerOrder(order: any) {
   if (!order) return order;
   // internal_notes is staff-only; the customer's own notes are customer_notes.
@@ -111,6 +119,8 @@ export function sanitizeCustomerOrder(order: any) {
     ...safeOrder,
     can_cancel: customerCanCancel(order.order_status),
     items: Array.isArray(order.items) ? order.items.map(sanitizeCustomerOrderItem) : order.items,
+    // PayHere (migration 047): the raw gateway notification stays staff-side.
+    ...(order.payment && typeof order.payment === 'object' ? { payment: sanitizeCustomerPayment(order.payment) } : {}),
     ...('delivery' in order ? { delivery: sanitizeCustomerDelivery(order.delivery) } : {}),
     ...(Array.isArray(order.history) ? { history: order.history.map(sanitizeCustomerHistory) } : {}),
   };
@@ -281,6 +291,17 @@ export class OrderService {
       throw new AppError('Ordering for someone else is not available right now.', 422, 'FOR_SOMEONE_ELSE_DISABLED');
     }
     const receiver = input.for_someone_else === true && input.recipient ? input.recipient : null;
+
+    // 3c. Pay online (migration 047): only while staff have PayHere switched
+    // on and it is fully configured.
+    let onlinePayment: { window_minutes: number } | null = null;
+    if (input.payment_method === 'ONLINE') {
+      const gateway = await paymentGateway.read();
+      if (!gateway.enabled || !isReady(gateway)) {
+        throw new AppError('Online payment is not available right now. Please choose cash on delivery.', 422, 'ONLINE_PAYMENT_UNAVAILABLE');
+      }
+      onlinePayment = { window_minutes: gateway.payment_window_minutes };
+    }
     const deliveryNote = input.delivery_note?.trim() ? input.delivery_note.trim() : null;
 
     // 4. Scheduled delivery: the slot's start, or null for as soon as possible.
@@ -340,6 +361,7 @@ export class OrderService {
       customer_notes: input.customer_notes ?? null,
       items: orderItemsData,
       combos: orderCombos,
+      online_payment: onlinePayment,
     };
 
     const createdOrder = await createWithUniqueNumber(orderData);
@@ -465,6 +487,8 @@ export class OrderService {
       order_for_someone_else: forOthers,
       // Owner, 2026-10-09: eligible -> the next order gets `percent` off its items.
       birthday_offer: publicBirthdayStatus(birthday),
+      // PayHere (migration 047): whether checkout offers "Pay online".
+      online_payment: await publicOnlinePayment(),
       // Owner, 2026-10-10: referral_reward (applied automatically when it is
       // the larger discount) and points (balance + the program's numbers).
       ...(await checkoutRewardsInfo(db, customerId, charged)),

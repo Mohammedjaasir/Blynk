@@ -3209,3 +3209,92 @@ th.cell__secondary {
   flex: 0 1 140px;
   margin: 0;
 }
+
+/* ------------------------------------------------ payments (PayHere, migration 047) */
+.pay-chip {
+  display: inline-block;
+  white-space: nowrap;
+  align-self: flex-start;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+  font-weight: 700;
+}
+.pay-chip--paid {
+  border-color: var(--green);
+  color: var(--green);
+}
+.pay-chip--pending {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.pay-chip--failed,
+.pay-chip--refunded,
+.pay-chip--refund {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.pay-chip--refund {
+  background: var(--danger);
+  color: #fff;
+}
+.pay-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+.pay-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 4px 0 0;
+  font-size: var(--text-meta);
+}
+.pay-details dt {
+  color: var(--ink-3);
+}
+.pay-details dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.pg-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.pg-urls {
+  display: grid;
+  gap: 8px;
+}
+.pg-url {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pg-url .input {
+  flex: 1;
+  min-width: 0;
+}
+.pg-warning {
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-weight: 700;
+}
+.pg-hash {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  font-size: var(--text-meta);
+}
+.pg-hash dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

@@ -56,7 +56,9 @@ describe('order lifecycle: no bypass', () => {
     const inserting = files.filter((f) => /insertInto\(\s*['"]orders['"]\s*\)/.test(f.text));
     expect(inserting.map((f) => f.rel)).toEqual(['modules/orders/order.repository.ts']);
     const repo = inserting[0].text;
-    expect(repo).toMatch(/order_status:\s*INITIAL_ORDER_STATUS/);
-    expect(repo).not.toMatch(/order_status:\s*'PLACED'/);
+    // Migration 047: PLACED for COD, AWAITING_PAYMENT for online - both from the lifecycle.
+    expect(repo).toMatch(/const initialStatus = initialOrderStatus\(paymentMethod\)/);
+    expect(repo).toMatch(/order_status:\s*initialStatus/);
+    expect(repo).not.toMatch(/order_status:\s*'(PLACED|AWAITING_PAYMENT)'/);
   });
 });

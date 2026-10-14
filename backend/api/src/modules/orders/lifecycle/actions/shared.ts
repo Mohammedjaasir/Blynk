@@ -7,7 +7,7 @@ import { releaseRedemption } from '../../../coupons/coupon.service.js';
 import { releaseBirthdayRedemption } from '../../../birthday/birthday.offer.js';
 import { onOrderCancelledRewards } from '../../../loyalty/order-rewards.js';
 import { enqueueCustomerSms } from '../notify.js';
-import { setOrderStatus } from '../status-writer.js';
+import { setOrderStatus, type OrderFields } from '../status-writer.js';
 import type { Actor, DeliveryRow, OrderRow, Trx } from '../types.js';
 
 /** Admin endpoint: the requested status is not reachable from the current one. */
@@ -73,8 +73,9 @@ export async function closeDeliveryAsFailed(trx: Trx, delivery: DeliveryRow, rea
  * the order lock: order -> inventory rows. A coupon the order used is
  * released so the customer can use it again, and so is a birthday gift.
  */
-export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reason: string) {
+export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reason: string, extra: OrderFields = {}) {
   const updated = await setOrderStatus(trx, order, 'CANCELLED', actor, reason, {
+    ...extra,
     cancellation_reason: reason,
     cancelled_by_user_id: actor.id,
     cancelled_at: new Date(),
@@ -87,6 +88,14 @@ export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reaso
   // Referral reward and Blynk Points (owner, 2026-10-10; migration 037): the
   // reward is released and the points given back.
   await onOrderCancelledRewards(trx, order);
+  // Online payments (migration 047): money already taken for this order must
+  // go back - flagged for staff (refunds are made in the PayHere portal).
+  if (order.payment_method === 'ONLINE' && order.payment_status === 'PAID') {
+    await trx.updateTable('payments').set({ refund_required: true, updated_at: new Date() }).where('order_id', '=', order.id).execute();
+  }
+  // An online order that was never paid was never confirmed to the customer:
+  // no "cancelled" SMS for it (owner: SMS cost); the app shows the state.
+  if (order.order_status === 'AWAITING_PAYMENT') return updated;
   // The SMS goes to the delivery recipient's phone, which the customer typed
   // and never proved: a customer's own reason is never put in it (security
   // audit 2026-10) - it stays on the order (cancellation_reason) for staff.

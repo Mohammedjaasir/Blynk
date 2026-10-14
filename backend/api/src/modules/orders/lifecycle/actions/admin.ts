@@ -3,7 +3,7 @@ import { AppError } from '../../../../middleware/error.middleware.js';
 import { ACTIVE_DELIVERY_STATUSES, CATALOGUE, type ActionName } from '../catalogue.js';
 import { confirmWithCode, confirmWithOverride } from '../delivery-code.js';
 import { enqueueCustomerSms } from '../notify.js';
-import { settleCod, type CodSettlement } from '../settlement.js';
+import { isPrepaidOnline, settleCod, type CodSettlement } from '../settlement.js';
 import { setOrderStatus } from '../status-writer.js';
 import type { ActionImpl, DeliveryRow, LockedState, OrderRow, Trx } from '../types.js';
 import { cancelOrder, closeDeliveryAsFailed, invalidTransition } from './shared.js';
@@ -178,6 +178,8 @@ export const adminMarkDelivered: ActionImpl<CodSettlement> = {
   },
   checkPreconditions(state) {
     requireDeliveryOnTheRoad(state);
+    // Paid online (migration 047): delivered through the same settlement, no cash.
+    if (isPrepaidOnline(state.order)) return;
     if (state.order.payment_status === 'PAID') {
       throw new AppError('Cash for this order has already been collected.', 409, 'COD_ALREADY_COLLECTED');
     }

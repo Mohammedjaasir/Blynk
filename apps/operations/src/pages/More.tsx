@@ -23,6 +23,7 @@ import { CustomerSmsLanguageCard } from '../components/CustomerSmsLanguageCard';
 import { AppVersionCard } from '../components/AppUpdate';
 import { AppUpdatesSettingsCard } from '../components/AppUpdatesSettingsCard';
 import { DefaultMarkupCard } from '../components/DefaultMarkupCard';
+import { PaymentGatewayCard } from '../components/PaymentGatewayCard';
 
 /**
  * The More tab (plan §8: rider list, settings, sign-out). Sign-out is real,
@@ -191,6 +192,8 @@ export function More() {
       {/* Selling prices (owner, 2026-10-13): the markup products fall back to. */}
       <DefaultMarkupCard />
       <CheckoutSettingsCard />
+      {/* PayHere online payments (docs/api/payhere.md): on/off, window, methods; credentials Admin-only. */}
+      <PaymentGatewayCard />
       {/* Customer SMS language (owner, 2026-10-12). */}
       <CustomerSmsLanguageCard />
       <RiderCommissionCard />

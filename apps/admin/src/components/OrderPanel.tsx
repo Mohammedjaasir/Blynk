@@ -15,6 +15,7 @@ import {
   type OrderAction,
 } from '../lib/orders';
 import type { UserRole } from '../api/types';
+import { REFUND_NEEDED_LABEL, gatewayMethodLabel, paymentLabel, refundNeeded } from '../lib/payments';
 import { scheduledLabel } from '../lib/schedule';
 import { Spinner } from './ui';
 import { OrderBill } from './OrderBill';
@@ -120,6 +121,8 @@ export function OrderPanel({
             <OrderBill order={detail} />
           </section>
 
+          <PaymentSection detail={detail} />
+
           <section className="order-panel__section" aria-label="Customer">
             <h3 className="order-panel__label">{detail.ordered_for_someone_else ? 'Receiver' : 'Customer'}</h3>
             {/* Owner, 2026-10-12: ordered for family, and "needs help at the door". */}
@@ -158,10 +161,6 @@ export function OrderPanel({
               {detail.delivery_address_line2 ? `, ${detail.delivery_address_line2}` : ''}, {detail.delivery_city}
             </p>
             {detail.delivery_instructions ? <p className="order-panel__note">“{detail.delivery_instructions}”</p> : null}
-            <p className="order-panel__meta">
-              {detail.payment_method === 'COD' ? 'Cash on delivery' : 'Paid online'} · {formatMoney(detail.total_amount)}
-              {detail.payment_status === 'PAID' ? ' · paid' : ''}
-            </p>
             {detail.cancellation_reason ? (
               <p className="order-panel__meta">Cancelled: {detail.cancellation_reason}</p>
             ) : null}
@@ -213,5 +212,63 @@ export function OrderPanel({
         </footer>
       ) : null}
     </aside>
+  );
+}
+
+/**
+ * How the order is paid (docs/api/payhere.md sections 2 and 5): the label,
+ * "Refund needed" when staff must refund by hand, and the PayHere details.
+ */
+function PaymentSection({ detail }: { detail: OrderDetail }) {
+  const label = paymentLabel(detail);
+  const refund = refundNeeded(detail);
+  const p = detail.payment ?? null;
+  const method = gatewayMethodLabel(p?.gateway_method);
+  const awaiting = detail.order_status === 'AWAITING_PAYMENT';
+  return (
+    <section className="order-panel__section" aria-label="Payment">
+      <h3 className="order-panel__label">Payment</h3>
+      <div className="pay-chips">
+        {label ? (
+          <span className={`pay-chip pay-chip--${label.tone}`} data-testid="payment-label">
+            {label.text}
+          </span>
+        ) : null}
+        {refund ? (
+          <span className="pay-chip pay-chip--refund" role="alert">
+            {REFUND_NEEDED_LABEL}
+          </span>
+        ) : null}
+        <span className="order-panel__meta">{formatMoney(detail.total_amount)}</span>
+      </div>
+      {awaiting ? (
+        <p className="order-panel__meta" data-testid="payment-awaiting">
+          Waiting for the customer to pay online. Not packable until PayHere confirms the payment
+          {detail.payment_expires_at ? `; cancelled automatically at ${formatClock(detail.payment_expires_at)}` : ''}.
+        </p>
+      ) : null}
+      {p && (p.gateway_payment_id || method || p.gateway_status_message) ? (
+        <dl className="pay-details">
+          {p.gateway_payment_id ? (
+            <>
+              <dt>PayHere payment ID</dt>
+              <dd className="mono">{p.gateway_payment_id}</dd>
+            </>
+          ) : null}
+          {method ? (
+            <>
+              <dt>Method</dt>
+              <dd>{method}</dd>
+            </>
+          ) : null}
+          {p.gateway_status_message ? (
+            <>
+              <dt>Message</dt>
+              <dd>{p.gateway_status_message}</dd>
+            </>
+          ) : null}
+        </dl>
+      ) : null}
+    </section>
   );
 }

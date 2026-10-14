@@ -1,4 +1,4 @@
-import type { ItemFulfillmentStatus, OrderStatus, UserRole, DeliveryAssignmentStatus } from '../../../database/types.js';
+import type { ItemFulfillmentStatus, OrderStatus, PaymentMethod, UserRole, DeliveryAssignmentStatus } from '../../../database/types.js';
 
 /**
  * The canonical order lifecycle (dispatch plan §O.2), as data.
@@ -23,6 +23,9 @@ export const ACTION_NAMES = [
   'ADMIN_MARK_CUSTOMER_UNAVAILABLE',
   'ADMIN_CANCEL',
   'RESTAGE',
+  // PayHere online payments (migration 047; owner, 2026-10-14).
+  'PAYMENT_CONFIRMED',
+  'PAYMENT_EXPIRED',
 ] as const;
 export type ActionName = (typeof ACTION_NAMES)[number];
 
@@ -79,7 +82,7 @@ const RIDER_OR_OPS: readonly UserRole[] = ['RIDER', 'ADMIN', 'OPERATIONS'];
 
 export const CATALOGUE: Record<ActionName, CatalogueEntry> = {
   CUSTOMER_CANCEL: {
-    action: 'CUSTOMER_CANCEL', from: ['PLACED', 'PACKED'], to: 'CANCELLED', roles: ['CUSTOMER'],
+    action: 'CUSTOMER_CANCEL', from: ['AWAITING_PAYMENT', 'PLACED', 'PACKED'], to: 'CANCELLED', roles: ['CUSTOMER'],
     lock: 'order', notesRequired: false, stock: 'RESTORE_ORDER_STOCK', notifications: ['ORDER_CANCELLED'],
   },
   RESOLVE_ITEM: {
@@ -127,17 +130,43 @@ export const CATALOGUE: Record<ActionName, CatalogueEntry> = {
     lock: 'activeDeliveries', notesRequired: true, stock: 'NONE', notifications: [],
   },
   ADMIN_CANCEL: {
-    action: 'ADMIN_CANCEL', from: ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'CANCELLED', roles: ADMIN,
+    action: 'ADMIN_CANCEL', from: ['AWAITING_PAYMENT', 'PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'CANCELLED', roles: ADMIN,
     lock: 'order', notesRequired: true, stock: 'RESTORE_ORDER_STOCK', notifications: ['ORDER_CANCELLED'],
   },
   RESTAGE: {
     action: 'RESTAGE', from: ['FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'PACKED', roles: ADMIN,
     lock: 'activeDeliveries', notesRequired: true, stock: 'NONE', notifications: [],
   },
+  /**
+   * PayHere's verified notification (status 2, amount and currency checked)
+   * releases an online order to the store. Run by payments/payhere.service.ts
+   * only, as the order's own customer (the payer); never exposed as a route.
+   */
+  PAYMENT_CONFIRMED: {
+    action: 'PAYMENT_CONFIRMED', from: ['AWAITING_PAYMENT'], to: 'PLACED', roles: ['CUSTOMER'],
+    lock: 'order', notesRequired: false, stock: 'NONE', notifications: [],
+  },
+  /**
+   * An online order not paid within the payment window is cancelled: coupon,
+   * birthday gift, referral reward and points are released (no stock was
+   * taken - stock moves only at packing). No SMS (owner: SMS cost).
+   */
+  PAYMENT_EXPIRED: {
+    action: 'PAYMENT_EXPIRED', from: ['AWAITING_PAYMENT'], to: 'CANCELLED', roles: ['CUSTOMER'],
+    lock: 'order', notesRequired: false, stock: 'RESTORE_ORDER_STOCK', notifications: [],
+  },
 };
 
 /** Status of a newly placed order (PLACE_ORDER). */
 export const INITIAL_ORDER_STATUS: OrderStatus = 'PLACED';
+
+/** Status of a newly placed order paid online: not packable until paid (migration 047). */
+export const AWAITING_PAYMENT_STATUS: OrderStatus = 'AWAITING_PAYMENT';
+
+/** PLACE_ORDER's status for the chosen payment method. */
+export function initialOrderStatus(paymentMethod: PaymentMethod): OrderStatus {
+  return paymentMethod === 'ONLINE' ? AWAITING_PAYMENT_STATUS : INITIAL_ORDER_STATUS;
+}
 
 /** Orders nobody may move any further along the delivery path. */
 export const CLOSED_ORDER_STATUSES: readonly OrderStatus[] = ['CANCELLED', 'DELIVERED', 'FAILED', 'CUSTOMER_UNAVAILABLE'];

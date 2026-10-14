@@ -11,7 +11,17 @@ import { TrackingStatus } from '../components/TrackingStatus';
 import { DeliveryMap } from '../components/DeliveryMap';
 import { Navigation } from 'lucide-react';
 import { googleMapsDirectionsUrl, toLatLng } from '../lib/route';
-import { bagRows, canReportFailure, isTrackable, nextAction, stage, statusLabel, statusTone } from '../lib/delivery';
+import {
+  bagRows,
+  canReportFailure,
+  isPaidOnline,
+  isTrackable,
+  nextAction,
+  PAID_ONLINE_NOTE,
+  stage,
+  statusLabel,
+  statusTone,
+} from '../lib/delivery';
 import { MESSAGES, deliveryCodeLockedUntil, errorCode, errorMessage } from '../lib/errors';
 import { formatMoney, formatPhone, formatScheduledSlot, formatTime, shortOrderNumber } from '../lib/format';
 import { getTracker, stopTrackingFor, syncTracking } from '../lib/tracker-session';
@@ -257,7 +267,9 @@ function Slip({
       {done ? (
         <section className="settled" aria-label="Delivered">
           <p className="settled__title">Delivered</p>
-          <p className="settled__amount">{formatMoney(d.cod_collected_amount)} collected</p>
+          <p className="settled__amount">
+            {isPaidOnline(d) ? 'Paid online — no cash collected' : `${formatMoney(d.cod_collected_amount)} collected`}
+          </p>
           {d.delivered_at ? <p className="settled__time">at {formatTime(d.delivered_at)}</p> : null}
         </section>
       ) : null}
@@ -381,6 +393,10 @@ function Slip({
           <span className="cash__label">Cash to collect</span>
           <span className="cash__amount">{formatMoney(d.total_amount)}</span>
         </section>
+      ) : isPaidOnline(d) && !closed && !done ? (
+        <section className={`cash cash--paid${stage(d) === 2 ? ' cash--now' : ''}`} aria-label="Payment">
+          <span className="cash__label">{PAID_ONLINE_NOTE}</span>
+        </section>
       ) : null}
     </article>
   );
@@ -459,6 +475,8 @@ function CollectSheet({
   const hintId = useId();
   const input = useRef<HTMLInputElement>(null);
   const complete = code.length === DELIVERY_CODE_LENGTH;
+  // Paid online (PayHere): no cash to count - the code alone completes the handover.
+  const prepaid = isPaidOnline(delivery);
 
   // A wrong code is cleared so the next attempt starts clean.
   useEffect(() => {
@@ -469,7 +487,7 @@ function CollectSheet({
   }, [problem]);
 
   return (
-    <Sheet title={`Collect ${formatMoney(delivery.total_amount)} in cash`} onClose={onClose}>
+    <Sheet title={prepaid ? 'Confirm the delivery code' : `Collect ${formatMoney(delivery.total_amount)} in cash`} onClose={onClose}>
       <form
         className="sheet__form"
         onSubmit={(event) => {
@@ -477,9 +495,15 @@ function CollectSheet({
           if (complete && !busy && !locked) onSubmit(code);
         }}
       >
-        <p className="sheet__body">
-          from {delivery.delivery_recipient_name}. Count it before you confirm — this completes the delivery.
-        </p>
+        {prepaid ? (
+          <p className="sheet__body">
+            {PAID_ONLINE_NOTE}. Hand the order to {delivery.delivery_recipient_name} — the code completes the delivery.
+          </p>
+        ) : (
+          <p className="sheet__body">
+            from {delivery.delivery_recipient_name}. Count it before you confirm — this completes the delivery.
+          </p>
+        )}
         <label className="field" htmlFor={fieldId}>
           <span className="field__label">Customer's delivery code</span>
           <input
@@ -508,7 +532,7 @@ function CollectSheet({
         ) : null}
         <div className="sheet__actions">
           <button type="submit" className="primary" disabled={!complete || busy || locked}>
-            {busy ? 'Recording…' : 'Cash collected — complete'}
+            {busy ? 'Recording…' : prepaid ? 'Code checked — complete' : 'Cash collected — complete'}
           </button>
           <button type="button" className="text-button" onClick={onClose}>
             Not yet

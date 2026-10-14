@@ -8,6 +8,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { deliveryErrorMessage, nextAction, splitQueue, statusLabel, statusTone } from '../../lib/delivery';
 import { errorCode } from '../../lib/errors';
 import { formatMoney, shortNumber } from '../../lib/orders';
+import { isPaidOnline } from '../../lib/payments';
 import { syncTrackingFromList } from '../../lib/tracker-session';
 import {
   formatAway,
@@ -218,6 +219,10 @@ function NowCard({ delivery: d }: { delivery: DeliverySummary }) {
         <p className="delivery-card__meta">
           <span className="order-detail__strong">Cash to collect: {formatMoney(d.total_amount)}</span>
         </p>
+      ) : isPaidOnline(d) ? (
+        <p className="delivery-card__meta">
+          <span className="order-detail__strong">Paid online - do not collect cash</span>
+        </p>
       ) : null}
       <Link to={`/delivery/${d.delivery_id}`} className="primary" aria-label={`Open delivery #${number}`}>
         Open delivery
@@ -269,6 +274,10 @@ export function TripCard({ stops }: { stops: TripStop[] }) {
               {owesCash(d) ? (
                 <p className="delivery-card__meta">
                   <span className="order-detail__strong">Cash to collect: {formatMoney(d.total_amount)}</span>
+                </p>
+              ) : isPaidOnline(d) ? (
+                <p className="delivery-card__meta">
+                  <span className="order-detail__strong">Paid online - do not collect cash</span>
                 </p>
               ) : null}
               <Link

@@ -31,6 +31,7 @@ export const ORDER_MAP_RANGE_LABEL: Record<OrderMapRange, string> = {
 
 /** Status breakdown order: the live pipeline first, then how orders ended. */
 export const STATUS_ORDER = [
+  'AWAITING_PAYMENT',
   'PLACED',
   'ITEM_UNAVAILABLE',
   'PACKED',

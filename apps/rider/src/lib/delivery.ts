@@ -10,13 +10,21 @@ import { formatMoney } from './format';
 export type RiderAction =
   | { kind: 'pickUp'; label: 'Picked up' }
   | { kind: 'arrive'; label: "I've arrived" }
-  | { kind: 'collect'; label: string; amount: number }
+  /** prepaid: paid online through PayHere - confirm the code only, no cash (owner, 2026-10-14). */
+  | { kind: 'collect'; label: string; amount: number; prepaid?: boolean }
   | {
       kind: 'none';
       reason: 'being-packed' | 'cancelled' | 'failed' | 'done' | 'not-cod' | 'check-store';
     };
 
 const FAILED_ORDER: OrderStatus[] = ['FAILED', 'CUSTOMER_UNAVAILABLE'];
+
+/** Paid online through PayHere: the rider collects no cash (owner, 2026-10-14). */
+export function isPaidOnline(d: Pick<DeliverySummary, 'payment_method' | 'payment_status'>): boolean {
+  return d.payment_method === 'ONLINE' && d.payment_status === 'PAID';
+}
+
+export const PAID_ONLINE_NOTE = 'Paid online — do not collect cash';
 
 export function nextAction(d: DeliverySummary): RiderAction {
   if (d.assignment_status === 'DELIVERED' || d.order_status === 'DELIVERED') return { kind: 'none', reason: 'done' };
@@ -38,6 +46,8 @@ export function nextAction(d: DeliverySummary): RiderAction {
       break;
     case 'ARRIVED_AT_CUSTOMER':
       if (d.order_status === 'OUT_FOR_DELIVERY') {
+        // Paid online (PayHere, migration 047): the handover is the delivery code only.
+        if (isPaidOnline(d)) return { kind: 'collect', label: 'Confirm delivery code', amount: 0, prepaid: true };
         if (d.payment_method !== 'COD' || d.payment_status !== 'PENDING') return { kind: 'none', reason: 'not-cod' };
         return { kind: 'collect', label: `Collect ${formatMoney(d.total_amount)}`, amount: d.total_amount };
       }
@@ -110,7 +120,8 @@ export function splitQueue(list: DeliverySummary[]): Queue {
     now,
     next: open.filter((d) => d !== now),
     done,
-    collectedToday: done.reduce((sum, d) => sum + d.total_amount, 0),
+    // Cash only: an order paid online brought no cash in.
+    collectedToday: done.filter((d) => !isPaidOnline(d)).reduce((sum, d) => sum + d.total_amount, 0),
   };
 }
 

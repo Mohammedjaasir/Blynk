@@ -8,6 +8,7 @@ import { storeSchedule } from './store-schedule.js';
 import { doctorsAccess } from './doctors-access.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
+import { publicOnlinePayment } from '../payments/gateway-settings.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
 import { RIDER_BATCHING_KEY, getBatchingRules, type BatchingRules } from '../riders/batching.js';
 import { kmTiersFrom, kmTiersSchema, type KmTier } from '../pricing/km-tiers.js';
@@ -803,6 +804,8 @@ export class SettingsService {
       delivery_slots_enabled: schedule.slots.enabled,
       // Owner, 2026-10-10: guests must sign in before the app shows doctors.
       doctors_require_sign_in: doctors.require_sign_in,
+      // PayHere (migration 047; owner, 2026-10-14): whether "Pay online" is offered.
+      online_payment: await publicOnlinePayment(),
     };
   }
 }

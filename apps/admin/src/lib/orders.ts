@@ -8,6 +8,8 @@ import type { UserRole } from '../api/types';
  * re-checks every step under its locks, and the board shows its refusals.
  */
 export type OrderStatus =
+  /** Online (PayHere) order not paid yet (migration 047): never packable, not on the packing lanes. */
+  | 'AWAITING_PAYMENT'
   | 'PLACED'
   | 'PACKED'
   | 'OUT_FOR_DELIVERY'
@@ -46,7 +48,7 @@ export interface BoardOrderLike {
   active_delivery: ActiveDelivery | null;
 }
 
-export type Lane = 'attention' | 'toPack' | 'readyForRider' | 'waitingPickup' | 'onTheRoad' | 'done';
+export type Lane = 'attention' | 'toPack' | 'readyForRider' | 'waitingPickup' | 'onTheRoad' | 'awaitingPayment' | 'done';
 
 /** Lanes in the order work flows through the store; exceptions first. */
 export const LANES: ReadonlyArray<{ id: Lane; title: string; empty: string }> = [
@@ -55,6 +57,9 @@ export const LANES: ReadonlyArray<{ id: Lane; title: string; empty: string }> = 
   { id: 'readyForRider', title: 'Ready for a rider', empty: 'No packed orders waiting for a rider.' },
   { id: 'waitingPickup', title: 'Waiting for pickup', empty: 'No rider is waiting at the counter.' },
   { id: 'onTheRoad', title: 'On the road', empty: 'No deliveries on the road.' },
+  // Online orders the customer has not paid yet: shown for information only,
+  // never packed until PayHere confirms the payment (docs/api/payhere.md).
+  { id: 'awaitingPayment', title: 'Awaiting payment', empty: 'No online orders waiting for payment.' },
 ];
 
 export function laneOf(order: BoardOrderLike): Lane {
@@ -69,6 +74,8 @@ export function laneOf(order: BoardOrderLike): Lane {
       return order.active_delivery ? 'waitingPickup' : 'readyForRider';
     case 'OUT_FOR_DELIVERY':
       return 'onTheRoad';
+    case 'AWAITING_PAYMENT':
+      return 'awaitingPayment';
     default:
       return 'done';
   }
@@ -86,7 +93,9 @@ export function uncostedSubstitutions(s: ItemsSummary): number {
  * something is left in the bag (backend `packingBlockers`; a substitution
  * with its cost counts as in the bag). Mirrors apps/operations/src/lib/orders.ts.
  */
-export function isPackable({ items_summary: s }: BoardOrderLike): boolean {
+export function isPackable({ order_status, items_summary: s }: BoardOrderLike): boolean {
+  // An unpaid online order is never packed (only PLACED orders reach the packers).
+  if (order_status === 'AWAITING_PAYMENT') return false;
   const uncosted = uncostedSubstitutions(s);
   return uncosted === 0 && s.pending + s.sourced + s.packed + (s.substituted - uncosted) > 0;
 }
@@ -152,7 +161,8 @@ const RULES: ReadonlyArray<[OrderAction, OrderStatus[], UserRole[], (o: BoardOrd
   ['markCustomerUnavailable', ['OUT_FOR_DELIVERY'], ADMIN, () => true],
   ['restage', ['FAILED', 'CUSTOMER_UNAVAILABLE'], ADMIN, () => true],
   // A failed or customer-unavailable order can be closed directly too (2026-10-08).
-  ['cancel', ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], ADMIN, () => true],
+  // An unpaid online order can be cancelled too (ADMIN_CANCEL accepts AWAITING_PAYMENT; a note is required).
+  ['cancel', ['AWAITING_PAYMENT', 'PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], ADMIN, () => true],
 ];
 
 export function allowedActions(order: BoardOrderLike, role: UserRole | undefined): OrderAction[] {
@@ -192,6 +202,7 @@ export const ACTION_LABEL: Record<OrderAction, string> = {
 };
 
 export const STATUS_LABEL: Record<OrderStatus, string> = {
+  AWAITING_PAYMENT: 'Awaiting payment',
   PLACED: 'Placed',
   PACKED: 'Packed',
   OUT_FOR_DELIVERY: 'Out for delivery',

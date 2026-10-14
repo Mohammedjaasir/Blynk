@@ -25,7 +25,9 @@ export interface BoardOrderLike {
   active_delivery: ActiveDelivery | null;
 }
 
-export type Lane = 'attention' | 'toPack' | 'readyForRider' | 'waitingPickup' | 'onTheRoad' | 'done';
+/** `awaitingPayment` is not a work lane (it is not in LANES): an online order
+ * waiting for PayHere is shown muted, apart from the lanes, with no action. */
+export type Lane = 'attention' | 'toPack' | 'readyForRider' | 'waitingPickup' | 'onTheRoad' | 'awaitingPayment' | 'done';
 
 /** Lanes in the order work flows through the store; exceptions first. */
 export const LANES: ReadonlyArray<{ id: Lane; title: string; empty: string }> = [
@@ -38,6 +40,8 @@ export const LANES: ReadonlyArray<{ id: Lane; title: string; empty: string }> = 
 
 export function laneOf(order: BoardOrderLike): Lane {
   switch (order.order_status) {
+    case 'AWAITING_PAYMENT':
+      return 'awaitingPayment';
     case 'ITEM_UNAVAILABLE':
     case 'FAILED':
     case 'CUSTOMER_UNAVAILABLE':
@@ -65,7 +69,9 @@ export function uncostedSubstitutions(s: ItemsSummary): number {
  * something is left in the bag (backend `packingBlockers`; a substitution
  * with its cost counts as in the bag). Mirrors apps/admin/src/lib/orders.ts.
  */
-export function isPackable({ items_summary: s }: BoardOrderLike): boolean {
+export function isPackable({ order_status, items_summary: s }: BoardOrderLike): boolean {
+  // An online order is packed only once PayHere has confirmed the payment (PLACED).
+  if (order_status === 'AWAITING_PAYMENT') return false;
   const uncosted = uncostedSubstitutions(s);
   return uncosted === 0 && s.pending + s.sourced + s.packed + (s.substituted - uncosted) > 0;
 }
@@ -95,7 +101,8 @@ const RULES: ReadonlyArray<[OrderAction, OrderStatus[], (o: BoardOrderLike) => b
   ['markCustomerUnavailable', ['OUT_FOR_DELIVERY'], () => true],
   ['restage', ['FAILED', 'CUSTOMER_UNAVAILABLE'], () => true],
   // A failed or customer-unavailable order can be closed directly too (2026-10-08).
-  ['cancel', ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], () => true],
+  // An unpaid online order can be cancelled by staff too (PayHere, backend ADMIN_CANCEL).
+  ['cancel', ['AWAITING_PAYMENT', 'PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], () => true],
 ];
 
 export function allowedActions(order: BoardOrderLike): OrderAction[] {
@@ -132,6 +139,7 @@ export const ACTION_LABEL: Record<OrderAction, string> = {
 };
 
 export const STATUS_LABEL: Record<OrderStatus, string> = {
+  AWAITING_PAYMENT: 'Awaiting payment',
   PLACED: 'Placed',
   PACKED: 'Packed',
   OUT_FOR_DELIVERY: 'Out for delivery',

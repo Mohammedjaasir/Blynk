@@ -92,7 +92,7 @@
   if (!still) {
     const art = document.querySelector('.hero__art');
     const veggies = document.querySelector('.deco--veggies');
-    const skyline = document.querySelector('.deco--skyline');
+    const veggiesRight = document.querySelector('.deco--veggies-right');
     const root = document.documentElement;
     let queued = false;
     const frame = () => {
@@ -103,7 +103,7 @@
       if (y < window.innerHeight * 1.5) {
         if (art) art.style.translate = `0 ${(y * -0.12).toFixed(1)}px`;
         if (veggies) veggies.style.translate = `0 ${(y * 0.18).toFixed(1)}px`;
-        if (skyline) skyline.style.translate = `0 ${(y * 0.08).toFixed(1)}px`;
+        if (veggiesRight) veggiesRight.style.translate = `0 ${(y * 0.1).toFixed(1)}px`;
       }
     };
     window.addEventListener('scroll', () => {

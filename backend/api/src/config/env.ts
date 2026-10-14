@@ -66,6 +66,21 @@ const envSchema = z.object({
   // the code (src/ or dist/); the Docker image sets /app/app-files.
   APP_FILES_DIR: z.string().optional(),
 
+  // PayHere online payments (migration 047; owner, 2026-10-14). The merchant
+  // secret is saved encrypted with a key derived from PAYMENT_SECRET_KEY
+  // (>= 32 characters). Unset, staff cannot save a secret and online payment
+  // stays off. Read at call time by payments/secret-box.ts. Changing it makes
+  // the stored secret unreadable - re-enter the secret in Admin.
+  PAYMENT_SECRET_KEY: z.preprocess(
+    (val) => (val === '' ? undefined : val),
+    z.string().min(32, { message: 'PAYMENT_SECRET_KEY must be at least 32 characters' }).optional()
+  ),
+  // Optional overrides; defaults: PUBLIC_BASE_URL + API_PREFIX +
+  // /payments/payhere/notify, and WEB_APP_URL + payment/return|cancel.
+  PAYHERE_NOTIFY_URL: z.preprocess((val) => (val === '' ? undefined : val), z.string().url().optional()),
+  PAYHERE_RETURN_URL: z.preprocess((val) => (val === '' ? undefined : val), z.string().url().optional()),
+  PAYHERE_CANCEL_URL: z.preprocess((val) => (val === '' ? undefined : val), z.string().url().optional()),
+
   // Logging
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 

@@ -21,11 +21,22 @@ export interface CodSettlement {
  * amount, payment PAID, order DELIVERED/PAID with its history row, and the
  * DELIVERED and COD_PAYMENT_CONFIRMED messages.
  */
+/**
+ * Migration 047: an ONLINE order already PAID through PayHere. It is delivered
+ * through the same settlement with no cash collected (cod_collected_amount 0,
+ * no "cash received" SMS, the payment row left as the gateway set it).
+ */
+export function isPrepaidOnline(order: Pick<OrderRow, 'payment_method' | 'payment_status'>): boolean {
+  return order.payment_method === 'ONLINE' && order.payment_status === 'PAID';
+}
+
 export async function settleCod(
   trx: Trx,
   params: { delivery: DeliveryRow; order: OrderRow; amount: number; actor: Actor; note: string }
 ): Promise<CodSettlement> {
-  const { delivery, order, amount, actor, note } = params;
+  const { delivery, order, actor, note } = params;
+  const prepaid = isPrepaidOnline(order);
+  const amount = prepaid ? 0 : params.amount;
   const now = new Date();
   // Rider pay (migration 032; owner, 2026-10-09): what this delivery earned,
   // with the rider's pay type and share as they are now - a snapshot, so a
@@ -43,11 +54,13 @@ export async function settleCod(
   await recordDeliveryBonusLines(trx, delivery.rider_id, delivery.id, now, pay.lines);
   await awardDailyTargets(trx, delivery.rider_id, pay.columns.rider_pay_type, now);
 
-  await trx
-    .updateTable('payments')
-    .set({ payment_status: 'PAID', paid_at: now, updated_at: now })
-    .where('order_id', '=', order.id)
-    .execute();
+  if (!prepaid) {
+    await trx
+      .updateTable('payments')
+      .set({ payment_status: 'PAID', paid_at: now, updated_at: now })
+      .where('order_id', '=', order.id)
+      .execute();
+  }
 
   const delivered = await setOrderStatus(trx, order, 'DELIVERED', actor, note, { payment_status: 'PAID', delivered_at: now });
   // Refer a friend + Blynk Points (owner, 2026-10-10; migration 037): the
@@ -57,10 +70,12 @@ export async function settleCod(
   await enqueueCustomerSms(trx, order, 'DELIVERED', `order_${order.id}_DELIVERED_SMS`, {
     order_number: order.order_number,
   });
-  await enqueueCustomerSms(trx, order, 'COD_PAYMENT_CONFIRMED', `order_${order.id}_COD_CONFIRMED_SMS`, {
-    order_number: order.order_number,
-    amount,
-  });
+  if (!prepaid) {
+    await enqueueCustomerSms(trx, order, 'COD_PAYMENT_CONFIRMED', `order_${order.id}_COD_CONFIRMED_SMS`, {
+      order_number: order.order_number,
+      amount,
+    });
+  }
 
   return {
     delivery_id: delivery.id,

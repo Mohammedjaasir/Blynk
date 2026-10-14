@@ -154,10 +154,10 @@ a { color: inherit; }
   -webkit-mask-image: radial-gradient(circle at 0% 100%, #000 58%, transparent 82%);
   mask-image: radial-gradient(circle at 0% 100%, #000 58%, transparent 82%);
 }
-.deco--skyline {
-  left: 40%; bottom: 60px; width: min(24vw, 330px); opacity: 0.5; mix-blend-mode: multiply;
-  -webkit-mask-image: radial-gradient(ellipse 60% 70% at 50% 60%, #000 40%, transparent 100%);
-  mask-image: radial-gradient(ellipse 60% 70% at 50% 60%, #000 40%, transparent 100%);
+.deco--veggies-right {
+  right: 0; bottom: 24px; width: min(16vw, 220px); opacity: 0.85; transform: scaleX(-1);
+  -webkit-mask-image: radial-gradient(circle at 0% 100%, #000 58%, transparent 82%);
+  mask-image: radial-gradient(circle at 0% 100%, #000 58%, transparent 82%);
 }
 
 /* ------------------------------ Sections ------------------------------
@@ -346,7 +346,7 @@ html, body { overflow-x: clip; }
    Laid out like the owner's reference (5a5cebc9-...png), without its
    highlights bar (removed at the owner's request, 2026-09-29): copy on the
    left, the two phones whole in the right half, the grocery bag bottom-left
-   and the skyline faint behind. Header + hero fill one window; text sizes
+   and the vegetables faint at the edges. Header + hero fill one window; text sizes
    follow the window height so a short laptop window still fits. */
 @media (min-width: 961px) {
   :root { --nav-h: 96px; }
@@ -380,7 +380,7 @@ html, body { overflow-x: clip; }
   }
   /* The grocery bag sits in the bottom-left corner, clear of the copy. */
   .deco--veggies { width: min(15vw, 230px); left: -24px; bottom: -64px; z-index: 0; }
-  .deco--skyline { left: 30%; bottom: -10px; width: min(26vw, 400px); opacity: 0.45; }
+  .deco--veggies-right { right: -24px; bottom: -48px; width: min(12vw, 180px); z-index: 0; }
 }
 }
 
@@ -394,7 +394,7 @@ html, body { overflow-x: clip; }
   .nav__cta { margin-left: auto; }
   .hero { grid-template-columns: minmax(0, 1fr); padding-bottom: 60px; min-height: 0; }
   .hero__art { justify-self: center; width: min(100%, 560px); margin-right: 0; }
-  .deco--skyline { display: none; }
+  .deco--veggies-right { display: none; }
   .deco--veggies { bottom: auto; top: 58%; width: 150px; opacity: 0.9; }
 }
 @media (max-width: 600px) {
@@ -496,3 +496,52 @@ html, body { overflow-x: clip; }
 /* Support contacts (owner, 2026-10-08) */
 .footer__help { margin: 0; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; }
 .footer__help a { color: var(--green); font-weight: 700; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+
+/* Legal pages and links (owner, 2026-10-14): /privacy, /terms, /refunds. */
+.footer__legal { display: flex; flex-wrap: wrap; gap: 0 18px; }
+.footer__legal a { color: var(--ink-2); text-decoration: none; font-size: 15px; min-height: 44px; display: inline-flex; align-items: center; }
+.footer__legal a:hover, .footer__legal a[aria-current="page"] { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+@media (min-width: 768px) {
+  .footer .footer__legal { grid-column: 2 / -1; justify-content: flex-end; }
+}
+
+.nav__home { margin-left: auto; }
+.legal-head { padding: clamp(24px, 5vw, 56px) 0 clamp(20px, 3vw, 32px); }
+.legal-head h1 { margin: 0; font-size: clamp(36px, 6vw, 64px); font-weight: 800; line-height: 1.04; letter-spacing: -0.03em; text-wrap: balance; }
+.legal-head .lead { margin-top: 14px; }
+.legal-meta { margin: 18px 0 0; color: var(--ink-3); font-size: 15px; font-weight: 600; }
+.legal-note {
+  margin: 20px 0 0; max-width: 72ch; padding: 14px 18px; border-radius: 14px;
+  background: #fff4bf; border: 1px solid #f2dc6b; color: #4a4210; font-size: 16px; line-height: 1.5;
+}
+.legal-note strong { color: var(--ink); }
+
+.legal { display: grid; gap: 28px; padding-bottom: var(--space, 96px); }
+.legal-toc { padding: 18px 20px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--line); }
+.legal-toc h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; color: var(--ink-3); letter-spacing: 0.02em; text-transform: uppercase; }
+.legal-toc ol { margin: 0; padding-left: 22px; display: grid; gap: 2px; }
+.legal-toc a { display: inline-block; padding: 6px 0; color: var(--ink-2); text-decoration: none; font-weight: 500; line-height: 1.35; }
+.legal-toc a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+.legal-body { max-width: 72ch; font-size: 17px; line-height: 1.7; color: var(--ink-2); }
+.legal-body section { padding-top: 8px; scroll-margin-top: 24px; }
+.legal-body section + section { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 28px; }
+.legal-body h2 { margin: 0 0 12px; font-size: clamp(22px, 2.6vw, 28px); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; color: var(--ink); }
+.legal-body h3 { margin: 20px 0 6px; font-size: 18px; font-weight: 700; color: var(--ink); }
+.legal-body p { margin: 0 0 12px; text-wrap: pretty; }
+.legal-body ul, .legal-body ol { margin: 0 0 14px; padding-left: 22px; }
+.legal-body li { margin: 4px 0; }
+.legal-body strong { color: var(--ink); }
+.legal-body a { color: var(--green); font-weight: 600; text-underline-offset: 3px; }
+.legal-body .placeholder { background: #fff4bf; border-radius: 4px; padding: 0 4px; color: var(--ink); font-weight: 600; }
+.legal-contact { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.legal-contact li { margin: 0; }
+
+@media (min-width: 1024px) {
+  .legal { grid-template-columns: 280px minmax(0, 1fr); gap: 56px; align-items: start; }
+  .legal-toc { position: sticky; top: 24px; }
+}
+@media print {
+  .nav, .footer, .legal-toc { display: none; }
+  .legal-body { max-width: none; color: #000; }
+}
