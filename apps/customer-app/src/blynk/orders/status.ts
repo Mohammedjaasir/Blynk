@@ -9,6 +9,7 @@ import type { Order, OrderHistoryEntry, OrderStatus } from './types';
 export type OrderTone = 'active' | 'success' | 'neutral' | 'problem';
 
 const LABEL: Record<OrderStatus, string> = {
+  AWAITING_PAYMENT: 'Waiting for payment',
   PLACED: 'Order placed',
   PACKED: 'Packed',
   OUT_FOR_DELIVERY: 'Out for delivery',
@@ -26,15 +27,20 @@ export function statusTone(s: string): OrderTone {
     case 'DELIVERED': return 'success';
     case 'CANCELLED': return 'neutral';
     case 'FAILED': case 'CUSTOMER_UNAVAILABLE': case 'ITEM_UNAVAILABLE': return 'problem';
-    case 'PLACED': case 'PACKED': case 'OUT_FOR_DELIVERY': return 'active';
+    case 'PLACED': case 'PACKED': case 'OUT_FOR_DELIVERY': case 'AWAITING_PAYMENT': return 'active';
     default: return 'neutral';
   }
 }
 
 /** One sentence under the status, from the order status and the delivery's handover step. */
-export function statusSentence(o: Pick<Order, 'order_status' | 'scheduled_for' | 'delivery'>): string {
+export function statusSentence(o: Pick<Order, 'order_status' | 'scheduled_for' | 'delivery'> & Partial<Pick<Order, 'payment_expires_at' | 'payment_status'>>): string {
   const a = o.delivery?.assignment_status ?? null;
   switch (o.order_status) {
+    case 'AWAITING_PAYMENT': {
+      const by = clockTime(o.payment_expires_at);
+      if (o.payment_status === 'FAILED') return by ? `The last payment didn't go through. Try again by ${by}.` : "The last payment didn't go through. Try again.";
+      return by ? `Pay online by ${by} to confirm your order.` : 'Pay online to confirm your order.';
+    }
     case 'PLACED': return o.scheduled_for ? "We'll start preparing it when deliveries open." : "We've received your order.";
     case 'ITEM_UNAVAILABLE': return "Something couldn't be sourced. Your total has been updated.";
     case 'PACKED': return a === 'ASSIGNED' || a === 'ACCEPTED' ? 'A rider has been assigned.' : 'Your order is packed.';
@@ -52,7 +58,7 @@ export const PROGRESS_STEPS = ['Order received', 'Packed', 'On the way', 'Delive
 /** Where the order is on the four-step tracker, and whether it stopped there (cancelled, failed). */
 export function progressOf(s: string): { step: number; stopped: boolean } {
   switch (s) {
-    case 'PLACED': case 'ITEM_UNAVAILABLE': return { step: 0, stopped: false };
+    case 'AWAITING_PAYMENT': case 'PLACED': case 'ITEM_UNAVAILABLE': return { step: 0, stopped: false };
     case 'PACKED': return { step: 1, stopped: false };
     case 'OUT_FOR_DELIVERY': return { step: 2, stopped: false };
     case 'DELIVERED': return { step: 3, stopped: false };
@@ -68,10 +74,39 @@ export function timelineLabel(e: Pick<OrderHistoryEntry, 'old_status' | 'new_sta
 }
 
 /** The order is still moving: the status screen keeps polling. */
-export const isOpenOrder = (s: string) => s === 'PLACED' || s === 'PACKED' || s === 'OUT_FOR_DELIVERY' || s === 'ITEM_UNAVAILABLE';
+export const isOpenOrder = (s: string) => s === 'AWAITING_PAYMENT' || s === 'PLACED' || s === 'PACKED' || s === 'OUT_FOR_DELIVERY' || s === 'ITEM_UNAVAILABLE';
 
-/** The one payment line (cash on delivery is the only method). */
-export function paymentLine(o: Pick<Order, 'order_status' | 'payment_status' | 'total_amount'>): string {
+/** "9:41 PM" in Sri Lanka time, or '' (for "pay by"). */
+export function clockTime(iso: string | null | undefined): string {
+  const t = orderTime(iso);
+  return t ? t.split(', ')[1] ?? '' : '';
+}
+
+export const isOnline = (o: Pick<Order, 'payment_method'>) => o.payment_method === 'ONLINE';
+
+/** An online order still waiting for its PayHere payment ("Pay now" is offered). */
+export const awaitingPayment = (o: Pick<Order, 'order_status' | 'payment_method'>) =>
+  o.order_status === 'AWAITING_PAYMENT' && isOnline(o);
+
+/** "Awaiting payment — pay by 9:41 PM" (or without the time when the server sent none). */
+export const payByLine = (o: Pick<Order, 'payment_expires_at'>) => {
+  const by = clockTime(o.payment_expires_at);
+  return by ? `Awaiting payment — pay by ${by}` : 'Awaiting payment';
+};
+
+/** The one payment line: cash on delivery, or the online payment's state. */
+export function paymentLine(o: Pick<Order, 'order_status' | 'payment_status' | 'total_amount'> & Partial<Pick<Order, 'payment_method' | 'payment_expires_at'>>): string {
+  if (o.payment_method === 'ONLINE') {
+    if (o.payment_status === 'REFUNDED') return 'Refunded';
+    if (o.payment_status === 'PAID') return 'Paid online';
+    if (o.order_status === 'CANCELLED') return 'Not paid — nothing to pay';
+    if (o.order_status === 'AWAITING_PAYMENT') {
+      const by = clockTime(o.payment_expires_at);
+      if (o.payment_status === 'FAILED') return by ? `Payment failed — try again by ${by}` : 'Payment failed — try again';
+      return payByLine(o);
+    }
+    return 'Paying online';
+  }
   if (o.order_status === 'CANCELLED') return 'Nothing to pay';
   if (o.payment_status === 'PAID') return 'Paid in cash';
   if (o.order_status === 'FAILED' || o.order_status === 'CUSTOMER_UNAVAILABLE') return 'Not paid';
@@ -151,6 +186,6 @@ export function slotWindowText(from: string | null | undefined, until: string | 
   return d1 === d2 ? `${d1}, ${t1} – ${t2}` : `${start} – ${end}`;
 }
 
-/** Cancel is offered only while the server says so (CUSTOMER_CANCEL from PLACED or PACKED). */
-export const CANCELLABLE: readonly string[] = ['PLACED', 'PACKED'];
+/** Cancel is offered only while the server says so (CUSTOMER_CANCEL from AWAITING_PAYMENT, PLACED or PACKED). */
+export const CANCELLABLE: readonly string[] = ['AWAITING_PAYMENT', 'PLACED', 'PACKED'];
 export const mayCancel = (o: Pick<Order, 'order_status' | 'can_cancel'>) => o.can_cancel === true && CANCELLABLE.includes(o.order_status);

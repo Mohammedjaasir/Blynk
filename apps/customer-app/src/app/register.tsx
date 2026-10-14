@@ -10,6 +10,7 @@ import { demoFlow } from '@/blynk/auth/flow';
 import { authErrorText, cleanReferral, NAME_ERROR, NAME_MAX, referralOk, validName } from '@/blynk/auth/forms';
 import { formatPhone } from '@/blynk/auth/phone';
 import { getSession, needsRegistration } from '@/blynk/auth/session';
+import { AgreeLine } from '@/blynk/legal/PolicyLinks';
 import { PressScale } from '@/components/ui';
 import { LIVE } from '@/demo/cartLive';
 import { DEMO } from '@/demo/mode';
@@ -153,6 +154,7 @@ export default function Register() {
             <Text style={styles.ctaTxt}>{busy ? R.saving : R.cta}</Text>
           </Animated.View>
         </PressScale>
+        {!DEMO && <AgreeLine style={{ marginTop: 16 }} />}
       </ScrollView>
     </View>
   );

@@ -1,11 +1,14 @@
+import type { OnlinePaymentInfo } from '@/blynk/api/types';
+
 /*
  * The customer order contract (backend/api/src/modules/orders): GET /orders/checkout-info,
- * POST /orders, GET /orders, GET /orders/:id, POST /orders/:id/cancel. Payment is cash on
- * delivery only (the server writes payment_method 'COD'); there is no payment field to send.
+ * POST /orders, GET /orders, GET /orders/:id, POST /orders/:id/cancel. Cash on delivery is the
+ * default; "Pay online" (payment_method ONLINE, PayHere - docs/api/payhere.md) creates the order
+ * AWAITING_PAYMENT until a verified PayHere notification marks it PLACED + PAID.
  */
 
 export type OrderStatus =
-  | 'PLACED' | 'PACKED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'CANCELLED' | 'FAILED'
+  | 'AWAITING_PAYMENT' | 'PLACED' | 'PACKED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'CANCELLED' | 'FAILED'
   | 'CUSTOMER_UNAVAILABLE' | 'ITEM_UNAVAILABLE';
 
 export interface FreeDeliveryStatus {
@@ -36,6 +39,8 @@ export interface CheckoutInfo {
   /** Owner, 2026-10-12: whether checkout offers "For someone else" (absent on an older server = off). */
   order_for_someone_else?: { enabled: boolean; send_code_to_receiver: boolean };
   birthday_offer?: { eligible?: boolean; percent?: number; [k: string]: unknown };
+  /** PayHere: whether "Pay online" is offered (absent on an older server = off). */
+  online_payment?: OnlinePaymentInfo;
   referral_reward?: { available: boolean; side: string | null; mode: string | null; amount_lkr: number };
   points?: {
     enabled: boolean; balance: number; value_lkr: number; earn_points?: number; earn_per_lkr?: number;
@@ -105,8 +110,14 @@ export interface Order {
   id: string;
   order_number: string;
   order_status: OrderStatus;
+  /** 'COD' | 'ONLINE'. */
   payment_method: string;
+  /** 'PENDING' | 'PAID' | 'FAILED' (last online attempt failed; may still be paid until expiry) | 'REFUNDED'. */
   payment_status: string;
+  /** ONLINE orders: pay by this time, or the worker cancels the order. */
+  payment_expires_at?: string | null;
+  /** GET /orders/:id: the payment row (gateway fields for ONLINE orders). */
+  payment?: { gateway?: string | null; gateway_method?: string | null; gateway_status_message?: string | null; failed_at?: string | null; [k: string]: unknown } | null;
   subtotal_amount: number;
   delivery_fee: number;
   discount_amount: number;
@@ -171,4 +182,6 @@ export interface PlaceOrderBody {
   for_someone_else?: boolean;
   recipient?: { name: string; phone: string };
   needs_help?: boolean;
+  /** Omitted = cash on delivery. ONLINE = PayHere (the order waits for payment). */
+  payment_method?: 'COD' | 'ONLINE';
 }

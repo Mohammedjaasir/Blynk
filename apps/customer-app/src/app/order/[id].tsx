@@ -14,11 +14,12 @@ import { appHidden, onVisible } from '@/blynk/lib/visibility';
 import { cancelOrder, getOrder } from '@/blynk/orders/api';
 import { cancelErrorText, placeErrorCopy } from '@/blynk/orders/errors';
 import {
-  CODE_COMING, discountRows, isOpenOrder, itemCaption, itemTitle, mayCancel, orderTime, paymentLine, progressOf, PROGRESS_STEPS,
+  awaitingPayment, CODE_COMING, discountRows, payByLine, isOpenOrder, itemCaption, itemTitle, mayCancel, orderTime, paymentLine, progressOf, PROGRESS_STEPS,
   riderArrived, showsDeliveryCode, showsDeliveryCodeComing, slotWindowText, statusLabel, statusSentence, statusTone,
   timelineLabel, type OrderTone,
 } from '@/blynk/orders/status';
 import { canReorder, reorderInto, reorderMessage } from '@/blynk/orders/reorder';
+import { PAY } from '@/blynk/payments/copy';
 import type { Order } from '@/blynk/orders/types';
 import { LiveTracking, isTrackable } from '@/blynk/tracking';
 import { openSignIn } from '@/blynk/ui/signIn';
@@ -146,6 +147,16 @@ export default function OrderStatus() {
         ) : (
           <Animated.View entering={FadeIn.duration(200)}>
             <StatusCard order={order} />
+            {/* an online order waiting for its PayHere payment: pay by the expiry time */}
+            {awaitingPayment(order) && (
+              <View style={[styles.card, styles.payCard]}>
+                <Text style={styles.payHead}>{payByLine(order)}</Text>
+                <Text style={[styles.small, { marginTop: 2 }]}>{order.payment_status === 'FAILED' ? PAY.failedSub('') : `${formatLkr(order.total_amount)} · ${PAY.online}`}</Text>
+                <PressScale onPress={() => router.push({ pathname: '/payment/pay', params: { order: order.id } } as never)} style={styles.payBtn} haptic>
+                  <Text style={styles.payBtnTxt}>{PAY.payNow}</Text>
+                </PressScale>
+              </View>
+            )}
             {showsDeliveryCode(order) ? (
               <View style={[styles.card, styles.codeCard]} accessible accessibilityLabel={`Your delivery code: ${order.delivery_code}. Show this to your rider.`}>
                 <Text style={styles.codeLabel}>Your delivery code</Text>
@@ -397,6 +408,10 @@ const styles = StyleSheet.create({
   billR: { fontFamily: F.regular, fontSize: 13, color: C.ink },
   billBold: { fontFamily: F.bold, fontSize: 14.5, color: C.ink },
   sep: { height: 1, backgroundColor: C.line, marginVertical: 8 },
+  payCard: { backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandSoft },
+  payHead: { fontFamily: F.bold, fontSize: 15.5, color: C.ink },
+  payBtn: { marginTop: 12, height: 46, borderRadius: 23, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
+  payBtnTxt: { fontFamily: F.semi, fontSize: 15, color: C.brandInk },
   cancelBtn: { marginTop: 10, height: 44, borderRadius: 22, borderWidth: 1.4, borderColor: C.problem, alignItems: 'center', justifyContent: 'center' },
   cancelTxt: { fontFamily: F.semi, fontSize: 14, color: C.problem },
   keepBtn: { height: 46, borderRadius: 23, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },

@@ -26,6 +26,8 @@ import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { addressSummary } from '@/blynk/address/api';
 import { clearSelection, useDeliveryLocation, type DeliveryLocation } from '@/blynk/address/store';
+import { CoverageCard } from '@/blynk/area/AreaSteps';
+import { coverageOf } from '@/blynk/area/coverage';
 import { ComboAdd, comboHasSaving, ComboThumb, comboSummary } from '@/blynk/combos/ComboViews';
 import { couponAppliedNote, couponErrorText, couponInputError, discountLabel, normalizeCoupon } from '@/blynk/checkout/coupon';
 import { BirthdayBanner, DeliveryDetailsCard, RewardsCard, SlotPickerCard } from '@/blynk/checkout/CheckoutSections';
@@ -43,7 +45,12 @@ import {
 } from '@/blynk/orders/checkout';
 import { OUTSIDE_AREA, placeErrorCopy, refusedProduct, stockRefusal, stockRefusalNote, type PlaceErrorCopy } from '@/blynk/orders/errors';
 import type { CheckoutInfo, CouponPreview } from '@/blynk/orders/types';
+import { openPolicy } from '@/blynk/legal/open';
+import { PolicyRow } from '@/blynk/legal/PolicyLinks';
 import { formatLkr } from '@/blynk/lib/money';
+import { PAY } from '@/blynk/payments/copy';
+import { effectiveMethod, methodBody, onlineInfo, onlineOffered, type PayMethod } from '@/blynk/payments/method';
+import { PaymentChoice } from '@/blynk/payments/PaymentChoice';
 import { requestPushPermission } from '@/blynk/push';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
@@ -69,8 +76,10 @@ import { C, F } from '@/lib/theme';
  * first sign-in); the signed-in state is a registered Blynk session (src/blynk/auth/session.ts).
  * Signed in, the cart is the checkout: the delivery address comes from the address book
  * (src/blynk/address/store.ts), the fee from GET /orders/checkout-info for that address, and
- * "Place order" POSTs /orders (cash on delivery, the only method) with an idempotency key, so a
- * double tap or a retry is one order. Refusals get clear copy (src/blynk/orders/errors.ts).
+ * "Place order" POSTs /orders with an idempotency key, so a double tap or a retry is one order.
+ * Payment: cash on delivery, or "Pay online" while GET /store / checkout-info say PayHere is on
+ * (the order then waits for payment and /payment/pay posts the PayHere form). Refusals get clear
+ * copy (src/blynk/orders/errors.ts).
  *
  * Live mode (DEMO=false) keeps the layout and motion but every value is Blynk's own: lines and
  * totals from the cart store at effective (offer-aware) LKR prices, unavailable lines flagged,
@@ -133,6 +142,8 @@ export default function Cart() {
   const setNotes = (f: (s: string[]) => string[]) => setDetails((d) => ({ ...d, noteChips: f(d.noteChips) }));
   const [showDetailErrors, setShowDetailErrors] = useState(false);
   const [usePoints, setUsePoints] = useState(false);
+  // cash on delivery, or PayHere while staff have it on (src/blynk/payments/method.ts)
+  const [payChoice, setPayChoice] = useState<PayMethod>('COD');
   // scheduled delivery: GET /orders/slots while staff have slots on (or the store is closed)
   const [slots, setSlots] = useState<DeliverySlots | null>(null);
   const [slotsFailed, setSlotsFailed] = useState(false);
@@ -154,6 +165,8 @@ export default function Cart() {
   const addrId = addr?.id ?? null;
   const quoteFor = quote && addrId && quote.delivery_fee_address_id === addrId ? quote : null;
   const checkout: CheckoutBill | null = addrId ? checkoutBill(total, quoteFor, coupon, usePoints) : null;
+  const payInfo = onlineInfo(store?.online_payment, quoteFor?.online_payment);
+  const payMethod = effectiveMethod(payChoice, payInfo, checkout?.toPay ?? null);
   // "For someone else" only while staff allow it (checkout-info; absent = off)
   const forOthers = quoteFor?.order_for_someone_else;
   const allowForOthers = forOthers?.enabled === true;
@@ -242,6 +255,7 @@ export default function Cart() {
       ...(pointsOn ? { use_points: true } : {}),
       ...(more.for_someone_else ? { for_someone_else: true, recipient: more.recipient } : {}),
       ...(more.needs_help ? { needs_help: true } : {}),
+      ...methodBody(payMethod),
     };
     const note = more.delivery_note ?? '';
     // one key per checkout: a double tap or a retry after a timeout replays the same order
@@ -264,7 +278,13 @@ export default function Cart() {
       rememberPlaced(order);
       // the moment order updates matter: ask to allow notifications (Flutter cart_screen_payment_container)
       void requestPushPermission();
-      router.replace({ pathname: '/placed', params: { id: order.id } });
+      if (order.payment_method === 'ONLINE' && order.order_status === 'AWAITING_PAYMENT') {
+        // it is an order now (paid with "Pay now" until it expires): the cart starts over
+        cartActions.clear();
+        router.replace({ pathname: '/payment/pay', params: { order: order.id } } as never);
+      } else {
+        router.replace({ pathname: '/placed', params: { id: order.id } });
+      }
     } catch (e) {
       const copy = placeErrorCopy(e);
       const gone = refusedProduct(e);
@@ -287,6 +307,8 @@ export default function Cart() {
       // the slot went, or the store closed after all: fresh slots so one can be picked
       if (copy.action === 'slot') setPickedSlot(null);
       if (copy.action === 'slot' || copy.action === 'closed') setSlotsTick((n) => n + 1);
+      // "Pay online" was refused (switched off / nothing to pay): back to cash, fresh checkout-info
+      if (copy.action === 'payment') { setPayChoice('COD'); setQuoteTick((n) => n + 1); }
     } finally {
       placingRef.current = false;
       setPlacing(false);
@@ -498,7 +520,7 @@ export default function Cart() {
           />
         )}
 
-        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} freeCount={quoteFor?.free_delivery?.count ?? 0} /> : (
+        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} freeCount={quoteFor?.free_delivery?.count ?? 0} payMethod={payMethod} /> : (
         <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
           <StampBadge size={78} style={{ position: 'absolute', right: -6, top: -4 }} />
           <View style={styles.billHead}>
@@ -534,8 +556,23 @@ export default function Cart() {
         </Animated.View>
         )}
 
+        {/* payment: cash on delivery or PayHere (only while staff have it on), with the policy links */}
+        {!DEMO && checkout && onlineOffered(payInfo) && (
+          <PaymentChoice info={payInfo} toPay={checkout.toPay} method={payMethod} onChange={setPayChoice} />
+        )}
+
+        {/* where we deliver (owner, 2026-10-14: show the surroundings when they order) */}
+        {!DEMO && (
+          <CoverageCard
+            coverage={coverageOf(store)}
+            pin={addr ? { lat: addr.latitude, lng: addr.longitude } : loc.guestPin}
+            style={{ marginHorizontal: 15, marginBottom: 15 }}
+          />
+        )}
+
         <Text style={styles.policyTitle}>{COPY.policyTitle}</Text>
         <Text style={styles.policy}>{DEMO ? COPY.policy : LIVE.policy}</Text>
+        {!DEMO && !(checkout && onlineOffered(payInfo)) && <PolicyRow style={{ marginHorizontal: 23, marginTop: 8 }} />}
       </Animated.ScrollView>
 
       <FeeHeader
@@ -575,6 +612,7 @@ export default function Cart() {
               : !closedNow || !slotsOn ? null : pickedSlot ? SLOT_COPY.slotPickedHint : SLOT_COPY.pickSlotHint}
             blockedLabel={lead.blocked ? LEAD_COPY.blockedCta : lead.days > 0 ? LEAD_COPY.pickCta : null}
             canOrder={hasLines}
+            payMethod={payMethod}
             placing={placing}
             error={placeErr}
             onPlace={place}
@@ -913,8 +951,9 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
  * address (GET /orders/checkout-info: free deliveries, the basket amount, per-km distance);
  * otherwise it is what /store says. No taxes or invented savings.
  */
-function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount }: {
+function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, payMethod }: {
   bill: LiveBill; itemTotal: number; mrpTotal: number; checkout: CheckoutBill | null; coupon: CouponPreview | null;
+  payMethod: PayMethod;
   /** New-customer free deliveries in all (checkout-info free_delivery.count). */
   freeCount: number;
 }) {
@@ -1005,7 +1044,7 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount }
       {!!checkout && (
         <View style={[styles.billRow, { paddingHorizontal: 15, paddingBottom: 14, marginTop: -6 }]}>
           <Text style={[styles.billL, { lineHeight: 18 }]}>Payment</Text>
-          <Text style={[styles.billR, { fontFamily: F.medium }]}>Cash on delivery</Text>
+          <Text style={[styles.billR, { fontFamily: F.medium }]}>{payMethod === 'ONLINE' ? PAY.online : PAY.cod}</Text>
         </View>
       )}
     </Animated.View>
@@ -1067,7 +1106,7 @@ function CouponCard({ coupon, error, onApply, onRemove }: {
  * The signed-in bottom panel: where the order goes (the address book's chosen address, with
  * Change), then "Place order" for the server-quoted total. Refusals show here with their copy.
  */
-function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow, orderable, closedHint, blockedLabel, canOrder, placing, error, onPlace }: {
+function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow, orderable, closedHint, blockedLabel, canOrder, payMethod, placing, error, onPlace }: {
   loc: DeliveryLocation; checkout: CheckoutBill | null; quoteFailed: boolean; onRetryQuote: () => void; closedNow: boolean;
   /** Open for ASAP, or a picked delivery slot with room (a closed store can still take a slot). */
   orderable: boolean;
@@ -1075,7 +1114,7 @@ function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow
   closedHint: string | null;
   /** The button's words while the cart can't go now for a lead time (pick a slot / remove the item). */
   blockedLabel?: string | null;
-  canOrder: boolean; placing: boolean; error: PlaceErrorCopy | null; onPlace: () => void;
+  canOrder: boolean; payMethod: PayMethod; placing: boolean; error: PlaceErrorCopy | null; onPlace: () => void;
 }) {
   const a = loc.address;
   if (loc.syncing || (!a && loc.loading)) {
@@ -1114,7 +1153,7 @@ function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow
   const label = !orderable ? (blockedLabel ?? (closedNow && closedHint ? 'Pick a delivery time' : LIVE.closedCta))
     : placing ? 'Placing your order…'
       : toPay === null ? (quoteFailed ? 'Delivery fee unavailable' : 'Getting the delivery fee…')
-        : `Place order  |  ${formatLkr(toPay)}`;
+        : payMethod === 'ONLINE' ? PAY.placeOnline(formatLkr(toPay)) : PAY.placeCod(formatLkr(toPay));
   return (
     <Animated.View key="place" entering={FadeIn.duration(200)}>
       {error && (
@@ -1238,7 +1277,7 @@ function LoginSheet({ onClose }: { onClose: () => void }) {
           <Animated.View style={[styles.cta, btn]}><Text style={[styles.ctaTxt, { fontSize: 14.5 }]}>{sending ? LIVE.sending : COPY.continue}</Text></Animated.View>
         </PressScale>
         <Text style={styles.terms}>
-          By clicking, I accept the <Text style={styles.link}>privacy policy</Text> and <Text style={styles.link}>terms of use</Text>
+          By clicking, I accept the <Text style={styles.link} onPress={DEMO ? undefined : () => openPolicy('privacy')} accessibilityRole="link">privacy policy</Text> and <Text style={styles.link} onPress={DEMO ? undefined : () => openPolicy('terms')} accessibilityRole="link">terms of use</Text>
         </Text>
       </Animated.View>
     </Animated.View>

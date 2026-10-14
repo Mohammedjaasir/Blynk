@@ -771,7 +771,7 @@ export class SettingsService {
       storeSchedule.read(),
       db
         .selectFrom('dark_stores')
-        .select(['name', 'radius_km'])
+        .select(['name', 'radius_km', 'latitude', 'longitude'])
         .where('is_active', '=', true)
         .orderBy('created_at', 'asc')
         .limit(1)
@@ -793,6 +793,12 @@ export class SettingsService {
       // Today's hours, or the next open day's when today is closed.
       delivery_hours: { ...displayHours(schedule, now), timezone: STORE_TIMEZONE },
       radius_km: store ? Number(store.radius_km) : null,
+      // The delivery-area map (owner, 2026-10-14: "showcase the surroundings"): the
+      // centre the radius is measured from. The store's public location, not a secret;
+      // the address book and checkout still decide (DELIVERY_OUTSIDE_RADIUS).
+      store_location: store && Number.isFinite(Number(store.latitude)) && Number.isFinite(Number(store.longitude))
+        ? { lat: Number(store.latitude), lng: Number(store.longitude) }
+        : null,
       coupons_enabled: checkout.coupons_enabled,
       new_customer_free_deliveries: checkout.new_customer_free_deliveries,
       // Owner, 2026-10-10: the customer app shows "Save LKR X" only when on.

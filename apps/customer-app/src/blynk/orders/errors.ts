@@ -24,6 +24,8 @@ export type PlaceErrorAction =
    * marked sold out, lowered to what is left, or asking for a size - and the catalogue refreshed.
    */
   | 'stock'
+  /** "Pay online" was refused (switched off, or nothing to pay): back to cash on delivery. */
+  | 'payment'
   | 'signin'
   | 'retry'
   | null;
@@ -67,6 +69,9 @@ const COPY: Record<string, PlaceErrorCopy> = {
   // delivery lead time (migration 045): pick a slot on/after the first delivery day
   LEAD_TIME_REQUIRES_SLOT: { title: 'Pick a delivery time', message: 'An item in your cart needs a few days. Pick a delivery time.', action: 'slot' },
   SLOT_BEFORE_LEAD_TIME: { title: 'Pick a later time', message: 'An item in your cart cannot be delivered that soon. Pick a later delivery time.', action: 'slot' },
+  // PayHere (docs/api/payhere.md): online payment switched off meanwhile, or the total is 0
+  ONLINE_PAYMENT_UNAVAILABLE: { title: 'Online payment is off', message: 'Online payment is not available right now. Choose cash on delivery and place the order again.', action: 'payment' },
+  NOTHING_TO_PAY_ONLINE: { title: 'Nothing to pay online', message: 'This order has nothing to pay online. Place it with cash on delivery.', action: 'payment' },
   POINTS_INSUFFICIENT: { title: 'Not enough points', message: "You don't have enough Blynk Points for that.", action: 'retry' },
   TOO_MANY_REQUESTS: { title: 'Too many tries', message: 'Too many tries. Wait a moment, then try again.', action: 'retry' },
   RATE_LIMITED: { title: 'Too many tries', message: 'Too many tries. Wait a moment, then try again.', action: 'retry' },

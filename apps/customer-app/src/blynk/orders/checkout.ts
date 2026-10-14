@@ -33,7 +33,7 @@ export function checkoutSignature(args: {
   items: PlaceOrderBody['items']; addressId: string; coupon?: string | null; note?: string | null;
   combos?: PlaceOrderBody['combos'];
   /** The rest of the body that makes it a different order: slot, points, receiver, needs help. */
-  extra?: Pick<PlaceOrderBody, 'delivery_slot_start' | 'use_points' | 'for_someone_else' | 'recipient' | 'needs_help'>;
+  extra?: Pick<PlaceOrderBody, 'delivery_slot_start' | 'use_points' | 'for_someone_else' | 'recipient' | 'needs_help' | 'payment_method'>;
 }): string {
   const itemKey = (i: PlaceOrderBody['items'][number]) => (i.variant_id ? `${i.product_id}:${i.variant_id}` : i.product_id);
   const items = [...args.items].sort((a, b) => itemKey(a).localeCompare(itemKey(b))).map((i) => `${itemKey(i)}x${i.quantity}`).join(',');
@@ -42,7 +42,9 @@ export function checkoutSignature(args: {
     ? [x.delivery_slot_start ?? '', x.use_points ? 'P' : '', x.for_someone_else ? `R:${x.recipient?.name ?? ''}:${x.recipient?.phone ?? ''}` : '', x.needs_help ? 'H' : ''].join(';')
     : null;
   const combos = [...(args.combos ?? [])].sort((a, b) => a.combo_id.localeCompare(b.combo_id)).map((c) => `C${c.combo_id}x${c.quantity}`).join(',');
-  return [combos ? `${items}+${combos}` : items, args.addressId, args.coupon ?? '', (args.note ?? '').trim(), ...(more ? [more] : [])].join('|');
+  // paying online is a different order from cash on delivery (a COD replay must not answer an online checkout)
+  const pay = x?.payment_method === 'ONLINE' ? ['PAY:ONLINE'] : [];
+  return [combos ? `${items}+${combos}` : items, args.addressId, args.coupon ?? '', (args.note ?? '').trim(), ...(more ? [more] : []), ...pay].join('|');
 }
 
 /** 128 random bits as hex (the server allows up to 128 characters). */
