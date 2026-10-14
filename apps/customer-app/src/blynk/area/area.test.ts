@@ -37,9 +37,9 @@ describe('coverage from GET /store', () => {
 });
 
 describe('the places on the owner\'s sketch', () => {
-  test('distances from the Clock Tower (OpenStreetMap positions) to within 0.1 km', () => {
+  test('distances from the Clock Tower (owner points) to within 0.1 km', () => {
     const want: Record<string, number> = {
-      'Kande Vihara': 1.5, Aluthgama: 1.7, Kaluwamodara: 1.9, Bentota: 2.7, Moragalla: 2.5, 'Beruwala town': 4.9, Welipenna: 11,
+      'Kande Vihara': 1.5, Aluthgama: 1.4, Kaluwamodara: 1.9, Bentota: 2.7, Moragalla: 3.0, 'Beruwala town': 4.9, Welipenna: 11,
     };
     for (const [name, km] of Object.entries(want)) expect(Math.abs(byName(name).km - km)).toBeLessThanOrEqual(km >= 10 ? 0.5 : 0.1);
   });
@@ -61,7 +61,7 @@ describe('the places on the owner\'s sketch', () => {
 describe('area list and pin placement', () => {
   test('the store\'s town first, then in-radius areas nearest first; outside ones listed separately', () => {
     const { inside, outside } = deliveryAreas(cov);
-    expect(inside.map((a) => a.name)).toEqual(['Dharga Town', 'Kande Vihara', 'Aluthgama', 'Kaluwamodara', 'Moragalla', 'Bentota']);
+    expect(inside.map((a) => a.name)).toEqual(['Dharga Town', 'Aluthgama', 'Kande Vihara', 'Kaluwamodara', 'Bentota', 'Moragalla']);
     expect(outside.map((a) => a.name)).toEqual(['Beruwala town', 'Welipenna']);
     expect(inside.every((a) => a.inside)).toBe(true);
   });
