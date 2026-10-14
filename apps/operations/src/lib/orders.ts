@@ -330,7 +330,8 @@ function mergeRows(items: OrderItemRow[]): ItemDisplayRow[] {
   const rows: ItemDisplayRow[] = [];
   const byKey = new Map<string, ItemDisplayRow>();
   for (const item of items) {
-    const product = item.product_id ?? `${item.product_name_snapshot}|${item.unit_snapshot ?? ''}`;
+    // Two sizes of one product (migration 045) stay separate lines.
+    const product = `${item.product_id ?? `${item.product_name_snapshot}|${item.unit_snapshot ?? ''}`}|${item.variant_id ?? ''}`;
     const key = `${product}|${item.item_status}`;
     const existing = byKey.get(key);
     if (existing) {
@@ -370,4 +371,25 @@ export function groupOrderItems(order: Pick<OrderDetail, 'items' | 'combos'>, it
 /** "Breakfast pack × 2 — LKR 980" - a combo line's heading. */
 export function comboHeading(combo: OrderCombo): string {
   return `${combo.name} × ${combo.quantity} — ${formatMoney(combo.subtotal)}`;
+}
+
+/**
+ * An order line's name (migration 045): "Chilli Powder - 100 g" for a
+ * variant line, unless the product name already says it.
+ */
+export function orderItemName(item: Pick<OrderItemRow, 'product_name_snapshot' | 'variant_label_snapshot'>): string {
+  const label = item.variant_label_snapshot?.trim();
+  if (!label || item.product_name_snapshot.toLowerCase().includes(label.toLowerCase())) return item.product_name_snapshot;
+  return `${item.product_name_snapshot} - ${label}`;
+}
+
+/**
+ * The packing slip's Unit cell: on a variant line unit_snapshot IS the
+ * variant label, which the name already carries - so it is left empty.
+ */
+export function orderItemUnit(item: Pick<OrderItemRow, 'unit_snapshot' | 'variant_label_snapshot'>): string {
+  const unit = item.unit_snapshot ?? '';
+  const label = item.variant_label_snapshot?.trim();
+  if (label && unit.trim().toLowerCase() === label.toLowerCase()) return '';
+  return unit;
 }

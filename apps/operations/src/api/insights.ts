@@ -107,6 +107,12 @@ export interface PurchaseItem {
   supplier_id: string | null;
   supplier_name: string | null;
   supplier_phone: string | null;
+  /** Migration 045: a variant's own stock row (null/absent = the product's). */
+  variant_id?: string | null;
+  variant_label?: string | null;
+  variant_sku?: string | null;
+  /** "Chilli Powder - 100 g". */
+  display_name?: string;
 }
 
 export interface PurchaseSupplierGroup {

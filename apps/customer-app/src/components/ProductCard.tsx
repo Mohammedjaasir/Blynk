@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
 import type { Product } from '@/blynk/api/types';
 import { openProduct } from '@/blynk/catalog/openProduct';
+import { deliveredFromText, hasVariants, priceText, VARIANT_COPY } from '@/blynk/catalog/variants';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
@@ -38,6 +39,9 @@ export const ProductCard = memo(function ProductCard({
   const inCart = useCartSelect((c) => (c.qty[p.id] ?? 0) > 0);
   const showSavings = useStore()?.show_offer_savings === true;
   const offer = isOfferActive(p);
+  // sold in sizes: "LKR 50 – 350" ("From LKR 50" when narrow); a lead time: "Delivered from Fri 17 Oct"
+  const sized = hasVariants(p);
+  const lead = DEMO ? null : deliveredFromText(p);
   const x = extraOf(p.id);
   const h = height ?? width;
   const wide = h < width * 0.85; // a store card's 134 x 100 row photo, not a (near-)square tile
@@ -72,7 +76,7 @@ export const ProductCard = memo(function ProductCard({
           {p.is_available ? (
             <AddButton product={p} big />
           ) : (
-            <View style={styles.soldOut}><Text style={styles.soldOutTxt}>Out of stock</Text></View>
+            <View style={styles.soldOut}><Text style={styles.soldOutTxt}>{VARIANT_COPY.soldOut}</Text></View>
           )}
         </View>
       </View>
@@ -85,7 +89,9 @@ export const ProductCard = memo(function ProductCard({
       </View>
       {!x && !!unitText(p) && <Text style={styles.unit} numberOfLines={1}>{unitText(p)}</Text>}
       <View style={styles.priceRow}>
-        {offer ? (
+        {sized ? (
+          <Text style={[styles.price, offer && styles.priceOffer]} numberOfLines={1}>{priceText(p, { compact: width < 116, money })}</Text>
+        ) : offer ? (
           <>
             {/* live: the struck regular price only while Admin's show_offer_savings is on (as in the cart) */}
             {(DEMO || showSavings) && <Text style={styles.mrp}>{money(p.selling_price)}</Text>}
@@ -95,6 +101,7 @@ export const ProductCard = memo(function ProductCard({
           <Text style={styles.price}>{money(effectivePrice(p))}</Text>
         )}
       </View>
+      {!!lead && <Text style={styles.lead} numberOfLines={1}>{lead}</Text>}
       {x ? (
         <DemoTicker other={x.other} lowerPct={x.lowerPct} seen={seen} forceSave={inCart} money={money} delay={1400 + Math.min(index, 4) * 140} />
       ) : (
@@ -130,4 +137,6 @@ const styles = StyleSheet.create({
   pill: { backgroundColor: C.brandSoft, borderRadius: 9, paddingHorizontal: 5, height: 20, justifyContent: 'center' },
   pillTxt: { fontSize: 13.5, color: C.brandInk, fontFamily: F.semi },
   price: { fontSize: 13.5, color: '#1E1E24', fontFamily: F.regular },
+  priceOffer: { color: C.brandText, fontFamily: F.semi },
+  lead: { fontSize: 10.5, color: C.brandText, fontFamily: F.medium, marginTop: 1 },
 });

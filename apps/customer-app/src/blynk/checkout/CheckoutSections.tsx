@@ -62,9 +62,13 @@ function Choice({ label, picked, full, onPress, a11y }: { label: string; picked:
  * "Delivery time": while staff have slots on. ASAP is the default while open; while closed
  * ASAP is not offered and a slot must be picked. A full slot is shown greyed, not pickable.
  */
-export function SlotPickerCard({ slots, failed, loading, storeOpen, picked, onPick, onRetry }: {
+export function SlotPickerCard({ slots, failed, loading, storeOpen, picked, onPick, onRetry, asapAllowed = true, note }: {
   slots: DeliverySlots | null; failed: boolean; loading: boolean; storeOpen: boolean; picked: string | null;
   onPick: (start: string | null) => void; onRetry: () => void;
+  /** False for a cart with a delivery lead time (migration 045): no "As soon as possible". */
+  asapAllowed?: boolean;
+  /** Shown instead of the closed note when ASAP is not offered ("Delivered from Fri 17 Oct..."). */
+  note?: string | null;
 }) {
   if (!slots) {
     if (!failed) return null;
@@ -79,14 +83,14 @@ export function SlotPickerCard({ slots, failed, loading, storeOpen, picked, onPi
     );
   }
   if (!slots.enabled) return null;
-  const asap = asapOffered(slots, storeOpen);
+  const asap = asapAllowed && asapOffered(slots, storeOpen);
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={[s.card, s.pad]}>
       <Text style={s.head}>{SLOT_COPY.title}</Text>
       {asap ? (
         <Choice label={SLOT_COPY.asap} picked={picked === null} onPress={() => onPick(null)} />
       ) : (
-        <Text style={[s.muted, { marginTop: 6 }]}>{SLOT_COPY.closedNote}</Text>
+        <Text style={[s.muted, { marginTop: 6 }]}>{note ?? SLOT_COPY.closedNote}</Text>
       )}
       {!slots.slots.length && !asap && <Text style={[s.muted, { marginTop: 6 }]}>{SLOT_COPY.noSlots}</Text>}
       {slotsByDay(slots.slots).map((g) => (

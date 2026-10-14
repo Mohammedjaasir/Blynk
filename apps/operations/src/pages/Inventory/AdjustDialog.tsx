@@ -30,10 +30,14 @@ const TYPES: Array<{ id: ManualAdjustmentType; hint: string; quantityLabel: stri
 
 export function AdjustDialog({
   detail,
+  variantId,
   onClose,
   onDone,
 }: {
-  detail: StockDetail;
+  /** The stock row being adjusted; `product_name` is the display name ("Chilli Powder - 100 g" for a variant). */
+  detail: Pick<StockDetail, 'product_id' | 'product_name' | 'quantity_on_hand' | 'quantity_reserved'>;
+  /** Migration 045: adjust this variant's own stock row instead of the product's. */
+  variantId?: string | null;
   onClose(): void;
   onDone(resultOnHand: number): void | Promise<void>;
 }) {
@@ -88,6 +92,7 @@ export function AdjustDialog({
         adjustment_type: type,
         quantity_delta: delta!,
         notes: reason.trim(),
+        ...(variantId ? { variant_id: variantId } : {}),
       });
       await onDone(result.inventory.quantity_on_hand);
     } catch (err) {

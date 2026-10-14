@@ -13,6 +13,7 @@ import {
   DEFAULT_WEEKLY_HOURS,
   STORE_TIMEZONE,
   buildSlots,
+  earliestDeliveryDay,
   isQuarterHour,
   storeStatusAt,
   toMinutes,
@@ -490,21 +491,29 @@ export async function bookedPerSlot(executor: DBConnection, from: Date, to: Date
 }
 
 /** GET /orders/slots: the slots a customer may pick now, with capacity left. */
-export async function availableSlots(now: Date = orderingClock.now()) {
+export async function availableSlots(now: Date = orderingClock.now(), leadDays = 0) {
   const schedule = await storeSchedule.read();
   const status = storeStatusAt(schedule, now);
-  const draft = buildSlots(schedule, now);
+  const lead = Math.max(0, Math.floor(leadDays));
+  const draft = buildSlots(schedule, now, new Map(), { leadDays: lead });
   const booked = draft.length
     ? await bookedPerSlot(db, new Date(draft[0].start), new Date(draft[draft.length - 1].start))
     : new Map<string, number>();
+  const earliest = earliestDeliveryDay(now, lead);
   return {
     enabled: schedule.slots.enabled,
-    asap_available: status.is_open_now,
+    // Migration 045: a cart with lead-time items cannot go "as soon as possible".
+    asap_available: status.is_open_now && lead === 0,
     is_open_now: status.is_open_now,
     closed_kind: status.closed_kind,
     closed_reason: status.closed_reason,
     reopens_at: status.reopens_at,
     next_open_at: status.next_open_at,
-    slots: buildSlots(schedule, now, booked),
+    // Migration 045 (owner, 2026-10-14): the cart's longest delivery lead
+    // time and the first day it can be delivered ("Delivered from <date>").
+    lead_days: lead,
+    earliest_delivery_date: earliest.date,
+    earliest_delivery_label: earliest.label,
+    slots: buildSlots(schedule, now, booked, { leadDays: lead }),
   };
 }

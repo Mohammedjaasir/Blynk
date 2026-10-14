@@ -14,6 +14,7 @@ import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { applyFilters, FILTERS, type FilterId } from '@/blynk/lib/filters';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
+import { hasVariants, priceText } from '@/blynk/catalog/variants';
 import { useFreeDeliveryUnlocked } from '@/blynk/store/freeDelivery';
 import { useStore } from '@/blynk/store/StoreContext';
 import { CART_BAR, CartBar } from '@/components/CartBar';
@@ -535,13 +536,15 @@ function PairItem({ p }: { p: Product }) {
 
 /** Live pair card: the real photo, LKR effective price, regular price struck only on an active offer. */
 function LivePairItem({ p }: { p: Product }) {
-  const offer = isOfferActive(p);
+  // sold in sizes: the price shows as "From LKR 50" and the regular price is not struck
+  const sized = hasVariants(p);
+  const offer = !sized && isOfferActive(p);
   return (
     <View style={styles.pairItem}>
       <View style={{ flex: 1, paddingLeft: 9, paddingTop: 16, paddingRight: 6 }}>
         <Text style={styles.pairName} numberOfLines={2}>{p.name}</Text>
         <View style={styles.pairPriceRow}>
-          <Text style={styles.pairPrice}>{formatLkr(effectivePrice(p))}</Text>
+          <Text style={styles.pairPrice}>{sized ? priceText(p, { compact: true }) : formatLkr(effectivePrice(p))}</Text>
           {offer && <Text style={styles.pairMrp}>{formatLkr(p.selling_price)}</Text>}
         </View>
       </View>

@@ -27,6 +27,13 @@ export interface DeliverySlots {
   closed_reason?: string | null;
   reopens_at?: string | null;
   next_open_at?: string | null;
+  /**
+   * Migration 045 (asked with ?product_ids=): the cart's longest delivery lead time. With
+   * lead_days > 0 only slots from earliest_delivery_date on are listed and asap_available is false.
+   */
+  lead_days?: number;
+  earliest_delivery_date?: string | null;
+  earliest_delivery_label?: string | null;
   slots: DeliverySlot[];
 }
 
@@ -69,6 +76,9 @@ export function parseSlots(raw: unknown): DeliverySlots | null {
     closed_reason: typeof raw.closed_reason === 'string' ? raw.closed_reason : null,
     reopens_at: typeof raw.reopens_at === 'string' ? raw.reopens_at : null,
     next_open_at: typeof raw.next_open_at === 'string' ? raw.next_open_at : null,
+    lead_days: typeof raw.lead_days === 'number' && Number.isFinite(raw.lead_days) ? Math.max(0, Math.floor(raw.lead_days)) : 0,
+    earliest_delivery_date: typeof raw.earliest_delivery_date === 'string' ? raw.earliest_delivery_date : null,
+    earliest_delivery_label: typeof raw.earliest_delivery_label === 'string' ? raw.earliest_delivery_label : null,
     slots: raw.enabled ? list.map(parseSlot).filter((s): s is DeliverySlot => s !== null) : [],
   };
 }

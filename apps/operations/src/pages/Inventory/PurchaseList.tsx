@@ -7,6 +7,7 @@ import { errorMessage } from '../../lib/errors';
 import { lineCost, lineName, purchaseCsv, purchaseText, whatsappUrl, type PurchaseLine } from '../../lib/insights';
 import { formatMoney } from '../../lib/orders';
 import { downloadBlob } from '../../lib/productImport';
+import { stockRowKey } from '../../lib/inventory';
 
 /**
  * Purchase list (owner, 2026-10-10): a supplier order made from what is
@@ -30,7 +31,8 @@ export function PurchaseList() {
       .then((d) => {
         if (!live) return;
         setData(d);
-        setQty(Object.fromEntries(d.items.map((i) => [i.product_id, i.suggested_quantity])));
+        // Keyed by product + variant: two sizes of one product are separate lines.
+        setQty(Object.fromEntries(d.items.map((i) => [stockRowKey(i), i.suggested_quantity])));
       })
       .catch((err) => live && setError(errorMessage(err, 'Could not load the purchase list.')));
     return () => {
@@ -38,7 +40,7 @@ export function PurchaseList() {
     };
   }, [reload]);
 
-  const linesOf = (g: PurchaseSupplierGroup): PurchaseLine[] => g.items.map((item) => ({ item, quantity: qty[item.product_id] ?? item.suggested_quantity }));
+  const linesOf = (g: PurchaseSupplierGroup): PurchaseLine[] => g.items.map((item) => ({ item, quantity: qty[stockRowKey(item)] ?? item.suggested_quantity }));
   const allLines = useMemo(() => (data ? data.suppliers.flatMap(linesOf) : []), [data, qty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function copy(text: string, what: string) {
@@ -50,8 +52,8 @@ export function PurchaseList() {
     }
   }
 
-  function setQuantity(productId: string, value: number) {
-    setQty((q) => ({ ...q, [productId]: Math.max(0, Math.min(99999, Math.round(value) || 0)) }));
+  function setQuantity(key: string, value: number) {
+    setQty((q) => ({ ...q, [key]: Math.max(0, Math.min(99999, Math.round(value) || 0)) }));
   }
 
   const allText = data
@@ -121,7 +123,7 @@ export function PurchaseList() {
                 {g.supplier_id === null ? <p className="cat-row__meta">Never bought from a named supplier. Pick one when sourcing to group it next time.</p> : null}
                 <ul className="cat-list">
                   {lines.map(({ item, quantity }) => (
-                    <li key={item.product_id} className={quantity === 0 ? 'cat-row cat-row--flat is-muted' : 'cat-row cat-row--flat'}>
+                    <li key={stockRowKey(item)} className={quantity === 0 ? 'cat-row cat-row--flat is-muted' : 'cat-row cat-row--flat'}>
                       <div className="cat-row__main">
                         <Link className="cat-row__title purchase-item__name" to={`/catalog/inventory/stock/${item.product_id}`}>
                           {lineName(item)}
@@ -138,18 +140,18 @@ export function PurchaseList() {
                         </p>
                       </div>
                       <div className="cat-row__actions">
-                        <div className="qty-stepper" role="group" aria-label={`Quantity of ${item.product_name}`}>
-                          <button type="button" className="qty-stepper__button" aria-label={`Less ${item.product_name}`} disabled={quantity === 0} onClick={() => setQuantity(item.product_id, quantity - 1)}>
+                        <div className="qty-stepper" role="group" aria-label={`Quantity of ${lineLabel(item)}`}>
+                          <button type="button" className="qty-stepper__button" aria-label={`Less ${lineLabel(item)}`} disabled={quantity === 0} onClick={() => setQuantity(stockRowKey(item), quantity - 1)}>
                             −
                           </button>
                           <input
                             className="qty-stepper__value purchase-qty"
                             inputMode="numeric"
-                            aria-label={`${item.product_name} quantity`}
+                            aria-label={`${lineLabel(item)} quantity`}
                             value={quantity}
-                            onChange={(e) => setQuantity(item.product_id, Number(e.target.value.replace(/\D/g, '')))}
+                            onChange={(e) => setQuantity(stockRowKey(item), Number(e.target.value.replace(/\D/g, '')))}
                           />
-                          <button type="button" className="qty-stepper__button" aria-label={`More ${item.product_name}`} onClick={() => setQuantity(item.product_id, quantity + 1)}>
+                          <button type="button" className="qty-stepper__button" aria-label={`More ${lineLabel(item)}`} onClick={() => setQuantity(stockRowKey(item), quantity + 1)}>
                             +
                           </button>
                         </div>
@@ -172,4 +174,9 @@ export function PurchaseList() {
       ) : null}
     </div>
   );
+}
+
+/** The accessible name of a line: the product, or "Chilli Powder - 100 g" for a variant. */
+function lineLabel(item: { product_name: string; display_name?: string; variant_label?: string | null }): string {
+  return item.variant_label ? (item.display_name ?? `${item.product_name} - ${item.variant_label}`) : item.product_name;
 }

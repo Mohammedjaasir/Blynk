@@ -1,4 +1,5 @@
 import { ApiError } from '@/blynk/api/client';
+import type { LineRefusal } from '@/blynk/cart/cartStore';
 
 /*
  * Words for a refused order, keyed on the backend's error code (the Flutter app's
@@ -18,6 +19,11 @@ export type PlaceErrorAction =
   | 'slot'
   /** Staff switched "For someone else" off: reload checkout-info, which hides it. */
   | 'details'
+  /**
+   * Stock or size (migration 045): the cart is updated from the refusal (stockRefusal) - the line
+   * marked sold out, lowered to what is left, or asking for a size - and the catalogue refreshed.
+   */
+  | 'stock'
   | 'signin'
   | 'retry'
   | null;
@@ -52,12 +58,26 @@ const COPY: Record<string, PlaceErrorCopy> = {
   COMBO_UNAVAILABLE: { title: 'Combo pack unavailable', message: "A combo pack in your cart isn't available right now. Remove it and try again.", action: 'reconcile' },
   COMBO_OUT_OF_STOCK: { title: 'Combo pack sold out', message: 'A combo pack in your cart has sold out. Remove it or lower the quantity and try again.', action: 'reconcile' },
   COMBO_QUANTITY_TOO_HIGH: { title: 'Too many packs', message: 'You can order at most 20 of one combo pack.', action: null },
+  // variants and stock (migration 045): the cart follows the refusal (stockRefusal)
+  OUT_OF_STOCK: { title: 'Sold out', message: 'An item in your cart has sold out. It is marked in your cart.', action: 'stock' },
+  INSUFFICIENT_STOCK: { title: 'Not enough left', message: 'We have fewer of an item than you asked for. Your cart now has what is left.', action: 'stock' },
+  VARIANT_REQUIRED: { title: 'Choose a size', message: 'An item in your cart now comes in sizes. Remove it and add the size you want.', action: 'stock' },
+  VARIANT_NOT_FOUND: { title: 'Size no longer sold', message: 'A size in your cart is no longer sold. Remove it and pick another size.', action: 'stock' },
+  VARIANT_UNAVAILABLE: { title: 'Size unavailable', message: "A size in your cart isn't available right now. Remove it and try again.", action: 'stock' },
+  // delivery lead time (migration 045): pick a slot on/after the first delivery day
+  LEAD_TIME_REQUIRES_SLOT: { title: 'Pick a delivery time', message: 'An item in your cart needs a few days. Pick a delivery time.', action: 'slot' },
+  SLOT_BEFORE_LEAD_TIME: { title: 'Pick a later time', message: 'An item in your cart cannot be delivered that soon. Pick a later delivery time.', action: 'slot' },
   POINTS_INSUFFICIENT: { title: 'Not enough points', message: "You don't have enough Blynk Points for that.", action: 'retry' },
   TOO_MANY_REQUESTS: { title: 'Too many tries', message: 'Too many tries. Wait a moment, then try again.', action: 'retry' },
   RATE_LIMITED: { title: 'Too many tries', message: 'Too many tries. Wait a moment, then try again.', action: 'retry' },
 };
 
-const SERVER_WORDED = new Set(['STORE_CLOSED', 'SLOT_UNAVAILABLE', 'SLOT_FULL', 'FOR_SOMEONE_ELSE_DISABLED']);
+const SERVER_WORDED = new Set([
+  'STORE_CLOSED', 'SLOT_UNAVAILABLE', 'SLOT_FULL', 'FOR_SOMEONE_ELSE_DISABLED',
+  // these name the item ("Only 3 left of Chilli Powder 100 g. Please lower the quantity.")
+  'OUT_OF_STOCK', 'INSUFFICIENT_STOCK', 'VARIANT_REQUIRED', 'VARIANT_NOT_FOUND', 'VARIANT_UNAVAILABLE',
+  'LEAD_TIME_REQUIRES_SLOT', 'SLOT_BEFORE_LEAD_TIME',
+]);
 
 /** Clear copy for any failure of POST /orders (or the coupon preview). */
 export function placeErrorCopy(e: unknown): PlaceErrorCopy {
@@ -84,6 +104,37 @@ export function refusedProduct(e: unknown): { product_id: string; name: string }
   if (!(e instanceof ApiError) || e.code !== 'PRODUCT_UNAVAILABLE') return null;
   const d = e.details as { product_id?: unknown; name?: unknown } | null | undefined;
   return d && typeof d.product_id === 'string' ? { product_id: d.product_id, name: typeof d.name === 'string' ? d.name : '' } : null;
+}
+
+/** The cart line a stock / size refusal is about (migration 045 details), or null. */
+export function stockRefusal(e: unknown): LineRefusal | null {
+  if (!(e instanceof ApiError) || !e.code) return null;
+  const d = (e.details ?? {}) as { product_id?: unknown; variant_id?: unknown; available?: unknown };
+  if (typeof d.product_id !== 'string' || !d.product_id) return null;
+  const variant = typeof d.variant_id === 'string' && d.variant_id ? d.variant_id : null;
+  switch (e.code) {
+    case 'OUT_OF_STOCK':
+    case 'VARIANT_UNAVAILABLE':
+    case 'VARIANT_NOT_FOUND':
+      return { kind: 'sold-out', product_id: d.product_id, variant_id: variant };
+    case 'INSUFFICIENT_STOCK': {
+      const left = typeof d.available === 'number' && Number.isFinite(d.available) ? Math.max(0, Math.floor(d.available)) : 0;
+      return left > 0
+        ? { kind: 'only', product_id: d.product_id, variant_id: variant, available: left }
+        : { kind: 'sold-out', product_id: d.product_id, variant_id: variant };
+    }
+    case 'VARIANT_REQUIRED':
+      return { kind: 'needs-size', product_id: d.product_id };
+    default:
+      return null;
+  }
+}
+
+/** The words under a stock refusal once the cart has been updated: what changed. */
+export function stockRefusalNote(r: LineRefusal): string {
+  if (r.kind === 'only') return `Your cart now has ${r.available}.`;
+  if (r.kind === 'needs-size') return 'Remove it and add the size you want.';
+  return 'Remove it from your cart to order the rest.';
 }
 
 /** Cancel refusals (lifecycle CUSTOMER_CANCEL). */

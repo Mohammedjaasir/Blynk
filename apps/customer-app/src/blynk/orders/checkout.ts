@@ -1,4 +1,4 @@
-import type { CartLine, ComboLine } from '@/blynk/cart/cartStore';
+import { lineAvailable, type CartLine, type ComboLine } from '@/blynk/cart/cartStore';
 import { formatLkr } from '@/blynk/lib/money';
 import { storage } from '@/blynk/lib/storage';
 import { rewardsSummary, type DiscountKind } from '@/blynk/checkout/rewards';
@@ -11,11 +11,14 @@ import type { CheckoutInfo, CouponPreview, PlaceOrderBody } from './types';
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
-/** The lines the order carries: available Blynk products only (design-mock "demo-" lines never go out). */
+/**
+ * The lines the order carries: available Blynk products only (design-mock "demo-" lines never go
+ * out). A size line names its variant (migration 045); the server prices it again.
+ */
 export function orderItems(lines: CartLine[]): PlaceOrderBody['items'] {
   return lines
-    .filter((l) => l.product.is_available && l.quantity > 0 && !l.product.id.startsWith('demo-'))
-    .map((l) => ({ product_id: l.product.id, quantity: l.quantity }));
+    .filter((l) => lineAvailable(l) && l.quantity > 0 && !l.product.id.startsWith('demo-'))
+    .map((l) => (l.variant ? { product_id: l.product.id, variant_id: l.variant.id, quantity: l.quantity } : { product_id: l.product.id, quantity: l.quantity }));
 }
 
 /** The combo packs the order carries (POST /orders `combos`): available ones only, like items. */
@@ -32,7 +35,8 @@ export function checkoutSignature(args: {
   /** The rest of the body that makes it a different order: slot, points, receiver, needs help. */
   extra?: Pick<PlaceOrderBody, 'delivery_slot_start' | 'use_points' | 'for_someone_else' | 'recipient' | 'needs_help'>;
 }): string {
-  const items = [...args.items].sort((a, b) => a.product_id.localeCompare(b.product_id)).map((i) => `${i.product_id}x${i.quantity}`).join(',');
+  const itemKey = (i: PlaceOrderBody['items'][number]) => (i.variant_id ? `${i.product_id}:${i.variant_id}` : i.product_id);
+  const items = [...args.items].sort((a, b) => itemKey(a).localeCompare(itemKey(b))).map((i) => `${itemKey(i)}x${i.quantity}`).join(',');
   const x = args.extra;
   const more = x && (x.delivery_slot_start || x.use_points || x.for_someone_else || x.needs_help)
     ? [x.delivery_slot_start ?? '', x.use_points ? 'P' : '', x.for_someone_else ? `R:${x.recipient?.name ?? ''}:${x.recipient?.phone ?? ''}` : '', x.needs_help ? 'H' : ''].join(';')

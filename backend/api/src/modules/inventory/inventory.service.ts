@@ -8,7 +8,10 @@ import {
   UpdateSupplierInput,
   InventoryQueryInput,
   AdjustmentsQueryInput,
+  SetStockInput,
 } from './inventory.schema.js';
+import type { AuditActor } from '../audit/audit.writer.js';
+import { toStaffStock } from './stock-view.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import { db } from '../../database/connection.js';
@@ -16,6 +19,18 @@ import type { UserRole } from '../../database/types.js';
 
 // Default Central Dharga Town Hub fallback ID
 export const DEFAULT_DARK_STORE_ID = '018dc3f0-4a82-789a-8b1b-947f61ad8821';
+
+/** A variant id must belong to the product in the URL (and not be deleted). */
+async function assertVariantOf(productId: string, variantId: string) {
+  const v = await db
+    .selectFrom('product_variants')
+    .select('id')
+    .where('id', '=', variantId)
+    .where('product_id', '=', productId)
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst();
+  if (!v) throw new AppError('Variant not found.', 404, 'VARIANT_NOT_FOUND', { variant_id: variantId });
+}
 
 export class InventoryService {
   /**
@@ -89,7 +104,7 @@ export class InventoryService {
   /**
    * Retrieves single product inventory and adjustment history.
    */
-  async getInventoryByProduct(productId: string, darkStoreId?: string) {
+  async getInventoryByProduct(productId: string, darkStoreId?: string, variantId: string | null = null) {
     // Validate product exists first
     const product = await db
       .selectFrom('products')
@@ -102,11 +117,13 @@ export class InventoryService {
       throw new AppError('Product not found.', 404, 'PRODUCT_NOT_FOUND', { product_id: productId });
     }
 
-    const inventory = await inventoryRepository.getInventoryByProduct(productId, darkStoreId);
+    if (variantId) await assertVariantOf(productId, variantId);
+    const inventory = await inventoryRepository.getInventoryByProduct(productId, darkStoreId, db, variantId);
     if (!inventory) {
       // Return default UNTRACKED representation if not yet initialized in inventory table
       return {
         product_id: product.id,
+        variant_id: variantId,
         product_name: product.name,
         tracking_mode: 'UNTRACKED',
         quantity_on_hand: 0,
@@ -138,7 +155,8 @@ export class InventoryService {
     }
 
     const storeId = input.dark_store_id ?? DEFAULT_DARK_STORE_ID;
-    const updated = await inventoryRepository.setTrackingMode(productId, storeId, input.tracking_mode);
+    if (input.variant_id) await assertVariantOf(productId, input.variant_id);
+    const updated = await inventoryRepository.setTrackingMode(productId, storeId, input.tracking_mode, db, input.variant_id ?? null);
 
     logger.info(
       { productId, darkStoreId: storeId, mode: input.tracking_mode },
@@ -165,8 +183,10 @@ export class InventoryService {
     }
 
     const storeId = input.dark_store_id ?? DEFAULT_DARK_STORE_ID;
+    if (input.variant_id) await assertVariantOf(productId, input.variant_id);
     const result = await inventoryRepository.adjustStockAtomic({
       productId,
+      variantId: input.variant_id ?? null,
       darkStoreId: storeId,
       quantityDelta: input.quantity_delta,
       adjustmentType: input.adjustment_type,
@@ -211,13 +231,45 @@ export class InventoryService {
     }
 
     const storeId = input.dark_store_id ?? DEFAULT_DARK_STORE_ID;
-    const updated = await inventoryRepository.setLowStockThreshold(productId, storeId, input.low_stock_threshold);
+    if (input.variant_id) await assertVariantOf(productId, input.variant_id);
+    const updated = await inventoryRepository.setLowStockThreshold(productId, storeId, input.low_stock_threshold, db, input.variant_id ?? null);
 
     logger.info(
       { productId, darkStoreId: storeId, threshold: input.low_stock_threshold, userId },
       'Low-stock threshold updated'
     );
     return updated;
+  }
+
+  /**
+   * PUT /admin/inventory/:productId/stock (migration 045): tracking, count
+   * and low-stock level in one audited call; answers with the stock as staff
+   * see it (on hand, in open orders, sellable, low/out flags).
+   */
+  async setStock(productId: string, input: SetStockInput, actor: AuditActor) {
+    const storeId = input.dark_store_id ?? DEFAULT_DARK_STORE_ID;
+    const variantId = input.variant_id ?? null;
+    await inventoryRepository.setStockAtomic(
+      {
+        productId,
+        variantId,
+        darkStoreId: storeId,
+        tracked: input.tracked,
+        stockCount: input.stock_count,
+        lowStockThreshold: input.low_stock_threshold,
+        reason: input.reason,
+      },
+      actor
+    );
+    logger.info({ productId, variantId, tracked: input.tracked, count: input.stock_count, actorId: actor.actorId }, 'Stock settings saved');
+    const row = await db
+      .selectFrom('v_inventory_stock')
+      .selectAll()
+      .where('dark_store_id', '=', storeId)
+      .where('product_id', '=', productId)
+      .where((eb) => (variantId === null ? eb('variant_id', 'is', null) : eb('variant_id', '=', variantId)))
+      .executeTakeFirst();
+    return { product_id: productId, variant_id: variantId, stock: toStaffStock(row) };
   }
 
   // ==========================================================================

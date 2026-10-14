@@ -195,6 +195,8 @@ describe('Free deliveries for every customer', () => {
       points: expect.objectContaining({ enabled: false, balance: 0 }),
       // Migration 047 (owner, 2026-10-14): PayHere "Pay online" - whatever the gateway row says here.
       online_payment: expect.objectContaining({ provider: 'PAYHERE', enabled: expect.any(Boolean) }),
+      // Migration 045 (owner, 2026-10-14): no ?product_ids=, so no lead time - today, ASAP allowed.
+      delivery_lead: expect.objectContaining({ lead_days: 0, asap_allowed: true }),
     });
 
     const first = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));

@@ -8,6 +8,7 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { effectivePrice } from './catalog.offers.js';
+import { stockKeyOf } from '../inventory/stock-ledger.js';
 
 /**
  * Combo packs (migration 033; owner, 2026-10-09).
@@ -32,6 +33,10 @@ import { effectivePrice } from './catalog.offers.js';
  *   for the pack (on hand - reserved >= quantity). A sold-out combo still
  *   shows, marked unavailable, like a sold-out product.
  *
+ * Migration 045: a combo item may name a specific variant of its product
+ * (variant_id) - "Chilli powder 100 g" - priced, stocked and ordered as that
+ * variant. Without variant_id it is the product itself, exactly as before.
+ *
  * In an order a combo is one order_combos line (name, price, quantity
  * snapshotted) whose items are ordinary order_items rows pointing at it
  * (order_items.order_combo_id). Their unit prices share the combo price in
@@ -48,6 +53,8 @@ const twoDecimals = (v: number) => Math.abs(Math.round(v * 100) - v * 100) < 1e-
 
 const comboItemSchema = z.object({
   product_id: uuid,
+  /** Migration 045: a specific variant of the product (optional). */
+  variant_id: uuid.nullable().optional(),
   quantity: z.number().int('Quantity must be a whole number').min(1, 'Quantity must be at least 1').max(100, 'Quantity cannot exceed 100'),
 });
 
@@ -55,7 +62,10 @@ const comboItemsSchema = z
   .array(comboItemSchema)
   .min(1, 'Pick the products in the combo')
   .max(30, 'A combo can hold at most 30 products')
-  .refine((items) => new Set(items.map((i) => i.product_id)).size === items.length, 'Each product may appear only once - raise its quantity instead')
+  .refine(
+    (items) => new Set(items.map((i) => `${i.product_id}:${i.variant_id ?? ''}`)).size === items.length,
+    'Each product (or variant) may appear only once - raise its quantity instead'
+  )
   .refine(
     (items) => items.length >= 2 || (items.length === 1 && items[0].quantity >= 2),
     'A combo needs at least 2 products, or 1 product with a quantity of 2 or more'
@@ -162,6 +172,9 @@ type Executor = typeof db | Transaction<Database>;
 
 export interface ComboItemView {
   product_id: string;
+  /** Migration 045: the variant in the combo, or null for the product itself. */
+  variant_id: string | null;
+  variant_label: string | null;
   name: string;
   slug: string | null;
   sku: string | null;
@@ -184,6 +197,8 @@ export interface ComboItemView {
   /** Internal, for order pricing: never sent to customers. */
   purchase_cost: number;
   effective_markup_percent: number;
+  /** Migration 045: the product's delivery lead time in days. */
+  delivery_lead_days: number;
 }
 
 export interface ComboView {
@@ -208,6 +223,8 @@ export interface ComboView {
   is_available: boolean;
   /** Why it is not live, for Ops/Admin: INACTIVE, ENDED, ITEM_INACTIVE, NOT_CHEAPER; null when live. */
   not_live_reason: 'INACTIVE' | 'ENDED' | 'ITEM_INACTIVE' | 'NOT_CHEAPER' | null;
+  /** Migration 045: the longest delivery lead time of its items (0 = same day). */
+  delivery_lead_days: number;
 }
 
 function clampFocal(value: unknown): number {
@@ -241,9 +258,22 @@ export async function loadCombos(executor: Executor, ids?: string[], now: Date =
     .selectFrom('combo_items as ci')
     .innerJoin('products as p', 'p.id', 'ci.product_id')
     .leftJoin('v_product_catalog as v', 'v.id', 'ci.product_id')
+    // Migration 045: the variant's own price, offer and switches.
+    .leftJoin('v_product_variant_catalog as pv', 'pv.id', 'ci.variant_id')
     .select([
       'ci.combo_id',
       'ci.product_id',
+      'ci.variant_id',
+      'pv.label as variant_label',
+      'pv.sku as variant_sku',
+      'pv.purchase_cost as variant_purchase_cost',
+      'pv.effective_markup_percent as variant_effective_markup_percent',
+      'pv.calculated_selling_price as variant_selling_price',
+      'pv.is_active as variant_is_active',
+      'pv.is_available as variant_is_available',
+      'pv.offer_price as variant_offer_price',
+      'pv.offer_ends_at as variant_offer_ends_at',
+      'p.delivery_lead_days',
       'ci.quantity',
       'ci.sort_order',
       'p.name',
@@ -271,31 +301,52 @@ export async function loadCombos(executor: Executor, ids?: string[], now: Date =
 
   const storeId = await activeStoreId(executor);
   const productIds = [...new Set(items.map((i) => i.product_id))];
+  // Migration 045: what is left to sell (on hand - reserved - units in open
+  // orders), per product-level row or variant row.
   const stock =
     storeId && productIds.length
       ? await executor
-          .selectFrom('inventory')
-          .select(['product_id', 'tracking_mode', 'quantity_on_hand', 'quantity_reserved'])
+          .selectFrom('v_inventory_stock')
+          .select(['product_id', 'variant_id', 'tracking_mode', 'quantity_sellable'])
           .where('dark_store_id', '=', storeId)
           .where('product_id', 'in', productIds)
           .execute()
       : [];
   const tracked = new Map(
-    stock.filter((s) => s.tracking_mode === 'TRACKED').map((s) => [s.product_id, s.quantity_on_hand - s.quantity_reserved])
+    stock
+      .filter((s) => s.tracking_mode === 'TRACKED')
+      .map((s) => [stockKeyOf({ product_id: s.product_id, variant_id: s.variant_id ?? null }), Math.max(0, Number(s.quantity_sellable))])
   );
 
   return combos.map((c) => {
     const mine: ComboItemView[] = items
       .filter((i) => i.combo_id === c.id)
       .map((i) => {
-        const listed = i.calculated_selling_price !== null && i.calculated_selling_price !== undefined;
-        const selling = listed ? Number(Number(i.calculated_selling_price).toFixed(2)) : 0;
-        const available = tracked.has(i.product_id) ? tracked.get(i.product_id)! : null;
+        const isVariant = i.variant_id !== null && i.variant_id !== undefined;
+        // A variant item is listed while the variant is live (not deleted) and its product is listed.
+        const productListed = i.calculated_selling_price !== null && i.calculated_selling_price !== undefined;
+        const listed = productListed && (!isVariant || (i.variant_selling_price !== null && i.variant_selling_price !== undefined));
+        const rawSelling = isVariant ? i.variant_selling_price : i.calculated_selling_price;
+        const selling = listed ? Number(Number(rawSelling).toFixed(2)) : 0;
+        const key = stockKeyOf({ product_id: i.product_id, variant_id: i.variant_id ?? null });
+        const available = tracked.has(key) ? tracked.get(key)! : null;
+        const offerFields = isVariant
+          ? {
+              offer_price: i.variant_offer_price,
+              offer_ends_at: i.variant_offer_ends_at,
+              category_offer_percent: i.category_offer_percent,
+              category_offer_ends_at: i.category_offer_ends_at,
+            }
+          : i;
+        const active = listed && i.is_active === true && (!isVariant || i.variant_is_active === true);
+        const availableNow = active && i.is_available === true && (!isVariant || i.variant_is_available === true);
         return {
           product_id: i.product_id,
+          variant_id: i.variant_id ?? null,
+          variant_label: isVariant ? i.variant_label ?? null : null,
           name: i.name,
           slug: i.slug,
-          sku: i.sku,
+          sku: isVariant ? i.variant_sku ?? i.sku : i.sku,
           unit: i.unit,
           pack_size: i.pack_size,
           image_url: i.image_url,
@@ -303,14 +354,17 @@ export async function loadCombos(executor: Executor, ids?: string[], now: Date =
           image_focal_y: clampFocal(i.image_focal_y),
           quantity: i.quantity,
           selling_price: selling,
-          unit_price: listed ? effectivePrice(i, selling, now) : 0,
-          is_active: listed && i.is_active === true,
-          is_available: listed && i.is_active === true && i.is_available === true,
+          unit_price: listed ? effectivePrice(offerFields, selling, now) : 0,
+          is_active: active,
+          is_available: availableNow,
           in_stock: available === null || available >= i.quantity,
           stock_available: available,
-          purchase_cost: Number(Number(i.purchase_cost).toFixed(2)),
+          purchase_cost: Number(Number(isVariant ? i.variant_purchase_cost ?? 0 : i.purchase_cost).toFixed(2)),
           // Migration 044: a FIXED product's implied markup, clamped for order_items (NUMERIC(5,2)).
-          effective_markup_percent: listed ? recordableMarkupPercent(i.effective_markup_percent) : 0,
+          effective_markup_percent: listed
+            ? recordableMarkupPercent(isVariant ? i.variant_effective_markup_percent : i.effective_markup_percent)
+            : 0,
+          delivery_lead_days: Number(i.delivery_lead_days ?? 0),
         };
       });
     const price = Number(Number(c.price).toFixed(2));
@@ -344,6 +398,7 @@ export async function loadCombos(executor: Executor, ids?: string[], now: Date =
       is_live: notLive === null,
       is_available: notLive === null && mine.every((i) => i.is_available && i.in_stock),
       not_live_reason: notLive,
+      delivery_lead_days: mine.reduce((m, i) => Math.max(m, i.delivery_lead_days), 0),
     };
   });
 }
@@ -360,8 +415,12 @@ export function publicCombo(c: ComboView) {
     items_total: c.items_total,
     saving: c.saving,
     is_available: c.is_available,
+    // Migration 045: delivered from today + N days (0 = same day).
+    delivery_lead_days: c.delivery_lead_days,
     items: c.items.map((i) => ({
       product_id: i.product_id,
+      variant_id: i.variant_id,
+      variant_label: i.variant_label,
       name: i.name,
       slug: i.slug,
       unit: i.unit,
@@ -381,7 +440,7 @@ export function publicCombo(c: ComboView) {
 export function adminCombo(c: ComboView) {
   return {
     ...c,
-    items: c.items.map(({ purchase_cost: _c, effective_markup_percent: _m, ...rest }) => rest),
+    items: c.items.map(({ purchase_cost: _c, effective_markup_percent: _m, delivery_lead_days: _l, ...rest }) => rest),
   };
 }
 
@@ -397,6 +456,9 @@ export interface PricedComboLine {
   items_regular_total: number;
   items: Array<{
     product_id: string;
+    /** Migration 045. */
+    variant_id: string | null;
+    variant_label_snapshot: string | null;
     product_name_snapshot: string;
     sku_snapshot: string;
     unit_snapshot: string;
@@ -426,6 +488,7 @@ export async function priceComboLines(
   const byId = new Map(combos.map((c) => [c.id, c]));
 
   const need = new Map(looseQuantities);
+  const keyOf = (i: ComboItemView) => stockKeyOf({ product_id: i.product_id, variant_id: i.variant_id });
   for (const [comboId, qty] of merged) {
     const combo = byId.get(comboId);
     if (!combo) throw new AppError('A combo pack in your cart no longer exists.', 400, 'COMBO_NOT_FOUND', { combo_id: comboId });
@@ -436,11 +499,11 @@ export async function priceComboLines(
       });
     }
     if (qty > 20) throw new AppError('You can order at most 20 of one combo.', 400, 'COMBO_QUANTITY_TOO_HIGH', { combo_id: comboId });
-    for (const i of combo.items) need.set(i.product_id, (need.get(i.product_id) ?? 0) + i.quantity * qty);
+    for (const i of combo.items) need.set(keyOf(i), (need.get(keyOf(i)) ?? 0) + i.quantity * qty);
   }
   for (const [comboId] of merged) {
     const combo = byId.get(comboId)!;
-    const short = combo.items.find((i) => i.stock_available !== null && i.stock_available < (need.get(i.product_id) ?? 0));
+    const short = combo.items.find((i) => i.stock_available !== null && i.stock_available < (need.get(keyOf(i)) ?? 0));
     if (short) {
       throw new AppError(`Not enough ${short.name} in stock for the combo '${combo.name}'.`, 409, 'COMBO_OUT_OF_STOCK', {
         combo_id: combo.id,
@@ -466,9 +529,12 @@ export async function priceComboLines(
         const quantity = line.quantity * qty;
         return {
           product_id: item.product_id,
+          variant_id: item.variant_id,
+          variant_label_snapshot: item.variant_label,
           product_name_snapshot: item.name,
           sku_snapshot: item.sku ?? '',
-          unit_snapshot: item.unit ?? '',
+          // A variant's label ('100 g') is its unit on the packing list.
+          unit_snapshot: item.variant_label ?? item.unit ?? '',
           unit_selling_price: line.unit_price,
           estimated_unit_cost: item.purchase_cost,
           markup_percentage_applied: item.effective_markup_percent,
@@ -486,9 +552,14 @@ export async function priceComboLines(
 /** Products must exist and be live; the price must be below the items' total today. */
 async function assertComboAllowed(
   executor: Executor,
-  args: { price: number; items: Array<{ product_id: string; quantity: number }>; endsAt: string | null; endsAtChanged: boolean }
+  args: {
+    price: number;
+    items: Array<{ product_id: string; variant_id?: string | null; quantity: number }>;
+    endsAt: string | null;
+    endsAtChanged: boolean;
+  }
 ) {
-  const ids = args.items.map((i) => i.product_id);
+  const ids = [...new Set(args.items.map((i) => i.product_id))];
   const rows = await executor
     .selectFrom('v_product_catalog')
     .select(['id', 'name', 'is_active', 'calculated_selling_price', 'offer_price', 'offer_ends_at', 'category_offer_percent', 'category_offer_ends_at'])
@@ -505,8 +576,33 @@ async function assertComboAllowed(
       product_ids: inactive.map((r) => r.id),
     });
   }
+  // Migration 045: a variant item must be a live, active variant of its product.
+  const variantIds = args.items.map((i) => i.variant_id).filter((v): v is string => !!v);
+  const variants = variantIds.length
+    ? await executor
+        .selectFrom('v_product_variant_catalog')
+        .select(['id', 'product_id', 'label', 'is_active', 'calculated_selling_price', 'offer_price', 'offer_ends_at', 'category_offer_percent', 'category_offer_ends_at'])
+        .where('id', 'in', variantIds)
+        .execute()
+    : [];
+  const variantById = new Map(variants.map((v) => [v.id, v]));
+  for (const i of args.items) {
+    if (!i.variant_id) continue;
+    const v = variantById.get(i.variant_id);
+    if (!v || v.product_id !== i.product_id) {
+      throw new AppError('A variant in the combo does not belong to its product.', 400, 'COMBO_VARIANT_NOT_FOUND', {
+        product_id: i.product_id,
+        variant_id: i.variant_id,
+      });
+    }
+    if (!v.is_active) {
+      throw new AppError(`'${byId.get(i.product_id)!.name} ${v.label}' is switched off, so it cannot go in a combo.`, 400, 'COMBO_PRODUCT_INACTIVE', {
+        variant_ids: [v.id],
+      });
+    }
+  }
   const totalCents = args.items.reduce((sum, i) => {
-    const r = byId.get(i.product_id)!;
+    const r = i.variant_id ? variantById.get(i.variant_id)! : byId.get(i.product_id)!;
     const selling = Number(Number(r.calculated_selling_price).toFixed(2));
     return sum + toCents(effectivePrice(r, selling)) * i.quantity;
   }, 0);
@@ -523,11 +619,23 @@ async function assertComboAllowed(
   }
 }
 
-async function writeItems(trx: Transaction<Database>, comboId: string, items: Array<{ product_id: string; quantity: number }>) {
+async function writeItems(
+  trx: Transaction<Database>,
+  comboId: string,
+  items: Array<{ product_id: string; variant_id?: string | null; quantity: number }>
+) {
   await trx.deleteFrom('combo_items').where('combo_id', '=', comboId).execute();
   await trx
     .insertInto('combo_items')
-    .values(items.map((i, idx) => ({ combo_id: comboId, product_id: i.product_id, quantity: i.quantity, sort_order: idx })))
+    .values(
+      items.map((i, idx) => ({
+        combo_id: comboId,
+        product_id: i.product_id,
+        variant_id: i.variant_id ?? null,
+        quantity: i.quantity,
+        sort_order: idx,
+      }))
+    )
     .execute();
 }
 
@@ -571,7 +679,12 @@ export async function createCombo(input: CreateComboInput, actor: AuditActor) {
 export async function updateCombo(id: string, input: UpdateComboInput, actor: AuditActor) {
   const existing = await db.selectFrom('combos').selectAll().where('id', '=', id).where('deleted_at', 'is', null).executeTakeFirst();
   if (!existing) throw new AppError('Combo not found.', 404, 'COMBO_NOT_FOUND');
-  const existingItems = await db.selectFrom('combo_items').select(['product_id', 'quantity']).where('combo_id', '=', id).orderBy('sort_order').execute();
+  const existingItems = await db
+    .selectFrom('combo_items')
+    .select(['product_id', 'variant_id', 'quantity'])
+    .where('combo_id', '=', id)
+    .orderBy('sort_order')
+    .execute();
 
   const items = input.items ?? existingItems;
   const price = input.price ?? Number(existing.price);
@@ -710,9 +823,15 @@ export const combosController = {
   },
 };
 
-/** For tests and the order module: how many units of a product loose lines take. */
-export function looseQuantities(items: Array<{ product_id: string; quantity: number }>): Map<string, number> {
+/**
+ * For tests and the order module: how many units of a product (or variant,
+ * migration 045) loose lines take, keyed like stock rows (stockKeyOf).
+ */
+export function looseQuantities(items: Array<{ product_id: string; variant_id?: string | null; quantity: number }>): Map<string, number> {
   const m = new Map<string, number>();
-  for (const i of items) m.set(i.product_id, (m.get(i.product_id) ?? 0) + i.quantity);
+  for (const i of items) {
+    const key = stockKeyOf({ product_id: i.product_id, variant_id: i.variant_id ?? null });
+    m.set(key, (m.get(key) ?? 0) + i.quantity);
+  }
   return m;
 }

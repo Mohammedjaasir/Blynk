@@ -392,6 +392,22 @@ describe('Online order flow', () => {
     expect((await checkout(c.token, cod.id)).body.error.code).toBe('NOT_ONLINE_ORDER');
   });
 
+  it('stock (migration 045): units in an unpaid online order are held until it is paid, expires or is cancelled', async () => {
+    const t = await fx.product({ onHand: 1 });
+    const payer = await people.customer(10);
+    const other = await people.customer(11);
+    const online = await expectCreated(await payer.placeOrder([{ product_id: t.productId, quantity: 1 }], { payment_method: 'ONLINE' }));
+    expect(online.order_status).toBe('AWAITING_PAYMENT');
+    // While the customer is paying, the last unit is not sold to anyone else.
+    const refused = await other.placeOrder([{ product_id: t.productId, quantity: 1 }]);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe('OUT_OF_STOCK');
+    // The payment window passes: the unit is free again.
+    await pool.query(`UPDATE orders SET payment_expires_at = now() - interval '1 minute' WHERE id = $1`, [online.id]);
+    const cod = await expectCreated(await other.placeOrder([{ product_id: t.productId, quantity: 1 }]));
+    expect(cod.order_status).toBe('PLACED');
+  });
+
   it('notifications for unknown orders are logged and change nothing', async () => {
     const res = await notify(signed('BL-19990101-0000', '10.00', '2'));
     expect(res.status).toBe(200);

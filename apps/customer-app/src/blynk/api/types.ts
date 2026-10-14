@@ -4,6 +4,32 @@ export interface Product {
   image_url: string | null; image_focal_x: number | null; image_focal_y: number | null;
   selling_price: number; offer_price: number | null; offer_ends_at: string | null;
   offer_kind: 'PRODUCT' | 'CATEGORY' | 'LKR_OFF' | null; is_available: boolean;
+  /*
+   * Variants, stock and lead time (migration 045; docs/api/catalog-variants-stock-leadtime.md).
+   * Optional: an older server (and the design mock) leaves them out, which means "no variants,
+   * same day". is_available already means "orderable now" (switched on and not sold out).
+   */
+  /** The customer must pick a size/pack; the order line then carries variant_id. */
+  has_variants?: boolean;
+  variant_count?: number;
+  /** What one unit costs now (offers included); for variants the cheapest / dearest available one. */
+  price_min?: number;
+  price_max?: number;
+  /** 0 = same day. N = can be delivered from today + N days. */
+  delivery_lead_days?: number;
+  /** YYYY-MM-DD (Asia/Colombo) of the first delivery day when delivery_lead_days > 0. */
+  earliest_delivery_date?: string | null;
+  /** Only on GET /catalog/products/:id: the active variants in staff order ([] without variants). */
+  variants?: ProductVariant[];
+}
+/** One size/pack of a product ("50 g", "3 pack"), as GET /catalog/products/:id lists it. */
+export interface ProductVariant {
+  id: string; label: string; sku: string | null; barcode: string | null; sort_order: number;
+  selling_price: number; offer_price: number | null; offer_ends_at: string | null; offer_kind: 'PRODUCT' | 'CATEGORY' | null;
+  /** offer_price ?? selling_price: exactly what the basket charges now. */
+  price: number;
+  /** False = sold out or switched off (shown greyed out). */
+  is_available: boolean;
 }
 export interface Category {
   id: string; name: string; slug: string; description: string | null; image_url: string | null;
@@ -23,10 +49,14 @@ export interface ComboItem {
   product_id: string; name: string; slug: string | null; unit: string | null; pack_size: string | null;
   image_url: string | null; image_focal_x: number; image_focal_y: number; quantity: number;
   selling_price: number; unit_price: number; is_available: boolean;
+  /** Migration 045: the combo holds this size of the product (null = the product itself). */
+  variant_id?: string | null; variant_label?: string | null;
 }
 export interface Combo {
   id: string; name: string; description: string | null; image_url: string | null; price: number;
   items_total: number; saving: number; ends_at: string | null; is_available: boolean; items: ComboItem[];
+  /** Migration 045: the longest lead time of its items (0 / absent = same day). */
+  delivery_lead_days?: number;
 }
 export interface Pagination { page: number; limit: number; total: number; total_pages: number }
 export interface StoreInfo {

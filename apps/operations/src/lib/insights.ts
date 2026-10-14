@@ -81,7 +81,11 @@ export interface PurchaseLine {
 }
 
 /** "Sugar (1 kg)" - the name plus the pack, so the supplier sends the right size. */
-export function lineName(item: Pick<PurchaseItem, 'product_name' | 'product_unit' | 'pack_size'>): string {
+export function lineName(
+  item: Pick<PurchaseItem, 'product_name' | 'product_unit' | 'pack_size'> & Partial<Pick<PurchaseItem, 'variant_label' | 'display_name'>>
+): string {
+  // A variant's label is its size ("Chilli Powder - 100 g"), so no pack is added.
+  if (item.variant_label) return item.display_name || `${item.product_name} - ${item.variant_label}`;
   const pack = item.pack_size || item.product_unit;
   return pack && !item.product_name.toLowerCase().includes(pack.toLowerCase()) ? `${item.product_name} (${pack})` : item.product_name;
 }
@@ -117,9 +121,9 @@ export function purchaseCsv(lines: PurchaseLine[]): string {
     .filter((l) => l.quantity > 0)
     .map((l) => [
       l.item.supplier_name ?? 'No supplier yet',
-      l.item.product_name,
-      l.item.product_sku,
-      l.item.pack_size || l.item.product_unit,
+      l.item.variant_label ? lineName(l.item) : l.item.product_name,
+      l.item.variant_sku ?? l.item.product_sku,
+      l.item.variant_label ?? (l.item.pack_size || l.item.product_unit),
       l.item.quantity_available,
       l.item.low_stock_threshold,
       l.quantity,

@@ -33,13 +33,14 @@ function readBlob(blob: Blob): Promise<ArrayBuffer> {
   });
 }
 const blobText = async (blob: Blob) => new TextDecoder().decode(await readBlob(blob));
-const GOOD = ['Kotmale Fresh Milk 1L', 'Dairy', 'bottle', '1L', 430, 480, '', 'KOT-MILK-1L', '4791234567890', '', 'yes', 24, ''];
+const GOOD = ['Kotmale Fresh Milk 1L', 'Dairy', '', 'bottle', '1L', 430, 480, '', 'KOT-MILK-1L', '4791234567890', '', 'yes', 24, ''];
 
 describe('productImport lib', () => {
   it('the template has exactly the contract columns, in order', async () => {
     expect(TEMPLATE_COLUMNS).toEqual([
-      'name', 'category', 'unit', 'pack_size', 'purchase_cost', 'selling_price', 'markup_percent',
+      'name', 'category', 'sub_category', 'unit', 'pack_size', 'purchase_cost', 'selling_price', 'markup_percent',
       'sku', 'barcode', 'description', 'tracked', 'opening_stock', 'image_url',
+      'parent_sku', 'variant', 'delivery_lead_days',
     ]);
     expect(templateCsv().split('\r\n')[0]).toBe(TEMPLATE_COLUMNS.join(','));
 
@@ -71,6 +72,9 @@ describe('productImport lib', () => {
         tracked: 'yes',
         opening_stock: 24,
         image_url: null,
+        parent_sku: null,
+        variant: null,
+        delivery_lead_days: null,
       },
     });
   });
@@ -106,7 +110,7 @@ describe('productImport lib', () => {
     expect(rowsFromMatrix([]).fileError).toBe('The file is empty.');
     expect(rowsFromMatrix([['name', 'unit']]).fileError).toMatch(/Missing columns: category, purchase_cost, sku/);
     expect(rowsFromMatrix([HEADER]).fileError).toMatch(/no products/);
-    const many = [HEADER, ...Array.from({ length: 1001 }, (_, i) => [...GOOD.slice(0, 7), `SKU-${i}`, ...GOOD.slice(8)])];
+    const many = [HEADER, ...Array.from({ length: 1001 }, (_, i) => [...GOOD.slice(0, 8), `SKU-${i}`, ...GOOD.slice(9)])];
     expect(rowsFromMatrix(many).fileError).toMatch(/at most 1000/);
   });
 
@@ -137,7 +141,7 @@ describe('productImport lib', () => {
   });
 
   it('the errors CSV lists client and server errors by row, quoted safely', () => {
-    const { rows } = rowsFromMatrix([HEADER, ['', 'Dairy', 'l', '', '', '', '', ''], ['Milk, "fresh"', 'Nope', 'l', '', 10, '', '', 'B2']]);
+    const { rows } = rowsFromMatrix([HEADER, ['', 'Dairy', '', 'l', '', '', '', '', ''], ['Milk, "fresh"', 'Nope', '', 'l', '', 10, '', '', 'B2']]);
     const csv = errorsCsv(rows, {
       dry_run: false,
       summary: { created: 0, updated: 0, skipped: 0, errors: 1 },
@@ -210,9 +214,9 @@ describe('Import products page', () => {
     );
     const csv = [
       TEMPLATE_COLUMNS.join(','),
-      'Kotmale Fresh Milk 1L,Dairy,bottle,1L,430,480,,KOT-MILK-1L,,,yes,24,',
-      'Mystery,Nope,pack,,100,,,MYS-1,,,,,',
-      ',Dairy,pack,,100,,,NONAME,,,,,',
+      'Kotmale Fresh Milk 1L,Dairy,,bottle,1L,430,480,,KOT-MILK-1L,,,yes,24,',
+      'Mystery,Nope,,pack,,100,,,MYS-1,,,,,',
+      ',Dairy,,pack,,100,,,NONAME,,,,,',
     ].join('\n');
     await user.upload(screen.getByLabelText(/Spreadsheet/), new File([csv], 'products.csv', { type: 'text/csv' }));
 
@@ -231,7 +235,7 @@ describe('Import products page', () => {
       {
         row: 2, name: 'Kotmale Fresh Milk 1L', category: 'Dairy', unit: 'bottle', pack_size: '1L',
         purchase_cost: 430, selling_price: 480, markup_percent: null, sku: 'KOT-MILK-1L', barcode: null, description: null,
-        tracked: 'yes', opening_stock: 24, image_url: null,
+        tracked: 'yes', opening_stock: 24, image_url: null, parent_sku: null, variant: null, delivery_lead_days: null,
       },
     ]);
 

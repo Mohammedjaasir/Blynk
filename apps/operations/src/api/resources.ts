@@ -104,6 +104,10 @@ import type {
   SmsOfferInput,
   SmsOfferTestResult,
   CategoryProductOrder,
+  SetStockInput,
+  SetStockResult,
+  StaffVariant,
+  VariantDeleteResult,
 } from './types';
 // Rider documents (owner, 2026-10-10).
 import type {
@@ -925,6 +929,36 @@ export const catalog = {
     /** `DELETE /admin/products/:id` - HARD or SOFT, decided by the server. */
     remove: (id: string) => apiRequest<ProductDeleteResult>(`/admin/products/${id}`, { method: 'DELETE' }),
 
+    /**
+     * Variants (migration 045; owner, 2026-10-14) - sizes / packs of one
+     * product, each with its own cost, price, offer and stock. ADMIN and
+     * OPERATIONS.
+     */
+    variants: {
+      list: (productId: string) =>
+        apiRequest<{ variants: StaffVariant[] }>(`/admin/products/${productId}/variants`).then((d) => d.variants),
+      /** The body may carry track_stock / stock_count / low_stock_threshold (create only). */
+      create: (productId: string, input: Record<string, unknown>) =>
+        apiRequest<{ variant: StaffVariant }>(`/admin/products/${productId}/variants`, { method: 'POST', body: input }).then(
+          (d) => d.variant
+        ),
+      /** Any subset of the create fields except the stock ones (stock: `inventory.stock.setStock`). */
+      update: (productId: string, variantId: string, input: Record<string, unknown>) =>
+        apiRequest<{ variant: StaffVariant }>(`/admin/products/${productId}/variants/${variantId}`, {
+          method: 'PATCH',
+          body: input,
+        }).then((d) => d.variant),
+      /** Never ordered = removed (HARD); ordered = archived (SOFT). */
+      remove: (productId: string, variantId: string) =>
+        apiRequest<VariantDeleteResult>(`/admin/products/${productId}/variants/${variantId}`, { method: 'DELETE' }),
+      /** Every live variant id once, in the new order. */
+      reorder: (productId: string, variantIds: string[]) =>
+        apiRequest<{ variants: StaffVariant[] }>(`/admin/products/${productId}/variants/order`, {
+          method: 'PUT',
+          body: { variant_ids: variantIds },
+        }).then((d) => d.variants),
+    },
+
     /** `POST /admin/products/import` - rows parsed in the browser
      * (lib/productImport.ts). `dry_run` validates without writing. */
     import: (rows: ImportRow[], dryRun: boolean) =>
@@ -1039,9 +1073,10 @@ export const inventory = {
     setMode: (productId: string, tracking_mode: TrackingMode) =>
       apiRequest(`/admin/inventory/${productId}/mode`, { method: 'PATCH', body: { tracking_mode } }),
 
+    /** `variant_id` (migration 045) adjusts that variant's own stock row. */
     adjust: (
       productId: string,
-      body: { adjustment_type: ManualAdjustmentType; quantity_delta: number; notes: string }
+      body: { adjustment_type: ManualAdjustmentType; quantity_delta: number; notes: string; variant_id?: string }
     ) =>
       apiRequest<{ inventory: { quantity_on_hand: number; quantity_available: number } }>(
         `/admin/inventory/${productId}/adjust`,
@@ -1056,6 +1091,14 @@ export const inventory = {
     /** `GET /admin/inventory/low-stock` - tracked products at or under their
      * threshold, OUT first. */
     lowStock: () => apiRequest<LowStockResult>('/admin/inventory/low-stock'),
+
+    /**
+     * `PUT /admin/inventory/:productId/stock` (migration 045): tracking, the
+     * count and the low-stock level of a product (or, with `variant_id`, one
+     * of its variants) in one call. A changed count is one ledger row.
+     */
+    setStock: (productId: string, body: SetStockInput) =>
+      apiRequest<SetStockResult>(`/admin/inventory/${productId}/stock`, { method: 'PUT', body: { ...body } }),
   },
 
   ledger: {

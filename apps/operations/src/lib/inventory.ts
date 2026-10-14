@@ -95,3 +95,29 @@ export function inventoryErrorMessage(err: unknown, fallback = 'Something went w
 }
 
 export const isInventoryError = (err: unknown, code: string) => err instanceof ApiError && err.code === code;
+
+/**
+ * The badge for a product's or variant's staff stock (migration 045):
+ * "Sold out" when nothing is left to sell, "Low" at or under the low-stock
+ * level, else the sellable count. Null when stock is not tracked.
+ */
+export function staffStockBadge(
+  stock: { tracked: boolean; sellable: number | null; is_low_stock: boolean; is_out_of_stock: boolean } | null | undefined
+): { kind: 'OUT' | 'LOW' | 'IN_STOCK'; label: string } | null {
+  if (!stock || !stock.tracked) return null;
+  if (stock.is_out_of_stock) return { kind: 'OUT', label: 'Sold out' };
+  const left = stock.sellable ?? 0;
+  if (stock.is_low_stock) return { kind: 'LOW', label: `Low · ${left} left` };
+  return { kind: 'IN_STOCK', label: `${left} in stock` };
+}
+
+/** The low-stock / purchase-list row's name: "Chilli Powder - 100 g" for a variant. */
+export function stockRowName(row: { display_name?: string | null; product_name: string; variant_label?: string | null }): string {
+  if (row.display_name) return row.display_name;
+  return row.variant_label ? `${row.product_name} - ${row.variant_label}` : row.product_name;
+}
+
+/** A key that keeps two variants of one product apart (product_id + variant_id). */
+export function stockRowKey(row: { product_id: string; variant_id?: string | null }): string {
+  return `${row.product_id}:${row.variant_id ?? ''}`;
+}

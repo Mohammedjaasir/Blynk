@@ -11,6 +11,7 @@ import {
 import { AppError } from '../../middleware/error.middleware.js';
 import { AdjustmentsQueryInput, InventoryQueryInput } from './inventory.schema.js';
 import { lockInventoryRow, recordStockMovement } from './stock-ledger.js';
+import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 
 export type DBConnection = Transaction<Database> | typeof db;
 
@@ -40,12 +41,26 @@ export interface SourceItemParams {
 
 export interface AdjustStockParams {
   productId: string;
+  /** Migration 045: a variant's own stock row; omitted = the product-level row. */
+  variantId?: string | null;
   darkStoreId: string;
   quantityDelta: number;
   adjustmentType: InventoryAdjustmentType;
   notes?: string;
   referenceOrderId?: string;
   userId?: string;
+}
+
+/** PUT /admin/inventory/:productId/stock (migration 045). */
+export interface SetStockParams {
+  productId: string;
+  variantId?: string | null;
+  darkStoreId: string;
+  tracked: boolean;
+  /** The new on-hand count (needs tracked); omitted = unchanged. */
+  stockCount?: number;
+  lowStockThreshold?: number;
+  reason?: string;
 }
 
 export class InventoryRepository {
@@ -226,7 +241,7 @@ export class InventoryRepository {
       // 6. A TRACKED product's units leave the counted shelf into this
       // order's bag (ORDER_FULFILLMENT), through the canonical stock writer.
       // Lock order: item -> order -> inventory row.
-      const inventoryRow = await lockInventoryRow(trx, order.dark_store_id, item.product_id);
+      const inventoryRow = await lockInventoryRow(trx, order.dark_store_id, item.product_id, item.variant_id ?? null);
 
       if (inventoryRow && inventoryRow.tracking_mode === 'TRACKED') {
         if (inventoryRow.quantity_on_hand < qtyToSource) {
@@ -381,7 +396,7 @@ export class InventoryRepository {
         .selectFrom('products as p')
         .innerJoin('categories as c', 'c.id', 'p.category_id')
         .leftJoin('inventory as inv', (join) =>
-          join.onRef('inv.product_id', '=', 'p.id').on('inv.dark_store_id', '=', storeId)
+          join.onRef('inv.product_id', '=', 'p.id').on('inv.dark_store_id', '=', storeId).on('inv.variant_id', 'is', null)
         )
         .leftJoin('dark_stores as ds', 'ds.id', 'inv.dark_store_id');
 
@@ -521,7 +536,7 @@ export class InventoryRepository {
   /**
    * Retrieves single product inventory with adjustment history.
    */
-  async getInventoryByProduct(productId: string, darkStoreId?: string, executor: DBConnection = db) {
+  async getInventoryByProduct(productId: string, darkStoreId?: string, executor: DBConnection = db, variantId: string | null = null) {
     let query = executor
       .selectFrom('inventory as inv')
       .innerJoin('products as p', 'p.id', 'inv.product_id')
@@ -531,6 +546,7 @@ export class InventoryRepository {
         'inv.dark_store_id',
         'ds.name as dark_store_name',
         'inv.product_id',
+        'inv.variant_id',
         'p.name as product_name',
         'p.sku as product_sku',
         'p.purchase_cost',
@@ -540,7 +556,8 @@ export class InventoryRepository {
         'inv.low_stock_threshold',
         'inv.updated_at',
       ])
-      .where('inv.product_id', '=', productId);
+      .where('inv.product_id', '=', productId)
+      .where((eb) => (variantId === null ? eb('inv.variant_id', 'is', null) : eb('inv.variant_id', '=', variantId)));
 
     if (darkStoreId) {
       query = query.where('inv.dark_store_id', '=', darkStoreId);
@@ -577,18 +594,26 @@ export class InventoryRepository {
    * available first.
    */
   async listLowStock(darkStoreId: string, executor: DBConnection = db) {
+    // Migration 045: variant rows too (live, active variants of live
+    // products), named "<product> - <variant label>".
     const rows = await executor
-      .selectFrom('inventory as inv')
+      .selectFrom('v_inventory_stock as inv')
       .innerJoin('products as p', 'p.id', 'inv.product_id')
       .innerJoin('categories as c', 'c.id', 'p.category_id')
+      .leftJoin('product_variants as v', 'v.id', 'inv.variant_id')
       .select([
         'p.id as product_id',
         'p.name as product_name',
         'p.sku as product_sku',
         'p.unit as product_unit',
         'c.name as category_name',
+        'inv.variant_id',
+        'v.label as variant_label',
+        'v.sku as variant_sku',
         'inv.quantity_on_hand',
         'inv.quantity_reserved',
+        'inv.quantity_in_open_orders',
+        'inv.quantity_sellable',
         'inv.low_stock_threshold',
         'inv.updated_at',
       ])
@@ -597,8 +622,10 @@ export class InventoryRepository {
       .whereRef('inv.quantity_on_hand', '<=', 'inv.low_stock_threshold')
       .where('p.is_active', '=', true)
       .where('p.deleted_at', 'is', null)
+      .where((eb) => eb.or([eb('inv.variant_id', 'is', null), eb.and([eb('v.deleted_at', 'is', null), eb('v.is_active', '=', true)])]))
       .orderBy(sql`inv.quantity_on_hand - inv.quantity_reserved`, 'asc')
       .orderBy('p.name', 'asc')
+      .orderBy('v.sort_order', 'asc')
       .orderBy('p.id', 'asc')
       .execute();
 
@@ -607,7 +634,12 @@ export class InventoryRepository {
         const available = r.quantity_on_hand - r.quantity_reserved;
         return {
           ...r,
+          variant_id: r.variant_id ?? null,
+          variant_label: r.variant_label ?? null,
+          variant_sku: r.variant_sku ?? null,
+          display_name: r.variant_label ? `${r.product_name} - ${r.variant_label}` : r.product_name,
           quantity_available: available,
+          quantity_sellable: Math.max(0, Number(r.quantity_sellable)),
           stock_state: (available <= 0 ? 'OUT' : 'LOW') as 'OUT' | 'LOW',
         };
       })
@@ -622,9 +654,15 @@ export class InventoryRepository {
    * Sets the low-stock threshold of a TRACKED product. Only the threshold
    * changes - quantities move through the stock writer alone.
    */
-  async setLowStockThreshold(productId: string, darkStoreId: string, threshold: number, executor: DBConnection = db) {
+  async setLowStockThreshold(
+    productId: string,
+    darkStoreId: string,
+    threshold: number,
+    executor: DBConnection = db,
+    variantId: string | null = null
+  ) {
     return await executor.transaction().execute(async (trx: Transaction<Database>) => {
-      const inv = await lockInventoryRow(trx, darkStoreId, productId);
+      const inv = await lockInventoryRow(trx, darkStoreId, productId, variantId);
       if (!inv || inv.tracking_mode !== 'TRACKED') {
         throw new AppError(
           'A low-stock level only applies to a tracked product. Switch it to TRACKED first.',
@@ -654,17 +692,12 @@ export class InventoryRepository {
     productId: string,
     darkStoreId: string,
     trackingMode: InventoryTrackingMode,
-    executor: DBConnection = db
+    executor: DBConnection = db,
+    variantId: string | null = null
   ) {
     return await executor.transaction().execute(async (trx: Transaction<Database>) => {
-      // Check if inventory row exists
-      const existing = await trx
-        .selectFrom('inventory')
-        .selectAll()
-        .where('dark_store_id', '=', darkStoreId)
-        .where('product_id', '=', productId)
-        .forUpdate()
-        .executeTakeFirst();
+      // Check if inventory row exists (migration 045: the variant's own row when given)
+      const existing = await lockInventoryRow(trx, darkStoreId, productId, variantId);
 
       if (!existing) {
         // Create initial inventory row
@@ -673,6 +706,7 @@ export class InventoryRepository {
           .values({
             dark_store_id: darkStoreId,
             product_id: productId,
+            variant_id: variantId,
             tracking_mode: trackingMode,
             quantity_on_hand: 0,
             quantity_reserved: 0,
@@ -705,7 +739,7 @@ export class InventoryRepository {
       // product's quantities are never read, so a count recorded against it
       // would mean nothing. Tracking is switched on explicitly (PATCH …/mode),
       // never as a side effect of an adjustment.
-      const inv = await lockInventoryRow(trx, params.darkStoreId, params.productId);
+      const inv = await lockInventoryRow(trx, params.darkStoreId, params.productId, params.variantId ?? null);
 
       if (!inv || inv.tracking_mode !== 'TRACKED') {
         throw new AppError(
@@ -732,6 +766,107 @@ export class InventoryRepository {
         },
         adjustment,
       };
+    });
+  }
+
+  /**
+   * The product form's "Stock" section in one call (migration 045; owner,
+   * 2026-10-14): switch tracking on/off, set the count and the low-stock
+   * level for a product or one of its variants. A new count is ONE ledger row
+   * (INVENTORY_AUDIT_ADJUSTMENT, before/after, who, and the reason) through
+   * the canonical stock writer; tracking and threshold changes are written to
+   * audit_logs (STOCK_SETTINGS_UPDATED). Customers never see the numbers.
+   */
+  async setStockAtomic(params: SetStockParams, actor: AuditActor, executor: DBConnection = db) {
+    return await executor.transaction().execute(async (trx: Transaction<Database>) => {
+      const product = await trx
+        .selectFrom('products')
+        .select(['id', 'name'])
+        .where('id', '=', params.productId)
+        .where('deleted_at', 'is', null)
+        .executeTakeFirst();
+      if (!product) throw new AppError('Product not found.', 404, 'PRODUCT_NOT_FOUND', { product_id: params.productId });
+      if (params.variantId) {
+        const variant = await trx
+          .selectFrom('product_variants')
+          .select('id')
+          .where('id', '=', params.variantId)
+          .where('product_id', '=', params.productId)
+          .where('deleted_at', 'is', null)
+          .executeTakeFirst();
+        if (!variant) throw new AppError('Variant not found.', 404, 'VARIANT_NOT_FOUND', { variant_id: params.variantId });
+      }
+      const variantId = params.variantId ?? null;
+      const wantMode: InventoryTrackingMode = params.tracked ? 'TRACKED' : 'UNTRACKED';
+
+      if (params.stockCount !== undefined && !params.tracked) {
+        throw new AppError('Turn on stock tracking to set a stock count.', 409, 'PRODUCT_NOT_TRACKED', {
+          product_id: params.productId,
+          variant_id: variantId,
+        });
+      }
+
+      let inv = await lockInventoryRow(trx, params.darkStoreId, params.productId, variantId);
+      const before = inv
+        ? { tracking_mode: inv.tracking_mode, low_stock_threshold: inv.low_stock_threshold }
+        : { tracking_mode: 'UNTRACKED' as InventoryTrackingMode, low_stock_threshold: 5 };
+
+      if (!inv) {
+        // An untracked product needs no stock row.
+        if (wantMode === 'UNTRACKED' && params.lowStockThreshold === undefined) return { changed: false };
+        await trx
+          .insertInto('inventory')
+          .values({
+            dark_store_id: params.darkStoreId,
+            product_id: params.productId,
+            variant_id: variantId,
+            tracking_mode: wantMode,
+            ...(params.lowStockThreshold !== undefined ? { low_stock_threshold: params.lowStockThreshold } : {}),
+          })
+          .execute();
+        inv = (await lockInventoryRow(trx, params.darkStoreId, params.productId, variantId))!;
+      } else if (
+        inv.tracking_mode !== wantMode ||
+        (params.lowStockThreshold !== undefined && params.lowStockThreshold !== inv.low_stock_threshold)
+      ) {
+        inv = await trx
+          .updateTable('inventory')
+          .set({
+            tracking_mode: wantMode,
+            ...(params.lowStockThreshold !== undefined ? { low_stock_threshold: params.lowStockThreshold } : {}),
+            updated_at: new Date(),
+          })
+          .where('id', '=', inv.id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+      }
+
+      let countChanged = false;
+      if (params.stockCount !== undefined && params.stockCount !== inv.quantity_on_hand) {
+        const reason = params.reason?.trim();
+        await recordStockMovement(trx, {
+          inventory: inv,
+          delta: params.stockCount - inv.quantity_on_hand,
+          type: 'INVENTORY_AUDIT_ADJUSTMENT',
+          orderId: null,
+          actorId: actor.actorId,
+          notes: `Stock count set to ${params.stockCount} (was ${inv.quantity_on_hand})${reason ? `: ${reason}` : ''}`,
+        });
+        countChanged = true;
+      }
+
+      const after = { tracking_mode: wantMode, low_stock_threshold: params.lowStockThreshold ?? before.low_stock_threshold };
+      const settingsChanged = after.tracking_mode !== before.tracking_mode || after.low_stock_threshold !== before.low_stock_threshold;
+      if (settingsChanged) {
+        await writeAudit(trx, actor, {
+          action: 'STOCK_SETTINGS_UPDATED',
+          entityType: 'PRODUCT',
+          entityId: params.productId,
+          oldValues: { variant_id: variantId, ...before },
+          newValues: { variant_id: variantId, ...after },
+        });
+      }
+      return { changed: settingsChanged || countChanged };
     });
   }
 

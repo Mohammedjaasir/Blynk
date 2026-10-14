@@ -92,6 +92,12 @@ export interface PurchaseItem {
   product_id: string;
   product_name: string;
   product_sku: string;
+  /** Migration 045: a variant line (null for the product itself). */
+  variant_id?: string | null;
+  variant_label?: string | null;
+  variant_sku?: string | null;
+  /** "Chilli Powder - 100 g" for a variant, else the product name. */
+  display_name?: string;
   product_unit: string;
   pack_size: string | null;
   category_name: string;

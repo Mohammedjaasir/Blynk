@@ -244,6 +244,8 @@ describe('Delivery fee setting and GET /store', () => {
       doctors_require_sign_in: false,
       // Show doctor channelling to customers (owner, 2026-10-14): on by default.
       doctors_enabled: true,
+      // PayHere (migration 047): "Pay online" - whatever the gateway row says here.
+      online_payment: expect.objectContaining({ provider: 'PAYHERE', enabled: expect.any(Boolean) }),
     });
   });
 

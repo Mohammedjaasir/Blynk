@@ -369,3 +369,54 @@ export function describePromotionTarget(
       return 'all products';
   }
 }
+
+// ------------------------------------- variants, lead time (migration 045)
+
+/** The longest delivery lead time the API accepts, in whole days. */
+export const MAX_DELIVERY_LEAD_DAYS = 30;
+
+/** A delivery lead time typed into the product form: blank = 0, else a whole number 0-30. */
+export function parseLeadDays(input: string): { value: number } | { error: string } {
+  const s = input.trim();
+  if (s === '') return { value: 0 };
+  if (!/^\d+$/.test(s) || Number(s) > MAX_DELIVERY_LEAD_DAYS) {
+    return { error: `Enter whole days from 0 to ${MAX_DELIVERY_LEAD_DAYS} (0 = same day).` };
+  }
+  return { value: Number(s) };
+}
+
+/** "Delivered after 2 days" chip text; null for same day. */
+export function leadTimeLabel(days: number | null | undefined): string | null {
+  const n = Number(days ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `Delivered after ${n} ${n === 1 ? 'day' : 'days'}`;
+}
+
+const lkr = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+
+/**
+ * The price a product row shows: "LKR 50 - 350" for a product with variants
+ * whose prices differ, else the one price ("LKR 125.00"). Null when unknown.
+ */
+export function productPriceText(product: {
+  has_variants?: boolean;
+  price_min?: number | null;
+  price_max?: number | null;
+  calculated_selling_price?: number | null;
+}): string | null {
+  if (product.has_variants && product.price_min != null && product.price_max != null) {
+    const min = Number(product.price_min);
+    const max = Number(product.price_max);
+    return min === max ? `LKR ${lkr(min)}` : `LKR ${lkr(min)} - ${lkr(max)}`;
+  }
+  if (product.calculated_selling_price == null) return null;
+  return `LKR ${Number(product.calculated_selling_price).toFixed(2)}`;
+}
+
+/** A whole stock number typed into a form (0-100000); blank = null. */
+export function parseStockNumber(input: string, label: string): { value: number | null } | { error: string } {
+  const s = input.trim();
+  if (s === '') return { value: null };
+  if (!/^\d+$/.test(s) || Number(s) > 100_000) return { error: `${label} must be a whole number from 0 to 100000.` };
+  return { value: Number(s) };
+}

@@ -32,6 +32,12 @@ export const orderRecipientSchema = z
 
 export const orderItemInputSchema = z.object({
   product_id: z.string().uuid('Invalid product_id UUID'),
+  /**
+   * Migration 045 (owner, 2026-10-14): the size/pack picked ('100 g'). Required
+   * for a product that has variants (400 VARIANT_REQUIRED otherwise); the
+   * server prices the variant itself.
+   */
+  variant_id: z.string().uuid('Invalid variant_id UUID').nullable().optional(),
   quantity: z.number().int().min(1, 'Quantity must be at least 1').max(100, 'Quantity cannot exceed 100'),
 });
 

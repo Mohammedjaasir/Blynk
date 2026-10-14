@@ -9,11 +9,13 @@ import {
   CATEGORY_HELP,
   TEMPLATE_COLUMNS,
   PRICING_RULES,
+  VARIANT_RULES,
   buildTemplateBlob,
   downloadBlob,
   errorsCsv,
   importTooLargeMessage,
   isSupportedFile,
+  isVariantImportRow,
   parseSheet,
   readImportFile,
   resultLabel,
@@ -174,6 +176,14 @@ export function ProductImport() {
             ))}
           </ul>
         </div>
+        <div className="card__note" aria-label="Variants and delivery lead time">
+          <p>Sizes / packs (variants) and delivery lead time:</p>
+          <ul>
+            {VARIANT_RULES.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </div>
         <button type="button" className="button button--ghost" onClick={() => void downloadTemplate()} disabled={templateBusy}>
           {templateBusy ? <Spinner label="Building template" /> : 'Download template'}
         </button>
@@ -233,12 +243,32 @@ export function ProductImport() {
                   const server = dryByRow.get(r.row);
                   const bad = r.errors.length > 0 || server?.status === 'error';
                   const pricing = rowPricing(r.data, server);
+                  // Variant rows (migration 045): which product and which size.
+                  const isVariant = isVariantImportRow(r.data) || server?.kind === 'variant';
+                  const parentSku = r.data.parent_sku ?? server?.parent_sku ?? '';
+                  const variantLabel = r.data.variant ?? server?.variant ?? '';
                   return (
                     <tr key={r.row} className={bad ? 'import-table__row--bad' : undefined}>
                       <td className="mono">{r.row}</td>
-                      <td>{r.data.name}</td>
+                      <td>
+                        {isVariant ? (
+                          <>
+                            <Badge tone="muted">Variant</Badge> <strong>{variantLabel}</strong>
+                            <span className="import-table__parent">{` of ${parentSku}`}</span>
+                          </>
+                        ) : (
+                          <>
+                            {r.data.name}
+                            {r.data.delivery_lead_days ? (
+                              <span className="import-table__parent">{` · delivered after ${r.data.delivery_lead_days} ${
+                                r.data.delivery_lead_days === 1 ? 'day' : 'days'
+                              }`}</span>
+                            ) : null}
+                          </>
+                        )}
+                      </td>
                       <td className="mono">{r.data.sku}</td>
-                      <td>{r.data.sub_category ? `${r.data.category} › ${r.data.sub_category}` : r.data.category}</td>
+                      <td>{isVariant ? '—' : r.data.sub_category ? `${r.data.category} › ${r.data.sub_category}` : r.data.category}</td>
                       <td className="mono">{r.data.purchase_cost.toFixed(2)}</td>
                       <td className="mono">{bad || pricing.price === null ? '—' : pricing.price.toFixed(2)}</td>
                       <td>{bad ? '—' : <Badge tone="muted">{pricing.label}</Badge>}</td>

@@ -14,6 +14,7 @@ import { CatalogProvider } from '@/blynk/catalog/CatalogContext';
 // reads ?ref= and #/p/<id> from the page address before the router moves it on
 import { ShareStartup } from '@/blynk/share/ShareStartup';
 import { StoreProvider } from '@/blynk/store/StoreContext';
+import { SizePickerHost } from '@/components/SizePicker';
 import { CartProvider } from '@/lib/cart';
 
 SplashScreen.preventAutoHideAsync();
@@ -61,6 +62,8 @@ function AppShell() {
               {/* session end cleanup, web push, the app-wide notice (src/blynk/account) */}
               <SessionEffects />
               <ShareStartup />
+              {/* the size picker for products sold in sizes (migration 045) */}
+              <SizePickerHost />
             </CatalogProvider>
           </StoreProvider>
         </CartProvider>

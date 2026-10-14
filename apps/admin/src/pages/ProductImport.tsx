@@ -6,10 +6,13 @@ import type { ImportResponse, ImportResultRow, ImportRow } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, EmptyState, Spinner, useToast } from '../components/ui';
 import { PRICING_SOURCE_LABEL, formatLkr, formatPercent } from '../lib/pricing';
+import { leadTimeText } from '../lib/stock';
 import {
   CATEGORY_HELP,
   PRICING_RULES,
   TEMPLATE_COLUMNS,
+  VARIANT_RULES,
+  variantName,
   buildTemplateXlsx,
   downloadBlob,
   errorsCsv,
@@ -21,6 +24,13 @@ import {
 const STATUS_TEXT: Record<ImportResultRow['status'], string> = {
   created: 'Will be added',
   updated: 'Will update the existing product',
+  skipped: 'No change',
+  error: 'Error',
+};
+/** A variant row's status (migration 045). */
+const VARIANT_STATUS_TEXT: Record<ImportResultRow['status'], string> = {
+  created: 'Will be added as a variant',
+  updated: 'Will update the existing variant',
   skipped: 'No change',
   error: 'Error',
 };
@@ -173,14 +183,21 @@ export function ProductImport() {
       <section className="panel import__steps" aria-label="File">
         <p className="panel__body">
           Columns, in this order: <span className="mono">{TEMPLATE_COLUMNS.join(', ')}</span>. Required: name,
-          category (must already exist), unit, purchase_cost (or cost_price), sku. Optional extra column:{' '}
-          <span className="mono">sub_category</span>.
+          category (must already exist), unit, purchase_cost (or cost_price), sku (sub_category is optional). Variant rows need parent_sku, variant and purchase_cost only.
         </p>
         <p className="panel__body">{CATEGORY_HELP}</p>
         <div>
           <p className="panel__body">How prices work:</p>
           <ul className="import__rules" aria-label="How prices work">
             {PRICING_RULES.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="panel__body">Variants and delivery lead time:</p>
+          <ul className="import__rules" aria-label="How variants work">
+            {VARIANT_RULES.map((rule) => (
               <li key={rule}>{rule}</li>
             ))}
           </ul>
@@ -289,18 +306,40 @@ export function ProductImport() {
                           ? server.errors.map((e) => `${e.field}: ${e.message}`)
                           : [server.message ?? 'Rejected by the store.']
                         : [];
+                    // A variant row (migration 045): the dry run's own words when back.
+                    const isVariant = server?.kind === 'variant' || Boolean(r.data.parent_sku || r.data.variant);
+                    const variantLabel = server?.variant ?? r.data.variant ?? '';
+                    const parentSku = server?.parent_sku ?? r.data.parent_sku ?? '';
                     return (
                       <tr key={r.row} className={messages.length ? 'import__row--error' : undefined}>
                         <td className="num mono">{r.row}</td>
                         <td>
-                          <span className="cell__primary">{r.data.name || '-'}</span>
-                          <span className="cell__secondary">
-                            {r.data.sku || '-'} · {r.data.unit || '-'}
-                          </span>
+                          {isVariant ? (
+                            <>
+                              <span className="cell__primary">{variantName(variantLabel, parentSku)}</span>
+                              <span className="cell__secondary">{r.data.sku ? `Variant SKU ${r.data.sku}` : 'No variant SKU'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="cell__primary">{r.data.name || '-'}</span>
+                              <span className="cell__secondary">
+                                {r.data.sku || '-'} · {r.data.unit || '-'}
+                              </span>
+                              {r.data.delivery_lead_days ? (
+                                <span className="cell__secondary">Delivery {leadTimeText(r.data.delivery_lead_days)}</span>
+                              ) : null}
+                            </>
+                          )}
                         </td>
                         <td>
-                          {r.data.category || '-'}
-                          {r.data.sub_category ? ` › ${r.data.sub_category}` : ''}
+                          {isVariant ? (
+                            <span className="cell__secondary">From the product</span>
+                          ) : (
+                            <>
+                              {r.data.category || '-'}
+                              {r.data.sub_category ? ` › ${r.data.sub_category}` : ''}
+                            </>
+                          )}
                         </td>
                         <td className="num">{formatLkr(r.data.purchase_cost)}</td>
                         <td className="num">
@@ -320,7 +359,9 @@ export function ProductImport() {
                             </ul>
                           ) : server ? (
                             <>
-                              <span className="cell__secondary">{server.message ?? STATUS_TEXT[server.status]}</span>
+                              <span className="cell__secondary">
+                                {server.message ?? (isVariant ? VARIANT_STATUS_TEXT : STATUS_TEXT)[server.status]}
+                              </span>
                               {server.warnings?.length ? (
                                 <ul className="import__errors">
                                   {server.warnings.map((w) => (

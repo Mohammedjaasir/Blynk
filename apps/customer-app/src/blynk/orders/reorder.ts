@@ -1,5 +1,5 @@
 import { ApiError } from '@/blynk/api/client';
-import type { Combo, Product } from '@/blynk/api/types';
+import type { Combo, Product, ProductVariant } from '@/blynk/api/types';
 import type { Order, OrderStatus } from './types';
 
 /*
@@ -24,8 +24,8 @@ export interface ReorderDeps {
   fetchCombos: () => Promise<Combo[]>;
   comboQty: (id: string) => number;
   addCombo: (c: Combo) => void;
-  /** Adds up to n units (within the cart's limit); returns how many went in. */
-  addProduct: (p: Product, n: number) => number;
+  /** Adds up to n units (within the cart's limit) of the product or of one size of it; returns how many went in. */
+  addProduct: (p: Product, n: number, variant?: ProductVariant | null) => number;
 }
 
 const OVER: OrderStatus[] = ['DELIVERED', 'CANCELLED', 'FAILED', 'CUSTOMER_UNAVAILABLE'];
@@ -51,28 +51,45 @@ export async function reorderInto(order: Pick<Order, 'items' | 'combos'>, deps: 
     }
   }
 
+  // per product and size (migration 045): a size line goes back in as that size
   const qty = new Map<string, number>();
   const names = new Map<string, string>();
+  const sizeOf = new Map<string, string | null>();
+  const productOf = new Map<string, string>();
   for (const it of order.items) {
     if (it.order_combo_id && comboLinesAdded.has(it.order_combo_id)) continue;
     if (!it.product_id) { unavailable.push(it.product_name_snapshot); continue; }
-    qty.set(it.product_id, (qty.get(it.product_id) ?? 0) + it.quantity);
-    names.set(it.product_id, it.product_name_snapshot);
+    const vid = it.variant_id ?? null;
+    const key = vid ? `${it.product_id}:${vid}` : it.product_id;
+    qty.set(key, (qty.get(key) ?? 0) + it.quantity);
+    names.set(key, it.variant_label_snapshot ? `${it.product_name_snapshot} ${it.variant_label_snapshot}` : it.product_name_snapshot);
+    sizeOf.set(key, vid);
+    productOf.set(key, it.product_id);
   }
 
-  const ids = [...qty.keys()];
+  const ids = [...new Set(productOf.values())];
   const results = await Promise.all(ids.map((id) => deps.fetchProduct(id).then((p) => ({ p }), (e: unknown) => ({ e }))));
   let networkFailures = 0;
-  results.forEach((r, i) => {
-    const id = ids[i];
-    if ('e' in r) {
-      if (!(r.e instanceof ApiError) || r.e.status === 0 || r.e.code === 'NETWORK_ERROR' || r.e.code === 'TIMEOUT') networkFailures++;
-      unavailable.push(names.get(id)!);
-      return;
-    }
-    if (!r.p.is_available) { unavailable.push(names.get(id)!); return; }
-    addedUnits += deps.addProduct(r.p, qty.get(id)!);
+  const fetched = new Map(ids.map((id, i) => [id, results[i]]));
+  results.forEach((r) => {
+    if ('e' in r && (!(r.e instanceof ApiError) || r.e.status === 0 || r.e.code === 'NETWORK_ERROR' || r.e.code === 'TIMEOUT')) networkFailures++;
   });
+  for (const [key, n] of qty) {
+    const r = fetched.get(productOf.get(key)!)!;
+    if ('e' in r || !r.p.is_available) { unavailable.push(names.get(key)!); continue; }
+    const vid = sizeOf.get(key) ?? null;
+    if (vid) {
+      // that size today: gone or sold out is named, never swapped for another size
+      const v = (r.p.variants ?? []).find((x) => x.id === vid);
+      if (!v || !v.is_available) { unavailable.push(names.get(key)!); continue; }
+      addedUnits += deps.addProduct(r.p, n, v);
+    } else if (r.p.has_variants) {
+      // it is sold in sizes now: the customer picks one
+      unavailable.push(names.get(key)!);
+    } else {
+      addedUnits += deps.addProduct(r.p, n);
+    }
+  }
 
   return { addedUnits, unavailable, offline: ids.length > 0 && networkFailures === ids.length };
 }

@@ -37,20 +37,26 @@ export interface StockMovement {
   notes: string | null;
 }
 
-/** Locks one product's inventory row in a store; undefined when it has none (UNTRACKED by default). */
-export async function lockInventoryRow(trx: Trx, darkStoreId: string, productId: string): Promise<InventoryRow | undefined> {
-  return await trx
-    .selectFrom('inventory')
-    .selectAll()
-    .where('dark_store_id', '=', darkStoreId)
-    .where('product_id', '=', productId)
-    .forUpdate()
-    .executeTakeFirst();
+/**
+ * Locks one product's inventory row in a store; undefined when it has none
+ * (UNTRACKED by default). Migration 045: `variantId` picks a variant's own
+ * row; omitted/null is the product-level row (variant_id IS NULL).
+ */
+export async function lockInventoryRow(
+  trx: Trx,
+  darkStoreId: string,
+  productId: string,
+  variantId: string | null = null
+): Promise<InventoryRow | undefined> {
+  let q = trx.selectFrom('inventory').selectAll().where('dark_store_id', '=', darkStoreId).where('product_id', '=', productId);
+  q = variantId === null ? q.where('variant_id', 'is', null) : q.where('variant_id', '=', variantId);
+  return await q.forUpdate().executeTakeFirst();
 }
 
 /**
- * Locks several products' inventory rows in a store, in ascending id (the
- * canonical order for inventory rows). Products without a row are absent.
+ * Locks several products' product-level inventory rows in a store, in
+ * ascending id (the canonical order for inventory rows). Products without a
+ * row are absent. Variant rows are not included (lockStockRows does both).
  */
 export async function lockInventoryRows(trx: Trx, darkStoreId: string, productIds: readonly string[]): Promise<InventoryRow[]> {
   if (productIds.length === 0) return [];
@@ -59,9 +65,47 @@ export async function lockInventoryRows(trx: Trx, darkStoreId: string, productId
     .selectAll()
     .where('dark_store_id', '=', darkStoreId)
     .where('product_id', 'in', [...productIds])
+    .where('variant_id', 'is', null)
     .orderBy('id')
     .forUpdate()
     .execute();
+}
+
+/** A stock line: a product, or one of its variants (migration 045). */
+export interface StockKey {
+  product_id: string;
+  variant_id: string | null;
+}
+
+export const stockKeyOf = (k: StockKey) => `${k.product_id}:${k.variant_id ?? ''}`;
+
+/**
+ * Locks the inventory rows of several product/variant lines in a store, in
+ * ascending id (canonical order). Lines without a row are absent from the
+ * result map (they are UNTRACKED).
+ */
+export async function lockStockRows(
+  trx: Trx,
+  darkStoreId: string,
+  keys: readonly StockKey[],
+  opts: { trackedOnly?: boolean } = {}
+): Promise<Map<string, InventoryRow>> {
+  const out = new Map<string, InventoryRow>();
+  if (keys.length === 0) return out;
+  const wanted = new Set(keys.map(stockKeyOf));
+  let q = trx
+    .selectFrom('inventory')
+    .selectAll()
+    .where('dark_store_id', '=', darkStoreId)
+    .where('product_id', 'in', [...new Set(keys.map((k) => k.product_id))]);
+  // Checkout locks only counted rows: carts of untracked products never wait on each other.
+  if (opts.trackedOnly) q = q.where('tracking_mode', '=', 'TRACKED');
+  const rows = await q.orderBy('id').forUpdate().execute();
+  for (const row of rows) {
+    const key = stockKeyOf({ product_id: row.product_id, variant_id: row.variant_id ?? null });
+    if (wanted.has(key)) out.set(key, row);
+  }
+  return out;
 }
 
 export async function recordStockMovement(trx: Trx, m: StockMovement): Promise<{ inventory: InventoryRow; adjustment: AdjustmentRow }> {
