@@ -9,10 +9,11 @@ import { C, F } from '@/lib/theme';
 
 /* Small shared pieces of the account screens, in the app's look (white cards on the pale grey). */
 
-export function ScreenHeader({ title, top, onBack = goBack }: { title: string; top: number; onBack?: () => void }) {
+/** `onBack={null}`: no back button (a tab of the shell has nowhere to go back to). */
+export function ScreenHeader({ title, top, onBack = goBack }: { title: string; top: number; onBack?: (() => void) | null }) {
   return (
-    <View style={[s.head, { paddingTop: top + 8 }]}>
-      <PressScale onPress={onBack} style={{ padding: 4 }}><BackIcon size={20} color={C.text} stroke={1.8} /></PressScale>
+    <View style={[s.head, { paddingTop: top + 8 }, !onBack && { paddingLeft: 17 }]}>
+      {onBack && <PressScale onPress={onBack} style={{ padding: 4 }}><BackIcon size={20} color={C.text} stroke={1.8} /></PressScale>}
       <Text style={s.title} accessibilityRole="header">{title}</Text>
     </View>
   );

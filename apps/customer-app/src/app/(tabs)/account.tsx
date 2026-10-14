@@ -9,6 +9,9 @@ import { showNotice } from '@/blynk/account/notice';
 import { accountStyles as A, Button, Card, ErrorText, Row, ScreenHeader, SectionLabel, Sheet } from '@/blynk/account/ui';
 import { deleteAccount, getProfile, SMS_LANGUAGES, type AccountProfile } from '@/blynk/api/account';
 import { formatPhone } from '@/blynk/auth/phone';
+import { doctorsVisible, showMyAppointments } from '@/blynk/doctors/access';
+import { fetchMyAppointments } from '@/blynk/doctors/api';
+import { useStore } from '@/blynk/store/StoreContext';
 import { needsRegistration, signOut, useSession } from '@/blynk/auth/session';
 import { requestPushPermission } from '@/blynk/push';
 import { fetchPoints, fetchReferral } from '@/blynk/rewards/api';
@@ -37,6 +40,16 @@ export default function Account() {
   // Flutter ProfileRewardsTiles: the points balance and Refer a friend, each while its programme is on
   const [points, setPoints] = useState<{ enabled: boolean; text: string } | null>(null);
   const [referOn, setReferOn] = useState(false);
+  // doctors switched off (GET /store doctors_enabled false): only "My appointments", and only for a customer who has some
+  const doctorsOn = doctorsVisible(useStore());
+  const [hasAppointments, setHasAppointments] = useState(false);
+  useEffect(() => {
+    if (DEMO || !signedIn || doctorsOn) return;
+    const ctrl = new AbortController();
+    fetchMyAppointments(1, ctrl.signal).then((a) => setHasAppointments(a.length > 0)).catch(() => undefined);
+    return () => ctrl.abort();
+  }, [signedIn, doctorsOn, session?.user.id]);
+  const appointmentsRow = showMyAppointments(signedIn, doctorsOn, hasAppointments);
 
   useEffect(() => {
     if (DEMO || !signedIn) return;
@@ -97,7 +110,7 @@ export default function Account() {
   return (
     <View style={A.screen}>
       <StatusBar style="dark" />
-      <ScreenHeader title="Profile" top={insets.top} />
+      <ScreenHeader title="Profile" top={insets.top} onBack={null} />
       <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 48 }}>
         <Animated.View entering={FadeIn.duration(200)} style={styles.who}>
           <Text style={styles.name} numberOfLines={1}>{signedIn ? name : 'My Account'}</Text>
@@ -122,10 +135,12 @@ export default function Account() {
           <Row icon="💬" title="SMS & offers" sub={smsSub} onPress={() => router.push(signedIn ? '/settings' : '/login')} last />
         </Card>
 
-        <Card>
-          <Row icon="🩺" title="Channel doctors" sub="Book an appointment with a doctor" onPress={() => router.push('/doctors')} last={!signedIn} />
-          {signedIn && <Row icon="📅" title="My appointments" onPress={() => router.push('/doctors/appointments')} last />}
-        </Card>
+        {(doctorsOn || appointmentsRow) && (
+          <Card>
+            {doctorsOn && <Row icon="🩺" title="Channel doctors" sub="Book an appointment with a doctor" onPress={() => router.push('/doctors')} last={!appointmentsRow} />}
+            {appointmentsRow && <Row icon="📅" title="My appointments" onPress={() => router.push('/doctors/appointments')} last />}
+          </Card>
+        )}
 
         {signedIn && perm !== 'unsupported' && !DEMO && (
           <Card>

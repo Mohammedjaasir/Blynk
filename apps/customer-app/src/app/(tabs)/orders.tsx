@@ -7,14 +7,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { formatLkr } from '@/blynk/lib/money';
 import { listOrders } from '@/blynk/orders/api';
+import { setKnownOrders } from '@/blynk/orders/openOrders';
 import { placeErrorCopy } from '@/blynk/orders/errors';
 import { itemCountText, orderTime, statusLabel, statusTone, type OrderTone } from '@/blynk/orders/status';
 import type { Order } from '@/blynk/orders/types';
 import { openSignIn } from '@/blynk/ui/signIn';
-import { BackIcon, ChevronIcon } from '@/components/icons';
+import { ChevronIcon } from '@/components/icons';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
-import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 
 /*
@@ -43,6 +44,8 @@ export default function Orders() {
       .then((r) => {
         if (g !== gen.current) return;
         setOrders(r.orders);
+        // the Orders tab's badge (an order still open)
+        setKnownOrders(r.orders);
         setPage(1);
         setPages(r.pagination.total_pages);
       })
@@ -70,11 +73,12 @@ export default function Orders() {
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <StatusBar style="dark" />
+      {/* a tab of the shell: no back button */}
       <View style={[styles.head, { paddingTop: insets.top + 8 }]}>
-        <PressScale onPress={goBack} style={{ padding: 4 }}><BackIcon size={20} color={C.text} stroke={1.8} /></PressScale>
-        <Text style={styles.title}>My orders</Text>
+        <Text style={styles.title} accessibilityRole="header">My orders</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 40 }}>
+        {signedIn && !DEMO && <OfflineBanner onRetry={load} style={{ marginBottom: 12 }} />}
         {DEMO ? (
           <Empty title="Your orders appear here" sub="Ordering opens soon. This is a preview." />
         ) : !signedIn ? (
@@ -139,7 +143,7 @@ function Empty({ title, sub, cta, to, onPress }: { title: string; sub: string; c
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingBottom: 12, backgroundColor: '#fff' },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 17, paddingBottom: 12, backgroundColor: '#fff' },
   title: { fontFamily: F.bold, fontSize: 18, color: C.ink },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 15, marginBottom: 12 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

@@ -15,3 +15,21 @@ export const DOCTORS_SIGN_IN = {
   action: 'Log in / Sign up',
   bookTitle: 'Sign in to book',
 } as const;
+
+/**
+ * Doctor channelling shown to customers (owner, 2026-10-14; GET /store `doctors_enabled`).
+ * false hides the section: the Home entry and the Profile rows. Before /store has answered the
+ * entry stays hidden (no flash of a row that then disappears); an older backend without the
+ * field means on.
+ */
+export function doctorsVisible(store: { doctors_enabled?: boolean } | null | undefined): boolean {
+  return !!store && store.doctors_enabled !== false;
+}
+
+/**
+ * "My appointments" in Profile: signed in while the section is shown; while it is hidden, only
+ * for a customer who has appointments (they stay reachable: GET /dental/appointments still works).
+ */
+export function showMyAppointments(signedIn: boolean, visible: boolean, hasAppointments: boolean): boolean {
+  return signedIn && (visible || hasAppointments);
+}

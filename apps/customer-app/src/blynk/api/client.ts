@@ -11,6 +11,18 @@ export class ApiError extends Error {
 
 export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
+/**
+ * Told the outcome of every request: null for any answer from the server (even a 4xx/5xx proves
+ * the network works), or the connection failure. Feeds the offline banner (lib/connectivity.ts).
+ */
+let networkObserver: ((error: ApiError | null) => void) | null = null;
+export function setNetworkObserver(fn: ((error: ApiError | null) => void) | null) {
+  networkObserver = fn;
+}
+const observe = (error: ApiError | null) => {
+  try { networkObserver?.(error); } catch { /* the banner must never break a request */ }
+};
+
 interface Options {
   signal?: AbortSignal;
   /** GET when omitted (the catalogue and store reads). */
@@ -39,14 +51,19 @@ export async function apiRequest<T>(path: string, opts: Options = {}): Promise<T
     res = await fetch(`${API_BASE_URL}${path}`, init);
   } catch {
     const timedOut = ctrl.signal.aborted && !opts.signal?.aborted;
-    throw new ApiError(
+    const cancelled = !!opts.signal?.aborted;
+    const error = new ApiError(
       timedOut ? 'This is taking too long. Check your connection and try again.' : "We couldn't reach Blynk. Check your connection and try again.",
       timedOut ? 408 : 0,
       timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
     );
+    // a request the screen cancelled itself says nothing about the connection
+    if (!cancelled) observe(error);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
+  observe(null);
   const text = await res.text();
   let payload: { success?: boolean; data?: unknown; error?: { code?: string; message?: string; details?: unknown } } = {};
   try { payload = text ? JSON.parse(text) : {}; } catch { /* non-JSON body */ }

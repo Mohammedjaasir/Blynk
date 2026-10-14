@@ -6,7 +6,6 @@ import Animated, {
   FadeIn, FadeOut, interpolate, SlideInDown, SlideOutDown, useAnimatedStyle, useSharedValue, withSequence, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatLkr } from '@/blynk/lib/money';
 import { useFreeDeliveryUnlocked } from '@/blynk/store/freeDelivery';
 import { DEMO } from '@/demo/mode';
@@ -14,6 +13,7 @@ import { rupees } from '@/demo/money';
 import { STORE } from '@/demo/store';
 import { withSpring } from '@/lib/motion';
 import { useCartSelect } from '@/lib/cart';
+import { useBottomInset } from '@/lib/tabs';
 import { C, F } from '@/lib/theme';
 import { Confetti, PressScale, RollingText } from './ui';
 
@@ -58,7 +58,8 @@ export function CartBar() {
   const total = useCartSelect((c) => c.total);
   const freeCount = useStripOn(total, count);
   const freeDelivery = freeCount > 0;
-  const insets = useSafeAreaInsets();
+  // inside the tabs the tab bar already keeps clear of the home indicator
+  const insets = { bottom: useBottomInset() };
   const { width, height } = useWindowDimensions();
   const jiggle = useSharedValue(0);
   const strip = useSharedValue(freeDelivery ? 1 : 0);

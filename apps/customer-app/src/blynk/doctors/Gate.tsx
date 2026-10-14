@@ -1,10 +1,12 @@
+import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { useSession } from '@/blynk/auth/session';
 import { useStore } from '@/blynk/store/StoreContext';
 import { Page, StateView } from '@/blynk/ui/kit';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { DEMO } from '@/demo/mode';
-import { doctorsGate, DOCTORS_SIGN_IN } from './access';
+import { DOCTORS_OFF } from '@/blynk/ui/strings';
+import { doctorsGate, doctorsVisible, DOCTORS_SIGN_IN } from './access';
 
 /** The sign-in prompt, inside any doctors screen (also for a server SIGN_IN_REQUIRED). */
 export const DoctorsSignInPrompt = ({ title = DOCTORS_SIGN_IN.title }: { title?: string }) => (
@@ -21,6 +23,19 @@ export function DoctorsGate({ children }: { children: ReactNode }) {
   const store = useStore();
   if (DEMO) {
     return <Page title="Channel doctors"><StateView title="Channel doctors" message="Book a doctor here once the shop is live. This is a preview." /></Page>;
+  }
+  // switched off in Admin / Ops (GET /store doctors_enabled false): a deep link lands here, not on a 404
+  if (store && !doctorsVisible(store)) {
+    return (
+      <Page title="Channel doctors">
+        <StateView
+          title={DOCTORS_OFF.title}
+          message={signedIn ? DOCTORS_OFF.message : null}
+          action={signedIn ? DOCTORS_OFF.myAppointments : DOCTORS_OFF.goToShop}
+          onAction={() => (signedIn ? router.replace('/doctors/appointments') : router.dismissTo('/home'))}
+        />
+      </Page>
+    );
   }
   if (doctorsGate(signedIn, store) === 'sign-in') {
     return <Page title="Channel doctors"><DoctorsSignInPrompt /></Page>;

@@ -43,7 +43,20 @@ export interface Promotion {
   background_image_url: string | null; background_focal_x: number; background_focal_y: number;
   cta_label: string | null;
   cta_destination_type: 'CATEGORY' | 'PRODUCT' | 'CATALOG' | null; cta_destination_value: string | null;
+  /**
+   * What the destination resolves to (2026-10-14, docs/api/catalog-tools.md). null: no destination
+   * or it no longer exists (the banner is not tappable). Absent on an older backend.
+   */
+  cta_target?: PromotionTarget | null;
   display_order: number;
+}
+export type PromotionTargetLevel = 'MAIN' | 'CATEGORY' | 'SUB_CATEGORY' | 'PRODUCT' | 'CATALOG';
+export interface PromotionTarget {
+  level: PromotionTargetLevel;
+  id: string | null; slug: string | null; name: string | null;
+  /** SUB_CATEGORY: its parent category (the screen whose sidebar it sits in). */
+  parent_id: string | null; parent_slug: string | null; parent_name: string | null;
+  is_active: boolean | null;
 }
 export interface ComboItem {
   product_id: string; name: string; slug: string | null; unit: string | null; pack_size: string | null;
@@ -69,4 +82,6 @@ export interface StoreInfo {
   is_open_now: boolean; closed_kind: 'OPEN' | 'OUTSIDE_HOURS' | 'CLOSED_DAY' | 'HOLIDAY' | 'CLOSED_NOW';
   closed_reason: string | null; next_open_at: string | null; reopens_at?: string | null; delivery_slots_enabled: boolean;
   doctors_require_sign_in: boolean;
+  /** Doctor channelling shown to customers (2026-10-14). false: hide the doctors section. Absent on an older backend. */
+  doctors_enabled?: boolean;
 }

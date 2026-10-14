@@ -43,7 +43,7 @@ export default function Help() {
   return (
     <View style={A.screen}>
       <StatusBar style="dark" />
-      <ScreenHeader title="Help" top={insets.top} />
+      <ScreenHeader title="Help" top={insets.top} onBack={null} />
       <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 40 }}>
         <View style={styles.intro}>
           <Text style={{ fontSize: 26 }}>🛟</Text>

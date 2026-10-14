@@ -13,7 +13,7 @@ const gone: Product = { ...sugar, id: 'p-gone', name: 'Red Rice 5KG', selling_pr
 
 function catalog(products: Product[] = [milk, sugar, cheese, gone]): CatalogData {
   const categories = [dairy, groc];
-  return { products, aisles: categories, categories, promotions: [], topOf: topLevelOf(categories), chainOf: ancestorsOf(categories) };
+  return { products, aisles: categories, categories, promotions: [], groups: [], tree: [], topOf: topLevelOf(categories), chainOf: ancestorsOf(categories) };
 }
 const now = new Date('2026-10-13T06:00:00Z');
 const flat = { ...store, delivery_fee_mode: 'FLAT' as const, delivery_fee_lkr: 100 };
