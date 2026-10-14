@@ -54,7 +54,7 @@ import { rupees } from '@/demo/money';
 import { withSpring } from '@/lib/motion';
 import { useCartSelect } from '@/lib/cart';
 import { openAisle } from '@/lib/nav';
-import { C, F } from '@/lib/theme';
+import { C, F, SPACE, T } from '@/lib/theme';
 
 /*
  * Home, matched frame by frame to the reference recording (0:04–0:31). All content is the
@@ -235,7 +235,7 @@ export default function Home() {
     return {
       rail: liveRail(data) as RailCat[],
       under: liveUnder(data, cat, on),
-      aisles: liveAisles(data, store, cat, on, undefined, claim),
+      aisles: liveAisles(data, store, cat, on),
       vs: liveVs(data, store, undefined, claim),
       promo: livePromo(store, claim),
       fees: liveFees(store, claim),
@@ -341,17 +341,17 @@ export default function Home() {
                     Channel doctors, then every Main as a section of category tiles with "All categories" */}
                 {!DEMO && <OfflineBanner onRetry={() => void refresh()} style={{ marginHorizontal: 15, marginTop: 12 }} />}
                 {!DEMO && <BirthdayOfferBanner style={{ marginHorizontal: 15, marginTop: 12 }} />}
-                {!DEMO && !!data && <PromoCarousel promotions={data.promotions} style={{ marginTop: 14 }} />}
+                {!DEMO && !!data && <PromoCarousel promotions={data.promotions} style={{ marginTop: 16 }} />}
                 {!DEMO && <UsualsRow />}
-                {!DEMO && <DoctorsHomeEntry style={{ marginHorizontal: 15, marginTop: 18 }} />}
+                {!DEMO && <DoctorsHomeEntry style={{ marginHorizontal: SPACE.gutter, marginTop: SPACE.section }} />}
                 {!DEMO && !!data && <HomeCategoryGroups tree={data.tree} width={screenW} />}
                 {meals.length > 0 && (
                   <>
                     <View style={styles.sectionHead}>
                       <Text style={styles.h2}>{DEMO ? 'Meals under ₹99' : `Under ${formatLkr(UNDER_LKR)}`}</Text>
                       <Pressable onPress={toExplore} hitSlop={8} style={styles.seeAll}>
-                        <Text style={styles.seeAllTxt}>See All</Text>
-                        <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={15} color="#4A4A50" stroke={2.2} /></View>
+                        <Text style={styles.seeAllTxt}>See all</Text>
+                        <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={13} color={C.sub} stroke={2.2} /></View>
                       </Pressable>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 15 }}>
@@ -363,11 +363,11 @@ export default function Home() {
                 )}
 
                 {/* live: Combo packs (Flutter home combo rail; GET /combos, nothing until one is live) */}
-                {!DEMO && <ComboRail style={{ marginTop: 20 }} />}
+                {!DEMO && <ComboRail style={{ marginTop: SPACE.section }} />}
 
                 {granted && (DEMO || !!live?.vs) && <VsSection live={live?.vs ?? null} />}
 
-                <View onLayout={(e) => chipsY.set(e.nativeEvent.layout.y)} style={{ marginTop: granted && (DEMO || !!live?.vs) ? 2 : 16 }}>
+                <View onLayout={(e) => chipsY.set(e.nativeEvent.layout.y)} style={{ marginTop: granted && (DEMO || !!live?.vs) ? 4 : SPACE.section }}>
                   <FilterChips items={chips} on={filters} onToggle={toggleFilter} />
                 </View>
                 <Text onLayout={(e) => exploreY.set(e.nativeEvent.layout.y)} style={styles.explore}>
@@ -776,19 +776,19 @@ const AisleCard = memo(function AisleCard({ aisle: a, index, promo }: {
 }) {
   return (
     <View>
-      <PressScale scaleTo={0.985} onPress={() => openAisle(a.cat)} style={styles.store}>
+      <PressScale scaleTo={0.985} onPress={() => openAisle(a.cat)} style={[styles.store, styles.aisle]}>
         <AisleStamp items={aisleArt(a.cat, index)} phase={aislePhase(index)} style={styles.aisleStamp} />
         {!!a.offer && <Text style={styles.lower}>{a.offer}</Text>}
         <View style={styles.storeNameRow}>
           <Text style={styles.storeName} numberOfLines={1}>{a.cat.name}</Text>
         </View>
         <View style={styles.metaRow}>
-          <BagBadge size={12} color={C.brandInk} />
-          <Text style={styles.meta}>{a.meta}</Text>
+          <BagBadge size={12} color={C.sub} />
+          <Text style={styles.meta} numberOfLines={1}>{a.meta}</Text>
         </View>
-        <View style={[styles.metaRow, { marginTop: 4 }]}>
-          <OfferBadge size={12} color={C.brandInk} />
-          <Text style={[styles.meta, { fontSize: 11.5, flexShrink: 1 }]}>{a.delivery}</Text>
+        <View style={[styles.metaRow, { marginTop: 3 }]}>
+          <OfferBadge size={12} color={C.sub} />
+          <Text style={styles.meta} numberOfLines={1}>{a.delivery}</Text>
         </View>
         <ScrollView
           horizontal
@@ -797,7 +797,7 @@ const AisleCard = memo(function AisleCard({ aisle: a, index, promo }: {
           contentContainerStyle={{ gap: 12, paddingHorizontal: 15 }}
         >
           {a.items.slice(0, 10).map((p: Product, i) => (
-            <ProductCard key={p.id} product={p} width={DISH_W} height={DISH_H} index={i} showRating={false} />
+            <ProductCard key={p.id} product={p} width={DISH_W} height={DISH_H} index={i} showRating={false} tileColor={C.white} />
           ))}
         </ScrollView>
       </PressScale>
@@ -873,11 +873,11 @@ const styles = StyleSheet.create({
   fromTxt: { color: C.brandInk, fontSize: 8.5, fontFamily: F.bold, letterSpacing: 0.1 },
   catName: { fontFamily: F.medium, fontSize: 11, color: '#55555C', marginTop: 2, maxWidth: CAT_W - 8 },
   catNameOn: { fontFamily: F.bold, color: '#1B1B1F' },
-  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, marginTop: 16, marginBottom: 15 },
-  h2: { fontFamily: F.semi, fontSize: 19.5, color: '#26262B', letterSpacing: -0.2 },
+  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACE.gutter, marginTop: SPACE.section, marginBottom: SPACE.head },
+  h2: T.section,
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  seeAllTxt: { fontFamily: F.medium, fontSize: 14.5, color: '#4A4A50' },
-  explore: { fontFamily: F.semi, fontSize: 17, color: '#1B1B1F', marginHorizontal: 15, marginTop: 6, marginBottom: 6 },
+  seeAllTxt: T.seeAll,
+  explore: { ...T.section, marginHorizontal: SPACE.gutter, marginTop: 12, marginBottom: 4 },
   empty: { fontFamily: F.regular, fontSize: 13, color: C.sub, marginHorizontal: 16, marginVertical: 20 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#E1E1E6', borderRadius: 18,
@@ -891,6 +891,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#EDEDF0', overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
   },
+  // live aisle cards: a flat light surface, no border or shadow (clean pass)
+  aisle: { backgroundColor: '#F7F7F9', borderWidth: 0, shadowOpacity: 0, elevation: 0, marginTop: 8, marginBottom: 8 },
   stamp: { position: 'absolute', right: -10, top: -9 },
   // clear of the title (storeNameRow keeps 52 pt free) and of the product row below
   aisleStamp: { position: 'absolute', right: -5, top: -5 },
@@ -900,7 +902,7 @@ const styles = StyleSheet.create({
   adTxt: { fontFamily: F.medium, fontSize: 9, color: '#8A8A90' },
   storeName: { fontFamily: F.bold, fontSize: 18.5, color: '#141418', letterSpacing: -0.2, flexShrink: 1 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5, marginRight: 50 },
-  meta: { fontFamily: F.regular, fontSize: 12.5, color: '#3A3A40' },
+  meta: { ...T.meta, flexShrink: 1 },
   vsKicker: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 15 },
   vsSmall: { fontFamily: F.bold, fontSize: 13, color: C.brandText, letterSpacing: -0.1 },
   vsVs: { fontFamily: F.semi, fontSize: 10.5, fontStyle: 'italic' },

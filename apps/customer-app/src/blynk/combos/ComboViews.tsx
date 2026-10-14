@@ -10,7 +10,7 @@ import { ProductImage } from '@/components/ProductImage';
 import { PressScale, tap } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
 import { cartActions, useCartSelect } from '@/lib/cart';
-import { C, F } from '@/lib/theme';
+import { C, F, T } from '@/lib/theme';
 
 /*
  * Combo packs (owner, 2026-10-09; Flutter combo_rail.dart, combo_card.dart, card_combo_cart.dart):
@@ -146,7 +146,7 @@ export function ComboRail({ style }: { style?: StyleProp<ViewStyle> }) {
 const s = StyleSheet.create({
   thumb: { backgroundColor: C.tile, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   collage: { flexDirection: 'row', flexWrap: 'wrap' },
-  h2: { fontFamily: F.bold, fontSize: 18, color: C.ink, paddingHorizontal: 15, marginBottom: 10, letterSpacing: -0.2 },
+  h2: { ...T.section, paddingHorizontal: 15, marginBottom: 12 },
   card: { width: CARD_W, backgroundColor: '#fff', borderRadius: 16, padding: 10, borderWidth: 1, borderColor: C.line },
   saveTag: { position: 'absolute', left: 6, top: 6, backgroundColor: C.brand, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
   saveTxt: { fontFamily: F.bold, fontSize: 10.5, color: C.brandInk },

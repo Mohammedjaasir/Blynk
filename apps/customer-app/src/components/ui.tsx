@@ -19,10 +19,8 @@ import { cartActions, useCartSelect } from '@/lib/cart';
 import { keyOf } from '@/blynk/cart/cartStore';
 import { openSizePicker } from '@/blynk/catalog/sizePicker';
 import { hasVariants } from '@/blynk/catalog/variants';
-import { flip, startClocks, sway } from '@/lib/clock';
+import { startClocks, sway } from '@/lib/clock';
 import type { Product } from '@/blynk/api/types';
-import { formatLkr } from '@/blynk/lib/money';
-import { isOfferActive, savingsPerUnit } from '@/blynk/lib/pricing';
 import { C, F } from '@/lib/theme';
 import { ChevronIcon, CloseIcon, HeartsIcon } from './icons';
 
@@ -165,46 +163,6 @@ function EyesPop({ h, color, v, pupil }: { h: number; color: string; v: SharedVa
     <View style={{ width: h * 1.45, height: h }}>
       <Animated.View style={[StyleSheet.absoluteFill, eyes]}><HeartsIcon size={h} color={color} pupil={pupil} /></Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, love]}><HeartsIcon size={h} color={color} filled /></Animated.View>
-    </View>
-  );
-}
-
-/**
- * The card's price footer. When an offer is running AND Admin's "show offer savings"
- * switch is on, it flips between "Offer price" and "You save LKR n" like the original
- * card footer. Otherwise it is static text. Both lines are always mounted and driven by
- * one app-wide UI-thread clock, so the flip costs no React renders on any number of cards.
- */
-export function PriceTicker({ product, showSavings, forceSave }: { product: Product; showSavings: boolean; forceSave?: boolean }) {
-  useEffect(startClocks, []);
-  const offer = isOfferActive(product);
-  const save = savingsPerUnit(product);
-  const flips = offer && showSavings && save > 0;
-  const forced = useSharedValue(forceSave ? 1 : 0);
-  useEffect(() => {
-    forced.set(withTiming(forceSave ? 1 : 0, { duration: 220 }));
-  }, [forceSave]);
-  const ours = useAnimatedStyle(() => {
-    const v = flips ? Math.max(flip.value, forced.value) : 0;
-    return { opacity: v, transform: [{ translateY: (1 - v) * 12 }] };
-  });
-  const other = useAnimatedStyle(() => {
-    const v = flips ? Math.max(flip.value, forced.value) : 0;
-    return { opacity: 1 - v, transform: [{ translateY: -v * 12 }] };
-  });
-  if (!offer) return <View style={styles.ticker} />;
-  return (
-    <View style={styles.ticker}>
-      <Animated.View style={[styles.tickRow, other]}>
-        <Hearts size={10} still />
-        <Text numberOfLines={1} style={[styles.tickTxt, { color: C.brandText, fontFamily: F.semi }]}>Offer price</Text>
-      </Animated.View>
-      {flips && (
-        <Animated.View style={[styles.tickRow, ours]}>
-          <Hearts size={10} still />
-          <Text numberOfLines={1} style={[styles.tickTxt, { color: C.brandText, fontFamily: F.semi }]}>You save {formatLkr(save)}</Text>
-        </Animated.View>
-      )}
     </View>
   );
 }
@@ -526,8 +484,5 @@ const styles = StyleSheet.create({
   tri: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   tip: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.ink, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, gap: 8 },
   tipTxt: { color: C.white, fontSize: 11.5, fontFamily: F.medium },
-  ticker: { height: 15, overflow: 'hidden', alignSelf: 'stretch' },
-  tickRow: { position: 'absolute', left: 0, right: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: 3 },
-  tickTxt: { fontSize: 10, fontFamily: F.regular, flexShrink: 1 },
   tipX: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#ddd', alignItems: 'center', justifyContent: 'center' },
 });

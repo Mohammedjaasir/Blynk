@@ -59,10 +59,11 @@ describe('live home content', () => {
     const a = liveAisles(catalog(), flat, 'all', [], now);
     expect(a.map((x) => x.cat.id)).toEqual(['c-dairy', 'c-groc']);
     expect(a[0].meta).toBe('2 items • 8 AM – 9 PM');
-    expect(a[0].delivery).toBe('First 2 deliveries free for new customers • Items from LKR 513');
-    expect(a[0].offer).toBe('5% OFF EVERYTHING HERE');
+    // free deliveries are said once (band title + fee strip), not on every aisle card
+    expect(a[0].delivery).toBe('Items from LKR 513');
+    expect(a[0].offer).toBe('5% off everything here');
     expect(a[1].offer).toBeNull();
-    expect(liveAisles(catalog(), noFree, 'all', [], now)[1].delivery).toBe('Delivery LKR 100 • Items from LKR 253');
+    expect(liveAisles(catalog(), noFree, 'all', [], now)[1].delivery).toBe('Items from LKR 253');
     expect(liveAisles(catalog(), flat, 'c-groc', ['offer'], now)).toEqual([]);
   });
 
@@ -92,9 +93,11 @@ describe('live home content', () => {
   });
 
   it('promo band and fee strip carry only true labels', () => {
-    expect(livePromo(store)).toEqual({ line1: 'Free delivery on your first 2 orders for new customers', fees: ['No Platform Fee', 'No Packaging Fee'] });
+    // the built-in band has no free-delivery headline (the band title and the fee strip say it)
+    expect(livePromo(store)).toEqual({ line1: null, fees: ['No Platform Fee', 'No Packaging Fee'] });
     expect(livePromo(noFree).line1).toBeNull();
-    expect(liveFees(store)[2]).toEqual(['2', 'Free · New Users']);
+    expect(liveFees(store)[0]).toEqual(['0', 'Packaging fee']);
+    expect(liveFees(store)[2]).toEqual(['2', 'Free · new users']);
     expect(liveFees(noFree)[2]).toEqual(['LKR', 'Delivery LKR 100']);
     expect(liveFees({ ...store, new_customer_free_deliveries: { ...store.new_customer_free_deliveries, enabled: false } })[2]).toEqual(['km', 'Fee at checkout']);
     const all = JSON.stringify([liveFees(store), livePromo(store), liveVs(catalog(), store, now)]);
@@ -105,9 +108,6 @@ describe('live home content', () => {
     const two = { kind: 'personal', count: 2 } as const;
     const one = { kind: 'personal', count: 1 } as const;
     const none = { kind: 'none', count: 0 } as const;
-    expect(liveAisles(catalog(), flat, 'all', [], now, two)[0].delivery).toBe('Your next 2 deliveries free • Items from LKR 513');
-    expect(liveAisles(catalog(), flat, 'all', [], now, one)[0].delivery).toBe('1 free delivery left • Items from LKR 513');
-    expect(liveAisles(catalog(), flat, 'all', [], now, none)[0].delivery).toBe('Delivery LKR 100 • Items from LKR 513');
     expect(liveVs(catalog(), store, now, two)!.title).toBe('NEXT 2 DELIVERIES FREE');
     expect(liveVs(catalog(), store, now, one)!.title).toBe('1 FREE DELIVERY LEFT');
     // the store still has the offer on, but this customer used theirs: the band keeps its products
@@ -115,13 +115,13 @@ describe('live home content', () => {
     expect(used.title).toBe('OFFER PRICES TODAY');
     expect(used.tiles).toHaveLength(1);
     expect(liveFees(flat, none)[2]).toEqual(['LKR', 'Delivery LKR 100']);
-    expect(liveFees(store, two)[2]).toEqual(['2', 'Free Left']);
-    expect(liveFees(store, one)[2]).toEqual(['1', 'Free Delivery Left']);
+    expect(liveFees(store, two)[2]).toEqual(['2', 'Free left']);
+    expect(liveFees(store, one)[2]).toEqual(['1', 'Free delivery left']);
     expect(livePromo(store, none).line1).toBeNull();
-    expect(livePromo(store, two).line1).toBe('Your next 2 deliveries are free');
+    expect(livePromo(store, two).line1).toBeNull();
     expect(liveBanner(catalog(), store, now, none).freeCount).toBe(0);
     expect(liveBanner(catalog(), store, now, one).freeCount).toBe(1);
-    const usedAll = JSON.stringify([liveFees(store, none), livePromo(store, none), used, liveAisles(catalog(), store, 'all', [], now, none)]);
+    const usedAll = JSON.stringify([liveFees(store, none), livePromo(store, none), used, liveAisles(catalog(), store, 'all', [], now)]);
     expect(usedAll).not.toMatch(/free deliver|deliveries free|delivery free/i);
   });
 });

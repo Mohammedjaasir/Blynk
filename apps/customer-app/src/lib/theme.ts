@@ -46,3 +46,31 @@ export const F = {
   display: 'BowlbyOne_400Regular',
   condensed: 'Anton_400Regular',
 };
+
+/*
+ * A small type and spacing scale (clean pass, 2026-10-14: "make it more clean minimal").
+ * Section headers everywhere use T.section / T.seeAll; Home stacks its sections SPACE.section
+ * apart. Designed banner titles (hero, promo band) keep their own display type.
+ */
+export const T = {
+  /** Section header: "Grocery & Kitchen", "Under LKR 300", "Your usuals". */
+  section: { fontFamily: F.semi, fontSize: 18, color: C.ink, letterSpacing: -0.2 },
+  /** The quiet "See all" link beside a section header. */
+  seeAll: { fontFamily: F.medium, fontSize: 13.5, color: C.sub },
+  /** Card / row titles. */
+  title: { fontFamily: F.bold, fontSize: 17, color: C.ink, letterSpacing: -0.2 },
+  body: { fontFamily: F.regular, fontSize: 14, color: C.text },
+  /** Helper lines under a title (one line). */
+  meta: { fontFamily: F.regular, fontSize: 12.5, color: C.sub },
+  /** The one small label on a product tile. */
+  label: { fontFamily: F.medium, fontSize: 11, color: C.sub },
+} as const;
+
+export const SPACE = {
+  /** Between Home sections. */
+  section: 24,
+  /** Page side gutter. */
+  gutter: 15,
+  /** Header to its content. */
+  head: 12,
+} as const;

@@ -35,7 +35,7 @@ describe('claim wording', () => {
     expect(claimLine({ kind: 'new-customer', count: 1 })).toBe('First delivery free for new customers');
     expect(claimPromoLine(g)).toBe('Free delivery on your first 2 orders for new customers');
     expect(claimTitle(g)).toBe('FIRST 2 DELIVERIES FREE');
-    expect(claimFee(g)).toEqual(['2', 'Free · New Users']);
+    expect(claimFee(g)).toEqual(['2', 'Free · new users']);
   });
 
   it('personal copy says the real number left', () => {

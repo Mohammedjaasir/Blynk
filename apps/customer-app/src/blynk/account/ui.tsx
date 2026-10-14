@@ -31,7 +31,7 @@ export function Row({
       {!!icon && <View style={s.iconBox}><Text style={s.icon}>{icon}</Text></View>}
       <View style={{ flex: 1 }}>
         <Text style={[s.rowTitle, danger && { color: C.problem }]}>{title}</Text>
-        {!!sub && <Text style={s.rowSub} numberOfLines={2}>{sub}</Text>}
+        {!!sub && <Text style={s.rowSub} numberOfLines={1}>{sub}</Text>}
       </View>
       {right ?? (onPress ? <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={14} color={C.sub} stroke={2.2} /></View> : null)}
     </PressScale>
@@ -97,7 +97,7 @@ const s = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 16, marginBottom: 12, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 15, minHeight: 56, paddingVertical: 10 },
   rowLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line },
-  iconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.brandTint, alignItems: 'center', justifyContent: 'center' },
+  iconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
   icon: { fontSize: 16 },
   rowTitle: { fontFamily: F.semi, fontSize: 14.5, color: C.ink },
   rowSub: { fontFamily: F.regular, fontSize: 12, color: C.sub, marginTop: 2 },

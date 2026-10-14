@@ -13,7 +13,7 @@ import { applyFilters, type FilterId } from '../blynk/lib/filters';
 import { formatLkr } from '../blynk/lib/money';
 import { effectivePrice, isOfferActive, savingsPerUnit } from '../blynk/lib/pricing';
 import { flatFee, formatHours, freeDeliveryCount } from '../blynk/lib/storeText';
-import { claimFee, claimLine, claimPromoLine, claimTitle, freeDeliveryClaim, type FreeClaim } from '../blynk/store/freeClaim';
+import { claimFee, claimLine, claimTitle, freeDeliveryClaim, NO_CLAIM, type FreeClaim } from '../blynk/store/freeClaim';
 
 /** The "Under LKR 300" rail (the video's "Meals under ₹99"). */
 export const UNDER_LKR = 300;
@@ -42,9 +42,12 @@ export type LiveAisleCard = {
   items: Product[];
   /** "24 items • 8 AM – 9 PM" */
   meta: string;
-  /** "Free delivery on your first 2 orders • Items from LKR 120" */
+  /**
+   * "Items from LKR 120" (the fee line when nothing is priced). Free deliveries are not
+   * repeated on every card: the band title and the fee strip carry them (clean pass).
+   */
   delivery: string;
-  /** "5% OFF EVERYTHING HERE" while a category offer runs, else null. */
+  /** "5% off everything here" while a category offer runs, else null. */
   offer: string | null;
 };
 
@@ -134,11 +137,12 @@ export function deliveryLine(store: StoreInfo | null, claim: FreeClaim = guestCl
 
 /** The video's restaurant cards become aisles (real categories), each with its products. */
 export function liveAisles(
-  data: CatalogData | null, store: StoreInfo | null, cat: string, filters: FilterId[], now: Date = new Date(), claim: FreeClaim = guestClaim(store),
+  data: CatalogData | null, store: StoreInfo | null, cat: string, filters: FilterId[], now: Date = new Date(),
 ): LiveAisleCard[] {
   if (!data) return [];
   const hours = formatHours(store);
-  const delivery = deliveryLine(store, claim);
+  // the fee only (no free-delivery claim): Home says that once, in the band title and the fee strip
+  const delivery = deliveryLine(store, NO_CLAIM);
   return data.aisles
     .filter((c) => cat === 'all' || c.id === cat)
     .map((c) => {
@@ -149,8 +153,8 @@ export function liveAisles(
         cat: c,
         items,
         meta: [plural(all.length, 'item'), ...(hours ? [hours] : [])].join(' • '),
-        delivery: from != null ? `${delivery} • Items from ${formatLkr(from)}` : delivery,
-        offer: categoryOfferActive(c, now) ? `${c.offer_percent}% OFF EVERYTHING HERE` : null,
+        delivery: from != null ? `Items from ${formatLkr(from)}` : delivery,
+        offer: categoryOfferActive(c, now) ? `${c.offer_percent}% off everything here` : null,
       };
     })
     .filter((a) => a.items.length > 0);
@@ -194,10 +198,14 @@ export function liveVs(data: CatalogData | null, store: StoreInfo | null, now: D
   return { kicker: ['NO PACKAGING FEE', '&', 'NO PLATFORM FEE'], title, tiles };
 }
 
-/** The green promo band: only what Blynk really does. */
-export function livePromo(store: StoreInfo | null, claim: FreeClaim = guestClaim(store)): { line1: string | null; fees: string[] } {
+/**
+ * The promo band's built-in copy (before Admin / Ops set their own): only what Blynk really
+ * does. No free-delivery headline: Home says that once, in the band title and the fee strip
+ * (clean pass, 2026-10-14), so the built-in band shows its ticks.
+ */
+export function livePromo(_store?: StoreInfo | null, _claim?: FreeClaim): { line1: string | null; fees: string[] } {
   return {
-    line1: claimPromoLine(claim),
+    line1: null,
     fees: ['No Platform Fee', 'No Packaging Fee'],
   };
 }
@@ -206,8 +214,8 @@ export function livePromo(store: StoreInfo | null, claim: FreeClaim = guestClaim
 export function liveFees(store: StoreInfo | null, claim: FreeClaim = guestClaim(store)): [string, string][] {
   const flat = flatFee(store);
   return [
-    ['0', 'Packaging Fee'],
-    ['0', 'Platform Fee'],
+    ['0', 'Packaging fee'],
+    ['0', 'Platform fee'],
     claimFee(claim) ?? (flat != null ? ['LKR', `Delivery ${formatLkr(flat)}`] : ['km', 'Fee at checkout']),
   ];
 }

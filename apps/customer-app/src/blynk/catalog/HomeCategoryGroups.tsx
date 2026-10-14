@@ -4,7 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { CategoryTile } from '@/components/CategoryTile';
 import { ChevronIcon } from '@/components/icons';
 import { PressScale } from '@/components/ui';
-import { C, F } from '@/lib/theme';
+import { C, F, SPACE, T } from '@/lib/theme';
 import { CATEGORIES } from '../ui/strings';
 import { categoriesHref, categoryHref, type MainNode } from './tree';
 
@@ -27,7 +27,7 @@ export function HomeCategoryGroups({ tree, width }: { tree: MainNode[]; width: n
   // one running index across groups, so the tile wells keep cycling down the page
   const starts = tree.map((_, i) => tree.slice(0, i).reduce((n, m) => n + m.categories.length, 0));
   return (
-    <Animated.View entering={FadeIn.duration(260)} style={{ marginTop: 6 }}>
+    <Animated.View entering={FadeIn.duration(260)}>
       {tree.map((main, i) => <Group key={main.key} main={main} tile={tile} width={width} start={starts[i]} />)}
       <PressScale onPress={() => router.push(categoriesHref())} scaleTo={0.97} style={styles.allBtn} haptic>
         <GridGlyph />
@@ -43,12 +43,12 @@ function Group({ main, tile, width, start }: { main: MainNode; tile: number; wid
   const swipe = cats.length > COLS * 2;
   const open = (slug: string) => router.push(categoryHref(slug));
   return (
-    <View style={{ marginTop: 18 }}>
+    <View style={{ marginTop: SPACE.section }}>
       <View style={styles.head}>
         <Text style={styles.h2} accessibilityRole="header" numberOfLines={1}>{main.name}</Text>
         <PressScale onPress={() => router.push(categoriesHref(main.id))} hitSlop={8} style={styles.seeAll}>
           <Text style={styles.seeAllTxt}>{CATEGORIES.seeAll}</Text>
-          <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={13} color="#4A4A50" stroke={2.2} /></View>
+          <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={13} color={C.sub} stroke={2.2} /></View>
         </PressScale>
       </View>
       {swipe ? (
@@ -94,13 +94,13 @@ function GridGlyph() {
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: GUTTER, marginBottom: 12 },
-  h2: { fontFamily: F.semi, fontSize: 18.5, color: '#26262B', letterSpacing: -0.2, flexShrink: 1 },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: GUTTER, marginBottom: SPACE.head },
+  h2: { ...T.section, flexShrink: 1 },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4 },
-  seeAllTxt: { fontFamily: F.medium, fontSize: 13.5, color: '#4A4A50' },
+  seeAllTxt: T.seeAll,
   grid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: GAP, rowGap: 14, paddingHorizontal: GUTTER },
   allBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginHorizontal: GUTTER, marginTop: 18,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginHorizontal: GUTTER, marginTop: 16,
     height: 46, borderRadius: 23, backgroundColor: C.brand,
   },
   allTxt: { fontFamily: F.semi, fontSize: 15, color: C.brandInk },

@@ -52,12 +52,12 @@ export function claimTitle(c: FreeClaim): string | null {
 
 /** The bottom fee strip's third item ([coin, label]), or null (the caller shows the fee instead). */
 export function claimFee(c: FreeClaim): [string, string] | null {
-  if (c.kind === 'new-customer') return [String(c.count), 'Free · New Users'];
-  if (c.kind === 'personal') return [String(c.count), c.count === 1 ? 'Free Delivery Left' : 'Free Left'];
+  if (c.kind === 'new-customer') return [String(c.count), 'Free · new users'];
+  if (c.kind === 'personal') return [String(c.count), c.count === 1 ? 'Free delivery left' : 'Free left'];
   return null;
 }
 
-/** The yellow promo band's first line, or null. */
+/** The cart bar's free-delivery strip line, or null. */
 export function claimPromoLine(c: FreeClaim): string | null {
   if (c.kind === 'new-customer') return `Free delivery on your first ${c.count === 1 ? 'order' : `${c.count} orders`} for new customers`;
   if (c.kind === 'personal') return c.count === 1 ? 'Your next delivery is free' : `Your next ${deliveries(c.count)} are free`;

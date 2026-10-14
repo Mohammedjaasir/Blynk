@@ -48,7 +48,7 @@ export default function CategoryScreen() {
     router.setParams({ slug: view.root.slug, sub: s ? s.slug : undefined });
   };
   const search = () => view && router.push({ pathname: '/search', params: { c: view.root.slug, name: view.root.name } });
-  const offer = view && categoryOfferActive(view.root) ? `${view.root.offer_percent}% OFF EVERYTHING HERE` : null;
+  const offer = view && categoryOfferActive(view.root) ? `${view.root.offer_percent}% off everything here` : null;
 
   return (
     <View style={styles.root}>

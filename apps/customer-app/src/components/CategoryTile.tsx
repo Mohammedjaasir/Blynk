@@ -5,8 +5,11 @@ import { categoryOfferActive } from '@/blynk/lib/categories';
 import { C, F } from '@/lib/theme';
 import { PressScale } from './ui';
 
-/** Soft wells the tiles cycle through, so a grid is not one flat colour (Flutter CategoryWidget). */
-const WELLS = ['#F3F4F6', '#FFF8D6', '#E7F5EA', '#EEF1FB', '#FDEFEA'];
+/**
+ * The picture's well. Once soft pastels cycled here (Flutter CategoryWidget); the clean pass
+ * (2026-10-14) keeps one plain light grey so the pictures carry the colour.
+ */
+const WELLS = [C.tile];
 export const wellFor = (i: number) => WELLS[((i % WELLS.length) + WELLS.length) % WELLS.length];
 
 /** A category's picture on its well, or its initial while there is none (or it fails to load). */

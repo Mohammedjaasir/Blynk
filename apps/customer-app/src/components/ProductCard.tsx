@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
 import type { Product } from '@/blynk/api/types';
 import { openProduct } from '@/blynk/catalog/openProduct';
+import { tileLabel } from '@/blynk/catalog/tileLabel';
 import { deliveredFromText, hasVariants, priceText, VARIANT_COPY } from '@/blynk/catalog/variants';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
@@ -12,10 +13,10 @@ import { DEMO } from '@/demo/mode';
 import { rupees } from '@/demo/money';
 import { withSpring } from '@/lib/motion';
 import { useCartSelect } from '@/lib/cart';
-import { C, F } from '@/lib/theme';
+import { C, F, T } from '@/lib/theme';
 import { NonVegMark, StarIcon, VegMark } from './icons';
 import { ProductImage } from './ProductImage';
-import { AddButton, DemoTicker, PriceTicker } from './ui';
+import { AddButton, DemoTicker } from './ui';
 
 export const unitText = (p: Pick<Product, 'unit' | 'pack_size'>) => [p.unit, p.pack_size].filter(Boolean).join(' · ');
 const money = (n: number) => (DEMO ? rupees(n) : formatLkr(n));
@@ -23,14 +24,18 @@ const money = (n: number) => (DEMO ? rupees(n) : formatLkr(n));
 /**
  * Dish tile, measured off the reference: photo slot (square on Home's "Meals under ₹99"
  * rail, 134 × 100 inside a store card) with a "Popular" tag, a ★ rating tab and the "+"
- * that opens into "− 1 +"; then the restaurant line, veg mark + name, the price (offer
- * price in a tinted pill) and the "Other apps / Our app" footer.
- * In the design mock the photo is an emoji stand-in on a neutral tile.
+ * that opens into "− 1 +"; then the restaurant line, veg mark + name and the price.
+ * Live (clean pass, 2026-10-14): the offer price in green, the regular price struck after it,
+ * and at most one small label (sold out > offer > "Delivered from", src/blynk/catalog/tileLabel.ts).
+ * In the design mock the photo is an emoji stand-in on a neutral tile, with its
+ * "Other apps / Our app" footer.
  */
 export const ProductCard = memo(function ProductCard({
-  product: p, width = 128, height, sub, index = 0, showRating = true, seen = true,
+  product: p, width = 128, height, sub, index = 0, showRating = true, seen = true, tileColor,
 }: {
   product: Product; width?: number; height?: number; sub?: string; index?: number;
+  /** The photo's well (an aisle card's light surface wants a white one). */
+  tileColor?: string;
   /** The ★ tab on the photo (Home's rail shows it, store cards don't). */
   showRating?: boolean;
   /** The footer rolls to "Our app: n% lower" a moment after this turns true. */
@@ -42,6 +47,8 @@ export const ProductCard = memo(function ProductCard({
   // sold in sizes: "LKR 50 – 350" ("From LKR 50" when narrow); a lead time: "Delivered from Fri 17 Oct"
   const sized = hasVariants(p);
   const lead = DEMO ? null : deliveredFromText(p);
+  const struck = offer && (DEMO || showSavings);
+  const label = DEMO ? null : tileLabel({ available: p.is_available, offer, struckShown: struck, lead });
   const x = extraOf(p.id);
   const h = height ?? width;
   const wide = h < width * 0.85; // a store card's 134 x 100 row photo, not a (near-)square tile
@@ -55,7 +62,7 @@ export const ProductCard = memo(function ProductCard({
   return (
     // the whole card opens the product page; the "+" inside keeps its own tap
     <Pressable style={{ width }} onPress={() => openProduct(p)} accessibilityRole="link" accessibilityLabel={p.name}>
-      <View style={[styles.img, { width, height: h, borderRadius: wide ? 10 : 14 }]}>
+      <View style={[styles.img, { width, height: h, borderRadius: wide ? 10 : 14 }, !!tileColor && { backgroundColor: tileColor }]}>
         <Animated.View style={[ea, !p.is_available && { opacity: 0.45 }]}>
           {x?.emoji ? (
             <Text style={{ fontSize: Math.round(h * 0.5), lineHeight: Math.round(h * 0.62) }}>{x.emoji}</Text>
@@ -93,23 +100,17 @@ export const ProductCard = memo(function ProductCard({
         price struck through. The row wraps, so on a narrow tile the struck price drops to its own
         line instead of being cut off. Sized products: the offer range, then the cheapest size's
         regular price struck. Live, the struck price shows while Admin's show_offer_savings is on
-        (as in the cart).
+        (as in the cart); it already says "offer", so no "Offer price" / "You save" line under it.
       */}
       <View style={styles.priceRow}>
-        {sized ? (
-          <Text style={[styles.price, offer && styles.priceOffer]} numberOfLines={1}>{priceText(p, { compact: width < 116, money })}</Text>
-        ) : offer ? (
-          <View style={styles.pill}><Text style={styles.pillTxt} numberOfLines={1}>{money(effectivePrice(p))}</Text></View>
-        ) : (
-          <Text style={styles.price}>{money(effectivePrice(p))}</Text>
-        )}
-        {offer && (DEMO || showSavings) && <Text style={styles.mrp} numberOfLines={1}>{money(p.selling_price)}</Text>}
+        <Text style={[styles.price, offer && styles.priceOffer]} numberOfLines={1}>
+          {sized ? priceText(p, { compact: width < 116, money }) : money(effectivePrice(p))}
+        </Text>
+        {struck && <Text style={styles.mrp} numberOfLines={1}>{money(p.selling_price)}</Text>}
       </View>
-      {!!lead && <Text style={styles.lead} numberOfLines={1}>{lead}</Text>}
-      {x ? (
+      {!!label && <Text style={[styles.label, label.kind === 'offer' && styles.labelOffer]} numberOfLines={1}>{label.text}</Text>}
+      {x && (
         <DemoTicker other={x.other} lowerPct={x.lowerPct} seen={seen} forceSave={inCart} money={money} delay={1400 + Math.min(index, 4) * 140} />
-      ) : (
-        <PriceTicker product={p} showSavings={showSavings} forceSave={inCart} />
       )}
     </Pressable>
   );
@@ -136,11 +137,11 @@ const styles = StyleSheet.create({
   mark: { position: 'absolute', left: 0, top: 3 },
   name: { fontSize: 13.5, fontFamily: F.medium, color: '#1E1E24', lineHeight: 17 },
   unit: { fontSize: 10, color: C.sub, fontFamily: F.regular, marginTop: 1 },
-  priceRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 5, rowGap: 1, marginTop: 3, minHeight: 20 },
-  mrp: { fontSize: 12.5, lineHeight: 17, color: '#8A8A90', textDecorationLine: 'line-through', fontFamily: F.regular, flexShrink: 0 },
-  pill: { backgroundColor: C.brandSoft, borderRadius: 9, paddingHorizontal: 5, height: 20, justifyContent: 'center', flexShrink: 0 },
-  pillTxt: { fontSize: 13.5, color: C.brandInk, fontFamily: F.semi },
-  price: { fontSize: 13.5, color: '#1E1E24', fontFamily: F.regular },
-  priceOffer: { color: C.brandText, fontFamily: F.semi },
-  lead: { fontSize: 10.5, color: C.brandText, fontFamily: F.medium, marginTop: 1 },
+  priceRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, rowGap: 1, marginTop: 4, minHeight: 20 },
+  mrp: { fontSize: 12, lineHeight: 17, color: C.faint, textDecorationLine: 'line-through', fontFamily: F.regular, flexShrink: 0 },
+  price: { fontSize: 14, lineHeight: 19, color: C.ink, fontFamily: F.semi, flexShrink: 0 },
+  // green only for offer prices (and veg marks)
+  priceOffer: { color: C.green },
+  label: { ...T.label, marginTop: 2 },
+  labelOffer: { color: C.green },
 });

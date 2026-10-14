@@ -4,7 +4,7 @@ import { showNotice } from '@/blynk/account/notice';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { ProductCard } from '@/components/ProductCard';
 import { cartActions, getCartSnapshot } from '@/lib/cart';
-import { C, F } from '@/lib/theme';
+import { C, F, SPACE, T } from '@/lib/theme';
 import { USUALS } from '../ui/strings';
 import { useUsuals } from './useUsuals';
 import { addUsualsInto, availableUsuals, showUsuals, usualsAddedMessage } from './usuals';
@@ -33,7 +33,7 @@ export function UsualsRow({ cardWidth = 140 }: { cardWidth?: number }) {
   };
 
   return (
-    <Animated.View entering={FadeIn.duration(260)} style={{ marginTop: 18 }}>
+    <Animated.View entering={FadeIn.duration(260)} style={{ marginTop: SPACE.section }}>
       <View style={styles.head}>
         <Text style={styles.h2} accessibilityRole="header">{USUALS.title}</Text>
         {canAdd && (
@@ -54,8 +54,8 @@ export function UsualsRow({ cardWidth = 140 }: { cardWidth?: number }) {
 
 const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
-  h2: { fontFamily: F.semi, fontSize: 19.5, color: '#26262B', letterSpacing: -0.2 },
+  h2: T.section,
   addAll: { backgroundColor: C.brand, borderRadius: 14, paddingHorizontal: 13, height: 28, justifyContent: 'center' },
   addAllTxt: { fontFamily: F.semi, fontSize: 13, color: C.brandInk },
-  sub: { fontFamily: F.regular, fontSize: 12.5, color: C.sub, paddingHorizontal: 15, marginTop: 2, marginBottom: 12 },
+  sub: { ...T.meta, paddingHorizontal: 15, marginTop: 2, marginBottom: SPACE.head },
 });
