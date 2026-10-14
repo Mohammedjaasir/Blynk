@@ -8,9 +8,13 @@ import Animated, {
 import { withSpring } from '@/lib/motion';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { formatLkr } from '@/blynk/lib/money';
+import { CoverageCard } from '@/blynk/area/AreaSteps';
+import { coverageOf } from '@/blynk/area/coverage';
 import { getOrder } from '@/blynk/orders/api';
 import { placedFromMemory } from '@/blynk/orders/checkout';
 import { slotWindowText } from '@/blynk/orders/status';
+import { PAY } from '@/blynk/payments/copy';
+import { useStore } from '@/blynk/store/StoreContext';
 import type { Order } from '@/blynk/orders/types';
 import { Confetti, PressScale } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
@@ -23,19 +27,25 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 /**
  * Order placed: ring draws, tick draws, badge pops, confetti rains.
  * Live: the cart's "Place order" lands here as /placed?id=<order id> with the order the server
- * returned (fetched again after a reload): its number, the total to pay in cash, and "Track
- * order" to /order/<id>. The cart is emptied only for an order placed just now.
+ * returned (fetched again after a reload): its number, the total to pay in cash (or "Paid
+ * online" after PayHere, from /payment/return), "Track order" to /order/<id>, and the small
+ * delivery-area card. The cart is emptied only for an order placed just now.
  */
 export default function Placed() {
   const { width, height } = useWindowDimensions();
   const { clear } = cartActions;
   const { id } = useLocalSearchParams<{ id?: string }>();
   const fresh = !DEMO && id ? placedFromMemory(id) : null;
+  // an online order remembered before it was paid: ask the server again for its payment
+  const stale = !!fresh && fresh.payment_method === 'ONLINE' && fresh.payment_status !== 'PAID';
   const [order, setOrder] = useState<Order | null>(fresh);
   const ring = useSharedValue(0);
   const tick = useSharedValue(0);
   const pop = useSharedValue(0);
   const [burst, setBurst] = useState(0);
+  const store = useStore();
+  const paidOnline = order?.payment_method === 'ONLINE' && order.payment_status === 'PAID';
+  const dropAt = order ? { lat: Number(order.delivery_latitude), lng: Number(order.delivery_longitude) } : null;
 
   useEffect(() => {
     ring.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
@@ -43,7 +53,7 @@ export default function Placed() {
     pop.value = withDelay(450, withSpring(1, { damping: 7, stiffness: 160 }));
     const t = setTimeout(() => setBurst(Date.now()), 750);
     if (DEMO || fresh) clear();
-    if (!DEMO && id && !fresh) getOrder(id).then(setOrder).catch(() => undefined);
+    if (!DEMO && id && (!fresh || stale)) getOrder(id).then(setOrder).catch(() => undefined);
     return () => clearTimeout(t);
   }, []);
 
@@ -88,8 +98,13 @@ export default function Placed() {
           )}
           <View style={styles.factRow}>
             <Text style={styles.factLabel}>Amount</Text>
-            <Text style={styles.factValue}>{formatLkr(order.total_amount)} · Cash on delivery</Text>
+            <Text style={styles.factValue}>{formatLkr(order.total_amount)} · {paidOnline ? PAY.paidOnline : order.payment_method === 'ONLINE' ? PAY.online : PAY.cod}</Text>
           </View>
+        </Animated.View>
+      )}
+      {!DEMO && order && (
+        <Animated.View entering={FadeInDown.delay(950)} style={{ marginTop: 12, minWidth: 280, maxWidth: 360, alignSelf: 'stretch', marginHorizontal: 24 }}>
+          <CoverageCard coverage={coverageOf(store)} pin={dropAt && Number.isFinite(dropAt.lat) && Number.isFinite(dropAt.lng) ? dropAt : null} />
         </Animated.View>
       )}
       <Animated.View entering={FadeInDown.delay(1000)} style={{ alignItems: 'center' }}>

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type KeyboardTypeOptions,
@@ -10,6 +10,10 @@ import Animated, {
   withTiming, ZoomOut,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AreaIntro, AreaList } from '@/blynk/area/AreaSteps';
+import { AREA, noteText } from '@/blynk/area/copy';
+import { circleRing, coverageOf, insideCoverage, kmText, nearestPlace, type Coverage } from '@/blynk/area/coverage';
+import { cityFor, flowReducer, gpsFailureOf, initialFlow, leavesScreen } from '@/blynk/area/flow';
 import { formatPhone } from '@/blynk/auth/phone';
 import { useSession } from '@/blynk/auth/session';
 import { useStore } from '@/blynk/store/StoreContext';
@@ -22,7 +26,7 @@ import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 import { addressErrorText, isOutsideRadius, type SavedAddress, type UpdateAddressBody } from './api';
 import {
-  COPY, DEFAULT_LABEL, metresBetween, numParam, safeReturn, STORE_AREA, townFromHub, validateAddress, validPin,
+  COPY, DEFAULT_LABEL, metresBetween, numParam, safeReturn, townFromHub, validateAddress,
   type AddressFields, type FieldErrors, type Pin as LatLng,
 } from './forms';
 import {
@@ -38,6 +42,8 @@ const PIN_DX = 6;
 const PIN_Y = 346;
 /** The pin block: tooltip (37 + 8 arrow) + 8 gap above the pin, so the pin's top is at PIN_Y - 17. */
 const PIN_TOP = PIN_Y - 17;
+/** Zoom for each way into the map: the store (see the streets around it), an area's centre, a GPS fix. */
+const ZOOM = { store: 15, area: 15.5, gps: 17 } as const;
 
 const T = {
   search: 'Move the map to your delivery spot',
@@ -63,7 +69,16 @@ const T = {
   gone: 'This address no longer exists.',
 };
 
-type Step = 'map' | 'form';
+/** The delivery circle and the store on the MapLibre picker (drawn once the style has loaded). */
+function drawCoverage(map: MlMap, c: Coverage) {
+  try {
+    map.addSource('blynk-area', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [circleRing(c)] } } });
+    map.addLayer({ id: 'blynk-area-fill', type: 'fill', source: 'blynk-area', paint: { 'fill-color': C.brand, 'fill-opacity': 0.12 } });
+    map.addLayer({ id: 'blynk-area-line', type: 'line', source: 'blynk-area', paint: { 'line-color': C.brandDeep, 'line-width': 2.5, 'line-dasharray': [3, 2] } });
+    map.addSource('blynk-store', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [c.center.lng, c.center.lat] } } });
+    map.addLayer({ id: 'blynk-store', type: 'circle', source: 'blynk-store', paint: { 'circle-radius': 7, 'circle-color': C.brand, 'circle-stroke-color': C.brandInk, 'circle-stroke-width': 2 } });
+  } catch { /* the overlay is a guide only; the picker works without it */ }
+}
 
 export function LiveAddressScreen() {
   const insets = useSafeAreaInsets();
@@ -73,6 +88,7 @@ export function LiveAddressScreen() {
   const session = useSession();
   const loc = useDeliveryLocation();
   const store = useStore();
+  const coverage = coverageOf(store);
   const cartPhone = useCartSelect((c) => c.phone);
   const town = townFromHub(store?.hub_name);
 
@@ -82,13 +98,26 @@ export function LiveAddressScreen() {
   const waiting = !!editId && !!session && !editing && (loc.loading || !loc.addresses);
   const gone = !!editId && !!session && !editing && !waiting;
 
-  const [step, setStep] = useState<Step>('map');
+  // area map first, then GPS / drag the pin / choose the area (src/blynk/area/flow.ts)
+  const [flow, dispatch] = useReducer(flowReducer, undefined, () => initialFlow({
+    coverage,
+    fix: { lat: numParam(params.lat) ?? NaN, lng: numParam(params.lng) ?? NaN },
+    gpsOff: params.gps === 'off',
+    edit: !!editId,
+    editing: editing ? { lat: editing.latitude, lng: editing.longitude } : null,
+  }));
+  const step = flow.step;
+  const onMap = step === 'map' || step === 'form';
+  // the map is created the first time it is needed and kept under the area screens after that
+  const [mapOn, setMapOn] = useState(onMap);
+  if (onMap && !mapOn) setMapOn(true);
+
   const [pin, setPin] = useState<LatLng | null>(null);
   const [moving, setMoving] = useState(false);
   const [mapState, setMapState] = useState<'loading' | 'ready' | 'failed'>('loading');
   const [mapTry, setMapTry] = useState(0);
   const [tip, setTip] = useState(true);
-  const [note, setNote] = useState<string | null>(params.gps === 'off' ? T.gpsOff : null);
+  const [note, setNote] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [outOfArea, setOutOfArea] = useState(false);
 
@@ -96,19 +125,15 @@ export function LiveAddressScreen() {
   const mapRef = useRef<MlMap | null>(null);
   const lift = useSharedValue(0);
 
-  /** Where the map opens: the GPS fix, else the address being edited, else the chosen spot, else the store area. */
-  const start = useMemo<LatLng>(() => {
-    const gps = { lat: numParam(params.lat) ?? NaN, lng: numParam(params.lng) ?? NaN };
-    if (validPin(gps)) return gps;
-    if (editing) return { lat: editing.latitude, lng: editing.longitude };
-    const s = getLocationState();
-    if (!session && s.guest) return { lat: s.guest.lat, lng: s.guest.lng };
-    if (loc.address) return { lat: loc.address.latitude, lng: loc.address.longitude };
-    if (s.guest) return { lat: s.guest.lat, lng: s.guest.lng };
-    return { lat: STORE_AREA.lat, lng: STORE_AREA.lng };
-    // the map is created once; later changes do not move it
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waiting]);
+  // a new way into the map (GPS fix, the store, an area): say what to do there
+  const [seenKey, setSeenKey] = useState(flow.startKey);
+  if (seenKey !== flow.startKey) {
+    setSeenKey(flow.startKey);
+    setOutOfArea(false);
+    setNote(flow.area ? AREA.areaLine(flow.area.name) : noteText(flow.note === 'areaPicked' ? null : flow.note));
+  }
+
+  const zoomFor = () => (flow.area ? ZOOM.area : flow.note === 'drag' ? ZOOM.store : editing ? MAP_ZOOM.start : ZOOM.gps);
 
   // the camera centre sits under the pin's tail dot, not the middle of the screen
   const ground = { x: width / 2 + PIN_DX, y: insets.top + PIN_TOP + PIN_GROUND_Y };
@@ -118,18 +143,20 @@ export function LiveAddressScreen() {
   }, [ground.y, height]);
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || waiting || gone) return;
+    if (Platform.OS !== 'web' || waiting || gone || !mapOn) return;
     let alive = true;
     loadMapLibre()
       .then((ml) => {
         const el = hostRef.current as unknown as HTMLElement | null;
         if (!alive || !el) return;
+        // where the map opens: the address being edited, else where the flow says (GPS fix, store, area centre)
+        const start = editing ? { lat: editing.latitude, lng: editing.longitude } : flow.start;
         setPin(start);
         const map = new ml.Map({
           container: el,
           style: MAP_STYLE,
           center: [start.lng, start.lat],
-          zoom: MAP_ZOOM.start,
+          zoom: zoomFor(),
           minZoom: MAP_ZOOM.min,
           maxZoom: MAP_ZOOM.max,
           dragRotate: false,
@@ -155,7 +182,11 @@ export function LiveAddressScreen() {
           setMoving(false);
           lift.set(withSequence(withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) }), withSpring(0)));
         });
-        map.once('load', () => { if (alive) setMapState('ready'); });
+        map.once('load', () => {
+          if (!alive) return;
+          drawCoverage(map, coverage);
+          setMapState('ready');
+        });
         mapRef.current = map;
       })
       .catch(() => { if (alive) setMapState('failed'); });
@@ -165,26 +196,50 @@ export function LiveAddressScreen() {
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waiting, gone, mapTry]);
+  }, [waiting, gone, mapTry, mapOn]);
 
   useEffect(() => { mapRef.current?.setPadding(padding); }, [padding]);
+
+  // ...and move the open map there
+  useEffect(() => {
+    const s = flow.start;
+    if (flow.startKey > 0) mapRef.current?.jumpTo({ center: [s.lng, s.lat], zoom: zoomFor() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow.startKey]);
 
   const toCurrent = () => {
     if (locating) return;
     setLocating(true);
     setNote(null);
     locateOnce()
-      .then((p) => { mapRef.current?.easeTo({ center: [p.lng, p.lat], zoom: Math.max(MAP_ZOOM.start, 17), duration: 600 }); })
-      .catch(() => setNote(T.gpsOff))
+      .then((p) => { mapRef.current?.easeTo({ center: [p.lng, p.lat], zoom: Math.max(MAP_ZOOM.start, ZOOM.gps), duration: 600 }); })
+      .catch((e) => setNote(noteText(gpsFailureOf(e)) ?? T.gpsOff))
       .finally(() => setLocating(false));
+  };
+
+  /** The area screen's "Use my current location": one fix, else stay with the GPS-free ways. */
+  const askGps = () => {
+    if (flow.asking) return;
+    dispatch({ type: 'useGps' });
+    locateOnce()
+      .then((fix) => dispatch({ type: 'gpsOk', fix, coverage }))
+      .catch((e) => dispatch({ type: 'gpsFail', reason: gpsFailureOf(e) }));
   };
 
   const pinA = useAnimatedStyle(() => ({ transform: [{ translateY: -lift.value * 16 }] }));
   const placed = !!pin && !moving && mapState === 'ready';
-  const title = editing ? editing.address_line1 : T.spot;
-  const line = editing ? editing.city : `${town} · ${T.spotLine}`;
+  // advisory: the drawn circle (the server still decides when the address is saved or ordered to)
+  const far = pin ? insideCoverage(coverage, pin) : null;
+  const outside = !!far && !far.inside;
+  const near = pin ? nearestPlace(coverage, pin) : null;
+  const city = cityFor(flow, town);
+  const title = editing ? editing.address_line1 : flow.area ? flow.area.name : T.spot;
+  const line = editing ? editing.city
+    : [near && !flow.area ? AREA.near(near.name) : city, far ? (far.km >= 0.1 ? `${kmText(far.km)} ${AREA.fromStore}` : null) : T.spotLine]
+      .filter(Boolean).join(' · ');
 
   const leave = () => (ret ? router.dismissTo(ret as never) : goBack());
+  const back = () => (leavesScreen(flow) ? leave() : dispatch({ type: 'back' }));
 
   return (
     <Animated.View entering={FadeIn.duration(110)} style={{ flex: 1, backgroundColor: '#EFEBE3' }}>
@@ -192,12 +247,12 @@ export function LiveAddressScreen() {
 
       {/* the map: MapLibre needs a plain block element with a size (its CSS makes it position: relative) */}
       <View style={StyleSheet.absoluteFill}>
-        {Platform.OS === 'web' && !waiting && !gone && <View key={mapTry} ref={hostRef} style={{ width: '100%', height: '100%' }} />}
+        {Platform.OS === 'web' && mapOn && !waiting && !gone && <View key={mapTry} ref={hostRef} style={{ width: '100%', height: '100%' }} />}
       </View>
-      {(mapState === 'loading' || waiting) && !gone && (
+      {onMap && (mapState === 'loading' || waiting) && !gone && Platform.OS === 'web' && (
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.mapLoading]}><ActivityIndicator color={C.brandInk} /></View>
       )}
-      {(mapState === 'failed' || Platform.OS !== 'web' || gone) && (
+      {onMap && (mapState === 'failed' || Platform.OS !== 'web' || gone) && (
         <View style={[StyleSheet.absoluteFill, styles.mapLoading]}>
           <Text style={styles.failTxt}>{gone ? T.gone : Platform.OS !== 'web' ? T.web : T.mapFailed}</Text>
           {mapState === 'failed' && !gone && (
@@ -207,7 +262,7 @@ export function LiveAddressScreen() {
       )}
 
       {/* fixed centre pin + tooltip */}
-      {mapState === 'ready' && (
+      {onMap && mapState === 'ready' && (
         <View pointerEvents="box-none" style={[styles.pinWrap, { left: width / 2 + PIN_DX - 140, top: insets.top + PIN_Y - 70 }]}>
           {tip ? (
             <Animated.View exiting={ZoomOut.duration(150)} style={{ alignItems: 'center' }}>
@@ -227,67 +282,73 @@ export function LiveAddressScreen() {
       )}
 
       {/* back + hint pill */}
-      <View style={[styles.top, { top: insets.top + 24 }]}>
-        <PressScale onPress={leave} style={styles.backBtn}><BackIcon size={19} color="#111" stroke={2} /></PressScale>
-        <View style={styles.search}>
-          <SmallPin />
-          <Text style={styles.searchTxt} numberOfLines={1}>{T.search}</Text>
-        </View>
-      </View>
-      <Text style={[styles.attrib, { top: insets.top + 66 }]} pointerEvents="none">{`OpenFreeMap © OpenMapTiles ${MAP_ATTRIBUTION}`}</Text>
+      {onMap && (
+        <>
+          <View style={[styles.top, { top: insets.top + 24 }]}>
+            <PressScale onPress={back} style={styles.backBtn}><BackIcon size={19} color="#111" stroke={2} /></PressScale>
+            <View style={styles.search}>
+              <SmallPin />
+              <Text style={styles.searchTxt} numberOfLines={1}>{T.search}</Text>
+            </View>
+          </View>
+          <Text style={[styles.attrib, { top: insets.top + 66 }]} pointerEvents="none">{`OpenFreeMap © OpenMapTiles ${MAP_ATTRIBUTION}`}</Text>
+        </>
+      )}
 
       {/* bottom: current location pill + place card */}
-      <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 0) + 38 }]} pointerEvents="box-none">
-        {!!note && (
-          <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.note}>
-            <Text style={styles.noteTxt}>{note}</Text>
-          </Animated.View>
-        )}
-        {Platform.OS === 'web' && !gone && (
-          <Animated.View layout={LinearTransition.duration(140)} style={{ alignSelf: 'center' }}>
-            <PressScale onPress={toCurrent} style={styles.current}>
-              {locating ? <ActivityIndicator size="small" color={C.brandInk} /> : <TargetIcon />}
-              <Text style={styles.currentTxt}>{locating ? T.locating : T.current}</Text>
-            </PressScale>
-          </Animated.View>
-        )}
-        <Animated.View layout={LinearTransition.duration(140)} style={styles.card}>
-          {outOfArea ? (
-            <View style={[styles.cardHead, styles.cardHeadBad]}>
-              <Text style={[styles.cardHint, { color: C.problem, fontFamily: F.semi }]}>{COPY.outTitle}</Text>
-            </View>
-          ) : (
-            <View style={styles.cardHead}>
-              <Text style={styles.cardHint}>{placed ? T.placed : T.moving}</Text>
-            </View>
+      {onMap && (
+        <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 0) + 38 }]} pointerEvents="box-none">
+          {!!note && (
+            <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.note}>
+              <Text style={styles.noteTxt}>{note}</Text>
+            </Animated.View>
           )}
-          {placed ? (
-            <Animated.View key="placed" entering={FadeIn.duration(140)} style={{ paddingHorizontal: 15, paddingTop: 15 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <SmallPin />
-                <Text style={styles.placeName} numberOfLines={1}>{title}</Text>
-              </View>
-              <Text style={styles.placeLine}>{outOfArea ? COPY.outBody : line}</Text>
-              <PressScale onPress={() => setStep('form')} style={styles.cta} haptic scaleTo={0.96}>
-                <Text style={styles.ctaTxt}>{T.cta}</Text>
+          {Platform.OS === 'web' && !gone && (
+            <Animated.View layout={LinearTransition.duration(140)} style={{ alignSelf: 'center' }}>
+              <PressScale onPress={toCurrent} style={styles.current}>
+                {locating ? <ActivityIndicator size="small" color={C.brandInk} /> : <TargetIcon />}
+                <Text style={styles.currentTxt}>{locating ? T.locating : T.current}</Text>
               </PressScale>
             </Animated.View>
-          ) : (
-            <View key="loading" style={{ paddingHorizontal: 15, paddingTop: 14 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <SmallPin />
-                <Skeleton h={22} r={6} style={{ flex: 1 }} />
-              </View>
-              <Skeleton h={22} r={6} style={{ marginTop: 8 }} />
-            </View>
           )}
-        </Animated.View>
-      </View>
+          <Animated.View layout={LinearTransition.duration(140)} style={styles.card}>
+            {outOfArea || (placed && outside) ? (
+              <View style={[styles.cardHead, styles.cardHeadBad]}>
+                <Text style={[styles.cardHint, { color: C.problem, fontFamily: F.semi }]}>{outOfArea ? COPY.outTitle : AREA.farHead}</Text>
+              </View>
+            ) : (
+              <View style={styles.cardHead}>
+                <Text style={styles.cardHint}>{placed ? T.placed : T.moving}</Text>
+              </View>
+            )}
+            {placed ? (
+              <Animated.View key="placed" entering={FadeIn.duration(140)} style={{ paddingHorizontal: 15, paddingTop: 15 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <SmallPin />
+                  <Text style={styles.placeName} numberOfLines={1}>{title}</Text>
+                </View>
+                <Text style={styles.placeLine}>{outOfArea ? COPY.outBody : outside && far ? AREA.farLine(far.km, coverage) : line}</Text>
+                <PressScale onPress={() => dispatch({ type: 'confirmPin' })} style={styles.cta} haptic scaleTo={0.96}>
+                  <Text style={styles.ctaTxt}>{T.cta}</Text>
+                </PressScale>
+              </Animated.View>
+            ) : (
+              <View key="loading" style={{ paddingHorizontal: 15, paddingTop: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <SmallPin />
+                  <Skeleton h={22} r={6} style={{ flex: 1 }} />
+                </View>
+                <Skeleton h={22} r={6} style={{ marginTop: 8 }} />
+              </View>
+            )}
+          </Animated.View>
+        </View>
+      )}
 
       {step === 'form' && pin && (
         <AddressForm
           pin={pin}
-          town={town}
+          town={city}
           editing={editing}
           signedIn={!!session}
           prefill={{
@@ -295,9 +356,30 @@ export function LiveAddressScreen() {
             phone: session ? formatPhone(session.user.phone) : getLocationState().guest?.details?.recipient_phone
               ? formatPhone(getLocationState().guest?.details?.recipient_phone as string) : cartPhone ?? '',
           }}
-          onBack={() => setStep('map')}
-          onOutOfArea={() => { setOutOfArea(true); setStep('map'); }}
+          onBack={() => dispatch({ type: 'back' })}
+          onOutOfArea={() => { setOutOfArea(true); dispatch({ type: 'back' }); }}
           onDone={leave}
+        />
+      )}
+
+      {/* the delivery-area map first, then the area list (laid over the map) */}
+      {step === 'area' && (
+        <AreaIntro
+          coverage={coverage}
+          note={flow.note}
+          asking={flow.asking}
+          onBack={leave}
+          onGps={askGps}
+          onDrag={() => dispatch({ type: 'dragPin', coverage })}
+          onList={() => dispatch({ type: 'openList' })}
+        />
+      )}
+      {step === 'list' && (
+        <AreaList
+          coverage={coverage}
+          onBack={() => dispatch({ type: 'back' })}
+          onPick={(area) => dispatch({ type: 'pickArea', area })}
+          onDrag={() => dispatch({ type: 'dragPin', coverage })}
         />
       )}
     </Animated.View>

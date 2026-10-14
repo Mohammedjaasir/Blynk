@@ -29,11 +29,19 @@ export interface Combo {
   items_total: number; saving: number; ends_at: string | null; is_available: boolean; items: ComboItem[];
 }
 export interface Pagination { page: number; limit: number; total: number; total_pages: number }
+/** GET /store and GET /orders/checkout-info `online_payment` (never any credential). */
+export interface OnlinePaymentInfo {
+  enabled: boolean; provider: string; methods_note: string | null; payment_window_minutes: number;
+}
 export interface StoreInfo {
   delivery_fee_lkr: number | null; delivery_fee_mode: 'FLAT' | 'DISTANCE_TIERS';
   /** Name of the active dark store, e.g. "Dharga Town Central Dark Store"; null when none is set up. */
   hub_name?: string | null;
   radius_km: number | null; coupons_enabled: boolean; show_offer_savings: boolean;
+  /** Where the radius is measured from (the active dark store); absent on an older server. */
+  store_location?: { lat: number; lng: number } | null;
+  /** PayHere (docs/api/payhere.md): "Pay online" is offered only while enabled. Absent = off. */
+  online_payment?: OnlinePaymentInfo;
   new_customer_free_deliveries: { enabled: boolean; count: number; since: string };
   delivery_hours: { start: string; end: string; timezone: string };
   is_open_now: boolean; closed_kind: 'OPEN' | 'OUTSIDE_HOURS' | 'CLOSED_DAY' | 'HOLIDAY' | 'CLOSED_NOW';

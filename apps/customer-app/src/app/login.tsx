@@ -8,6 +8,7 @@ import { setPendingOtp } from '@/blynk/auth/flow';
 import { authErrorText } from '@/blynk/auth/forms';
 import { toE164 } from '@/blynk/auth/phone';
 import { getSession, needsRegistration } from '@/blynk/auth/session';
+import { AgreeLine } from '@/blynk/legal/PolicyLinks';
 import { BackIcon } from '@/components/icons';
 import { PressScale } from '@/components/ui';
 import { COPY } from '@/demo/cart';
@@ -93,6 +94,7 @@ export default function Login() {
           </View>
         </PressScale>
         <Text style={styles.note}>We send a 6-digit code by SMS to sign you in.</Text>
+        <AgreeLine style={{ marginTop: 18 }} />
       </View>
     </View>
   );

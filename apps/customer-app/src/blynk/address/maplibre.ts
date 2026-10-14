@@ -18,6 +18,9 @@ export type MlMap = {
   jumpTo(o: { center?: [number, number]; zoom?: number }): void;
   setPadding(p: Padding): void;
   resize(): void;
+  /** The delivery-area overlay (a GeoJSON circle and the store point). */
+  addSource(id: string, source: Record<string, unknown>): void;
+  addLayer(layer: Record<string, unknown>): void;
   remove(): void;
   touchZoomRotate: { disableRotation(): void };
   dragRotate: { disable(): void };

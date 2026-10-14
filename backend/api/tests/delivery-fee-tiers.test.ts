@@ -163,6 +163,9 @@ describe('GET /store never shows the km prices', () => {
     const res = await request(app).get('/api/v1/store');
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ delivery_fee_lkr: null, delivery_fee_mode: 'DISTANCE_TIERS', delivery_fee_by_distance: true });
+    // the delivery-area map's centre (customer app, 2026-10-14): the active store's location
+    const hub = (await pool.query('SELECT latitude, longitude FROM dark_stores WHERE is_active = true ORDER BY created_at LIMIT 1')).rows[0];
+    expect(res.body.data.store_location).toEqual(hub ? { lat: Number(hub.latitude), lng: Number(hub.longitude) } : null);
     const raw = JSON.stringify(res.body);
     expect(raw).not.toContain('tiers');
     expect(raw).not.toContain('max_fee');

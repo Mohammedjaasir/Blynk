@@ -7,9 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addressErrorText, addressSummary, type SavedAddress } from '@/blynk/address/api';
 import { safeReturn } from '@/blynk/address/forms';
 import { SmallPin } from '@/blynk/address/pins';
+import { CoverageCard } from '@/blynk/area/AreaSteps';
+import { coverageOf } from '@/blynk/area/coverage';
 import { chooseAddress, loadAddresses, removeAddress, useDeliveryLocation } from '@/blynk/address/store';
 import { formatPhone } from '@/blynk/auth/phone';
 import { useSession } from '@/blynk/auth/session';
+import { useStore } from '@/blynk/store/StoreContext';
 import { BackIcon } from '@/components/icons';
 import { PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
@@ -20,7 +23,7 @@ const T = {
   title: 'Saved addresses',
   choose: 'Choose a delivery address',
   add: 'Add new address',
-  addSub: 'Place a pin on the map',
+  addSub: 'See where we deliver, then set your spot',
   selected: 'Delivering here',
   isDefault: 'Default',
   edit: 'Edit',
@@ -45,6 +48,7 @@ export default function Addresses() {
   const ret = safeReturn(params.return);
   const session = useSession();
   const loc = useDeliveryLocation();
+  const store = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +170,8 @@ export default function Addresses() {
             })}
           </>
         )}
+        {/* where Blynk delivers (owner, 2026-10-14) */}
+        {!DEMO && <CoverageCard coverage={coverageOf(store)} pin={loc.address ? { lat: loc.address.latitude, lng: loc.address.longitude } : loc.guestPin} style={{ marginTop: 16 }} />}
       </ScrollView>
     </View>
   );
