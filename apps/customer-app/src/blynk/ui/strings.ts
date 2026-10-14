@@ -81,3 +81,10 @@ export const LOGIN_GATE = {
   /** Read by a screen reader after the Skip button. */
   skipHint: 'Opens the shop. You can log in later from Profile.',
 } as const;
+
+/** The phone login's yellow hero (rider mascot). The headlines take turns, about 3 s each. */
+export const LOGIN = {
+  headlines: ['Fresh to your door', 'Dharga Town in minutes', 'Groceries, delivered fast'],
+  /** Read by a screen reader for the (decorative) rider picture. */
+  heroLabel: 'The Blynk rider bringing groceries',
+} as const;
