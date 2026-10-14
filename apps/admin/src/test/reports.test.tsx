@@ -323,7 +323,7 @@ describe('Customers page', () => {
     const details = await screen.findByLabelText('Order #0042 details');
     expect(details).toHaveTextContent('Milk 1L');
     expect(details).toHaveTextContent('Discount (WELCOME50)−LKR 50');
-    expect(details).toHaveTextContent('Total · cash to collectLKR 650');
+    expect(details).toHaveTextContent('Total · cash collectedLKR 650');
 
     // Each address the customer saved, with how many orders went to it (owner, 2026-10-11).
     const saved = await screen.findByRole('table', { name: 'Saved addresses' });

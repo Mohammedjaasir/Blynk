@@ -5,6 +5,8 @@ import { orders as ordersApi } from '../api/resources';
 import type { OrderDetail as OrderDetailData } from '../api/types';
 import { AssignRiderDialog, MarkDeliveredDialog, NoteDialog, needsNote } from '../components/OrderDialogs';
 import { deliveryCodeError } from '../lib/delivery';
+import { PaymentStatus } from '../components/PaymentStatus';
+import { refundNeeded } from '../lib/payments';
 import {
   ACTION_LABEL,
   ITEM_STATUS_LABEL,
@@ -274,10 +276,24 @@ export function OrderDetail() {
           </p>
         ) : null}
         {detail.delivery_instructions ? <p className="order-detail__note">"{detail.delivery_instructions}"</p> : null}
-        <p className="order-detail__meta">
-          {detail.payment_method === 'COD' ? 'Cash on delivery' : 'Paid online'} · {formatMoney(detail.total_amount)}
-          {detail.payment_status === 'PAID' ? ' · paid' : ''}
+        {/* PayHere (docs/api/payhere.md §5): method + status in the staff words. */}
+        <p className="order-detail__meta order-detail__payment">
+          <PaymentStatus order={detail} refundRequired={refundNeeded(detail)} />
+          <span>{formatMoney(detail.total_amount)}</span>
+          {detail.payment?.gateway_method ? <span>{detail.payment.gateway_method}</span> : null}
         </p>
+        {detail.order_status === 'AWAITING_PAYMENT' ? (
+          <p className="order-detail__note" data-testid="awaiting-payment">
+            Waiting for the customer's PayHere payment. Don't pack it yet: it moves to Placed once paid
+            {detail.payment_expires_at ? `, or cancels itself at ${formatClock(detail.payment_expires_at)}` : ''}.
+          </p>
+        ) : null}
+        {refundNeeded(detail) ? (
+          <p className="field__error" data-testid="refund-needed-note">
+            Refund needed: money arrived for this order that should go back to the customer (cancelled or expired order,
+            wrong amount, or a chargeback). Check it in the PayHere merchant portal.
+          </p>
+        ) : null}
         {detail.cancellation_reason ? <p className="order-detail__meta">Cancelled: {detail.cancellation_reason}</p> : null}
       </section>
 

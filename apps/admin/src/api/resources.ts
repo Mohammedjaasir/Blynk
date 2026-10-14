@@ -4,6 +4,9 @@ import type {
   AppUpdatePolicySetting,
   AppUpdatesSetting,
   DoctorsAccessSetting,
+  PaymentGatewayInput,
+  PaymentGatewaySetting,
+  PaymentGatewayTestHash,
   RiderTripsSetting,
   DeliverySlotSettings,
   StoreClosureInput,
@@ -436,6 +439,13 @@ export const settings = {
   /** Show doctor channelling to customers (owner, 2026-10-14); require_sign_in keeps its value. */
   setDoctorsVisibility: (show_to_customers: boolean) =>
     apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { show_to_customers } }),
+  /** PayHere online payments (docs/api/payhere.md section 5). The secret is write-only. */
+  getPaymentGateway: () => apiRequest<PaymentGatewaySetting>('/admin/settings/payment-gateway'),
+  setPaymentGateway: (body: PaymentGatewayInput) =>
+    apiRequest<PaymentGatewaySetting>('/admin/settings/payment-gateway', { method: 'PATCH', body }),
+  /** A sample checkout hash from the stored secret; calls nothing outside Blynk. */
+  testPaymentHash: (body: { order_id?: string; amount?: number } = {}) =>
+    apiRequest<PaymentGatewayTestHash>('/admin/settings/payment-gateway/test-hash', { method: 'POST', body }),
 
   /** Birthday-week gift and birthday SMS (owner, 2026-10-09). ADMIN and OPERATIONS. */
   getBirthdayOffer: () => apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer'),
@@ -551,6 +561,16 @@ export const orders = {
     apiRequest<OrdersPage>(
       `/admin/orders?status=${status}&since=${encodeURIComponent(since.toISOString())}&limit=1`
     ).then((d) => d.pagination?.total ?? d.orders.length),
+
+  /**
+   * Online orders waiting for PayHere (AWAITING_PAYMENT), read apart from the
+   * live lanes so an API that does not know the status yet cannot break the
+   * board: any refusal reads as "none". Never packable; shown for information.
+   */
+  awaitingPayment: () =>
+    apiRequest<OrdersPage>(`/admin/orders?status=AWAITING_PAYMENT&limit=${LIVE_ORDERS_LIMIT}&page=1`)
+      .then((d) => d.orders.filter((o) => o.order_status === 'AWAITING_PAYMENT'))
+      .catch(() => [] as BoardOrder[]),
 
   detail: (id: string) => apiRequest<{ order: OrderDetail }>(`/admin/orders/${id}`).then((d) => d.order),
 

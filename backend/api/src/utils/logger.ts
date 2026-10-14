@@ -20,6 +20,12 @@ export const logger = pino({
       'refreshToken',
       'otp_hash',
       'token_hash',
+      // PayHere (migration 047): the merchant secret never reaches a log.
+      'req.body.merchant_secret',
+      'merchant_secret',
+      'merchant_secret_encrypted',
+      'md5sig',
+      'req.body.md5sig',
     ],
     censor: '[REDACTED]',
   },

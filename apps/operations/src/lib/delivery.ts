@@ -14,7 +14,10 @@ import { errorCode } from './errors';
 export type RiderAction =
   | { kind: 'pickUp'; label: 'Picked up' }
   | { kind: 'arrive'; label: "I've arrived" }
-  | { kind: 'collect'; label: string; amount: number }
+  /** The handover step (collect-cod with the customer's code). `paidOnline`:
+   * PayHere already took the money, so no cash is collected - the step only
+   * confirms the delivery code (the server ignores the amount). */
+  | { kind: 'collect'; label: string; amount: number; paidOnline: boolean }
   | {
       kind: 'none';
       reason: 'being-packed' | 'cancelled' | 'failed' | 'done' | 'not-cod' | 'check-store';
@@ -50,8 +53,11 @@ export function nextAction(d: DeliveryLike): RiderAction {
       break;
     case 'ARRIVED_AT_CUSTOMER':
       if (d.order_status === 'OUT_FOR_DELIVERY') {
+        if (d.payment_method === 'ONLINE' && d.payment_status === 'PAID') {
+          return { kind: 'collect', label: 'Confirm delivery code', amount: d.total_amount, paidOnline: true };
+        }
         if (d.payment_method !== 'COD' || d.payment_status !== 'PENDING') return { kind: 'none', reason: 'not-cod' };
-        return { kind: 'collect', label: `Collect ${formatMoney(d.total_amount)}`, amount: d.total_amount };
+        return { kind: 'collect', label: `Collect ${formatMoney(d.total_amount)}`, amount: d.total_amount, paidOnline: false };
       }
       break;
   }
@@ -100,7 +106,8 @@ export interface Queue {
   next: DeliverySummary[];
   /** Delivered today. */
   done: DeliverySummary[];
-  /** Cash settled today - the backend only settles the exact order total. */
+  /** Cash settled today - the backend only settles the exact order total.
+   * Orders paid online collect no cash and are not counted. */
   collectedToday: number;
 }
 
@@ -125,7 +132,7 @@ export function splitQueue(list: DeliverySummary[]): Queue {
     now,
     next: open.filter((d) => d !== now),
     done,
-    collectedToday: done.reduce((sum, d) => sum + d.total_amount, 0),
+    collectedToday: done.reduce((sum, d) => sum + (d.payment_method === 'ONLINE' ? 0 : d.total_amount), 0),
   };
 }
 

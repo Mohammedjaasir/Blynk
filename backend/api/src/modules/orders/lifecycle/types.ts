@@ -35,6 +35,17 @@ export interface TransitionInput {
   reason?: string;
   /** RIDER_COLLECT_COD, ADMIN_MARK_DELIVERED: the 4-digit code the customer shows (migration 016). */
   delivery_code?: string;
+  /** PAYMENT_CONFIRMED: the verified PayHere notification (migration 047). */
+  payment?: {
+    gateway_payment_id: string | null;
+    status_code: number;
+    method: string | null;
+    status_message: string | null;
+    /** Sanitised notification (no card data, no md5sig) for payments.gateway_response. */
+    response: Record<string, unknown>;
+  };
+  /** PAYMENT_EXPIRED: the clock the window is compared with. */
+  now?: Date;
 }
 
 export interface TransitionRequest {

@@ -1,7 +1,7 @@
 import { AppError } from '../../../../middleware/error.middleware.js';
 import type { DeliveryAssignmentStatus } from '../../../../database/types.js';
 import { confirmWithCode } from '../delivery-code.js';
-import { settleCod, type CodSettlement } from '../settlement.js';
+import { isPrepaidOnline, settleCod, type CodSettlement } from '../settlement.js';
 import { setOrderStatus } from '../status-writer.js';
 import type { ActionImpl, DeliveryRow, OrderRow } from '../types.js';
 import { assertOrderActiveForRider, closeDeliveryAsFailed, dispatch } from './shared.js';
@@ -88,7 +88,8 @@ export const riderFail: ActionImpl<OrderRow> = {
  */
 export const riderCollectCod: ActionImpl<CodSettlement> = {
   checkState({ order, delivery }) {
-    if (order.payment_status === 'PAID' || delivery!.assignment_status === 'DELIVERED') {
+    // A paid online order (migration 047) is delivered here without cash.
+    if ((order.payment_status === 'PAID' && !isPrepaidOnline(order)) || delivery!.assignment_status === 'DELIVERED') {
       throw new AppError('Cash for this order has already been collected.', 409, 'COD_ALREADY_COLLECTED');
     }
     assertOrderActiveForRider(order);
@@ -101,6 +102,8 @@ export const riderCollectCod: ActionImpl<CodSettlement> = {
     }
   },
   checkPreconditions({ order }, req) {
+    // Paid online (migration 047): no cash to count - the amount is ignored.
+    if (isPrepaidOnline(order)) return;
     if (order.payment_method !== 'COD') {
       throw new AppError('This order is not cash on delivery.', 409, 'NOT_COD_ORDER');
     }
@@ -123,7 +126,9 @@ export const riderCollectCod: ActionImpl<CodSettlement> = {
       order,
       amount,
       actor: req.actor,
-      note: `Delivered and collected ${amount.toFixed(2)} LKR in cash (customer code confirmed)`,
+      note: isPrepaidOnline(order)
+        ? 'Delivered, paid online - no cash collected (customer code confirmed)'
+        : `Delivered and collected ${amount.toFixed(2)} LKR in cash (customer code confirmed)`,
     });
   },
 };

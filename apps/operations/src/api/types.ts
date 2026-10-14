@@ -34,6 +34,9 @@ export interface AuthUser {
 // Task F2 (Home). `orders.order_status` - the existing enum, nothing added
 // (mirrors apps/admin/src/lib/orders.ts's own `OrderStatus`).
 export type OrderStatus =
+  /** PayHere (migration 047): an ONLINE order waiting for its payment. Never
+   * packable; the worker cancels it when payment_expires_at passes. */
+  | 'AWAITING_PAYMENT'
   | 'PLACED'
   | 'PACKED'
   | 'OUT_FOR_DELIVERY'
@@ -99,6 +102,29 @@ export interface BoardOrder {
   delivery_city: string;
   items_summary: ItemsSummary;
   active_delivery: ActiveDelivery | null;
+  /** The list query selects every orders column; optional so older fixtures stay valid. */
+  payment_method?: PaymentMethod;
+  payment_status?: PaymentStatus;
+  /** PayHere (migration 047): only for ONLINE orders. */
+  payment_expires_at?: string | null;
+}
+
+export type PaymentMethod = 'COD' | 'ONLINE';
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+
+/** `order.payment` on `GET /admin/orders/:id` (PayHere gateway fields, migration 047). */
+export interface OrderPayment {
+  payment_method?: PaymentMethod;
+  payment_status?: PaymentStatus;
+  amount?: number;
+  gateway?: 'PAYHERE' | null;
+  gateway_payment_id?: string | null;
+  gateway_status_code?: number | string | null;
+  gateway_method?: string | null;
+  gateway_status_message?: string | null;
+  /** Money arrived for a cancelled/expired order, the amount did not match, or a chargeback. */
+  refund_required?: boolean;
+  failed_at?: string | null;
 }
 
 export interface OrderItemRow {
@@ -160,8 +186,12 @@ export interface OrderDetail {
   id: string;
   order_number: string;
   order_status: OrderStatus;
-  payment_method: 'COD' | 'ONLINE';
-  payment_status: string;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus | string;
+  /** PayHere (migration 047): only for ONLINE orders. */
+  payment_expires_at?: string | null;
+  /** The payment row with the gateway fields; absent on older data. */
+  payment?: OrderPayment | null;
   /** Bill lines (backend migration 018): total = subtotal + delivery_fee - discount_amount. */
   subtotal_amount?: number;
   delivery_fee?: number;
@@ -1588,6 +1618,49 @@ export interface RiderAdjustmentInput {
 /** `GET|PATCH /admin/settings/default-markup` (migration 044; owner,
  * 2026-10-13): the markup for products with no markup of their own and none
  * on their category or parent category. */
+/** `GET|PATCH /admin/settings/payment-gateway` (PayHere, docs/api/payhere.md §5).
+ * The merchant secret itself is never returned. */
+export interface PaymentGatewaySetting {
+  provider: 'PAYHERE';
+  enabled: boolean;
+  mode: 'sandbox' | 'live';
+  merchant_id: string | null;
+  merchant_secret_set: boolean;
+  merchant_secret_masked: string | null;
+  merchant_secret_updated_at: string | null;
+  allowed_methods: string | null;
+  payment_window_minutes: number;
+  encryption_key_configured: boolean;
+  ready: boolean;
+  checkout_url: string;
+  notify_url: string;
+  return_url: string;
+  cancel_url: string;
+  /** Only an ADMIN may change mode / merchant id / secret. */
+  can_edit_credentials: boolean;
+  updated_at: string | null;
+}
+
+/** PATCH body: any subset. Credentials (mode, merchant_id, merchant_secret) are Admin-only. */
+export interface PaymentGatewayInput {
+  enabled?: boolean;
+  allowed_methods?: string | null;
+  payment_window_minutes?: number;
+  mode?: 'sandbox' | 'live';
+  merchant_id?: string;
+  merchant_secret?: string;
+}
+
+/** `POST /admin/settings/payment-gateway/test-hash` - nothing is sent to PayHere. */
+export interface PaymentGatewayTestHash {
+  merchant_id: string;
+  order_id: string;
+  amount: string;
+  currency: string;
+  hash: string;
+  mode: 'sandbox' | 'live';
+}
+
 export interface DefaultMarkupSetting {
   markup_percent: number;
   updated_at: string | null;

@@ -8,6 +8,7 @@ import { TrackingStatus } from '../../components/TrackingStatus';
 import { DeliveryMap } from '../../components/DeliveryMap';
 import { toLatLng } from '../../lib/route';
 import { DeliveryCodeField, isCompleteDeliveryCode } from '../../components/DeliveryCodeField';
+import { isPaidOnline } from '../../lib/payments';
 import { canReportFailure, deliveryCodeError, deliveryErrorMessage, isTrackable, nextAction, stage } from '../../lib/delivery';
 import { errorCode } from '../../lib/errors';
 import { formatClock, formatMoney, shortNumber } from '../../lib/orders';
@@ -224,7 +225,9 @@ export function Detail() {
 
       {done ? (
         <section className="settled" aria-label="Delivered">
-          <p className="order-detail__strong">{formatMoney(data.cod_collected_amount)} collected</p>
+          <p className="order-detail__strong">
+            {isPaidOnline(data) ? 'Paid online - no cash collected' : `${formatMoney(data.cod_collected_amount)} collected`}
+          </p>
           {data.delivered_at ? <p className="order-detail__meta">at {formatClock(data.delivered_at)}</p> : null}
         </section>
       ) : null}
@@ -303,6 +306,14 @@ export function Detail() {
         </section>
       ) : null}
 
+      {/* PayHere (docs/api/payhere.md §6): the money is already in. */}
+      {isPaidOnline(data) && !closed && !done ? (
+        <section className="order-detail__section paid-online" aria-label="Payment" data-testid="paid-online">
+          <h2 className="order-detail__label">Payment</h2>
+          <p className="order-detail__strong">Paid online - do not collect cash</p>
+        </section>
+      ) : null}
+
       {action.kind !== 'none' || canFail ? (
         <footer className="order-detail__actions">
           {canFail ? (
@@ -340,6 +351,7 @@ export function Detail() {
       {dialog === 'collect' && nextAction(data).kind === 'collect' ? (
         <CollectCodDialog
           amount={data.total_amount}
+          paidOnline={isPaidOnline(data)}
           recipient={data.delivery_recipient_name}
           busy={busy}
           error={codeError}
@@ -374,6 +386,7 @@ export function Detail() {
  */
 function CollectCodDialog({
   amount,
+  paidOnline,
   recipient,
   busy,
   error,
@@ -382,6 +395,8 @@ function CollectCodDialog({
   onClose,
 }: {
   amount: number;
+  /** PayHere already took the money: only the delivery code is confirmed. */
+  paidOnline: boolean;
   recipient: string;
   busy: boolean;
   error: { message: string; locked: boolean } | null;
@@ -413,9 +428,13 @@ function CollectCodDialog({
         }}
       >
         <h2 className="modal__title" id={titleId}>
-          Collect {formatMoney(amount)} in cash
+          {paidOnline ? 'Confirm the delivery code' : `Collect ${formatMoney(amount)} in cash`}
         </h2>
-        <p className="modal__message">from {recipient}. Count it before you confirm — this completes the delivery.</p>
+        <p className="modal__message">
+          {paidOnline
+            ? `Paid online - do not collect cash. Ask ${recipient} for their delivery code — this completes the delivery.`
+            : `from ${recipient}. Count it before you confirm — this completes the delivery.`}
+        </p>
         <DeliveryCodeField
           ref={codeRef}
           value={code}
@@ -432,7 +451,7 @@ function CollectCodDialog({
             Not yet
           </button>
           <button type="submit" className="button" disabled={!ready}>
-            {busy ? 'Recording…' : 'Cash collected — complete'}
+            {busy ? 'Recording…' : paidOnline ? 'Code checked — complete' : 'Cash collected — complete'}
           </button>
         </div>
       </form>

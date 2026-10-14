@@ -12,6 +12,8 @@ export type InventoryAdjustmentType =
   | 'INVENTORY_AUDIT_ADJUSTMENT';
 
 export type OrderStatus =
+  // Migration 047: an ONLINE order waiting for PayHere's verified notification.
+  | 'AWAITING_PAYMENT'
   | 'PLACED'
   | 'PACKED'
   | 'OUT_FOR_DELIVERY'
@@ -384,6 +386,8 @@ export interface OrdersTable {
    * customer's free deliveries, or the basket amount (which never uses one up).
    */
   free_delivery_reason: ColumnType<FreeDeliveryReason | null, FreeDeliveryReason | null | undefined, FreeDeliveryReason | null>;
+  /** Migration 047: an unpaid ONLINE order is cancelled after this moment. */
+  payment_expires_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
   cancellation_reason: string | null;
   cancelled_by_user_id: string | null;
   cancelled_at: Date | null;
@@ -472,6 +476,45 @@ export interface PaymentsTable {
   paid_at: Date | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
+  // Migration 047 (PayHere).
+  gateway: ColumnType<string | null, string | null | undefined, string | null>;
+  gateway_payment_id: ColumnType<string | null, string | null | undefined, string | null>;
+  gateway_status_code: ColumnType<number | null, number | null | undefined, number | null>;
+  gateway_method: ColumnType<string | null, string | null | undefined, string | null>;
+  gateway_status_message: ColumnType<string | null, string | null | undefined, string | null>;
+  refund_required: ColumnType<boolean, boolean | undefined, boolean>;
+  failed_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+}
+
+/** Migration 047: one row per payment provider; the secret only ever encrypted. */
+export interface PaymentGatewaySettingsTable {
+  provider: string;
+  enabled: ColumnType<boolean, boolean | undefined, boolean>;
+  mode: ColumnType<'sandbox' | 'live', 'sandbox' | 'live' | undefined, 'sandbox' | 'live'>;
+  merchant_id: string | null;
+  merchant_secret_encrypted: string | null;
+  merchant_secret_updated_at: Date | null;
+  allowed_methods: string | null;
+  payment_window_minutes: ColumnType<number, number | undefined, number>;
+  updated_by_user_id: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+/** Migration 047: every PayHere notify_url call (no card data, no secret). */
+export interface PaymentNotificationsTable {
+  id: Generated<string>;
+  provider: ColumnType<string, string | undefined, string>;
+  order_id: string | null;
+  gateway_order_id: string | null;
+  gateway_payment_id: string | null;
+  status_code: number | null;
+  amount: ColumnType<string | null, number | string | null, number | string | null>;
+  currency: string | null;
+  method: string | null;
+  signature_valid: boolean;
+  outcome: string;
+  received_at: Generated<Date>;
 }
 
 export interface RidersTable {
@@ -957,6 +1000,8 @@ export interface Database {
   order_combos: OrderCombosTable;
   order_status_history: OrderStatusHistoryTable;
   payments: PaymentsTable;
+  payment_gateway_settings: PaymentGatewaySettingsTable;
+  payment_notifications: PaymentNotificationsTable;
   riders: RidersTable;
   /** Migration 039 (owner, 2026-10-10). */
   rider_documents: RiderDocumentsTable;

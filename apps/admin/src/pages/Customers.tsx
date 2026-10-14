@@ -14,6 +14,7 @@ import { formatDay } from '../lib/coupons';
 import { buildCustomersXlsx, customerExportFilename } from '../lib/customerExport';
 import { downloadBlob } from '../lib/productImport';
 import { smsLanguageLabel } from '../lib/smsOffers';
+import { paymentLabel } from '../lib/payments';
 import { STATUS_LABEL, formatClock, formatMoney, orderErrorMessage, shortNumber } from '../lib/orders';
 
 /**
@@ -369,7 +370,10 @@ function OrderHistoryRow({ order, open, onToggle }: { order: CustomerOrderRow; o
         <td className="cell__secondary">
           {formatDay(order.placed_at)} {formatClock(order.placed_at)}
         </td>
-        <td>{STATUS_LABEL[order.order_status] ?? order.order_status}</td>
+        <td>
+          {STATUS_LABEL[order.order_status] ?? order.order_status}
+          {paymentLabel(order) ? <span className="cell__secondary"> · {paymentLabel(order)!.text}</span> : null}
+        </td>
         <td className="num mono">{order.item_count}</td>
         <td className="num mono">
           {formatMoney(order.total_amount)}

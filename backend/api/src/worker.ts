@@ -3,6 +3,7 @@ import { logger } from './utils/logger.js';
 import { pool, checkDatabaseConnection } from './database/connection.js';
 import { notificationWorker, logPushStatus } from './modules/notifications/index.js';
 import { appointmentReminderJob } from './modules/dental/appointment-reminders.js';
+import { paymentExpiryJob } from './modules/payments/expiry-job.js';
 
 async function bootstrapWorker() {
   logger.info(
@@ -35,6 +36,8 @@ async function bootstrapWorker() {
     // prompts and the birthday SMS (owner, 2026-10-09), every
     // APPOINTMENT_REMINDER_INTERVAL_MS (default 5 minutes).
     appointmentReminderJob.start();
+    // PayHere (migration 047): unpaid online orders past their window are cancelled.
+    paymentExpiryJob.start();
   } else {
     logger.warn('NOTIFICATION_WORKER_ENABLED is set to false. Worker process will remain idle.');
   }
@@ -48,6 +51,7 @@ async function bootstrapWorker() {
 
     try {
       await appointmentReminderJob.stop();
+      await paymentExpiryJob.stop();
       await notificationWorker.stop();
       logger.info('Notification worker stopped cleanly.');
     } catch (workerErr) {

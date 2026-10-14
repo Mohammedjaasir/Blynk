@@ -71,15 +71,20 @@ export async function updateOrderFields(trx: Trx, order: OrderRow, fields: Order
 }
 
 /** PLACE_ORDER: the first history row of a new order. */
-export async function recordOrderPlaced(trx: Trx, orderId: string, customerId: string): Promise<void> {
+export async function recordOrderPlaced(
+  trx: Trx,
+  orderId: string,
+  customerId: string,
+  status: OrderStatus = INITIAL_ORDER_STATUS
+): Promise<void> {
   await trx
     .insertInto('order_status_history')
     .values({
       order_id: orderId,
       old_status: null,
-      new_status: INITIAL_ORDER_STATUS,
+      new_status: status,
       changed_by_user_id: customerId,
-      reason_or_notes: 'Order placed by customer',
+      reason_or_notes: status === INITIAL_ORDER_STATUS ? 'Order placed by customer' : 'Order placed by customer - waiting for online payment',
     })
     .execute();
 }

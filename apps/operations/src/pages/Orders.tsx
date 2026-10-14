@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ORDER_MAX_PAGES, ORDER_PAGE_LIMIT, orders as ordersApi } from '../api/resources';
 import type { BoardOrder } from '../api/types';
 import { PageHeader } from '../components/Layout';
+import { PaymentStatus } from '../components/PaymentStatus';
 import { AssignRiderDialog, NoteDialog, needsNote } from '../components/OrderDialogs';
 import {
   ACTION_LABEL,
@@ -90,6 +91,8 @@ export function Orders() {
   const [liveTruncated, setLiveTruncated] = useState(false);
   const [closed, setClosed] = useState<BoardOrder[]>([]);
   const [closedTotal, setClosedTotal] = useState(0);
+  /** Online orders waiting for PayHere (migration 047) - shown muted, apart from the work lanes. */
+  const [awaiting, setAwaiting] = useState<BoardOrder[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
@@ -102,7 +105,14 @@ export function Orders() {
 
   const load = useCallback(async () => {
     try {
-      const [liveOrders, closedToday] = await Promise.all([ordersApi.live(), ordersApi.closedSince(startOfTodayColombo())]);
+      const [liveOrders, closedToday, awaitingPayment] = await Promise.all([
+        ordersApi.live(),
+        ordersApi.closedSince(startOfTodayColombo()),
+        // Best effort: a backend without AWAITING_PAYMENT refuses the filter;
+        // the board itself must still load.
+        ordersApi.awaitingPayment().catch(() => null),
+      ]);
+      setAwaiting((awaitingPayment?.orders ?? []).filter((o) => o.order_status === 'AWAITING_PAYMENT'));
       setLive(liveOrders.orders);
       setLiveTotal(liveOrders.total);
       setLiveTruncated(liveOrders.truncated);
@@ -191,7 +201,7 @@ export function Orders() {
   /** Scheduled live orders grouped by slot, earliest slot first. */
   const bySlot = useMemo(() => {
     const groups = new Map<string, { start: string; end: string | null; rows: BoardOrder[] }>();
-    for (const o of asapThenBySlot((live ?? []).filter((x) => x.scheduled_for))) {
+    for (const o of asapThenBySlot((live ?? []).filter((x) => x.scheduled_for && laneOf(x) !== 'awaitingPayment'))) {
       const key = `${o.scheduled_for}|${o.scheduled_until ?? ''}`;
       const group = groups.get(key) ?? { start: o.scheduled_for!, end: o.scheduled_until ?? null, rows: [] };
       group.rows.push(o);
@@ -200,6 +210,15 @@ export function Orders() {
     return [...groups.values()];
   }, [live]);
   const scheduledCount = bySlot.reduce((n, g) => n + g.rows.length, 0);
+
+  /** Awaiting-payment orders, oldest first: from their own query, plus any the
+   * live query returned (kept once). Never packable, so never in a work lane. */
+  const awaitingRows = useMemo(() => {
+    const seen = new Set<string>();
+    return [...(byLane.get('awaitingPayment') ?? []), ...awaiting]
+      .filter((o) => (seen.has(o.id) ? false : (seen.add(o.id), true)))
+      .sort((a, b) => a.placed_at.localeCompare(b.placed_at));
+  }, [byLane, awaiting]);
 
   const delivered = closed.filter((o) => o.order_status === 'DELIVERED').length;
   const cancelled = closed.filter((o) => o.order_status === 'CANCELLED').length;
@@ -303,6 +322,23 @@ export function Orders() {
         );
       })}
 
+      {filter === 'all' && awaitingRows.length > 0 ? (
+        <section id="lane-awaitingPayment" className="lane lane--awaiting" aria-labelledby="lane-heading-awaitingPayment">
+          <h2 className="lane__title" id="lane-heading-awaitingPayment">
+            Awaiting payment <span className="lane__count">{awaitingRows.length}</span>
+          </h2>
+          <p className="lane__summary">
+            Online orders waiting for PayHere. Don't pack them: they move to To pack once paid, and cancel themselves if the
+            payment window runs out.
+          </p>
+          <ul className="lane__rows">
+            {awaitingRows.map((o) => (
+              <OrderRow key={o.id} order={o} primary={null} busy={false} onAct={() => undefined} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {delivered + cancelled > 0 ? (
         <section className="lane lane--done" aria-labelledby="lane-done">
           <h2 className="lane__title" id="lane-done">
@@ -395,6 +431,7 @@ function OrderRow({
           <span>{progress(order)}</span>
           {order.active_delivery?.rider_name ? <span className="ticket__rider">{order.active_delivery.rider_name}</span> : null}
           {order.scheduled_for ? <span className="ticket__scheduled">{scheduledLabel(order)}</span> : null}
+          <PaymentStatus order={order} />
           <span className="ticket__total">{formatMoney(order.total_amount)}</span>
         </span>
       </Link>

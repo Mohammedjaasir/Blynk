@@ -8,6 +8,7 @@ import { useLowStock } from '../components/LowStock';
 import { splitQueue, statusLabel } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
 import { formatMoney } from '../lib/orders';
+import { isPaidOnline } from '../lib/payments';
 import { syncTrackingFromList } from '../lib/tracker-session';
 import { isTripStop, owesCash, tripOf, useCurrentPosition, useRoadOrder } from '../lib/trip';
 import { TripCard } from './Delivery/Queue';
@@ -265,6 +266,10 @@ export function Home() {
                   <span className="order-detail__strong">
                     Cash to collect: {formatMoney(summary.activeDelivery.total_amount)}
                   </span>
+                </p>
+              ) : isPaidOnline(summary.activeDelivery) ? (
+                <p className="delivery-card__meta">
+                  <span className="order-detail__strong">Paid online - do not collect cash</span>
                 </p>
               ) : null}
               {/* F4 registers this exact route (`/delivery/:id`) - see

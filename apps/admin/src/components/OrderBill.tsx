@@ -16,6 +16,7 @@ export function OrderBill({
     birthday_discount_amount?: number;
     total_amount: number;
     payment_method?: 'COD' | 'ONLINE';
+    payment_status?: string;
   };
 }) {
   const discount = order.discount_amount ?? 0;
@@ -38,9 +39,15 @@ export function OrderBill({
         </div>
       ) : null}
       <div className="bill__row bill__row--total">
-        <dt>{order.payment_method === 'ONLINE' ? 'Total' : 'Total · cash to collect'}</dt>
+        <dt>{totalLabel(order.payment_method, order.payment_status)}</dt>
         <dd className="mono">{formatMoney(order.total_amount)}</dd>
       </div>
     </dl>
   );
+}
+
+/** What the total means for whoever reads the bill (docs/api/payhere.md section 6). */
+export function totalLabel(method?: 'COD' | 'ONLINE', status?: string): string {
+  if (method === 'ONLINE') return status === 'PAID' ? 'Total · paid online' : 'Total';
+  return status === 'PAID' ? 'Total · cash collected' : 'Total · cash to collect';
 }

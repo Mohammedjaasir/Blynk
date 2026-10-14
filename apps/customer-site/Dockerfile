@@ -32,7 +32,8 @@ FROM nginx:1.27-alpine
 COPY apps/customer-site/nginx.conf /etc/nginx/conf.d/default.conf
 COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-site/app.js \
      apps/customer-site/manifest.webmanifest apps/customer-site/firebase-messaging-sw.js \
-     apps/customer-site/walkthrough.js apps/customer-site/analytics.js /usr/share/nginx/html/
+     apps/customer-site/walkthrough.js apps/customer-site/analytics.js \
+     apps/customer-site/privacy.html apps/customer-site/terms.html apps/customer-site/refunds.html /usr/share/nginx/html/
 COPY apps/customer-site/assets /usr/share/nginx/html/assets
 # Android App Links. The fingerprint is the key the Blynk APK is signed with;
 # a build signed with another key needs ANDROID_CERT_SHA256 set to its SHA-256.

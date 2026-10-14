@@ -2468,3 +2468,16 @@ a {
   margin: 0 0 10px;
   color: var(--ink-2);
 }
+
+/* Paid online through PayHere (owner, 2026-10-14): nothing to collect. */
+.slip__cash--paid,
+.cash--paid {
+  color: var(--green);
+  font-weight: 800;
+}
+.cash--paid {
+  border-color: var(--green);
+  background: var(--green-wash);
+  padding-left: 12px;
+  padding-right: 12px;
+}

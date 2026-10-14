@@ -91,6 +91,11 @@ export const createOrderSchema = z.object({
   delivery_note: z.string({ invalid_type_error: 'delivery_note must be text' }).trim().max(500).nullable().optional(),
   /** "Elderly / needs help - please knock and wait, carry items inside" (owner, 2026-10-12). */
   needs_help: z.boolean({ invalid_type_error: 'needs_help must be true or false' }).optional(),
+  /**
+   * PayHere (migration 047; owner, 2026-10-14): ONLINE creates the order
+   * AWAITING_PAYMENT; it reaches the store only once paid. Omitted = COD.
+   */
+  payment_method: z.enum(['COD', 'ONLINE'], { invalid_type_error: 'payment_method must be COD or ONLINE' }).optional(),
 }).refine((v) => v.items.length + (v.combos?.length ?? 0) > 0, {
   message: 'At least one order item is required',
   path: ['items'],
@@ -123,6 +128,7 @@ export const orderQuerySchema = z.object({
     .pipe(z.number().int().min(1).max(100).default(20)),
   status: z
     .enum([
+      'AWAITING_PAYMENT',
       'PLACED',
       'PACKED',
       'OUT_FOR_DELIVERY',
@@ -191,7 +197,7 @@ export const adminOrderQuerySchema = z.object({
     .pipe(
       z
         .array(
-          z.enum(['PLACED', 'PACKED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'FAILED', 'CUSTOMER_UNAVAILABLE', 'ITEM_UNAVAILABLE'])
+          z.enum(['AWAITING_PAYMENT', 'PLACED', 'PACKED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'FAILED', 'CUSTOMER_UNAVAILABLE', 'ITEM_UNAVAILABLE'])
         )
         .optional()
     ),

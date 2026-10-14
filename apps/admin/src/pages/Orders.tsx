@@ -21,6 +21,7 @@ import {
   type Lane,
   type OrderAction,
 } from '../lib/orders';
+import { paymentLabel } from '../lib/payments';
 import { scheduledLabel } from '../lib/schedule';
 
 /** How often the board re-reads while it is on screen (no push; the Rider pattern). */
@@ -73,12 +74,15 @@ export function Orders() {
   const load = useCallback(async () => {
     try {
       const since = startOfTodayColombo();
-      const [liveOrders, delivered, cancelled] = await Promise.all([
+      const [liveOrders, delivered, cancelled, awaiting] = await Promise.all([
         ordersApi.live(),
         ordersApi.countSince('DELIVERED', since),
         ordersApi.countSince('CANCELLED', since),
+        // Unpaid online orders (PayHere): their own lane, never packed.
+        ordersApi.awaitingPayment(),
       ]);
-      setLive(liveOrders.orders);
+      const ids = new Set(liveOrders.orders.map((o) => o.id));
+      setLive([...liveOrders.orders, ...awaiting.filter((o) => !ids.has(o.id))]);
       setLiveTotal(liveOrders.total);
       setTruncated(liveOrders.truncated);
       setDone({ delivered, cancelled });
@@ -342,6 +346,7 @@ function OrderRow({
 }) {
   const number = shortNumber(order.order_number);
   const exception = laneOf(order) === 'attention';
+  const payment = paymentLabel(order);
   const blocked =
     (order.order_status === 'PLACED' || order.order_status === 'ITEM_UNAVAILABLE') &&
     primary === null &&
@@ -360,6 +365,10 @@ function OrderRow({
           {order.active_delivery?.rider_name ? <span className="ticket__rider">{order.active_delivery.rider_name}</span> : null}
           {order.scheduled_for ? (
             <span className="ticket__scheduled">{scheduledLabel(order.scheduled_for, order.scheduled_until)}</span>
+          ) : null}
+          {payment ? <span className={`pay-chip pay-chip--${payment.tone}`}>{payment.text}</span> : null}
+          {order.order_status === 'AWAITING_PAYMENT' && order.payment_expires_at ? (
+            <span>Pay by {formatClock(order.payment_expires_at)}</span>
           ) : null}
         </span>
         <span className="ticket__age">{formatAge(order.placed_at)}</span>

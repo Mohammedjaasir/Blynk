@@ -6,6 +6,9 @@ import type {
   AppUpdatesSetting,
   DoctorsAccessSetting,
   DefaultMarkupSetting,
+  PaymentGatewayInput,
+  PaymentGatewaySetting,
+  PaymentGatewayTestHash,
   Coupon,
   CouponInput,
   RiderTripsSetting,
@@ -293,6 +296,11 @@ export const orders = {
   /** The Orders board's own live query (task F3) - every status that still
    * needs staff attention, oldest first (mirrors Admin's `orders.live()`). */
   live: () => listAllOrders<BoardOrder>({ status: LIVE_STATUSES }),
+
+  /** Online orders still waiting for their PayHere payment (migration 047).
+   * Asked separately from `live` so a backend that does not know the status
+   * yet cannot break the board; shown muted, outside the work lanes. */
+  awaitingPayment: () => listOrders<BoardOrder>({ status: 'AWAITING_PAYMENT', limit: ORDER_PAGE_LIMIT }),
 
   /** Orders closed since a given moment (mirrors Admin's `orders.closedSince()`
    * exactly, including `DELIVERED,CANCELLED` - unlike `completedToday` above,
@@ -1105,6 +1113,16 @@ export const settings = {
     get: () => apiRequest<CustomerSmsLanguageSetting>('/admin/settings/customer-sms-language'),
     update: (body: { mode?: CustomerSmsLanguageMode; fallback?: SmsLanguageCode }) =>
       apiRequest<CustomerSmsLanguageSetting>('/admin/settings/customer-sms-language', { method: 'PATCH', body }),
+  },
+  /** PayHere online payments (docs/api/payhere.md §5). Admin and Operations
+   * switch it on/off and set the window and methods note; mode, merchant id
+   * and secret are Admin-only (403 CREDENTIALS_ADMIN_ONLY otherwise). */
+  paymentGateway: {
+    get: () => apiRequest<PaymentGatewaySetting>('/admin/settings/payment-gateway'),
+    update: (body: PaymentGatewayInput) =>
+      apiRequest<PaymentGatewaySetting>('/admin/settings/payment-gateway', { method: 'PATCH', body: { ...body } }),
+    testHash: (body: { order_id?: string; amount?: number } = {}) =>
+      apiRequest<PaymentGatewayTestHash>('/admin/settings/payment-gateway/test-hash', { method: 'POST', body }),
   },
   /** Global default markup (migration 044; owner, 2026-10-13): products with
    * no markup of their own and none on their category use it. Audited. */

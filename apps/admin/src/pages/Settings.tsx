@@ -21,6 +21,7 @@ import { PageHeader } from '../components/Layout';
 import { StoreScheduleSettings } from '../components/StoreSchedulePanels';
 import { ReferralSettingsCard } from '../components/ReferralSettingsCard';
 import { PointsSettingsCard } from '../components/PointsSettingsCard';
+import { PaymentGatewayCard } from '../components/PaymentGatewayCard';
 import { RiderDocumentsSettingsCard } from '../components/RiderDocumentsSettingsCard';
 import { RiderPaySettings } from '../components/RiderPaySettings';
 import { AppUpdatesPanel } from '../components/AppUpdatesPanel';
@@ -76,6 +77,8 @@ export function Settings() {
       {/* Global default markup (migration 044; owner, 2026-10-13). */}
       <DefaultMarkupPanel />
       <CheckoutSettingsPanel />
+      {/* PayHere online payments (migration 047; docs/api/payhere.md). */}
+      <PaymentGatewayCard />
       {/* Customer SMS language (owner, 2026-10-12). */}
       <CustomerSmsLanguagePanel />
       {/* Rider pay (owner, 2026-10-10): default pay model, bonuses and the rain

@@ -2,7 +2,7 @@ import { sql, Transaction } from 'kysely';
 import { defaultMarkupFrom } from '../pricing/index.js';
 import { db } from '../../database/connection.js';
 import { Database, OrderStatus, ItemFulfillmentStatus } from '../../database/types.js';
-import { ACTIVE_DELIVERY_STATUSES, INITIAL_ORDER_STATUS, isUncostedSubstitution } from './lifecycle/catalogue.js';
+import { ACTIVE_DELIVERY_STATUSES, initialOrderStatus, isUncostedSubstitution } from './lifecycle/catalogue.js';
 import { recordOrderPlaced } from './lifecycle/status-writer.js';
 import { DELIVERY_PUBLIC_SELECT } from './delivery.columns.js';
 import { evaluateCoupon, recordRedemption } from '../coupons/coupon.service.js';
@@ -128,6 +128,11 @@ export interface CreateOrderData {
     subtotal: number;
     items_regular_total: number;
   }>;
+  /**
+   * PayHere (migration 047): ONLINE starts AWAITING_PAYMENT with a payment
+   * window. Absent = COD, exactly as before.
+   */
+  online_payment?: { window_minutes: number } | null;
 }
 
 /** Migration 033: an order's combo lines as the API returns them. */
@@ -322,6 +327,14 @@ export class OrderRepository {
       const discountAmount = Number((offerDiscount + (points?.discount_amount ?? 0)).toFixed(2));
       const totalAmount = Number((data.subtotal_amount + deliveryFee - discountAmount).toFixed(2));
 
+      // PayHere (migration 047): nothing to charge online - place it as COD.
+      const paymentMethod = data.online_payment ? ('ONLINE' as const) : ('COD' as const);
+      if (paymentMethod === 'ONLINE' && totalAmount <= 0) {
+        throw new AppError('This order has nothing to pay online. Place it as cash on delivery.', 422, 'NOTHING_TO_PAY_ONLINE');
+      }
+      const initialStatus = initialOrderStatus(paymentMethod);
+      const paymentExpiresAt = data.online_payment ? new Date(Date.now() + data.online_payment.window_minutes * 60_000) : null;
+
       // 1. Insert orders record
       const [order] = await trx
         .insertInto('orders')
@@ -330,9 +343,10 @@ export class OrderRepository {
           idempotency_key: data.idempotency_key,
           customer_id: data.customer_id,
           dark_store_id: data.dark_store_id,
-          order_status: INITIAL_ORDER_STATUS,
-          payment_method: 'COD',
+          order_status: initialStatus,
+          payment_method: paymentMethod,
           payment_status: 'PENDING',
+          ...(paymentExpiresAt ? { payment_expires_at: paymentExpiresAt } : {}),
           subtotal_amount: data.subtotal_amount,
           delivery_fee: deliveryFee,
           // Migration 032 (owner, 2026-10-09): the standard fee, even when this
@@ -406,9 +420,10 @@ export class OrderRepository {
         .insertInto('payments')
         .values({
           order_id: order.id,
-          payment_method: 'COD',
+          payment_method: paymentMethod,
           payment_status: 'PENDING',
           amount: totalAmount,
+          ...(paymentMethod === 'ONLINE' ? { gateway: 'PAYHERE' } : {}),
         })
         .returningAll()
         .execute();
@@ -418,7 +433,7 @@ export class OrderRepository {
       await recordOrderRewards(trx, { orderId: order.id, customerId: data.customer_id, referral, points, now: rewardsNow });
 
       // 4. Record initial status in order_status_history (lifecycle PLACE_ORDER)
-      await recordOrderPlaced(trx, order.id, data.customer_id);
+      await recordOrderPlaced(trx, order.id, data.customer_id, initialStatus);
 
       // 5. No "order placed" SMS (owner, 2026-10-07: SMS cost) - the app
       // shows the confirmation. See CUSTOMER_ORDER_SMS (lifecycle/notify.ts).

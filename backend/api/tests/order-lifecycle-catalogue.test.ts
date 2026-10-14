@@ -20,6 +20,8 @@ import type { OrderStatus, UserRole } from '../src/database/types.js';
  * here independently of the implementation.
  */
 const ALL_STATES: OrderStatus[] = [
+  // Migration 047 (owner, 2026-10-14): an ONLINE order waiting for PayHere.
+  'AWAITING_PAYMENT',
   'PLACED',
   'PACKED',
   'OUT_FOR_DELIVERY',
@@ -32,7 +34,8 @@ const ALL_STATES: OrderStatus[] = [
 const CLOSED: OrderStatus[] = ['CANCELLED', 'DELIVERED', 'FAILED', 'CUSTOMER_UNAVAILABLE'];
 
 const EXPECTED: Record<ActionName, { from: OrderStatus[]; to: OrderStatus | null; roles: UserRole[] }> = {
-  CUSTOMER_CANCEL: { from: ['PLACED', 'PACKED'], to: 'CANCELLED', roles: ['CUSTOMER'] },
+  // AWAITING_PAYMENT (migration 047): the customer may abandon an unpaid online order.
+  CUSTOMER_CANCEL: { from: ['AWAITING_PAYMENT', 'PLACED', 'PACKED'], to: 'CANCELLED', roles: ['CUSTOMER'] },
   RESOLVE_ITEM: { from: ['PLACED', 'ITEM_UNAVAILABLE'], to: 'ITEM_UNAVAILABLE', roles: ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'] },
   PACK: { from: ['PLACED', 'ITEM_UNAVAILABLE'], to: 'PACKED', roles: ['ADMIN', 'PACKING_STAFF', 'OPERATIONS'] },
   ASSIGN_RIDER: { from: ['PACKED'], to: null, roles: ['ADMIN', 'OPERATIONS'] },
@@ -50,8 +53,15 @@ const EXPECTED: Record<ActionName, { from: OrderStatus[]; to: OrderStatus | null
   ADMIN_MARK_FAILED: { from: ['OUT_FOR_DELIVERY'], to: 'FAILED', roles: ['ADMIN', 'OPERATIONS'] },
   ADMIN_MARK_CUSTOMER_UNAVAILABLE: { from: ['OUT_FOR_DELIVERY'], to: 'CUSTOMER_UNAVAILABLE', roles: ['ADMIN', 'OPERATIONS'] },
   // FAILED and CUSTOMER_UNAVAILABLE added 2026-10-08: close a failed order directly.
-  ADMIN_CANCEL: { from: ['PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'CANCELLED', roles: ['ADMIN', 'OPERATIONS'] },
+  ADMIN_CANCEL: {
+    from: ['AWAITING_PAYMENT', 'PLACED', 'ITEM_UNAVAILABLE', 'PACKED', 'FAILED', 'CUSTOMER_UNAVAILABLE'],
+    to: 'CANCELLED',
+    roles: ['ADMIN', 'OPERATIONS'],
+  },
   RESTAGE: { from: ['FAILED', 'CUSTOMER_UNAVAILABLE'], to: 'PACKED', roles: ['ADMIN', 'OPERATIONS'] },
+  // PayHere (migration 047): run by the payments module as the paying customer, never by a route.
+  PAYMENT_CONFIRMED: { from: ['AWAITING_PAYMENT'], to: 'PLACED', roles: ['CUSTOMER'] },
+  PAYMENT_EXPIRED: { from: ['AWAITING_PAYMENT'], to: 'CANCELLED', roles: ['CUSTOMER'] },
 };
 
 /** The documented error when the order is in `status`, which is not in the action's `from`. */
@@ -82,11 +92,12 @@ const actorFor = (role: UserRole) => ({ id: 'a0000001-0000-0000-0000-00000000000
 
 /** A locked state in which the action would succeed, apart from the order status under test. */
 function happyState(action: ActionName, status: OrderStatus): LockedState {
+  const online = action === 'PAYMENT_CONFIRMED' || action === 'PAYMENT_EXPIRED';
   const order: any = {
     id: ORDER_ID,
     order_status: status,
     customer_id: actorFor('CUSTOMER').id,
-    payment_method: 'COD',
+    payment_method: online ? 'ONLINE' : 'COD',
     payment_status: 'PENDING',
     total_amount: '610.00',
   };
@@ -137,7 +148,7 @@ function thrown(fn: () => void): [number, string] | null {
 }
 
 describe('order lifecycle catalogue', () => {
-  it('has exactly the 14 documented actions, each fully described', () => {
+  it('has exactly the 16 documented actions (14 + 2 PayHere), each fully described', () => {
     expect([...ACTION_NAMES].sort()).toEqual(Object.keys(EXPECTED).sort());
     for (const name of ACTION_NAMES) {
       const entry = CATALOGUE[name];
@@ -169,6 +180,8 @@ describe('order lifecycle catalogue', () => {
       ADMIN_MARK_CUSTOMER_UNAVAILABLE: 'activeDeliveries',
       ADMIN_CANCEL: 'order',
       RESTAGE: 'activeDeliveries',
+      PAYMENT_CONFIRMED: 'order',
+      PAYMENT_EXPIRED: 'order',
     });
     const notes = ACTION_NAMES.filter((n) => CATALOGUE[n].notesRequired).sort();
     expect(notes).toEqual(
@@ -205,6 +218,7 @@ describe('admin status endpoint → action', () => {
     table.push([current, 'CANCELLED', 'ADMIN_CANCEL']);
     table.push([current, 'PLACED', null]);
     table.push([current, 'ITEM_UNAVAILABLE', null]);
+    table.push([current, 'AWAITING_PAYMENT', null]);
   }
   it.each(table)('current %s, requested %s → %s', (current, target, action) => {
     expect(adminStatusAction(target, current)).toBe(action);
@@ -238,8 +252,9 @@ describe('packing rule (D7, revised 2026-09-30: no separate sourcing)', () => {
 });
 
 describe('stock effect per action (inventory plan §4)', () => {
-  const RESTORING: ActionName[] = ['ADMIN_CANCEL', 'CUSTOMER_CANCEL'];
-  it('only the two cancellations return stock', () => {
+  // PAYMENT_EXPIRED (migration 047) cancels too; an unpaid order has taken no stock, so it is a no-op in practice.
+  const RESTORING: ActionName[] = ['ADMIN_CANCEL', 'CUSTOMER_CANCEL', 'PAYMENT_EXPIRED'];
+  it('only the cancellations return stock', () => {
     expect(ACTION_NAMES.filter((a) => CATALOGUE[a].stock === 'RESTORE_ORDER_STOCK').sort()).toEqual(RESTORING);
   });
   it('only packing takes stock (for the items not yet sourced)', () => {

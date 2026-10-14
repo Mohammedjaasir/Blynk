@@ -8,6 +8,7 @@ import { storeSchedule } from './store-schedule.js';
 import { doctorsAccess, doctorsShown } from './doctors-access.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
+import { publicOnlinePayment } from '../payments/gateway-settings.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
 import { RIDER_BATCHING_KEY, getBatchingRules, type BatchingRules } from '../riders/batching.js';
 import { kmTiersFrom, kmTiersSchema, type KmTier } from '../pricing/km-tiers.js';
@@ -807,6 +808,8 @@ export class SettingsService {
       // discovery and booking routes answer 404 DOCTORS_DISABLED; a
       // customer's existing appointments stay viewable and cancellable).
       doctors_enabled: doctorsShown(doctors),
+      // PayHere (migration 047; owner, 2026-10-14): whether "Pay online" is offered.
+      online_payment: await publicOnlinePayment(),
     };
   }
 }

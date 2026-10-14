@@ -103,7 +103,7 @@ describe('Orders board', () => {
     const toPack = await lane('To pack');
     await waitFor(() => expect(within(toPack).getAllByRole('listitem')).toHaveLength(140), { timeout: 5_000 });
     expect(screen.queryByText(/Showing \d+ of/)).not.toBeInTheDocument();
-    const live = api.find('GET', '/admin/orders').filter((c) => !c.query.since);
+    const live = api.find('GET', '/admin/orders').filter((c) => !c.query.since && c.query.status !== 'AWAITING_PAYMENT');
     expect(live.map((c) => [c.query.page, c.query.limit])).toEqual([
       ['1', '100'],
       ['2', '100'],
@@ -125,7 +125,7 @@ describe('Orders board', () => {
         timeout: 20_000,
       })
     ).toBeInTheDocument();
-    expect(api.find('GET', '/admin/orders').filter((c) => !c.query.since)).toHaveLength(20);
+    expect(api.find('GET', '/admin/orders').filter((c) => !c.query.since && c.query.status !== 'AWAITING_PAYMENT')).toHaveLength(20);
   }, 30_000);
 
   it('a substitution with its cost packs; one without shows "Substitution needs a cost"', async () => {

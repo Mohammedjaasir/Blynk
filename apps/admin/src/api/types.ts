@@ -1,4 +1,5 @@
 import type { ActiveDelivery, ItemsSummary, OrderStatus } from '../lib/orders';
+import type { PaymentMethod, PaymentStatus } from '../lib/payments';
 
 /** Shapes returned by the Blynk API - mirrors of the backend DTOs. */
 
@@ -635,6 +636,11 @@ export interface BoardOrder {
   delivery_city: string;
   items_summary: ItemsSummary;
   active_delivery: ActiveDelivery | null;
+  /** Absent on an older API. */
+  payment_method?: PaymentMethod;
+  payment_status?: PaymentStatus | string;
+  /** Online orders only (migration 047): when an unpaid order is cancelled. */
+  payment_expires_at?: string | null;
 }
 
 export interface OrderItemRow {
@@ -673,13 +679,31 @@ export interface OrderHistoryRow {
   created_at: string;
 }
 
+/** order.payment in the admin order detail (gateway fields only for online orders). */
+export interface OrderPayment {
+  gateway?: 'PAYHERE' | null;
+  gateway_payment_id?: string | null;
+  gateway_status_code?: number | string | null;
+  /** e.g. "VISA". */
+  gateway_method?: string | null;
+  gateway_status_message?: string | null;
+  /** Money arrived for a cancelled/expired order, the amount did not match, or a chargeback. */
+  refund_required?: boolean;
+  failed_at?: string | null;
+  [key: string]: unknown;
+}
+
 /** GET /admin/orders/:id - only the fields the Orders panel shows. */
 export interface OrderDetail {
   id: string;
   order_number: string;
   order_status: OrderStatus;
-  payment_method: 'COD' | 'ONLINE';
-  payment_status: string;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus | string;
+  /** Online orders only (migration 047): an AWAITING_PAYMENT order is cancelled after this. */
+  payment_expires_at?: string | null;
+  /** The payment row with the PayHere fields (docs/api/payhere.md section 2); absent on an older API. */
+  payment?: OrderPayment | null;
   subtotal_amount: number;
   delivery_fee: number;
   /** Coupon discount (backend migration 018); total = subtotal + delivery fee - discount. */
@@ -945,6 +969,46 @@ export interface DoctorsAccessSetting {
    */
   show_to_customers?: boolean;
   updated_at: string | null;
+}
+
+/** PayHere online payments (migration 047): GET|PATCH /admin/settings/payment-gateway. The secret is never returned. */
+export type PaymentGatewayMode = 'sandbox' | 'live';
+export interface PaymentGatewaySetting {
+  provider: 'PAYHERE';
+  enabled: boolean;
+  mode: PaymentGatewayMode;
+  merchant_id: string | null;
+  merchant_secret_set: boolean;
+  merchant_secret_masked: string | null;
+  merchant_secret_updated_at: string | null;
+  allowed_methods: string | null;
+  payment_window_minutes: number;
+  encryption_key_configured: boolean;
+  ready: boolean;
+  checkout_url: string;
+  notify_url: string;
+  return_url: string;
+  cancel_url: string;
+  can_edit_credentials: boolean;
+  updated_at: string | null;
+}
+/** PATCH body: any subset; mode / merchant_id / merchant_secret are Admin only. */
+export type PaymentGatewayInput = {
+  enabled?: boolean;
+  allowed_methods?: string | null;
+  payment_window_minutes?: number;
+  mode?: PaymentGatewayMode;
+  merchant_id?: string;
+  merchant_secret?: string;
+};
+/** POST /admin/settings/payment-gateway/test-hash - nothing is sent to PayHere. */
+export interface PaymentGatewayTestHash {
+  merchant_id: string;
+  order_id: string;
+  amount: string;
+  currency: string;
+  hash: string;
+  mode: PaymentGatewayMode;
 }
 
 /** In-app updates (owner, 2026-10-12): GET|PATCH /admin/settings/app-updates. */
@@ -1235,7 +1299,8 @@ export interface CustomerOrderRow {
   id: string;
   order_number: string;
   order_status: OrderStatus;
-  payment_status: string;
+  payment_method?: PaymentMethod;
+  payment_status: PaymentStatus | string;
   subtotal_amount: number;
   delivery_fee: number;
   discount_amount: number;

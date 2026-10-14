@@ -342,7 +342,7 @@ describe('Orders board', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const api = renderBoard(ADMIN, [boardOrder()]);
     await lane('To pack');
-    const reads = () => api.find('GET', '/admin/orders').filter((c) => !c.query.get('since')).length;
+    const reads = () => api.find('GET', '/admin/orders').filter((c) => c.query.get('status')?.includes('PLACED')).length;
     const before = reads();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20_000);
@@ -405,5 +405,40 @@ describe('Assign dialog: suggested rider and trips', () => {
     await waitFor(() =>
       expect(api.find('POST', `/admin/orders/${o.id}/assign-rider`)[0]?.body).toEqual({ rider_id: 'r1', confirm_far_batch: true })
     );
+  });
+});
+
+describe('Orders board: online payments (PayHere)', () => {
+  beforeEach(() => {
+    tokenStore.clear();
+    seq = 0;
+  });
+  afterEach(() => {
+    tokenStore.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows unpaid online orders in their own lane, never packable, and labels payments on rows', async () => {
+    const unpaid = boardOrder({
+      order_status: 'AWAITING_PAYMENT',
+      payment_method: 'ONLINE',
+      payment_status: 'PENDING',
+      payment_expires_at: '2026-10-14T10:20:00.000Z',
+      items_summary: { total: 2, pending: 2, sourced: 0, packed: 0, unavailable: 0, substituted: 0 },
+    });
+    const paid = boardOrder({ payment_method: 'ONLINE', payment_status: 'PAID' });
+    const api = renderBoard(ADMIN, [unpaid, paid]);
+    const awaiting = await lane('Awaiting payment');
+    expect(within(awaiting).getAllByRole('button', { name: /^Open order/ })).toHaveLength(1);
+    expect(within(awaiting).getByText('Payment pending')).toBeInTheDocument();
+    expect(within(awaiting).getByText('Pay by 15:50')).toBeInTheDocument();
+    expect(within(awaiting).queryByRole('button', { name: /^Pack/ })).not.toBeInTheDocument();
+    const toPack = await lane('To pack');
+    expect(within(toPack).getAllByRole('button', { name: /^Open order/ })).toHaveLength(1);
+    expect(within(toPack).getByText('Paid online')).toBeInTheDocument();
+    // The live lanes never ask for AWAITING_PAYMENT; it is read on its own.
+    const statuses = api.find('GET', '/admin/orders').map((c) => c.query.get('status') ?? '');
+    expect(statuses.filter((s) => s.includes('PLACED')).every((s) => !s.includes('AWAITING_PAYMENT'))).toBe(true);
+    expect(statuses).toContain('AWAITING_PAYMENT');
   });
 });
