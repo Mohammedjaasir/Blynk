@@ -5,7 +5,7 @@ import { dentalController } from './dental.controller.js';
 import { appointmentController } from './appointment.controller.js';
 import { dentalAdminController } from './dental-admin.controller.js';
 import { doctorRatingController } from './doctor-rating.controller.js';
-import { requireDoctorsSignIn } from '../configuration/doctors-access.js';
+import { requireDoctorsShown, requireDoctorsSignIn } from '../configuration/doctors-access.js';
 
 // ----------------------------------------------------------------------------
 // 1. CLINICS ROUTER (/api/v1/dental/clinics) - public to browse only when
@@ -38,10 +38,13 @@ export const dentalAppointmentsRouter = Router();
 dentalAppointmentsRouter.use(requireAuth, requireShopper());
 // `/holds` is declared before `/:id` so the literal path can never be
 // swallowed by the UUID param route.
-dentalAppointmentsRouter.post('/holds', appointmentController.createHold.bind(appointmentController));
+// "Show doctor channelling to customers" off (owner, 2026-10-14): no new
+// bookings (404 DOCTORS_DISABLED), but a customer's existing appointments stay
+// readable, cancellable and rateable.
+dentalAppointmentsRouter.post('/holds', requireDoctorsShown(), appointmentController.createHold.bind(appointmentController));
 dentalAppointmentsRouter.get('/', appointmentController.list.bind(appointmentController));
 dentalAppointmentsRouter.get('/:id', appointmentController.getById.bind(appointmentController));
-dentalAppointmentsRouter.post('/:id/confirm', appointmentController.confirm.bind(appointmentController));
+dentalAppointmentsRouter.post('/:id/confirm', requireDoctorsShown(), appointmentController.confirm.bind(appointmentController));
 dentalAppointmentsRouter.post('/:id/cancel', appointmentController.cancel.bind(appointmentController));
 // Migration 023: rate a visit (confirmed, slot over), once.
 dentalAppointmentsRouter.post('/:id/rating', doctorRatingController.rate.bind(doctorRatingController));

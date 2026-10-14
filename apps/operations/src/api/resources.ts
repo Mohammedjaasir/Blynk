@@ -113,6 +113,8 @@ import type {
   CreateRiderResult,
   StaffRiderDocument,
 } from './types';
+// Category import (2026-10-14).
+import type { CategoryImportResult, CategoryImportSheetRow, CategoryImportTemplate } from './types';
 
 /**
  * Typed wrappers over the existing Blynk endpoints, grouped by domain.
@@ -800,6 +802,18 @@ export const catalog = {
         body: { ids },
       }).then((d) => d.categories),
 
+    /** Category import (2026-10-14): the owner's list and the sheet columns. */
+    importTemplate: () => apiRequest<CategoryImportTemplate>('/admin/categories/import/template'),
+
+    /** `POST /admin/categories/import` - exactly one of `text` or `rows`.
+     * `dry_run` previews; an apply with errors is refused (400
+     * CATEGORY_IMPORT_INVALID). Nothing is deleted; products are untouched. */
+    import: (input: { text: string } | { rows: CategoryImportSheetRow[] }, dryRun: boolean) =>
+      apiRequest<CategoryImportResult>('/admin/categories/import', {
+        method: 'POST',
+        body: { ...input, dry_run: dryRun },
+      }),
+
     /** The category's products (its sub-categories' too) in customer order. */
     productOrder: (id: string) => apiRequest<CategoryProductOrder>(`/admin/categories/${id}/product-order`),
 
@@ -1143,8 +1157,9 @@ export const settings = {
   },
   doctorsAccess: {
     get: () => apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access'),
-    update: (require_sign_in: boolean) =>
-      apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { require_sign_in } }),
+    /** Send either field (or both); the other keeps its stored value. */
+    update: (body: { require_sign_in?: boolean; show_to_customers?: boolean }) =>
+      apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { ...body } }),
   },
   /** Birthday offer: X% off one order in the birthday week, plus a birthday
    * SMS (owner, 2026-10-09). PATCH sends only what changed. */

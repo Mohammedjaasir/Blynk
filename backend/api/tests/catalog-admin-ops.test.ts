@@ -242,6 +242,8 @@ describe('Delivery fee setting and GET /store', () => {
       delivery_slots_enabled: false,
       // Doctors need sign-in (owner, 2026-10-10): pinned off by tests/setup/doctors-access.ts.
       doctors_require_sign_in: false,
+      // Show doctor channelling to customers (owner, 2026-10-14): on by default.
+      doctors_enabled: true,
     });
   });
 

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { deleteImagesQuietly } from '../../api/client';
 import { catalog } from '../../api/resources';
-import type { Category, Promotion } from '../../api/types';
+import type { AdminProduct, Category, CategoryGroup, Promotion } from '../../api/types';
 import {
   BackgroundPicker,
   SOLID_SWATCHES,
@@ -12,7 +12,14 @@ import { ImageUploader } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { PromotionPreview } from '../../components/PromotionPreview';
 import { Badge, ConfirmDialog, EmptyState, Field, Spinner } from '../../components/ui';
-import { MAX_PROMOTION_ORDER, catalogErrorMessage, parseDisplayOrder, planReorder } from '../../lib/catalog';
+import {
+  MAX_PROMOTION_ORDER,
+  catalogErrorMessage,
+  categoryOptions,
+  describePromotionTarget,
+  parseDisplayOrder,
+  planReorder,
+} from '../../lib/catalog';
 import { replacedImages } from '../../lib/image';
 
 /**
@@ -22,10 +29,18 @@ import { replacedImages } from '../../lib/image';
  * only source of that content - the Flutter customer app renders whatever
  * `GET /promotions` returns, in the order and with the background chosen
  * here.
+ *
+ * Banner targets (2026-10-14): a banner opens the whole catalog, a Main
+ * section (category group: CATALOG + group id), a Category or Sub-category
+ * (CATEGORY + slug) or a product (PRODUCT + id). The list shows the server's
+ * resolved `cta_target`; a target that no longer exists reads "Target
+ * missing", and the server's 400 INVALID_PROMOTION_TARGET message is shown
+ * in the form as is.
  */
 export function Promotions() {
   const [rows, setRows] = useState<Promotion[] | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<Promotion | 'new' | null>(null);
@@ -44,6 +59,10 @@ export function Promotions() {
   useEffect(() => {
     void load();
     void catalog.categories.list().then(setCategories).catch(() => setCategories([]));
+    void catalog.categoryGroups
+      .list()
+      .then((r) => setGroups(r.groups ?? []))
+      .catch(() => setGroups([]));
   }, [load]);
 
   async function toggleActive(promotion: Promotion) {
@@ -129,11 +148,11 @@ export function Promotions() {
                 <p className="cat-row__meta">{promotion.subtitle ?? '—'}</p>
                 <p className="cat-row__meta">
                   {promotion.cta_label
-                    ? `${promotion.cta_label} → ${describeDestination(promotion)}`
+                    ? `${promotion.cta_label} → ${describePromotionTarget(promotion)}`
                     : // A full-artwork banner can point somewhere with no button:
                       // the whole card is the tap target, so it is not informational.
                       promotion.cta_destination_type
-                      ? `Whole card → ${describeDestination(promotion)}`
+                      ? `Whole card → ${describePromotionTarget(promotion)}`
                       : 'Informational'}
                 </p>
                 <div className="cat-row__badges">
@@ -181,6 +200,7 @@ export function Promotions() {
         <PromotionDialog
           promotion={editing === 'new' ? null : editing}
           categories={categories}
+          groups={groups}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -236,19 +256,6 @@ function LivePreviewStrip() {
   );
 }
 
-function describeDestination(promotion: Promotion): string {
-  switch (promotion.cta_destination_type) {
-    case 'CATEGORY':
-      return `category "${promotion.cta_destination_value}"`;
-    case 'PRODUCT':
-      return 'a product';
-    case 'CATALOG':
-      return 'all products';
-    default:
-      return 'nothing';
-  }
-}
-
 // New promotions start as a designed banner - one finished picture, like the
 // big shopping apps (owner, 2026-10-08). The other types are one tap away.
 const EMPTY_BACKGROUND: BackgroundValue = {
@@ -264,11 +271,13 @@ const EMPTY_BACKGROUND: BackgroundValue = {
 function PromotionDialog({
   promotion,
   categories,
+  groups,
   onClose,
   onSaved,
 }: {
   promotion: Promotion | null;
   categories: Category[];
+  groups: CategoryGroup[];
   onClose(): void;
   onSaved(): void | Promise<void>;
 }) {
@@ -290,8 +299,15 @@ function PromotionDialog({
       : EMPTY_BACKGROUND
   );
   const [ctaLabel, setCtaLabel] = useState(promotion?.cta_label ?? '');
-  const [destinationType, setDestinationType] = useState<string>(promotion?.cta_destination_type ?? '');
+  // The picker's kind: the stored type, except CATALOG + a group id = 'MAIN'.
+  const [targetKind, setTargetKind] = useState<TargetKind>(() => initialTargetKind(promotion));
   const [destinationValue, setDestinationValue] = useState(promotion?.cta_destination_value ?? '');
+  /** The chosen product's name, for the picker (the stored value is only its id). */
+  const [productName, setProductName] = useState<string | null>(
+    promotion?.cta_target?.level === 'PRODUCT' ? promotion.cta_target.name : null
+  );
+  const destinationType = targetKind === 'MAIN' ? 'CATALOG' : targetKind;
+  const pickerCategories = useMemo(() => categoryOptions(categories), [categories]);
   const [displayOrder, setDisplayOrder] = useState(String(promotion?.display_order ?? 0));
   const [isActive, setIsActive] = useState(promotion?.is_active ?? true);
   const [saving, setSaving] = useState(false);
@@ -342,8 +358,14 @@ function PromotionDialog({
       setError('A promotion with a destination needs a button label.');
       return;
     }
-    if ((destinationType === 'CATEGORY' || destinationType === 'PRODUCT') && !destinationValue.trim()) {
-      setError('Choose where the button should go.');
+    if ((targetKind === 'CATEGORY' || targetKind === 'PRODUCT' || targetKind === 'MAIN') && !destinationValue.trim()) {
+      setError(
+        targetKind === 'MAIN'
+          ? 'Choose the main section.'
+          : targetKind === 'PRODUCT'
+            ? 'Choose the product.'
+            : 'Choose the category or sub-category.'
+      );
       return;
     }
     if (usesBackgroundImage(background.background_type) && !background.background_image_url) {
@@ -373,7 +395,7 @@ function PromotionDialog({
       background_focal_y: usesBackgroundImage(background.background_type) ? background.background_focal_y : 50,
       cta_label: ctaLabel.trim() || null,
       cta_destination_type: destinationType || null,
-      cta_destination_value: destinationType === 'CATEGORY' || destinationType === 'PRODUCT' ? destinationValue.trim() : null,
+      cta_destination_value: targetKind === 'CATALOG' || targetKind === '' ? null : destinationValue.trim(),
       display_order: order.value,
       is_active: isActive,
     };
@@ -462,37 +484,59 @@ function PromotionDialog({
             >
               <select
                 className="input"
-                value={destinationType}
+                value={targetKind}
                 onChange={(e) => {
-                  setDestinationType(e.target.value);
+                  setTargetKind(e.target.value as TargetKind);
                   setDestinationValue('');
+                  setProductName(null);
                 }}
               >
                 <option value="">Nothing (informational)</option>
-                <option value="CATALOG">All products</option>
-                <option value="CATEGORY">A category</option>
-                <option value="PRODUCT">A product (by id)</option>
+                <option value="CATALOG">Whole catalog</option>
+                <option value="MAIN">A main section (home heading)</option>
+                <option value="CATEGORY">A category or sub-category</option>
+                <option value="PRODUCT">A product</option>
               </select>
             </Field>
           </div>
 
-          {destinationType === 'CATEGORY' ? (
-            <Field label="Category">
+          {targetKind === 'MAIN' ? (
+            <Field label="Main section" hint="The heading on the customer home, e.g. Grocery">
               <select className="input" value={destinationValue} onChange={(e) => setDestinationValue(e.target.value)}>
-                <option value="">Select a category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.slug}>
-                    {category.name}
+                <option value="">Select a main section</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                    {group.is_active ? '' : ' (off)'}
                   </option>
                 ))}
               </select>
             </Field>
           ) : null}
 
-          {destinationType === 'PRODUCT' ? (
-            <Field label="Product id" hint="Copy the id from the product edit URL">
-              <input className="input" value={destinationValue} onChange={(e) => setDestinationValue(e.target.value)} />
+          {targetKind === 'CATEGORY' ? (
+            <Field label="Category or sub-category" hint="Sub-categories are the sidebar items inside a category">
+              <select className="input" value={destinationValue} onChange={(e) => setDestinationValue(e.target.value)}>
+                <option value="">Select a category</option>
+                {pickerCategories.map((option) => (
+                  <option key={option.id} value={option.slug}>
+                    {option.label}
+                    {option.isActive ? '' : ' (off)'}
+                  </option>
+                ))}
+              </select>
             </Field>
+          ) : null}
+
+          {targetKind === 'PRODUCT' ? (
+            <TargetProductPicker
+              selectedId={destinationValue || null}
+              selectedName={productName}
+              onPick={(product) => {
+                setDestinationValue(product?.id ?? '');
+                setProductName(product?.name ?? null);
+              }}
+            />
           ) : null}
         </section>
 
@@ -550,6 +594,121 @@ function PromotionDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+type TargetKind = '' | 'CATALOG' | 'MAIN' | 'CATEGORY' | 'PRODUCT';
+
+function initialTargetKind(promotion: Promotion | null): TargetKind {
+  const type = promotion?.cta_destination_type ?? null;
+  if (!type) return '';
+  if (type === 'CATALOG') return promotion?.cta_destination_value ? 'MAIN' : 'CATALOG';
+  return type;
+}
+
+/**
+ * The banner's product: search `GET /admin/products?search=` (a short pause
+ * after typing) and pick one. Switched-off products are listed too - a
+ * banner can be prepared before the product goes live.
+ */
+function TargetProductPicker({
+  selectedId,
+  selectedName,
+  onPick,
+}: {
+  selectedId: string | null;
+  selectedName: string | null;
+  onPick(product: AdminProduct | null): void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<AdminProduct[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setResults(null);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setBusy(true);
+      catalog.products
+        .list({ search: term, limit: 20 })
+        .then((rows) => {
+          if (!cancelled) {
+            setResults(rows);
+            setError(null);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) setError(catalogErrorMessage(err));
+        })
+        .finally(() => {
+          if (!cancelled) setBusy(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  if (selectedId) {
+    return (
+      <div className="field">
+        <span className="field__label">Product</span>
+        <p className="card__row">
+          <span className="card__value">{selectedName ?? `Product ${selectedId}`}</span>
+          <button type="button" className="button button--ghost button--sm" onClick={() => onPick(null)}>
+            Change
+          </button>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="combo-search">
+      <Field label="Find the product" hint="Type at least 2 letters of its name or SKU">
+        <input
+          className="input"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.preventDefault();
+          }}
+        />
+      </Field>
+      {busy ? <Spinner label="Searching products" /> : null}
+      {error ? <p className="field__error">{error}</p> : null}
+      {results && !busy && results.length === 0 ? <p className="form__note">No products match.</p> : null}
+      {results && results.length > 0 ? (
+        <ul className="combo-search__results" aria-label="Product results">
+          {results.map((product) => (
+            <li key={product.id} className="combo-search__row">
+              <span className="combo-search__name">
+                {product.name}
+                <span className="cat-row__meta">
+                  {[product.unit, product.sku, product.is_active ? null : 'off'].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                aria-label={`Choose ${product.name}`}
+                onClick={() => onPick(product)}
+              >
+                Choose
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

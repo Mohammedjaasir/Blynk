@@ -3965,3 +3965,49 @@ a.button {
   flex: 0 1 140px;
   margin: 0;
 }
+
+/* ------------------------------------------ category import tree (2026-10-14) */
+.cat-import,
+.cat-import__level {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.cat-import__level {
+  margin-top: 6px;
+  padding-left: 14px;
+  border-left: 2px solid var(--line);
+}
+.cat-import__main {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.cat-import__node {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.cat-import__name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.cat-import__badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cat-import__notes {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  padding-left: 18px;
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}
+.cat-import__notes--warn {
+  color: var(--danger);
+}

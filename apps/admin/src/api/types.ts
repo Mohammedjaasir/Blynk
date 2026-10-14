@@ -182,6 +182,94 @@ export interface CategoryGroupDeleteResult {
   released_category_count: number;
 }
 
+// ------------------------------------------------------ category import
+/**
+ * Import categories (owner, 2026-10-14; backend catalog.category-import.ts).
+ * Main = a category group (home section), Category = a top-level category
+ * (a tile), Sub-category = a child category (the sidebar inside it).
+ */
+export type CategoryImportAction = 'create' | 'update' | 'keep';
+
+export interface CategoryImportNode {
+  name: string;
+  id: string | null;
+  action: CategoryImportAction;
+  changes: string[];
+  /** Whether customers will see it (an existing item keeps its own state). */
+  active: boolean;
+  warnings: string[];
+  /** Text line or sheet row it came from. */
+  source: number;
+}
+export interface CategoryImportSubNode extends CategoryImportNode {
+  display_order: number;
+}
+export interface CategoryImportCategoryNode extends CategoryImportNode {
+  display_order: number;
+  sub_categories: CategoryImportSubNode[];
+}
+export interface CategoryImportMainNode extends CategoryImportNode {
+  sort_order: number;
+  categories: CategoryImportCategoryNode[];
+}
+
+export interface CategoryImportIssue {
+  line: number | null;
+  message: string;
+}
+
+export interface CategoryImportCounts {
+  create: number;
+  update: number;
+  keep: number;
+}
+
+export interface CategoryImportResult {
+  dry_run: boolean;
+  summary: {
+    mains: CategoryImportCounts;
+    categories: CategoryImportCounts;
+    sub_categories: CategoryImportCounts;
+    /** Existing groups/categories not in the list, kept after the listed ones. */
+    others_reordered: number;
+  };
+  tree: CategoryImportMainNode[];
+  warnings: string[];
+  errors: CategoryImportIssue[];
+  ignored_lines: CategoryImportIssue[];
+}
+
+/** One spreadsheet row (keys are matched loosely by the API); `row` = the sheet row. */
+export type CategoryImportSheetRow = Record<string, string | number> & { row: number };
+
+export type CategoryImportInput = { text: string } | { rows: CategoryImportSheetRow[] };
+
+/** GET /admin/categories/import/template. */
+export interface CategoryImportTemplate {
+  text: string;
+  columns: string[];
+}
+
+/** GET /admin/products/remove-images/preview (owner, 2026-10-14; ADMIN only). */
+export interface RemoveImagesPreview {
+  products: number;
+  combos: number;
+  /** Distinct uploaded files the cleared links point at. */
+  files: number;
+  files_on_disk: number;
+  /** Links to images hosted elsewhere (cleared, nothing to delete). */
+  external_links: number;
+}
+
+/** POST /admin/products/remove-images {confirm: "REMOVE"}. */
+export interface RemoveImagesResult {
+  products_cleared: number;
+  combos_cleared: number;
+  files_deleted: number;
+  files_missing: number;
+  files_kept_in_use: number;
+}
+
 /** DELETE /admin/products/:id - HARD when never ordered, SOFT (hidden) otherwise. */
 export interface ProductDeleteResult {
   product_id: string;
@@ -277,7 +365,10 @@ export interface CustomerSmsLanguageSetting {
 export interface ImportRow {
   row?: number;
   name: string;
+  /** A name or slug; "Rice & Flour > Rice" picks a sub-category. */
   category: string;
+  /** Optional: the sub-category (sidebar item) inside `category` (owner, 2026-10-14). */
+  sub_category?: string | null;
   unit: string;
   pack_size?: string | null;
   /** The purchase cost (the older header cost_price is read into this). */
@@ -495,10 +586,31 @@ export interface Promotion {
   cta_label: string | null;
   cta_destination_type: 'CATEGORY' | 'PRODUCT' | 'CATALOG' | null;
   cta_destination_value: string | null;
+  /**
+   * What the destination points at (owner, 2026-10-14). null = no
+   * destination, or it no longer exists. Absent on an older API.
+   */
+  cta_target?: PromotionTarget | null;
   display_order: number;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+/**
+ * A promotion's resolved destination (backend promotion.targets.ts):
+ * MAIN = a category group (stored CATALOG + group id), CATALOG = the whole
+ * catalog, CATEGORY / SUB_CATEGORY = stored CATEGORY + slug, PRODUCT = id.
+ */
+export interface PromotionTarget {
+  level: 'MAIN' | 'CATEGORY' | 'SUB_CATEGORY' | 'PRODUCT' | 'CATALOG';
+  id: string | null;
+  slug: string | null;
+  name: string | null;
+  parent_id: string | null;
+  parent_slug: string | null;
+  parent_name: string | null;
+  is_active: boolean | null;
 }
 
 export interface Paginated<T> {
@@ -826,6 +938,12 @@ export interface RiderTripsSetting {
  * /admin/settings/doctors-access. */
 export interface DoctorsAccessSetting {
   require_sign_in: boolean;
+  /**
+   * Show doctor channelling to customers (owner, 2026-10-14). Off: the
+   * customer apps hide doctors and new bookings are refused; existing
+   * appointments stay visible and cancellable. Absent on an older API = on.
+   */
+  show_to_customers?: boolean;
   updated_at: string | null;
 }
 

@@ -28,7 +28,12 @@ import { getGlobalMarkup } from './catalog.pricing.js';
  *   product stock moves through the Inventory screens (restock/adjust), so an
  *   import can never silently rewrite a count.
  * - The category must already exist (matched by name or slug, ignoring case);
- *   an import never invents categories from typos.
+ *   an import never invents categories from typos. A product can sit in a
+ *   sub-category (owner, 2026-10-14: "main category - side category if
+ *   available"): fill sub_category next to category, or write the category
+ *   cell as "Parent > Child" (also › or →). A name that matches more than one
+ *   category (e.g. "Rice" as a category and as a sub-category of "Rice &
+ *   Flour") is an error asking for the parent or the slug - never a guess.
  * - Pricing (migration 044; owner, 2026-10-13). purchase_cost (or the older
  *   header cost_price) is the purchase cost. Then:
  *     selling_price given  -> FIXED at exactly that price (a price below cost
@@ -91,6 +96,8 @@ interface CleanRow {
   row: number;
   name: string;
   category: string;
+  /** Optional: a sub-category of `category` (matched within it). */
+  sub_category?: string;
   unit: string;
   pack_size?: string;
   cost_price: number;
@@ -157,6 +164,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
 
   const name = text(raw.name);
   const category = text(raw.category);
+  const subCategory = text(raw.sub_category) ?? text(raw.subcategory);
   const unit = text(raw.unit);
   const packSize = text(raw.pack_size);
   const sku = text(raw.sku);
@@ -239,6 +247,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
       row: rowNo,
       name: name!,
       category: category!,
+      sub_category: subCategory,
       unit: unit!,
       pack_size: packSize,
       cost_price: cost!,
@@ -419,11 +428,7 @@ export async function importProducts(input: ImportProductsInput, actorId: string
     db.selectFrom('categories').select(['id', 'name', 'slug', 'parent_id', 'markup_percent']).where('deleted_at', 'is', null).execute(),
     getGlobalMarkup(),
   ]);
-  const categoryByKey = new Map<string, string>();
-  for (const c of categories) {
-    categoryByKey.set(c.slug.toLowerCase(), c.id);
-    categoryByKey.set(c.name.trim().toLowerCase(), c.id);
-  }
+  const resolveCategory = categoryResolver(categories);
   // Migration 044: what each category's products inherit (v_product_catalog's rule).
   const ownMarkup = new Map(categories.map((c) => [c.id, c.markup_percent === null ? null : Number(c.markup_percent)]));
   const markups: CategoryMarkups = new Map(
@@ -441,8 +446,9 @@ export async function importProducts(input: ImportProductsInput, actorId: string
 
     let categoryId: string | undefined;
     if (row) {
-      categoryId = categoryByKey.get(row.category.toLowerCase());
-      if (!categoryId) errors.push({ field: 'category', message: `No category called '${row.category}'` });
+      const resolved = resolveCategory(row.category, row.sub_category);
+      if ('error' in resolved) errors.push(resolved.error);
+      else categoryId = resolved.id;
       const firstRow = seenSkus.get(row.sku);
       if (firstRow !== undefined) {
         errors.push({ field: 'sku', message: `SKU ${row.sku} is already used on row ${firstRow} of this file` });
@@ -481,6 +487,51 @@ export async function importProducts(input: ImportProductsInput, actorId: string
   }
   logger.info({ ...summary, dryRun, actorId, rows: input.rows.length }, 'Product import processed');
   return { dry_run: dryRun, summary, results };
+}
+
+type CategoryRef = { id: string; name: string; slug: string; parent_id: string | null };
+const CATEGORY_PATH = /\s*(?:>|›|→)\s*/;
+const nameKey = (v: string) => v.replace(/\s+/g, ' ').trim().toLowerCase();
+
+/**
+ * Finds a row's category: "Name" or "slug", "Parent > Child", or category +
+ * sub_category. Ambiguous names are an error (owner, 2026-10-14).
+ */
+export function categoryResolver(categories: CategoryRef[]) {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const label = (c: CategoryRef) => (c.parent_id && byId.get(c.parent_id) ? `${byId.get(c.parent_id)!.name} > ${c.name}` : c.name);
+  const matches = (value: string, pool: CategoryRef[]) => {
+    const k = nameKey(value);
+    const bySlug = pool.filter((c) => c.slug.toLowerCase() === k);
+    if (bySlug.length) return bySlug;
+    return pool.filter((c) => nameKey(c.name) === k);
+  };
+  const one = (value: string, pool: CategoryRef[], field: string, within?: CategoryRef): { id: string } | { error: { field: string; message: string } } => {
+    const found = matches(value, pool);
+    if (found.length === 1) return { id: found[0].id };
+    if (!found.length) {
+      return { error: { field, message: within ? `No sub-category called '${value}' inside '${within.name}'` : `No category called '${value}'` } };
+    }
+    return {
+      error: {
+        field,
+        message: `'${value}' matches more than one category (${found.map(label).join('; ')}). Write it as 'Category > Sub-category' or use the slug.`,
+      },
+    };
+  };
+  return (categoryCell: string, subCell?: string) => {
+    const parts = categoryCell.split(CATEGORY_PATH).filter(Boolean);
+    if (parts.length > 2) return { error: { field: 'category', message: `'${categoryCell}' has too many levels; use 'Category > Sub-category'` } };
+    if (parts.length === 2 && subCell) {
+      return { error: { field: 'sub_category', message: 'Give the sub-category either in the category cell or in sub_category, not both' } };
+    }
+    const [parentText, childText] = parts.length === 2 ? parts : [parts[0] ?? categoryCell, subCell];
+    if (!childText) return one(parentText, categories, 'category');
+    const parent = one(parentText, categories.filter((c) => !c.parent_id), 'category');
+    if ('error' in parent) return parent;
+    const parentRef = byId.get(parent.id)!;
+    return one(childText, categories.filter((c) => c.parent_id === parent.id), parts.length === 2 ? 'category' : 'sub_category', parentRef);
+  };
 }
 
 /** Picks a free slug for a new product: the name, else name + SKU. */

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { categories as categoriesApi, promotions as promotionsApi } from '../api/resources';
-import type { Category, Promotion } from '../api/types';
+import {
+  categories as categoriesApi,
+  categoryGroups as groupsApi,
+  products as productsApi,
+  promotions as promotionsApi,
+} from '../api/resources';
+import type { AdminProduct, Category, CategoryGroup, Promotion } from '../api/types';
+import { categoryOptions, SUB_CATEGORY_SEPARATOR } from '../lib/categoryTree';
 import {
   BackgroundPicker,
   GRADIENT_PRESETS,
@@ -26,6 +32,8 @@ export function Promotions() {
   const toast = useToast();
   const [rows, setRows] = useState<Promotion[] | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  // Main sections (category groups) for the "Main section" destination.
+  const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Promotion | 'new' | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Promotion | null>(null);
@@ -43,6 +51,10 @@ export function Promotions() {
   useEffect(() => {
     void load();
     void categoriesApi.listAdmin().then(setCategories).catch(() => setCategories([]));
+    void groupsApi
+      .list()
+      .then((r) => setGroups(r.groups))
+      .catch(() => setGroups([]));
   }, [load]);
 
   async function toggleActive(promotion: Promotion) {
@@ -206,6 +218,7 @@ export function Promotions() {
         <PromotionDialog
           promotion={editing === 'new' ? null : editing}
           categories={categories}
+          groups={groups}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -264,7 +277,33 @@ export function reorderItems(
   return normalised;
 }
 
-function describeDestination(promotion: Promotion): string {
+/**
+ * Where the banner goes, from the server's resolved `cta_target` (owner,
+ * 2026-10-14): "Sub-category: Rice & Flour › Rice", "Main: Grocery"...
+ * null with a destination type = the target no longer exists. An older API
+ * without cta_target falls back to the stored type and value.
+ */
+export function describeDestination(promotion: Promotion): string {
+  const target = promotion.cta_target;
+  if (target !== undefined) {
+    if (!promotion.cta_destination_type) return 'nothing';
+    if (target === null) return 'Target missing';
+    const off = target.is_active === false ? ' (off)' : '';
+    switch (target.level) {
+      case 'MAIN':
+        return `Main: ${target.name ?? ''}${off}`;
+      case 'CATEGORY':
+        return `Category: ${target.name ?? target.slug ?? ''}${off}`;
+      case 'SUB_CATEGORY':
+        return `Sub-category: ${target.parent_name ? `${target.parent_name}${SUB_CATEGORY_SEPARATOR}` : ''}${
+          target.name ?? target.slug ?? ''
+        }${off}`;
+      case 'PRODUCT':
+        return `Product: ${target.name ?? ''}${off}`;
+      default:
+        return 'Whole catalog';
+    }
+  }
   switch (promotion.cta_destination_type) {
     case 'CATEGORY':
       return `category "${promotion.cta_destination_value}"`;
@@ -308,14 +347,41 @@ const EMPTY_BACKGROUND: BackgroundValue = {
   background_image_url: null,
 };
 
+/**
+ * The destination picker's choices (owner, 2026-10-14). Stored in the
+ * existing columns: ALL = CATALOG + null, MAIN = CATALOG + group id,
+ * CATEGORY = CATEGORY + slug (a category or a sub-category), PRODUCT =
+ * PRODUCT + product id.
+ */
+export type TargetKind = '' | 'ALL' | 'MAIN' | 'CATEGORY' | 'PRODUCT';
+
+function initialTarget(promotion: Promotion | null): { kind: TargetKind; value: string } {
+  if (!promotion?.cta_destination_type) return { kind: '', value: '' };
+  const value = promotion.cta_destination_value ?? '';
+  switch (promotion.cta_destination_type) {
+    case 'CATALOG':
+      return value ? { kind: 'MAIN', value } : { kind: 'ALL', value: '' };
+    case 'CATEGORY':
+      // The stored value is the slug; an older row may hold an id.
+      return { kind: 'CATEGORY', value: promotion.cta_target?.slug ?? value };
+    default:
+      return { kind: 'PRODUCT', value };
+  }
+}
+
+const destinationTypeOf = (kind: TargetKind): Promotion['cta_destination_type'] =>
+  kind === 'ALL' || kind === 'MAIN' ? 'CATALOG' : kind === 'CATEGORY' ? 'CATEGORY' : kind === 'PRODUCT' ? 'PRODUCT' : null;
+
 function PromotionDialog({
   promotion,
   categories,
+  groups,
   onClose,
   onSaved,
 }: {
   promotion: Promotion | null;
   categories: Category[];
+  groups: CategoryGroup[];
   onClose(): void;
   onSaved(): void | Promise<void>;
 }) {
@@ -334,12 +400,13 @@ function PromotionDialog({
       : EMPTY_BACKGROUND
   );
   const [ctaLabel, setCtaLabel] = useState(promotion?.cta_label ?? '');
-  const [destinationType, setDestinationType] = useState<string>(
-    promotion?.cta_destination_type ?? ''
+  const [targetKind, setTargetKind] = useState<TargetKind>(() => initialTarget(promotion).kind);
+  const [destinationValue, setDestinationValue] = useState(() => initialTarget(promotion).value);
+  // PRODUCT: the chosen product's name (the stored value is its id).
+  const [productName, setProductName] = useState<string | null>(
+    promotion?.cta_target?.level === 'PRODUCT' ? promotion.cta_target.name : null
   );
-  const [destinationValue, setDestinationValue] = useState(
-    promotion?.cta_destination_value ?? ''
-  );
+  const destinationType = destinationTypeOf(targetKind);
   const [displayOrder, setDisplayOrder] = useState(String(promotion?.display_order ?? 0));
   const [isActive, setIsActive] = useState(promotion?.is_active ?? true);
   const [saving, setSaving] = useState(false);
@@ -360,7 +427,7 @@ function PromotionDialog({
     background_focal_x: promotion?.background_focal_x,
     background_focal_y: promotion?.background_focal_y,
     cta_label: ctaLabel || null,
-    cta_destination_type: (destinationType || null) as Promotion['cta_destination_type'],
+    cta_destination_type: destinationType,
     cta_destination_value: destinationValue || null,
     display_order: Number(displayOrder) || 0,
     is_active: isActive,
@@ -379,8 +446,14 @@ function PromotionDialog({
       setError('A promotion with a destination needs a button label.');
       return;
     }
-    if ((destinationType === 'CATEGORY' || destinationType === 'PRODUCT') && !destinationValue.trim()) {
-      setError('Choose where the button should go.');
+    if ((targetKind === 'MAIN' || targetKind === 'CATEGORY' || targetKind === 'PRODUCT') && !destinationValue.trim()) {
+      setError(
+        targetKind === 'MAIN'
+          ? 'Choose the main section the banner opens.'
+          : targetKind === 'CATEGORY'
+            ? 'Choose the category or sub-category the banner opens.'
+            : 'Choose the product the banner opens.'
+      );
       return;
     }
     if (background.background_type === 'IMAGE' && !background.background_image_url) {
@@ -412,11 +485,8 @@ function PromotionDialog({
         ? background.background_image_url
         : null,
       cta_label: ctaLabel.trim() || null,
-      cta_destination_type: destinationType || null,
-      cta_destination_value:
-        destinationType === 'CATEGORY' || destinationType === 'PRODUCT'
-          ? destinationValue.trim()
-          : null,
+      cta_destination_type: destinationType,
+      cta_destination_value: targetKind === 'ALL' || targetKind === '' ? null : destinationValue.trim(),
       display_order: Number(displayOrder) || 0,
       is_active: isActive,
     };
@@ -483,45 +553,70 @@ function PromotionDialog({
             <Field label="Button goes to">
               <select
                 className="input"
-                value={destinationType}
+                value={targetKind}
                 onChange={(e) => {
-                  setDestinationType(e.target.value);
+                  setTargetKind(e.target.value as TargetKind);
                   setDestinationValue('');
+                  setProductName(null);
                 }}
               >
                 <option value="">Nothing (informational)</option>
-                <option value="CATALOG">All products</option>
-                <option value="CATEGORY">A category</option>
-                <option value="PRODUCT">A product (by id)</option>
+                <option value="ALL">Whole catalog (all products)</option>
+                <option value="MAIN">A main section (home heading)</option>
+                <option value="CATEGORY">A category or sub-category</option>
+                <option value="PRODUCT">A product</option>
               </select>
             </Field>
           </div>
 
-          {destinationType === 'CATEGORY' ? (
-            <Field label="Category">
+          {targetKind === 'MAIN' ? (
+            <Field label="Main section" hint="Opens the catalog at this home section">
               <select
                 className="input"
                 value={destinationValue}
                 onChange={(e) => setDestinationValue(e.target.value)}
               >
-                <option value="">Select a category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.slug}>
-                    {category.name}
+                <option value="">Select a main section</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                    {group.is_active ? '' : ' (hidden)'}
                   </option>
                 ))}
               </select>
             </Field>
           ) : null}
 
-          {destinationType === 'PRODUCT' ? (
-            <Field label="Product id" hint="Copy the id from the product list URL">
-              <input
+          {targetKind === 'CATEGORY' ? (
+            <Field
+              label="Category or sub-category"
+              hint="A sub-category opens its category with that sidebar item selected"
+            >
+              <select
                 className="input"
                 value={destinationValue}
                 onChange={(e) => setDestinationValue(e.target.value)}
-              />
+              >
+                <option value="">Select a category</option>
+                {categoryOptions(categories).map(({ category, label }) => (
+                  <option key={category.id} value={category.slug}>
+                    {label}
+                    {category.is_active ? '' : ' (off)'}
+                  </option>
+                ))}
+              </select>
             </Field>
+          ) : null}
+
+          {targetKind === 'PRODUCT' ? (
+            <ProductPicker
+              value={destinationValue}
+              name={productName}
+              onChange={(id, name) => {
+                setDestinationValue(id);
+                setProductName(name);
+              }}
+            />
           ) : null}
         </section>
 
@@ -598,3 +693,84 @@ function PromotionDialog({
 }
 
 export { GRADIENT_PRESETS };
+
+/**
+ * Searchable product picker for a PRODUCT destination: type part of a name,
+ * SKU or barcode (GET /admin/products?search=) and choose a result.
+ */
+function ProductPicker({
+  value,
+  name,
+  onChange,
+}: {
+  value: string;
+  name: string | null;
+  onChange(id: string, name: string | null): void;
+}) {
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<AdminProduct[] | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const term = search.trim();
+    if (term.length < 2) {
+      setResults(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      productsApi
+        .searchAdmin(term)
+        .then((rows) => {
+          if (cancelled) return;
+          setResults(rows);
+          setSearchError(null);
+        })
+        .catch((err) => {
+          if (!cancelled) setSearchError(errorMessage(err, 'Could not search products.'));
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [search]);
+
+  return (
+    <div className="field">
+      <span className="field__label">Product</span>
+      <span className="field__hint" aria-live="polite">
+        {value ? `Selected: ${name ?? value}` : 'No product selected yet'}
+      </span>
+      <input
+        className="input"
+        type="search"
+        aria-label="Search products"
+        placeholder="Search by name, SKU or barcode"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+      {searchError ? <span className="field__error">{searchError}</span> : null}
+      {results === null ? null : results.length === 0 ? (
+        <span className="field__hint">No products match.</span>
+      ) : (
+        <ul className="picker-results" aria-label="Matching products">
+          {results.map((product) => (
+            <li key={product.id}>
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                aria-pressed={product.id === value}
+                onClick={() => onChange(product.id, product.name)}
+              >
+                {product.name}
+                {product.category_name ? ` · ${product.category_name}` : ''}
+                {product.is_active ? '' : ' (off)'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

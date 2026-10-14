@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client';
+import type { Promotion } from '../api/types';
 
 /**
  * The API's refusals in the operator's words, for Products/Categories/
@@ -278,5 +279,93 @@ export function comboNotLiveLabel(reason: string | null): string {
       return 'Hidden: items are now cheaper than the combo';
     default:
       return 'Not on sale';
+  }
+}
+
+/** One entry of a category picker (product form, promotion target). */
+export interface CategoryOption {
+  id: string;
+  slug: string;
+  /** "Rice & Flour" for a category, "Rice & Flour › Rice" for a sub-category. */
+  label: string;
+  /** Null for a top-level category. */
+  parentId: string | null;
+  isActive: boolean;
+}
+
+const byArrangeOrder = (a: { display_order: number; name: string }, b: { display_order: number; name: string }) =>
+  a.display_order - b.display_order || a.name.localeCompare(b.name);
+
+/**
+ * Categories in customer order for a picker: each top-level category
+ * (display_order, then name - the Arrange rule) followed by its
+ * sub-categories in the same order, labelled "Category › Sub-category" so a
+ * sub-category named like another category is never ambiguous. A child whose
+ * parent is missing from the list is shown on its own at the end.
+ */
+export function categoryOptions(
+  rows: Array<{ id: string; name: string; slug: string; display_order: number; is_active: boolean; parent_id?: string | null }>
+): CategoryOption[] {
+  const ids = new Set(rows.map((c) => c.id));
+  const isOrphan = (c: { parent_id?: string | null }) => Boolean(c.parent_id) && !ids.has(c.parent_id!);
+  const top = [
+    ...rows.filter((c) => !c.parent_id).sort(byArrangeOrder),
+    ...rows.filter(isOrphan).sort(byArrangeOrder),
+  ];
+  const out: CategoryOption[] = [];
+  for (const parent of top) {
+    const orphan = Boolean(parent.parent_id);
+    out.push({ id: parent.id, slug: parent.slug, label: parent.name, parentId: orphan ? parent.parent_id! : null, isActive: parent.is_active });
+    if (orphan) continue;
+    for (const child of rows.filter((c) => c.parent_id === parent.id).sort(byArrangeOrder)) {
+      out.push({
+        id: child.id,
+        slug: child.slug,
+        label: `${parent.name} › ${child.name}`,
+        parentId: parent.id,
+        isActive: child.is_active,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Where a promotion's button / card leads, in staff words, from the server's
+ * resolved `cta_target` (2026-10-14): "Main: Grocery", "Category: Rice &
+ * Flour", "Sub-category: Rice & Flour › Rice", "Product: Samba 5kg", "all
+ * products"; "(off)" when the target is switched off; "Target missing" when a
+ * destination is set but points at nothing any more. An older API without
+ * `cta_target` falls back to the stored type and value.
+ */
+export function describePromotionTarget(
+  promotion: Pick<Promotion, 'cta_destination_type' | 'cta_destination_value' | 'cta_target'>
+): string {
+  const target = promotion.cta_target;
+  if (target === undefined) {
+    switch (promotion.cta_destination_type) {
+      case 'CATEGORY':
+        return `category "${promotion.cta_destination_value}"`;
+      case 'PRODUCT':
+        return 'a product';
+      case 'CATALOG':
+        return 'all products';
+      default:
+        return 'nothing';
+    }
+  }
+  if (target === null) return promotion.cta_destination_type ? 'Target missing' : 'nothing';
+  const off = target.is_active === false ? ' (off)' : '';
+  switch (target.level) {
+    case 'MAIN':
+      return `Main: ${target.name ?? '?'}${off}`;
+    case 'CATEGORY':
+      return `Category: ${target.name ?? target.slug ?? '?'}${off}`;
+    case 'SUB_CATEGORY':
+      return `Sub-category: ${target.parent_name ? `${target.parent_name} › ` : ''}${target.name ?? target.slug ?? '?'}${off}`;
+    case 'PRODUCT':
+      return `Product: ${target.name ?? '?'}${off}`;
+    default:
+      return 'all products';
   }
 }

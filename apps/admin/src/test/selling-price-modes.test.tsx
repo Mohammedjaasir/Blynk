@@ -103,7 +103,7 @@ function renderForm(path = '/products/new') {
 
 async function fillNewProduct(user: ReturnType<typeof userEvent.setup>, categoryId: string, cost: string) {
   await user.type(await screen.findByLabelText('Product name'), 'Test product');
-  await waitFor(() => expect(screen.getByRole('option', { name: 'Rice' })).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole('option', { name: 'Grocery › Rice' })).toBeInTheDocument());
   await user.selectOptions(screen.getByLabelText('Category'), categoryId);
   await user.type(screen.getByLabelText('SKU'), 'TEST-1');
   await user.type(screen.getByLabelText(/^Unit/), '1 kg');

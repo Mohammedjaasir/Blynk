@@ -5,7 +5,7 @@ import { orderingClock } from '../../utils/time.js';
 import { DateTime } from 'luxon';
 import { STORE_TIMEZONE, displayHours, storeStatusAt } from '../../utils/store-hours.js';
 import { storeSchedule } from './store-schedule.js';
-import { doctorsAccess } from './doctors-access.js';
+import { doctorsAccess, doctorsShown } from './doctors-access.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
@@ -803,6 +803,10 @@ export class SettingsService {
       delivery_slots_enabled: schedule.slots.enabled,
       // Owner, 2026-10-10: guests must sign in before the app shows doctors.
       doctors_require_sign_in: doctors.require_sign_in,
+      // Owner, 2026-10-14: false = hide the doctors section entirely (the
+      // discovery and booking routes answer 404 DOCTORS_DISABLED; a
+      // customer's existing appointments stay viewable and cancellable).
+      doctors_enabled: doctorsShown(doctors),
     };
   }
 }

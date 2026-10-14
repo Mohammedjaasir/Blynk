@@ -3,6 +3,7 @@ import { mediaStorage } from '../../utils/storage.js';
 import { promotionRepository } from './promotion.repository.js';
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
+import { describeTargets, normalizePromotionTarget, type PromotionTarget } from './promotion.targets.js';
 import type {
   CreatePromotionInput,
   ReorderPromotionsInput,
@@ -46,7 +47,23 @@ export interface CustomerPromotionDto {
   cta_label: string | null;
   cta_destination_type: string | null;
   cta_destination_value: string | null;
+  /**
+   * Owner, 2026-10-14: what the destination resolves to - level MAIN
+   * (category group), CATEGORY, SUB_CATEGORY (with its parent), PRODUCT or
+   * CATALOG - so the app can open a sub-category inside its parent's
+   * sidebar. Null when there is no destination or it no longer exists (the
+   * card then has no button). See docs/api/catalog-tools.md.
+   */
+  cta_target: PromotionTarget | null;
   display_order: number;
+}
+
+/** Adds cta_target to each row (one batch of lookups). */
+async function withTargets<T extends { cta_destination_type: string | null; cta_destination_value: string | null }>(
+  rows: T[]
+): Promise<Array<T & { cta_target: PromotionTarget | null }>> {
+  const targets = await describeTargets(rows);
+  return rows.map((row, i) => ({ ...row, cta_target: targets[i] ?? null }));
 }
 
 /**
@@ -63,7 +80,7 @@ function clampFocal(value: unknown): number {
 
 export class PromotionService {
   async listActive(): Promise<CustomerPromotionDto[]> {
-    const rows = await promotionRepository.findActive();
+    const rows = await withTargets(await promotionRepository.findActive());
     return rows.map((row) => ({
       id: row.id,
       title: row.title,
@@ -78,12 +95,13 @@ export class PromotionService {
       cta_label: row.cta_label,
       cta_destination_type: row.cta_destination_type,
       cta_destination_value: row.cta_destination_value,
+      cta_target: row.cta_target,
       display_order: row.display_order,
     }));
   }
 
   async listAdmin(isActive?: boolean) {
-    return await promotionRepository.findAll(isActive);
+    return await withTargets(await promotionRepository.findAll(isActive));
   }
 
   async getById(id: string) {
@@ -91,11 +109,15 @@ export class PromotionService {
     if (!promotion) {
       throw new AppError('Promotion not found.', 404, 'PROMOTION_NOT_FOUND');
     }
-    return promotion;
+    return (await withTargets([promotion]))[0];
   }
 
   async create(input: CreatePromotionInput) {
-    return await promotionRepository.create(input);
+    // Owner, 2026-10-14: the target must exist; stored canonically
+    // (category slug, product id, category group id) - promotion.targets.ts.
+    const value = await normalizePromotionTarget(input.cta_destination_type, input.cta_destination_value);
+    const created = await promotionRepository.create({ ...input, cta_destination_value: value });
+    return (await withTargets([created]))[0];
   }
 
   async update(id: string, input: UpdatePromotionInput) {
@@ -182,17 +204,25 @@ export class PromotionService {
       replaced.push(existing.background_image_url);
     }
 
-    const updated = await promotionRepository.update(id, input);
+    // A changed destination must point at something that exists (owner,
+    // 2026-10-14); an untouched one is left alone even if its target was
+    // deleted since, so other edits still save.
+    let write = input;
+    if (input.cta_destination_type !== undefined || input.cta_destination_value !== undefined) {
+      write = { ...input, cta_destination_type: type, cta_destination_value: await normalizePromotionTarget(type, value) };
+    }
+
+    const updated = await promotionRepository.update(id, write);
     if (!updated) {
       throw new AppError('Promotion not found.', 404, 'PROMOTION_NOT_FOUND');
     }
     for (const url of replaced) await this.deleteImageFileIfUnused(url);
-    return updated;
+    return (await withTargets([updated]))[0];
   }
 
   async reorder(input: ReorderPromotionsInput) {
     await promotionRepository.reorder(input.items);
-    return await promotionRepository.findAll();
+    return await withTargets(await promotionRepository.findAll());
   }
 
   async remove(id: string) {

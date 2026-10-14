@@ -5,4 +5,4 @@ import { doctorsAccess } from '../../src/modules/configuration/doctors-access.js
 // written before it browse clinics and doctors as guests, so pin it off here;
 // tests/doctors-access.test.ts switches back to doctorsAccess.realRead to test
 // the stored setting and the default.
-doctorsAccess.read = async () => ({ require_sign_in: false });
+doctorsAccess.read = async () => ({ require_sign_in: false, show_to_customers: true });

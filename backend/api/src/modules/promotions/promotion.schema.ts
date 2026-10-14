@@ -67,7 +67,10 @@ export const createPromotionSchema = z
     background_focal_y: focalPercent.default(50).optional(),
     cta_label: z.string().trim().max(40).nullable().optional(),
     cta_destination_type: z.enum(promotionDestinationTypes).nullable().optional(),
-    // A category slug or a product id; ignored for CATALOG.
+    // CATEGORY: a category or sub-category (slug or id; stored as the slug).
+    // PRODUCT: a product (id or slug; stored as the id). CATALOG: blank for
+    // the whole catalog, or a category group id for one Main section (owner,
+    // 2026-10-14; promotion.targets.ts). The target must exist.
     cta_destination_value: z.string().trim().max(255).nullable().optional(),
     display_order: z.number().int().min(0).max(1000).default(0).optional(),
     is_active: z.boolean().default(true).optional(),

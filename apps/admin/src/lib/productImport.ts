@@ -17,9 +17,27 @@ import { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS, buildTemplateWo
 export { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS };
 
 export type TemplateColumn = (typeof TEMPLATE_COLUMNS)[number];
-/** Every header the import reads: the template's plus the older cost_price (= purchase_cost). */
-export type ImportColumn = TemplateColumn | 'cost_price';
-const READ_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, 'cost_price'];
+/**
+ * Every header the import reads: the template's, the older cost_price
+ * (= purchase_cost) and the optional sub_category (owner, 2026-10-14: the
+ * sidebar item inside `category`; "Rice & Flour > Rice" in the category cell
+ * works too). The shared template (importTemplate.ts, identical in the Ops
+ * app) does not list sub_category; a file may add the column.
+ */
+export type ImportColumn = TemplateColumn | 'cost_price' | 'sub_category';
+const READ_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, 'cost_price', 'sub_category'];
+
+/** Header spellings read as sub_category ("Sub-category", "Subcategory", "Sidebar"). */
+const HEADER_ALIASES: Record<string, string> = {
+  'sub-category': 'sub_category',
+  subcategory: 'sub_category',
+  sub_categories: 'sub_category',
+  sidebar: 'sub_category',
+};
+
+/** Help text for the category cell (the import screen). */
+export const CATEGORY_HELP =
+  'category: an existing category name or slug. For a sub-category (sidebar item) write "Category > Sub-category" (e.g. Rice & Flour > Rice), or put the parent in category and the sub-category in an optional sub_category column. A name that exists under two categories needs its parent or its slug.';
 
 /** Required columns; purchase_cost may be the older cost_price instead. */
 const REQUIRED_COLUMNS: TemplateColumn[] = ['name', 'category', 'unit', 'purchase_cost', 'sku'];
@@ -68,7 +86,10 @@ function cellNumber(value: unknown): number | null {
   return /^-?\d+(\.\d+)?$/.test(text) ? Number(text) : Number.NaN;
 }
 
-const normaliseHeader = (h: unknown) => cellText(h).toLowerCase().replace(/\s+/g, '_');
+const normaliseHeader = (h: unknown) => {
+  const key = cellText(h).toLowerCase().replace(/\s+/g, '_');
+  return HEADER_ALIASES[key] ?? key;
+};
 
 // -------------------------------------------------------------- validation
 /** Check one spreadsheet row and shape it for the API. */
@@ -146,6 +167,7 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
     row,
     name,
     category,
+    ...(optional('sub_category') ? { sub_category: text('sub_category') } : {}),
     unit,
     pack_size: optional('pack_size'),
     purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : 0,

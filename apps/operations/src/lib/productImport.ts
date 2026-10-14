@@ -30,8 +30,25 @@ export { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS } from './import
 export type TemplateColumn = (typeof TEMPLATE_COLUMNS)[number];
 /** The older header for purchase_cost, still read (the server accepts it too). */
 export const LEGACY_COST_COLUMN = 'cost_price';
-export type ImportColumn = TemplateColumn | typeof LEGACY_COST_COLUMN;
-const KNOWN_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, LEGACY_COST_COLUMN];
+/**
+ * Optional sub-category column (2026-10-14): `category` = "Rice & Flour" plus
+ * `sub_category` = "Rice" puts the product in that sidebar item. The same can
+ * be written in the category cell as "Rice & Flour > Rice" (also › or →).
+ * Not in the shared template file (it must stay word for word the Admin
+ * one), but read whenever a sheet has it, under any of these spellings.
+ */
+export const SUB_CATEGORY_COLUMN = 'sub_category';
+const SUB_CATEGORY_ALIASES: Record<string, typeof SUB_CATEGORY_COLUMN> = {
+  sub_category: SUB_CATEGORY_COLUMN,
+  subcategory: SUB_CATEGORY_COLUMN,
+  'sub-category': SUB_CATEGORY_COLUMN,
+  'sub category': SUB_CATEGORY_COLUMN,
+};
+/** Shown on the import screen next to the template columns. */
+export const CATEGORY_HELP =
+  'category can be a category name, its slug, or "Category > Sub-category" (e.g. Rice & Flour > Rice). Or add an optional sub_category column next to category. A name used by more than one category needs its parent or the slug.';
+export type ImportColumn = TemplateColumn | typeof LEGACY_COST_COLUMN | typeof SUB_CATEGORY_COLUMN;
+const KNOWN_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, LEGACY_COST_COLUMN, SUB_CATEGORY_COLUMN];
 
 /** Required; purchase_cost may come as the older cost_price instead. */
 const REQUIRED_COLUMNS: TemplateColumn[] = ['name', 'category', 'unit', 'purchase_cost', 'sku'];
@@ -170,6 +187,8 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
     opening_stock: opening !== null && !Number.isNaN(opening) ? opening : null,
     image_url: imageUrl,
   };
+  const subCategory = text(cells[SUB_CATEGORY_COLUMN]);
+  if (subCategory !== null) data.sub_category = subCategory;
   return { row, data, errors };
 }
 
@@ -181,7 +200,10 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
  */
 export function parseSheet(matrix: Cell[][]): ParsedSheet {
   const fileErrors: string[] = [];
-  const header = (matrix[0] ?? []).map((c) => (text(c) ?? '').toLowerCase());
+  const header = (matrix[0] ?? []).map((c) => {
+    const h = (text(c) ?? '').toLowerCase();
+    return SUB_CATEGORY_ALIASES[h.replace(/\s+/g, ' ')] ?? h;
+  });
   const index = new Map<ImportColumn, number>();
   const ignoredColumns: string[] = [];
   header.forEach((h, i) => {
