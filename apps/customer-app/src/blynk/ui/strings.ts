@@ -88,3 +88,19 @@ export const LOGIN = {
   /** Read by a screen reader for the (decorative) rider picture. */
   heroLabel: 'The Blynk rider bringing groceries',
 } as const;
+
+/** The "Order placed!" screen (src/app/placed.tsx). The stage lines take turns under the headline. */
+export const PLACED = {
+  title: 'Order placed!',
+  packing: 'Your Blynk order is being packed',
+  scheduled: "We'll deliver at the time you picked",
+  basket: '🧺',
+  stagesNow: ['Packing your items…', 'A rider will pick it up soon'],
+  stagesScheduled: ["We'll pack it fresh before your time", 'A rider will bring it to your door'],
+  orderNumber: 'Order number',
+  deliveryTime: 'Delivery time',
+  forWhom: 'For',
+  amount: 'Amount',
+  track: 'Track order',
+  home: 'Back to home',
+} as const;
