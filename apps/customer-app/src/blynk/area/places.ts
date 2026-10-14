@@ -1,8 +1,8 @@
 /*
  * The places around the Blynk store that the delivery-area map shows (owner's sketch,
  * 2026-10-14): the store at the Clock Tower in Dharga Town, the towns inside the radius and
- * the two nearest ones outside it. Coordinates are real, approximate town centres (the
- * distances from the Clock Tower match the owner's sketch to within 0.1 km); the map and the
+ * the two nearest ones outside it. Coordinates are the OpenStreetMap positions of each place
+ * (owner, 2026-10-14: the sketch-fitted ones were wrong); the map and the
  * area list compute every distance from the store location GET /store sends, so they stay
  * right if the store or its radius changes. Whether an address is delivered to is always the
  * server's decision (422 DELIVERY_OUTSIDE_RADIUS).
@@ -28,13 +28,13 @@ export type Place = {
 
 export const PLACES: readonly Place[] = [
   { id: 'dharga-town', name: 'Dharga Town', lat: CLOCK_TOWER.lat, lng: CLOCK_TOWER.lng, label: { side: 'right', dy: 0 }, listed: true },
-  { id: 'aluthgama', name: 'Aluthgama', lat: 6.4348, lng: 80.0008, label: { side: 'left', dy: -4 }, listed: true },
-  { id: 'kande-vihara', name: 'Kande Vihara', lat: 6.4290, lng: 80.0050, label: { side: 'right', dy: -7 }, listed: true },
+  { id: 'aluthgama', name: 'Aluthgama', lat: 6.4326, lng: 79.9989, label: { side: 'left', dy: -4 }, listed: true },
+  { id: 'kande-vihara', name: 'Kande Vihara', lat: 6.4491, lng: 80.0003, label: { side: 'right', dy: -6 }, listed: true },
   { id: 'kaluwamodara', name: 'Kaluwamodara', lat: 6.4262, lng: 80.0040, label: { side: 'right', dy: 9 }, listed: true },
-  { id: 'bentota', name: 'Bentota', lat: 6.4200, lng: 79.9990, label: { side: 'left', dy: 6 }, listed: true },
-  { id: 'moragalla', name: 'Moragalla', lat: 6.4495, lng: 79.9858, label: { side: 'right', dy: -2 }, listed: true },
-  { id: 'beruwala', name: 'Beruwala town', lat: 6.4770, lng: 79.9855, label: { side: 'right', dy: 0 }, listed: false },
-  { id: 'welipenna', name: 'Welipenna', lat: 6.4605, lng: 80.1095, label: { side: 'left', dy: 0 }, listed: false },
+  { id: 'bentota', name: 'Bentota', lat: 6.4215, lng: 79.9979, label: { side: 'left', dy: 6 }, listed: true },
+  { id: 'moragalla', name: 'Moragalla', lat: 6.4467, lng: 79.9898, label: { side: 'left', dy: 4 }, listed: true },
+  { id: 'beruwala', name: 'Beruwala town', lat: 6.4756, lng: 79.9834, label: { side: 'right', dy: 0 }, listed: false },
+  { id: 'welipenna', name: 'Welipenna', lat: 6.4671, lng: 80.1076, label: { side: 'left', dy: 0 }, listed: false },
 ];
 
 /** The store's own town: drawn as the store, not as a separate dot. */
