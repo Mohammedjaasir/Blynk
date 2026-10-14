@@ -25,6 +25,11 @@ export function parseOrder(raw: Order): Order {
     points_discount_amount: n(raw.points_discount_amount),
     total_amount: n(raw.total_amount),
     can_cancel: raw.can_cancel === true,
+    ...(Array.isArray(raw.combos) ? {
+      combos: raw.combos.map((c) => ({
+        ...c, unit_price: n(c.unit_price), subtotal: n(c.subtotal), items_regular_total: n(c.items_regular_total), quantity: n(c.quantity, 1),
+      })),
+    } : {}),
     items: (raw.items ?? []).map((it) => ({
       ...it,
       unit_selling_price: n(it.unit_selling_price),
@@ -52,9 +57,10 @@ export async function getCheckoutInfo(addressId: string, subtotal: number, signa
 
 /** POST /orders/validate-coupon: what the code takes off this cart, without using it. */
 export async function previewCoupon(
-  code: string, items: PlaceOrderBody['items'], addressId: string,
+  code: string, items: PlaceOrderBody['items'], addressId: string, combos: PlaceOrderBody['combos'] = [],
 ): Promise<CouponPreview> {
-  const { coupon } = await authed((t) => apiPost<{ coupon: CouponPreview }>('/orders/validate-coupon', { code, items, address_id: addressId }, t));
+  const body = { code, items, address_id: addressId, ...(combos?.length ? { combos } : {}) };
+  const { coupon } = await authed((t) => apiPost<{ coupon: CouponPreview }>('/orders/validate-coupon', body, t));
   return coupon;
 }
 

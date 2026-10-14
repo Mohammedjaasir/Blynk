@@ -11,14 +11,20 @@ import { deleteAccount, getProfile, SMS_LANGUAGES, type AccountProfile } from '@
 import { formatPhone } from '@/blynk/auth/phone';
 import { needsRegistration, signOut, useSession } from '@/blynk/auth/session';
 import { requestPushPermission } from '@/blynk/push';
+import { fetchPoints, fetchReferral } from '@/blynk/rewards/api';
+import { pointsBalanceText } from '@/blynk/rewards/models';
+import { SHARE_BASE_URL } from '@/blynk/share/links';
+import { shareText } from '@/blynk/share/share';
 import { browserPermission, webPushPossible } from '@/blynk/push/webPlatform';
 import { DEMO } from '@/demo/mode';
 import { C, F } from '@/lib/theme';
 
 /*
- * Profile (Flutter's ProfileScreen): who is signed in, then About you, Your orders, Address book,
- * SMS & offers, Order updates (web push), Help & support, Send feedback, Log out, and - last
- * and set apart - Delete account. A guest browses freely: "Log in" is one clear step.
+ * Profile (Flutter's ProfileScreen, in its order): who is signed in, then About you, Blynk Points
+ * and Refer a friend (each only while its programme is on), Your orders, Address book, SMS &
+ * offers, Channel doctors, My appointments, Order updates (web push), Help & support, Send
+ * feedback, Share the app, About us, Log out, and - last and set apart - Delete account. A guest browses
+ * freely: "Log in" is one clear step.
  */
 export default function Account() {
   const insets = useSafeAreaInsets();
@@ -28,6 +34,17 @@ export default function Account() {
   const [logout, setLogout] = useState(false);
   const [del, dispatch] = useReducer(deleteReducer, { step: 'closed' });
   const [perm, setPerm] = useState(() => (webPushPossible() ? browserPermission() : 'unsupported'));
+  // Flutter ProfileRewardsTiles: the points balance and Refer a friend, each while its programme is on
+  const [points, setPoints] = useState<{ enabled: boolean; text: string } | null>(null);
+  const [referOn, setReferOn] = useState(false);
+
+  useEffect(() => {
+    if (DEMO || !signedIn) return;
+    let alive = true;
+    fetchPoints().then((p) => { if (alive) setPoints({ enabled: p.enabled, text: pointsBalanceText(p.balance, p.valueLkr) }); }).catch(() => undefined);
+    fetchReferral().then((r) => { if (alive) setReferOn(r.enabled); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [signedIn, session?.user.id]);
 
   // a fresh profile for the SMS line (the session keeps only name, phone and email)
   useEffect(() => {
@@ -64,6 +81,11 @@ export default function Account() {
     }
   };
 
+  const shareApp = async () => {
+    const r = await shareText(`Order groceries on Blynk: ${SHARE_BASE_URL}`, 'Blynk');
+    if (r === 'copied') showNotice('Link copied');
+  };
+
   const askPush = async () => {
     const r = await requestPushPermission();
     setPerm(r);
@@ -92,9 +114,17 @@ export default function Account() {
 
         <Card>
           {signedIn && <Row icon="🙂" title="About you" sub="Name, email and birthday" onPress={() => router.push('/profile')} />}
+          {signedIn && points?.enabled && <Row icon="⭐" title="Blynk Points" sub={points.text} onPress={() => router.push('/points')} />}
+          {signedIn && referOn && <Row icon="🎁" title="Refer a friend" sub="Invite friends with your code" onPress={() => router.push('/refer')} />}
           <Row icon="🧾" title="Your orders" onPress={() => router.push('/orders')} />
-          <Row icon="📍" title="Address book" onPress={() => router.push('/addresses')} last={!signedIn} />
-          {signedIn && <Row icon="💬" title="SMS & offers" sub={smsSub} onPress={() => router.push('/settings')} last />}
+          <Row icon="📍" title="Address book" onPress={() => router.push('/addresses')} />
+          {/* a guest is sent to log in first (Flutter SmsPreferencesScreen.open) */}
+          <Row icon="💬" title="SMS & offers" sub={smsSub} onPress={() => router.push(signedIn ? '/settings' : '/login')} last />
+        </Card>
+
+        <Card>
+          <Row icon="🩺" title="Channel doctors" sub="Book an appointment with a doctor" onPress={() => router.push('/doctors')} last={!signedIn} />
+          {signedIn && <Row icon="📅" title="My appointments" onPress={() => router.push('/doctors/appointments')} last />}
         </Card>
 
         {signedIn && perm !== 'unsupported' && !DEMO && (
@@ -112,7 +142,9 @@ export default function Account() {
 
         <Card>
           <Row icon="🛟" title="Help & support" sub="Call or WhatsApp the store" onPress={() => router.push('/help')} />
-          <Row icon="✍️" title="Send feedback" onPress={() => router.push(signedIn ? '/feedback' : '/login')} last={!signedIn} />
+          <Row icon="✍️" title="Send feedback" onPress={() => router.push(signedIn ? '/feedback' : '/login')} />
+          <Row icon="📤" title="Share the app" onPress={() => void shareApp()} />
+          <Row icon="ℹ️" title="About us" onPress={() => router.push('/about')} last={!signedIn} />
           {signedIn && <Row icon="↩️" title="Log out" onPress={() => setLogout(true)} last />}
         </Card>
 

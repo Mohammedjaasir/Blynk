@@ -27,6 +27,7 @@ import {
 } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
 import { DoctorsHomeEntry } from '@/blynk/doctors/DoctorsHomeEntry';
+import { ComboRail } from '@/blynk/combos/ComboViews';
 import { BirthdayOfferBanner } from '@/blynk/rewards/BirthdayOfferBanner';
 import { SPLASH_LOGO, SPLASH_LOGO_H, SPLASH_LOGO_W } from '@/lib/splash';
 import { PressScale, RollingText, Skeleton, StampBadge } from '@/components/ui';
@@ -353,6 +354,8 @@ export default function Home() {
                     <DoctorsHomeEntry />
                   </View>
                 )}
+                {/* live: Combo packs (Flutter home combo rail; GET /combos, nothing until one is live) */}
+                {!DEMO && <ComboRail style={{ marginTop: 20 }} />}
 
                 {granted && (DEMO || !!live?.vs) && <VsSection live={live?.vs ?? null} />}
 

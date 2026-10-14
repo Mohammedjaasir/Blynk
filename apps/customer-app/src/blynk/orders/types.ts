@@ -69,6 +69,17 @@ export interface OrderItem {
   order_combo_id?: string | null;
 }
 
+/** One combo pack line of an order (order_combos; its items carry order_combo_id). */
+export interface OrderCombo {
+  id: string;
+  combo_id: string | null;
+  name: string;
+  unit_price: number;
+  quantity: number;
+  subtotal: number;
+  items_regular_total: number;
+}
+
 export interface OrderHistoryEntry {
   id: string; order_id: string; old_status: OrderStatus | null; new_status: OrderStatus; created_at: string;
 }
@@ -101,10 +112,19 @@ export interface Order {
   delivery_address_line2: string | null;
   delivery_city: string | null;
   delivery_instructions: string | null;
+  /**
+   * The delivery point (GET /orders/:id selects every orders column). Postgres DECIMAL columns
+   * reach the app as strings ("7.4831"), so read them through destinationOf (tracking), which
+   * accepts either; null/absent on an older server.
+   */
+  delivery_latitude?: number | string | null;
+  delivery_longitude?: number | string | null;
   placed_at: string | null;
   created_at: string;
   can_cancel: boolean;
   items: OrderItem[];
+  /** Combo packs in this order (migration 033; absent on an older server). */
+  combos?: OrderCombo[];
   history?: OrderHistoryEntry[];
   delivery?: { assignment_status: string; assigned_at: string | null; picked_up_at: string | null; delivered_at: string | null } | null;
   /** GET /orders/:id only, while OUT_FOR_DELIVERY. */
@@ -121,6 +141,8 @@ export interface OrderList {
 export interface PlaceOrderBody {
   address_id: string;
   items: { product_id: string; quantity: number }[];
+  /** Combo packs (migration 033): the server charges the combo price. */
+  combos?: { combo_id: string; quantity: number }[];
   idempotency_key: string;
   coupon_code?: string;
   delivery_note?: string;

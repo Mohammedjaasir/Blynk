@@ -1,4 +1,4 @@
-import type { CartLine } from '@/blynk/cart/cartStore';
+import type { CartLine, ComboLine } from '@/blynk/cart/cartStore';
 import { formatLkr } from '@/blynk/lib/money';
 import { storage } from '@/blynk/lib/storage';
 import { rewardsSummary, type DiscountKind } from '@/blynk/checkout/rewards';
@@ -18,9 +18,17 @@ export function orderItems(lines: CartLine[]): PlaceOrderBody['items'] {
     .map((l) => ({ product_id: l.product.id, quantity: l.quantity }));
 }
 
+/** The combo packs the order carries (POST /orders `combos`): available ones only, like items. */
+export function orderCombos(combos: ComboLine[] | undefined): NonNullable<PlaceOrderBody['combos']> {
+  return (combos ?? [])
+    .filter((l) => l.combo.is_available && l.quantity > 0)
+    .map((l) => ({ combo_id: l.combo.id, quantity: l.quantity }));
+}
+
 /** Everything that makes this checkout a different order. Same signature = same idempotency key. */
 export function checkoutSignature(args: {
   items: PlaceOrderBody['items']; addressId: string; coupon?: string | null; note?: string | null;
+  combos?: PlaceOrderBody['combos'];
   /** The rest of the body that makes it a different order: slot, points, receiver, needs help. */
   extra?: Pick<PlaceOrderBody, 'delivery_slot_start' | 'use_points' | 'for_someone_else' | 'recipient' | 'needs_help'>;
 }): string {
@@ -29,7 +37,8 @@ export function checkoutSignature(args: {
   const more = x && (x.delivery_slot_start || x.use_points || x.for_someone_else || x.needs_help)
     ? [x.delivery_slot_start ?? '', x.use_points ? 'P' : '', x.for_someone_else ? `R:${x.recipient?.name ?? ''}:${x.recipient?.phone ?? ''}` : '', x.needs_help ? 'H' : ''].join(';')
     : null;
-  return [items, args.addressId, args.coupon ?? '', (args.note ?? '').trim(), ...(more ? [more] : [])].join('|');
+  const combos = [...(args.combos ?? [])].sort((a, b) => a.combo_id.localeCompare(b.combo_id)).map((c) => `C${c.combo_id}x${c.quantity}`).join(',');
+  return [combos ? `${items}+${combos}` : items, args.addressId, args.coupon ?? '', (args.note ?? '').trim(), ...(more ? [more] : [])].join('|');
 }
 
 /** 128 random bits as hex (the server allows up to 128 characters). */

@@ -10,6 +10,7 @@ import { listOrders } from '@/blynk/orders/api';
 import { placeErrorCopy } from '@/blynk/orders/errors';
 import { itemCountText, orderTime, statusLabel, statusTone, type OrderTone } from '@/blynk/orders/status';
 import type { Order } from '@/blynk/orders/types';
+import { openSignIn } from '@/blynk/ui/signIn';
 import { BackIcon, ChevronIcon } from '@/components/icons';
 import { PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
@@ -77,7 +78,7 @@ export default function Orders() {
         {DEMO ? (
           <Empty title="Your orders appear here" sub="Ordering opens soon. This is a preview." />
         ) : !signedIn ? (
-          <Empty title="Log in to see your orders" sub="Your past and current orders appear here. Log in from your cart." cta="Go to cart" to="/cart" />
+          <Empty title="Log in to see your orders" sub="Your past and current orders appear here." cta="Log in" onPress={openSignIn} />
         ) : error && !orders ? (
           <Empty title="Couldn't load your orders" sub={error} cta="Try again" onPress={load} />
         ) : !orders ? (

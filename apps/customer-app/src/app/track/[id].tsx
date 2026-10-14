@@ -9,6 +9,7 @@ import { getOrder } from '@/blynk/orders/api';
 import { statusLabel } from '@/blynk/orders/status';
 import type { Order } from '@/blynk/orders/types';
 import { isTrackable, LiveTracking } from '@/blynk/tracking';
+import { openSignIn } from '@/blynk/ui/signIn';
 import { BackIcon } from '@/components/icons';
 import { PressScale } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
@@ -52,7 +53,7 @@ export default function TrackOrder() {
 
   let body: React.ReactNode;
   if (DEMO) body = <Note text="Live tracking works in the live app." />;
-  else if (!signedIn) body = <Note text="Log in to track your order." />;
+  else if (!signedIn) body = <Note text="Log in to track your order." cta="Log in" onRetry={openSignIn} />;
   else if (error && !order) body = <Note text={error} onRetry={load} />;
   else if (!order) body = <View style={styles.center}><ActivityIndicator color={C.brandInk} /></View>;
   else if (!isTrackable(order)) {

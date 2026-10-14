@@ -47,6 +47,11 @@ const COPY: Record<string, PlaceErrorCopy> = {
   COUPON_FIRST_ORDER_ONLY: { title: 'First order only', message: 'That coupon is only for a first order.', action: 'coupon' },
   COUPON_MIN_SUBTOTAL: { title: 'Add more items', message: "Your cart is below that coupon's minimum. Add items or remove the code.", action: 'coupon' },
   COUPONS_DISABLED: { title: 'Coupons are off', message: 'Coupon codes are not available right now.', action: 'coupon' },
+  // combo packs (Flutter app_errors.dart): ended, changed or sold out since it was added
+  COMBO_NOT_FOUND: { title: 'Combo pack ended', message: "A combo pack in your cart isn't available anymore. Remove it and try again.", action: 'reconcile' },
+  COMBO_UNAVAILABLE: { title: 'Combo pack unavailable', message: "A combo pack in your cart isn't available right now. Remove it and try again.", action: 'reconcile' },
+  COMBO_OUT_OF_STOCK: { title: 'Combo pack sold out', message: 'A combo pack in your cart has sold out. Remove it or lower the quantity and try again.', action: 'reconcile' },
+  COMBO_QUANTITY_TOO_HIGH: { title: 'Too many packs', message: 'You can order at most 20 of one combo pack.', action: null },
   POINTS_INSUFFICIENT: { title: 'Not enough points', message: "You don't have enough Blynk Points for that.", action: 'retry' },
   TOO_MANY_REQUESTS: { title: 'Too many tries', message: 'Too many tries. Wait a moment, then try again.', action: 'retry' },
   RATE_LIMITED: { title: 'Too many tries', message: 'Too many tries. Wait a moment, then try again.', action: 'retry' },

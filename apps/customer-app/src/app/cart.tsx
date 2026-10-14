@@ -10,7 +10,9 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
+import { getCombos } from '@/blynk/api/catalog';
 import type { Product } from '@/blynk/api/types';
+import type { ComboLine } from '@/blynk/cart/cartStore';
 import { requestOtp } from '@/blynk/auth/api';
 import { setPendingOtp } from '@/blynk/auth/flow';
 import { authErrorText } from '@/blynk/auth/forms';
@@ -19,6 +21,7 @@ import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { addressSummary } from '@/blynk/address/api';
 import { clearSelection, useDeliveryLocation, type DeliveryLocation } from '@/blynk/address/store';
+import { ComboAdd, comboHasSaving, ComboThumb, comboSummary } from '@/blynk/combos/ComboViews';
 import { couponAppliedNote, couponErrorText, couponInputError, discountLabel, normalizeCoupon } from '@/blynk/checkout/coupon';
 import { BirthdayBanner, DeliveryDetailsCard, RewardsCard, SlotPickerCard } from '@/blynk/checkout/CheckoutSections';
 import { detailsBody, detailsProblem, EMPTY_DETAILS, type CheckoutDetails } from '@/blynk/checkout/details';
@@ -26,12 +29,13 @@ import { birthdayOf, canRedeem, pointsOf, referralOf } from '@/blynk/checkout/re
 import { availableSlot, canOrderNow, SLOT_COPY, slotForOrder, type DeliverySlots } from '@/blynk/checkout/slots';
 import { getCheckoutInfo, getDeliverySlots, placeOrder, previewCoupon } from '@/blynk/orders/api';
 import {
-  basketProgress, basketPrompt, checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, freeDeliveryNote, orderItems,
+  basketProgress, basketPrompt, checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, freeDeliveryNote, orderCombos, orderItems,
   rememberPlaced, type CheckoutBill,
 } from '@/blynk/orders/checkout';
 import { OUTSIDE_AREA, placeErrorCopy, refusedProduct, type PlaceErrorCopy } from '@/blynk/orders/errors';
 import type { CheckoutInfo, CouponPreview } from '@/blynk/orders/types';
 import { formatLkr } from '@/blynk/lib/money';
+import { requestPushPermission } from '@/blynk/push';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
 import { ClosedBanner, useStoreClosed } from '@/components/ClosedBanner';
@@ -109,7 +113,10 @@ export default function Cart() {
   const loc = useDeliveryLocation();
   const addr = DEMO || !phone ? null : loc.address;
   const items = orderItems(lines);
-  const itemsSig = checkoutSignature({ items, addressId: '' });
+  // combo packs go out as `combos` (the server charges the combo price)
+  const combos = orderCombos(cart.combos);
+  const hasLines = items.length + combos.length > 0;
+  const itemsSig = checkoutSignature({ items, combos, addressId: '' });
   // receiver, needs help, quick notes and the rider note (the quick picks also show signed out)
   const [details, setDetails] = useState<CheckoutDetails>(EMPTY_DETAILS);
   const notes = details.noteChips;
@@ -158,7 +165,7 @@ export default function Cart() {
 
   // the fee for the chosen address and this basket (refetched when either changes)
   useEffect(() => {
-    if (DEMO || !addrId || !items.length) return;
+    if (DEMO || !addrId || !hasLines) return;
     const ctrl = new AbortController();
     const t = setTimeout(() => {
       setQuoteFailed(false);
@@ -176,9 +183,9 @@ export default function Cart() {
 
   // an applied coupon is re-checked whenever the basket or the address changes
   useEffect(() => {
-    if (DEMO || !coupon || !addrId || !items.length) return;
+    if (DEMO || !coupon || !addrId || !hasLines) return;
     let alive = true;
-    previewCoupon(coupon.code, items, addrId)
+    previewCoupon(coupon.code, items, addrId, combos)
       .then((c) => { if (alive) setCoupon(c); })
       .catch((e) => { if (alive) { setCoupon(null); setCouponErr(couponErrorText(e)); } });
     return () => { alive = false; };
@@ -194,7 +201,7 @@ export default function Cart() {
     if (bad) { setCouponErr(bad); return; }
     setCouponErr(null);
     try {
-      setCoupon(await previewCoupon(normalizeCoupon(raw), items, addrId));
+      setCoupon(await previewCoupon(normalizeCoupon(raw), items, addrId, combos));
     } catch (e) {
       setCoupon(null);
       setCouponErr(couponErrorText(e));
@@ -202,7 +209,7 @@ export default function Cart() {
   };
 
   const place = async () => {
-    if (DEMO || placingRef.current || !addrId || !items.length || !orderable) return;
+    if (DEMO || placingRef.current || !addrId || !hasLines || !orderable) return;
     const problem = detailsProblem(details, allowForOthers);
     if (problem) {
       setShowDetailErrors(true);
@@ -221,7 +228,7 @@ export default function Cart() {
     };
     const note = more.delivery_note ?? '';
     // one key per checkout: a double tap or a retry after a timeout replays the same order
-    const sig = checkoutSignature({ items, addressId: addrId, coupon: coupon?.code ?? null, note, extra });
+    const sig = checkoutSignature({ items, combos, addressId: addrId, coupon: coupon?.code ?? null, note, extra });
     const key = checkoutKeyFor(sig);
     placingRef.current = true;
     setPlacing(true);
@@ -230,6 +237,7 @@ export default function Cart() {
       const order = await placeOrder({
         address_id: addrId,
         items,
+        ...(combos.length ? { combos } : {}),
         idempotency_key: key,
         ...(coupon ? { coupon_code: coupon.code } : {}),
         ...(note ? { delivery_note: note } : {}),
@@ -237,13 +245,15 @@ export default function Cart() {
       });
       forgetCheckoutKey();
       rememberPlaced(order);
+      // the moment order updates matter: ask to allow notifications (Flutter cart_screen_payment_container)
+      void requestPushPermission();
       router.replace({ pathname: '/placed', params: { id: order.id } });
     } catch (e) {
       const copy = placeErrorCopy(e);
       const gone = refusedProduct(e);
       setPlaceErr(gone?.name ? { ...copy, message: `${gone.name} isn't available right now. Remove it and try again.` } : copy);
       // fresh prices and availability: the catalogue reconciles the cart lines
-      if (copy.action === 'reconcile') void refresh();
+      if (copy.action === 'reconcile') { void refresh(); refreshCombos(); }
       if (copy.action === 'coupon') { setCoupon(null); setCouponErr(couponErrorText(e)); }
       if (copy.action === 'address' || copy.action === 'details') setQuoteTick((n) => n + 1);
       // the slot went, or the store closed after all: fresh slots so one can be picked
@@ -263,6 +273,7 @@ export default function Cart() {
     }
     // live: fresh prices and availability for what is in the cart (the catalogue reconciles the cart)
     if (lines.length) void refresh().then((ok) => setRefreshFailed(!ok));
+    if (cart.combos.length) refreshCombos();
     return () => clearTimeout(a);
   }, []);
 
@@ -271,7 +282,7 @@ export default function Cart() {
   const liveFree = live.freeCount > 0;
   const storeSeen = !!store;
   useEffect(() => {
-    if (DEMO || loading || !storeSeen || !lines.length) return;
+    if (DEMO || loading || !storeSeen || !(lines.length || cart.combos.length)) return;
     const t = liveFree ? setTimeout(() => setHurray(true), 60) : setTimeout(() => setBurst(Date.now()), BURST_AFTER_MODAL);
     return () => clearTimeout(t);
   }, [loading, storeSeen]);
@@ -304,7 +315,7 @@ export default function Cart() {
   const toPay = DEMO ? Math.round(total + BILL.taxes) : live.toPay;
   const bottomPad = Math.max(insets.bottom + 16, 42);
 
-  if (lines.length === 0 && !loading) {
+  if (lines.length === 0 && cart.combos.length === 0 && !loading) {
     return (
       <View style={[styles.empty, { paddingTop: insets.top }]}>
         <Animated.Text entering={ZoomIn.springify().mass(1).energyThreshold(1e-4)} style={{ fontSize: 80 }}>🧺</Animated.Text>
@@ -334,6 +345,8 @@ export default function Cart() {
         {/* items */}
         <View style={{ zIndex: 3 }}>
           <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, styles.itemsCard]}>
+            {/* combo packs first (Flutter _CartComboList), each with what is inside */}
+            {!DEMO && cart.combos.map((l) => <ComboCartLine key={`combo-${l.combo.id}`} line={l} />)}
             {lines.map(({ product: p, quantity }) => (DEMO ? (
               <Animated.View key={p.id} exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={styles.itemRow}>
                 <VegMark size={11} color={C.veg} />
@@ -519,7 +532,7 @@ export default function Cart() {
             closedNow={closedNow}
             orderable={orderable}
             closedHint={!closedNow || !slotsOn ? null : pickedSlot ? SLOT_COPY.slotPickedHint : SLOT_COPY.pickSlotHint}
-            canOrder={items.length > 0}
+            canOrder={hasLines}
             placing={placing}
             error={placeErr}
             onPlace={place}
@@ -751,6 +764,35 @@ function LiveLine({ product: p, qty, showSavings }: { product: Product; qty: num
       <View style={[styles.priceCol, { width: 78 }]}>
         {offer && <Text style={styles.itemStrike}>{formatLkr(round2(p.selling_price * qty))}</Text>}
         {p.is_available && <Text style={[styles.itemPrice, { fontSize: 13 }]}>{formatLkr(round2(effectivePrice(p) * qty))}</Text>}
+      </View>
+    </Animated.View>
+  );
+}
+
+/** Fresh combo packs (GET /combos) for the combo lines in the cart: price, items, sold out. */
+function refreshCombos() {
+  getCombos().then((r) => cartActions.syncCombos(Array.isArray(r?.combos) ? r.combos : [])).catch(() => undefined);
+}
+
+/** One combo pack line: its picture, name, what one pack holds, a stepper and packs x price. */
+function ComboCartLine({ line }: { line: ComboLine }) {
+  const c = line.combo;
+  return (
+    <Animated.View exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={[styles.itemRow, { height: undefined, minHeight: 56, paddingVertical: 8 }]}>
+      <View style={!c.is_available && { opacity: 0.45 }}><ComboThumb combo={c} size={30} radius={6} /></View>
+      <View style={{ flex: 1, marginLeft: 6, marginRight: 6 }}>
+        <Text style={[styles.itemName, { marginLeft: 0 }, !c.is_available && { color: '#8A8A90' }]} numberOfLines={1}>{c.name}</Text>
+        <Text style={styles.comboInside} numberOfLines={2}>Combo pack · {comboSummary(c)}</Text>
+        {!c.is_available && <Text style={styles.unavail}>{LIVE.unavailable}</Text>}
+      </View>
+      {c.is_available ? (
+        <ComboAdd combo={c} compact />
+      ) : (
+        <PressScale onPress={() => cartActions.setComboQty(c, 0)} style={styles.removeBtn}><Text style={styles.removeTxt}>{LIVE.remove}</Text></PressScale>
+      )}
+      <View style={[styles.priceCol, { width: 78 }]}>
+        {c.is_available && comboHasSaving(c) && <Text style={styles.itemStrike}>{formatLkr(round2(c.items_total * line.quantity))}</Text>}
+        {c.is_available && <Text style={[styles.itemPrice, { fontSize: 13 }]}>{formatLkr(round2(c.price * line.quantity))}</Text>}
       </View>
     </Animated.View>
   );
@@ -1278,6 +1320,7 @@ const styles = StyleSheet.create({
   toast: { position: 'absolute', left: 24, right: 24, backgroundColor: C.ink, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', zIndex: 60 },
   toastTxt: { color: '#fff', fontFamily: F.semi, fontSize: 13.5 },
   warn: { fontFamily: F.medium, fontSize: 12, color: C.problem, marginHorizontal: 23, marginBottom: 10 },
+  comboInside: { fontFamily: F.regular, fontSize: 11, color: '#8A8A90', marginTop: 1, lineHeight: 14 },
   unavail: { fontFamily: F.semi, fontSize: 11, color: C.problem, marginTop: 1 },
   removeBtn: { height: 26, paddingHorizontal: 10, borderRadius: 13, borderWidth: 1.2, borderColor: C.problem, justifyContent: 'center' },
   removeTxt: { fontFamily: F.semi, fontSize: 11.5, color: C.problem },

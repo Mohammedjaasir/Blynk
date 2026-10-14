@@ -4,8 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { showNotice } from '@/blynk/account/notice';
+import { getCombos } from '@/blynk/api/catalog';
 import { ApiError } from '@/blynk/api/client';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
+import { fetchProductDetail } from '@/blynk/catalog/product';
 import { formatLkr } from '@/blynk/lib/money';
 import { appHidden, onVisible } from '@/blynk/lib/visibility';
 import { cancelOrder, getOrder } from '@/blynk/orders/api';
@@ -15,11 +18,14 @@ import {
   riderArrived, showsDeliveryCode, showsDeliveryCodeComing, slotWindowText, statusLabel, statusSentence, statusTone,
   timelineLabel, type OrderTone,
 } from '@/blynk/orders/status';
+import { canReorder, reorderInto, reorderMessage } from '@/blynk/orders/reorder';
 import type { Order } from '@/blynk/orders/types';
+import { LiveTracking, isTrackable } from '@/blynk/tracking';
+import { openSignIn } from '@/blynk/ui/signIn';
 import { BackIcon } from '@/components/icons';
 import { PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
-import { goBack } from '@/lib/nav';
+import { cartActions, getCartSnapshot } from '@/lib/cart';
 import { C, F } from '@/lib/theme';
 
 /*
@@ -80,6 +86,31 @@ export default function OrderStatus() {
       .finally(() => { cancelRef.current = false; setCancelling(false); });
   };
 
+  // "Order again" (Flutter OrderAgainButton): today's prices, gone items named, then the cart
+  const [reordering, setReordering] = useState(false);
+  const orderAgain = async () => {
+    if (!order || reordering) return;
+    setReordering(true);
+    try {
+      const r = await reorderInto(order, {
+        fetchProduct: (pid) => fetchProductDetail(pid).then((d) => d.product),
+        fetchCombos: () => getCombos().then((x) => x.combos ?? []),
+        comboQty: (cid) => getCartSnapshot().comboQty[cid] ?? 0,
+        addCombo: cartActions.addCombo,
+        addProduct: (p, n) => {
+          const before = getCartSnapshot().qty[p.id] ?? 0;
+          cartActions.setQty(p, before + n);
+          return (getCartSnapshot().qty[p.id] ?? 0) - before;
+        },
+      });
+      const m = reorderMessage(r);
+      showNotice(m.text, m.ok ? 'info' : 'problem');
+      if (m.ok) router.push('/cart');
+    } finally {
+      setReordering(false);
+    }
+  };
+
   const title = order?.order_number ?? 'Order';
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -101,7 +132,7 @@ export default function OrderStatus() {
         {DEMO ? (
           <Note title="Order status appears here" sub="Ordering opens soon. This is a preview." />
         ) : !signedIn ? (
-          <Note title="Log in to see this order" sub="Your orders appear here once you are signed in." />
+          <Note title="Log in to see this order" sub="Your orders appear here once you are signed in." cta="Log in" onPress={openSignIn} />
         ) : !order && error ? (
           <Note title={error.missing ? 'Order not found' : "Couldn't load this order"} sub={error.text} cta={error.missing ? undefined : 'Try again'} onPress={load} />
         ) : !order ? (
@@ -135,6 +166,13 @@ export default function OrderStatus() {
                 </PressScale>
               </View>
             )}
+            {isTrackable(order) && (
+              <LiveTracking
+                orderId={order.id}
+                destination={{ lat: order.delivery_latitude, lng: order.delivery_longitude }}
+                riderName={order.rider_contact?.first_name}
+              />
+            )}
             {!!error && <Text style={styles.stale}>{error.text}</Text>}
 
             {!!order.history?.length && (
@@ -157,7 +195,27 @@ export default function OrderStatus() {
 
             <View style={styles.card}>
               <Text style={styles.section}>Items</Text>
-              {order.items.map((it) => {
+              {/* combo packs first, each with its products under it (Flutter order summary); then loose items */}
+              {(order.combos ?? []).map((c) => (
+                <View key={c.id} style={styles.comboBlock}>
+                  <View style={styles.itemRow}>
+                    <Text style={[styles.itemName, { fontFamily: F.semi }]} numberOfLines={2}>
+                      {c.quantity > 1 ? `${c.name} × ${c.quantity}` : c.name}
+                    </Text>
+                    <Text style={styles.price}>{formatLkr(c.subtotal)}</Text>
+                  </View>
+                  <Text style={[styles.small, { marginTop: -4, marginBottom: 2 }]}>Combo pack</Text>
+                  {order.items.filter((it) => it.order_combo_id === c.id).map((it) => (
+                    <View key={it.id} style={[styles.itemRow, { paddingVertical: 3 }]}>
+                      <Text style={[styles.itemName, styles.comboItem, itemCaption(it.item_status)?.struck && styles.struck]} numberOfLines={2}>
+                        {itemTitle(it.product_name_snapshot, it.unit_snapshot)}
+                      </Text>
+                      <Text style={styles.qty}>× {it.quantity}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+              {order.items.filter((it) => !it.order_combo_id).map((it) => {
                 // an UNAVAILABLE line is out of the totals (struck, shown for the record); a SUBSTITUTED one was replaced
                 const cap = itemCaption(it.item_status);
                 return (
@@ -198,6 +256,12 @@ export default function OrderStatus() {
               {!!order.delivery_instructions && <Text style={[styles.small, { marginTop: 4 }]}>Note: {order.delivery_instructions}</Text>}
               {order.delivery_needs_help === true && <Text style={[styles.small, { marginTop: 4 }]}>Needs help at the door</Text>}
             </View>
+
+            {canReorder(order) && (
+              <PressScale onPress={() => void orderAgain()} disabled={reordering} style={[styles.keepBtn, { marginBottom: 12 }]} haptic>
+                <Text style={styles.keepTxt}>{reordering ? 'Adding…' : 'Order again'}</Text>
+              </PressScale>
+            )}
 
             {(mayCancel(order) || cancelMsg) && (
               <Animated.View layout={LinearTransition.duration(200)} style={styles.card}>
@@ -319,6 +383,8 @@ const styles = StyleSheet.create({
   tlDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#D5D5DC', backgroundColor: '#fff', marginTop: 3 },
   tlLine: { flex: 1, width: 2, backgroundColor: '#E6E6EB', marginTop: 2 },
   tlLabel: { fontFamily: F.semi, fontSize: 13.5, color: C.ink },
+  comboBlock: { borderBottomWidth: 1, borderBottomColor: C.line, paddingBottom: 6, marginBottom: 4 },
+  comboItem: { fontFamily: F.regular, fontSize: 12.5, color: C.text, paddingLeft: 10 },
   itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, gap: 8 },
   itemName: { flex: 1, fontFamily: F.medium, fontSize: 13, color: C.ink },
   qty: { fontFamily: F.regular, fontSize: 12.5, color: C.sub, width: 34, textAlign: 'right' },

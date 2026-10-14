@@ -14,6 +14,8 @@ import {
   notifyMeAction, setNotifyMe, unitLine,
 } from '@/blynk/catalog/product';
 import { recallProduct } from '@/blynk/catalog/productCache';
+import { ComboAdd } from '@/blynk/combos/ComboViews';
+import { requestPushPermission } from '@/blynk/push';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive, savingsPerUnit } from '@/blynk/lib/pricing';
 import { orderTime } from '@/blynk/orders/status';
@@ -95,6 +97,8 @@ export default function ProductPage() {
     try {
       const r = await setNotifyMe(product.id, action === 'subscribe');
       if (r === 'back-in-stock') { setNotify(false); load(); } else setNotify(r === 'on');
+      // switched on: the moment a push is useful (Flutter notify_me_button)
+      if (r === 'on') void requestPushPermission();
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.');
     } finally {
@@ -230,7 +234,7 @@ function ComboRow({ combo: c, showSavings }: { combo: Combo; showSavings: boolea
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
         <Text style={styles.comboPrice}>{formatLkr(c.price)}</Text>
         {showSavings && c.saving > 0 && <Text style={styles.save}>Save {formatLkr(c.saving)}</Text>}
-        {!c.is_available && <Badge tone="neutral" label="Sold out" />}
+        <ComboAdd combo={c} compact />
       </View>
     </View>
   );
