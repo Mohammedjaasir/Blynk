@@ -169,3 +169,111 @@ export function markupProductCountText(count: number | null | undefined, hasOwnM
   if (hasOwnMarkup) return `${count} ${noun} ${count === 1 ? 'uses' : 'use'} this markup`;
   return `${count} ${noun} ${count === 1 ? 'follows' : 'follow'} the parent/global markup`;
 }
+
+// ------------------------------------------------- variants (migration 045)
+
+/** Pricing sources a variant can have (backend VARIANT_PRICING_SOURCES). */
+export type VariantPricingSource = 'VARIANT_MARKUP' | PricingSource;
+
+/** The inputs of the selling-price rule (backend ResolvePriceInput). */
+export interface ResolvePriceInput {
+  purchaseCost: number | string;
+  pricingMode?: PricingMode | string | null;
+  fixedSellingPrice?: number | string | null;
+  productMarkupPercent?: number | string | null;
+  categoryMarkupPercent?: number | string | null;
+  parentCategoryMarkupPercent?: number | string | null;
+  globalMarkupPercent?: number | string | null;
+}
+
+export interface ResolvedPrice {
+  pricingMode: PricingMode;
+  pricingSource: PricingSource;
+  purchaseCost: number;
+  sellingPrice: number;
+  /** MARKUP: the markup used. FIXED: the implied markup over cost (null when the cost is 0). */
+  effectiveMarkupPercent: number | null;
+}
+
+export interface ResolveVariantPriceInput extends ResolvePriceInput {
+  variantMarkupPercent?: number | string | null;
+}
+
+export interface ResolvedVariantPrice extends Omit<ResolvedPrice, 'pricingSource'> {
+  pricingSource: VariantPricingSource;
+}
+
+const presentValue = (v: unknown): v is number | string =>
+  v !== null && v !== undefined && !(typeof v === 'string' && v.trim() === '') && Number.isFinite(Number(v));
+
+/**
+ * The single selling-price rule - the twin of the backend's
+ * resolveSellingPrice (pricing/index.ts), same order, same cent rounding.
+ * Throws on a negative cost / a FIXED price that is missing or not above 0,
+ * exactly as the server refuses them.
+ */
+export function resolveSellingPrice(input: ResolvePriceInput): ResolvedPrice {
+  const cost = Number(input.purchaseCost);
+  if (!Number.isFinite(cost) || cost < 0) throw new Error('Purchase cost cannot be negative');
+
+  if (input.pricingMode === 'FIXED') {
+    if (!presentValue(input.fixedSellingPrice) || !(Number(input.fixedSellingPrice) > 0)) {
+      throw new Error('A fixed selling price above 0 is required');
+    }
+    const price = round2(Number(input.fixedSellingPrice));
+    return {
+      pricingMode: 'FIXED',
+      pricingSource: 'FIXED',
+      purchaseCost: cost,
+      sellingPrice: price,
+      effectiveMarkupPercent: marginPercent(cost, price),
+    };
+  }
+
+  let markup: number;
+  let source: PricingSource;
+  if (presentValue(input.productMarkupPercent)) {
+    markup = Number(input.productMarkupPercent);
+    source = 'PRODUCT_MARKUP';
+  } else if (presentValue(input.categoryMarkupPercent)) {
+    markup = Number(input.categoryMarkupPercent);
+    source = 'CATEGORY_MARKUP';
+  } else if (presentValue(input.parentCategoryMarkupPercent)) {
+    markup = Number(input.parentCategoryMarkupPercent);
+    source = 'PARENT_CATEGORY_MARKUP';
+  } else {
+    markup = presentValue(input.globalMarkupPercent) ? Number(input.globalMarkupPercent) : FALLBACK_DEFAULT_MARKUP_PERCENT;
+    source = 'GLOBAL_MARKUP';
+  }
+  if (markup < 0) throw new Error('Markup percentage cannot be negative');
+
+  return {
+    pricingMode: 'MARKUP',
+    pricingSource: source,
+    purchaseCost: cost,
+    sellingPrice: markupPrice(cost, markup),
+    effectiveMarkupPercent: markup,
+  };
+}
+
+/**
+ * A variant's price (migration 045; backend resolveVariantPrice): the same
+ * rule with ONE extra markup at the front of the chain -
+ *   FIXED  - the variant's fixed selling price;
+ *   MARKUP - variant cost x (1 + m / 100), m = the variant's own markup, else
+ *            the product's custom markup, else category, parent, global.
+ */
+export function resolveVariantPrice(input: ResolveVariantPriceInput): ResolvedVariantPrice {
+  const own = presentValue(input.variantMarkupPercent);
+  const resolved = resolveSellingPrice({
+    ...input,
+    productMarkupPercent: own ? input.variantMarkupPercent : input.productMarkupPercent,
+  });
+  const source: VariantPricingSource = resolved.pricingMode === 'MARKUP' && own ? 'VARIANT_MARKUP' : resolved.pricingSource;
+  return { ...resolved, pricingSource: source };
+}
+
+/** Badge text for a variant's pricing source. */
+export function variantPricingSourceLabel(source: VariantPricingSource | null | undefined): string {
+  return source === 'VARIANT_MARKUP' ? 'Variant markup' : pricingSourceLabel(source);
+}

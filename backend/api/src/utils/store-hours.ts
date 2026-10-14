@@ -293,13 +293,21 @@ export interface DeliverySlot {
  * closed by "close now", is not offered. `booked` counts the non-cancelled
  * orders already in each slot (keyed by start ISO).
  */
-export function buildSlots(state: ScheduleState, now: Date, booked: Map<string, number> = new Map()): DeliverySlot[] {
+export function buildSlots(
+  state: ScheduleState,
+  now: Date,
+  booked: Map<string, number> = new Map(),
+  opts: { leadDays?: number } = {}
+): DeliverySlot[] {
   const s = state.slots;
   if (!s.enabled) return [];
   const earliest = now.getTime() + s.min_lead_minutes * 60_000;
   const today = local(now).startOf('day');
+  // Migration 045 (owner, 2026-10-14): a cart with items delivered only
+  // after N days is offered the days from today + N to today + N + days_ahead.
+  const lead = Math.max(0, Math.floor(opts.leadDays ?? 0));
   const out: DeliverySlot[] = [];
-  for (let i = 0; i <= s.days_ahead; i++) {
+  for (let i = lead; i <= lead + s.days_ahead; i++) {
     const w = dayWindow(state, today.plus({ days: i }));
     if (!w.open) continue;
     for (let start = w.open; start < w.close; start = start.plus({ minutes: s.slot_minutes })) {
@@ -323,6 +331,17 @@ export function buildSlots(state: ScheduleState, now: Date, booked: Map<string, 
     }
   }
   return out;
+}
+
+/**
+ * The earliest delivery day for a lead time of `leadDays` (migration 045):
+ * today + N in Colombo, as 'YYYY-MM-DD', its start, and a label ('Today',
+ * 'Tomorrow', 'Fri 17 Oct').
+ */
+export function earliestDeliveryDay(now: Date, leadDays: number): { date: string; starts_at: Date; label: string } {
+  const day = local(now).startOf('day').plus({ days: Math.max(0, Math.floor(leadDays)) });
+  const startsAt = day.toJSDate();
+  return { date: day.toISODate()!, starts_at: startsAt, label: dayLabel(startsAt, now) };
 }
 
 /** The hours label for a day's window: '08:00'/'21:00' pair for GET /store. */

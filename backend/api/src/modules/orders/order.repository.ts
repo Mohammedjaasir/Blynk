@@ -23,6 +23,7 @@ import type { DeliveryFeeQuote } from './delivery-fee.js';
 // Refer a friend and Blynk Points (owner, 2026-10-10; migration 037).
 import { orderRewardColumns, pointsForOrder, recordOrderRewards, referralForOrder } from '../loyalty/order-rewards.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { assertCartStock } from '../inventory/sellable.js';
 
 /**
  * Refuses (409 SLOT_FULL) when the slot starting at `start` already holds
@@ -108,6 +109,9 @@ export interface CreateOrderData {
   customer_notes: string | null;
   items: Array<{
     product_id: string;
+    /** Migration 045: the variant ordered (null/absent = the product itself) and its label. */
+    variant_id?: string | null;
+    variant_label_snapshot?: string | null;
     product_name_snapshot: string;
     sku_snapshot: string;
     unit_snapshot: string;
@@ -230,12 +234,14 @@ export class OrderRepository {
         category_offer_ends_at: Date | null;
         category_markup_percent: string | null;
         parent_category_markup_percent: string | null;
+        /** Migration 045: the product has live variants, so an order line must name one. */
+        has_variants: boolean;
       }
     >();
     if (productIds.length === 0) return map;
     const rows = await executor
       .selectFrom('v_product_catalog')
-      .select(['id', 'category_offer_percent', 'category_offer_ends_at', 'category_markup_percent', 'parent_category_markup_percent'])
+      .select(['id', 'category_offer_percent', 'category_offer_ends_at', 'category_markup_percent', 'parent_category_markup_percent', 'has_variants'])
       .where('id', 'in', productIds)
       .execute();
     for (const r of rows) {
@@ -244,9 +250,34 @@ export class OrderRepository {
         category_offer_ends_at: r.category_offer_ends_at,
         category_markup_percent: r.category_markup_percent,
         parent_category_markup_percent: r.parent_category_markup_percent,
+        has_variants: r.has_variants === true,
       });
     }
     return map;
+  }
+
+  /** Migration 045: the cart's variants as the catalog prices them (live variants only). */
+  async findVariantsByIds(variantIds: string[], executor: DBConnection = db) {
+    if (variantIds.length === 0) return [];
+    return await executor
+      .selectFrom('v_product_variant_catalog as v')
+      .innerJoin('product_variants as pv', 'pv.id', 'v.id')
+      .select([
+        'v.id',
+        'v.product_id',
+        'v.label',
+        'v.sku',
+        'pv.purchase_cost',
+        'pv.pricing_mode',
+        'pv.fixed_selling_price',
+        'pv.custom_markup_percent',
+        'pv.offer_price',
+        'pv.offer_ends_at',
+        'v.is_active',
+        'v.is_available',
+      ])
+      .where('v.id', 'in', variantIds)
+      .execute();
   }
 
   /**
@@ -259,6 +290,22 @@ export class OrderRepository {
       // points): two racing checkouts must not both see "no earlier order"
       // (security audit 2026-10). The later steps re-take this same lock.
       await trx.selectFrom('users').select('id').where('id', '=', data.customer_id).forNoKeyUpdate().executeTakeFirst();
+
+      // 0'. Stock (migration 045; owner, 2026-10-14): customers can order a
+      //     TRACKED product or variant until its sellable stock reaches 0.
+      //     The rows are locked, so racing checkouts for the last units
+      //     serialise; the later one sees the earlier one's items as "in
+      //     open orders" and is refused with OUT_OF_STOCK / INSUFFICIENT_STOCK.
+      await assertCartStock(
+        trx,
+        data.dark_store_id,
+        data.items.map((it) => ({
+          product_id: it.product_id,
+          variant_id: it.variant_id ?? null,
+          quantity: it.quantity,
+          name: it.variant_label_snapshot ? `${it.product_name_snapshot} ${it.variant_label_snapshot}` : it.product_name_snapshot,
+        }))
+      );
 
       // 0. Delivery slot (owner, 2026-10-10): one transaction-scoped advisory
       //    lock per slot start, then count the non-cancelled orders in it.
@@ -393,6 +440,8 @@ export class OrderRepository {
         subtotal: item.subtotal,
         item_status: 'PENDING' as ItemFulfillmentStatus,
         order_combo_id: item.combo_index !== undefined ? comboRows[item.combo_index].id : null,
+        // Migration 045: written only for a variant line (NULL defaults otherwise).
+        ...(item.variant_id ? { variant_id: item.variant_id, variant_label_snapshot: item.variant_label_snapshot ?? null } : {}),
       }));
 
       const items = await trx

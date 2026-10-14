@@ -193,6 +193,8 @@ describe('Free deliveries for every customer', () => {
       // Migration 037 (owner, 2026-10-10): refer a friend and Blynk Points, both off by default.
       referral_reward: { available: false, side: null, mode: null, amount_lkr: 0 },
       points: expect.objectContaining({ enabled: false, balance: 0 }),
+      // Migration 045 (owner, 2026-10-14): no ?product_ids=, so no lead time - today, ASAP allowed.
+      delivery_lead: expect.objectContaining({ lead_days: 0, asap_allowed: true }),
     });
 
     const first = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));

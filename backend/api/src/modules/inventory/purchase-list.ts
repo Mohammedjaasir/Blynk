@@ -31,10 +31,13 @@ export function suggestedQuantity(threshold: number, available: number): number 
 const money = (v: unknown) => Number(Number(v ?? 0).toFixed(2));
 
 export async function purchaseList(darkStoreId: string = DEFAULT_DARK_STORE_ID) {
+  // Migration 045: variant stock rows too (live, active variants), each at
+  // its own purchase cost and named "<product> - <variant>".
   const rows = await db
     .selectFrom('inventory as inv')
     .innerJoin('products as p', 'p.id', 'inv.product_id')
     .innerJoin('categories as c', 'c.id', 'p.category_id')
+    .leftJoin('product_variants as v', 'v.id', 'inv.variant_id')
     .leftJoinLateral(
       (eb) =>
         eb
@@ -54,6 +57,10 @@ export async function purchaseList(darkStoreId: string = DEFAULT_DARK_STORE_ID) 
       'p.unit as product_unit',
       'p.pack_size',
       'p.purchase_cost',
+      'inv.variant_id',
+      'v.label as variant_label',
+      'v.sku as variant_sku',
+      'v.purchase_cost as variant_purchase_cost',
       'c.name as category_name',
       'inv.quantity_on_hand',
       'inv.quantity_reserved',
@@ -67,6 +74,7 @@ export async function purchaseList(darkStoreId: string = DEFAULT_DARK_STORE_ID) 
     .whereRef('inv.quantity_on_hand', '<=', 'inv.low_stock_threshold')
     .where('p.is_active', '=', true)
     .where('p.deleted_at', 'is', null)
+    .where((eb) => eb.or([eb('inv.variant_id', 'is', null), eb.and([eb('v.deleted_at', 'is', null), eb('v.is_active', '=', true)])]))
     .orderBy(sql`inv.quantity_on_hand - inv.quantity_reserved`, 'asc')
     .orderBy('p.name', 'asc')
     .orderBy('p.id', 'asc')
@@ -75,11 +83,15 @@ export async function purchaseList(darkStoreId: string = DEFAULT_DARK_STORE_ID) 
   const items = rows.map((r) => {
     const available = r.quantity_on_hand - r.quantity_reserved;
     const suggested = suggestedQuantity(r.low_stock_threshold, available);
-    const unitCost = money(r.purchase_cost);
+    const unitCost = money(r.variant_id ? r.variant_purchase_cost : r.purchase_cost);
     return {
       product_id: r.product_id,
       product_name: r.product_name,
       product_sku: r.product_sku,
+      variant_id: r.variant_id ?? null,
+      variant_label: r.variant_label ?? null,
+      variant_sku: r.variant_sku ?? null,
+      display_name: r.variant_label ? `${r.product_name} - ${r.variant_label}` : r.product_name,
       product_unit: r.product_unit,
       pack_size: r.pack_size,
       category_name: r.category_name,

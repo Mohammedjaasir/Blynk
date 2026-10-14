@@ -49,6 +49,9 @@ describe('productImport: template', () => {
       'tracked',
       'opening_stock',
       'image_url',
+      'parent_sku',
+      'variant',
+      'delivery_lead_days',
     ]);
   });
 
@@ -79,11 +82,22 @@ describe('productImport: template', () => {
     expect(notes.some((n) => /Old files with only selling_price now set a FIXED price/.test(n))).toBe(true);
     expect(notes.some((n) => /^purchase_cost \| yes \| .*cost_price/.test(n))).toBe(true);
 
-    // The examples parse cleanly: one FIXED, one product markup, one inheriting.
+    // The examples parse cleanly: one FIXED, one product markup, one inheriting,
+    // a product with a fixed and a markup variant, and a lead-time product.
     const examples = parseSheet(TEMPLATE_EXAMPLE_ROWS);
     expect(examples.fileErrors).toEqual([]);
-    expect(examples.rows.map((r) => r.errors)).toEqual([[], [], []]);
-    expect(examples.rows.map((r) => rowPricing(r.data, undefined).source)).toEqual(['FIXED', 'PRODUCT_MARKUP', null]);
+    expect(examples.rows.map((r) => r.errors)).toEqual([[], [], [], [], [], [], []]);
+    expect(examples.rows.map((r) => rowPricing(r.data, undefined).source)).toEqual([
+      'FIXED',
+      'PRODUCT_MARKUP',
+      null,
+      null,
+      'FIXED',
+      'VARIANT_MARKUP',
+      'FIXED',
+    ]);
+    expect(examples.rows[5]!.data).toMatchObject({ parent_sku: 'CHILLI-PWD', variant: '100 g', sku: 'CHILLI-PWD-100G' });
+    expect(examples.rows[6]!.data).toMatchObject({ delivery_lead_days: 2 });
   });
 });
 

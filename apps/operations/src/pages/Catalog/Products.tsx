@@ -4,7 +4,8 @@ import { catalog } from '../../api/resources';
 import type { AdminProduct, Category } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Spinner } from '../../components/ui';
-import { catalogErrorMessage } from '../../lib/catalog';
+import { catalogErrorMessage, leadTimeLabel, productPriceText } from '../../lib/catalog';
+import { staffStockBadge } from '../../lib/inventory';
 import { percentText, pricingSourceLabel } from '../../lib/pricing';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -179,10 +180,14 @@ export function Products() {
                 <p className="cat-row__meta">
                   {product.sku} · {product.unit} · {product.category_name ?? categoryName(product.category_id)}
                 </p>
+                {/* A product with variants shows its price range (migration 045). */}
                 <p className="cat-row__price">
-                  LKR {Number(product.calculated_selling_price ?? 0).toFixed(2)}
+                  {productPriceText(product) ?? `LKR ${Number(product.calculated_selling_price ?? 0).toFixed(2)}`}
                 </p>
-                {product.pricing_source && product.pricing_source !== 'FIXED' && product.effective_markup_percent != null ? (
+                {!product.has_variants &&
+                product.pricing_source &&
+                product.pricing_source !== 'FIXED' &&
+                product.effective_markup_percent != null ? (
                   <p className="cat-row__meta">{`${percentText(Number(product.effective_markup_percent))} over cost LKR ${Number(product.purchase_cost).toFixed(2)}`}</p>
                 ) : null}
                 <div className="cat-row__badges">
@@ -198,6 +203,7 @@ export function Products() {
                     <span className="offer-tag">Offer LKR {Number(product.offer_price).toFixed(2)}</span>
                   ) : null}
                 </div>
+                <ProductChips product={product} />
               </div>
               <div className="cat-row__actions">
                 <Link className="button button--ghost button--sm" to={`/catalog/products/${product.id}`}>
@@ -245,6 +251,31 @@ export function Products() {
           onCancel={() => setPendingDelete(null)}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Variants, stock and lead time at a glance (migration 045): "4 variants",
+ * the product's stock (Sold out / Low / count - staff only, customers never
+ * see it) and "Delivered after 2 days".
+ */
+function ProductChips({ product }: { product: AdminProduct }) {
+  const variantCount = product.variant_count ?? product.variants?.length ?? 0;
+  const stock = product.has_variants ? null : staffStockBadge(product.stock);
+  const lead = leadTimeLabel(product.delivery_lead_days);
+  if (!product.has_variants && !stock && !lead) return null;
+  return (
+    <div className="cat-row__badges product-chips">
+      {product.has_variants ? (
+        <span className="chip">{`${variantCount} ${variantCount === 1 ? 'variant' : 'variants'}`}</span>
+      ) : null}
+      {stock ? (
+        <span className={`stock stock--${stock.kind.toLowerCase()}`}>
+          <span className="stock__word">{stock.label}</span>
+        </span>
+      ) : null}
+      {lead ? <span className="chip chip--lead">{lead}</span> : null}
     </div>
   );
 }

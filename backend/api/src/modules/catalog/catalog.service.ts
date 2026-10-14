@@ -27,6 +27,18 @@ import {
   staffPricing,
 } from './catalog.pricing.js';
 import type { CategoryOfferInput } from './catalog.schema.js';
+import {
+  customerVariantsFor,
+  staffStockFor,
+  staffVariantsFor,
+  variantPriceRange,
+  variantSummary,
+  UNTRACKED_STOCK,
+  type CustomerVariantDto,
+  type StaffStock,
+} from './catalog.variants.js';
+import { earliestDeliveryDay } from '../../utils/store-hours.js';
+import { orderingClock } from '../../utils/time.js';
 
 export interface CustomerProductDto {
   id: string;
@@ -61,7 +73,70 @@ export interface CustomerProductDto {
    * its category's % (the lower of the two wins); null without an offer.
    */
   offer_kind: 'PRODUCT' | 'CATEGORY' | null;
+  /**
+   * Can be added to the basket now: switched on and, when its stock is
+   * tracked, not sold out (migration 045 - never a count). With variants:
+   * at least one variant can be.
+   */
   is_available: boolean;
+  /**
+   * Migration 045 (owner, 2026-10-14). has_variants: the customer must pick a
+   * variant (size/pack); the order line then names variant_id. price_min /
+   * price_max: what one unit costs right now (offers included) - equal for a
+   * product without variants; for one with variants the cheapest and dearest
+   * available variant ("LKR 50-350"). For a product with variants
+   * selling_price / offer_price describe the cheapest variant.
+   */
+  has_variants: boolean;
+  variant_count: number;
+  price_min: number;
+  price_max: number;
+  /** 0 = same day / as soon as possible; N = delivered from today + N days. */
+  delivery_lead_days: number;
+  /** 'YYYY-MM-DD' (Colombo) of the first delivery day when delivery_lead_days > 0, else null. */
+  earliest_delivery_date: string | null;
+  /** Product page only: the active variants, sold-out ones marked is_available false. */
+  variants?: CustomerVariantDto[];
+}
+
+type CustomerCatalogRow = Awaited<ReturnType<typeof catalogRepository.findActiveProducts>>[number];
+
+/**
+ * The customer-safe product (no cost, markup, pricing source or stock
+ * figure). `variants` are this product's active variants when it has any.
+ */
+function toCustomerProduct(p: CustomerCatalogRow, variants: CustomerVariantDto[] | undefined, withVariants: boolean): CustomerProductDto {
+  const selling = Number(Number(p.calculated_selling_price).toFixed(2));
+  const own = publicOffer(p, selling);
+  const range = p.has_variants ? variantPriceRange(variants ?? []) : null;
+  const headline = range?.headline;
+  const lead = Number(p.delivery_lead_days ?? 0);
+  const ownPrice = own.offer_price ?? selling;
+  return {
+    id: p.id,
+    category_id: p.category_id,
+    category_name: p.category_name,
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
+    sku: p.sku,
+    barcode: p.barcode,
+    unit: p.unit,
+    pack_size: p.pack_size,
+    image_url: p.image_url,
+    image_focal_x: clampFocal(p.image_focal_x),
+    image_focal_y: clampFocal(p.image_focal_y),
+    selling_price: headline ? headline.selling_price : selling,
+    ...(headline ? { offer_price: headline.offer_price, offer_ends_at: headline.offer_ends_at, offer_kind: headline.offer_kind } : own),
+    is_available: p.is_orderable === true,
+    has_variants: p.has_variants === true,
+    variant_count: variants?.length ?? 0,
+    price_min: range ? range.price_min : ownPrice,
+    price_max: range ? range.price_max : ownPrice,
+    delivery_lead_days: lead,
+    earliest_delivery_date: lead > 0 ? earliestDeliveryDay(orderingClock.now(), lead).date : null,
+    ...(withVariants ? { variants: variants ?? [] } : {}),
+  };
 }
 
 /** Admin/Operations: the offer as stored, plus whether it applies right now. */
@@ -123,6 +198,32 @@ function clampFocal(value: unknown): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 50;
   return Math.min(100, Math.max(0, Math.round(parsed)));
+}
+
+/**
+ * Migration 045 staff fields: lead time, the product-level stock (tracked,
+ * on hand, in open orders, sellable, low/out), and variant count + regular
+ * price range (price_min/price_max = the product's own price when it has no
+ * variants). Admin/Ops only.
+ */
+function staffExtras(
+  product: { delivery_lead_days?: unknown; has_variants?: unknown; calculated_selling_price: unknown; is_orderable?: unknown },
+  stock: StaffStock | undefined,
+  variants: Parameters<typeof variantSummary>[0]
+) {
+  const summary = variantSummary(variants);
+  const selling = Number(Number(product.calculated_selling_price).toFixed(2));
+  const hasVariants = product.has_variants === true;
+  return {
+    delivery_lead_days: Number(product.delivery_lead_days ?? 0),
+    has_variants: hasVariants,
+    is_orderable: product.is_orderable === true,
+    variant_count: summary.variant_count,
+    active_variant_count: summary.active_variant_count,
+    price_min: hasVariants && summary.price_min !== null ? summary.price_min : selling,
+    price_max: hasVariants && summary.price_max !== null ? summary.price_max : selling,
+    stock: stock ?? { ...UNTRACKED_STOCK },
+  };
 }
 
 export class CatalogService {
@@ -411,25 +512,14 @@ export class CatalogService {
       catalogRepository.countActiveProducts(queryParams),
     ]);
 
-    // Format customer-safe payload: strictly omit purchase_cost & markup figures
-    const products: CustomerProductDto[] = rawProducts.map((p) => ({
-      id: p.id,
-      category_id: p.category_id,
-      category_name: p.category_name,
-      name: p.name,
-      slug: p.slug,
-      description: p.description,
-      sku: p.sku,
-      barcode: p.barcode,
-      unit: p.unit,
-      pack_size: p.pack_size,
-      image_url: p.image_url,
-      image_focal_x: clampFocal(p.image_focal_x),
-      image_focal_y: clampFocal(p.image_focal_y),
-      selling_price: Number(Number(p.calculated_selling_price).toFixed(2)),
-      ...publicOffer(p, Number(Number(p.calculated_selling_price).toFixed(2))),
-      is_available: p.is_available,
-    }));
+    // Format customer-safe payload: strictly omit purchase_cost & markup
+    // figures and stock counts. Migration 045: variant products carry their
+    // price range (one read for the whole page).
+    const variants = await customerVariantsFor(
+      db,
+      rawProducts.filter((p) => p.has_variants).map((p) => p.id)
+    );
+    const products: CustomerProductDto[] = rawProducts.map((p) => toCustomerProduct(p, variants.get(p.id), false));
 
     return {
       products,
@@ -449,25 +539,10 @@ export class CatalogService {
       throw new AppError('Product not found.', 404, 'PRODUCT_NOT_FOUND');
     }
 
-    // Format customer-safe payload: strictly omit purchase_cost & markup figures
-    return {
-      id: rawProduct.id,
-      category_id: rawProduct.category_id,
-      category_name: rawProduct.category_name,
-      name: rawProduct.name,
-      slug: rawProduct.slug,
-      description: rawProduct.description,
-      sku: rawProduct.sku,
-      barcode: rawProduct.barcode,
-      unit: rawProduct.unit,
-      pack_size: rawProduct.pack_size,
-      image_url: rawProduct.image_url,
-      image_focal_x: clampFocal(rawProduct.image_focal_x),
-      image_focal_y: clampFocal(rawProduct.image_focal_y),
-      selling_price: Number(Number(rawProduct.calculated_selling_price).toFixed(2)),
-      ...publicOffer(rawProduct, Number(Number(rawProduct.calculated_selling_price).toFixed(2))),
-      is_available: rawProduct.is_available,
-    };
+    // Format customer-safe payload: strictly omit purchase_cost & markup
+    // figures and stock counts. Migration 045: the variants to pick from.
+    const variants = rawProduct.has_variants ? (await customerVariantsFor(db, [rawProduct.id])).get(rawProduct.id) ?? [] : [];
+    return toCustomerProduct(rawProduct, variants, true);
   }
 
   // --------------------------------------------------------------------------
@@ -497,6 +572,12 @@ export class CatalogService {
       offset: (page - 1) * limit,
     });
 
+    // Migration 045: variant count + price range, and the product's stock.
+    const ids = rows.map((r) => r.id);
+    const [variants, stock] = await Promise.all([
+      staffVariantsFor(db, rows.filter((r) => r.has_variants).map((r) => r.id)),
+      staffStockFor(db, { productIds: ids }),
+    ]);
     return {
       products: rows.map((product) => ({
         ...product,
@@ -505,6 +586,7 @@ export class CatalogService {
         // Migration 044: cost, mode, markups, pricing_source, selling price, price_warning.
         ...staffPricing(product),
         ...adminOffer(product),
+        ...staffExtras(product, stock.get(product.id), variants.get(product.id)),
       })),
       pagination: { page, limit },
     };
@@ -516,6 +598,8 @@ export class CatalogService {
       throw new AppError('Product not found.', 404, 'PRODUCT_NOT_FOUND');
     }
 
+    const [variants, stock] = await Promise.all([staffVariantsFor(db, [id]), staffStockFor(db, { productIds: [id] })]);
+    const list = variants.get(id) ?? [];
     return {
       ...product,
       image_focal_x: clampFocal(product.image_focal_x),
@@ -523,6 +607,9 @@ export class CatalogService {
       // Migration 044: cost, mode, markups, pricing_source, selling price, price_warning.
       ...staffPricing(product),
       ...adminOffer(product),
+      ...staffExtras(product, stock.get(id), list),
+      // Migration 045: every live variant (inactive ones too) with cost, pricing and stock.
+      variants: list,
     };
   }
 
@@ -533,8 +620,8 @@ export class CatalogService {
       throw new AppError('Specified category does not exist.', 400, 'CATEGORY_NOT_FOUND');
     }
 
-    // 2. Verify SKU uniqueness
-    const skuConflict = await catalogRepository.findProductBySku(input.sku);
+    // 2. Verify SKU uniqueness (migration 045: variant SKUs too)
+    const skuConflict = (await catalogRepository.findProductBySku(input.sku)) ?? (await catalogRepository.findVariantBySku(input.sku));
     if (skuConflict) {
       throw new AppError(
         `Product with SKU '${input.sku}' already exists.`,
@@ -602,6 +689,7 @@ export class CatalogService {
       fixed_selling_price: input.fixed_selling_price ?? null,
       is_available: input.is_available ?? true,
       is_active: input.is_active ?? true,
+      delivery_lead_days: input.delivery_lead_days ?? 0,
       offer_price: offerPrice,
       // No offer, no end date.
       offer_ends_at: offerPrice === null ? null : input.offer_ends_at ?? null,
@@ -630,7 +718,7 @@ export class CatalogService {
 
     // 3. If SKU changed, verify uniqueness
     if (input.sku && input.sku !== existing.sku) {
-      const skuConflict = await catalogRepository.findProductBySku(input.sku);
+      const skuConflict = (await catalogRepository.findProductBySku(input.sku)) ?? (await catalogRepository.findVariantBySku(input.sku));
       if (skuConflict && skuConflict.id !== id) {
         throw new AppError(
           `Product with SKU '${input.sku}' already exists.`,
@@ -729,6 +817,7 @@ export class CatalogService {
       ...(input.fixed_selling_price !== undefined ? { fixed_selling_price: input.fixed_selling_price } : {}),
       ...(input.is_available !== undefined ? { is_available: input.is_available } : {}),
       ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
+      ...(input.delivery_lead_days !== undefined ? { delivery_lead_days: input.delivery_lead_days } : {}),
       ...(offerChanged ? { offer_price: offerPrice, offer_ends_at: offerEnds } : {}),
     });
 

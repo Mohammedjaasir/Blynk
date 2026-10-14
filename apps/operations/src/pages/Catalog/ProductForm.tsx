@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { deleteImagesQuietly } from '../../api/client';
-import { catalog, settings } from '../../api/resources';
-import type { Category, PricingMode } from '../../api/types';
+import { catalog, inventory as inventoryApi, settings } from '../../api/resources';
+import type { AdminProduct, Category, PricingMode, SetStockInput, StaffStock, StaffVariant } from '../../api/types';
 import { CENTRE_FOCAL, ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { Field, Spinner } from '../../components/ui';
@@ -12,10 +12,14 @@ import {
   colomboTodayDay,
   formatColomboDate,
   offerEndForDay,
+  parseLeadDays,
   parseOfferAmountOff,
   parseOfferPrice,
+  parseStockNumber,
   percentOff,
 } from '../../lib/catalog';
+import { staffStockBadge } from '../../lib/inventory';
+import { ProductVariants } from './ProductVariants';
 import { replacedImages } from '../../lib/image';
 import {
   FALLBACK_DEFAULT_MARKUP_PERCENT,
@@ -66,7 +70,27 @@ interface FormState {
   offer_mode: OfferMode;
   /** LKR off as typed, used when offer_mode is 'off'; '' = no offer. */
   offer_off: string;
+  /** Migration 045: whole days before it can be delivered; '' = 0 (same day). */
+  delivery_lead_days: string;
+  /** Migration 045: the product's own stock (PUT /admin/inventory/:id/stock). */
+  track_stock: boolean;
+  stock_count: string;
+  low_stock_threshold: string;
+  stock_reason: string;
 }
+
+/** An untracked product's stock, for a new product or an API from before 045. */
+const NO_STOCK: StaffStock = {
+  inventory_id: null,
+  tracked: false,
+  on_hand: 0,
+  reserved: 0,
+  in_open_orders: 0,
+  sellable: null,
+  low_stock_threshold: 5,
+  is_low_stock: false,
+  is_out_of_stock: false,
+};
 
 type OfferMode = 'price' | 'off';
 const OFFER_MODES: Array<{ value: OfferMode; label: string }> = [
@@ -112,6 +136,11 @@ const EMPTY: FormState = {
   offer_end_day: '',
   offer_mode: 'price',
   offer_off: '',
+  delivery_lead_days: '0',
+  track_stock: false,
+  stock_count: '',
+  low_stock_threshold: '5',
+  stock_reason: '',
 };
 
 /**
@@ -143,6 +172,10 @@ export function ProductForm() {
   /** The saved product's own selling price, for when no preview can be worked out. */
   const [savedSellingPrice, setSavedSellingPrice] = useState<number | null>(null);
   const [savedOffer, setSavedOffer] = useState<SavedOffer>(NO_OFFER);
+  /** The saved product (edit only) - its markups price the variants. */
+  const [savedProduct, setSavedProduct] = useState<AdminProduct | null>(null);
+  const [savedStock, setSavedStock] = useState<StaffStock>(NO_STOCK);
+  const [variants, setVariants] = useState<StaffVariant[]>([]);
 
   useEffect(() => {
     void catalog.categories
@@ -167,6 +200,10 @@ export function ProductForm() {
       .then((product) => {
         if (cancelled) return;
         setSavedImageUrl(product.image_url);
+        setSavedProduct(product);
+        setVariants(product.variants ?? []);
+        const stock = product.stock ?? NO_STOCK;
+        setSavedStock(stock);
         const offer: SavedOffer = {
           price: product.offer_price === null || product.offer_price === undefined ? '' : String(product.offer_price),
           // Shown back as the day it ends on in Colombo, whatever time it was stored at.
@@ -211,6 +248,11 @@ export function ProductForm() {
           offer_end_day: offer.endDay,
           offer_mode: 'price',
           offer_off: '',
+          delivery_lead_days: String(product.delivery_lead_days ?? 0),
+          track_stock: stock.tracked,
+          stock_count: stock.tracked ? String(stock.on_hand) : '',
+          low_stock_threshold: String(stock.low_stock_threshold ?? 5),
+          stock_reason: '',
         });
         setProductGlobalMarkup(
           product.global_markup_percent === null || product.global_markup_percent === undefined
@@ -307,8 +349,43 @@ export function ProductForm() {
     }
   }
 
+  /** A product with variants keeps its stock per variant (migration 045). */
+  const hasVariants = variants.length > 0;
+
+  /**
+   * The Stock section's PUT body, or null when nothing there changed (so an
+   * unrelated edit never touches the ledger). The count goes only when it
+   * changed; a NEW product sends it only when tracking is on.
+   */
+  function stockChange(): SetStockInput | null {
+    if (hasVariants) return null;
+    const count = parseStockNumber(form.stock_count, 'Stock count');
+    const threshold = parseStockNumber(form.low_stock_threshold, 'Low-stock level');
+    const countValue = 'value' in count ? count.value : null;
+    const thresholdValue = 'value' in threshold ? threshold.value : null;
+    const trackedChanged = form.track_stock !== savedStock.tracked;
+    const countChanged = form.track_stock && countValue !== null && (!savedStock.tracked || countValue !== savedStock.on_hand);
+    const thresholdChanged = thresholdValue !== null && thresholdValue !== savedStock.low_stock_threshold;
+    if (!trackedChanged && !countChanged && !thresholdChanged) return null;
+    // A new product: only worth a call once tracking is on.
+    if (!isEditing && !form.track_stock) return null;
+    const body: SetStockInput = { tracked: form.track_stock };
+    if (countChanged && countValue !== null) body.stock_count = countValue;
+    if (thresholdChanged && thresholdValue !== null) body.low_stock_threshold = thresholdValue;
+    if (form.stock_reason.trim()) body.reason = form.stock_reason.trim();
+    return body;
+  }
+
   function validate(): boolean {
     const next: Record<string, string> = {};
+    const lead = parseLeadDays(form.delivery_lead_days);
+    if ('error' in lead) next.delivery_lead_days = lead.error;
+    if (!hasVariants) {
+      const count = parseStockNumber(form.stock_count, 'Stock count');
+      if ('error' in count) next.stock_count = count.error;
+      const threshold = parseStockNumber(form.low_stock_threshold, 'Low-stock level');
+      if ('error' in threshold) next.low_stock_threshold = threshold.error;
+    }
     if (!form.category_id) next.category_id = 'Choose a category';
     if (form.name.trim().length < 2) next.name = 'Enter the product name';
     if (form.sku.trim().length < 3) next.sku = 'SKU must be at least 3 characters';
@@ -356,6 +433,8 @@ export function ProductForm() {
       is_available: form.is_available,
       is_active: form.is_active,
     };
+    const lead = parseLeadDays(form.delivery_lead_days);
+    payload.delivery_lead_days = 'value' in lead ? lead.value : 0;
     // Only the active mode's own field goes (backend contract): Markup sends
     // its custom markup (null = inherit), Fixed sends its price. The other
     // stays stored on the server, ignored while unused.
@@ -383,6 +462,20 @@ export function ProductForm() {
       const saved = isEditing && id ? await catalog.products.update(id, payload) : await catalog.products.create(payload);
       // Saved: only now is the replaced (or removed) file safe to delete.
       void deleteImagesQuietly(replacedImages([savedImageUrl], [form.image_url]));
+      // Stock (migration 045): its own call, only when the section changed;
+      // for a new product right after it exists.
+      const stockBody = stockChange();
+      const productId = isEditing && id ? id : saved?.id;
+      if (stockBody && productId) {
+        try {
+          const result = await inventoryApi.stock.setStock(productId, stockBody);
+          setSavedStock(result.stock);
+        } catch (err) {
+          setServerError(`${form.name.trim()} was saved, but its stock was not: ${catalogErrorMessage(err)}`);
+          if (!isEditing) navigate(`/catalog/products/${productId}`, { replace: true });
+          return;
+        }
+      }
       // A fixed price below cost saves (owner rule), and the list says so.
       const warning = saved?.price_warning?.message;
       navigate('/catalog/products', warning ? { state: { notice: `${form.name.trim()} saved. ${warning}` } } : undefined);
@@ -612,8 +705,31 @@ export function ProductForm() {
           ) : null}
         </section>
 
+        <section className="form__section" aria-labelledby="stock-title">
+          <h2 className="form__section-title" id="stock-title">
+            Stock
+          </h2>
+          {hasVariants ? (
+            <p className="form__note">This product has variants, so stock is set per variant below.</p>
+          ) : (
+            <StockFields form={form} setForm={setForm} errors={errors} stock={isEditing ? savedStock : null} />
+          )}
+        </section>
+
         <section className="form__section">
           <h2 className="form__section-title">Availability</h2>
+          <Field
+            label="Delivery lead time (days)"
+            hint="Customers can pick delivery from today + N days. 0 = same day."
+            error={errors.delivery_lead_days}
+          >
+            <input
+              className="input"
+              inputMode="numeric"
+              value={form.delivery_lead_days}
+              onChange={(event) => setForm({ ...form, delivery_lead_days: event.target.value })}
+            />
+          </Field>
           <label className="toggle">
             <input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
             <span>
@@ -641,7 +757,99 @@ export function ProductForm() {
           </button>
         </div>
       </form>
+
+      {isEditing && savedProduct ? (
+        <ProductVariants product={savedProduct} variants={variants} globalMarkup={globalMarkup} onChange={setVariants} />
+      ) : (
+        <section className="form__section" aria-labelledby="variants-title">
+          <h2 className="form__section-title" id="variants-title">
+            Variants
+          </h2>
+          <p className="form__note">
+            Save the product first to add variants (sizes or packs with their own price, e.g. 50 g, 100 g).
+          </p>
+        </section>
+      )}
     </div>
+  );
+}
+
+/**
+ * The product's own stock (migration 045): tracking, count and low-stock
+ * level, with what is on hand / in open orders / sellable right now. Staff
+ * only - customers never see a count, and can order until it reaches 0.
+ */
+function StockFields({
+  form,
+  setForm,
+  errors,
+  stock,
+}: {
+  form: FormState;
+  setForm(next: FormState): void;
+  errors: Record<string, string>;
+  /** The saved stock (edit), null for a new product. */
+  stock: StaffStock | null;
+}) {
+  const badge = staffStockBadge(stock);
+  return (
+    <>
+      <p className="form__note">Customers never see the count. They can order until it reaches 0, then it shows as sold out.</p>
+      <label className="toggle">
+        <input type="checkbox" checked={form.track_stock} onChange={(event) => setForm({ ...form, track_stock: event.target.checked })} />
+        <span>
+          <strong>Track stock</strong>
+          <em>Off: sourced on order, never limited.</em>
+        </span>
+      </label>
+      {stock?.tracked ? (
+        <>
+          <dl className="stock-figures" aria-label="Current stock">
+            <div>
+              <dt>On hand</dt>
+              <dd>{stock.on_hand}</dd>
+            </div>
+            <div>
+              <dt>In open orders</dt>
+              <dd>{stock.in_open_orders}</dd>
+            </div>
+            <div>
+              <dt>Can sell</dt>
+              <dd>{stock.sellable ?? 0}</dd>
+            </div>
+          </dl>
+          {badge && badge.kind !== 'IN_STOCK' ? (
+            <p>
+              <span className={`stock stock--${badge.kind.toLowerCase()}`}>
+                <span className="stock__word">{badge.kind === 'OUT' ? 'Sold out' : 'Low'}</span>
+              </span>
+            </p>
+          ) : null}
+        </>
+      ) : null}
+      <div className="form__row">
+        <Field label="Stock count" hint="Units on the shelf now" error={errors.stock_count}>
+          <input
+            className="input input--mono"
+            inputMode="numeric"
+            disabled={!form.track_stock}
+            value={form.stock_count}
+            onChange={(event) => setForm({ ...form, stock_count: event.target.value })}
+          />
+        </Field>
+        <Field label="Low-stock level" hint="Listed under Running low at or below this" error={errors.low_stock_threshold}>
+          <input
+            className="input input--mono"
+            inputMode="numeric"
+            value={form.low_stock_threshold}
+            onChange={(event) => setForm({ ...form, low_stock_threshold: event.target.value })}
+          />
+        </Field>
+      </div>
+      <Field label="Reason" hint="Optional, kept in the stock ledger, e.g. Shelf count">
+        <input className="input" value={form.stock_reason} onChange={(event) => setForm({ ...form, stock_reason: event.target.value })} />
+      </Field>
+    </>
   );
 }
 

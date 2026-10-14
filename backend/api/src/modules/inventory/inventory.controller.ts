@@ -14,6 +14,7 @@ import {
   sourceItemParamsSchema,
   sourcingOrderParamsSchema,
   supplierIdParamsSchema,
+  setStockSchema,
 } from './inventory.schema.js';
 
 export class InventoryController {
@@ -85,8 +86,8 @@ export class InventoryController {
   async getInventoryByProduct(req: Request, res: Response, next: NextFunction) {
     try {
       const { productId } = productIdParamsSchema.parse(req.params);
-      const { dark_store_id: darkStoreId } = productStockQuerySchema.parse(req.query);
-      const result = await inventoryService.getInventoryByProduct(productId, darkStoreId);
+      const { dark_store_id: darkStoreId, variant_id: variantId } = productStockQuerySchema.parse(req.query);
+      const result = await inventoryService.getInventoryByProduct(productId, darkStoreId, variantId ?? null);
       res.status(200).json({
         success: true,
         data: result,
@@ -125,6 +126,22 @@ export class InventoryController {
       const { productId } = productIdParamsSchema.parse(req.params);
       const input = updateThresholdSchema.parse(req.body);
       const result = await inventoryService.setLowStockThreshold(productId, input, req.user?.id);
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PUT /admin/inventory/:productId/stock (migration 045). */
+  async setStock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { productId } = productIdParamsSchema.parse(req.params);
+      const input = setStockSchema.parse(req.body);
+      const result = await inventoryService.setStock(productId, input, {
+        actorId: req.user!.id,
+        ipAddress: req.ip ?? null,
+        userAgent: req.get('user-agent') ?? null,
+      });
       res.status(200).json({ success: true, data: result });
     } catch (err) {
       next(err);

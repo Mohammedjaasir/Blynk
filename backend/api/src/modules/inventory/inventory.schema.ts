@@ -33,6 +33,8 @@ export const adjustStockSchema = z
       .int('Quantity delta must be an integer')
       .refine((val) => val !== 0, 'Quantity delta cannot be zero'),
     dark_store_id: z.string().uuid('Invalid dark store ID').optional(),
+    /** Migration 045: a variant's own stock row; omitted = the product-level row. */
+    variant_id: z.string().uuid('Invalid variant ID').optional(),
     notes: z.string().max(500, 'Notes cannot exceed 500 characters').optional(),
   })
   .superRefine((input, ctx) => {
@@ -75,13 +77,47 @@ export const productIdParamsSchema = z.object({
 
 export const productStockQuerySchema = z.object({
   dark_store_id: z.string().uuid('Invalid dark store ID').optional(),
+  /** Migration 045: GET /inventory/:productId?variant_id= reads a variant's stock row. */
+  variant_id: z.string().uuid('Invalid variant ID').optional(),
 });
+
+/**
+ * PUT /admin/inventory/:productId/stock (migration 045; owner, 2026-10-14):
+ * the product form's Stock section - tracking on/off, the count and the
+ * low-stock level of a product or one of its variants, in one call.
+ */
+export const setStockSchema = z
+  .object({
+    variant_id: z.string().uuid('Invalid variant ID').nullable().optional(),
+    tracked: z.boolean({ required_error: 'Say whether stock is tracked', invalid_type_error: 'tracked must be true or false' }),
+    stock_count: z
+      .number({ invalid_type_error: 'Stock count must be a number' })
+      .int('Stock count must be a whole number')
+      .min(0, 'Stock count cannot be negative')
+      .max(100000, 'Stock count is too large')
+      .optional(),
+    low_stock_threshold: z
+      .number({ invalid_type_error: 'Low-stock level must be a number' })
+      .int('Low-stock level must be a whole number')
+      .min(0, 'Low-stock level cannot be negative')
+      .max(100000, 'Low-stock level is too large')
+      .optional(),
+    reason: z.string().trim().max(300, 'Reason cannot exceed 300 characters').optional(),
+    dark_store_id: z.string().uuid('Invalid dark store ID').optional(),
+  })
+  .refine((v) => v.stock_count === undefined || v.tracked, {
+    message: 'Turn on stock tracking to set a stock count',
+    path: ['stock_count'],
+  });
+export type SetStockInput = z.infer<typeof setStockSchema>;
 
 export const updateInventoryModeSchema = z.object({
   tracking_mode: z.enum(['UNTRACKED', 'TRACKED'], {
     required_error: 'Tracking mode must be UNTRACKED or TRACKED',
   }),
   dark_store_id: z.string().uuid('Invalid dark store ID').optional(),
+  /** Migration 045: a variant's own stock row; omitted = the product-level row. */
+  variant_id: z.string().uuid('Invalid variant ID').optional(),
 });
 
 /** PATCH /admin/inventory/:productId/threshold - stock at or below this reads "Running low". */
@@ -92,6 +128,8 @@ export const updateThresholdSchema = z.object({
     .min(0, 'Low-stock threshold cannot be negative')
     .max(100000, 'Low-stock threshold is too large'),
   dark_store_id: z.string().uuid('Invalid dark store ID').optional(),
+  /** Migration 045: a variant's own stock row; omitted = the product-level row. */
+  variant_id: z.string().uuid('Invalid variant ID').optional(),
 });
 
 /**

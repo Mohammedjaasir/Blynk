@@ -292,6 +292,12 @@ export interface ImportRow {
   tracked?: 'yes' | 'no' | boolean | null;
   opening_stock?: number | null;
   image_url?: string | null;
+  /** Variant rows (migration 045): the product's SKU; the row is then a variant of it. */
+  parent_sku?: string | null;
+  /** Variant rows: the variant's label, e.g. "100 g". */
+  variant?: string | null;
+  /** Product rows: whole days 0..30 before it can be delivered; null = unchanged / 0 for new. */
+  delivery_lead_days?: number | null;
 }
 
 export type ImportStatus = 'created' | 'updated' | 'skipped' | 'error';
@@ -299,11 +305,12 @@ export type ImportStatus = 'created' | 'updated' | 'skipped' | 'error';
 /** The price an import row gives the product (migration 044). */
 export interface ImportRowPricing {
   pricing_mode: PricingMode;
-  pricing_source: PricingSource;
+  pricing_source: PricingSource | VariantPricingSource;
   purchase_cost: number;
   selling_price: number;
   /** MARKUP: the markup used; FIXED: the implied markup over cost (null when the cost is 0). */
-  effective_markup_percent: number | null;  /** Both price cells were empty on an existing SKU: its current pricing is kept. */
+  effective_markup_percent: number | null;
+  /** Both price cells were empty on an existing SKU: its current pricing is kept. */
   kept_current?: boolean;
 }
 
@@ -311,6 +318,11 @@ export interface ImportResultRow {
   row: number;
   sku: string | null;
   status: ImportStatus;
+  /** Migration 045: 'variant' for a variant row, with its parent SKU and label. */
+  kind?: 'product' | 'variant';
+  parent_sku?: string;
+  variant?: string;
+  variant_id?: string;
   product_id?: string;
   message?: string;
   errors?: Array<{ field: string; message: string }>;
@@ -330,6 +342,82 @@ export interface ImportResponse {
 export type PricingMode = 'MARKUP' | 'FIXED';
 /** Where a product's selling price comes from. */
 export type PricingSource = 'FIXED' | 'PRODUCT_MARKUP' | 'CATEGORY_MARKUP' | 'PARENT_CATEGORY_MARKUP' | 'GLOBAL_MARKUP';
+/** A variant's price source (migration 045): its own markup comes first in the chain. */
+export type VariantPricingSource = 'VARIANT_MARKUP' | PricingSource;
+
+/**
+ * Stock as staff see it (migration 045; product or variant). Customers never
+ * see a count, only whether they can order.
+ */
+export interface StaffStock {
+  inventory_id: string | null;
+  tracked: boolean;
+  on_hand: number;
+  reserved: number;
+  /** Units in orders not yet packed. */
+  in_open_orders: number;
+  /** What customers can still order; null when untracked. */
+  sellable: number | null;
+  low_stock_threshold: number;
+  is_low_stock: boolean;
+  is_out_of_stock: boolean;
+}
+
+/** One size / pack of a product (migration 045; GET /admin/products/:id/variants). */
+export interface StaffVariant {
+  id: string;
+  product_id: string;
+  label: string;
+  sku: string | null;
+  barcode: string | null;
+  sort_order: number;
+  is_active: boolean;
+  is_available: boolean;
+  purchase_cost: number;
+  pricing_mode: PricingMode;
+  fixed_selling_price: number | null;
+  custom_markup_percent: number | null;
+  product_markup_percent?: number | null;
+  category_markup_percent?: number | null;
+  parent_category_markup_percent?: number | null;
+  global_markup_percent?: number | null;
+  effective_markup_percent: number | null;
+  pricing_source: VariantPricingSource;
+  selling_price: number;
+  price_warning?: { code: 'SELLING_BELOW_COST'; message: string } | null;
+  offer_price: number | null;
+  offer_ends_at: string | null;
+  offer_active?: boolean;
+  customer_price?: number;
+  is_orderable?: boolean;
+  stock: StaffStock;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** DELETE /admin/products/:id/variants/:variantId. */
+export interface VariantDeleteResult {
+  product_id: string;
+  variant_id: string;
+  /** HARD = removed (never ordered); SOFT = archived (kept for order history). */
+  mode: 'HARD' | 'SOFT';
+}
+
+/** PUT /admin/inventory/:productId/stock body. */
+export interface SetStockInput {
+  variant_id?: string | null;
+  tracked: boolean;
+  stock_count?: number;
+  low_stock_threshold?: number;
+  reason?: string;
+}
+
+/** PUT /admin/inventory/:productId/stock answer. */
+export interface SetStockResult {
+  product_id: string;
+  variant_id: string | null;
+  stock: StaffStock;
+}
 
 /** GET|PATCH /admin/settings/default-markup. */
 export interface DefaultMarkupSetting {
@@ -392,6 +480,19 @@ export interface AdminProduct {
   is_available: boolean;
   is_active: boolean;
   updated_at?: string;
+  /** Migration 045: whole days before it can be delivered (0 = same day). */
+  delivery_lead_days?: number;
+  has_variants?: boolean;
+  is_orderable?: boolean;
+  variant_count?: number;
+  active_variant_count?: number;
+  /** Regular selling prices of the active variants (the product's own price without variants). */
+  price_min?: number;
+  price_max?: number;
+  /** The product-level stock (meaningful without variants). */
+  stock?: StaffStock;
+  /** Detail / create / update answers only. */
+  variants?: StaffVariant[];
 }
 
 /** Why a combo is not shown to customers (owner, 2026-10-09). */
@@ -538,6 +639,11 @@ export interface OrderItemRow {
   product_id?: string | null;
   /** The order combo line this item belongs to; null for a loose item (owner, 2026-10-09). */
   order_combo_id?: string | null;
+  /** Migration 045: the variant ordered (null without variants) and its label then. */
+  variant_id?: string | null;
+  variant_label_snapshot?: string | null;
+  /** The unit then; equals the variant label on variant lines. */
+  unit_snapshot?: string | null;
 }
 
 /** One combo pack line of an order; its items point at it by order_combo_id. */

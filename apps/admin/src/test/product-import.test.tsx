@@ -40,6 +40,7 @@ describe('productImport lib', () => {
     expect(TEMPLATE_COLUMNS).toEqual([
       'name', 'category', 'unit', 'pack_size', 'purchase_cost', 'selling_price', 'markup_percent',
       'sku', 'barcode', 'description', 'tracked', 'opening_stock', 'image_url',
+      'parent_sku', 'variant', 'delivery_lead_days',
     ]);
     expect(templateCsv().split('\r\n')[0]).toBe(TEMPLATE_COLUMNS.join(','));
 
@@ -71,6 +72,9 @@ describe('productImport lib', () => {
         tracked: 'yes',
         opening_stock: 24,
         image_url: null,
+        parent_sku: null,
+        variant: null,
+        delivery_lead_days: null,
       },
     });
   });
@@ -231,7 +235,7 @@ describe('Import products page', () => {
       {
         row: 2, name: 'Kotmale Fresh Milk 1L', category: 'Dairy', unit: 'bottle', pack_size: '1L',
         purchase_cost: 430, selling_price: 480, markup_percent: null, sku: 'KOT-MILK-1L', barcode: null, description: null,
-        tracked: 'yes', opening_stock: 24, image_url: null,
+        tracked: 'yes', opening_stock: 24, image_url: null, parent_sku: null, variant: null, delivery_lead_days: null,
       },
     ]);
 

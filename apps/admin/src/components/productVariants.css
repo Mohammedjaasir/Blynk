@@ -1,0 +1,92 @@
+/* Variants, stock and delivery lead time (migration 045; owner, 2026-10-14).
+   Built on the site's table, segmented control, rd-switch and modal. */
+
+.pv-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: #eef0f4;
+  color: var(--ink-2);
+}
+
+.pv-chip--ok {
+  background: #e7f5ea;
+  color: var(--green);
+}
+
+.pv-chip--low {
+  background: #fff4db;
+  color: #a35f00;
+}
+
+.pv-chip--out {
+  background: #fbeceb;
+  color: var(--danger);
+}
+
+.pv-chip--lead {
+  background: #e9f0fb;
+  color: #2457a6;
+}
+
+.pv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.pv-chips .pv-chip {
+  margin-left: 0;
+}
+
+.pv-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.pv-figures div {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.pv-figures dt {
+  font-size: 12px;
+}
+
+.pv-figures dd {
+  margin: 0;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.pv-switches {
+  display: grid;
+  gap: 10px;
+}
+
+.pv-table .row-actions {
+  flex-wrap: wrap;
+}
+
+.pv-dialog__group {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.pv-dialog__group-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink-2);
+}

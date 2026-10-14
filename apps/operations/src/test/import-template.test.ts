@@ -8,6 +8,7 @@ import {
   TEMPLATE_EXAMPLE_ROWS,
   TEMPLATE_NOTES,
   TEMPLATE_SHEETS,
+  VARIANT_RULES,
   buildTemplateWorkbook,
 } from '../lib/importTemplate';
 
@@ -32,9 +33,22 @@ describe('import template', () => {
     const products = XLSX.utils.sheet_to_json<unknown[]>(book.Sheets.Products!, { header: 1 });
     expect(products).toEqual([[...TEMPLATE_COLUMNS]]);
     const examples = XLSX.utils.sheet_to_json<unknown[]>(book.Sheets.Examples!, { header: 1, defval: '' });
-    expect(examples).toHaveLength(4);
+    // Header + 7 rows: the three pricing rules, a product with two variants, a lead-time product.
+    expect(examples).toHaveLength(8);
     expect(examples[0]).toEqual([...TEMPLATE_COLUMNS]);
-    expect(examples.slice(1).map((r) => r[TEMPLATE_COLUMNS.indexOf('sku')])).toEqual(['KOT-MILK-1L', 'RICE-SAMBA-5KG', 'SUN-SOAP-100']);
+    expect(examples.slice(1).map((r) => r[TEMPLATE_COLUMNS.indexOf('sku')])).toEqual([
+      'KOT-MILK-1L',
+      'RICE-SAMBA-5KG',
+      'SUN-SOAP-100',
+      'CHILLI-PWD',
+      'CHILLI-PWD-50G',
+      'CHILLI-PWD-100G',
+      'CAKE-RIBBON-1KG',
+    ]);
+    const col = (name: (typeof TEMPLATE_COLUMNS)[number]) => TEMPLATE_COLUMNS.indexOf(name);
+    expect(examples.slice(1).map((r) => r[col('parent_sku')])).toEqual(['', '', '', '', 'CHILLI-PWD', 'CHILLI-PWD', '']);
+    expect(examples.slice(1).map((r) => r[col('variant')])).toEqual(['', '', '', '', '50 g', '100 g', '']);
+    expect(examples[7]![col('delivery_lead_days')]).toBe(2);
     expect(TEMPLATE_EXAMPLE_ROWS.slice(1).every((r) => r.length === TEMPLATE_COLUMNS.length)).toBe(true);
   });
 
@@ -44,5 +58,15 @@ describe('import template', () => {
     expect(notes.some((n) => /EXISTING product \(same SKU\): its current pricing is kept unchanged/.test(n))).toBe(true);
     expect(notes.some((n) => /never both/.test(n))).toBe(true);
     expect(PRICING_RULES.some((r) => /EXISTING product \(same SKU\): its current pricing is kept/.test(r))).toBe(true);
+  });
+
+  it('explains variant rows (parent_sku, variant) and delivery_lead_days', () => {
+    const notes = TEMPLATE_NOTES.map((r) => r.join(' | '));
+    expect(TEMPLATE_COLUMNS.slice(-3)).toEqual(['parent_sku', 'variant', 'delivery_lead_days']);
+    expect(notes.some((n) => /^parent_sku \| variant rows \| .*SKU of the product this variant belongs to/.test(n))).toBe(true);
+    expect(notes.some((n) => /^variant \| variant rows \| .*size or pack/.test(n))).toBe(true);
+    expect(notes.some((n) => /^delivery_lead_days \| no \| .*0 or empty = same day, up to 30/.test(n))).toBe(true);
+    expect(VARIANT_RULES.some((r) => /parent_sku/.test(r) && /variant/.test(r))).toBe(true);
+    expect(VARIANT_RULES.some((r) => /delivery_lead_days/.test(r))).toBe(true);
   });
 });

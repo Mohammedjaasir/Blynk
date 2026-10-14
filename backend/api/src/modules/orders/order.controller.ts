@@ -29,6 +29,7 @@ const checkoutInfoQuerySchema = z.object({
     .optional(),
 });
 import { availableSlots } from '../configuration/store-schedule.js';
+import { leadFromQuery, leadQuerySchema } from './lead-time.js';
 
 export class OrderController {
   // --------------------------------------------------------------------------
@@ -68,16 +69,21 @@ export class OrderController {
     try {
       // Per-km tiers (owner, 2026-10-10): the fee for the cart's chosen address.
       const { address_id, subtotal } = checkoutInfoQuerySchema.parse(req.query);
-      res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id, address_id, subtotal) });
+      // Migration 045: ?product_ids=a,b (or ?lead_days=N) -> delivery_lead.
+      const lead = await leadFromQuery(leadQuerySchema.parse(req.query));
+      res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id, address_id, subtotal, lead) });
     } catch (err) {
       next(err);
     }
   }
 
   /** GET /orders/slots (owner, 2026-10-10): delivery slots the customer may pick. */
-  async getDeliverySlots(_req: Request, res: Response, next: NextFunction) {
+  async getDeliverySlots(req: Request, res: Response, next: NextFunction) {
     try {
-      res.status(200).json({ success: true, data: await availableSlots() });
+      // Migration 045 (owner, 2026-10-14): ?product_ids=a,b (or ?lead_days=N)
+      // limits the slots to days on/after today + the cart's lead time.
+      const lead = await leadFromQuery(leadQuerySchema.parse(req.query));
+      res.status(200).json({ success: true, data: await availableSlots(undefined, lead.lead_days) });
     } catch (err) {
       next(err);
     }

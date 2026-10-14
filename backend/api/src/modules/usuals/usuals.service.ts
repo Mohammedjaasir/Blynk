@@ -18,6 +18,13 @@ import { catalogService, type CustomerProductDto } from '../catalog/catalog.serv
 export interface UsualItem {
   product: CustomerProductDto;
   quantity: number;
+  /**
+   * Migration 045: the variant ordered (null for a product without variants)
+   * and its label then; "Add all" puts this variant in the basket. When it is
+   * no longer sold, product.variants says what can be picked instead.
+   */
+  variant_id: string | null;
+  variant_label: string | null;
 }
 
 export async function customerUsuals(customerId: string) {
@@ -34,26 +41,38 @@ export async function customerUsuals(customerId: string) {
 
   const lines = await db
     .selectFrom('order_items')
-    .select(['product_id', 'product_name_snapshot', 'quantity', 'item_status'])
+    .select(['product_id', 'variant_id', 'variant_label_snapshot', 'product_name_snapshot', 'quantity', 'item_status'])
     .where('order_id', '=', order.id)
     .where('order_combo_id', 'is', null)
     .orderBy('created_at', 'asc')
     .orderBy('id', 'asc')
     .execute();
 
-  // One entry per product (an order normally has each product once).
-  const wanted = new Map<string, { name: string; quantity: number }>();
+  // One entry per product, or per variant (migration 045).
+  const wanted = new Map<string, { productId: string; variantId: string | null; label: string | null; name: string; quantity: number }>();
   for (const l of lines) {
     if (l.item_status === 'UNAVAILABLE') continue; // removed from that order by the store
-    const prev = wanted.get(l.product_id);
-    wanted.set(l.product_id, { name: l.product_name_snapshot, quantity: (prev?.quantity ?? 0) + l.quantity });
+    const key = `${l.product_id}:${l.variant_id ?? ''}`;
+    const prev = wanted.get(key);
+    wanted.set(key, {
+      productId: l.product_id,
+      variantId: l.variant_id ?? null,
+      label: l.variant_label_snapshot ?? null,
+      name: l.product_name_snapshot,
+      quantity: (prev?.quantity ?? 0) + l.quantity,
+    });
   }
 
   const items: UsualItem[] = [];
   const unavailable: string[] = [];
-  for (const [productId, w] of wanted) {
+  for (const w of wanted.values()) {
     try {
-      items.push({ product: await catalogService.getProductById(productId), quantity: w.quantity });
+      items.push({
+        product: await catalogService.getProductById(w.productId),
+        quantity: w.quantity,
+        variant_id: w.variantId,
+        variant_label: w.label,
+      });
     } catch (err) {
       if (err instanceof AppError && err.statusCode === 404) unavailable.push(w.name);
       else throw err;

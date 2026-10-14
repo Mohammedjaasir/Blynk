@@ -140,7 +140,8 @@ export async function runDevSeed(): Promise<void> {
         ($1, 'b0000001-0000-0000-0000-000000000003', 'UNTRACKED', 0, 0),
         ($1, 'b0000001-0000-0000-0000-000000000004', 'UNTRACKED', 0, 0),
         ($1, 'b0000001-0000-0000-0000-000000000005', 'UNTRACKED', 0, 0)
-      ON CONFLICT (dark_store_id, product_id) DO NOTHING;
+      -- Migration 045: the product-level row (partial unique index, variant_id IS NULL).
+      ON CONFLICT (dark_store_id, product_id) WHERE variant_id IS NULL DO NOTHING;
     `, [storeId]);
 
     // 7. Users: Customer, Rider, Admin, Packing Staff

@@ -1,6 +1,6 @@
 import type { ImportRow, ImportRowResult } from '../api/types';
 import { TEMPLATE_COLUMNS, buildTemplateWorkbook } from './importTemplate';
-import { MAX_MARKUP_PERCENT, MAX_SELLING_PRICE, markupPrice, pricingSourceLabel, type PricingSource } from './pricing';
+import { MAX_MARKUP_PERCENT, MAX_SELLING_PRICE, markupPrice, variantPricingSourceLabel, type VariantPricingSource } from './pricing';
 
 /**
  * Bulk product import (spreadsheet -> `POST /admin/products/import`).
@@ -25,7 +25,10 @@ import { MAX_MARKUP_PERCENT, MAX_SELLING_PRICE, markupPrice, pricingSourceLabel,
  *                            global markup; an existing SKU keeps its pricing.
  * Both filled is an error.
  */
-export { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS } from './importTemplate';
+export { PRICING_RULES, TEMPLATE_COLUMNS, TEMPLATE_EXAMPLE_ROWS, VARIANT_RULES } from './importTemplate';
+
+/** The longest delivery lead time a product row may ask for (days). */
+export const MAX_IMPORT_LEAD_DAYS = 30;
 
 export type TemplateColumn = (typeof TEMPLATE_COLUMNS)[number];
 /** The older header for purchase_cost, still read (the server accepts it too). */
@@ -91,6 +94,19 @@ function hasTwoDecimalsAtMost(n: number): boolean {
   return Math.abs(Math.round(n * 100) - n * 100) < 1e-6;
 }
 
+/**
+ * A variant row (migration 045): its `variant` or `parent_sku` cell is
+ * filled. It belongs to the product whose SKU is in parent_sku.
+ */
+export function isVariantCells(cells: Partial<Record<ImportColumn, Cell>>): boolean {
+  return text(cells.variant) !== null || text(cells.parent_sku) !== null;
+}
+
+/** True for a parsed row that is a variant row. */
+export function isVariantImportRow(data: ImportRow): boolean {
+  return Boolean(data.variant || data.parent_sku);
+}
+
 /** Validates and normalises one data row (cells keyed by template column). */
 export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: number): ParsedImportRow {
   const errors: FieldError[] = [];
@@ -99,11 +115,43 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
     if (v === null) errors.push({ field, message: `${field} is required.` });
     return v ?? '';
   };
+  const variantRow = isVariantCells(cells);
 
-  const name = need('name');
-  const category = need('category');
-  const unit = need('unit');
-  const sku = need('sku');
+  // A variant row takes its name, category and unit from its product; its
+  // own SKU is optional (3-64 characters, never the product's).
+  let name = '';
+  let category = '';
+  let unit = '';
+  let sku = '';
+  let parentSku: string | null = null;
+  let variantLabel: string | null = null;
+  if (variantRow) {
+    parentSku = need('parent_sku') || null;
+    variantLabel = need('variant') || null;
+    if (variantLabel && variantLabel.length > 64) {
+      errors.push({ field: 'variant', message: 'variant can be at most 64 characters.' });
+    }
+    sku = text(cells.sku) ?? '';
+    if (sku && (sku.length < 3 || sku.length > 64)) {
+      errors.push({ field: 'sku', message: 'A variant sku must be 3 to 64 characters (or leave it empty).' });
+    } else if (sku && parentSku && sku === parentSku) {
+      errors.push({ field: 'sku', message: "A variant's sku must differ from parent_sku (or leave it empty)." });
+    }
+  } else {
+    name = need('name');
+    category = need('category');
+    unit = need('unit');
+    sku = need('sku');
+  }
+
+  // delivery_lead_days: product rows only, whole days 0-30 (blank = 0 / unchanged).
+  const leadDays = variantRow ? null : number(cells.delivery_lead_days);
+  if (
+    leadDays !== null &&
+    (Number.isNaN(leadDays) || !Number.isInteger(leadDays) || leadDays < 0 || leadDays > MAX_IMPORT_LEAD_DAYS)
+  ) {
+    errors.push({ field: 'delivery_lead_days', message: `delivery_lead_days must be whole days from 0 to ${MAX_IMPORT_LEAD_DAYS}.` });
+  }
 
   // purchase_cost, or the older cost_price header; both filled must agree.
   const purchaseCost = number(cells.purchase_cost);
@@ -170,6 +218,13 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
     opening_stock: opening !== null && !Number.isNaN(opening) ? opening : null,
     image_url: imageUrl,
   };
+  // Only sent when the row uses them, so a plain product row stays as before.
+  if (variantRow) {
+    data.parent_sku = parentSku;
+    data.variant = variantLabel;
+  } else if (leadDays !== null && !Number.isNaN(leadDays)) {
+    data.delivery_lead_days = leadDays;
+  }
   return { row, data, errors };
 }
 
@@ -225,7 +280,23 @@ export function parseSheet(matrix: Cell[][]): ParsedSheet {
     else seen.set(key, r.row);
   }
 
+  // Two rows naming the same variant of one product (labels match ignoring case).
+  const seenVariant = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.data.parent_sku || !r.data.variant) continue;
+    const key = `${r.data.parent_sku.toLowerCase()}|${r.data.variant.toLowerCase()}`;
+    const first = seenVariant.get(key);
+    if (first !== undefined) r.errors.push({ field: 'variant', message: `Same variant as row ${first}.` });
+    else seenVariant.set(key, r.row);
+  }
+
   return { rows, fileErrors, ignoredColumns };
+}
+
+/** A row's name for the preview / errors CSV: a variant row reads "CHILLI-PWD - 100 g". */
+export function importRowName(data: ImportRow): string {
+  if (isVariantImportRow(data)) return `${data.parent_sku ?? ''} - ${data.variant ?? ''}`;
+  return data.name;
 }
 
 /** RFC 4180 quoting; also neutralises spreadsheet formula injection. */
@@ -243,11 +314,12 @@ export function errorsCsv(parsed: ParsedImportRow[], results: ImportRowResult[] 
   const lines = [['row', 'sku', 'name', 'field', 'message']];
   const byRow = new Map(parsed.map((p) => [p.row, p]));
   for (const p of parsed) {
-    for (const e of p.errors) lines.push([String(p.row), p.data.sku, p.data.name, e.field, e.message]);
+    for (const e of p.errors) lines.push([String(p.row), p.data.sku, importRowName(p.data), e.field, e.message]);
   }
   for (const r of results) {
     if (r.status !== 'error') continue;
-    const name = byRow.get(r.row)?.data.name ?? '';
+    const parsedRow = byRow.get(r.row);
+    const name = parsedRow ? importRowName(parsedRow.data) : r.variant ? `${r.parent_sku ?? ''} - ${r.variant}` : '';
     const sku = r.sku ?? byRow.get(r.row)?.data.sku ?? '';
     if (r.errors && r.errors.length > 0) {
       for (const e of r.errors) lines.push([String(r.row), sku, name, e.field, e.message]);
@@ -267,34 +339,47 @@ export function errorsCsv(parsed: ParsedImportRow[], results: ImportRowResult[] 
 export function rowPricing(
   data: ImportRow,
   server: ImportRowResult | undefined
-): { price: number | null; source: PricingSource | null; label: string; warnings: string[] } {
+): { price: number | null; source: VariantPricingSource | null; label: string; warnings: string[] } {
   if (server?.pricing) {
     const kept = server.pricing.kept_current ? ' (current pricing kept)' : '';
     return {
       price: server.pricing.selling_price,
       source: server.pricing.pricing_source,
-      label: `${pricingSourceLabel(server.pricing.pricing_source)}${kept}`,
+      label: `${variantPricingSourceLabel(server.pricing.pricing_source)}${kept}`,
       warnings: server.warnings ?? [],
     };
   }
   const warnings = server?.warnings ?? [];
+  const variant = isVariantImportRow(data);
   if (data.selling_price !== null && data.selling_price !== undefined) {
-    return { price: data.selling_price, source: 'FIXED', label: pricingSourceLabel('FIXED'), warnings };
+    return { price: data.selling_price, source: 'FIXED', label: variantPricingSourceLabel('FIXED'), warnings };
   }
   if (data.markup_percent !== null && data.markup_percent !== undefined) {
+    const source: VariantPricingSource = variant ? 'VARIANT_MARKUP' : 'PRODUCT_MARKUP';
     return {
       price: markupPrice(data.purchase_cost, data.markup_percent),
-      source: 'PRODUCT_MARKUP',
-      label: pricingSourceLabel('PRODUCT_MARKUP'),
+      source,
+      label: variantPricingSourceLabel(source),
       warnings,
     };
   }
-  return { price: null, source: null, label: 'Category / global markup (new) or current pricing (existing)', warnings };
+  return {
+    price: null,
+    source: null,
+    label: variant
+      ? 'Product / category / global markup (new) or current pricing (existing)'
+      : 'Category / global markup (new) or current pricing (existing)',
+    warnings,
+  };
 }
 
 /** Human summary of one server result for the preview table. */
 export function resultLabel(r: ImportRowResult | undefined): string {
   if (!r) return '';
+  if (r.kind === 'variant') {
+    if (r.status === 'created') return 'New variant will be added';
+    if (r.status === 'updated') return 'Will update the existing variant';
+  }
   if (r.status === 'created') return 'Will be added';
   if (r.status === 'updated') return 'Will update the existing SKU';
   if (r.status === 'skipped') return 'No change';

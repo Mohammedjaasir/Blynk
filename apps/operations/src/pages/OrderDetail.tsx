@@ -23,6 +23,7 @@ import {
   farBatchRefusal,
   type FarBatchRefusal,
   type OrderAction,
+  orderItemName,
 } from '../lib/orders';
 import { scheduledLabel } from '../lib/slots';
 
@@ -175,7 +176,7 @@ export function OrderDetail() {
     return (
       <li key={row.key} className={`order-items__row order-items__row--${item.item_status.toLowerCase()}`}>
         <span className="order-items__qty mono">{row.quantity} ×</span>
-        <span className="order-items__name">{item.product_name_snapshot}</span>
+        <span className="order-items__name">{orderItemName(item)}</span>
         <span className="order-items__status">{ITEM_STATUS_LABEL[item.item_status] ?? item.item_status}</span>
         {beingPacked && item.item_status === 'PENDING' ? (
           // Not on the shelf: off the bill, and the customer is told.
@@ -184,7 +185,7 @@ export function OrderDetail() {
             className="text-button"
             disabled={busyItem !== null || busyAction !== null}
             onClick={() => setConfirmItem(row)}
-            aria-label={`Mark ${item.product_name_snapshot} unavailable`}
+            aria-label={`Mark ${orderItemName(item)} unavailable`}
           >
             {busyItem === row.key ? 'Saving…' : 'Unavailable'}
           </button>
@@ -353,7 +354,7 @@ export function OrderDetail() {
               Mark item unavailable
             </h2>
             <p className="modal__message">
-              {confirmItem.quantity} × {confirmItem.item.product_name_snapshot} comes off this order and its bill, and the
+              {confirmItem.quantity} × {orderItemName(confirmItem.item)} comes off this order and its bill, and the
               customer is told. This cannot be undone.
             </p>
             <div className="modal__actions">

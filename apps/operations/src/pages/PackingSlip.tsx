@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { orders as ordersApi } from '../api/resources';
 import type { OrderDetail } from '../api/types';
-import { comboHeading, formatMoney, groupOrderItems, orderErrorMessage } from '../lib/orders';
+import { comboHeading, formatMoney, groupOrderItems, orderErrorMessage, orderItemName, orderItemUnit } from '../lib/orders';
 import { formatPhone } from '../lib/format';
 import { formatSlotAbsolute } from '../lib/slots';
 
@@ -170,8 +170,8 @@ export function PackingSlip() {
               {rows.map((row) => (
                 <tr key={row.key}>
                   <td className="mono">{row.quantity}</td>
-                  <td>{row.item.product_name_snapshot}</td>
-                  <td>{row.item.unit_snapshot ?? ''}</td>
+                  <td>{orderItemName(row.item)}</td>
+                  <td>{orderItemUnit(row.item)}</td>
                 </tr>
               ))}
             </tbody>
@@ -187,8 +187,8 @@ export function PackingSlip() {
             {grouped.loose.map(({ item }) => (
               <tr key={item.id}>
                 <td className="mono">{item.quantity}</td>
-                <td>{item.product_name_snapshot}</td>
-                <td>{item.unit_snapshot ?? ''}</td>
+                <td>{orderItemName(item)}</td>
+                <td>{orderItemUnit(item)}</td>
               </tr>
             ))}
           </tbody>
