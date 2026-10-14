@@ -5,6 +5,7 @@ import { AppUpdatePrompt } from './components/AppUpdate';
 import { Cash } from './pages/Cash';
 import { Catalog } from './pages/Catalog';
 import { Categories } from './pages/Catalog/Categories';
+import { CategoryImport } from './pages/Catalog/CategoryImport';
 import { ArrangeProducts } from './pages/Catalog/ArrangeProducts';
 import { CategoryGroups } from './pages/Catalog/CategoryGroups';
 import { Combos } from './pages/Catalog/Combos';
@@ -143,6 +144,8 @@ export function AppRoutes() {
         <Route path="catalog/products/import" element={<ProductImport />} />
         <Route path="catalog/products/:id" element={<ProductForm />} />
         <Route path="catalog/categories" element={<Categories />} />
+        {/* Import categories (2026-10-14): Main -> Category -> Sub-category from one list. */}
+        <Route path="catalog/categories/import" element={<CategoryImport />} />
         {/* Arrange (owner, 2026-10-10): a category's product order. */}
         <Route path="catalog/categories/:id/arrange" element={<ArrangeProducts />} />
         <Route path="catalog/category-groups" element={<CategoryGroups />} />

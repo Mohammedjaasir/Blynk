@@ -164,6 +164,10 @@ export function Categories() {
               >
                 Arrange
               </button>
+              {/* Import categories (owner, 2026-10-14): the whole Main -> Category -> Sub-category list at once. */}
+              <Link className="button button--ghost" to="/categories/import">
+                Import categories
+              </Link>
               <button
                 type="button"
                 className="button"

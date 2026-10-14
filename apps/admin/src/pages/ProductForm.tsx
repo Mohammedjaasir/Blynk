@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { categories as categoriesApi, products as productsApi, settings as settingsApi } from '../api/resources';
 import type { Category, PricingMode, PricingSource } from '../api/types';
+import { categoryOptions } from '../lib/categoryTree';
 import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
 import { ApiError } from '../api/client';
@@ -194,7 +195,7 @@ export function ProductForm() {
         setForm((current) =>
           current.category_id || rows.length === 0
             ? current
-            : { ...current, category_id: rows[0]!.id }
+            : { ...current, category_id: categoryOptions(rows)[0]!.category.id }
         );
       })
       .catch(() => setCategories([]));
@@ -532,9 +533,10 @@ export function ProductForm() {
               onChange={(event) => setForm({ ...form, category_id: event.target.value })}
             >
               <option value="">Select a category</option>
-              {categories.map((category) => (
+              {/* Each category followed by its sub-categories ("Rice & Flour › Rice"). */}
+              {categoryOptions(categories).map(({ category, label }) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {label}
                   {category.is_active ? '' : ' (inactive)'}
                 </option>
               ))}

@@ -82,6 +82,11 @@ import type {
   RiderAdjustment,
   RiderAdjustmentInput,
   CategoryProductOrder,
+  RemoveImagesPreview,
+  RemoveImagesResult,
+  CategoryImportInput,
+  CategoryImportResult,
+  CategoryImportTemplate,
 } from './types';
 
 /**
@@ -164,6 +169,19 @@ export const categories = {
       method: 'PUT',
       body: { ids },
     }).then((d) => d.categories),
+
+  /** Import categories: the owner's list as text (GET /admin/categories/import/template). */
+  importTemplate: () => apiRequest<CategoryImportTemplate>('/admin/categories/import/template'),
+
+  /**
+   * Import categories from pasted text or sheet rows. dry_run previews
+   * without writing; an apply with errors is 400 CATEGORY_IMPORT_INVALID.
+   */
+  importCategories: (input: CategoryImportInput, dryRun: boolean) =>
+    apiRequest<CategoryImportResult>('/admin/categories/import', {
+      method: 'POST',
+      body: { ...input, dry_run: dryRun },
+    }),
 
   /** The category's products (its sub-categories' too) in customer order. */
   productOrder: (id: string) => apiRequest<CategoryProductOrder>(`/admin/categories/${id}/product-order`),
@@ -286,6 +304,12 @@ export const products = {
     return { products: all, complete: false };
   },
 
+  /** One page of admin products matching `search` (pickers). */
+  searchAdmin: (search: string, limit = 20) => {
+    const query = new URLSearchParams({ search, limit: String(limit), page: '1' });
+    return apiRequest<{ products: AdminProduct[] }>(`/admin/products?${query.toString()}`).then((d) => d.products);
+  },
+
   getAdmin: (id: string) =>
     apiRequest<{ product: AdminProduct }>(`/admin/products/${id}`).then(
       (data) => data.product
@@ -305,6 +329,13 @@ export const products = {
 
   /** Hard-deletes a never-ordered product; hides (soft-deletes) one with order history. */
   remove: (id: string) => apiRequest<ProductDeleteResult>(`/admin/products/${id}`, { method: 'DELETE' }),
+
+  /** Remove all product images (ADMIN only): what would be cleared, nothing written. */
+  removeImagesPreview: () => apiRequest<RemoveImagesPreview>('/admin/products/remove-images/preview'),
+
+  /** Clears every product and combo image and deletes the unused uploaded files. Cannot be undone. */
+  removeAllImages: (confirm: string) =>
+    apiRequest<RemoveImagesResult>('/admin/products/remove-images', { method: 'POST', body: { confirm } }),
 
   /** Rows parsed in the browser; dry_run validates against the DB without writing. */
   importRows: (rows: ImportRow[], dryRun: boolean) =>
@@ -401,6 +432,10 @@ export const settings = {
 
   setDoctorsAccess: (require_sign_in: boolean) =>
     apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { require_sign_in } }),
+
+  /** Show doctor channelling to customers (owner, 2026-10-14); require_sign_in keeps its value. */
+  setDoctorsVisibility: (show_to_customers: boolean) =>
+    apiRequest<DoctorsAccessSetting>('/admin/settings/doctors-access', { method: 'PATCH', body: { show_to_customers } }),
 
   /** Birthday-week gift and birthday SMS (owner, 2026-10-09). ADMIN and OPERATIONS. */
   getBirthdayOffer: () => apiRequest<BirthdayOfferSetting>('/admin/settings/birthday-offer'),

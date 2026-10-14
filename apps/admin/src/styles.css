@@ -3209,3 +3209,57 @@ th.cell__secondary {
   flex: 0 1 140px;
   margin: 0;
 }
+
+/* Product picker results (Promotions destination). */
+.picker-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.picker-results .button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+.picker-results .button[aria-pressed='true'] {
+  font-weight: 700;
+}
+
+/* Import categories: the preview tree (Main -> Category -> Sub-category). */
+.cat-import__tree,
+.cat-import__tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cat-import__tree ul {
+  padding-left: 22px;
+  border-left: 1px solid var(--line, #e5e5e5);
+  margin-left: 8px;
+}
+.cat-import__tree li {
+  margin: 4px 0;
+}
+.cat-import__node {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.cat-import__level {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  min-width: 84px;
+}
+.cat-import__source {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}

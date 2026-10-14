@@ -953,10 +953,34 @@ export interface Promotion {
   cta_label: string | null;
   cta_destination_type: PromotionDestinationType | null;
   cta_destination_value: string | null;
+  /**
+   * What the destination resolves to (2026-10-14), on every promotion
+   * payload. Null = no destination, or it no longer exists. Absent on an
+   * older API.
+   */
+  cta_target?: PromotionTarget | null;
   display_order: number;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+/** Banner target levels: MAIN = a category group (stored as CATALOG + group
+ * id); CATALOG = the whole catalog; CATEGORY / SUB_CATEGORY = stored as
+ * CATEGORY + slug; PRODUCT = stored as PRODUCT + id. */
+export type PromotionTargetLevel = 'MAIN' | 'CATEGORY' | 'SUB_CATEGORY' | 'PRODUCT' | 'CATALOG';
+
+export interface PromotionTarget {
+  level: PromotionTargetLevel;
+  id: string | null;
+  slug: string | null;
+  name: string | null;
+  /** SUB_CATEGORY: the category whose sidebar it sits in. */
+  parent_id: string | null;
+  parent_slug: string | null;
+  parent_name: string | null;
+  /** Whether customers can see the target now (null for the whole catalog). */
+  is_active: boolean | null;
 }
 
 // ---------------------------------------------------------------- inventory
@@ -1257,7 +1281,10 @@ export interface LowStockResult {
 export interface ImportRow {
   row?: number;
   name: string;
+  /** A category name or slug, or "Category > Sub-category". */
   category: string;
+  /** Optional sidebar item inside `category` (2026-10-14). */
+  sub_category?: string | null;
   unit: string;
   pack_size?: string | null;
   purchase_cost: number;
@@ -1936,6 +1963,10 @@ export interface RiderTripsSetting {
  * /admin/settings/doctors-access. */
 export interface DoctorsAccessSetting {
   require_sign_in: boolean;
+  /** Doctor channelling on/off for customers (2026-10-14). Off: customers
+   * don't see doctors and can't book; existing bookings stay visible and
+   * cancellable; staff dental screens are unaffected. Default true. */
+  show_to_customers: boolean;
   updated_at: string | null;
 }
 
@@ -2082,3 +2113,63 @@ export type StoreHoursInput =
   | { same_every_day: false; days: Record<DayKey, DayHours> };
 
 export type StoreClosureInput = { closed: true; reason: string; reopens_at?: string | null } | { closed: false };
+
+// ------------------------------------------------------- category import
+/** Category import (2026-10-14): GET /admin/categories/import/template. */
+export interface CategoryImportTemplate {
+  text: string;
+  columns: string[];
+}
+
+/** One sheet row for POST /admin/categories/import (`row` = spreadsheet row). */
+export type CategoryImportSheetRow = { row: number } & Record<string, string | number>;
+
+export type CategoryImportAction = 'create' | 'update' | 'keep';
+
+export interface CategoryImportNodeBase {
+  name: string;
+  /** Null for an item the import would create. */
+  id: string | null;
+  action: CategoryImportAction;
+  /** What an update changes (and notes for a create). */
+  changes: string[];
+  /** Whether customers will see it. */
+  active: boolean;
+  warnings: string[];
+  /** The line (text) or sheet row it came from. */
+  source: number;
+}
+export interface CategoryImportSubNode extends CategoryImportNodeBase {
+  display_order: number;
+}
+export interface CategoryImportCategoryNode extends CategoryImportNodeBase {
+  display_order: number;
+  sub_categories: CategoryImportSubNode[];
+}
+export interface CategoryImportMainNode extends CategoryImportNodeBase {
+  sort_order: number;
+  categories: CategoryImportCategoryNode[];
+}
+export interface CategoryImportCounts {
+  create: number;
+  update: number;
+  keep: number;
+}
+export interface CategoryImportIssue {
+  line: number | null;
+  message: string;
+}
+/** POST /admin/categories/import response (`data`). */
+export interface CategoryImportResult {
+  dry_run: boolean;
+  summary: {
+    mains: CategoryImportCounts;
+    categories: CategoryImportCounts;
+    sub_categories: CategoryImportCounts;
+    others_reordered: number;
+  };
+  tree: CategoryImportMainNode[];
+  warnings: string[];
+  errors: CategoryImportIssue[];
+  ignored_lines: CategoryImportIssue[];
+}

@@ -27,6 +27,8 @@ export interface StoredMedia {
 export interface MediaStorage {
   save(buffer: Buffer, contentType: string, folder: string): Promise<StoredMedia>;
   delete(key: string): Promise<void>;
+  /** Whether a stored file exists (false for a key outside the media root). */
+  exists(key: string): Promise<boolean>;
   /** Extracts a storage key from a stored URL, or null if it isn't ours. */
   keyFromUrl(url: string): string | null;
 }
@@ -70,17 +72,36 @@ export class LocalDiskStorage implements MediaStorage {
     return { key, url: `${this.baseUrl}${this.publicPath}/${key}` };
   }
 
-  async delete(key: string): Promise<void> {
-    // Keys come from keyFromUrl or save; normalize anyway so a crafted
-    // value can't escape the media root.
+  /**
+   * The absolute path of a key, or null when it would land outside the media
+   * root (or on the root itself). Keys come from keyFromUrl or save;
+   * normalized anyway so a crafted value can't escape.
+   */
+  private pathFor(key: string): string | null {
     const normalized = path
       .normalize(key)
       .replace(/^(\.\.(\/|\\|$))+/, '')
       .replace(/^[/\\]+/, '');
     const target = path.resolve(this.root, normalized);
-    if (!target.startsWith(this.root)) return;
+    const relative = path.relative(this.root, target);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
+    return target;
+  }
 
+  async delete(key: string): Promise<void> {
+    const target = this.pathFor(key);
+    if (!target) return;
     await fs.promises.rm(target, { force: true });
+  }
+
+  async exists(key: string): Promise<boolean> {
+    const target = this.pathFor(key);
+    if (!target) return false;
+    try {
+      return (await fs.promises.stat(target)).isFile();
+    } catch {
+      return false;
+    }
   }
 
   keyFromUrl(url: string): string | null {

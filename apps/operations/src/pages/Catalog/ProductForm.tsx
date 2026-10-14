@@ -8,6 +8,7 @@ import { PageHeader } from '../../components/Layout';
 import { Field, Spinner } from '../../components/ui';
 import {
   catalogErrorMessage,
+  categoryOptions,
   colomboDay,
   colomboTodayDay,
   formatColomboDate,
@@ -149,7 +150,8 @@ export function ProductForm() {
       .list()
       .then((rows) => {
         setCategories(rows);
-        setForm((current) => (current.category_id || rows.length === 0 ? current : { ...current, category_id: rows[0]!.id }));
+        const first = categoryOptions(rows)[0];
+        setForm((current) => (current.category_id || !first ? current : { ...current, category_id: first.id }));
       })
       .catch(() => setCategories([]));
     // Preview only; when this cannot be read the product's own copy (or 20%) stands in.
@@ -232,6 +234,8 @@ export function ProductForm() {
     [form.category_id, categories, globalPercent]
   );
   const selectedCategory = categories.find((c) => c.id === form.category_id) ?? null;
+  /** Each category followed by its sub-categories ("Category › Sub-category"), in customer order. */
+  const pickerOptions = useMemo(() => categoryOptions(categories), [categories]);
 
   /** The purchase cost as typed, or null when it is not a valid amount yet. */
   const cost = useMemo(() => {
@@ -411,10 +415,10 @@ export function ProductForm() {
           <Field label="Category" error={errors.category_id}>
             <select className="input" value={form.category_id} onChange={(event) => setForm({ ...form, category_id: event.target.value })}>
               <option value="">Select a category</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                  {category.is_active ? '' : ' (inactive)'}
+              {pickerOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                  {option.isActive ? '' : ' (inactive)'}
                 </option>
               ))}
             </select>

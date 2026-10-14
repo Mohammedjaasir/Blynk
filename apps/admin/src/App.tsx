@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Spinner, ToastProvider } from './components/ui';
 import { Cash } from './pages/Cash';
 import { Categories } from './pages/Categories';
+import { CategoryImport } from './pages/CategoryImport';
 import { ArrangeProducts } from './pages/ArrangeProducts';
 import { Combos } from './pages/Combos';
 import { CategoryGroups } from './pages/CategoryGroups';
@@ -82,6 +83,8 @@ export function AppRoutes() {
         <Route path="products/import" element={<AdminOnly><ProductImport /></AdminOnly>} />
         <Route path="products/:id" element={<AdminOnly><ProductForm /></AdminOnly>} />
         <Route path="categories" element={<AdminOnly><Categories /></AdminOnly>} />
+        {/* Import categories (owner, 2026-10-14): Main -> Category -> Sub-category. */}
+        <Route path="categories/import" element={<AdminOnly><CategoryImport /></AdminOnly>} />
         {/* Arrange (owner, 2026-10-10): a category's product order. */}
         <Route path="categories/:id/arrange" element={<AdminOnly><ArrangeProducts /></AdminOnly>} />
         <Route path="category-groups" element={<AdminOnly><CategoryGroups /></AdminOnly>} />

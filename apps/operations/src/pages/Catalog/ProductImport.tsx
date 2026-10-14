@@ -6,6 +6,7 @@ import { PageHeader } from '../../components/Layout';
 import { Badge, Spinner } from '../../components/ui';
 import { catalogErrorMessage } from '../../lib/catalog';
 import {
+  CATEGORY_HELP,
   TEMPLATE_COLUMNS,
   PRICING_RULES,
   buildTemplateBlob,
@@ -162,6 +163,9 @@ export function ProductImport() {
         <p className="card__note">
           1. Download the template and fill one product per row. Columns: <span className="mono">{TEMPLATE_COLUMNS.join(', ')}</span>.
         </p>
+        <p className="card__note" aria-label="Categories and sub-categories">
+          {CATEGORY_HELP}
+        </p>
         <div className="card__note" aria-label="How prices are set">
           <p>How each row is priced:</p>
           <ul>
@@ -234,7 +238,7 @@ export function ProductImport() {
                       <td className="mono">{r.row}</td>
                       <td>{r.data.name}</td>
                       <td className="mono">{r.data.sku}</td>
-                      <td>{r.data.category}</td>
+                      <td>{r.data.sub_category ? `${r.data.category} › ${r.data.sub_category}` : r.data.category}</td>
                       <td className="mono">{r.data.purchase_cost.toFixed(2)}</td>
                       <td className="mono">{bad || pricing.price === null ? '—' : pricing.price.toFixed(2)}</td>
                       <td>{bad ? '—' : <Badge tone="muted">{pricing.label}</Badge>}</td>

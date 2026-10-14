@@ -174,6 +174,9 @@ export function Categories() {
             >
               Arrange
             </button>
+            <Link className="button button--ghost" to="/catalog/categories/import">
+              Import categories
+            </Link>
             <button
               type="button"
               className="button"

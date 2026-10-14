@@ -9,6 +9,8 @@ import { combosController } from './catalog.combos.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { idParamSchema } from './catalog.schema.js';
 import { arrangeController } from './catalog.arrange.js';
+import { removeImagesController } from './catalog.remove-images.js';
+import { categoryImportController } from './catalog.category-import.js';
 
 // A malformed :id is a 400 VALIDATION_ERROR, never a Postgres uuid cast 500.
 const validId = validate({ params: idParamSchema });
@@ -44,6 +46,10 @@ adminCatalogRouter.get('/categories', requireAuth, requireRoles(['ADMIN', 'OPERA
 adminCatalogRouter.post('/categories', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createCategoryAdmin.bind(catalogController));
 // Arrange (owner, 2026-10-10): sibling categories' order, and the product
 // order inside a category. /categories/order before /categories/:id.
+// Category import (owner, 2026-10-14): Main -> Category -> Sub-category from
+// pasted text or a spreadsheet; dry_run previews. /categories/import before /:id.
+adminCatalogRouter.get('/categories/import/template', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryImportController.template);
+adminCatalogRouter.post('/categories/import', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), categoryImportController.run);
 adminCatalogRouter.put('/categories/order', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), arrangeController.reorderCategories);
 adminCatalogRouter.get('/categories/:id/product-order', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, arrangeController.getProductOrder);
 adminCatalogRouter.put('/categories/:id/product-order', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, arrangeController.setProductOrder);
@@ -67,6 +73,10 @@ adminCatalogRouter.patch('/combos/:id', requireAuth, requireRoles(['ADMIN', 'OPE
 adminCatalogRouter.delete('/combos/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, combosController.remove);
 // Bulk import (.xlsx/.csv parsed in the browser). Before /products/:id.
 adminCatalogRouter.post('/products/import', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.importProductsAdmin.bind(catalogController));
+// Remove all product images (owner, 2026-10-14) - ADMIN ONLY: destructive
+// and irreversible (catalog.remove-images.ts). Before /products/:id.
+adminCatalogRouter.get('/products/remove-images/preview', requireAuth, requireRoles('ADMIN'), removeImagesController.preview);
+adminCatalogRouter.post('/products/remove-images', requireAuth, requireRoles('ADMIN'), removeImagesController.remove);
 adminCatalogRouter.get('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.listProductsAdmin.bind(catalogController));
 adminCatalogRouter.get('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.getProductByIdAdmin.bind(catalogController));
 adminCatalogRouter.post('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createProductAdmin.bind(catalogController));
@@ -97,3 +107,5 @@ export * from './catalog.stock-alerts.js';
 export * from './catalog.groups.js';
 export * from './catalog.combos.js';
 export * from './catalog.arrange.js';
+export * from './catalog.remove-images.js';
+export * from './catalog.category-import.js';

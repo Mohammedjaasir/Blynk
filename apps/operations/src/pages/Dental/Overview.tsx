@@ -84,6 +84,9 @@ export function Overview() {
  * show the doctor things."). On by default; flipping the switch saves at
  * once (PATCH /admin/settings/doctors-access, audited) and the customer app
  * follows within about a minute.
+ *
+ * "Show doctor channelling to customers" (2026-10-14) sits above it in the
+ * same card: the same setting row (`show_to_customers`), saved the same way.
  */
 export function DoctorsSignInCard() {
   const [current, setCurrent] = useState<DoctorsAccessSetting | null>(null);
@@ -99,18 +102,26 @@ export function DoctorsSignInCard() {
       .catch((err) => setLoadError(catalogErrorMessage(err)));
   }, []);
 
-  async function change(requireSignIn: boolean) {
+  async function change(body: { require_sign_in?: boolean; show_to_customers?: boolean }) {
     setNotice(null);
     setError(null);
     setSaving(true);
     try {
-      const saved = await settings.doctorsAccess.update(requireSignIn);
+      const saved = await settings.doctorsAccess.update(body);
       setCurrent(saved);
-      setNotice(
-        saved.require_sign_in
-          ? 'Saved. Customers must sign in to see doctors.'
-          : 'Saved. Anyone can see doctors without signing in.'
-      );
+      if (body.show_to_customers !== undefined) {
+        setNotice(
+          saved.show_to_customers !== false
+            ? 'Saved. Customers can see doctors and book again.'
+            : 'Saved. Doctor channelling is hidden from customers.'
+        );
+      } else {
+        setNotice(
+          saved.require_sign_in
+            ? 'Saved. Customers must sign in to see doctors.'
+            : 'Saved. Anyone can see doctors without signing in.'
+        );
+      }
     } catch (err) {
       setError(catalogErrorMessage(err));
     } finally {
@@ -128,21 +139,38 @@ export function DoctorsSignInCard() {
       ) : !current ? (
         <Spinner label="Loading the doctors sign-in setting" />
       ) : (
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={current.require_sign_in}
-            disabled={saving}
-            onChange={(e) => void change(e.target.checked)}
-          />
-          <span>
-            <strong>Doctors need sign-in</strong>
-            <em>
-              When on, customers must log in or create an account with their phone number before the app shows
-              clinics and doctors. When off, anyone can see doctors; booking always needs sign-in.
-            </em>
-          </span>
-        </label>
+        <>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={current.show_to_customers !== false}
+              disabled={saving}
+              onChange={(e) => void change({ show_to_customers: e.target.checked })}
+            />
+            <span>
+              <strong>Show doctor channelling to customers</strong>
+              <em>
+                When off, customers don't see doctors and can't book. Bookings already made stay visible and can
+                still be cancelled. Staff dental screens are not affected.
+              </em>
+            </span>
+          </label>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={current.require_sign_in}
+              disabled={saving}
+              onChange={(e) => void change({ require_sign_in: e.target.checked })}
+            />
+            <span>
+              <strong>Doctors need sign-in</strong>
+              <em>
+                When on, customers must log in or create an account with their phone number before the app shows
+                clinics and doctors. When off, anyone can see doctors; booking always needs sign-in.
+              </em>
+            </span>
+          </label>
+        </>
       )}
       {saving ? <Spinner label="Saving" /> : null}
       {error ? <p className="field__error" role="alert">{error}</p> : null}

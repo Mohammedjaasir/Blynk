@@ -101,7 +101,7 @@ describe('Doctors need sign-in setting', () => {
     await pool.query('DELETE FROM system_configurations WHERE key = $1', [DOCTORS_ACCESS_KEY]);
     const res = await getSetting(opsToken);
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ require_sign_in: true, updated_at: null });
+    expect(res.body.data).toEqual({ require_sign_in: true, show_to_customers: true, updated_at: null });
     expect(await storeFlag()).toBe(true);
   });
 
@@ -138,15 +138,23 @@ describe('Doctors need sign-in setting', () => {
     expect(audit).toHaveLength(2);
     // The first change had no stored row: the old values are just the key.
     expect(audit[0].old_values).toEqual({ key: DOCTORS_ACCESS_KEY });
-    expect(audit[0].new_values).toEqual({ key: DOCTORS_ACCESS_KEY, require_sign_in: false });
-    expect(audit[1].old_values).toEqual({ key: DOCTORS_ACCESS_KEY, require_sign_in: false });
-    expect(audit[1].new_values).toEqual({ key: DOCTORS_ACCESS_KEY, require_sign_in: true });
+    expect(audit[0].new_values).toEqual({ key: DOCTORS_ACCESS_KEY, require_sign_in: false, show_to_customers: true });
+    expect(audit[1].old_values).toEqual({ key: DOCTORS_ACCESS_KEY, require_sign_in: false, show_to_customers: true });
+    expect(audit[1].new_values).toEqual({ key: DOCTORS_ACCESS_KEY, require_sign_in: true, show_to_customers: true });
     expect(audit.every((a) => a.actor_user_id === users.admin.id)).toBe(true);
   });
 
   it('refuses malformed bodies (strict) and changes nothing', async () => {
     await patchSetting({ require_sign_in: true });
-    for (const body of [{}, { require_sign_in: 'false' }, { require_sign_in: 0 }, { require_sign_in: null }, { require_sign_in: false, extra: 1 }]) {
+    for (const body of [
+      {},
+      { require_sign_in: 'false' },
+      { require_sign_in: 0 },
+      { require_sign_in: null },
+      { require_sign_in: false, extra: 1 },
+      { show_to_customers: 'no' },
+      { show_to_customers: null },
+    ]) {
       const res = await patchSetting(body);
       expect(res.status, JSON.stringify(body)).toBe(400);
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
@@ -234,5 +242,92 @@ describe('Customer dental discovery with the setting OFF', () => {
   it('booking still needs sign-in', async () => {
     const res = await request(app).post('/api/v1/dental/appointments/holds').send({});
     expect(res.status).toBe(401);
+  });
+});
+
+/**
+ * Show doctor channelling to customers (owner, 2026-10-14: "I must be able to
+ * hide and unhide that doctor thing in Admin or Ops"). Default ON; when OFF the
+ * discovery and new-booking routes answer 404 DOCTORS_DISABLED, GET /store
+ * says doctors_enabled: false, a customer's existing appointments stay
+ * readable and cancellable, and staff dental admin is unaffected.
+ */
+describe('Show doctor channelling to customers', () => {
+  const storeEnabled = async () => (await request(app).get('/api/v1/store')).body.data.doctors_enabled;
+  let appointmentId = '';
+
+  beforeAll(async () => {
+    await patchSetting({ require_sign_in: false, show_to_customers: true });
+    // An existing booking of the test customer, made while doctors were shown.
+    appointmentId = (
+      await pool.query(
+        `INSERT INTO appointments (customer_id, clinic_doctor_id, start_at, end_at, status, held_by, consultation_fee_snapshot, idempotency_key)
+         VALUES ($1, $2, '2030-01-07 10:00+05:30', '2030-01-07 10:30+05:30', 'CONFIRMED', $1, 1800, $3) RETURNING id`,
+        [users.customer.id, clinicDoctorId, `da-show-${Date.now()}`]
+      )
+    ).rows[0].id;
+  });
+
+  afterAll(async () => {
+    await patchSetting({ show_to_customers: true });
+  });
+
+  it('is ON by default and GET /store says doctors_enabled: true', async () => {
+    expect((await getSetting()).body.data.show_to_customers).toBe(true);
+    expect(await storeEnabled()).toBe(true);
+    expect((await browse('/api/v1/dental/clinics?limit=100')).status).toBe(200);
+  });
+
+  it('Operations switches it OFF (audited), keeping the sign-in switch; GET /store follows', async () => {
+    const off = await patchSetting({ show_to_customers: false }, opsToken);
+    expect(off.status, JSON.stringify(off.body)).toBe(200);
+    expect(off.body.data).toMatchObject({ show_to_customers: false, require_sign_in: false });
+    expect(await storeEnabled()).toBe(false);
+    const audit = (
+      await pool.query(
+        `SELECT old_values, new_values FROM audit_logs
+          WHERE action = 'DOCTORS_ACCESS_UPDATED' AND created_at >= $1 ORDER BY created_at DESC LIMIT 1`,
+        [testStart]
+      )
+    ).rows[0];
+    expect(audit.old_values).toMatchObject({ show_to_customers: true });
+    expect(audit.new_values).toMatchObject({ show_to_customers: false, require_sign_in: false });
+  });
+
+  it('OFF: every discovery read is 404 DOCTORS_DISABLED for guests and customers alike', async () => {
+    for (const token of [undefined, tokens.customer]) {
+      for (const path of discoveryPaths()) {
+        const res = await browse(path, token);
+        expect(res.status, path).toBe(404);
+        expect(res.body.error.code).toBe('DOCTORS_DISABLED');
+        expect(JSON.stringify(res.body)).not.toContain('DA Sign-in');
+      }
+    }
+  });
+
+  it('OFF: no new bookings, but the existing appointment stays readable', async () => {
+    const hold = await request(app).post('/api/v1/dental/appointments/holds').set(auth(tokens.customer)).send({});
+    expect(hold.status).toBe(404);
+    expect(hold.body.error.code).toBe('DOCTORS_DISABLED');
+    const confirm = await request(app).post(`/api/v1/dental/appointments/${appointmentId}/confirm`).set(auth(tokens.customer)).send({});
+    expect(confirm.body.error?.code).toBe('DOCTORS_DISABLED');
+
+    const list = await request(app).get('/api/v1/dental/appointments').set(auth(tokens.customer));
+    expect(list.status).toBe(200);
+    expect(JSON.stringify(list.body.data)).toContain(appointmentId);
+    const one = await request(app).get(`/api/v1/dental/appointments/${appointmentId}`).set(auth(tokens.customer));
+    expect(one.status).toBe(200);
+  });
+
+  it('OFF: staff dental admin is unaffected', async () => {
+    const res = await request(app).get('/api/v1/admin/dental/clinics').set(auth(opsToken));
+    expect(res.status).toBe(200);
+  });
+
+  it('ON again: discovery is back', async () => {
+    const on = await patchSetting({ show_to_customers: true });
+    expect(on.body.data.show_to_customers).toBe(true);
+    expect(await storeEnabled()).toBe(true);
+    expect((await browse(`/api/v1/dental/clinics/${clinicId}`)).status).toBe(200);
   });
 });

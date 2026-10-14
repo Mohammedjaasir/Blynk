@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { categories as categoriesApi, products as productsApi } from '../api/resources';
 import type { AdminProduct, Category } from '../api/types';
+import { useSignedInUser } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
+import { RemoveProductImagesDialog } from '../components/RemoveProductImagesDialog';
+import { categoryOptions } from '../lib/categoryTree';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 import { formatMoney } from '../lib/orders';
@@ -27,6 +30,9 @@ export function Products() {
   const [complete, setComplete] = useState(true);
   const [pendingToggle, setPendingToggle] = useState<AdminProduct | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AdminProduct | null>(null);
+  // Remove all product images (owner, 2026-10-14): destructive, ADMIN only.
+  const isAdmin = useSignedInUser()?.role === 'ADMIN';
+  const [removingImages, setRemovingImages] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -95,6 +101,11 @@ export function Products() {
         description="Everything in the catalog, including products hidden from customers."
         actions={
           <>
+            {isAdmin ? (
+              <button type="button" className="button button--ghost" onClick={() => setRemovingImages(true)}>
+                Remove all product images
+              </button>
+            ) : null}
             <button type="button" className="button button--ghost" onClick={() => navigate('/products/import')}>
               Bulk upload (Excel)
             </button>
@@ -120,9 +131,9 @@ export function Products() {
           aria-label="Filter by category"
         >
           <option value="">All categories</option>
-          {categories.map((category) => (
+          {categoryOptions(categories).map(({ category, label }) => (
             <option key={category.id} value={category.id}>
-              {category.name}
+              {label}
             </option>
           ))}
         </select>
@@ -273,6 +284,9 @@ export function Products() {
           onConfirm={() => void deleteProduct(pendingDelete)}
           onCancel={() => setPendingDelete(null)}
         />
+      ) : null}
+      {removingImages ? (
+        <RemoveProductImagesDialog onClose={() => setRemovingImages(false)} onDone={() => load()} />
       ) : null}
     </>
   );

@@ -7,6 +7,7 @@ import { PageHeader } from '../components/Layout';
 import { Badge, EmptyState, Spinner, useToast } from '../components/ui';
 import { PRICING_SOURCE_LABEL, formatLkr, formatPercent } from '../lib/pricing';
 import {
+  CATEGORY_HELP,
   PRICING_RULES,
   TEMPLATE_COLUMNS,
   buildTemplateXlsx,
@@ -172,8 +173,10 @@ export function ProductImport() {
       <section className="panel import__steps" aria-label="File">
         <p className="panel__body">
           Columns, in this order: <span className="mono">{TEMPLATE_COLUMNS.join(', ')}</span>. Required: name,
-          category (must already exist), unit, purchase_cost (or cost_price), sku.
+          category (must already exist), unit, purchase_cost (or cost_price), sku. Optional extra column:{' '}
+          <span className="mono">sub_category</span>.
         </p>
+        <p className="panel__body">{CATEGORY_HELP}</p>
         <div>
           <p className="panel__body">How prices work:</p>
           <ul className="import__rules" aria-label="How prices work">
@@ -295,7 +298,10 @@ export function ProductImport() {
                             {r.data.sku || '-'} · {r.data.unit || '-'}
                           </span>
                         </td>
-                        <td>{r.data.category || '-'}</td>
+                        <td>
+                          {r.data.category || '-'}
+                          {r.data.sub_category ? ` › ${r.data.sub_category}` : ''}
+                        </td>
                         <td className="num">{formatLkr(r.data.purchase_cost)}</td>
                         <td className="num">
                           <SellingCell data={r.data} server={r.errors.length ? undefined : server} />
