@@ -1,4 +1,4 @@
-import { Easing, makeMutable, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import { cancelAnimation, Easing, makeMutable, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
 /*
  * App-wide motion clocks. Instead of every card owning its own JS timer / infinite
@@ -25,4 +25,19 @@ export function startClocks() {
     -1,
   );
   sway.value = withRepeat(withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.sin) }), -1, true);
+}
+
+/*
+ * Home's aisle-card corner animation: one linear 0→1 clock every aisle card reads with its own
+ * phase (src/components/AisleStamp.tsx). Home runs it only while it is the focused screen.
+ */
+export const AISLE_BEAT_MS = 7800; // three items × 2.6 s
+export const aisleBeat = makeMutable(0);
+let aisleRunning = false;
+export function runAisleBeat(on: boolean) {
+  if (on === aisleRunning) return;
+  aisleRunning = on;
+  if (!on) { cancelAnimation(aisleBeat); return; }
+  aisleBeat.value = 0;
+  aisleBeat.value = withRepeat(withTiming(1, { duration: AISLE_BEAT_MS, easing: Easing.linear }), -1);
 }

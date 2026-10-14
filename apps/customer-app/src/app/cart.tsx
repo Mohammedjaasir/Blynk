@@ -54,6 +54,7 @@ import { PaymentChoice } from '@/blynk/payments/PaymentChoice';
 import { requestPushPermission } from '@/blynk/push';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
+import { invalidateFreeClaim } from '@/blynk/store/useFreeClaim';
 import { ClosedBanner, useStoreClosed } from '@/components/ClosedBanner';
 import { FEE, FeeHeader } from '@/components/FeeHeader';
 import { BackIcon, ChevronIcon, CloseIcon, NavIcon, VegMark } from '@/components/icons';
@@ -276,6 +277,8 @@ export default function Cart() {
       });
       forgetCheckoutKey();
       rememberPlaced(order);
+      // a free delivery may have been used: Home asks checkout-info again
+      invalidateFreeClaim();
       // the moment order updates matter: ask to allow notifications (Flutter cart_screen_payment_container)
       void requestPushPermission();
       if (order.payment_method === 'ONLINE' && order.order_status === 'AWAITING_PAYMENT') {

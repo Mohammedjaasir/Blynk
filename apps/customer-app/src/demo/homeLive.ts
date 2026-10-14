@@ -13,6 +13,7 @@ import { applyFilters, type FilterId } from '../blynk/lib/filters';
 import { formatLkr } from '../blynk/lib/money';
 import { effectivePrice, isOfferActive, savingsPerUnit } from '../blynk/lib/pricing';
 import { flatFee, formatHours, freeDeliveryCount } from '../blynk/lib/storeText';
+import { claimFee, claimLine, claimPromoLine, claimTitle, freeDeliveryClaim, type FreeClaim } from '../blynk/store/freeClaim';
 
 /** The "Under LKR 300" rail (the video's "Meals under ₹99"). */
 export const UNDER_LKR = 300;
@@ -73,6 +74,13 @@ export function lowestPrice(products: Product[], now: Date = new Date()): number
 const inAisle = (data: CatalogData, catId: string) => data.products.filter((p) => data.chainOf(p.category_id).includes(catId));
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
+/**
+ * The free-delivery claim when the caller passes none: GET /store's new-customer offer, worded
+ * for new customers (a guest). Home passes useFreeClaim() so a signed-in customer sees only
+ * their own free deliveries left (src/blynk/store/freeClaim.ts).
+ */
+const guestClaim = (store: StoreInfo | null): FreeClaim => freeDeliveryClaim({ storeCount: freeDeliveryCount(store), signedIn: false });
+
 /** The location row's second line: the active dark store's name, when Ops has one set up. */
 export const liveAddress = (store: StoreInfo | null) => store?.hub_name?.trim() || null;
 
@@ -84,12 +92,12 @@ export function liveHints(data: CatalogData | null): string[] {
 }
 
 /** Banner props: product photos for the beam, the cheapest price and the free deliveries. */
-export function liveBanner(data: CatalogData | null, store: StoreInfo | null, now: Date = new Date()) {
+export function liveBanner(data: CatalogData | null, store: StoreInfo | null, now: Date = new Date(), claim: FreeClaim = guestClaim(store)) {
   const products = data?.products ?? [];
   return {
     images: products.filter((p) => p.is_available && p.image_url).slice(0, 6).map((p) => p.image_url as string),
     minPrice: data ? lowestPrice(products, now) : null,
-    freeCount: freeDeliveryCount(store),
+    freeCount: claim.count,
   };
 }
 
@@ -115,18 +123,20 @@ export function liveUnder(data: CatalogData | null, cat: string, filters: Filter
 }
 
 /** What a card says about delivery: free deliveries, the flat fee, or "at checkout". */
-export function deliveryLine(store: StoreInfo | null): string {
-  const free = freeDeliveryCount(store);
-  if (free > 0) return free === 1 ? 'First delivery free' : `First ${free} deliveries free`;
+export function deliveryLine(store: StoreInfo | null, claim: FreeClaim = guestClaim(store)): string {
+  const line = claimLine(claim);
+  if (line) return line;
   const flat = flatFee(store);
   return flat != null ? `Delivery ${formatLkr(flat)}` : 'Delivery fee at checkout';
 }
 
 /** The video's restaurant cards become aisles (real categories), each with its products. */
-export function liveAisles(data: CatalogData | null, store: StoreInfo | null, cat: string, filters: FilterId[], now: Date = new Date()): LiveAisleCard[] {
+export function liveAisles(
+  data: CatalogData | null, store: StoreInfo | null, cat: string, filters: FilterId[], now: Date = new Date(), claim: FreeClaim = guestClaim(store),
+): LiveAisleCard[] {
   if (!data) return [];
   const hours = formatHours(store);
-  const delivery = deliveryLine(store);
+  const delivery = deliveryLine(store, claim);
   return data.aisles
     .filter((c) => cat === 'all' || c.id === cat)
     .map((c) => {
@@ -149,9 +159,8 @@ export function liveAisles(data: CatalogData | null, store: StoreInfo | null, ca
  * Blynk's fees, then the free deliveries (or the offers), and tiles of products on offer
  * (else aisles with their "FROM" price).
  */
-export function liveVs(data: CatalogData | null, store: StoreInfo | null, now: Date = new Date()): LiveVs | null {
+export function liveVs(data: CatalogData | null, store: StoreInfo | null, now: Date = new Date(), claim: FreeClaim = guestClaim(store)): LiveVs | null {
   if (!data) return null;
-  const free = freeDeliveryCount(store);
   const showSave = store?.show_offer_savings === true;
   const topAisle = (p: Product) => {
     const top = data.topOf(p.category_id);
@@ -179,30 +188,24 @@ export function liveVs(data: CatalogData | null, store: StoreInfo | null, now: D
       };
     });
   if (!tiles.length) return null;
-  const title = free > 0
-    ? free === 1 ? 'FIRST DELIVERY FREE' : `FIRST ${free} DELIVERIES FREE`
-    : offers.length ? 'OFFER PRICES TODAY' : 'SHOP BY AISLE';
+  const title = claimTitle(claim) ?? (offers.length ? 'OFFER PRICES TODAY' : 'SHOP BY AISLE');
   return { kicker: ['NO PACKAGING FEE', '&', 'NO PLATFORM FEE'], title, tiles };
 }
 
 /** The green promo band: only what Blynk really does. */
-export function livePromo(store: StoreInfo | null): { line1: string | null; fees: string[] } {
-  const free = freeDeliveryCount(store);
+export function livePromo(store: StoreInfo | null, claim: FreeClaim = guestClaim(store)): { line1: string | null; fees: string[] } {
   return {
-    line1: free > 0 ? `Free delivery on your first ${plural(free, 'order')}` : null,
+    line1: claimPromoLine(claim),
     fees: ['No Platform Fee', 'No Packaging Fee'],
   };
 }
 
 /** The bottom fee strip: [coin, label], true labels only. */
-export function liveFees(store: StoreInfo | null): [string, string][] {
-  const free = freeDeliveryCount(store);
+export function liveFees(store: StoreInfo | null, claim: FreeClaim = guestClaim(store)): [string, string][] {
   const flat = flatFee(store);
   return [
     ['0', 'Packaging Fee'],
     ['0', 'Platform Fee'],
-    free > 0
-      ? ['✓', free === 1 ? '1st Delivery Free' : `${free} Free Deliveries`]
-      : flat != null ? ['LKR', `Delivery ${formatLkr(flat)}`] : ['km', 'Fee at checkout'],
+    claimFee(claim) ?? (flat != null ? ['LKR', `Delivery ${formatLkr(flat)}`] : ['km', 'Fee at checkout']),
   ];
 }

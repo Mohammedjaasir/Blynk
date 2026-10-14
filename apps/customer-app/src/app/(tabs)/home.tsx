@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, interpolate, interpolateColor, SlideOutDown,
@@ -18,7 +18,10 @@ import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { FILTERS as LIVE_FILTERS, toggle, type FilterId } from '@/blynk/lib/filters';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice } from '@/blynk/lib/pricing';
-import { freeDeliveryCount } from '@/blynk/lib/storeText';
+import { aisleArt, aislePhase } from '@/blynk/lib/aisleArt';
+import { useFreeClaim } from '@/blynk/store/useFreeClaim';
+import { AisleStamp } from '@/components/AisleStamp';
+import { runAisleBeat } from '@/lib/clock';
 import { useStore } from '@/blynk/store/StoreContext';
 import { Banner, BANNER_TOP } from '@/components/Banner';
 import { CART_BAR, CartBar } from '@/components/CartBar';
@@ -219,21 +222,27 @@ export default function Home() {
   const scrimA = useAnimatedStyle(() => ({ opacity: scrim.value * 0.6 }));
   const riseA = useAnimatedStyle(() => ({ transform: [{ translateY: rise.value * screenH * 0.32 }] }));
 
+  // what this customer may be told about free deliveries (guest: new customers; signed in: their own left)
+  const claim = useFreeClaim();
+  // the aisle cards' corner animation runs only while Home is the screen in front
+  useFocusEffect(useCallback(() => {
+    runAisleBeat(true);
+    return () => runAisleBeat(false);
+  }, []));
   const live = useMemo(() => {
     if (DEMO) return null;
     const on = filters as FilterId[];
     return {
       rail: liveRail(data) as RailCat[],
       under: liveUnder(data, cat, on),
-      aisles: liveAisles(data, store, cat, on),
-      vs: liveVs(data, store),
-      promo: livePromo(store),
-      fees: liveFees(store),
-      banner: liveBanner(data, store),
+      aisles: liveAisles(data, store, cat, on, undefined, claim),
+      vs: liveVs(data, store, undefined, claim),
+      promo: livePromo(store, claim),
+      fees: liveFees(store, claim),
+      banner: liveBanner(data, store, undefined, claim),
       hints: liveHints(data),
-      free: freeDeliveryCount(store),
     };
-  }, [data, store, cat, filters]);
+  }, [data, store, cat, filters, claim]);
 
   const cats: RailCat[] = live ? live.rail : granted ? CATEGORIES : CATEGORIES_PRE;
   const meals = live ? live.under : granted ? MEALS : MEALS_PRE;
@@ -383,7 +392,7 @@ export default function Home() {
                       <AisleCard
                         key={a.cat.id}
                         aisle={a}
-                        freeStamp={live.free > 0}
+                        index={i}
                         promo={i === Math.min(PROMO_AFTER, live.aisles.length) - 1 ? live.promo : null}
                       />
                     ))}
@@ -755,19 +764,20 @@ const StoreCard = memo(function StoreCard({ store: s, y, feedY, screenH, promo }
 
 /**
  * Live: the video's restaurant card as a Blynk aisle. Same layout; the rating / ETA row
- * becomes the item count and delivery hours, the free-delivery row says what /store says,
- * the "% LOWER PRICES" line is a running category offer, and there is no "Ad" tag. The
- * stamp is Blynk's free-delivery stamp, shown only while Ops has free deliveries on.
+ * becomes the item count and delivery hours, the delivery row says what this customer may
+ * really get (useFreeClaim), the "% LOWER PRICES" line is a running category offer, and there
+ * is no "Ad" tag. The corner holds the aisle's illustrated items swaying in a stamp ring
+ * (owner, 2026-10-14: the "FREE DELIVERY" stamp misled customers who had used theirs).
  */
-const AisleCard = memo(function AisleCard({ aisle: a, freeStamp, promo }: {
-  aisle: LiveAisleCard; freeStamp: boolean;
+const AisleCard = memo(function AisleCard({ aisle: a, index, promo }: {
+  aisle: LiveAisleCard; index: number;
   /** The yellow promo band follows this card. */
   promo: { line1: string | null; fees: string[] } | null;
 }) {
   return (
     <View>
       <PressScale scaleTo={0.985} onPress={() => openAisle(a.cat)} style={styles.store}>
-        {freeStamp && <StampBadge size={74} variant="free" style={styles.stamp} />}
+        <AisleStamp items={aisleArt(a.cat, index)} phase={aislePhase(index)} style={styles.aisleStamp} />
         {!!a.offer && <Text style={styles.lower}>{a.offer}</Text>}
         <View style={styles.storeNameRow}>
           <Text style={styles.storeName} numberOfLines={1}>{a.cat.name}</Text>
@@ -882,7 +892,9 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
   },
   stamp: { position: 'absolute', right: -10, top: -9 },
-  lower: { fontFamily: F.bold, color: C.brandText, fontSize: 12, letterSpacing: -0.1, marginBottom: 1 },
+  // clear of the title (storeNameRow keeps 52 pt free) and of the product row below
+  aisleStamp: { position: 'absolute', right: -5, top: -5 },
+  lower: { fontFamily: F.bold, color: C.brandText, fontSize: 12, letterSpacing: -0.1, marginBottom: 1, marginRight: 52 },
   storeNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 52 },
   ad: { backgroundColor: '#F1F1F3', borderRadius: 4, paddingHorizontal: 4, height: 15, justifyContent: 'center' },
   adTxt: { fontFamily: F.medium, fontSize: 9, color: '#8A8A90' },
