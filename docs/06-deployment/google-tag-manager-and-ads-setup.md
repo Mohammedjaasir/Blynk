@@ -2,6 +2,8 @@
 
 **STATUS (2026-10-10): the website code is done and tested. Nothing outside the code exists yet.** No GTM container, GA4 property, Google Ads conversion or Meta Pixel has been created, and no GTM ID is set in Coolify, so blynk.lk sends no tracking today. Nobody has checked the events on the live site yet. Section 9 says how to check them.
 
+**Update (2026-10-15): the shop at blynk.lk/app/ is now the new Expo customer app.** Its events are listed in **section 14** (it replaces section 8's "shop" rows, which describe the old Flutter shop). Steps 1 to 7 and 9 to 12 still apply to both pages; section 14.4 lists the few additions to the GTM container.
+
 Who this is for: the owner (steps 1 and 2: accounts and Coolify) and the marketer (steps 3 to 9: everything inside Google and Meta). Every click is written out. You don't need to change any code.
 
 ---
@@ -408,3 +410,92 @@ Ask whoever handles Blynk's legal matters whether Sri Lanka's Personal Data Prot
 - Build: `apps/customer-site/gtm-inject.sh`, run by `apps/customer-site/Dockerfile` after the Flutter shop is copied in. It fills in `__GTM_ID__` and `__CONSENT_DEFAULT__`, or deletes the marked blocks when `GTM_ID` is empty. Unfilled placeholders (local `flutter run`) load nothing, because the snippet checks the ID's shape first.
 - Tests: `node --test apps/customer-site/tests/gtm.test.mjs` (inject script, consent defaults, DNT/GPC, landing events) and `flutter test test/analytics_test.dart test/analytics_screens_test.dart` (event shapes, user id, PII guard, cart, checkout, sign-in, route observer, screens).
 - To add an event: add a method to `Analytics` (use a GA4 recommended name if one fits), call it from the one place it happens, add it to the table in section 8 and to the `CE - all Blynk events` regex in 4.2, and extend the PII journey test.
+
+---
+
+## 14. The new shop app at blynk.lk/app/ (Expo customer app, 2026-10-15)
+
+The shop at `https://blynk.lk/app/` is now the Expo customer app (`apps/customer-app`), built by the same Coolify application (`apps/customer-site/Dockerfile`). It uses **the same GTM container** as the landing page: the build fills `GTM_ID` and `CONSENT_DEFAULT` into `apps/customer-app/public/index.html` (the `GTM-HEAD`/`GTM-BODY` markers) exactly as before. With no `GTM_ID` the snippet is removed, there is no `window.dataLayer`, and the app pushes nothing at all.
+
+### 14.1 What is different from the old Flutter shop
+
+- **Real page addresses.** Screens have normal paths (`/app/home`, `/app/cart`, `/app/p/<id>`), no `#/` hash routes. `page_path` always includes `/app`.
+- **Ad-click parameters survive the intro.** The app opens on a short intro at `/app/` and then moves to `/app/home` (or the login). That move drops the address bar's query string, so the app reads `utm_*`, `gclid`, `fbclid`, `gbraid`, `wbraid` (and `ttclid`, `msclkid`) when the page loads and puts them on the **first** `page_view`'s `page_location`. The intro itself sends no `page_view`. nginx serves `/app/...` without any redirect, so nothing else strips them.
+- **`user_id` is Blynk's internal customer id** (a random UUID, never the phone number). The Flutter shop sent a hash of it; GA4 treats either the same way. It is set as a data-layer value (no event) on app start when signed in, after sign-in, and cleared (`user_id: undefined`) on sign-out, together with `app_language` (`en`; the app's screens are English, the SMS-language setting only changes SMS) and `app_mode` (`installed` when opened from the Home Screen, else `browser`).
+- **Sign-in method** is `sms` (was `phone_otp`).
+- **Home Screen install** is `pwa_install` (was `pwa_installed`).
+- New events: `select_item`, `notify_me`, `out_of_zone`, `points_redeem`. `add_shipping_info` now fires when the delivery fee for the chosen address is known (before, when the order was sent).
+
+### 14.2 The events
+
+Every shopping event is GA4 ecommerce: the app pushes `{ecommerce: null}` and then `{event, ecommerce: {currency: 'LKR', value, items, ...}}`. All amounts are numbers in LKR. Each item is
+`{item_id, item_name, item_variant, item_category, item_category2, price, quantity}`:
+`item_id` = the product's SKU, or the size's SKU when a size is chosen (the product id if no SKU is known); `item_variant` = the size label ("250 g"); `item_category` = the top-level category, `item_category2` = the sub-category (sidebar) name; `price` = the unit price actually charged (offer prices included); `quantity` = how many (for add/remove: how many were added or removed). Combo packs are items too: `item_id` `combo_<id>`, `item_category` `Combo packs`. Lists add `index`, `item_list_id`, `item_list_name`.
+
+`value` = the items total after discounts and points, **without** the delivery fee. `shipping` = the delivery fee.
+
+| Event | When it fires (where in the code) | Parameters |
+|---|---|---|
+| `page_view` | Every screen change, including Back (root layout, `AnalyticsHost`). The same path twice in a row counts once; a category's sub-category tab is its own page (`?sub=`). Not for the intro at `/app/`, and not for the SMS-code screen (its address carries the phone number, `/app/otp?phone=…`). | `page_path` (`/app/home`), `page_location` (full address, only harmless query parameters; the first one carries the ad-click parameters), `page_title` (`Home \| Blynk`, `Product \| Blynk` ...) |
+| `sign_up` | A new customer finished the SMS code **and** gave their name (`register.tsx`) | `method: 'sms'` |
+| `login` | A returning customer entered the right SMS code (`otp.tsx`) | `method: 'sms'`, `user_id` |
+| `search` | A search is submitted, a recent search is tapped, or typing pauses for 1.5 s on a term (`search.tsx`). Once per term, never per keystroke | `search_term` (phone numbers and emails typed into it become `[redacted]`) |
+| `view_item_list` | A category screen shows its products (one per category / sub-category tab, once per visit); Home's "Under LKR …" row and "Your usuals" row (once per Home visit) | `item_list_id`, `item_list_name` (`Dairy & Eggs`, `Dairy & Eggs / Milk`, `Your usuals`, `Under LKR 500`), `items` (first 20) |
+| `select_item` | Any product card is tapped (all cards open products through `openProduct`) | `item_list_name` (the list it was shown in, `Search results`, or `Other`), `items` (1) |
+| `view_item` | A product page shows, once per product per visit, after its current price and sizes arrived (`p/[id].tsx`) | `value` (unit price), `items` (1; the chosen size if any) |
+| `add_to_cart` | Anything that puts more in the cart: Add, "+", a size picked, "Add all" usuals, "Order again", combo packs. Sent from the single cart store (`lib/cart.tsx`), so every button is covered | `value`, `items` (with the quantity added) |
+| `remove_from_cart` | "−", removing a line, "Clear cart" (same store). The cart emptied after an order, on sign-out, or by stock refusals is **not** counted | `value`, `items` (with the quantity removed) |
+| `view_cart` | The cart screen opens with something in it (once per visit) | `value` (cart subtotal), `items` |
+| `begin_checkout` | **The checkout part of the cart screen shows**: signed in, a delivery address chosen and the cart has items ("Deliver to …", the bill and "Place order"). Once per visit of the cart. This is the first moment the customer is clearly checking out; a signed-out customer only sees "Log in" there | `value` (cart subtotal; discounts and points are not known yet), `items` |
+| `add_shipping_info` | The delivery fee for the chosen address is known (checkout-info answered), once per address per visit | `value` (after the estimated discount and points), `shipping` (fee), `items`; top level `distance_km` (road distance from the store, 1 decimal; only with distance pricing) |
+| `purchase` | **Cash on delivery:** the server answered "order placed" (POST /orders). **Pay online (PayHere):** only when the payment return screen sees the order **paid**, never when the unpaid order is created. Sent **once per order number per phone**: the sent order numbers are kept in the browser (`localStorage`), so a refresh of "Order placed", Back, or opening it again never sends it twice | `transaction_id` (order number, e.g. `BL-20261015-0042`), `value`, `shipping`, `items`, `coupon` (if any), `payment_type` (`COD` / `ONLINE`) |
+| `points_redeem` | Blynk Points were used on a placed order (sent right after its `purchase`, inside the same once-only guard) | `points` |
+| `out_of_zone` | A delivery spot is outside the delivery radius: the server refused it (422 `DELIVERY_OUTSIDE_RADIUS`, when saving an address or placing an order), or the map pin settled outside the circle. The same place within a minute counts once | `area`: an approximate place name only (the nearest named area or the town), never the address or map point |
+| `notify_me` | "Notify me" switched on for a sold-out product (product page) | `value`, `items` (1) |
+| `share` | The share sheet was used (or the link copied where there is none): product page, Refer a friend, Account's "Share Blynk" | `method` (`share_sheet` / `copy_link`), `content_type` (`product`, `referral`, `app`), `item_id` (product only). The referral code is never sent |
+| `pwa_install` | The browser reports the shop was added to the Home Screen (Android Chrome; iPhone Safari doesn't report it). Sent by the GTM snippet in `public/index.html` | none |
+
+What is not tracked: the Orders / Help / Account tabs' contents beyond their page views, doctor channelling events, anything in the staff apps.
+
+### 14.3 Privacy (the same promise as section 11)
+
+No names, phone numbers, addresses, map points or emails in any event. Items are built field by field; page addresses keep only a short allow-list of query parameters (the OTP screen's `?phone=` is dropped); free text (search, place names) has phone- and email-looking parts replaced with `[redacted]`; and every push passes a last filter that drops personal-sounding keys. The unit test `src/blynk/analytics/track.test.ts` replays a journey with a real-looking name, phone and address on the order and fails if any of them reaches the dataLayer.
+
+### 14.4 GTM container additions (marketer)
+
+Everything in sections 3 to 7 stays. Add:
+
+1. **Data Layer Variables** (4.1): `DLV - ecommerce.shipping` = `ecommerce.shipping`, `DLV - ecommerce.item_list_name` = `ecommerce.item_list_name`, `DLV - distance_km` = `distance_km`, `DLV - area` = `area`, `DLV - points` = `points`, `DLV - app_language` = `app_language`, `DLV - app_mode` = `app_mode`.
+2. **Trigger** `CE - all Blynk events` (4.2): use this regex (it adds the new names and keeps the old ones):
+   `^(page_view|get_blynk_click|install_guide_step|open_app_click|contact_click|sign_up|login|search|view_item_list|select_item|view_item|add_to_cart|remove_from_cart|view_cart|begin_checkout|add_shipping_info|purchase|points_redeem|out_of_zone|notify_me|share|select_promotion|pwa_install|pwa_installed)$`
+   Add single triggers `CE - out_of_zone`, `CE - notify_me`, `CE - pwa_install` if you want tags on them.
+3. **Google tag** (4.3): under **Configuration settings** add `user_id` = `{{DLV - user_id}}` (keep `send_page_view` = `false`). Under **Shared event settings** add `app_language` = `{{DLV - app_language}}` and `app_mode` = `{{DLV - app_mode}}`.
+4. **GA4 event tag** (4.4): the `page_location` = `{{DLV - page_location}}` parameter from 4.4 is **required** for the app: it makes every event carry the app's cleaned address instead of the browser's raw one (the SMS-code screen's raw address contains the phone number). Keep "Send Ecommerce data" ticked (it carries `items`, `value`, `currency`, `shipping`, `transaction_id`, `coupon`, `item_list_name`). Add event parameters `area` = `{{DLV - area}}`, `distance_km` = `{{DLV - distance_km}}`, `points` = `{{DLV - points}}`.
+5. **GA4 custom definitions** (3.3): dimensions `Area` (`area`), `App language` (`app_language`, scope User), `App mode` (`app_mode`, scope User); metrics `Distance km` (`distance_km`), `Points redeemed` (`points`). Optional key events: `begin_checkout`, `out_of_zone` (a demand signal for new areas).
+6. **Google Ads** (section 5): the **Purchase** conversion stays on `CE - purchase` with value `{{DLV - ecommerce.value}}`, transaction id `{{DLV - ecommerce.transaction_id}}` and currency `{{DLV - ecommerce.currency}}`. Because the app sends `purchase` once per order and the transaction id de-duplicates in Ads too, a refresh never counts twice. Sign up stays on `CE - sign_up`.
+7. **Meta Pixel** (section 6.3): the existing tags work unchanged (ViewContent, AddToCart, InitiateCheckout, Purchase with Event ID = order number, CompleteRegistration, Search). Meta has no standard event for shipping info, so leave `add_shipping_info` to GA4. Map `pwa_install` to a custom event if wanted.
+8. **TikTok Pixel** (optional, when TikTok ads start): Templates → Search Gallery → **TikTok Pixel** (by TikTok). Map `view_item` → `ViewContent`, `add_to_cart` → `AddToCart`, `begin_checkout` → `InitiateCheckout`, `purchase` → `CompletePayment` (or `PlaceAnOrder`) with `value`, `currency` and `event_id` = `{{DLV - ecommerce.transaction_id}}`, `search` → `Search`, `sign_up` → `CompleteRegistration`. `content_id` = `{{JS - item ids}}`. Give every TikTok tag the same `ad_storage` consent requirement as the Meta tags.
+9. **Belt and braces for the phone in the SMS-code address:** create a trigger `Block - phone in URL` (Trigger type **Custom Event**, Event name `.*`, regex on, **Some Custom Events**, `Page URL` **contains** `phone=`) and add it as an **Exception** on every Meta, TikTok and Google Ads tag. Meta and TikTok read the browser's address themselves; the app sends no page view on that screen, and this makes sure no other tag ever fires there. TikTok's own click id (`ttclid`) is kept on the first page view like `gclid`.
+
+### 14.5 Testing checklist (before publishing the container)
+
+1. **GTM Preview:** Preview → connect to `https://blynk.lk/app/?desktop=1&utm_source=test&gclid=abc`. The first `page_view` must show `page_location` with `utm_source=test&gclid=abc` even though the address bar moved on to `/app/home`. Walk: Home → a category (`view_item_list`) → a product (`select_item`, `view_item`) → Add (`add_to_cart`) → "−" (`remove_from_cart`) → cart (`view_cart`) → signed in with an address (`begin_checkout`, `add_shipping_info`) → search a word (`search`, once). Check every event's Data Layer tab: no phone, name or address anywhere; amounts are numbers; `currency` is `LKR`.
+2. **GA4 DebugView** (9.2): `purchase` shows `transaction_id`, `value` (without the delivery fee), `shipping`, `items` with SKUs and categories.
+3. **Purchase once:** place a small cash order (cancel it in Ops afterwards; it counts as a conversion, see 9.1). On "Order placed", refresh the page twice and press Back: Tag Assistant must show exactly **one** `purchase` for that order number. For "Pay online", `purchase` appears only after the payment return screen says paid.
+4. **WhatsApp preview:** send `https://blynk.lk/app/` in a WhatsApp chat (and paste it into https://developers.facebook.com/tools/debug/ → **Scrape Again** to refresh Facebook's cache). It should show the yellow Blynk card with "Blynk – Grocery Delivery in Dharga Town & Aluthgama". Previews are cached for days; the debugger's Scrape Again updates Facebook/WhatsApp.
+5. **No container, no tracking:** a build without `GTM_ID` has no `googletagmanager` in `/app/index.html` and `window.dataLayer` is undefined in the browser console.
+
+### 14.6 Search results and link previews
+
+`apps/customer-app/public/index.html` carries the page title "Blynk – Grocery Delivery in Dharga Town & Aluthgama", the description, Open Graph and Twitter tags (`og:image` = `https://blynk.lk/app/og-image.png`, 1200×630, made from the Blynk logo on brand yellow), `canonical` and a short plain-text `<noscript>` description. The canonical and `og:url` are `https://blynk.lk/app/` with the trailing slash: that is the address the shop is served at and the PWA's `start_url`/`scope`, so Google sees one URL. The manifest keeps `id`, `scope`, `start_url` (`/app/`) and `background_color` (`#FFFFFF`) unchanged so installed apps update in place; only its description changed. The landing page `https://blynk.lk/` keeps its own tags.
+
+### 14.7 For developers
+
+- `apps/customer-app/src/blynk/analytics/track.ts`: the only module that touches `window.dataLayer` (`track`, `trackEcommerce`, the item mapping, the purchase guard, page views, the PII filter). Web only; a no-op on Android/iOS, in tests and without a dataLayer; never throws.
+- `apps/customer-app/src/blynk/analytics/AnalyticsHost.tsx`: mounted in `src/app/_layout.tsx` (page views, identity, the catalogue index); hooks `useTrackList`, `useTrackOnce`, `useSearchTracking` used as one-liners in the screens.
+- Call sites: `lib/cart.tsx` (add/remove), `app/cart.tsx` (view_cart, begin_checkout, add_shipping_info, purchase, out_of_zone), `blynk/payments/PaymentResult.tsx` (PayHere purchase), `app/otp.tsx` (login), `app/register.tsx` (sign_up), `app/search.tsx`, `app/category/[slug].tsx`, `app/(tabs)/home.tsx` and `blynk/rewards/UsualsRow.tsx` (lists), `blynk/catalog/openProduct.ts` (select_item), `app/p/[id].tsx` (view_item, notify_me, share), `app/refer.tsx` and `app/(tabs)/account.tsx` (share), `blynk/address/LiveAddressScreen.tsx` (out_of_zone), `blynk/catalog/sizePicker.ts` (remembers size SKUs).
+- Tests: `npx vitest run src/blynk/analytics` (no-op without a dataLayer, `{ecommerce: null}` ordering, items, purchase once, page-view de-duplication, no personal data) and `node --test apps/customer-site/tests/gtm.test.mjs` (the snippet in the new app's `index.html`).
+
+### 14.8 Phase 2 (later): delivered and cancelled orders from the server
+
+Browser events stop at "order placed". A later backend task can send what happens next from Blynk's server, where ad blockers can't stop it: a `purchase` adjustment or a custom `order_delivered` / `order_cancelled` (GA4 **refund** for cancelled orders) through the **GA4 Measurement Protocol**, and the same through **Meta Conversions API** (and TikTok Events API). They must reuse the order number as `transaction_id` / `event_id` so GA4, Meta and TikTok keep one copy of each order, and the browser needs to hand over the GA4 `client_id` (from the `_ga` cookie) at checkout for the server events to join the same visitor. Not built yet; it needs the owner's go-ahead and a privacy-policy check.

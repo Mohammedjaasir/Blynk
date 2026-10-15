@@ -12,7 +12,9 @@ import vm from 'node:vm';
 
 const site = join(dirname(fileURLToPath(import.meta.url)), '..');
 const landing = join(site, 'index.html');
-const shop = join(site, '..', 'customer', 'blinkit-clone-Flutter-ecommerce-', 'web', 'index.html');
+// The shop at /app/ is the Expo customer app (apps/customer-site/Dockerfile builds it; its
+// public/index.html becomes /app/index.html), not the old Flutter shop.
+const shop = join(site, '..', 'customer-app', 'public', 'index.html');
 const script = join(site, 'gtm-inject.sh');
 
 function copies() {
@@ -70,7 +72,8 @@ test('no GTM_ID: every trace of GTM is removed, the pages stay whole', () => {
     assert.match(html, /<\/body>/);
   }
   assert.ok(readFileSync(files[0], 'utf8').includes('/analytics.js'), 'landing keeps its scripts');
-  assert.ok(readFileSync(files[1], 'utf8').includes('flutter.js'), 'shop keeps its loader');
+  assert.ok(readFileSync(files[1], 'utf8').includes('<div id="root"></div>'), 'shop keeps its app root');
+  assert.ok(readFileSync(files[1], 'utf8').includes('og:image'), 'shop keeps its link preview tags');
 });
 
 test('GTM_ID set: the container ID and the consent default are filled in', () => {
@@ -134,7 +137,7 @@ test('the shop snippet tags its pages and reports a Home Screen install', () => 
   const { window, listeners } = runHead(readFileSync(files[1], 'utf8'));
   assert.equal(window.dataLayer[1].site, 'app');
   listeners.appinstalled();
-  assert.equal(window.dataLayer.at(-1).event, 'pwa_installed');
+  assert.equal(window.dataLayer.at(-1).event, 'pwa_install');
 });
 
 test('unfilled placeholders (a local run) load nothing', () => {

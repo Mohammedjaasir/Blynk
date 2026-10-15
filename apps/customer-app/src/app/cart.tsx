@@ -36,6 +36,8 @@ import { birthdayOf, canRedeem, pointsOf, referralOf } from '@/blynk/checkout/re
 import { savingsHeader } from '@/blynk/checkout/savings';
 import { CLEAR_CART } from '@/blynk/ui/strings';
 import { accountStyles as A, Button as SheetButton, Sheet } from '@/blynk/account/ui';
+import { useTrackOnce } from '@/blynk/analytics/AnalyticsHost';
+import { trackBeginCheckout, trackOutOfZoneError, trackPurchase, trackShippingInfo, trackViewCart } from '@/blynk/analytics/track';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { availableSlot, SLOT_COPY, slotForOrder, type DeliverySlots } from '@/blynk/checkout/slots';
 import { getCheckoutInfo, getDeliverySlots, placeOrder, previewCoupon } from '@/blynk/orders/api';
@@ -181,6 +183,10 @@ export default function Cart() {
   // a picked slot that filled up (or is no longer offered) is dropped: the customer picks again
   const pickedSlot = pickedRaw && shownSlots && !availableSlot(shownSlots, pickedRaw) ? null : pickedRaw;
   const orderable = canOrderWithLead({ storeOpen, slots: slotsOn ? shownSlots : null, picked: pickedSlot, lead });
+  // GTM (src/blynk/analytics): the cart opened; checkout began (signed in with an address); the fee is known
+  useTrackOnce(!DEMO && hasLines, 'view_cart', () => trackViewCart(getCartSnapshot()));
+  useTrackOnce(!DEMO && !!addrId && hasLines, 'begin_checkout', () => trackBeginCheckout(getCartSnapshot()));
+  useTrackOnce(!DEMO && !!checkout && checkout.deliveryFee !== null, `shipping:${addrId}`, () => trackShippingInfo(getCartSnapshot(), { shipping: checkout?.deliveryFee ?? 0, distanceKm: quoteFor?.delivery_distance_km, discount: checkout?.discount, points: checkout?.points.value }));
 
   useEffect(() => {
     if (!slotsWanted) return;
@@ -277,6 +283,7 @@ export default function Cart() {
       });
       forgetCheckoutKey();
       rememberPlaced(order);
+      trackPurchase(order, { cart: getCartSnapshot(), points: checkout?.points.points });
       // a free delivery may have been used: Home asks checkout-info again
       invalidateFreeClaim();
       // the moment order updates matter: ask to allow notifications (Flutter cart_screen_payment_container)
@@ -290,6 +297,7 @@ export default function Cart() {
       }
     } catch (e) {
       const copy = placeErrorCopy(e);
+      trackOutOfZoneError(e, addr?.city);
       const gone = refusedProduct(e);
       // sold out / only N left / a size (migration 045): the cart follows the refusal at once
       const refusal = stockRefusal(e);
@@ -664,7 +672,7 @@ export default function Cart() {
           <Text style={A.body}>{CLEAR_CART.message}</Text>
           <View style={A.pair}>
             <SheetButton label={CLEAR_CART.cancel} kind="secondary" onPress={() => setConfirmClear(false)} style={{ flex: 1 }} />
-            <SheetButton label={CLEAR_CART.confirm} kind="danger" onPress={() => { setConfirmClear(false); cartActions.clear(); }} style={{ flex: 1 }} />
+            <SheetButton label={CLEAR_CART.confirm} kind="danger" onPress={() => { setConfirmClear(false); cartActions.clear(true); }} style={{ flex: 1 }} />
           </View>
         </Sheet>
       )}

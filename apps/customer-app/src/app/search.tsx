@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSearchTracking } from '@/blynk/analytics/AnalyticsHost';
+import { trackSearch } from '@/blynk/analytics/track';
 import { getProducts } from '@/blynk/api/catalog';
 import { ApiError } from '@/blynk/api/client';
 import type { Product } from '@/blynk/api/types';
@@ -46,6 +48,7 @@ export default function Search() {
   const seq = useRef(0);
   const term = normalizeSearch(q);
   const key = `${slug ?? ''}|${term}`;
+  useSearchTracking(term);
   const current = !!term && answer.key === key;
   const results = current ? answer.results : null;
   const error = current ? answer.error : null;
@@ -90,11 +93,12 @@ export default function Search() {
     setRecent(next);
     saveRecentSearches(next);
   };
-  const submit = () => { if (term) remember(term); };
+  const submit = () => { if (term) { remember(term); trackSearch(term); } };
   const pickRecent = (query: string) => {
     setQ(query);
     Keyboard.dismiss();
     remember(query);
+    trackSearch(normalizeSearch(query));
   };
   const clearRecent = () => { setRecent([]); clearRecentSearches(); };
   const clearQuery = () => { setQ(''); input.current?.focus(); };

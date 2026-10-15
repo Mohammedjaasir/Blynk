@@ -1,6 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { showNotice } from '@/blynk/account/notice';
+import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { ProductCard } from '@/components/ProductCard';
 import { cartActions, getCartSnapshot } from '@/lib/cart';
@@ -19,6 +20,7 @@ export function UsualsRow({ cardWidth = 140 }: { cardWidth?: number }) {
   const session = useSession();
   const signedIn = !!session && !needsRegistration(session);
   const usuals = useUsuals();
+  useTrackList(showUsuals(signedIn, usuals) ? 'Your usuals' : null, usuals?.items.map((u) => u.product) ?? []);
   if (!showUsuals(signedIn, usuals)) return null;
   const canAdd = availableUsuals(usuals).length > 0;
 

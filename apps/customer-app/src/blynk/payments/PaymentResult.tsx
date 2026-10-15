@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { trackPurchase } from '@/blynk/analytics/track';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { formatLkr } from '@/blynk/lib/money';
 import { getOrder } from '@/blynk/orders/api';
@@ -68,7 +69,7 @@ export function PaymentResult({ from }: { from: 'return' | 'cancel' }) {
   useEffect(() => {
     if (phase === 'paid') {
       // "Order placed" shows this (paid) order without asking again
-      if (order) rememberPlaced(order);
+      if (order) { rememberPlaced(order); trackPurchase(order); }
       router.replace({ pathname: '/placed', params: { id } });
     }
     if (phase === 'cod') router.replace({ pathname: '/order/[id]', params: { id } });

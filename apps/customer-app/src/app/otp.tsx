@@ -6,6 +6,7 @@ import Animated, {
   FadeIn, interpolateColor, useAnimatedStyle, useSharedValue, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { trackLogin } from '@/blynk/analytics/track';
 import { requestOtp, verifyOtp } from '@/blynk/auth/api';
 import { demoFlow, devOtpFor, finishSignIn, setPendingOtp } from '@/blynk/auth/flow';
 import { GATE_PARAMS, isFromGate } from '@/blynk/auth/gate';
@@ -83,7 +84,7 @@ export default function Otp() {
       .then((r) => {
         const s = signIn(r);
         if (needsRegistration(s)) router.replace(gate ? { pathname: '/register', params: GATE_PARAMS } : '/register');
-        else finishSignIn(gate);
+        else { trackLogin(s.user.id); finishSignIn(gate); }
       })
       .catch((e) => {
         if (!mounted.current) return;

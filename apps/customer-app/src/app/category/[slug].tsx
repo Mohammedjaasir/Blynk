@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-n
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Category } from '@/blynk/api/types';
+import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { productsInView, resolveCategory } from '@/blynk/catalog/tree';
 import { categoryOfferActive } from '@/blynk/lib/categories';
@@ -39,6 +40,7 @@ export default function CategoryScreen() {
   const { data, error, refresh } = useCatalog();
   const view = useMemo(() => (data ? resolveCategory(data.categories, slug, sub) : null), [data, slug, sub]);
   const products = useMemo(() => (data && view ? productsInView(data.products, data.chainOf, view) : []), [data, view]);
+  useTrackList(view ? (view.selected ? `${view.root.name} / ${view.selected.name}` : view.root.name) : null, products);
   const hasSidebar = !!view && view.subs.length > 0;
   const gridW = width - (hasSidebar ? SIDEBAR_W : 0) - PAD * 2;
   const card = Math.floor((gridW - GAP) / 2);
