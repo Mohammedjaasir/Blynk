@@ -7,7 +7,7 @@ import { HeroBanner } from '../pages/HeroBanner';
 import { HeroView } from '../components/HeroBannerPreview';
 import { tokenStore } from '../api/client';
 import type { HeroBannerSetting } from '../api/types';
-import { DEFAULT_HERO, fillTokens, heroPreviewModel, heroProblem, heroStatus } from '../lib/heroBanner';
+import { DEFAULT_HERO, fillTokens, heroPreviewModel, heroProblem, heroSampleFrom, heroStatus } from '../lib/heroBanner';
 import { fail, mockApi, ok, type Call } from './mockApi';
 
 /**
@@ -37,6 +37,9 @@ const catalogMocks = (c: Call) => {
     });
   }
   if (c.method === 'GET' && c.path === '/admin/category-groups') return ok({ groups: [], ungrouped: [] });
+  // the live switches the "Automatic" preview follows (owner, 2026-10-14: points instead of free delivery)
+  if (c.method === 'GET' && c.path === '/admin/settings/points') return ok({ enabled: true, earn_points: 1, earn_per_lkr: 100 });
+  if (c.method === 'GET' && c.path === '/admin/settings/checkout') return ok({ new_customer_free_deliveries: { enabled: false, count: 2 } });
   return undefined;
 };
 
@@ -59,6 +62,7 @@ describe('hero banner rules (same as the API)', () => {
     expect(heroProblem({ ...custom, lines: [''] })).toMatch(/at least 1 sub-line/);
     expect(heroProblem({ ...custom, lines: ['x'.repeat(41)] })).toMatch(/40 characters/);
     expect(heroProblem({ ...custom, lines: ['From {price}'] })).toMatch(/Unknown token \{price\}/);
+    expect(heroProblem({ ...custom, lines: ['Earn {points_rule}'] })).toBeNull();
     expect(heroProblem({ ...custom, cta_label: 'X'.repeat(17) })).toMatch(/16 characters/);
     expect(heroProblem({ ...custom, items: [] })).toMatch(/at least 1 item/);
     expect(heroProblem({ ...custom, cta_destination_type: 'PRODUCT' })).toMatch(/product the button opens/);
@@ -69,11 +73,31 @@ describe('hero banner rules (same as the API)', () => {
   it('fills tokens like the app and skips a line whose token has no value', () => {
     expect(fillTokens('Groceries starting at {min_price}', { minPrice: 253, freeCount: 0 })).toBe('Groceries starting at LKR 253');
     expect(fillTokens('First {free_count} free', { minPrice: 253, freeCount: 0 })).toBeNull();
+    expect(fillTokens('Earn {points_rule}', { minPrice: 253, freeCount: 0, pointsRule: '1 point for every LKR 100' })).toBe('Earn 1 point for every LKR 100');
+    expect(fillTokens('Earn {points_rule}', { minPrice: 253, freeCount: 2, pointsRule: null })).toBeNull();
+    // Automatic: Blynk Points while on (owner, 2026-10-14), else the free deliveries, else FRESH
     const auto = heroPreviewModel(DEFAULT_HERO);
-    expect(auto.title).toEqual(['FREE', 'DELIVERY']);
-    expect(auto.lines).toEqual(['On your first 2 orders', 'Groceries starting at LKR 253']);
+    expect(auto.title).toEqual(['EARN', 'POINTS']);
+    expect(auto.lines).toEqual(['1 point for every LKR 100', 'Groceries starting at LKR 253']);
     expect(auto.cta).toBe('ORDER NOW');
+    const free = heroPreviewModel(DEFAULT_HERO, { minPrice: 253, freeCount: 2, pointsRule: null });
+    expect(free.title).toEqual(['FREE', 'DELIVERY']);
+    expect(free.lines).toEqual(['On your first 2 orders', 'Groceries starting at LKR 253']);
+    expect(heroPreviewModel(DEFAULT_HERO, { minPrice: 99, freeCount: 2, pointsRule: '1 point for every LKR 100' }).title).toEqual(['EARN', 'POINTS']);
     expect(heroPreviewModel(DEFAULT_HERO, { minPrice: 99, freeCount: 0 }).title).toEqual(['FRESH', 'GROCERIES']);
+  });
+
+  it('previews the live switches: points on/off x free deliveries on/off', () => {
+    const on = { enabled: true, earn_points: 1, earn_per_lkr: 100 };
+    const off = { ...on, enabled: false };
+    const freeOn = { new_customer_free_deliveries: { enabled: true, count: 2 } };
+    const freeOff = { new_customer_free_deliveries: { enabled: false, count: 2 } };
+    expect(heroSampleFrom(on, freeOff)).toEqual({ minPrice: 253, freeCount: 0, pointsRule: '1 point for every LKR 100' });
+    expect(heroSampleFrom({ ...on, earn_points: 2, earn_per_lkr: 250 }, freeOn)).toEqual({ minPrice: 253, freeCount: 2, pointsRule: '2 points for every LKR 250' });
+    expect(heroSampleFrom(off, freeOn)).toEqual({ minPrice: 253, freeCount: 2, pointsRule: null });
+    expect(heroPreviewModel(DEFAULT_HERO, heroSampleFrom(off, freeOff)).title).toEqual(['FRESH', 'GROCERIES']);
+    // not loaded (or refused): the sample
+    expect(heroSampleFrom(null, null)).toEqual({ minPrice: 253, freeCount: 0, pointsRule: '1 point for every LKR 100' });
   });
 });
 
@@ -100,7 +124,7 @@ describe('hero banner preview', () => {
     render(<HeroView model={heroPreviewModel(DEFAULT_HERO)} reduced={false} paused />);
     act(() => vi.advanceTimersByTime(9000));
     expect(screen.getByTestId('hero-item')).toHaveTextContent('🍞');
-    expect(screen.getByTestId('hero-line')).toHaveTextContent('On your first 2 orders');
+    expect(screen.getByTestId('hero-line')).toHaveTextContent('1 point for every LKR 100');
   });
 });
 
@@ -124,11 +148,13 @@ describe('Home banner editor', () => {
 
     expect(await screen.findByRole('heading', { name: 'Home banner' })).toBeInTheDocument();
     expect(screen.getByTestId('hero-status')).toHaveTextContent('Automatic');
-    expect(screen.getByTestId('hero-banner')).toHaveTextContent('FREE');
+    expect(screen.getByTestId('hero-banner')).toHaveTextContent('EARN');
+    expect(screen.getByTestId('hero-banner')).not.toHaveTextContent('FREE');
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
     await user.click(within(screen.getByRole('group', { name: 'Banner words' })).getByRole('button', { name: 'Custom' }));
     expect(screen.getByTestId('hero-tokens')).toHaveTextContent('{min_price}');
+    expect(screen.getByTestId('hero-tokens')).toHaveTextContent('{points_rule}');
     await user.clear(screen.getByLabelText('First word (white)'));
     await user.type(screen.getByLabelText('First word (white)'), 'weekend');
     await user.clear(screen.getByLabelText('Second word (yellow)'));

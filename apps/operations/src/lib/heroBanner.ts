@@ -29,14 +29,18 @@ export const HERO_AUTO_ITEMS: HeroBannerItem[] = ['bread', 'apple', 'carrot', 'e
 export const HERO_TOKENS = [
   { token: '{min_price}', meaning: 'the cheapest product price right now, e.g. "LKR 253"' },
   { token: '{free_count}', meaning: 'how many free deliveries new customers get, e.g. "2"' },
+  { token: '{points_rule}', meaning: 'the Blynk Points earn rule, e.g. "1 point for every LKR 100"' },
 ] as const;
 
 /** Motion timings (ms), as the app plays them. */
 export const HERO_TIMING = { cycle: 2600, roll: 3200, exit: 380, next: 120 } as const;
 
-/** The sample facts the preview fills the tokens with (the live values come from the catalog). */
-export interface HeroSample { minPrice: number | null; freeCount: number }
-export const HERO_SAMPLE: HeroSample = { minPrice: 253, freeCount: 2 };
+/**
+ * The sample facts the preview fills the tokens with (the live values come from the catalog and
+ * the settings). pointsRule: the Blynk Points rule while points are on, null while off.
+ */
+export interface HeroSample { minPrice: number | null; freeCount: number; pointsRule?: string | null }
+export const HERO_SAMPLE: HeroSample = { minPrice: 253, freeCount: 0, pointsRule: '1 point for every LKR 100' };
 
 export const DEFAULT_HERO: HeroBannerFields = {
   mode: 'AUTO',
@@ -68,13 +72,39 @@ export const HERO_STATUS_TEXT: Record<HeroStatus, string> = {
 const lkr = (n: number) =>
   'LKR ' + n.toLocaleString('en-US', Math.abs(n % 1) < 0.005 ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/**
+ * The preview's facts from the live settings (Blynk Points and the checkout switches), so
+ * "Automatic" shows what customers see now; HERO_SAMPLE until they load (or if they fail).
+ */
+export function heroSampleFrom(
+  points: { enabled: boolean; earn_points: number; earn_per_lkr: number } | null | undefined,
+  checkout: { new_customer_free_deliveries?: { enabled: boolean; count: number } } | null | undefined,
+  base: HeroSample = HERO_SAMPLE,
+): HeroSample {
+  const free = checkout?.new_customer_free_deliveries;
+  const n = Math.max(1, Math.floor(points?.earn_points ?? 1));
+  return {
+    minPrice: base.minPrice,
+    freeCount: checkout ? (free?.enabled && free.count > 0 ? free.count : 0) : base.freeCount,
+    pointsRule: points
+      ? points.enabled && points.earn_per_lkr > 0
+        ? `${n} ${n === 1 ? 'point' : 'points'} for every ${lkr(points.earn_per_lkr)}`
+        : null
+      : base.pointsRule,
+  };
+}
+
 /** A sub-line with its tokens filled in; null when a token has no value (the app skips the line). */
 export function fillTokens(line: string, s: HeroSample): string | null {
   let missing = false;
-  const out = line.replace(/\{(min_price|free_count)\}/g, (_, t: string) => {
+  const out = line.replace(/\{(min_price|free_count|points_rule)\}/g, (_, t: string) => {
     if (t === 'min_price') {
       if (s.minPrice == null) missing = true;
       return s.minPrice != null ? lkr(s.minPrice) : '';
+    }
+    if (t === 'points_rule') {
+      if (!s.pointsRule) missing = true;
+      return s.pointsRule ?? '';
     }
     if (!(s.freeCount > 0)) missing = true;
     return s.freeCount > 0 ? String(s.freeCount) : '';
@@ -99,11 +129,16 @@ export function heroPreviewModel(h: HeroBannerFields, s: HeroSample = HERO_SAMPL
   const price = s.minPrice != null ? lkr(s.minPrice) : null;
   const emoji = (keys: HeroBannerItem[]) => keys.map((k) => HERO_ITEMS.find((i) => i.key === k)?.emoji).filter((e): e is string => !!e);
   if (h.mode !== 'CUSTOM') {
+    // the app's AUTO words: Blynk Points while they are on (owner, 2026-10-14), else the free
+    // deliveries while they are on, else FRESH / GROCERIES
     const lines: string[] = [];
-    if (s.freeCount > 0) lines.push(`On your first ${s.freeCount} order${s.freeCount > 1 ? 's' : ''}`);
+    const points = s.pointsRule || null;
+    const free = !points && s.freeCount > 0;
+    if (points) lines.push(points);
+    else if (free) lines.push(`On your first ${s.freeCount} order${s.freeCount > 1 ? 's' : ''}`);
     if (price) lines.push(`Groceries starting at ${price}`);
     return {
-      title: s.freeCount > 0 ? ['FREE', 'DELIVERY'] : ['FRESH', 'GROCERIES'],
+      title: points ? ['EARN', 'POINTS'] : free ? ['FREE', 'DELIVERY'] : ['FRESH', 'GROCERIES'],
       lines,
       accent: price,
       items: emoji(HERO_AUTO_ITEMS),
@@ -158,7 +193,9 @@ export function heroProblem(h: HeroBannerFields): string | null {
   if (lines.some((l) => l.length > HERO_LIMITS.lineChars)) return `Keep each sub-line to ${HERO_LIMITS.lineChars} characters.`;
   for (const l of lines) {
     for (const m of l.matchAll(TOKEN_RE)) {
-      if (m[1] !== 'min_price' && m[1] !== 'free_count') return `Unknown token {${m[1]}}. Use {min_price} or {free_count}.`;
+      if (m[1] !== 'min_price' && m[1] !== 'free_count' && m[1] !== 'points_rule') {
+        return `Unknown token {${m[1]}}. Use {min_price}, {free_count} or {points_rule}.`;
+      }
     }
   }
   if (!h.cta_label.trim()) return 'Write the button text.';

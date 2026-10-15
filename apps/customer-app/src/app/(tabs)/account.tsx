@@ -16,6 +16,7 @@ import { needsRegistration, signOut, useSession } from '@/blynk/auth/session';
 import { requestPushPermission } from '@/blynk/push';
 import { fetchPoints, fetchReferral } from '@/blynk/rewards/api';
 import { pointsBalanceText } from '@/blynk/rewards/models';
+import { POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
 import { SHARE_BASE_URL } from '@/blynk/share/links';
 import { shareText } from '@/blynk/share/share';
 import { browserPermission, webPushPossible } from '@/blynk/push/webPlatform';
@@ -41,7 +42,9 @@ export default function Account() {
   const [points, setPoints] = useState<{ enabled: boolean; text: string } | null>(null);
   const [referOn, setReferOn] = useState(false);
   // doctors switched off (GET /store doctors_enabled false): only "My appointments", and only for a customer who has some
-  const doctorsOn = doctorsVisible(useStore());
+  const store = useStore();
+  const doctorsOn = doctorsVisible(store);
+  const pointsRule = pointsRuleOf(store);
   const [hasAppointments, setHasAppointments] = useState(false);
   useEffect(() => {
     if (DEMO || !signedIn || doctorsOn) return;
@@ -128,6 +131,8 @@ export default function Account() {
         <Card>
           {signedIn && <Row icon="🙂" title="About you" sub="Name, email and birthday" onPress={() => router.push('/profile')} />}
           {signedIn && points?.enabled && <Row icon="⭐" title="Blynk Points" sub={points.text} onPress={() => router.push('/points')} />}
+          {/* a guest hears the earn rule while points are on (owner, 2026-10-14) */}
+          {!signedIn && !DEMO && !!pointsRule && <Row icon="⭐" title="Blynk Points" sub={POINTS_COPY.profileGuest(pointsRule)} onPress={() => router.push('/points')} />}
           {signedIn && referOn && <Row icon="🎁" title="Refer a friend" sub="Invite friends with your code" onPress={() => router.push('/refer')} />}
           <Row icon="🧾" title="Your orders" onPress={() => router.push('/orders')} />
           <Row icon="📍" title="Address book" onPress={() => router.push('/addresses')} />

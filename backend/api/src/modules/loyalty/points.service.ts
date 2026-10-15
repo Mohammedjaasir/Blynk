@@ -244,13 +244,7 @@ export async function earnPointsForOrder(
   if (!setting.enabled) return 0;
   const already = await executor.selectFrom('points_ledger').select('id').where('order_id', '=', order.id).where('kind', '=', 'EARN').executeTakeFirst();
   if (already) return 0;
-  const base = earnBase({
-    subtotal_amount: Number(order.subtotal_amount),
-    discount_amount: Number(order.discount_amount ?? 0),
-    points_discount_amount: Number(order.points_discount_amount ?? 0),
-    discountWasDeliveryFee: await discountWasDeliveryFee(executor, order),
-  });
-  const points = pointsEarned(base, setting);
+  const points = await pointsForOrder(executor, order, setting);
   if (points <= 0) return 0;
   await lockCustomer(executor, order.customer_id);
   await addLot(executor, {
@@ -261,6 +255,52 @@ export async function earnPointsForOrder(
     orderId: order.id,
   });
   return points;
+}
+
+type EarnableOrder = {
+  id: string;
+  subtotal_amount: unknown;
+  discount_amount: unknown;
+  points_discount_amount?: unknown;
+  referral_discount_amount?: unknown;
+  coupon_code: string | null;
+};
+
+/** The points `order` earns under `setting` (the one rule earnPointsForOrder applies). */
+async function pointsForOrder(executor: DBConnection, order: EarnableOrder, setting: PointsProgramSetting): Promise<number> {
+  const base = earnBase({
+    subtotal_amount: Number(order.subtotal_amount),
+    discount_amount: Number(order.discount_amount ?? 0),
+    points_discount_amount: Number(order.points_discount_amount ?? 0),
+    discountWasDeliveryFee: await discountWasDeliveryFee(executor, order),
+  });
+  return pointsEarned(base, setting);
+}
+
+/**
+ * The customer app's "You'll earn N points when it's delivered" (owner, 2026-10-14: points
+ * instead of free delivery): what this order earns on delivery under today's numbers - the
+ * same rule earnPointsForOrder applies then. 0 while the program is off and for a cancelled
+ * order; a delivered order shows what it really earned.
+ */
+export async function pointsEarnPreview(
+  executor: DBConnection,
+  order: EarnableOrder & { order_status?: string | null }
+): Promise<number> {
+  const status = order.order_status ?? null;
+  if (status === 'CANCELLED') return 0;
+  if (status === 'DELIVERED') {
+    const earned = await executor
+      .selectFrom('points_ledger')
+      .select('points')
+      .where('order_id', '=', order.id)
+      .where('kind', '=', 'EARN')
+      .executeTakeFirst();
+    return earned ? Number(earned.points) : 0;
+  }
+  const setting = await pointsSettings.read();
+  if (!setting.enabled) return 0;
+  return await pointsForOrder(executor, order, setting);
 }
 
 /** Whether the order's coupon / referral discount was a free delivery (off the fee, not the items). */

@@ -102,6 +102,20 @@ export interface StoreInfo {
    * custom words while live; null or missing (an older API) = the automatic banner.
    */
   hero_banner?: PublicHeroBanner | null;
+  /**
+   * Blynk Points (owner, 2026-10-14: points instead of free delivery): the public earn rule
+   * while Admin / Ops have the program on; null = off; missing = an older API (off).
+   */
+  points_program?: PublicPointsProgram | null;
+}
+
+/** GET /store `points_program`. */
+export interface PublicPointsProgram {
+  enabled: boolean;
+  earn_points: number;
+  earn_per_lkr: number;
+  lkr_per_point: number;
+  min_redeem_points: number;
 }
 
 /** Where a promo surface goes when tapped: the same resolved target a promotion carries. */
@@ -119,7 +133,7 @@ export interface PublicPromoBand {
   ends_at: string | null;
 }
 
-/** GET /store `hero_banner`: the custom hero banner (tokens {min_price} / {free_count} are filled in by the app). */
+/** GET /store `hero_banner`: the custom hero banner (tokens {min_price} / {free_count} / {points_rule} are filled in by the app). */
 export interface PublicHeroBanner {
   mode: 'CUSTOM';
   title: [string, string];

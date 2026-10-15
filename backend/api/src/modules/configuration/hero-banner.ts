@@ -26,8 +26,10 @@ import { promotionDestinationTypes } from '../promotions/promotion.schema.js';
  *   mode AUTO    the app's automatic words (the CUSTOM fields are kept for later)
  *   mode CUSTOM  title_1 / title_2, 1-4 rolling sub-lines with the tokens
  *                {min_price} (the cheapest product, e.g. "LKR 253") and
- *                {free_count} (new-customer free deliveries; a line whose token
- *                has no value is skipped by the app), the button's words and
+ *                {free_count} (new-customer free deliveries) and {points_rule}
+ *                (the Blynk Points earn rule, e.g. "1 point for every LKR 100";
+ *                owner, 2026-10-14); a line whose token has no value is
+ *                skipped by the app. Also the button's words and
  *                where it goes, and which illustrated items the beam lifts.
  *                Outside starts_at / ends_at the app falls back to AUTO.
  *
@@ -48,7 +50,7 @@ export const HERO_BANNER_ITEMS = ['milk', 'bread', 'apple', 'carrot', 'egg', 'br
 export type HeroBannerItem = (typeof HERO_BANNER_ITEMS)[number];
 export const HERO_BANNER_MODES = ['AUTO', 'CUSTOM'] as const;
 /** The tokens a sub-line may use. */
-export const HERO_BANNER_TOKENS = ['min_price', 'free_count'] as const;
+export const HERO_BANNER_TOKENS = ['min_price', 'free_count', 'points_rule'] as const;
 
 /**
  * Title words are sized to the 196 pt text column (Bowlby One ~0.82 em per
@@ -86,7 +88,7 @@ const subLine = z
       if (!(HERO_BANNER_TOKENS as readonly string[]).includes(m[1]!)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Unknown token {${m[1]}}. Use {min_price} or {free_count}.`,
+          message: `Unknown token {${m[1]}}. Use {min_price}, {free_count} or {points_rule}.`,
         });
       }
     }

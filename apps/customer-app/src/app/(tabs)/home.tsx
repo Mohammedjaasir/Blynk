@@ -312,7 +312,7 @@ export default function Home() {
             <ClosedBanner style={styles.closed} />
             <Animated.View style={[{ overflow: 'hidden' }, bannerA]}>
               {dark && (live
-                ? <Banner images={live.banner.images} minPrice={live.banner.minPrice} freeCount={live.banner.freeCount} freeKind={live.banner.freeKind} onOrderNow={toExplore} hero={store?.hero_banner} />
+                ? <Banner images={live.banner.images} minPrice={live.banner.minPrice} freeCount={live.banner.freeCount} freeKind={live.banner.freeKind} pointsRule={live.banner.pointsRule} onOrderNow={toExplore} hero={store?.hero_banner} />
                 : <Banner images={[]} minPrice={null} freeCount={0} onOrderNow={toExplore} demo={BANNER} />)}
             </Animated.View>
           </Animated.View>
@@ -656,8 +656,9 @@ function Wave({ color, flip }: { color: string; flip?: boolean }) {
 }
 
 /**
- * "BLYNK vs OTHER APPS / 40-60% LOWER PRICES" with its store tile(s). Live: Blynk's fees and
- * free deliveries over tiles of products on offer (else aisles), true copy only.
+ * "BLYNK vs OTHER APPS / 40-60% LOWER PRICES" with its store tile(s). Live: EARN BLYNK POINTS
+ * (or the free deliveries, or the offers) with Blynk's fees over tiles of products on offer
+ * (else aisles), true copy only (src/blynk/store/pointsPromo.ts).
  */
 function VsSection({ live }: { live: LiveVs | null }) {
   const kicker = live ? live.kicker : VS.kicker;
@@ -667,7 +668,9 @@ function VsSection({ live }: { live: LiveVs | null }) {
       <LinearGradient colors={[C.brandTint, '#FFFCEB', '#FFFFFF']} style={{ paddingTop: 12, paddingBottom: 6 }}>
         <View style={styles.vsKicker}>
           <HeartsIcon size={15} color={C.brandInk} pupil="#3A3A40" />
-          <Text style={styles.vsSmall}>{kicker[0]} <Text style={styles.vsVs}>{kicker[1]}</Text> {kicker[2]}</Text>
+          {kicker.length === 1
+            ? <Text style={[styles.vsSmall, styles.vsLine]}>{kicker[0]}</Text>
+            : <Text style={styles.vsSmall}>{kicker[0]} <Text style={styles.vsVs}>{kicker[1]}</Text> {kicker[2]}</Text>}
         </View>
         <Text style={styles.vsBig}>{live ? live.title : VS.title}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 14, marginTop: 10 }}>
@@ -764,8 +767,8 @@ const StoreCard = memo(function StoreCard({ store: s, y, feedY, screenH, promo }
 
 /**
  * Live: the video's restaurant card as a Blynk aisle. Same layout; the rating / ETA row
- * becomes the item count and delivery hours, the delivery row says what this customer may
- * really get (useFreeClaim), the "% LOWER PRICES" line is a running category offer, and there
+ * becomes the item count and delivery hours, the second row says "Items from LKR X" (no
+ * free-delivery or points claim per card: Home says that once), the "% LOWER PRICES" line is a running category offer, and there
  * is no "Ad" tag. The corner holds the aisle's illustrated items swaying in a stamp ring
  * (owner, 2026-10-14: the "FREE DELIVERY" stamp misled customers who had used theirs).
  */
@@ -906,6 +909,8 @@ const styles = StyleSheet.create({
   vsKicker: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 15 },
   vsSmall: { fontFamily: F.bold, fontSize: 13, color: C.brandText, letterSpacing: -0.1 },
   vsVs: { fontFamily: F.semi, fontSize: 10.5, fontStyle: 'italic' },
+  // one sentence-case line ("1 point for every LKR 100 · No packaging or platform fee"): quieter, may wrap
+  vsLine: { flexShrink: 1, fontFamily: F.semi, fontSize: 12, lineHeight: 16 },
   vsBig: { fontFamily: F.black, fontSize: 22.5, color: C.ink, marginHorizontal: 15, marginTop: 2, letterSpacing: -0.2 },
   vsTile: { width: MEAL_W, height: MEAL_W, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: C.tile },
   vsShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },

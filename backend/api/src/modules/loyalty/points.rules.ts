@@ -118,6 +118,26 @@ export const adjustPointsSchema = z
 
 export type AdjustPointsInput = z.infer<typeof adjustPointsSchema>;
 
+/** GET /store `points_program`: the public part of the rule (what the apps advertise), null while off. */
+export interface PublicPointsProgram {
+  enabled: true;
+  earn_points: number;
+  earn_per_lkr: number;
+  lkr_per_point: number;
+  min_redeem_points: number;
+}
+
+export function publicPointsProgram(s: PointsProgramSetting): PublicPointsProgram | null {
+  if (!s.enabled) return null;
+  return {
+    enabled: true,
+    earn_points: s.earn_points,
+    earn_per_lkr: s.earn_per_lkr,
+    lkr_per_point: s.lkr_per_point,
+    min_redeem_points: s.min_redeem_points,
+  };
+}
+
 /** Points a delivered order earns on `base` LKR (item subtotal after discounts). */
 export function pointsEarned(base: number, s: Pick<PointsProgramSetting, 'earn_points' | 'earn_per_lkr'>): number {
   if (!(base > 0) || !(s.earn_per_lkr > 0)) return 0;

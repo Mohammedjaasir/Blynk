@@ -1,5 +1,6 @@
 import { formatLkr } from '@/blynk/lib/money';
 import type { CheckoutInfo, CouponPreview } from '@/blynk/orders/types';
+import { pointsFor } from '@/blynk/store/pointsPromo';
 
 /*
  * Birthday gift, referral reward and Blynk Points at checkout (owner, 2026-10-09/10; the
@@ -125,13 +126,14 @@ export function pointsRedeem(p: PointsProgram | null, due: number): { points: nu
   return { points: usable, value: Math.round(usable * p.lkrPerPoint * 100) / 100 };
 }
 
-/** Points an order with this much of items (after the discount) earns once delivered. */
+/**
+ * Points an order with this much of items (after the discount, before points) earns once
+ * delivered: the server's rule (pointsPromo.ts pointsFor = backend pointsEarned).
+ */
 export function earnEstimate(p: PointsProgram | null, itemsAfterDiscount: number): number {
-  if (!p || !p.enabled || p.earnPerLkr <= 0 || p.earnPoints <= 0 || itemsAfterDiscount <= 0) return 0;
-  return Math.floor(itemsAfterDiscount / p.earnPerLkr) * p.earnPoints;
+  if (!p || !p.enabled) return 0;
+  return pointsFor({ earnPoints: p.earnPoints, earnPerLkr: p.earnPerLkr }, itemsAfterDiscount);
 }
-
-export const earnLine = (n: number) => `You'll earn about ${n} Blynk ${n === 1 ? 'Point' : 'Points'} when this order is delivered`;
 export const balanceLine = (p: PointsProgram) => `You have ${p.balance} ${p.balance === 1 ? 'point' : 'points'} = ${formatLkr(p.valueLkr)}`;
 export const redeemLine = (r: { points: number; value: number }) => (r.points > 0
   ? `About ${r.points} points (${formatLkr(r.value)}) off this order. The final amount is confirmed when you place it.`
@@ -156,7 +158,8 @@ export function rewardsSummary(args: {
   return {
     discount,
     points,
-    earn: earnEstimate(pointsOf(quote), subtotal - discount.onItems),
+    // the part paid with points never earns (backend earnBase)
+    earn: earnEstimate(pointsOf(quote), subtotal - discount.onItems - points.value),
     toPay: round2(Math.max(0, due - points.value)),
   };
 }

@@ -422,7 +422,10 @@ describe('Blynk Points', () => {
   it('switched off: no balance shown, nothing earned', async () => {
     const me = await people.customer(20);
     expect(await pointsOf(me.token)).toMatchObject({ enabled: false, balance: 0, value_lkr: 0, history: [] });
+    // Owner, 2026-10-14: the apps advertise nothing while it is off.
+    expect((await request(app).get('/api/v1/store')).body.data.points_program).toBeNull();
     const order = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 5 }]));
+    expect(order.points_earn_preview).toBe(0);
     await deliver(order.id);
     expect((await pointsOf(me.token)).balance).toBe(0);
     expect((await checkoutInfo(me.token)).points).toMatchObject({ enabled: false, balance: 0 });
@@ -430,11 +433,24 @@ describe('Blynk Points', () => {
 
   it('earns on delivered orders, redeems at checkout, gives back on cancel', async () => {
     expect((await patchPoints({ enabled: true })).status).toBe(200);
+    // GET /store: the public earn rule the customer app and blynk.lk advertise (owner, 2026-10-14).
+    expect((await request(app).get('/api/v1/store')).body.data.points_program).toEqual({
+      enabled: true,
+      earn_points: 1,
+      earn_per_lkr: 100,
+      lkr_per_point: 1,
+      min_redeem_points: 10,
+    });
     const me = await people.customer(21);
     const order = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 5 }]));
-    await deliver(order.id);
     const earned = Math.floor(order.subtotal_amount / 100);
     expect(earned).toBeGreaterThan(0);
+    // "Order placed": what it earns once delivered - the same rule the delivery applies.
+    expect(order.points_earn_preview).toBe(earned);
+    const detail = async () => (await request(app).get(`/api/v1/orders/${order.id}`).set(auth(me.token))).body.data.order;
+    expect((await detail()).points_earn_preview).toBe(earned);
+    await deliver(order.id);
+    expect((await detail()).points_earn_preview).toBe(earned);
     const after = await pointsOf(me.token);
     expect(after).toMatchObject({ enabled: true, balance: earned, value_lkr: earned });
     expect(after.history[0]).toMatchObject({ kind: 'EARN', points: earned, order_number: order.order_number });
@@ -463,6 +479,7 @@ describe('Blynk Points', () => {
     expect((await pointsOf(me.token)).balance).toBe(earned + 100 - expectedPoints);
 
     expect((await cancel(paid.id, me.token)).status).toBe(200);
+    expect((await request(app).get(`/api/v1/orders/${paid.id}`).set(auth(me.token))).body.data.order.points_earn_preview).toBe(0);
     const back = await pointsOf(me.token);
     expect(back.balance).toBe(earned + 100);
     expect(back.history[0]).toMatchObject({ kind: 'REFUND', points: expectedPoints });
@@ -476,8 +493,9 @@ describe('Blynk Points', () => {
     expect(order.points_redeemed).toBe(50);
     expect(order.discount_amount).toBe(100);
     await checkTotals(order.id);
-    await deliver(order.id);
     const earned = Math.floor((order.subtotal_amount - 50 - 50) / 100);
+    expect(order.points_earn_preview).toBe(earned);
+    await deliver(order.id);
     const pts = await pointsOf(me.token);
     expect(pts.balance).toBe(earned);
     expect(pts.history[0]).toMatchObject({ kind: 'EARN', points: earned });

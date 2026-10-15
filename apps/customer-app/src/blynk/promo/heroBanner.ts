@@ -1,6 +1,7 @@
 import type { PublicHeroBanner } from '../api/types';
 import { promoDestination, type PromoDestination } from '../catalog/promoTarget';
 import { formatLkr } from '../lib/money';
+import { NEUTRAL_COPY, POINTS_COPY } from '../store/pointsPromo';
 
 /*
  * The Home hero banner's render model (docs/promo-surfaces.md §3). Pure, so it is tested in
@@ -8,19 +9,26 @@ import { formatLkr } from '../lib/money';
  * both modes.
  *
  *   config undefined / null  -> AUTO: the automatic words the banner always had
- *   config object (CUSTOM)   -> Admin / Ops' words, with {min_price} / {free_count} filled in;
+ *   config object (CUSTOM)   -> Admin / Ops' words, with {min_price} / {free_count} /
+ *                               {points_rule} filled in;
  *                               after its ends_at (a cached /store) it is AUTO again
  *
  * Free deliveries follow the customer's own claim (src/blynk/store/freeClaim.ts): a guest hears
  * the store's new-customer offer, always "for new customers"; a signed-in customer only the
  * free deliveries they still have. FREE / FRESH and the sub-line in AUTO, and the {free_count}
  * token in CUSTOM, all read the same claim.
+ *
+ * Blynk Points (owner, 2026-10-14: points instead of free delivery): while GET /store
+ * `points_program` is on, AUTO says EARN / POINTS with the live rule ("1 point for every
+ * LKR 100") - for guests and signed-in customers alike - and the {points_rule} token fills in
+ * that rule (a line using it is skipped while points are off). CUSTOM keeps Admin / Ops' words.
  */
 
 /** Customer-facing words (kept together for the Sinhala / Tamil phase). */
 export const HERO_COPY = {
   titleFree: ['FREE', 'DELIVERY'] as [string, string],
-  titleFresh: ['FRESH', 'GROCERIES'] as [string, string],
+  titleFresh: NEUTRAL_COPY.heroTitle,
+  titlePoints: POINTS_COPY.heroTitle,
   /** Guest: the store's new-customer offer. */
   newCustomers: (n: number) => (n === 1 ? 'First order for new customers' : `First ${n} orders for new customers`),
   /** Signed in: this customer's own free deliveries left. */
@@ -62,6 +70,8 @@ export interface HeroFacts {
   freeCount: number;
   /** Whose count it is: 'personal' (signed in, their own left) or the store's offer for new customers (default). */
   freeKind?: 'personal' | 'new-customer' | 'none';
+  /** The Blynk Points rule while points are on ("1 point for every LKR 100"), else null / absent. */
+  pointsRule?: string | null;
 }
 
 const NEW_CUSTOMERS = /new customer/i;
@@ -70,10 +80,14 @@ const NEW_CUSTOMERS = /new customer/i;
 export function fillHeroTokens(line: string, facts: HeroFacts): string | null {
   let missing = false;
   let usedFree = false;
-  const out = line.replace(/\{(min_price|free_count)\}/g, (_, t: string) => {
+  const out = line.replace(/\{(min_price|free_count|points_rule)\}/g, (_, t: string) => {
     if (t === 'min_price') {
       if (facts.minPrice == null) missing = true;
       return facts.minPrice != null ? formatLkr(facts.minPrice) : '';
+    }
+    if (t === 'points_rule') {
+      if (!facts.pointsRule) missing = true;
+      return facts.pointsRule ?? '';
     }
     if (!(facts.freeCount > 0)) missing = true;
     usedFree = true;
@@ -88,12 +102,15 @@ export function fillHeroTokens(line: string, facts: HeroFacts): string | null {
 function autoHero(facts: HeroFacts): HeroModel {
   const price = facts.minPrice != null ? formatLkr(facts.minPrice) : null;
   const lines: string[] = [];
-  const free = facts.freeCount > 0 && facts.freeKind !== 'none';
+  // Points first (owner, 2026-10-14); free deliveries only while they are on and points are not.
+  const points = facts.pointsRule || null;
+  const free = !points && facts.freeCount > 0 && facts.freeKind !== 'none';
   const personal = facts.freeKind === 'personal';
-  if (free) lines.push(personal ? HERO_COPY.left(facts.freeCount) : HERO_COPY.newCustomers(facts.freeCount));
+  if (points) lines.push(points);
+  else if (free) lines.push(personal ? HERO_COPY.left(facts.freeCount) : HERO_COPY.newCustomers(facts.freeCount));
   if (price) lines.push(HERO_COPY.startingAt(price));
   return {
-    title: free ? HERO_COPY.titleFree : HERO_COPY.titleFresh,
+    title: points ? HERO_COPY.titlePoints : free ? HERO_COPY.titleFree : HERO_COPY.titleFresh,
     lines,
     accent: price,
     items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]!),

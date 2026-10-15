@@ -223,8 +223,20 @@ describe('Delivery fee setting and GET /store', () => {
     // null while off - its own contract is tests/promo-band.test.ts.
     // Home hero banner: null while AUTO (the default), else the custom banner -
     // its own contract is tests/hero-banner.test.ts.
-    const { promo_band: promoBand, hero_banner: heroBanner, ...facts } = res.body.data;
+    // Blynk Points (owner, 2026-10-14): the public earn rule, null while the program is off -
+    // its own contract is tests/referrals-and-points.test.ts.
+    const { promo_band: promoBand, hero_banner: heroBanner, points_program: pointsProgram, ...facts } = res.body.data;
     expect(promoBand === null || typeof promoBand === 'object').toBe(true);
+    expect('points_program' in res.body.data).toBe(true);
+    if (pointsProgram !== null) {
+      expect(pointsProgram).toEqual({
+        enabled: true,
+        earn_points: expect.any(Number),
+        earn_per_lkr: expect.any(Number),
+        lkr_per_point: expect.any(Number),
+        min_redeem_points: expect.any(Number),
+      });
+    }
     expect('hero_banner' in res.body.data).toBe(true);
     expect(heroBanner === null || heroBanner.mode === 'CUSTOM').toBe(true);
     expect(facts).toEqual({

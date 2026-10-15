@@ -190,16 +190,21 @@ Tokens in a sub-line: `{min_price}` = the cheapest available product's
 effective price ("LKR 253"), `{free_count}` = the free deliveries this customer
 may be told about: a signed-in customer's own free deliveries left (checkout-info),
 a guest's the store's new-customer count, with " for new customers" added unless
-the line already says so. Any other `{...}` is refused. The app fills them in; a
-line whose token has no value (no products / none left / free deliveries off) is
-skipped.
+the line already says so, `{points_rule}` = the Blynk Points earn rule from Admin /
+Ops' Blynk Points settings, worded "1 point for every LKR 100" (`GET /store` ->
+`points_program`; owner, 2026-10-14). Any other `{...}` is refused. The app fills
+them in; a line whose token has no value (no products / none left / free
+deliveries off / Blynk Points off) is skipped.
 
 AUTO (no row, a malformed row, mode AUTO, or a CUSTOM banner outside its
-schedule): "FREE / DELIVERY" while this customer may be told of free deliveries
-(a guest: the new-customer offer; signed in: at least one left), else "FRESH /
-GROCERIES"; sub-lines "First N orders for new customers" (guest) or "N free
-deliveries left" / "1 free delivery left" (signed in), and "Groceries starting at
-<price>"; the six AUTO items;
+schedule): "EARN / POINTS" while Blynk Points are on (owner, 2026-10-14: points
+instead of free delivery; guests and signed-in customers alike), sub-lines "1 point
+for every LKR 100" (the live rule) and "Groceries starting at <price>"; else
+"FREE / DELIVERY" while this customer may be told of free deliveries (a guest: the
+new-customer offer; signed in: at least one left), sub-lines "First N orders for
+new customers" (guest) or "N free deliveries left" / "1 free delivery left"
+(signed in), and "Groceries starting at <price>"; else "FRESH / GROCERIES" with
+"Groceries starting at <price>"; the six AUTO items;
 ORDER NOW scrolls to the aisles. Switching back to AUTO keeps the custom fields
 for next time; "Reset to automatic" saves the defaults above.
 
@@ -241,5 +246,35 @@ jumped (it used to stop after 1 s, leaving a letter past the 13th mid-jump in
 "FRESH GROCERIES"; short titles are unchanged). Reduced motion (Reanimated's
 system setting): loops still, one-off effects jump to their end; items still
 change every cycle and lines still roll. The staff previews (`HeroBannerPreview`)
-play the same with CSS; they fill the tokens with sample values (LKR 253, 2).
+play the same with CSS; they fill the tokens with sample values (LKR 253) and the
+live Blynk Points / free-delivery switches (`GET /admin/settings/points` and
+`/admin/settings/checkout`; until they load: points on, "1 point for every LKR
+100", no free deliveries), so "Automatic" previews what customers see now.
 
+
+---
+
+## 4. Blynk Points instead of free delivery (owner, 2026-10-14)
+
+"Remove completely free delivery - instead of that, for 100 LKR order 1 Blynk
+point." The free-delivery features and their Admin / Ops switches stay; the
+customer app only says what the switches allow (`src/blynk/store/pointsPromo.ts`,
+tested in `pointsPromo.test.ts` for free on/off x points on/off x guest/signed in).
+
+| Surface | Blynk Points on | Free deliveries on, points off | Both off |
+| --- | --- | --- | --- |
+| Hero AUTO | EARN / POINTS, "1 point for every LKR 100", "Groceries starting at ..." | FREE / DELIVERY (as §3) | FRESH / GROCERIES, "Groceries starting at ..." |
+| Yellow band over the offer tiles | "1 point for every LKR 100 · No packaging or platform fee" / EARN BLYNK POINTS | NO PACKAGING FEE & NO PLATFORM FEE / FIRST 2 DELIVERIES FREE (or NEXT N ...) | NO PACKAGING FEE & NO PLATFORM FEE / OFFER PRICES TODAY (or SHOP BY AISLE) |
+| Fee strip | 0 Packaging fee · 0 Platform fee · 1 pt / LKR 100 | ... · 2 Free · new users | ... · LKR Delivery LKR X (or km Fee at checkout) |
+| Aisle cards | "Items from LKR X" | same | same |
+| Aisle screen offer row | EARN BLYNK POINTS / 1 point for every LKR 100 (after a category offer) | FREE DELIVERY ON YOUR FIRST N ORDERS | none |
+| Cart bill | "You'll earn N Blynk Points on this order" (guest: "Sign in to earn N ..."; hidden at 0) | the free-delivery rows, Hurray and basket bar as before | nothing extra |
+| Order placed | "You'll earn N Blynk Points when it's delivered" (`points_earn_preview` on POST /orders and GET /orders/:id) | - | - |
+| Profile (guest) / Points screen | "1 point for every LKR 100 · Log in to earn" / the rule | - | - |
+
+Points win Home's headline surfaces when both are on. The earn number is the
+server's rule (backend `points.rules.ts`): items after discounts, never the
+delivery fee or the part paid with points, in full steps of `earn_per_lkr`,
+added when the order is DELIVERED. `GET /store` -> `points_program` =
+`{ enabled: true, earn_points, earn_per_lkr, lkr_per_point, min_redeem_points }`
+while on, `null` while off.
