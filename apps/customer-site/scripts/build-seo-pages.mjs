@@ -8,8 +8,8 @@
 //   /si/ /ta/ and /si/<area> /ta/<area>                           Sinhala and Tamil
 //   /sitemap.xml /robots.txt /pages.css (pages.css is hand-written, not generated)
 //
-// The English home page (index.html) and the legal pages are hand-written;
-// this script only lists them in the sitemap.
+// The English home page (index.html) is hand-written and the legal pages are
+// built by build-legal-pages.mjs; this script only lists them in the sitemap.
 //
 //   node apps/customer-site/scripts/build-seo-pages.mjs          write the pages
 //   node apps/customer-site/scripts/build-seo-pages.mjs --check  fail if a page is out of date
@@ -822,12 +822,15 @@ ${scripts(`\n  <script src="/app.js?v=20261014b" defer></script>`)}`;
 }
 
 // ---------------------------------------------------------------- sitemap + robots
-// The hand-written pages, with the date their content last changed.
+// The hand-written pages, with the date their content last changed. The legal
+// pages are built by build-legal-pages.mjs; their date is the "Last updated"
+// in legal/legal-config.json.
+const LEGAL_UPDATED = JSON.parse(readFileSync(join(siteDir, 'legal', 'legal-config.json'), 'utf8')).lastUpdated;
 export const STATIC_PAGES = [
   { path: '/', lastmod: LASTMOD, alternates: { en: '/', si: '/si/', ta: '/ta/' } },
-  { path: '/privacy', lastmod: '2026-10-14' },
-  { path: '/terms', lastmod: '2026-10-14' },
-  { path: '/refunds', lastmod: '2026-10-14' },
+  { path: '/privacy', lastmod: LEGAL_UPDATED },
+  { path: '/terms', lastmod: LEGAL_UPDATED },
+  { path: '/refunds', lastmod: LEGAL_UPDATED },
 ];
 
 function sitemap(entries) {

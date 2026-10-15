@@ -1,0 +1,19 @@
+{
+  "_help": [
+    "The owner's details for the Terms, Privacy and Refund pages (/terms, /privacy, /refunds).",
+    "Fill in a value, then run: node apps/customer-site/scripts/build-legal-pages.mjs",
+    "An empty value is left out of the pages cleanly (no [brackets] are ever shown).",
+    "The phone number is used only inside the Call us / WhatsApp us links, never shown as text (owner, 2026-10-15).",
+    "lastUpdated is the date shown on all three pages and in sitemap.xml (YYYY-MM-DD)."
+  ],
+  "lastUpdated": "2026-10-15",
+  "businessName": "Blynk Quick Commerce",
+  "businessRegistrationNo": "",
+  "registeredAddress": "",
+  "supportEmail": "",
+  "privacyEmail": "",
+  "dataProtectionContact": "",
+  "phone": "+94717107374",
+  "whatsappUrl": "https://wa.me/94717107374",
+  "hours": "8:00 am – 9:00 pm, daily"
+}
