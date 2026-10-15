@@ -1,4 +1,5 @@
 import type { Product } from '@/blynk/api/types';
+import { learnSkus } from '../analytics/track';
 
 /*
  * The size picker (bottom sheet) for a product with variants: tapping "+" on such a product
@@ -25,6 +26,7 @@ const MAX = 30;
 /** A GET /catalog/products/:id answer with its variants. */
 export function rememberDetail(p: Product) {
   if (!Array.isArray(p.variants)) return;
+  learnSkus(p.variants); // GTM items name a size by its SKU
   details.delete(p.id);
   details.set(p.id, p);
   if (details.size > MAX) details.delete(details.keys().next().value as string);

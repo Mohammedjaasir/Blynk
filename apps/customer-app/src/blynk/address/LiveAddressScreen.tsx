@@ -10,6 +10,8 @@ import Animated, {
   withTiming, ZoomOut,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTrackOnce } from '@/blynk/analytics/AnalyticsHost';
+import { trackOutOfZone } from '@/blynk/analytics/track';
 import { AreaIntro, AreaList } from '@/blynk/area/AreaSteps';
 import { AREA, noteText } from '@/blynk/area/copy';
 import { circleRing, coverageOf, insideCoverage, kmText, nearestPlace, type Coverage } from '@/blynk/area/coverage';
@@ -233,6 +235,7 @@ export function LiveAddressScreen() {
   const outside = !!far && !far.inside;
   const near = pin ? nearestPlace(coverage, pin) : null;
   const city = cityFor(flow, town);
+  useTrackOnce(placed && outside, 'out_of_zone', () => trackOutOfZone(near?.name ?? city)); // GTM: the pin settled outside the circle
   const title = editing ? editing.address_line1 : flow.area ? flow.area.name : T.spot;
   const line = editing ? editing.city
     : [near && !flow.area ? AREA.near(near.name) : city, far ? (far.km >= 0.1 ? `${kmText(far.km)} ${AREA.fromStore}` : null) : T.spotLine]
@@ -449,7 +452,7 @@ function AddressForm({ pin, town, editing, signedIn, prefill, onBack, onOutOfAre
       if (mounted.current) onDone();
     } catch (e) {
       if (!mounted.current) return;
-      if (isOutsideRadius(e)) setOut(true);
+      if (isOutsideRadius(e)) { setOut(true); trackOutOfZone(town); }
       else setError(addressErrorText(e));
     } finally {
       if (mounted.current) setBusy(false);

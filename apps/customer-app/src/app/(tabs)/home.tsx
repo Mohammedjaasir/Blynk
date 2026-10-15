@@ -13,6 +13,7 @@ import { useBottomInset } from '@/lib/tabs';
 import Svg, { Path } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useHomeLocation } from '@/blynk/address/homeLocation';
+import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import type { Product } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { FILTERS as LIVE_FILTERS, toggle, type FilterId } from '@/blynk/lib/filters';
@@ -246,6 +247,7 @@ export default function Home() {
 
   const cats: RailCat[] = live ? live.rail : granted ? CATEGORIES : CATEGORIES_PRE;
   const meals = live ? live.under : granted ? MEALS : MEALS_PRE;
+  useTrackList(live ? `Under ${formatLkr(UNDER_LKR)}` : null, live ? live.under : []);
   const stores = useMemo(() => (DEMO ? filterStores(cat, filters as DemoFilter[]) : []), [cat, filters]);
   const fees = live ? live.fees : FEES;
   const sheet = DEMO ? LOCATION_SHEET : here.sheet;

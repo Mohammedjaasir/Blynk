@@ -5,6 +5,7 @@ import { BackHandler, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } 
 import Animated, { FadeIn, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '@/blynk/api/client';
+import { trackSignUp } from '@/blynk/analytics/track';
 import { applyReferral, getReferral, saveProfile } from '@/blynk/auth/api';
 import { demoFlow, leaveSignIn } from '@/blynk/auth/flow';
 import { GATE_PARAMS, isFromGate } from '@/blynk/auth/gate';
@@ -91,6 +92,7 @@ export default function Register() {
       }
       stage = 'name';
       await saveProfile({ full_name: full });
+      trackSignUp(getSession()?.user.id);
       router.replace(gate ? { pathname: '/birthday', params: GATE_PARAMS } : '/birthday');
     } catch (e) {
       if (!mounted.current) return;

@@ -10,6 +10,8 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SessionEffects } from '@/blynk/account/SessionEffects';
+// GTM events: page views, who is shopping, the catalogue for item names (src/blynk/analytics)
+import { AnalyticsHost } from '@/blynk/analytics/AnalyticsHost';
 import { CatalogProvider } from '@/blynk/catalog/CatalogContext';
 import { configProblem } from '@/blynk/lib/config';
 import { installConnectivity } from '@/blynk/lib/connectivity';
@@ -62,6 +64,8 @@ function AppShell() {
           <StoreProvider>
             <CatalogProvider>
               <StatusBar style="auto" />
+              {/* before the screens: its page_view goes out ahead of the screen's own events */}
+              <AnalyticsHost />
               <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#fff' } }}>
                 <Stack.Screen name="index" options={{ animation: 'none' }} />
                 {/* Shop / Orders / Help / Profile (src/app/(tabs)); everything else pushes over them */}

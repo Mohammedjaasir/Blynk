@@ -6,7 +6,9 @@
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#FFFFFF",
-  "description": "Fresh groceries and quality essentials, delivered to your door in Dharga Town.",
+  "description": "Groceries, baby care and essentials delivered to your door in Dharga Town, Aluthgama and Bentota. Cash on delivery.",
+  "lang": "en",
+  "categories": ["shopping", "food"],
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [

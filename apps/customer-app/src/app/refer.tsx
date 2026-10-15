@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { trackShare } from '@/blynk/analytics/track';
 import { useSession } from '@/blynk/auth/session';
 import { applyReferralCode, fetchReferral } from '@/blynk/rewards/api';
 import { creditLabel, referredByText, rewardDescription, type ReferralInfo } from '@/blynk/rewards/models';
@@ -44,6 +45,7 @@ export default function Refer() {
 function Details({ info, onApplied, toast }: { info: ReferralInfo; onApplied: (text: string) => void; toast: (m: string) => void }) {
   const share = async () => {
     const r = await shareText(referralShareText(info.code), 'Join me on Blynk');
+    trackShare(r, 'referral');
     if (r === 'copied') toast('Code copied');
   };
   const copy = async () => toast((await copyText(info.code)) ? 'Code copied' : "Couldn't copy the code");

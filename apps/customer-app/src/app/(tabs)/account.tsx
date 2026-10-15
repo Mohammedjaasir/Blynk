@@ -8,6 +8,7 @@ import { deleteReducer, DELETE_COPY, runDelete } from '@/blynk/account/deleteFlo
 import { showNotice } from '@/blynk/account/notice';
 import { accountStyles as A, Button, Card, ErrorText, Row, ScreenHeader, SectionLabel, Sheet } from '@/blynk/account/ui';
 import { deleteAccount, getProfile, SMS_LANGUAGES, type AccountProfile } from '@/blynk/api/account';
+import { trackShare } from '@/blynk/analytics/track';
 import { formatPhone } from '@/blynk/auth/phone';
 import { doctorsVisible, showMyAppointments } from '@/blynk/doctors/access';
 import { fetchMyAppointments } from '@/blynk/doctors/api';
@@ -99,6 +100,7 @@ export default function Account() {
 
   const shareApp = async () => {
     const r = await shareText(`Order groceries on Blynk: ${SHARE_BASE_URL}`, 'Blynk');
+    trackShare(r, 'app');
     if (r === 'copied') showNotice('Link copied');
   };
 

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTrackOnce } from '@/blynk/analytics/AnalyticsHost';
+import { trackNotifyMe, trackShare, trackViewItem } from '@/blynk/analytics/track';
 import { getCombos } from '@/blynk/api/catalog';
 import { ApiError } from '@/blynk/api/client';
 import type { Combo, Product, ProductVariant } from '@/blynk/api/types';
@@ -103,10 +105,13 @@ export default function ProductPage() {
   const onOffer = variant ? variantOnOffer(variant) : !!product && isOfferActive(product);
   const orderable = !!product && product.is_available && (!variant || variant.is_available);
   const lead = product && !DEMO ? deliveredFromText(product) : null;
+  // GTM: once per product, after the fresh copy (current price, sizes) or a failed fetch
+  useTrackOnce(!DEMO && !!product && (!!fresh || !!error), `view_item:${id}`, () => product && trackViewItem(product, variant));
 
   const share = async () => {
     if (!product) return;
     const r = await shareText(productShareText(product.name, product.id), product.name);
+    trackShare(r, 'product', product.id);
     if (r === 'copied') showToast('Link copied');
   };
 
@@ -118,6 +123,7 @@ export default function ProductPage() {
     try {
       const r = await setNotifyMe(product.id, action === 'subscribe');
       if (r === 'back-in-stock') { setNotify(false); load(); } else setNotify(r === 'on');
+      if (r === 'on') trackNotifyMe(product, variant);
       // switched on: the moment a push is useful (Flutter notify_me_button)
       if (r === 'on') void requestPushPermission();
     } catch (e) {

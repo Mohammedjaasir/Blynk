@@ -5,6 +5,7 @@ import {
   regularTotal, saveCart, setComboQuantity, setQuantity, subtotal, type CartLine, type CartState, type CartVariant, type ComboLine,
   type LineRefusal,
 } from '@/blynk/cart/cartStore';
+import { trackCartChange } from '@/blynk/analytics/track';
 
 type Address = { title: string; line: string };
 
@@ -68,6 +69,12 @@ function setLines(state: CartState) {
   snap = { ...snap, ...derive(state) };
   listeners.forEach((l) => l());
 }
+/** A customer's own change (not a sync or a refusal): GTM hears what was added or removed. */
+function userSet(next: CartState, v?: CartVariant | null) {
+  const before = state();
+  setLines(next);
+  trackCartChange(before, next, v);
+}
 function set(patch: Partial<Pick<Snapshot, 'phone' | 'address'>>) {
   snap = { ...snap, ...patch };
   listeners.forEach((l) => l());
@@ -84,13 +91,13 @@ const state = (): CartState => ({ lines: snap.lines, combos: snap.combos });
 
 export const cartActions = {
   /** One more of a product, or of one size of it (`v`). */
-  add: (p: Product, v?: CartVariant | null) => setLines(setQuantity(state(), p, lineQuantityOf(state(), keyOf({ product: p, variant: v })) + 1, v)),
+  add: (p: Product, v?: CartVariant | null) => userSet(setQuantity(state(), p, lineQuantityOf(state(), keyOf({ product: p, variant: v })) + 1, v), v),
   /** One less of a line: `key` is the product id, or `lineKey(productId, variantId)` for a size. */
   remove: (key: string) => {
     const line = snap.lines.find((l) => keyOf(l) === key);
-    if (line) setLines(setQuantity(state(), line.product, line.quantity - 1, line.variant));
+    if (line) userSet(setQuantity(state(), line.product, line.quantity - 1, line.variant));
   },
-  setQty: (p: Product, n: number, v?: CartVariant | null) => setLines(setQuantity(state(), p, n, v)),
+  setQty: (p: Product, n: number, v?: CartVariant | null) => userSet(setQuantity(state(), p, n, v), v),
   /** A product page / size picker answer: fresh prices and stock for that product's size lines. */
   syncVariants: (p: Product) => {
     if (!snap.lines.some((l) => l.product.id === p.id)) return;
@@ -103,9 +110,9 @@ export const cartActions = {
     if (next.lines !== snap.lines) setLines(next);
   },
   /** One more pack of a combo (at most 20 packs, 20 different combos); the snapshot becomes `c`. */
-  addCombo: (c: Combo) => setLines(setComboQuantity(state(), c, comboQuantityOf(state(), c.id) + 1)),
-  removeCombo: (c: Combo) => setLines(setComboQuantity(state(), c, comboQuantityOf(state(), c.id) - 1)),
-  setComboQty: (c: Combo, n: number) => setLines(setComboQuantity(state(), c, n)),
+  addCombo: (c: Combo) => userSet(setComboQuantity(state(), c, comboQuantityOf(state(), c.id) + 1)),
+  removeCombo: (c: Combo) => userSet(setComboQuantity(state(), c, comboQuantityOf(state(), c.id) - 1)),
+  setComboQty: (c: Combo, n: number) => userSet(setComboQuantity(state(), c, n)),
   /** Fresh combos (GET /combos) update saved combo lines' prices, items and availability. */
   syncCombos: (fresh: Combo[]) => { if (snap.combos.length) setLines(reconcileCombos(state(), fresh)); },
   /** Keep prices and availability in step with a fresh catalogue. */
@@ -117,7 +124,8 @@ export const cartActions = {
   },
   setPhone: (phone: string) => set({ phone }),
   setAddress: (address: Address) => set({ address }),
-  clear: () => setLines({ lines: [], combos: [] }),
+  /** `byCustomer`: the cart's own "Clear cart" (GTM hears remove_from_cart); sign-out and a placed order are not. */
+  clear: (byCustomer = false) => (byCustomer ? userSet({ lines: [], combos: [] }) : setLines({ lines: [], combos: [] })),
 };
 
 /** Subscribe to one derived value; the component only re-renders when it changes. */

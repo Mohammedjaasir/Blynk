@@ -4,8 +4,26 @@
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
-    <title>Blynk</title>
-    <meta name="description" content="Blynk - order groceries for delivery." />
+    <!-- Search results and link previews (owner's Tracking & SEO brief, 2026-10-15). og:image is
+         public/og-image.png, served at /app/og-image.png; link previews need absolute URLs. -->
+    <title>Blynk – Grocery Delivery in Dharga Town &amp; Aluthgama</title>
+    <meta name="description" content="Groceries, baby care and essentials delivered to your door in Dharga Town, Aluthgama and Bentota. Cash on delivery." />
+    <link rel="canonical" href="https://blynk.lk/app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Blynk" />
+    <meta property="og:title" content="Blynk – Grocery Delivery in Dharga Town &amp; Aluthgama" />
+    <meta property="og:description" content="Groceries, baby care and essentials delivered to your door in Dharga Town, Aluthgama and Bentota. Cash on delivery." />
+    <meta property="og:url" content="https://blynk.lk/app/" />
+    <meta property="og:image" content="https://blynk.lk/app/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Blynk – groceries delivered in Dharga Town, Aluthgama and Bentota" />
+    <meta property="og:locale" content="en_LK" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Blynk – Grocery Delivery in Dharga Town &amp; Aluthgama" />
+    <meta name="twitter:description" content="Groceries, baby care and essentials delivered to your door in Dharga Town, Aluthgama and Bentota. Cash on delivery." />
+    <meta name="twitter:image" content="https://blynk.lk/app/og-image.png" />
     <!-- Google Tag Manager (owner, 2026-10-10): the same block as the Flutter shop had. The
          container ID and consent default are filled in by apps/customer-site/gtm-inject.sh at
          build time; with no GTM_ID the build deletes this block and the noscript one. -->
@@ -24,8 +42,9 @@
           functionality_storage: 'granted', security_storage: 'granted'
         });
         w.dataLayer.push({ site: 'app', consent_state: state });
-        // The shop was added to the Home Screen.
-        w.addEventListener('appinstalled', function () { w.dataLayer.push({ event: 'pwa_installed' }); });
+        // The shop was added to the Home Screen (GA4-style name from the 2026-10-15 brief; the
+        // Flutter shop sent pwa_installed). The app's own events: src/blynk/analytics/track.ts.
+        w.addEventListener('appinstalled', function () { w.dataLayer.push({ event: 'pwa_install' }); });
         w.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
         var s = d.createElement('script');
         s.async = true;
@@ -168,7 +187,7 @@
     })();
   </script>
 
-    <noscript>You need to enable JavaScript to run Blynk.</noscript>
+    <noscript>Blynk – grocery delivery in Dharga Town, Aluthgama and Bentota. Groceries, baby care and essentials delivered to your door, cash on delivery. Please turn on JavaScript to shop, or visit https://blynk.lk.</noscript>
     <div id="root"></div>
   </body>
 </html>
