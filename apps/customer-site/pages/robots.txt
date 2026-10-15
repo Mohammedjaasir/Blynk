@@ -1,0 +1,7 @@
+# blynk.lk - every page may be crawled. The shop (/app/) is a web app
+# with no pages of its own to index; it is left open so Google can render
+# the links that point to it.
+User-agent: *
+Allow: /
+
+Sitemap: https://blynk.lk/sitemap.xml

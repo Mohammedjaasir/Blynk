@@ -34,10 +34,83 @@
   <title>Blynk — Groceries delivered in Dharga Town &amp; Aluthgama</title>
   <meta name="description" content="Freshly sourced groceries and quality essentials, delivered to your doorstep in Dharga Town and its 4 km surroundings, including Aluthgama. Pay cash on delivery.">
   <meta name="theme-color" content="#FFE141">
+  <!-- Search and sharing (owner's SEO brief, 2026-10-15). The Sinhala and Tamil
+       versions and the area pages are built by scripts/build-seo-pages.mjs. -->
+  <link rel="canonical" href="https://blynk.lk/">
+  <link rel="alternate" hreflang="en" href="https://blynk.lk/">
+  <link rel="alternate" hreflang="si" href="https://blynk.lk/si/">
+  <link rel="alternate" hreflang="ta" href="https://blynk.lk/ta/">
+  <link rel="alternate" hreflang="x-default" href="https://blynk.lk/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Blynk">
+  <meta property="og:title" content="Blynk — Groceries delivered in Dharga Town &amp; Aluthgama">
+  <meta property="og:description" content="Freshly sourced groceries and quality essentials, delivered to your doorstep in Dharga Town and its 4 km surroundings, including Aluthgama. Pay cash on delivery.">
+  <meta property="og:url" content="https://blynk.lk/">
+  <meta property="og:image" content="https://blynk.lk/assets/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Blynk: groceries delivered in Dharga Town and Aluthgama">
+  <meta property="og:locale" content="en_LK">
+  <meta property="og:locale:alternate" content="si_LK">
+  <meta property="og:locale:alternate" content="ta_LK">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Blynk — Groceries delivered in Dharga Town &amp; Aluthgama">
+  <meta name="twitter:description" content="Freshly sourced groceries and quality essentials, delivered to your doorstep in Dharga Town and its 4 km surroundings, including Aluthgama. Pay cash on delivery.">
+  <meta name="twitter:image" content="https://blynk.lk/assets/og-image.jpg">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "GroceryStore",
+        "@id": "https://blynk.lk/#store",
+        "name": "Blynk",
+        "url": "https://blynk.lk/",
+        "logo": "https://blynk.lk/assets/icon-512.png",
+        "image": "https://blynk.lk/assets/og-image.jpg",
+        "description": "Grocery and household essentials delivery in Dharga Town and within 4 km of the Clock Tower, including Aluthgama. Order in the app, pay cash on delivery.",
+        "telephone": "+94717107374",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Near the Clock Tower",
+          "addressLocality": "Dharga Town",
+          "addressRegion": "Western Province (Kalutara District)",
+          "addressCountry": "LK"
+        },
+        "geo": { "@type": "GeoCoordinates", "latitude": 6.441268, "longitude": 80.011437 },
+        "openingHoursSpecification": [{
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+          "opens": "08:00",
+          "closes": "21:00"
+        }],
+        "openingHours": "Mo-Su 08:00-21:00",
+        "areaServed": [
+          { "@type": "Place", "name": "Dharga Town" },
+          { "@type": "Place", "name": "Aluthgama" },
+          { "@type": "Place", "name": "Bentota" },
+          { "@type": "Place", "name": "Kaluwamodara" },
+          { "@type": "Place", "name": "Moragalla" }
+        ],
+        "priceRange": "LKR",
+        "currenciesAccepted": "LKR",
+        "paymentAccepted": "Cash, Credit Card, Debit Card"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://blynk.lk/#website",
+        "url": "https://blynk.lk/",
+        "name": "Blynk",
+        "inLanguage": ["en", "si", "ta"],
+        "publisher": { "@id": "https://blynk.lk/#store" }
+      }
+    ]
+  }
+  </script>
 
   <!-- Installable web app (PWA): the shop lives at /app/. -->
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" type="image/png" href="/assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
   <link rel="apple-touch-icon" href="/assets/icon-192.png">
   <!-- The landing page is a website, never an installed app. Installing is
        for the shop at /app/ only (manifest scope /app/). -->
@@ -218,7 +291,7 @@
 
   <footer class="footer">
     <div class="wrap footer__inner">
-      <a class="footer__brand" href="#top"><img src="/assets/logo-mark.png" alt="" width="28" height="34"> blynk</a>
+      <a class="footer__brand" href="#top"><img src="/assets/logo-mark.png" alt="" width="28" height="34" loading="lazy"> blynk</a>
       <nav aria-label="Footer">
         <a href="#how">How it works</a>
         <a href="#products">Products</a>
@@ -232,6 +305,18 @@
         <a href="/privacy">Privacy Policy</a>
         <a href="/terms">Terms of Service</a>
         <a href="/refunds">Cancellations &amp; Refunds</a>
+      </nav>
+      <nav class="footer__legal" aria-label="Areas we deliver to">
+        <a href="/dharga-town">Dharga Town</a>
+        <a href="/aluthgama">Aluthgama</a>
+        <a href="/bentota">Bentota</a>
+        <a href="/kaluwamodara">Kaluwamodara</a>
+        <a href="/moragalla">Moragalla</a>
+      </nav>
+      <nav class="footer__legal" aria-label="Language">
+        <a href="/" hreflang="en" lang="en" aria-current="page">English</a>
+        <a href="/si/" hreflang="si" lang="si">සිංහල</a>
+        <a href="/ta/" hreflang="ta" lang="ta">தமிழ்</a>
       </nav>
     </div>
   </footer>
@@ -255,7 +340,7 @@
     </div>
   </dialog>
 
-  <script src="/analytics.js?v=20261010a" defer></script>
+  <script src="/analytics.js?v=20261015a" defer></script>
   <script src="/walkthrough.js?v=20261010a" defer></script>
   <script src="/app.js?v=20261014b" defer></script>
 </body>
