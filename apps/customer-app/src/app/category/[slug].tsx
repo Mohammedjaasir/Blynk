@@ -1,12 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Category } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
-import { productsInView, resolveCategory } from '@/blynk/catalog/tree';
+import { categoryRail, productsInView, resolveCategory, type RailRow } from '@/blynk/catalog/tree';
 import { categoryOfferActive } from '@/blynk/lib/categories';
 import { CATEGORIES } from '@/blynk/ui/strings';
 import { CartBar } from '@/components/CartBar';
@@ -20,12 +20,16 @@ import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 
 /*
- * A category's products with its sub-category sidebar (Flutter ProductsScreen + CategorySidebar;
- * owner's model: Main -> Category -> Sub-category). /category/<slug>?sub=<sub-slug> is a deep
- * link: the sidebar's first row is "All" (everything in the category, sub-categories included),
- * then each sub-category. A sub-category's own slug opens its parent with it selected. Without
- * sub-categories the products take the whole width. Sold-out products (is_available false, as
- * the API reports) show "Out of stock" and sit after the ones in stock.
+ * A category's products beside a left rail that is always there (Flutter ProductsScreen +
+ * CategorySidebar; owner 2026-10-14: "when we click a category it opens like a sidebar").
+ * /category/<slug>?sub=<sub-slug> is a deep link. A category with sub-categories: the rail is
+ * "All" (everything in the category, sub-categories included), then each sub-category; a
+ * sub-category's own slug opens its parent with it selected. A category without: the rail is the
+ * top-level categories beside it (its Home group, else all of them), and a row switches the screen
+ * to that category in place (setParams, so Back still returns to where the customer came from).
+ * The rail stays put and scrolls on its own; the grid scrolls back to the top on every switch.
+ * Sold-out products (is_available false, as the API reports) show "Out of stock" and sit after
+ * the ones in stock.
  */
 
 const SIDEBAR_W = 86;
@@ -35,17 +39,25 @@ const GAP = 12;
 export default function CategoryScreen() {
   const { slug, sub } = useLocalSearchParams<{ slug: string; sub?: string }>();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { data, error, refresh } = useCatalog();
   const view = useMemo(() => (data ? resolveCategory(data.categories, slug, sub) : null), [data, slug, sub]);
   const products = useMemo(() => (data && view ? productsInView(data.products, data.chainOf, view) : []), [data, view]);
-  const hasSidebar = !!view && view.subs.length > 0;
+  const rail = useMemo(() => (data ? categoryRail(data.tree, data.categories, view) : null), [data, view]);
+  const hasSidebar = !!rail && rail.rows.length > 0;
   const gridW = width - (hasSidebar ? SIDEBAR_W : 0) - PAD * 2;
   const card = Math.floor((gridW - GAP) / 2);
+  const railRef = useRef<ScrollView>(null);
+  const railRevealed = useRef(false);
 
-  const select = (s: Category | null) => {
-    if (!view) return;
-    router.setParams({ slug: view.root.slug, sub: s ? s.slug : undefined });
+  // in place: same screen, same history entry (Back returns to where the customer came from)
+  const select = (row: RailRow) => router.setParams({ slug: row.slug, sub: row.sub });
+  // a long rail opened at a row below the fold scrolls that row into view, once
+  const revealActive = (y: number, h: number) => {
+    if (railRevealed.current) return;
+    railRevealed.current = true;
+    const visible = height - insets.top - 64 - insets.bottom - 90;
+    if (y + h > visible) railRef.current?.scrollTo({ y: Math.max(0, y - visible / 2 + h / 2), animated: false });
   };
   const search = () => view && router.push({ pathname: '/search', params: { c: view.root.slug, name: view.root.name } });
   const offer = view && categoryOfferActive(view.root) ? `${view.root.offer_percent}% off everything here` : null;
@@ -86,22 +98,29 @@ export default function CategoryScreen() {
       ) : (
         <View style={{ flexDirection: 'row', flex: 1 }}>
           {hasSidebar && (
-            <ScrollView style={styles.sidebar} contentContainerStyle={{ paddingVertical: 6, paddingBottom: insets.bottom + 90 }} showsVerticalScrollIndicator={false}>
-              <SideRow
-                label={CATEGORIES.all}
-                a11y={CATEGORIES.allIn(view.root.name)}
-                art={view.root}
-                index={0}
-                active={view.selected === null}
-                onPress={() => select(null)}
-              />
-              {view.subs.map((s, i) => (
-                <SideRow key={s.id} label={s.name} a11y={s.name} art={s} index={i + 1} active={view.selected?.id === s.id} onPress={() => select(s)} />
+            <ScrollView
+              ref={railRef}
+              style={styles.sidebar}
+              contentContainerStyle={{ paddingVertical: 6, paddingBottom: insets.bottom + 90 }}
+              showsVerticalScrollIndicator={false}
+              accessibilityRole="tablist"
+            >
+              {rail.rows.map((r, i) => (
+                <SideRow
+                  key={r.key}
+                  label={r.label}
+                  a11y={r.a11y}
+                  art={r.art}
+                  index={i}
+                  active={r.active}
+                  onPress={() => { if (!r.active) select(r); }}
+                  onActiveLayout={r.active ? revealActive : undefined}
+                />
               ))}
             </ScrollView>
           )}
           <ScrollView
-            key={view.selected?.id ?? 'all'}
+            key={`${view.root.id}:${view.selected?.id ?? 'all'}`}
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: PAD, paddingBottom: insets.bottom + 110 }}
             showsVerticalScrollIndicator={false}
@@ -128,17 +147,20 @@ export default function CategoryScreen() {
   );
 }
 
-function SideRow({ label, a11y, art, index, active, onPress }: {
+function SideRow({ label, a11y, art, index, active, onPress, onActiveLayout }: {
   label: string; a11y: string; art: Pick<Category, 'name' | 'image_url'>; index: number; active: boolean; onPress: () => void;
+  onActiveLayout?: (y: number, h: number) => void;
 }) {
   return (
-    <PressScale onPress={onPress} scaleTo={0.96} style={[styles.side, active && styles.sideOn]}>
-      <View accessible accessibilityRole="tab" accessibilityState={{ selected: active }} accessibilityLabel={a11y} style={{ alignItems: 'center' }}>
-        <CategoryArt category={art} size={48} radius={24} index={index} />
-        <Text style={[styles.sideTxt, active && styles.sideTxtOn]} numberOfLines={2}>{label}</Text>
-      </View>
-      {active && <View style={styles.sideBar} />}
-    </PressScale>
+    <View onLayout={onActiveLayout ? (e) => onActiveLayout(e.nativeEvent.layout.y, e.nativeEvent.layout.height) : undefined}>
+      <PressScale onPress={onPress} scaleTo={0.96} style={[styles.side, active && styles.sideOn]}>
+        <View accessible accessibilityRole="tab" accessibilityState={{ selected: active }} aria-selected={active} accessibilityLabel={a11y} style={{ alignItems: 'center' }}>
+          <CategoryArt category={art} size={48} radius={24} index={index} />
+          <Text style={[styles.sideTxt, active && styles.sideTxtOn]} numberOfLines={2}>{label}</Text>
+        </View>
+        {active && <View style={styles.sideBar} />}
+      </PressScale>
+    </View>
   );
 }
 
