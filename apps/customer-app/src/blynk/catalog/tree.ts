@@ -98,6 +98,61 @@ export function resolveCategory(categories: Category[], slug: string | undefined
   return { root, subs, selected: picked };
 }
 
+/** One row of the category screen's left rail. */
+export interface RailRow {
+  key: string;
+  /** The category whose picture (or initial) the row shows. */
+  art: Category;
+  label: string;
+  a11y: string;
+  active: boolean;
+  /** The route params the row opens: a top-level category's slug, plus a sub-category's slug or none. */
+  slug: string;
+  sub?: string;
+}
+
+export interface CategoryRail {
+  /** "subs": "All" + the opened category's sub-categories. "siblings": the top-level categories beside it. */
+  kind: 'subs' | 'siblings';
+  rows: RailRow[];
+}
+
+/**
+ * The category screen's left rail, always shown as in the Flutter shop (owner 2026-10-14:
+ * "when we click a category it opens like a sidebar"):
+ * - a category with sub-categories: "All" (the category itself), then each sub-category;
+ * - a category without: the top-level categories beside it, the opened one selected. Those are
+ *   the categories of the Home group (Main) that lists it; when that group holds only it, every
+ *   top-level category in Home's order.
+ * No rows for an unknown category (view null).
+ */
+export function categoryRail(tree: MainNode[], categories: Category[], view: CategoryView | null): CategoryRail {
+  if (!view) return { kind: 'siblings', rows: [] };
+  const { root, subs, selected } = view;
+  if (subs.length) {
+    return {
+      kind: 'subs',
+      rows: [
+        { key: `all-${root.id}`, art: root, label: CATEGORIES.all, a11y: CATEGORIES.allIn(root.name), active: selected === null, slug: root.slug },
+        ...subs.map((s) => ({ key: s.id, art: s, label: s.name, a11y: s.name, active: selected?.id === s.id, slug: root.slug, sub: s.slug })),
+      ],
+    };
+  }
+  const group = tree.find((m) => m.categories.some((n) => n.category.id === root.id));
+  let siblings = group && group.categories.length > 1 ? group.categories.map((n) => n.category) : [];
+  if (!siblings.length) {
+    // every top-level category: Home's order first, then any the tree does not list
+    const seen = new Set<string>();
+    for (const c of tree.flatMap((m) => m.categories.map((n) => n.category))) if (!seen.has(c.id)) { seen.add(c.id); siblings.push(c); }
+    for (const c of categories.filter((x) => x.parent_id == null).sort(byDisplayOrder)) if (!seen.has(c.id)) { seen.add(c.id); siblings.push(c); }
+  }
+  if (!siblings.some((c) => c.id === root.id)) siblings = [root, ...siblings];
+  return {
+    kind: 'siblings',
+    rows: siblings.map((c) => ({ key: c.id, art: c, label: c.name, a11y: c.name, active: c.id === root.id, slug: c.slug })),
+  };
+}
+
 /**
  * The products of the selected row (a category includes its sub-categories' products), in the
  * API's order with sold-out ones (is_available false, as the API reports) moved to the end.
