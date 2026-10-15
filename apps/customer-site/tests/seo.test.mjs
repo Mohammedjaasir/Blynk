@@ -160,7 +160,8 @@ test('Sinhala and Tamil pages: lang attribute, machine-translation review note, 
 });
 
 test('sitemap.xml lists every page once, with lastmod and the hreflang alternates', () => {
-  const xml = readFileSync(join(pagesDir, 'sitemap.xml'), 'utf8');
+  // a Windows checkout (core.autocrlf) gives CRLF; the repo and the image have LF
+  const xml = readFileSync(join(pagesDir, 'sitemap.xml'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(xml, /^<\?xml version="1.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9" xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml">/);
   assert.match(xml, /<\/urlset>\n$/);
   const urls = [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)].map((m) => m[1]);
