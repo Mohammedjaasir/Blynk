@@ -7,6 +7,8 @@ import { AssignRiderDialog, MarkDeliveredDialog, NoteDialog, needsNote } from '.
 import { deliveryCodeError } from '../lib/delivery';
 import { PaymentStatus } from '../components/PaymentStatus';
 import { refundNeeded } from '../lib/payments';
+import { OrderWalletRefund } from '../components/Wallet';
+import { cashToCollectText, mayRefundToWallet, walletPaidLine } from '../lib/wallet';
 import {
   ACTION_LABEL,
   ITEM_STATUS_LABEL,
@@ -280,9 +282,17 @@ export function OrderDetail() {
         {/* PayHere (docs/api/payhere.md §5): method + status in the staff words. */}
         <p className="order-detail__meta order-detail__payment">
           <PaymentStatus order={detail} refundRequired={refundNeeded(detail)} />
-          <span>{formatMoney(detail.total_amount)}</span>
+          <span data-testid="order-amount-due">
+            {detail.payment_method === 'COD' ? cashToCollectText(detail) : formatMoney(detail.total_amount)}
+          </span>
           {detail.payment?.gateway_method ? <span>{detail.payment.gateway_method}</span> : null}
         </p>
+        {/* Blynk Wallet (docs/api/wallet.md): a payment already taken off the total. */}
+        {walletPaidLine(detail) ? (
+          <p className="order-detail__meta" data-testid="order-wallet-paid">
+            {walletPaidLine(detail)}
+          </p>
+        ) : null}
         {detail.order_status === 'AWAITING_PAYMENT' ? (
           <p className="order-detail__note" data-testid="awaiting-payment">
             Waiting for the customer's PayHere payment. Don't pack it yet: it moves to Placed once paid
@@ -297,6 +307,9 @@ export function OrderDetail() {
         ) : null}
         {detail.cancellation_reason ? <p className="order-detail__meta">Cancelled: {detail.cancellation_reason}</p> : null}
       </section>
+
+      {/* Refund to wallet (owner, 2026-10-15): every approved refund goes to the customer's Blynk Wallet. */}
+      {mayRefundToWallet(detail) ? <OrderWalletRefund key={`${detail.order_status}:${detail.payment_status}`} orderId={detail.id} /> : null}
 
       {detail.delivery ? (
         <section className="order-detail__section" aria-label="Rider">

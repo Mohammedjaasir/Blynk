@@ -65,7 +65,10 @@ export interface DeliverySummary {
   picked_up_at: string | null;
   order_number: string;
   order_status: OrderStatus;
+  /** What is still to pay: the cash to collect for COD (already less any wallet payment). */
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): what the customer's wallet paid. 0 / absent when none. */
+  wallet_amount_used?: number;
   payment_method: 'COD' | 'ONLINE';
   payment_status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
   delivery_recipient_name: string;

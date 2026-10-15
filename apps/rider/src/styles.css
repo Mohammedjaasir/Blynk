@@ -766,6 +766,13 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+/* Blynk Wallet paid part of the order: the amount above is already the rest. */
+.cash-wallet {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
 /* At the door the amount is the thing to count: make it the largest element. */
 .cash--now {
   flex-direction: column;

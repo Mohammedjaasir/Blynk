@@ -23,6 +23,8 @@ import { PAY } from '@/blynk/payments/copy';
 import type { Order } from '@/blynk/orders/types';
 import { LiveTracking, isTrackable } from '@/blynk/tracking';
 import { openSignIn } from '@/blynk/ui/signIn';
+import { WALLET_COPY } from '@/blynk/wallet/copy';
+import { refundNotice } from '@/blynk/wallet/models';
 import { BackIcon } from '@/components/icons';
 import { PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
@@ -34,6 +36,8 @@ import { C, F } from '@/lib/theme';
  * still moving. The status, a four-step tracker, the delivery code and the rider's first name
  * and phone while it is on the road (the server sends them only then), "What happened", the
  * items, the bill and the address. "Cancel order" only while the server says can_cancel.
+ * Blynk Wallet: "Paid by wallet" in the bill and the refunds credited back to the wallet; after a
+ * cancel that refunded something, "Refund of LKR X added to your Blynk Wallet".
  */
 
 const POLL_MS = 12_000;
@@ -82,7 +86,14 @@ export default function OrderStatus() {
     setCancelling(true);
     setCancelMsg(null);
     cancelOrder(order.id)
-      .then((o) => { setOrder({ ...order, ...o, history: o.history ?? order.history }); setConfirm(false); load(); })
+      .then((o) => {
+        setOrder({ ...order, ...o, history: o.history ?? order.history });
+        setConfirm(false);
+        // money back goes to the Blynk Wallet (docs/api/wallet.md §3)
+        const refund = refundNotice(o.wallet);
+        if (refund) showNotice(refund);
+        load();
+      })
       .catch((e) => { setCancelMsg(cancelErrorText(e)); setConfirm(false); load(); })
       .finally(() => { cancelRef.current = false; setCancelling(false); });
   };
@@ -251,9 +262,25 @@ export default function OrderStatus() {
               <BillLine l="Item total" r={formatLkr(order.subtotal_amount)} />
               <BillLine l="Delivery fee" r={order.delivery_fee === 0 ? 'FREE' : formatLkr(order.delivery_fee)} accent={order.delivery_fee === 0} />
               {discountRows(order).map((d) => <BillLine key={d.label} l={d.label} r={`−${formatLkr(d.amount)}`} accent />)}
+              {order.wallet_amount_used > 0 && <BillLine l={WALLET_COPY.orderBillLine} r={`−${formatLkr(order.wallet_amount_used)}`} accent />}
               <View style={styles.sep} />
               <BillLine l="Total" r={formatLkr(order.total_amount)} bold />
               <Text style={[styles.small, { marginTop: 6 }]}>{paymentLine(order)}</Text>
+              {/* refunds credited to the Blynk Wallet for this order, newest first */}
+              {!!order.wallet?.entries.length && (
+                <View style={styles.refunds}>
+                  <Text style={[styles.section, { marginBottom: 6 }]}>{WALLET_COPY.refundsTitle}</Text>
+                  {order.wallet.entries.map((e) => (
+                    <View key={e.id} style={{ paddingVertical: 4 }}>
+                      <Text style={styles.refundTxt}>{WALLET_COPY.refundAdded(e.amount)}</Text>
+                      <Text style={styles.small}>{[e.reason, e.createdAt ? orderTime(e.createdAt.toISOString()) : null].filter(Boolean).join(' · ')}</Text>
+                    </View>
+                  ))}
+                  <Pressable onPress={() => router.push('/wallet')} hitSlop={8} style={{ marginTop: 6, alignSelf: 'flex-start' }}>
+                    <Text style={styles.link}>{WALLET_COPY.viewWallet}</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
 
             <View style={styles.card}>
@@ -408,6 +435,8 @@ const styles = StyleSheet.create({
   billR: { fontFamily: F.regular, fontSize: 13, color: C.ink },
   billBold: { fontFamily: F.bold, fontSize: 14.5, color: C.ink },
   sep: { height: 1, backgroundColor: C.line, marginVertical: 8 },
+  refunds: { borderTopWidth: 1, borderTopColor: C.line, marginTop: 12, paddingTop: 12 },
+  refundTxt: { fontFamily: F.semi, fontSize: 13, color: C.greenDark },
   payCard: { backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandSoft },
   payHead: { fontFamily: F.bold, fontSize: 15.5, color: C.ink },
   payBtn: { marginTop: 12, height: 46, borderRadius: 23, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },

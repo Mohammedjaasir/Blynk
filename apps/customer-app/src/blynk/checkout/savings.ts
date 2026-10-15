@@ -17,8 +17,13 @@ export interface SavingsInput {
   discount: number;
   /** The value of the Blynk Points used (0 when none). */
   pointsValue: number;
-  /** The amount to pay (already net of every saving). */
+  /** The amount to pay (already net of every saving, and of the wallet). */
   toPay: number;
+  /**
+   * What the Blynk Wallet pays. A payment, not a saving: it is never counted as saved, but the
+   * struck "before" amount adds it back so it is the order's full price.
+   */
+  walletUsed?: number;
 }
 
 export interface SavingsHeader {
@@ -32,5 +37,5 @@ export interface SavingsHeader {
 export function savingsHeader(i: SavingsInput): SavingsHeader {
   const offer = i.showOfferSavings ? money(i.offerSaved) : 0;
   const saved = round2(offer + money(i.discount) + money(i.pointsValue));
-  return { saved, before: round2(i.toPay + saved), show: saved > 0 };
+  return { saved, before: round2(i.toPay + money(i.walletUsed) + saved), show: saved > 0 };
 }

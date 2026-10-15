@@ -54,6 +54,8 @@ import { PAY } from '@/blynk/payments/copy';
 import { effectiveMethod, methodBody, onlineInfo, onlineOffered, type PayMethod } from '@/blynk/payments/method';
 import { PaymentChoice } from '@/blynk/payments/PaymentChoice';
 import { requestPushPermission } from '@/blynk/push';
+import { WALLET_COPY } from '@/blynk/wallet/copy';
+import { canUseWallet, checkoutWalletOf } from '@/blynk/wallet/models';
 import { effectivePrice, isOfferActive, priceDisplay } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
 import { invalidateFreeClaim } from '@/blynk/store/useFreeClaim';
@@ -147,6 +149,8 @@ export default function Cart() {
   const setNotes = (f: (s: string[]) => string[]) => setDetails((d) => ({ ...d, noteChips: f(d.noteChips) }));
   const [showDetailErrors, setShowDetailErrors] = useState(false);
   const [usePoints, setUsePoints] = useState(false);
+  // "Use wallet balance" (Blynk Wallet, docs/api/wallet.md): pays after the coupon and points
+  const [useWallet, setUseWallet] = useState(false);
   // cash on delivery, or PayHere while staff have it on (src/blynk/payments/method.ts)
   const [payChoice, setPayChoice] = useState<PayMethod>('COD');
   // scheduled delivery: GET /orders/slots while staff have slots on (or the store is closed)
@@ -169,7 +173,8 @@ export default function Cart() {
   const [placeErrState, setPlaceErrState] = useState<{ copy: PlaceErrorCopy; for: string } | null>(null);
   const addrId = addr?.id ?? null;
   const quoteFor = quote && addrId && quote.delivery_fee_address_id === addrId ? quote : null;
-  const checkout: CheckoutBill | null = addrId ? checkoutBill(total, quoteFor, coupon, usePoints) : null;
+  const walletInfo = checkoutWalletOf(quoteFor?.wallet);
+  const checkout: CheckoutBill | null = addrId ? checkoutBill(total, quoteFor, coupon, usePoints, useWallet) : null;
   // Blynk Points instead of free delivery (owner, 2026-10-14): "You'll earn N Blynk Points on this
   // order" (a guest: "Sign in to earn N ..."); hidden while points are off or N = 0
   const pointsLine = cartPointsLine({
@@ -265,9 +270,12 @@ export default function Cart() {
     const slotStart = slotsOn ? slotForOrder(shownSlots, pickedSlot) : undefined;
     // the switch shows only while points can be used; the server decides how many
     const pointsOn = usePoints && canRedeem(pointsOf(quoteFor));
+    // likewise the wallet: the server decides the amount again (after the coupon and points)
+    const walletOn = useWallet && canUseWallet(walletInfo);
     const extra = {
       ...(slotStart ? { delivery_slot_start: slotStart } : {}),
       ...(pointsOn ? { use_points: true } : {}),
+      ...(walletOn ? { use_wallet: true } : {}),
       ...(more.for_someone_else ? { for_someone_else: true, recipient: more.recipient } : {}),
       ...(more.needs_help ? { needs_help: true } : {}),
       ...methodBody(payMethod),
@@ -296,6 +304,7 @@ export default function Cart() {
       invalidateFreeClaim();
       // the moment order updates matter: ask to allow notifications (Flutter cart_screen_payment_container)
       void requestPushPermission();
+      // an order the wallet paid in full comes back COD with nothing to pay: no PayHere step
       if (order.payment_method === 'ONLINE' && order.order_status === 'AWAITING_PAYMENT') {
         // it is an order now (paid with "Pay now" until it expires): the cart starts over
         cartActions.clear();
@@ -535,6 +544,11 @@ export default function Cart() {
             usePoints={usePoints}
             onUsePoints={setUsePoints}
             redeem={checkout.points}
+            wallet={walletInfo}
+            useWallet={useWallet}
+            onUseWallet={setUseWallet}
+            walletUsed={checkout.wallet}
+            walletDue={checkout.dueBeforeWallet}
           />
         )}
 
@@ -576,7 +590,7 @@ export default function Cart() {
 
         {/* payment: cash on delivery or PayHere (only while staff have it on), with the policy links */}
         {!DEMO && checkout && onlineOffered(payInfo) && (
-          <PaymentChoice info={payInfo} toPay={checkout.toPay} method={payMethod} onChange={setPayChoice} />
+          <PaymentChoice info={payInfo} toPay={checkout.toPay} method={payMethod} onChange={setPayChoice} nothingNote={checkout.wallet > 0 ? WALLET_COPY.nothingOnline : undefined} />
         )}
 
         {/* where we deliver (owner, 2026-10-14: show the surroundings when they order) */}
@@ -985,7 +999,11 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, 
   // the header counts every saving: offer prices (while shown), the coupon / birthday / referral discount and points
   const head = savingsHeader({
     offerSaved: bill.saved, showOfferSavings: bill.showSaved, discount: checkout?.discount ?? 0, pointsValue: checkout?.points.value ?? 0, toPay,
+    walletUsed: quoted ? checkout!.wallet : 0,
   });
+  // the Blynk Wallet pays (a payment, not a saving): its own line; covering it all reads "Paid by wallet"
+  const walletPaid = quoted ? checkout!.wallet : 0;
+  const allByWallet = walletPaid > 0 && toPay <= 0;
   const distance = quoted && checkout!.distanceKm != null ? ` · ${checkout!.distanceEstimated ? '~' : ''}${checkout!.distanceKm.toFixed(1)} km` : '';
   const feeRight = !checkout ? (
     <Text style={[styles.billR, free && { color: C.brandText }]}>{bill.feeText}</Text>
@@ -1050,7 +1068,13 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, 
             <BillRow l={`Blynk Points (${checkout.points.points})`} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(checkout.points.value)}</Text>} />
           </>
         )}
-        {!!checkout && (estimated || checkout.points.value > 0) && (
+        {walletPaid > 0 && (
+          <>
+            <Dashed style={{ marginVertical: 11 }} />
+            <BillRow l={WALLET_COPY.billLine} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(walletPaid)}</Text>} />
+          </>
+        )}
+        {!!checkout && (estimated || checkout.points.value > 0 || walletPaid > 0) && (
           <Text style={styles.freeNote}>Estimated. The final amount is confirmed when you place the order.</Text>
         )}
         {!!pointsLine && (
@@ -1071,7 +1095,7 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, 
       {!!checkout && (
         <View style={[styles.billRow, { paddingHorizontal: 15, paddingBottom: 14, marginTop: -6 }]}>
           <Text style={[styles.billL, { lineHeight: 18 }]}>Payment</Text>
-          <Text style={[styles.billR, { fontFamily: F.medium }]}>{payMethod === 'ONLINE' ? PAY.online : PAY.cod}</Text>
+          <Text style={[styles.billR, { fontFamily: F.medium }]}>{allByWallet ? WALLET_COPY.paidByWallet : payMethod === 'ONLINE' ? PAY.online : PAY.cod}</Text>
         </View>
       )}
     </Animated.View>

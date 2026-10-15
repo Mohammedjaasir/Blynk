@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { addressText, addresses as addressesApi, mapsLink, type AddressBookRow, type CustomerAddresses as CustomerAddressesData } from '../api/addresses';
 import { PageHeader } from '../components/Layout';
 import { EmptyState, Spinner } from '../components/ui';
+import { CustomerWalletSection } from '../components/Wallet';
 import { formatColomboDate } from '../lib/catalog';
 import { errorMessage } from '../lib/errors';
 
@@ -111,7 +112,7 @@ export function CustomerAddressBook() {
   );
 }
 
-/** /more/customers/:id - one customer's addresses. */
+/** /more/customers/:id - one customer's Blynk Wallet and addresses. */
 export function CustomerAddressDetail() {
   const { id = '' } = useParams();
   const [data, setData] = useState<CustomerAddressesData | null>(null);
@@ -139,6 +140,8 @@ export function CustomerAddressDetail() {
           All customers
         </Link>
       </p>
+      {/* Blynk Wallet (owner, 2026-10-15): balance and history, read-only here. */}
+      {id ? <CustomerWalletSection customerId={id} /> : null}
       {error ? <p className="field__error">{error}</p> : null}
       {!data && !error ? <Spinner label="Loading the addresses" /> : null}
       {data ? (

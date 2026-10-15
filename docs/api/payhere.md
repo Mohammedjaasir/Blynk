@@ -64,8 +64,10 @@ orders are packable).
 * `orders.payment_expires_at`: ISO time, only for online orders.
 * `order.payment` (detail): adds `gateway` (`PAYHERE`), `gateway_payment_id`,
   `gateway_status_code`, `gateway_method` (e.g. `VISA`), `gateway_status_message`,
-  `refund_required` (true when money arrived for an order that was already
-  cancelled/expired, the amount did not match, or a chargeback happened),
+  `refund_required` (true when the amount did not match, a second payment arrived,
+  or a chargeback happened; since the Blynk Wallet - migration 049, see wallet.md -
+  money for a cancelled order, including a payment that arrives after the cancel, is
+  credited to the customer's wallet instead and no longer flagged),
   `failed_at`. Customers do not get `gateway_response`.
 
 ## 3. Customer endpoints

@@ -26,6 +26,19 @@ export function isPaidOnline(d: Pick<DeliverySummary, 'payment_method' | 'paymen
 
 export const PAID_ONLINE_NOTE = 'Paid online — do not collect cash';
 
+/** What the Blynk Wallet paid (docs/api/wallet.md); total_amount is already less this. */
+export function walletPaid(d: Pick<DeliverySummary, 'wallet_amount_used'>): number {
+  const n = Number(d.wallet_amount_used ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** The wallet paid everything: nothing to collect, the code completes the handover. */
+export function isPaidByWallet(d: Pick<DeliverySummary, 'total_amount' | 'wallet_amount_used'>): boolean {
+  return Number(d.total_amount) === 0 && walletPaid(d) > 0;
+}
+
+export const PAID_BY_WALLET_NOTE = 'LKR 0 to collect - paid by wallet';
+
 export function nextAction(d: DeliverySummary): RiderAction {
   if (d.assignment_status === 'DELIVERED' || d.order_status === 'DELIVERED') return { kind: 'none', reason: 'done' };
   if (d.order_status === 'CANCELLED') return { kind: 'none', reason: 'cancelled' };
@@ -49,6 +62,8 @@ export function nextAction(d: DeliverySummary): RiderAction {
         // Paid online (PayHere, migration 047): the handover is the delivery code only.
         if (isPaidOnline(d)) return { kind: 'collect', label: 'Confirm delivery code', amount: 0, prepaid: true };
         if (d.payment_method !== 'COD' || d.payment_status !== 'PENDING') return { kind: 'none', reason: 'not-cod' };
+        // Paid in full by the Blynk Wallet: LKR 0 to collect, the code completes it (amount 0 is accepted).
+        if (isPaidByWallet(d)) return { kind: 'collect', label: 'Confirm delivery code', amount: 0, prepaid: true };
         return { kind: 'collect', label: `Collect ${formatMoney(d.total_amount)}`, amount: d.total_amount };
       }
       break;

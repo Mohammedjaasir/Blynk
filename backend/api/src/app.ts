@@ -33,6 +33,8 @@ import { dentalRouter } from './modules/dental/index.js';
 import { feedbackRouter } from './modules/feedback/index.js';
 // Your usuals, refer a friend, Blynk Points (owner, 2026-10-10; migration 037).
 import { rewardsMeRouter } from './modules/loyalty/index.js';
+// Blynk Wallet (owner, 2026-10-15; migration 049).
+import { walletMeRouter } from './modules/wallet/index.js';
 
 export function createApp(): Express {
   const app = express();
@@ -131,6 +133,7 @@ export function createApp(): Express {
   apiRouter.use('/auth', authRouter);
   apiRouter.use('/me', meRouter);
   apiRouter.use('/me', rewardsMeRouter);
+  apiRouter.use('/me', walletMeRouter);
   apiRouter.use('/users', usersRouter);
   apiRouter.use('/categories', categoriesRouter);
   apiRouter.use('/products', productsRouter);

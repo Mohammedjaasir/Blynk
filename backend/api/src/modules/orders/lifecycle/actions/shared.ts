@@ -6,6 +6,7 @@ import { issueDeliveryCode } from '../delivery-code.js';
 import { releaseRedemption } from '../../../coupons/coupon.service.js';
 import { releaseBirthdayRedemption } from '../../../birthday/birthday.offer.js';
 import { onOrderCancelledRewards } from '../../../loyalty/order-rewards.js';
+import { refundCancelledOrderToWallet } from '../../../wallet/wallet.service.js';
 import { enqueueCustomerSms } from '../notify.js';
 import { setOrderStatus, type OrderFields } from '../status-writer.js';
 import type { Actor, DeliveryRow, OrderRow, Trx } from '../types.js';
@@ -74,6 +75,10 @@ export async function closeDeliveryAsFailed(trx: Trx, delivery: DeliveryRow, rea
  * released so the customer can use it again, and so is a birthday gift.
  */
 export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reason: string, extra: OrderFields = {}) {
+  // Owner, 2026-10-15: a cancel that follows a failed delivery attempt keeps
+  // the delivery fee in the auto-refund below - the rider already made the
+  // trip. Read before setOrderStatus overwrites order_status to CANCELLED.
+  const keepDeliveryFee = order.order_status === 'FAILED' || order.order_status === 'CUSTOMER_UNAVAILABLE';
   const updated = await setOrderStatus(trx, order, 'CANCELLED', actor, reason, {
     ...extra,
     cancellation_reason: reason,
@@ -88,11 +93,12 @@ export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reaso
   // Referral reward and Blynk Points (owner, 2026-10-10; migration 037): the
   // reward is released and the points given back.
   await onOrderCancelledRewards(trx, order);
-  // Online payments (migration 047): money already taken for this order must
-  // go back - flagged for staff (refunds are made in the PayHere portal).
-  if (order.payment_method === 'ONLINE' && order.payment_status === 'PAID') {
-    await trx.updateTable('payments').set({ refund_required: true, updated_at: new Date() }).where('order_id', '=', order.id).execute();
-  }
+  // Blynk Wallet (migration 049; owner, 2026-10-15): everything paid for the
+  // order - the wallet part and a verified PayHere payment - is credited back
+  // to the customer's wallet at once, whatever the payment method (policy:
+  // "Payments for cancelled orders are refunded to your Blynk Wallet"). Cash
+  // orders cancelled before delivery get back only what the wallet paid.
+  await refundCancelledOrderToWallet(trx, order, new Date(), { keepDeliveryFee });
   // An online order that was never paid was never confirmed to the customer:
   // no "cancelled" SMS for it (owner: SMS cost); the app shows the state.
   if (order.order_status === 'AWAITING_PAYMENT') return updated;

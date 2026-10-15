@@ -4,6 +4,7 @@ import { pool, checkDatabaseConnection } from './database/connection.js';
 import { notificationWorker, logPushStatus } from './modules/notifications/index.js';
 import { appointmentReminderJob } from './modules/dental/appointment-reminders.js';
 import { paymentExpiryJob } from './modules/payments/expiry-job.js';
+import { walletExpiryJob } from './modules/wallet/expiry-job.js';
 
 async function bootstrapWorker() {
   logger.info(
@@ -38,6 +39,8 @@ async function bootstrapWorker() {
     appointmentReminderJob.start();
     // PayHere (migration 047): unpaid online orders past their window are cancelled.
     paymentExpiryJob.start();
+    // Blynk Wallet (migration 049): credits past their expiry date (expiry_months > 0).
+    walletExpiryJob.start();
   } else {
     logger.warn('NOTIFICATION_WORKER_ENABLED is set to false. Worker process will remain idle.');
   }
@@ -52,6 +55,7 @@ async function bootstrapWorker() {
     try {
       await appointmentReminderJob.stop();
       await paymentExpiryJob.stop();
+      await walletExpiryJob.stop();
       await notificationWorker.stop();
       logger.info('Notification worker stopped cleanly.');
     } catch (workerErr) {

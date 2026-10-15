@@ -34,6 +34,8 @@ import { checkoutRewardsInfo, previewReferral } from '../loyalty/order-rewards.j
 import { pointsEarnPreview } from '../loyalty/points.service.js';
 // PayHere online payments (migration 047; owner, 2026-10-14).
 import { isReady, paymentGateway, publicOnlinePayment } from '../payments/gateway-settings.js';
+// Blynk Wallet (owner, 2026-10-15; migration 049).
+import { checkoutWalletInfo, customerOrderWallet } from '../wallet/wallet.service.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -452,6 +454,7 @@ export class OrderService {
       coupon_code: settings.coupons_enabled ? input.coupon_code ?? null : null,
       birthday_offer: birthdaySetting.enabled ? { setting: birthdaySetting, now } : null,
       use_points: input.use_points === true,
+      use_wallet: input.use_wallet === true,
       scheduled_for: scheduledFor,
       delivery_slot: slot ? { until: slot.until, max_orders: schedule.slots.max_orders_per_slot, label: slot.label } : null,
       delivery_recipient_name: receiver?.name ?? address.recipient_name,
@@ -605,6 +608,8 @@ export class OrderService {
       // Owner, 2026-10-10: referral_reward (applied automatically when it is
       // the larger discount) and points (balance + the program's numbers).
       ...(await checkoutRewardsInfo(db, customerId, charged)),
+      // Blynk Wallet (migration 049): balance and whether checkout offers "Use wallet balance".
+      wallet: await checkoutWalletInfo(db, customerId),
     };
   }
 
@@ -648,7 +653,13 @@ export class OrderService {
     // `delivery` block itself still never says which rider.
     const contact =
       order.order_status === 'OUT_FOR_DELIVERY' ? await orderRepository.findRiderContactForCustomer(order.id, customerId) : null;
-    return { ...(await withPointsPreview(sanitizeCustomerOrder(order))), delivery_code: deliveryCode, rider_contact: toRiderContact(contact) };
+    return {
+      ...(await withPointsPreview(sanitizeCustomerOrder(order))),
+      delivery_code: deliveryCode,
+      rider_contact: toRiderContact(contact),
+      // Blynk Wallet (migration 049): what the wallet paid and the refunds credited for this order.
+      wallet: await customerOrderWallet(db, order),
+    };
   }
 
   /**
@@ -658,7 +669,8 @@ export class OrderService {
   async cancelOrderCustomer(orderId: string, actor: Actor, reason?: string) {
     await runTransition('CUSTOMER_CANCEL', { actor, orderId, input: { reason } });
     const updated = await orderRepository.findOrderById(orderId, actor.id);
-    return sanitizeCustomerOrder(updated);
+    // Blynk Wallet (migration 049): "Refund of LKR X added to your Blynk Wallet".
+    return { ...sanitizeCustomerOrder(updated), wallet: updated ? await customerOrderWallet(db, updated) : null };
   }
 
   // --------------------------------------------------------------------------

@@ -15,6 +15,7 @@ import { adminReportsRouter } from '../reports/index.js';
 import { smsOffersRouter } from '../sms-offers/index.js';
 import { adminCashRouter } from '../cash/index.js';
 import { adminRewardsRouter } from '../loyalty/index.js';
+import { adminWalletRouter } from '../wallet/index.js';
 import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
 import { purchaseList } from '../inventory/purchase-list.js';
@@ -92,6 +93,11 @@ adminRouter.use(adminCashRouter);
 // settings, the referrals list and a customer's points. ADMIN and
 // OPERATIONS, guarded inside.
 adminRouter.use(adminRewardsRouter);
+
+// Blynk Wallet (owner, 2026-10-15; migration 049): settings, a customer's
+// wallet, order refunds (ADMIN and OPERATIONS) and adjustments (ADMIN only),
+// guarded inside.
+adminRouter.use(adminWalletRouter);
 
 // Store Operations & Fulfillment Queue (Guarded by ADMIN and PACKING_STAFF)
 adminRouter.get(

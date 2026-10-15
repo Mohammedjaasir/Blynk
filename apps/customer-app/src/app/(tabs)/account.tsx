@@ -20,6 +20,10 @@ import { POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
 import { PROFILE_HERO } from '@/blynk/ui/strings';
 import { type HeroChip, ProfileHero } from '@/components/TabHero';
 import { SHARE_BASE_URL } from '@/blynk/share/links';
+import { fetchWallet } from '@/blynk/wallet/api';
+import { WALLET_COPY } from '@/blynk/wallet/copy';
+import { showWalletRow } from '@/blynk/wallet/models';
+import { DEMO_WALLET } from '@/demo/wallet';
 import { shareText } from '@/blynk/share/share';
 import { browserPermission, webPushPossible } from '@/blynk/push/webPlatform';
 import { DEMO } from '@/demo/mode';
@@ -49,6 +53,8 @@ export default function Account() {
   // Flutter ProfileRewardsTiles: the points balance and Refer a friend, each while its programme is on
   const [points, setPoints] = useState<{ enabled: boolean; text: string; balance: number; valueLkr: number } | null>(null);
   const [referOn, setReferOn] = useState(false);
+  // Blynk Wallet: shown while it is on or holds money (refunds still land while it is off)
+  const [wallet, setWallet] = useState<{ enabled: boolean; balance: number } | null>(DEMO ? DEMO_WALLET : null);
   // doctors switched off (GET /store doctors_enabled false): only "My appointments", and only for a customer who has some
   const store = useStore();
   const doctorsOn = doctorsVisible(store);
@@ -67,6 +73,8 @@ export default function Account() {
     let alive = true;
     fetchPoints().then((p) => { if (alive) setPoints({ enabled: p.enabled, text: pointsBalanceText(p.balance, p.valueLkr), balance: p.balance, valueLkr: p.valueLkr }); }).catch(() => undefined);
     fetchReferral().then((r) => { if (alive) setReferOn(r.enabled); }).catch(() => undefined);
+    // one entry is enough for the balance (an older server without a wallet: no row)
+    fetchWallet(1, 1).then((w) => { if (alive) setWallet({ enabled: w.enabled, balance: w.balance }); }).catch(() => undefined);
     return () => { alive = false; };
   }, [signedIn, session?.user.id]);
 
@@ -149,6 +157,9 @@ export default function Account() {
         <Card tone={TONE.you} stagger={0}>
           {signedIn && <Row icon="🙂" title="About you" sub="Name, email and birthday" onPress={() => router.push('/profile')} />}
           {signedIn && points?.enabled && <Row icon="⭐" title="Blynk Points" sub={points.text} onPress={() => router.push('/points')} />}
+          {(signedIn || DEMO) && showWalletRow(wallet) && (
+            <Row icon="👛" title={WALLET_COPY.title} sub={WALLET_COPY.rowSub(wallet!.balance)} onPress={() => router.push('/wallet')} />
+          )}
           {/* a guest hears the earn rule while points are on (owner, 2026-10-14) */}
           {!signedIn && !DEMO && !!pointsRule && <Row icon="⭐" title="Blynk Points" sub={POINTS_COPY.profileGuest(pointsRule)} onPress={() => router.push('/points')} />}
           {signedIn && referOn && <Row icon="🎁" title="Refer a friend" sub="Invite friends with your code" onPress={() => router.push('/refer')} />}

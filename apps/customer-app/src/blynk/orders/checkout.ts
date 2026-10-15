@@ -33,7 +33,7 @@ export function checkoutSignature(args: {
   items: PlaceOrderBody['items']; addressId: string; coupon?: string | null; note?: string | null;
   combos?: PlaceOrderBody['combos'];
   /** The rest of the body that makes it a different order: slot, points, receiver, needs help. */
-  extra?: Pick<PlaceOrderBody, 'delivery_slot_start' | 'use_points' | 'for_someone_else' | 'recipient' | 'needs_help' | 'payment_method'>;
+  extra?: Pick<PlaceOrderBody, 'delivery_slot_start' | 'use_points' | 'use_wallet' | 'for_someone_else' | 'recipient' | 'needs_help' | 'payment_method'>;
 }): string {
   const itemKey = (i: PlaceOrderBody['items'][number]) => (i.variant_id ? `${i.product_id}:${i.variant_id}` : i.product_id);
   const items = [...args.items].sort((a, b) => itemKey(a).localeCompare(itemKey(b))).map((i) => `${itemKey(i)}x${i.quantity}`).join(',');
@@ -44,7 +44,9 @@ export function checkoutSignature(args: {
   const combos = [...(args.combos ?? [])].sort((a, b) => a.combo_id.localeCompare(b.combo_id)).map((c) => `C${c.combo_id}x${c.quantity}`).join(',');
   // paying online is a different order from cash on delivery (a COD replay must not answer an online checkout)
   const pay = x?.payment_method === 'ONLINE' ? ['PAY:ONLINE'] : [];
-  return [combos ? `${items}+${combos}` : items, args.addressId, args.coupon ?? '', (args.note ?? '').trim(), ...(more ? [more] : []), ...pay].join('|');
+  // using the wallet is a different order too (appended, so older signatures are unchanged)
+  const wallet = x?.use_wallet ? ['WALLET'] : [];
+  return [combos ? `${items}+${combos}` : items, args.addressId, args.coupon ?? '', (args.note ?? '').trim(), ...(more ? [more] : []), ...pay, ...wallet].join('|');
 }
 
 /** 128 random bits as hex (the server allows up to 128 characters). */
@@ -94,6 +96,10 @@ export interface CheckoutBill {
   discountKind: DiscountKind;
   /** "Use points": the estimated points and their value (0 when off or not usable). */
   points: { points: number; value: number };
+  /** "Use wallet balance": the estimated amount the Blynk Wallet pays (0 when off or not usable). */
+  wallet: number;
+  /** What is due before the wallet (for the "can pay up to N%" note). */
+  dueBeforeWallet: number;
   /** Blynk Points this order earns once delivered (estimate). */
   earn: number;
   /** null while the fee is unknown. */
@@ -103,14 +109,14 @@ export interface CheckoutBill {
 }
 
 /** The bill from the cart's item total and the server's quote (and an applied coupon preview). */
-export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coupon?: CouponPreview | null, usePoints = false): CheckoutBill {
+export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coupon?: CouponPreview | null, usePoints = false, useWallet = false): CheckoutBill {
   const basket = quote?.basket_free_delivery;
   const basketApplies = basket?.enabled === true && basket.applies === true;
   const newCustomer = !basketApplies && quote?.free_delivery?.applies === true;
   const fee = quote ? quote.delivery_fee_lkr : null;
   // one discount only: the coupon preview carries the server's choice; without one the
-  // larger of the birthday gift and the referral reward is assumed; points come on top
-  const r = rewardsSummary({ subtotal: itemTotal, deliveryFee: fee ?? 0, quote, coupon, usePoints });
+  // larger of the birthday gift and the referral reward is assumed; points come on top, then the wallet
+  const r = rewardsSummary({ subtotal: itemTotal, deliveryFee: fee ?? 0, quote, coupon, usePoints, useWallet });
   return {
     itemTotal: round2(itemTotal),
     deliveryFee: fee,
@@ -123,6 +129,8 @@ export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coup
     discount: r.discount.amount,
     discountKind: r.discount.kind,
     points: r.points,
+    wallet: fee === null ? 0 : r.wallet,
+    dueBeforeWallet: r.dueBeforeWallet,
     earn: r.earn,
     toPay: fee === null ? null : r.toPay,
     distanceKm: quote?.delivery_fee_mode === 'DISTANCE_TIERS' ? quote.delivery_distance_km : null,

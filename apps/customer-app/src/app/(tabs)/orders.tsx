@@ -119,7 +119,8 @@ function OrderRow({ order: o, index }: { order: Order; index: number }) {
           <Text style={styles.meta}>{[orderTime(o.placed_at ?? o.created_at), itemCountText(o)].filter(Boolean).join('  ·  ')}</Text>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 8 }}>
-          <Text style={styles.total}>{formatLkr(o.total_amount)}</Text>
+          {/* the order's value: what is left to pay plus what the Blynk Wallet paid (a wallet-paid order is not "LKR 0") */}
+          <Text style={styles.total}>{formatLkr(o.total_amount + (o.wallet_amount_used ?? 0))}</Text>
           <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={14} color={C.sub} stroke={2.2} /></View>
         </View>
       </PressScale>

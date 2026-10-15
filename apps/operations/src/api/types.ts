@@ -90,6 +90,9 @@ export interface BoardOrder {
   order_number: string;
   order_status: OrderStatus;
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): what the wallet paid. A payment, not a
+   * discount - total_amount is already reduced by it (the cash still to collect). */
+  wallet_amount_used?: number;
   placed_at: string;
   updated_at: string;
   /** Delivery slot start (null = as soon as possible). */
@@ -206,6 +209,9 @@ export interface OrderDetail {
    * whole discount_amount and coupon_code is null. 0 / absent when none. */
   birthday_discount_amount?: number;
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): what the wallet paid. A payment, not a
+   * discount - total_amount is already reduced by it (the cash still to collect). */
+  wallet_amount_used?: number;
   placed_at: string;
   scheduled_for: string | null;
   /** Delivery slot end (migration 036); null on older orders (owner, 2026-10-10). */
@@ -332,6 +338,9 @@ export interface MyDelivery {
   payment_method: 'COD' | 'ONLINE';
   payment_status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): what the wallet paid. A payment, not a
+   * discount - total_amount is already reduced by it (the cash still to collect). */
+  wallet_amount_used?: number;
   delivery_recipient_name: string;
   delivery_address_line1: string;
   delivery_city: string;
@@ -356,6 +365,9 @@ export interface DeliverySummary {
   order_number: string;
   order_status: OrderStatus;
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): what the wallet paid. A payment, not a
+   * discount - total_amount is already reduced by it (the cash still to collect). */
+  wallet_amount_used?: number;
   payment_method: 'COD' | 'ONLINE';
   payment_status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
   delivery_recipient_name: string;

@@ -317,6 +317,89 @@ async function discountWasDeliveryFee(
 }
 
 // ---------------------------------------------------------------------------
+// Blynk Wallet refunds (migration 049; owner, 2026-10-15): "Blynk Points used
+// on a refunded item are returned. Points earned on it are removed."
+// ---------------------------------------------------------------------------
+
+/** Items-after-discounts an order earns on (the earnPointsForOrder base). */
+export async function orderEarnBase(executor: DBConnection, order: EarnableOrder): Promise<number> {
+  return earnBase({
+    subtotal_amount: Number(order.subtotal_amount),
+    discount_amount: Number(order.discount_amount ?? 0),
+    points_discount_amount: Number(order.points_discount_amount ?? 0),
+    discountWasDeliveryFee: await discountWasDeliveryFee(executor, order),
+  });
+}
+
+/**
+ * An order's points as a staff refund sees them: used (still on the order),
+ * how many of those may still be given back (not returned by a cancel or an
+ * earlier staff refund), earned on delivery, and already taken back.
+ */
+export async function orderPointsForRefund(executor: DBConnection, order: EarnableOrder & { points_redeemed?: unknown }) {
+  const rows = await executor
+    .selectFrom('points_ledger')
+    .select(['kind', 'points', 'actor_user_id'])
+    .where('order_id', '=', order.id)
+    .execute();
+  const redeemed = Number(order.points_redeemed ?? 0);
+  // Given back already: the cancel's REFUND lot and staff returns (ADJUST + with a staff actor;
+  // RESOLVE_ITEM's own give-back has no actor and already lowered points_redeemed).
+  const returned = rows
+    .filter((r) => r.kind === 'REFUND' || (r.kind === 'ADJUST' && r.points > 0 && r.actor_user_id))
+    .reduce((n, r) => n + r.points, 0);
+  const earned = rows.filter((r) => r.kind === 'EARN').reduce((n, r) => n + r.points, 0);
+  const removed = -rows.filter((r) => r.kind === 'ADJUST' && r.points < 0).reduce((n, r) => n + r.points, 0);
+  return {
+    redeemed,
+    returnable: Math.max(0, redeemed - returned),
+    earned,
+    removed,
+    earn_base: await orderEarnBase(executor, order),
+  };
+}
+
+/** Staff refund: points used on the refunded item go back (an ADJUST lot tied to the order). */
+export async function returnPointsForRefund(
+  executor: DBConnection,
+  p: { customerId: string; orderId: string; points: number; actorId: string; reason: string; now?: Date }
+): Promise<number> {
+  if (!(p.points > 0)) return 0;
+  await lockCustomer(executor, p.customerId);
+  const setting = await pointsSettings.read();
+  const now = p.now ?? new Date();
+  await addLot(executor, {
+    customerId: p.customerId,
+    kind: 'ADJUST',
+    points: p.points,
+    expiresAt: expiryFor(now, setting.expiry_months),
+    orderId: p.orderId,
+    reason: p.reason,
+    actorId: p.actorId,
+  });
+  return p.points;
+}
+
+/** Staff refund: points earned on the refunded item are taken back - never below 0 points. */
+export async function removeEarnedPointsForRefund(
+  executor: DBConnection,
+  p: { customerId: string; orderId: string; points: number; actorId: string; reason: string; now?: Date }
+): Promise<number> {
+  if (!(p.points > 0)) return 0;
+  const now = p.now ?? new Date();
+  await lockCustomer(executor, p.customerId);
+  await expireLots(executor, p.customerId, now);
+  const take = Math.min(p.points, await pointsBalance(executor, p.customerId, now));
+  if (take <= 0) return 0;
+  await consumeLots(executor, p.customerId, take, now);
+  await executor
+    .insertInto('points_ledger')
+    .values({ customer_id: p.customerId, kind: 'ADJUST', points: -take, order_id: p.orderId, reason: p.reason, actor_user_id: p.actorId })
+    .execute();
+  return take;
+}
+
+// ---------------------------------------------------------------------------
 // Reads and staff adjustments
 // ---------------------------------------------------------------------------
 

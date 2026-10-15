@@ -350,7 +350,7 @@ describe('Online order flow', () => {
     expect((await orderState(order.id)).order_status).toBe('PLACED');
   });
 
-  it('unpaid orders expire and are cancelled; a late payment is flagged for refund', async () => {
+  it('unpaid orders expire and are cancelled; a late payment is refunded to the Blynk Wallet', async () => {
     const c = await people.customer(6);
     const order = await expectCreated(await c.placeOrder([{ product_id: productId, quantity: 1 }], { payment_method: 'ONLINE' }));
     // Still inside the window: the sweep leaves it alone.
@@ -366,10 +366,19 @@ describe('Online order flow', () => {
     expect(sms).toBe(0);
     expect((await checkout(c.token, order.id)).body.error.code).toBe('ORDER_NOT_AWAITING_PAYMENT');
 
-    // PayHere confirms after all: recorded as paid, refund flagged, order stays cancelled.
-    expect((await notify(signed(order.order_number, order.total_amount.toFixed(2), '2'))).status).toBe(200);
+    // PayHere confirms after all: recorded as paid, the order stays cancelled, and
+    // (Blynk Wallet, migration 049) the payment is credited to the customer's wallet
+    // at once instead of being flagged for a portal refund.
+    const late = signed(order.order_number, order.total_amount.toFixed(2), '2');
+    expect((await notify(late)).status).toBe(200);
     s = await orderState(order.id);
-    expect(s).toMatchObject({ order_status: 'CANCELLED', payment_status: 'PAID', refund_required: true });
+    expect(s).toMatchObject({ order_status: 'CANCELLED', payment_status: 'PAID', refund_required: false });
+    const credited = async () =>
+      (await pool.query("SELECT kind, amount::float AS amount FROM wallet_entries WHERE order_id = $1 ORDER BY created_at", [order.id])).rows;
+    expect(await credited()).toEqual([{ kind: 'REFUND_ORDER_CANCELLED', amount: order.total_amount }]);
+    // The same notification again credits nothing more.
+    expect((await notify(late)).status).toBe(200);
+    expect(await credited()).toHaveLength(1);
   });
 
   it('checkout on an order past its window expires it', async () => {

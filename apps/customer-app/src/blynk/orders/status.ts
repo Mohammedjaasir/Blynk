@@ -1,4 +1,5 @@
 import { formatLkr } from '@/blynk/lib/money';
+import { WALLET_COPY } from '@/blynk/wallet/copy';
 import type { Order, OrderHistoryEntry, OrderStatus } from './types';
 
 /*
@@ -95,7 +96,7 @@ export const payByLine = (o: Pick<Order, 'payment_expires_at'>) => {
 };
 
 /** The one payment line: cash on delivery, or the online payment's state. */
-export function paymentLine(o: Pick<Order, 'order_status' | 'payment_status' | 'total_amount'> & Partial<Pick<Order, 'payment_method' | 'payment_expires_at'>>): string {
+export function paymentLine(o: Pick<Order, 'order_status' | 'payment_status' | 'total_amount'> & Partial<Pick<Order, 'payment_method' | 'payment_expires_at' | 'wallet_amount_used'>>): string {
   if (o.payment_method === 'ONLINE') {
     if (o.payment_status === 'REFUNDED') return 'Refunded';
     if (o.payment_status === 'PAID') return 'Paid online';
@@ -108,6 +109,8 @@ export function paymentLine(o: Pick<Order, 'order_status' | 'payment_status' | '
     return 'Paying online';
   }
   if (o.order_status === 'CANCELLED') return 'Nothing to pay';
+  // the Blynk Wallet paid it all: nothing for the rider to collect
+  if ((o.wallet_amount_used ?? 0) > 0 && o.total_amount <= 0) return WALLET_COPY.paidByWallet;
   if (o.payment_status === 'PAID') return 'Paid in cash';
   if (o.order_status === 'FAILED' || o.order_status === 'CUSTOMER_UNAVAILABLE') return 'Not paid';
   return `Cash on delivery — pay ${formatLkr(o.total_amount)} to the rider`;

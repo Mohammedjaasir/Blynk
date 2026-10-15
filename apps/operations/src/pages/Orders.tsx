@@ -11,7 +11,6 @@ import {
   STATUS_LABEL,
   formatAge,
   formatClock,
-  formatMoney,
   farBatchRefusal,
   laneOf,
   orderErrorMessage,
@@ -23,6 +22,7 @@ import {
   type OrderAction,
 } from '../lib/orders';
 import { asapThenBySlot, formatSlot, scheduledLabel } from '../lib/slots';
+import { cashToCollectText } from '../lib/wallet';
 
 /**
  * The Orders board (plan §10), replacing F1's placeholder. Reuses Admin's
@@ -432,7 +432,7 @@ function OrderRow({
           {order.active_delivery?.rider_name ? <span className="ticket__rider">{order.active_delivery.rider_name}</span> : null}
           {order.scheduled_for ? <span className="ticket__scheduled">{scheduledLabel(order)}</span> : null}
           <PaymentStatus order={order} />
-          <span className="ticket__total">{formatMoney(order.total_amount)}</span>
+          <span className="ticket__total">{cashToCollectText(order)}</span>
         </span>
       </Link>
       {primary ? (

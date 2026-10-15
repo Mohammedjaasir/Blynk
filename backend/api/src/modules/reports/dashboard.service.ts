@@ -10,7 +10,8 @@ import { STORE_ZONE, rangeBounds, salesReport, type DateRange } from './sales.se
  * plus orders by status, cash collected, and the previous period.
  *
  * Every figure is over orders PLACED in the range (Asia/Colombo days):
- * * delivered_revenue: total_amount of those orders now DELIVERED.
+ * * delivered_revenue: total_amount of those orders now DELIVERED, plus what
+ *   the Blynk Wallet paid for them (migration 049: a payment, not a discount).
  * * cash_collected: what riders recorded collecting at the door
  *   (deliveries.cod_collected_amount) for those DELIVERED orders.
  * * average_basket: delivered_revenue / delivered orders.

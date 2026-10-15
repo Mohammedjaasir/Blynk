@@ -95,6 +95,8 @@ export class RiderRepository {
         'orders.order_number',
         'orders.order_status',
         'orders.total_amount',
+        // Blynk Wallet (migration 049): total_amount is the cash to collect; this is what the wallet paid.
+        'orders.wallet_amount_used',
         'orders.payment_method',
         'orders.payment_status',
         'orders.delivery_recipient_name',
@@ -141,6 +143,7 @@ export class RiderRepository {
     return rows.map((row) => ({
       ...row,
       total_amount: Number(Number(row.total_amount).toFixed(2)),
+      wallet_amount_used: Number(Number(row.wallet_amount_used ?? 0).toFixed(2)),
       delivery_latitude: Number(row.delivery_latitude),
       delivery_longitude: Number(row.delivery_longitude),
     }));
@@ -168,6 +171,8 @@ export class RiderRepository {
         'orders.order_number',
         'orders.order_status',
         'orders.total_amount',
+        // Blynk Wallet (migration 049): total_amount is the cash to collect; this is what the wallet paid.
+        'orders.wallet_amount_used',
         'orders.payment_method',
         'orders.payment_status',
         'orders.delivery_recipient_name',
@@ -226,6 +231,7 @@ export class RiderRepository {
       ...row,
       items,
       total_amount: Number(Number(row.total_amount).toFixed(2)),
+      wallet_amount_used: Number(Number(row.wallet_amount_used ?? 0).toFixed(2)),
       cod_collected_amount: Number(Number(row.cod_collected_amount).toFixed(2)),
       delivery_latitude: Number(row.delivery_latitude),
       delivery_longitude: Number(row.delivery_longitude),

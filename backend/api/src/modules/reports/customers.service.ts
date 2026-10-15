@@ -19,7 +19,7 @@ const orderStats = db
     'customer_id',
     sql<number>`count(*)::int`.as('orders_count'),
     sql<number>`(count(*) FILTER (WHERE order_status = 'DELIVERED'))::int`.as('delivered_count'),
-    sql<string>`coalesce(sum(total_amount) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('delivered_spend'),
+    sql<string>`coalesce(sum(total_amount + wallet_amount_used) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('delivered_spend'),
     sql<Date | null>`max(placed_at)`.as('last_order_at'),
   ])
   .groupBy('customer_id')
@@ -187,6 +187,7 @@ export async function getCustomer(id: string, params: { page: number; limit: num
       'o.discount_amount',
       'o.birthday_discount_amount',
       'o.total_amount',
+      'o.wallet_amount_used',
       'o.coupon_code',
       'o.placed_at',
       'o.delivered_at',
@@ -223,6 +224,7 @@ export async function getCustomer(id: string, params: { page: number; limit: num
       discount_amount: money(o.discount_amount),
       birthday_discount_amount: money(o.birthday_discount_amount),
       total_amount: money(o.total_amount),
+      wallet_amount_used: money(o.wallet_amount_used),
       item_count: Number(o.item_count ?? 0),
     })),
     pagination: { page: params.page, limit: params.limit, total, total_pages: Math.ceil(total / params.limit) || 1 },
