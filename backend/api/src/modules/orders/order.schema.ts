@@ -64,6 +64,8 @@ export const createOrderSchema = z.object({
    * decides how many (Blynk Points rules); older apps never send it.
    */
   use_points: z.boolean({ invalid_type_error: 'use_points must be true or false' }).optional(),
+  // Blynk Wallet (owner, 2026-10-15; migration 049): pay part or all with the wallet balance.
+  use_wallet: z.boolean({ invalid_type_error: 'use_wallet must be true or false' }).optional(),
   /** Migration 018: re-validated inside the order transaction; any case, stored upper-case. */
   coupon_code: z
     .string({ invalid_type_error: 'coupon_code must be a string' })

@@ -836,6 +836,8 @@ export interface BoardOrder {
   order_number: string;
   order_status: OrderStatus;
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): what the wallet paid; total_amount stays what is still to pay. Absent on an older API. */
+  wallet_amount_used?: number;
   placed_at: string;
   updated_at: string;
   scheduled_for: string | null;
@@ -927,6 +929,8 @@ export interface OrderDetail {
   /** Birthday gift (owner, 2026-10-09): when > 0 it is the whole discount_amount and coupon_code is null. */
   birthday_discount_amount?: number;
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): what the wallet paid; total_amount stays what is still to pay. Absent on an older API. */
+  wallet_amount_used?: number;
   placed_at: string;
   scheduled_for: string | null;
   /** Slot end (migration 036); null on older orders (owner, 2026-10-10). */
@@ -1520,6 +1524,8 @@ export interface CustomerOrderRow {
   delivery_fee: number;
   discount_amount: number;
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): what the wallet paid; total_amount stays what is still to pay. Absent on an older API. */
+  wallet_amount_used?: number;
   coupon_code: string | null;
   /** Birthday gift (owner, 2026-10-09); 0 / absent when none. */
   birthday_discount_amount?: number;

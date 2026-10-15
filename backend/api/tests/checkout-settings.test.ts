@@ -197,6 +197,8 @@ describe('Free deliveries for every customer', () => {
       online_payment: expect.objectContaining({ provider: 'PAYHERE', enabled: expect.any(Boolean) }),
       // Migration 045 (owner, 2026-10-14): no ?product_ids=, so no lead time - today, ASAP allowed.
       delivery_lead: expect.objectContaining({ lead_days: 0, asap_allowed: true }),
+      // Migration 049 (owner, 2026-10-15): the Blynk Wallet - a new customer has nothing in it.
+      wallet: expect.objectContaining({ balance: 0 }),
     });
 
     const first = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));

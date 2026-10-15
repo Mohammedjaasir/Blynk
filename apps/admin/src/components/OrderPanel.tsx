@@ -20,6 +20,8 @@ import { scheduledLabel } from '../lib/schedule';
 import { Spinner } from './ui';
 import { OrderBill } from './OrderBill';
 import { OrderItems } from './OrderItems';
+import { OrderWalletRefund } from './OrderWalletRefund';
+import { walletUsed } from '../lib/wallet';
 
 /**
  * One order, read-only apart from the actions this role may take in this
@@ -121,7 +123,7 @@ export function OrderPanel({
             <OrderBill order={detail} />
           </section>
 
-          <PaymentSection detail={detail} />
+          <PaymentSection detail={detail} canRefund={role === 'ADMIN' || role === 'OPERATIONS'} />
 
           <section className="order-panel__section" aria-label="Customer">
             <h3 className="order-panel__label">{detail.ordered_for_someone_else ? 'Receiver' : 'Customer'}</h3>
@@ -217,10 +219,12 @@ export function OrderPanel({
 
 /**
  * How the order is paid (docs/api/payhere.md sections 2 and 5): the label,
- * "Refund needed" when staff must refund by hand, and the PayHere details.
+ * "Refund needed" when staff must refund by hand, and the PayHere details;
+ * the Blynk Wallet share and "Refund to wallet" (docs/api/wallet.md).
  */
-function PaymentSection({ detail }: { detail: OrderDetail }) {
+function PaymentSection({ detail, canRefund }: { detail: OrderDetail; canRefund: boolean }) {
   const label = paymentLabel(detail);
+  const wallet = walletUsed(detail);
   const refund = refundNeeded(detail);
   const p = detail.payment ?? null;
   const method = gatewayMethodLabel(p?.gateway_method);
@@ -237,6 +241,11 @@ function PaymentSection({ detail }: { detail: OrderDetail }) {
         {refund ? (
           <span className="pay-chip pay-chip--refund" role="alert">
             {REFUND_NEEDED_LABEL}
+          </span>
+        ) : null}
+        {wallet > 0 ? (
+          <span className="pay-chip wallet-chip" data-testid="payment-wallet">
+            Wallet {formatMoney(wallet)}
           </span>
         ) : null}
         <span className="order-panel__meta">{formatMoney(detail.total_amount)}</span>
@@ -269,6 +278,8 @@ function PaymentSection({ detail }: { detail: OrderDetail }) {
           ) : null}
         </dl>
       ) : null}
+      {/* Blynk Wallet refunds (owner, 2026-10-15): ADMIN and OPERATIONS only. */}
+      {canRefund ? <OrderWalletRefund orderId={detail.id} /> : null}
     </section>
   );
 }

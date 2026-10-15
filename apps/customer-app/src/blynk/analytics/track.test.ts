@@ -175,6 +175,14 @@ describe('purchase', () => {
     expect(byName('points_redeem')).toHaveLength(0);
   });
 
+  test('Blynk Wallet: a payment, so it counts in the value and is sent as wallet_used', () => {
+    expect(trackPurchase({ ...order, order_number: 'BL-W', total_amount: 0, wallet_amount_used: 1030 })).toBe(true);
+    const e = byName('purchase')[0].ecommerce as { value: number; wallet_used?: number; payment_type: string };
+    expect([e.value, e.wallet_used, e.payment_type]).toEqual([880, 1030, 'COD']);
+    trackPurchase({ ...order, order_number: 'BL-NW' });
+    expect((byName('purchase')[1].ecommerce as { wallet_used?: number }).wallet_used).toBeUndefined();
+  });
+
   test('the cart supplies SKUs and categories for the order lines', () => {
     catalog();
     trackPurchase({ ...order, order_number: 'BL-3' }, { cart: { lines: [{ product: product(), quantity: 2 }] } });

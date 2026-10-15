@@ -4,7 +4,7 @@ import { deliveriesApi } from '../api/resources';
 import type { DeliverySummary } from '../api/types';
 import { Banner } from '../components/Banner';
 import { Header } from '../components/Header';
-import { isPaidOnline, nextAction, PAID_ONLINE_NOTE, splitQueue, statusLabel, statusTone } from '../lib/delivery';
+import { isPaidByWallet, isPaidOnline, nextAction, PAID_BY_WALLET_NOTE, PAID_ONLINE_NOTE, splitQueue, statusLabel, statusTone } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
 import { formatMoney, formatScheduledSlot, shortOrderNumber } from '../lib/format';
 import { syncTrackingFromList } from '../lib/tracker-session';
@@ -96,7 +96,9 @@ export function Queue() {
                             <span className="row__slot">{formatScheduledSlot(d.scheduled_for, d.scheduled_until)}</span>
                           ) : null}
                         </span>
-                        <span className="row__amount">{isPaidOnline(d) ? 'Paid online' : formatMoney(d.total_amount)}</span>
+                        <span className="row__amount">
+                          {isPaidOnline(d) ? 'Paid online' : isPaidByWallet(d) ? 'Paid by wallet' : formatMoney(d.total_amount)}
+                        </span>
                       </Link>
                     </li>
                   ))}
@@ -156,7 +158,9 @@ function NowSlip({ delivery: d }: { delivery: DeliverySummary }) {
       </p>
       {/* Scheduled slot, when the customer picked one (owner, 2026-10-10). */}
       {slot ? <p className="slot">{slot}</p> : null}
-      {owesCash(d) ? (
+      {owesCash(d) && isPaidByWallet(d) ? (
+        <p className="slip__cash slip__cash--paid">{PAID_BY_WALLET_NOTE}</p>
+      ) : owesCash(d) ? (
         <p className="slip__cash">
           <span className="slip__cash-label">Cash to collect</span>
           <span className="slip__cash-amount">{formatMoney(d.total_amount)}</span>
@@ -214,7 +218,9 @@ function TripView({ stops }: { stops: TripStop[] }) {
               {formatScheduledSlot(d.scheduled_for, d.scheduled_until) ? (
                 <p className="slot">{formatScheduledSlot(d.scheduled_for, d.scheduled_until)}</p>
               ) : null}
-              {owesCash(d) ? (
+              {owesCash(d) && isPaidByWallet(d) ? (
+                <p className="slip__cash slip__cash--paid">{PAID_BY_WALLET_NOTE}</p>
+              ) : owesCash(d) ? (
                 <p className="slip__cash">
                   <span className="slip__cash-label">Cash to collect</span>
                   <span className="slip__cash-amount">{formatMoney(d.total_amount)}</span>

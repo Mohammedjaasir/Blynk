@@ -12,6 +12,8 @@ import {
   type Birthday, type PointsProgram, type Referral,
 } from './rewards';
 import { asapOffered, SLOT_COPY, slotsByDay, type DeliverySlots } from './slots';
+import { WALLET_COPY } from '@/blynk/wallet/copy';
+import { canUseWallet, walletUseLine, type CheckoutWallet } from '@/blynk/wallet/models';
 
 /*
  * The checkout sections the Flutter shop has and the cart lacked (owner, 2026-10-09..12):
@@ -247,16 +249,25 @@ export function DeliveryDetailsCard({ details, setDetails, allowForSomeoneElse, 
 }
 
 /**
- * Referral reward and "Use points" (default off): only for what applies. The points this order
- * earns are one quiet line in the bill, for guests too (cart.tsx, pointsPromo.ts).
+ * Referral reward, "Use points" and "Use wallet balance" (both default off): only for what
+ * applies. The points this order earns are one quiet line in the bill, for guests too (cart.tsx,
+ * pointsPromo.ts). The wallet pays after the coupon and points (docs/api/wallet.md).
  */
-export function RewardsCard({ referral, points, usePoints, onUsePoints, redeem }: {
+export function RewardsCard({ referral, points, usePoints, onUsePoints, redeem, wallet, useWallet = false, onUseWallet, walletUsed = 0, walletDue = 0 }: {
   referral: Referral | null; points: PointsProgram | null; usePoints: boolean; onUsePoints: (on: boolean) => void;
   redeem: { points: number; value: number };
+  /** checkout-info's wallet block (null = no wallet on this server). */
+  wallet?: CheckoutWallet | null;
+  useWallet?: boolean;
+  onUseWallet?: (on: boolean) => void;
+  /** The estimated amount the wallet pays, and what was due before it. */
+  walletUsed?: number;
+  walletDue?: number;
 }) {
   const showReferral = !!referral?.available;
   const redeemable = canRedeem(points);
-  if (!showReferral && !redeemable) return null;
+  const walletOn = canUseWallet(wallet) && !!onUseWallet;
+  if (!showReferral && !redeemable && !walletOn) return null;
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={[s.card, s.pad, { gap: 12 }]}>
       {showReferral && (
@@ -286,6 +297,27 @@ export function RewardsCard({ referral, points, usePoints, onUsePoints, redeem }
           </Pressable>
           {usePoints && (
             <Text style={[s.muted, { marginTop: 4 }, redeem.points > 0 && { color: C.green }]}>{redeemLine(redeem)}</Text>
+          )}
+        </View>
+      )}
+      {walletOn && (
+        <View>
+          <Pressable
+            onPress={() => onUseWallet!(!useWallet)}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: useWallet }}
+            accessibilityLabel={WALLET_COPY.toggleLabel(wallet!.balance)}
+            style={[s.optRow, { paddingVertical: 0 }]}
+          >
+            <Text style={{ fontSize: 16, marginRight: 10 }}>👛</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.optTitle}>{WALLET_COPY.toggleLabel(wallet!.balance)}</Text>
+              <Text style={s.muted}>{WALLET_COPY.toggleSub}</Text>
+            </View>
+            <Toggle on={useWallet} />
+          </Pressable>
+          {useWallet && (
+            <Text style={[s.muted, { marginTop: 4 }, walletUsed > 0 && { color: C.green }]}>{walletUseLine(wallet!, walletUsed, walletDue)}</Text>
           )}
         </View>
       )}

@@ -1,6 +1,7 @@
 import { apiGet, apiPost, ApiError } from '@/blynk/api/client';
 import { authed } from '@/blynk/auth/session';
 import { parseSlots, type DeliverySlots } from '@/blynk/checkout/slots';
+import { checkoutWalletOf, parseOrderWallet } from '@/blynk/wallet/models';
 import type { CheckoutInfo, CouponPreview, Order, OrderList, PlaceOrderBody } from './types';
 
 /*
@@ -24,6 +25,8 @@ export function parseOrder(raw: Order): Order {
     referral_discount_amount: n(raw.referral_discount_amount),
     points_discount_amount: n(raw.points_discount_amount),
     total_amount: n(raw.total_amount),
+    wallet_amount_used: Math.max(0, n(raw.wallet_amount_used)),
+    ...(raw.wallet !== undefined ? { wallet: parseOrderWallet(raw.wallet) } : {}),
     can_cancel: raw.can_cancel === true,
     ...(Array.isArray(raw.combos) ? {
       combos: raw.combos.map((c) => ({
@@ -42,6 +45,7 @@ export function parseOrder(raw: Order): Order {
 export function parseCheckoutInfo(raw: CheckoutInfo): CheckoutInfo {
   const dist = raw.delivery_distance_km;
   const lead = raw.delivery_lead;
+  const wallet = checkoutWalletOf(raw.wallet);
   return {
     ...raw,
     delivery_fee_lkr: n(raw.delivery_fee_lkr),
@@ -55,6 +59,7 @@ export function parseCheckoutInfo(raw: CheckoutInfo): CheckoutInfo {
         asap_allowed: lead.asap_allowed !== false,
       },
     } : {}),
+    wallet: wallet ? { enabled: wallet.enabled, balance: wallet.balance, max_use_percent: wallet.maxUsePercent } : undefined,
   };
 }
 

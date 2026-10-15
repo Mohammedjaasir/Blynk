@@ -1,4 +1,5 @@
 import type { OnlinePaymentInfo } from '@/blynk/api/types';
+import type { OrderWallet } from '@/blynk/wallet/models';
 
 /*
  * The customer order contract (backend/api/src/modules/orders): GET /orders/checkout-info,
@@ -51,6 +52,8 @@ export interface CheckoutInfo {
    * delivery day. asap_allowed false = the customer must pick a slot on/after that day.
    */
   delivery_lead?: DeliveryLead;
+  /** Blynk Wallet (docs/api/wallet.md): "Use wallet balance" while enabled and balance > 0 (absent on an older server = off). */
+  wallet?: { enabled: boolean; balance: number; max_use_percent: number };
 }
 
 export interface DeliveryLead {
@@ -125,7 +128,15 @@ export interface Order {
   referral_discount_amount: number;
   points_discount_amount: number;
   coupon_code: string | null;
+  /**
+   * What is still to pay (cash to the rider, or the amount sent to PayHere). The order's full
+   * value is total_amount + wallet_amount_used.
+   */
   total_amount: number;
+  /** Blynk Wallet: what the wallet paid for the order (a payment, not a discount; 0 = none). */
+  wallet_amount_used: number;
+  /** GET /orders/:id and POST /orders/:id/cancel: what the wallet paid and the refunds credited back to it. */
+  wallet?: OrderWallet | null;
   free_delivery_reason?: 'BASKET_THRESHOLD' | 'NEW_CUSTOMER' | null;
   /**
    * POST /orders and GET /orders/:id (owner, 2026-10-14): the Blynk Points this order earns once
@@ -184,6 +195,8 @@ export interface PlaceOrderBody {
   delivery_slot_start?: string;
   /** "Use points": the server decides how many. */
   use_points?: boolean;
+  /** "Use wallet balance": the server decides how much (after the coupon and points). */
+  use_wallet?: boolean;
   for_someone_else?: boolean;
   recipient?: { name: string; phone: string };
   needs_help?: boolean;

@@ -186,6 +186,12 @@ export function More() {
             <span className="cat-hub__title">Blynk Points</span>
           </Link>
         </li>
+        <li>
+          {/* Blynk Wallet: refunds go to the customer's wallet (owner, 2026-10-15). */}
+          <Link className="cat-hub__card" to="/more/wallet">
+            <span className="cat-hub__title">Blynk Wallet</span>
+          </Link>
+        </li>
       </ul>
 
       <DeliveryFeeCard />

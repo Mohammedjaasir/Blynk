@@ -21,15 +21,18 @@ export const onlineOffered = (info: OnlinePaymentInfo | null | undefined) => inf
 
 export type PayOption = { method: PayMethod; title: string; sub: string; enabled: boolean };
 
-/** The two rows of the payment choice (online only while offered). */
-export function payOptions(info: OnlinePaymentInfo | null | undefined, toPay: number | null): PayOption[] {
+/**
+ * The two rows of the payment choice (online only while offered). `nothingNote` replaces the
+ * "nothing to pay online" line (e.g. the Blynk Wallet covers the order).
+ */
+export function payOptions(info: OnlinePaymentInfo | null | undefined, toPay: number | null, nothingNote?: string): PayOption[] {
   const rows: PayOption[] = [{ method: 'COD', title: PAY.cod, sub: PAY.codSub, enabled: true }];
   if (onlineOffered(info)) {
     const nothing = toPay !== null && toPay <= 0;
     rows.push({
       method: 'ONLINE',
       title: PAY.online,
-      sub: nothing ? PAY.nothingToPay : (info?.methods_note?.trim() || PAY.onlineSubDefault),
+      sub: nothing ? (nothingNote ?? PAY.nothingToPay) : (info?.methods_note?.trim() || PAY.onlineSubDefault),
       enabled: !nothing,
     });
   }

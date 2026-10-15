@@ -7,8 +7,8 @@ import { PageHeader } from '../components/Layout';
 import { useLowStock } from '../components/LowStock';
 import { splitQueue, statusLabel } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
-import { formatMoney } from '../lib/orders';
 import { isPaidOnline } from '../lib/payments';
+import { cashToCollectLine } from '../lib/wallet';
 import { syncTrackingFromList } from '../lib/tracker-session';
 import { isTripStop, owesCash, tripOf, useCurrentPosition, useRoadOrder } from '../lib/trip';
 import { TripCard } from './Delivery/Queue';
@@ -263,9 +263,7 @@ export function Home() {
               </p>
               {owesCash(summary.activeDelivery) ? (
                 <p className="delivery-card__meta">
-                  <span className="order-detail__strong">
-                    Cash to collect: {formatMoney(summary.activeDelivery.total_amount)}
-                  </span>
+                  <span className="order-detail__strong">{cashToCollectLine(summary.activeDelivery)}</span>
                 </p>
               ) : isPaidOnline(summary.activeDelivery) ? (
                 <p className="delivery-card__meta">

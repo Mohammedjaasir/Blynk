@@ -2,6 +2,7 @@ import { ApiError } from '../api/client';
 import type { DeliverySummary, OrderStatus } from '../api/types';
 import { formatMoney } from './orders';
 import { errorCode } from './errors';
+import { paidByWallet } from './wallet';
 
 /**
  * What the operator can do next with a delivery, mirroring the backend's
@@ -31,7 +32,10 @@ const FAILED_ORDER: OrderStatus[] = ['FAILED', 'CUSTOMER_UNAVAILABLE'];
  * Queue/Detail's full `DeliverySummary` (F4) without widening `MyDelivery`
  * into a duplicate of `DeliverySummary` (design-audit I5).
  */
-export type DeliveryLike = Pick<DeliverySummary, 'assignment_status' | 'order_status' | 'payment_method' | 'payment_status' | 'total_amount'>;
+export type DeliveryLike = Pick<
+  DeliverySummary,
+  'assignment_status' | 'order_status' | 'payment_method' | 'payment_status' | 'total_amount' | 'wallet_amount_used'
+>;
 
 export function nextAction(d: DeliveryLike): RiderAction {
   if (d.assignment_status === 'DELIVERED' || d.order_status === 'DELIVERED') return { kind: 'none', reason: 'done' };
@@ -57,6 +61,8 @@ export function nextAction(d: DeliveryLike): RiderAction {
           return { kind: 'collect', label: 'Confirm delivery code', amount: d.total_amount, paidOnline: true };
         }
         if (d.payment_method !== 'COD' || d.payment_status !== 'PENDING') return { kind: 'none', reason: 'not-cod' };
+        // Blynk Wallet paid it all (docs/api/wallet.md): LKR 0 to collect, the code completes it.
+        if (paidByWallet(d)) return { kind: 'collect', label: 'Confirm delivery code', amount: 0, paidOnline: false };
         return { kind: 'collect', label: `Collect ${formatMoney(d.total_amount)}`, amount: d.total_amount, paidOnline: false };
       }
       break;

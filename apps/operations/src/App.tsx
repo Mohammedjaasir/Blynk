@@ -51,6 +51,7 @@ import { StoreHours } from './pages/StoreHours';
 import { Coupons } from './pages/Coupons';
 import { ReferAFriend } from './pages/ReferAFriend';
 import { BlynkPoints } from './pages/BlynkPoints';
+import { BlynkWallet } from './pages/BlynkWallet';
 import { CustomerAddressBook, CustomerAddressDetail } from './pages/CustomerAddresses';
 import { RiderRequests } from './pages/RiderRequests';
 import { RiderDocumentSettings } from './pages/RiderDocumentSettings';
@@ -189,6 +190,8 @@ export function AppRoutes() {
         {/* Refer a friend and Blynk Points (owner, 2026-10-10). */}
         <Route path="more/refer-a-friend" element={<ReferAFriend />} />
         <Route path="more/points" element={<BlynkPoints />} />
+        {/* Blynk Wallet settings (owner, 2026-10-15; docs/api/wallet.md). */}
+        <Route path="more/wallet" element={<BlynkWallet />} />
         {/* Customer addresses (owner, 2026-10-11): same view as Admin's. */}
         <Route path="more/customers" element={<CustomerAddressBook />} />
         <Route path="more/customers/:id" element={<CustomerAddressDetail />} />

@@ -21,6 +21,7 @@ import { PageHeader } from '../components/Layout';
 import { StoreScheduleSettings } from '../components/StoreSchedulePanels';
 import { ReferralSettingsCard } from '../components/ReferralSettingsCard';
 import { PointsSettingsCard } from '../components/PointsSettingsCard';
+import { WalletSettingsCard } from '../components/WalletSettingsCard';
 import { PaymentGatewayCard } from '../components/PaymentGatewayCard';
 import { RiderDocumentsSettingsCard } from '../components/RiderDocumentsSettingsCard';
 import { RiderPaySettings } from '../components/RiderPaySettings';
@@ -92,6 +93,8 @@ export function Settings() {
       {/* Refer a friend and Blynk Points (owner, 2026-10-10). */}
       <ReferralSettingsCard />
       <PointsSettingsCard />
+      {/* Blynk Wallet: refunds go to the wallet (owner, 2026-10-15; docs/api/wallet.md). */}
+      <WalletSettingsCard />
       {/* In-app updates for Blynk Ops and Blynk Rider (owner, 2026-10-12). */}
       <AppUpdatesPanel />
     </>

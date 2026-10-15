@@ -1,6 +1,7 @@
 import { formatLkr } from '@/blynk/lib/money';
 import type { CheckoutInfo, CouponPreview } from '@/blynk/orders/types';
 import { pointsFor } from '@/blynk/store/pointsPromo';
+import { checkoutWalletOf, walletPreview } from '@/blynk/wallet/models';
 
 /*
  * Birthday gift, referral reward and Blynk Points at checkout (owner, 2026-10-09/10; the
@@ -10,8 +11,10 @@ import { pointsFor } from '@/blynk/store/pointsPromo';
  * One discount only: a coupon, the birthday gift and a referral reward never stack. The server
  * uses the larger single one (a tie keeps the coupon; the reward only when strictly larger).
  * A coupon preview carries the server's own choice; without one, the larger of the gift and
- * the reward is assumed. Points come on top ("Use points"), capped by the programme. All of it
- * is an estimate: the server prices the order when it is placed.
+ * the reward is assumed. Points come on top ("Use points"), capped by the programme, then the
+ * Blynk Wallet ("Use wallet balance", docs/api/wallet.md): a payment, not a discount, on what is
+ * still due including the delivery fee. All of it is an estimate: the server prices the order
+ * when it is placed.
  */
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
@@ -143,23 +146,32 @@ export interface RewardsSummary {
   discount: DiscountEstimate;
   points: { points: number; value: number };
   earn: number;
-  /** Estimated total after the one discount and (when on) the points. */
+  /** What the Blynk Wallet pays (when on): after the discount and points, capped by max_use_percent and the balance. */
+  wallet: number;
+  /** What is due before the wallet (subtotal + fee - discount - points). */
+  dueBeforeWallet: number;
+  /** Estimated amount still to pay after the one discount, the points and the wallet (when on). */
   toPay: number;
 }
 
 /** Everything the bill and the rewards card show, from the cart's subtotal and the charged fee. */
 export function rewardsSummary(args: {
   subtotal: number; deliveryFee: number; quote: CheckoutInfo | null; coupon?: CouponPreview | null; usePoints: boolean;
+  useWallet?: boolean;
 }): RewardsSummary {
-  const { subtotal, deliveryFee, quote, coupon, usePoints } = args;
+  const { subtotal, deliveryFee, quote, coupon, usePoints, useWallet = false } = args;
   const discount = estimateDiscount({ subtotal, deliveryFee, coupon, birthday: birthdayOf(quote), referral: referralOf(quote) });
   const due = round2(Math.max(0, subtotal + deliveryFee - discount.amount));
   const points = usePoints ? pointsRedeem(pointsOf(quote), due) : { points: 0, value: 0 };
+  const dueBeforeWallet = round2(Math.max(0, due - points.value));
+  const wallet = useWallet ? walletPreview(checkoutWalletOf(quote?.wallet), dueBeforeWallet) : 0;
   return {
     discount,
     points,
-    // the part paid with points never earns (backend earnBase)
+    // the part paid with points never earns (backend earnBase); wallet money earns like cash
     earn: earnEstimate(pointsOf(quote), subtotal - discount.onItems - points.value),
-    toPay: round2(Math.max(0, due - points.value)),
+    wallet,
+    dueBeforeWallet,
+    toPay: round2(Math.max(0, dueBeforeWallet - wallet)),
   };
 }

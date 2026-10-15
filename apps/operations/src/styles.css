@@ -50,7 +50,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font-family: inherit;
 }
 
@@ -1716,6 +1718,17 @@ input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* An order's Blynk Wallet panel: its history rows span the page like other lists. */
+.order-wallet > .cat-list {
+  align-self: stretch;
+}
+
+/* Blynk Wallet history: the reason and who added it are read in full, never cut off. */
+.wallet-entry__wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .cat-row__price {

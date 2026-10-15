@@ -6,6 +6,7 @@ import { enqueueCustomerSms } from '../notify.js';
 import { recomputeOrderDiscount } from '../../../coupons/coupon.service.js';
 import { recomputeBirthdayDiscount } from '../../../birthday/birthday.offer.js';
 import { recomputeOrderRewards } from '../../../loyalty/order-rewards.js';
+import { settleWalletAfterItemChange } from '../../../wallet/wallet.service.js';
 import { setOrderStatus, updateOrderFields } from '../status-writer.js';
 import type { ActionImpl, Actor, DeliveryRow, ItemRow, LockedState, OrderRow, Trx } from '../types.js';
 import { dispatch, invalidTransition } from './shared.js';
@@ -64,12 +65,21 @@ export const resolveItem: ActionImpl<OrderRow> = {
     // Referral reward and Blynk Points (owner, 2026-10-10; migration 037):
     // the reward follows the new subtotal; points never pay more than is due.
     const rewards = await recomputeOrderRewards(trx, order, subtotal, discount);
-    const total = Number((subtotal + Number(order.delivery_fee) - rewards.discount_amount).toFixed(2));
+    const due = Number((subtotal + Number(order.delivery_fee) - rewards.discount_amount).toFixed(2));
+    // Blynk Wallet (migration 049): the wallet never pays more than is now due
+    // (its surplus goes back to the wallet), and on an order already paid
+    // online the money held beyond the new amount is refunded to the wallet.
+    const itemName = item!.variant_label_snapshot
+      ? `${item!.product_name_snapshot} ${item!.variant_label_snapshot}`
+      : item!.product_name_snapshot || 'An item';
+    const wallet = await settleWalletAfterItemChange(trx, order, due, itemName);
+    const total = wallet.total_amount;
     const fields = {
       subtotal_amount: subtotal,
       discount_amount: rewards.discount_amount,
       ...rewards.fields,
       ...(birthday !== null ? { birthday_discount_amount: birthday } : {}),
+      ...(Number(order.wallet_amount_used ?? 0) > 0 ? { wallet_amount_used: wallet.wallet_amount_used } : {}),
       total_amount: total,
     };
 
@@ -79,10 +89,13 @@ export const resolveItem: ActionImpl<OrderRow> = {
         ? await updateOrderFields(trx, order, fields)
         : await setOrderStatus(trx, order, 'ITEM_UNAVAILABLE', req.actor, note, fields);
 
+    // What is still to collect. A payment already made online keeps the amount
+    // PayHere charged (anything over the new total went to the wallet above).
     await trx
       .updateTable('payments')
       .set({ amount: total, updated_at: new Date() })
       .where('order_id', '=', order.id)
+      .where('payment_status', '!=', 'PAID')
       .execute();
 
     await enqueueCustomerSms(trx, order, 'ITEM_UNAVAILABLE', `order_${order.id}_${item!.id}_UNAVAILABLE_SMS`, {

@@ -7,6 +7,8 @@ import { PageHeader } from '../components/Layout';
 import { OrderBill } from '../components/OrderBill';
 import { OrderItems } from '../components/OrderItems';
 import { CustomerPointsPanel } from '../components/CustomerPointsPanel';
+import { CustomerWalletPanel } from '../components/CustomerWalletPanel';
+import { OrderWalletRefund } from '../components/OrderWalletRefund';
 import { CustomerAddressesPanel } from '../components/CustomerAddressesPanel';
 import { Badge, EmptyState, Spinner } from '../components/ui';
 import { birthdayWhen, formatDayMonth, formatDayMonthYear } from '../lib/birthday';
@@ -16,6 +18,7 @@ import { downloadBlob } from '../lib/productImport';
 import { smsLanguageLabel } from '../lib/smsOffers';
 import { paymentLabel } from '../lib/payments';
 import { STATUS_LABEL, formatClock, formatMoney, orderErrorMessage, shortNumber } from '../lib/orders';
+import { walletUsed } from '../lib/wallet';
 
 /**
  * Customers (ADMIN only - the API refuses everyone else, and the rows carry
@@ -243,6 +246,8 @@ export function CustomerDetail() {
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  /** Bumped after a "Refund to wallet" on one of the orders, so the wallet panel re-reads. */
+  const [walletVersion, setWalletVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,6 +312,8 @@ export function CustomerDetail() {
           <CustomerAddressesPanel customerId={c.id} />
           {/* Blynk Points balance, history and +/- adjust (owner, 2026-10-10). */}
           <CustomerPointsPanel customerId={c.id} />
+          {/* Blynk Wallet balance, history and Admin +/- adjust (owner, 2026-10-15). */}
+          <CustomerWalletPanel customerId={c.id} version={walletVersion} />
 
           {data.orders.length === 0 ? (
             <EmptyState title="No orders yet" />
@@ -331,7 +338,13 @@ export function CustomerDetail() {
                 </thead>
                 <tbody>
                   {data.orders.map((o) => (
-                    <OrderHistoryRow key={o.id} order={o} open={openId === o.id} onToggle={() => setOpenId(openId === o.id ? null : o.id)} />
+                    <OrderHistoryRow
+                      key={o.id}
+                      order={o}
+                      open={openId === o.id}
+                      onToggle={() => setOpenId(openId === o.id ? null : o.id)}
+                      onWalletRefund={() => setWalletVersion((v) => v + 1)}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -361,7 +374,17 @@ export function CustomerDetail() {
   );
 }
 
-function OrderHistoryRow({ order, open, onToggle }: { order: CustomerOrderRow; open: boolean; onToggle(): void }) {
+function OrderHistoryRow({
+  order,
+  open,
+  onToggle,
+  onWalletRefund,
+}: {
+  order: CustomerOrderRow;
+  open: boolean;
+  onToggle(): void;
+  onWalletRefund?(): void;
+}) {
   const number = shortNumber(order.order_number);
   return (
     <>
@@ -384,6 +407,12 @@ function OrderHistoryRow({ order, open, onToggle }: { order: CustomerOrderRow; o
               {(order.birthday_discount_amount ?? 0) > 0 ? ' birthday gift' : ''}
             </span>
           ) : null}
+          {walletUsed(order) > 0 ? (
+            <span className="cell__secondary" data-testid="order-row-wallet">
+              {' '}
+              + {formatMoney(walletUsed(order))} by wallet
+            </span>
+          ) : null}
         </td>
         <td>
           <button
@@ -400,7 +429,7 @@ function OrderHistoryRow({ order, open, onToggle }: { order: CustomerOrderRow; o
       {open ? (
         <tr className="order-expand">
           <td colSpan={6}>
-            <OrderDetailInline orderId={order.id} />
+            <OrderDetailInline orderId={order.id} onWalletRefund={onWalletRefund} />
           </td>
         </tr>
       ) : null}
@@ -409,7 +438,7 @@ function OrderHistoryRow({ order, open, onToggle }: { order: CustomerOrderRow; o
 }
 
 /** The same order detail the Orders board panel reads (GET /admin/orders/:id), read-only. */
-function OrderDetailInline({ orderId }: { orderId: string }) {
+function OrderDetailInline({ orderId, onWalletRefund }: { orderId: string; onWalletRefund?(): void }) {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -433,6 +462,8 @@ function OrderDetailInline({ orderId }: { orderId: string }) {
         {detail.delivery?.rider_name ? ` · Rider: ${detail.delivery.rider_name}` : ''}
         {detail.cancellation_reason ? ` · Cancelled: ${detail.cancellation_reason}` : ''}
       </p>
+      {/* Blynk Wallet refunds (owner, 2026-10-15); this page is ADMIN-only. */}
+      <OrderWalletRefund orderId={detail.id} onRefunded={onWalletRefund} />
     </div>
   );
 }

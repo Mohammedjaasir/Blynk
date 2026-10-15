@@ -10,10 +10,12 @@ import { payOptions, windowNote, type PayMethod } from './method';
  * Checkout's payment choice: "Cash on delivery" / "Pay online (card, wallet)" while online
  * payment is on (otherwise just cash on delivery), with the Terms, Privacy and Refund links.
  */
-export function PaymentChoice({ info, toPay, method, onChange }: {
+export function PaymentChoice({ info, toPay, method, onChange, nothingNote }: {
   info: OnlinePaymentInfo | null; toPay: number | null; method: PayMethod; onChange: (m: PayMethod) => void;
+  /** The online row's line when there is nothing to pay online (e.g. the wallet covers it). */
+  nothingNote?: string;
 }) {
-  const rows = payOptions(info, toPay);
+  const rows = payOptions(info, toPay, nothingNote);
   const note = windowNote(info);
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={styles.card}>

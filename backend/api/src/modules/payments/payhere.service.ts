@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { db } from '../../database/connection.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
+import { refundCancelledOrderToWallet } from '../wallet/wallet.service.js';
 import { runTransition } from '../orders/lifecycle/engine.js';
 import type { Actor } from '../orders/lifecycle/types.js';
 import { isReady, paymentGateway, payhereUrls } from './gateway-settings.js';
@@ -258,14 +259,24 @@ export const payhereService = {
           return 'AMOUNT_MISMATCH';
         }
         if (o.order_status !== 'AWAITING_PAYMENT') {
-          // Paid after the order was cancelled or expired: the money must go back.
+          // Paid after the order was cancelled or expired: the money must go
+          // back. Blynk Wallet (migration 049; owner, 2026-10-15): a cancelled
+          // order's payment is credited to the customer's wallet at once
+          // (REFUND_ORDER_CANCELLED) instead of waiting for a portal refund.
           const now = new Date();
+          const toWallet = o.order_status === 'CANCELLED';
           await trx
             .updateTable('payments')
-            .set({ ...gatewayFields, payment_status: 'PAID', paid_at: now, refund_required: true, transaction_reference: n.payment_id ?? null, updated_at: now })
+            .set({ ...gatewayFields, payment_status: 'PAID', paid_at: now, refund_required: !toWallet, transaction_reference: n.payment_id ?? null, updated_at: now })
             .where('order_id', '=', orderId)
             .execute();
-          await trx.updateTable('orders').set({ payment_status: 'PAID', updated_at: now }).where('id', '=', orderId).execute();
+          const paidRow = await trx
+            .updateTable('orders')
+            .set({ payment_status: 'PAID', updated_at: now })
+            .where('id', '=', orderId)
+            .returningAll()
+            .executeTakeFirstOrThrow();
+          if (toWallet) await refundCancelledOrderToWallet(trx, paidRow, now);
           return 'PAID_AFTER_CANCEL';
         }
         return 'CONFIRM';

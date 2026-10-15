@@ -23,6 +23,7 @@ import {
 } from '../lib/orders';
 import { paymentLabel } from '../lib/payments';
 import { scheduledLabel } from '../lib/schedule';
+import { paidByWalletOnly, walletUsed } from '../lib/wallet';
 
 /** How often the board re-reads while it is on screen (no push; the Rider pattern). */
 const REFRESH_MS = 20_000;
@@ -367,6 +368,9 @@ function OrderRow({
             <span className="ticket__scheduled">{scheduledLabel(order.scheduled_for, order.scheduled_until)}</span>
           ) : null}
           {payment ? <span className={`pay-chip pay-chip--${payment.tone}`}>{payment.text}</span> : null}
+          {walletUsed(order) > 0 ? (
+            <span className="pay-chip wallet-chip">{paidByWalletOnly(order) ? 'Paid by wallet' : `Wallet ${formatMoney(walletUsed(order))}`}</span>
+          ) : null}
           {order.order_status === 'AWAITING_PAYMENT' && order.payment_expires_at ? (
             <span>Pay by {formatClock(order.payment_expires_at)}</span>
           ) : null}

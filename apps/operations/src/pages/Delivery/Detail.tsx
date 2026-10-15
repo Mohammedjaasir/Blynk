@@ -12,6 +12,7 @@ import { isPaidOnline } from '../../lib/payments';
 import { canReportFailure, deliveryCodeError, deliveryErrorMessage, isTrackable, nextAction, stage } from '../../lib/delivery';
 import { errorCode } from '../../lib/errors';
 import { formatClock, formatMoney, shortNumber } from '../../lib/orders';
+import { PAID_BY_WALLET, cashToCollectText, paidByWallet, walletPaid } from '../../lib/wallet';
 import { formatPhone } from '../../lib/format';
 import { getTracker, stopTrackingFor, syncTracking } from '../../lib/tracker-session';
 import type { TrackingState } from '../../lib/tracking';
@@ -302,7 +303,13 @@ export function Detail() {
       {data.payment_method === 'COD' && data.payment_status === 'PENDING' && !closed ? (
         <section className="order-detail__section" aria-label="Cash to collect">
           <h2 className="order-detail__label">Cash to collect</h2>
-          <p className="order-detail__strong">{formatMoney(data.total_amount)}</p>
+          <p className="order-detail__strong">{cashToCollectText(data)}</p>
+          {/* Blynk Wallet (docs/api/wallet.md): the total above is already less what it paid. */}
+          {!paidByWallet(data) && walletPaid(data) > 0 ? (
+            <p className="order-detail__meta" data-testid="delivery-wallet-paid">
+              Wallet paid {formatMoney(walletPaid(data))}
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -352,6 +359,7 @@ export function Detail() {
         <CollectCodDialog
           amount={data.total_amount}
           paidOnline={isPaidOnline(data)}
+          paidByWallet={paidByWallet(data)}
           recipient={data.delivery_recipient_name}
           busy={busy}
           error={codeError}
@@ -387,6 +395,7 @@ export function Detail() {
 function CollectCodDialog({
   amount,
   paidOnline,
+  paidByWallet: walletPaidAll = false,
   recipient,
   busy,
   error,
@@ -397,6 +406,8 @@ function CollectCodDialog({
   amount: number;
   /** PayHere already took the money: only the delivery code is confirmed. */
   paidOnline: boolean;
+  /** Blynk Wallet paid it all: LKR 0 to collect, only the code is confirmed. */
+  paidByWallet?: boolean;
   recipient: string;
   busy: boolean;
   error: { message: string; locked: boolean } | null;
@@ -428,12 +439,14 @@ function CollectCodDialog({
         }}
       >
         <h2 className="modal__title" id={titleId}>
-          {paidOnline ? 'Confirm the delivery code' : `Collect ${formatMoney(amount)} in cash`}
+          {paidOnline || walletPaidAll ? 'Confirm the delivery code' : `Collect ${formatMoney(amount)} in cash`}
         </h2>
         <p className="modal__message">
           {paidOnline
             ? `Paid online - do not collect cash. Ask ${recipient} for their delivery code — this completes the delivery.`
-            : `from ${recipient}. Count it before you confirm — this completes the delivery.`}
+            : walletPaidAll
+              ? `${PAID_BY_WALLET}. Ask ${recipient} for their delivery code — this completes the delivery.`
+              : `from ${recipient}. Count it before you confirm — this completes the delivery.`}
         </p>
         <DeliveryCodeField
           ref={codeRef}
@@ -451,7 +464,7 @@ function CollectCodDialog({
             Not yet
           </button>
           <button type="submit" className="button" disabled={!ready}>
-            {busy ? 'Recording…' : paidOnline ? 'Code checked — complete' : 'Cash collected — complete'}
+            {busy ? 'Recording…' : paidOnline || walletPaidAll ? 'Code checked — complete' : 'Cash collected — complete'}
           </button>
         </div>
       </form>

@@ -399,6 +399,12 @@ export interface OrdersTable {
   /** Migration 037: Blynk Points used on the order and the LKR they took off (part of discount_amount). */
   points_redeemed: ColumnType<number, number | undefined, number>;
   points_discount_amount: ColumnType<number, number | string | undefined, number | string>;
+  /**
+   * Migration 049 (owner, 2026-10-15): what the Blynk Wallet paid for the
+   * order - a payment, not a discount: total_amount = subtotal + delivery_fee
+   * - discount_amount - wallet_amount_used is what is still to pay.
+   */
+  wallet_amount_used: ColumnType<number, number | string | undefined, number | string>;
   scheduled_for: Date | null;
   /** Migration 036 (owner, 2026-10-10): end of the delivery slot the customer picked; scheduled_for is its start. */
   scheduled_until: ColumnType<Date | null, Date | null | undefined, Date | null>;
@@ -1148,6 +1154,7 @@ export interface Database {
   referrals: ReferralsTable;
   referral_rewards: ReferralRewardsTable;
   points_ledger: PointsLedgerTable;
+  wallet_entries: WalletEntriesTable;
 }
 
 /**
@@ -1230,4 +1237,26 @@ export interface PointsLedgerTable {
   reason: string | null;
   actor_user_id: string | null;
   created_at: Generated<Date>;
+}
+
+export type WalletEntryKind =
+  | 'REFUND_ORDER_CANCELLED'
+  | 'REFUND_ITEM'
+  | 'REFUND_DELIVERY_FEE'
+  | 'ADJUSTMENT'
+  | 'ORDER_PAYMENT'
+  | 'ORDER_PAYMENT_RETURNED'
+  | 'EXPIRED';
+
+/** Migration 049 (owner, 2026-10-15): the Blynk Wallet ledger, append-only and signed. */
+export interface WalletEntriesTable {
+  id: Generated<string>;
+  customer_id: string;
+  amount: ColumnType<number, number | string, never>;
+  kind: WalletEntryKind;
+  order_id: string | null;
+  reason: string | null;
+  created_by: string | null;
+  created_at: Generated<Date>;
+  expires_at: Date | null;
 }

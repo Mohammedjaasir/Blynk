@@ -1,5 +1,6 @@
 import type { OrderDetail } from '../api/types';
 import { formatMoney } from '../lib/orders';
+import { cashToCollectText, walletPaid } from '../lib/wallet';
 
 /**
  * An order's bill (backend migration 018): items, delivery, the coupon
@@ -10,6 +11,8 @@ export function OrderBill({ order }: { order: OrderDetail }) {
   const discount = order.discount_amount ?? 0;
   // A birthday gift is the whole discount, never with a coupon (owner, 2026-10-09).
   const birthday = (order.birthday_discount_amount ?? 0) > 0;
+  // Blynk Wallet (docs/api/wallet.md): a payment, already taken off the total.
+  const wallet = walletPaid(order);
   return (
     <dl className="order-bill" aria-label="Bill">
       {order.subtotal_amount != null ? (
@@ -30,9 +33,15 @@ export function OrderBill({ order }: { order: OrderDetail }) {
           <dd className="mono">−{formatMoney(discount)}</dd>
         </div>
       ) : null}
+      {wallet > 0 ? (
+        <div className="order-bill__row order-bill__row--discount" data-testid="bill-wallet">
+          <dt>Paid by wallet</dt>
+          <dd className="mono">−{formatMoney(wallet)}</dd>
+        </div>
+      ) : null}
       <div className="order-bill__row order-bill__row--total">
         <dt>{order.payment_method === 'COD' ? 'Total · cash to collect' : 'Total'}</dt>
-        <dd className="mono">{formatMoney(order.total_amount)}</dd>
+        <dd className="mono">{order.payment_method === 'COD' ? cashToCollectText(order) : formatMoney(order.total_amount)}</dd>
       </div>
     </dl>
   );

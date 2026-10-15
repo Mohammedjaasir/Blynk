@@ -14,13 +14,16 @@ import { googleMapsDirectionsUrl, toLatLng } from '../lib/route';
 import {
   bagRows,
   canReportFailure,
+  isPaidByWallet,
   isPaidOnline,
   isTrackable,
   nextAction,
+  PAID_BY_WALLET_NOTE,
   PAID_ONLINE_NOTE,
   stage,
   statusLabel,
   statusTone,
+  walletPaid,
 } from '../lib/delivery';
 import { MESSAGES, deliveryCodeLockedUntil, errorCode, errorMessage } from '../lib/errors';
 import { formatMoney, formatPhone, formatScheduledSlot, formatTime, shortOrderNumber } from '../lib/format';
@@ -268,7 +271,11 @@ function Slip({
         <section className="settled" aria-label="Delivered">
           <p className="settled__title">Delivered</p>
           <p className="settled__amount">
-            {isPaidOnline(d) ? 'Paid online — no cash collected' : `${formatMoney(d.cod_collected_amount)} collected`}
+            {isPaidOnline(d)
+              ? 'Paid online — no cash collected'
+              : isPaidByWallet(d)
+                ? 'Paid by wallet — no cash collected'
+                : `${formatMoney(d.cod_collected_amount)} collected`}
           </p>
           {d.delivered_at ? <p className="settled__time">at {formatTime(d.delivered_at)}</p> : null}
         </section>
@@ -388,11 +395,20 @@ function Slip({
         </section>
       ) : null}
 
-      {owesCash(d) && !closed ? (
-        <section className={`cash${stage(d) === 2 ? ' cash--now' : ''}`} aria-label="Cash to collect">
-          <span className="cash__label">Cash to collect</span>
-          <span className="cash__amount">{formatMoney(d.total_amount)}</span>
+      {owesCash(d) && !closed && isPaidByWallet(d) ? (
+        // Blynk Wallet paid it all (docs/api/wallet.md): nothing to collect.
+        <section className={`cash cash--paid${stage(d) === 2 ? ' cash--now' : ''}`} aria-label="Payment" data-testid="paid-by-wallet">
+          <span className="cash__label">{PAID_BY_WALLET_NOTE}</span>
         </section>
+      ) : owesCash(d) && !closed ? (
+        <>
+          <section className={`cash${stage(d) === 2 ? ' cash--now' : ''}`} aria-label="Cash to collect">
+            <span className="cash__label">Cash to collect</span>
+            <span className="cash__amount">{formatMoney(d.total_amount)}</span>
+          </section>
+          {/* The wallet paid part: the amount above is already the rest. */}
+          {walletPaid(d) > 0 ? <p className="cash-wallet">Wallet paid {formatMoney(walletPaid(d))}</p> : null}
+        </>
       ) : isPaidOnline(d) && !closed && !done ? (
         <section className={`cash cash--paid${stage(d) === 2 ? ' cash--now' : ''}`} aria-label="Payment">
           <span className="cash__label">{PAID_ONLINE_NOTE}</span>
@@ -477,6 +493,8 @@ function CollectSheet({
   const complete = code.length === DELIVERY_CODE_LENGTH;
   // Paid online (PayHere): no cash to count - the code alone completes the handover.
   const prepaid = isPaidOnline(delivery);
+  // Paid in full by the Blynk Wallet: LKR 0 to collect, the code alone completes it.
+  const byWallet = !prepaid && isPaidByWallet(delivery);
 
   // A wrong code is cleared so the next attempt starts clean.
   useEffect(() => {
@@ -487,7 +505,7 @@ function CollectSheet({
   }, [problem]);
 
   return (
-    <Sheet title={prepaid ? 'Confirm the delivery code' : `Collect ${formatMoney(delivery.total_amount)} in cash`} onClose={onClose}>
+    <Sheet title={prepaid || byWallet ? 'Confirm the delivery code' : `Collect ${formatMoney(delivery.total_amount)} in cash`} onClose={onClose}>
       <form
         className="sheet__form"
         onSubmit={(event) => {
@@ -498,6 +516,10 @@ function CollectSheet({
         {prepaid ? (
           <p className="sheet__body">
             {PAID_ONLINE_NOTE}. Hand the order to {delivery.delivery_recipient_name} — the code completes the delivery.
+          </p>
+        ) : byWallet ? (
+          <p className="sheet__body">
+            {PAID_BY_WALLET_NOTE}. Hand the order to {delivery.delivery_recipient_name} — the code completes the delivery.
           </p>
         ) : (
           <p className="sheet__body">
@@ -532,7 +554,7 @@ function CollectSheet({
         ) : null}
         <div className="sheet__actions">
           <button type="submit" className="primary" disabled={!complete || busy || locked}>
-            {busy ? 'Recording…' : prepaid ? 'Code checked — complete' : 'Cash collected — complete'}
+            {busy ? 'Recording…' : prepaid || byWallet ? 'Code checked — complete' : 'Cash collected — complete'}
           </button>
           <button type="button" className="text-button" onClick={onClose}>
             Not yet

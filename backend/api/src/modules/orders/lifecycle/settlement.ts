@@ -70,7 +70,8 @@ export async function settleCod(
   await enqueueCustomerSms(trx, order, 'DELIVERED', `order_${order.id}_DELIVERED_SMS`, {
     order_number: order.order_number,
   });
-  if (!prepaid) {
+  // Nothing collected (Blynk Wallet or points paid it all; migration 049): no "cash received" SMS.
+  if (!prepaid && amount > 0) {
     await enqueueCustomerSms(trx, order, 'COD_PAYMENT_CONFIRMED', `order_${order.id}_COD_CONFIRMED_SMS`, {
       order_number: order.order_number,
       amount,

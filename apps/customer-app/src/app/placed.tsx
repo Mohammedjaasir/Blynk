@@ -20,6 +20,8 @@ import { placedLayout } from '@/blynk/orders/placedLayout';
 import { slotWindowText } from '@/blynk/orders/status';
 import { PAY } from '@/blynk/payments/copy';
 import { PLACED } from '@/blynk/ui/strings';
+import { WALLET_COPY } from '@/blynk/wallet/copy';
+import { paidByWallet } from '@/blynk/wallet/models';
 import { placedPointsLine } from '@/blynk/store/pointsPromo';
 import { useStore } from '@/blynk/store/StoreContext';
 import type { Order } from '@/blynk/orders/types';
@@ -136,8 +138,15 @@ export default function Placed() {
               )}
               <View style={styles.factRow}>
                 <Text style={styles.factLabel}>{PLACED.amount}</Text>
-                <Text style={styles.factValue}>{formatLkr(order.total_amount)} · {paidOnline ? PAY.paidOnline : order.payment_method === 'ONLINE' ? PAY.online : PAY.cod}</Text>
+                <Text style={styles.factValue}>{formatLkr(order.total_amount)} · {paidByWallet(order) ? WALLET_COPY.paidByWallet : paidOnline ? PAY.paidOnline : order.payment_method === 'ONLINE' ? PAY.online : PAY.cod}</Text>
               </View>
+              {/* Blynk Wallet: what the wallet paid (the amount above is what is left to pay) */}
+              {order.wallet_amount_used > 0 && (
+                <View style={styles.factRow}>
+                  <Text style={styles.factLabel}>{WALLET_COPY.placedFromWallet}</Text>
+                  <Text style={styles.factValue}>{formatLkr(order.wallet_amount_used)}</Text>
+                </View>
+              )}
               {/* Blynk Points (owner, 2026-10-14): the server's points_earn_preview, added on delivery */}
               {!!pointsLine && <Text style={styles.points}>✦ {pointsLine}</Text>}
               {!reduced && <Shine delay={at(T.shineAt)} width={L.column} />}

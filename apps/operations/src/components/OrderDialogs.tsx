@@ -4,6 +4,7 @@ import type { RiderSuggestions } from '../api/types';
 import { formatMoney, orderErrorMessage, shortNumber, type FarBatchRefusal, type OrderAction } from '../lib/orders';
 import { DeliveryCodeField, isCompleteDeliveryCode } from './DeliveryCodeField';
 import { distanceText, fromRoster, loadText, riderName, tripText } from '../lib/riderSuggestions';
+import { PAID_BY_WALLET, paidByWallet } from '../lib/wallet';
 
 /**
  * Assign-rider and note-required dialogs for the Orders board/detail (task
@@ -24,6 +25,8 @@ interface OrderSummary {
   delivery_address_line1: string;
   delivery_city: string;
   total_amount: number;
+  /** Blynk Wallet (docs/api/wallet.md): already taken off total_amount. */
+  wallet_amount_used?: number;
 }
 
 /**
@@ -91,7 +94,8 @@ export function AssignRiderDialog({
           Assign a rider to #{shortNumber(order.order_number)}
         </h2>
         <p className="modal__message">
-          {order.delivery_address_line1}, {order.delivery_city} · {formatMoney(order.total_amount)} cash on delivery
+          {order.delivery_address_line1}, {order.delivery_city} ·{' '}
+          {paidByWallet(order) ? PAID_BY_WALLET : `${formatMoney(order.total_amount)} cash on delivery`}
         </p>
 
         {error ? (
@@ -312,7 +316,11 @@ export function MarkDeliveredDialog({
         <h2 className="modal__title" id={titleId}>
           Mark delivered #{shortNumber(order.order_number)}
         </h2>
-        <p className="modal__message">Records {formatMoney(order.total_amount)} cash as collected and completes the delivery.</p>
+        <p className="modal__message">
+          {paidByWallet(order)
+            ? `${PAID_BY_WALLET}. Completes the delivery.`
+            : `Records ${formatMoney(order.total_amount)} cash as collected and completes the delivery.`}
+        </p>
         {mode === 'code' ? (
           <>
             <DeliveryCodeField

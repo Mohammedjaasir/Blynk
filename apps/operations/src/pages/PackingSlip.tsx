@@ -6,6 +6,7 @@ import type { OrderDetail } from '../api/types';
 import { comboHeading, formatMoney, groupOrderItems, orderErrorMessage, orderItemName, orderItemUnit } from '../lib/orders';
 import { formatPhone } from '../lib/format';
 import { formatSlotAbsolute } from '../lib/slots';
+import { PAID_BY_WALLET, paidByWallet, walletPaid } from '../lib/wallet';
 
 const slipDate = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -218,13 +219,22 @@ export function PackingSlip() {
               <dd className="mono">−{formatMoney(order.discount_amount!)}</dd>
             </div>
           ) : null}
+          {/* Blynk Wallet (docs/api/wallet.md): a payment, already off the total. */}
+          {walletPaid(order) > 0 ? (
+            <div className="packing-slip__discount" data-testid="slip-wallet">
+              <dt>Paid by wallet</dt>
+              <dd className="mono">−{formatMoney(walletPaid(order))}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>Total</dt>
             <dd className="mono">{formatMoney(order.total_amount)}</dd>
           </div>
           <div className="packing-slip__cod">
             <dt>Cash to collect (COD)</dt>
-            <dd className="mono">{cod > 0 ? formatMoney(cod) : 'Nothing - already paid'}</dd>
+            <dd className="mono">
+              {cod > 0 ? formatMoney(cod) : order.payment_method === 'COD' && paidByWallet(order) ? PAID_BY_WALLET : 'Nothing - already paid'}
+            </dd>
           </div>
         </dl>
 

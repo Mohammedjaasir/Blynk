@@ -437,6 +437,8 @@ type OrderItemLike = {
 export type OrderLike = {
   order_number: string; order_status: string; payment_method: string; payment_status: string;
   total_amount: number; delivery_fee: number; coupon_code?: string | null; points_discount_amount?: number;
+  /** Blynk Wallet: what the wallet paid (a payment; total_amount is what is left to pay). */
+  wallet_amount_used?: number;
   items?: OrderItemLike[]; combos?: { combo_id: string | null; id: string; name: string; unit_price: number; quantity: number }[];
 };
 
@@ -474,7 +476,8 @@ export function orderItems(o: OrderLike, cart?: CartLike | null): GaItem[] {
  * guard, so a refresh, Back or the "Order placed" screen opening again never sends it twice).
  * Cash on delivery: when POST /orders answers. PayHere: only once the order is paid (the return
  * screen saw payment_status PAID); an order still AWAITING_PAYMENT is not a purchase yet.
- * value = items after discounts and points, without the delivery fee; shipping = the fee.
+ * value = items after discounts and points, without the delivery fee; shipping = the fee. The Blynk
+ * Wallet is a payment, not a discount: what it paid is part of the value, and `wallet_used` says how much.
  * Points used on the order also send `points_redeem {points}` (inside the same guard).
  */
 export function trackPurchase(o: OrderLike, opts: { cart?: CartLike | null; points?: number } = {}): boolean {
@@ -487,11 +490,13 @@ export function trackPurchase(o: OrderLike, opts: { cart?: CartLike | null; poin
     markSent(o.order_number);
     const items = orderItems(o, opts.cart);
     const shipping = round2(num(o.delivery_fee));
-    const value = round2(Math.max(0, num(o.total_amount) - shipping));
+    const wallet = round2(Math.max(0, num(o.wallet_amount_used)));
+    const value = round2(Math.max(0, num(o.total_amount) + wallet - shipping));
     trackEcommerce('purchase', {
       transaction_id: o.order_number, value, shipping, items,
       ...(str(o.coupon_code) ? { coupon: str(o.coupon_code) } : {}),
       payment_type: o.payment_method === 'ONLINE' ? 'ONLINE' : 'COD',
+      ...(wallet > 0 ? { wallet_used: wallet } : {}),
     });
     const points = Math.round(num((o as { points_redeemed?: unknown }).points_redeemed) || (num(o.points_discount_amount) > 0 ? num(opts.points) : 0));
     if (points > 0) track('points_redeem', { points });

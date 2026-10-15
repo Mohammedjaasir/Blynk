@@ -24,6 +24,8 @@ import type { DeliveryFeeQuote } from './delivery-fee.js';
 import { orderRewardColumns, pointsForOrder, recordOrderRewards, referralForOrder } from '../loyalty/order-rewards.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { assertCartStock } from '../inventory/sellable.js';
+// Blynk Wallet (owner, 2026-10-15; migration 049).
+import { decideWalletUse, recordWalletPayment } from '../wallet/wallet.service.js';
 
 /**
  * Refuses (409 SLOT_FULL) when the slot starting at `start` already holds
@@ -88,6 +90,8 @@ export interface CreateOrderData {
   birthday_offer?: { setting: BirthdayOfferSetting; now: Date } | null;
   /** Migration 037 (owner, 2026-10-10): the customer turned "Use points" on. */
   use_points?: boolean;
+  /** Blynk Wallet (migration 049): the customer turned on "Use wallet balance". */
+  use_wallet?: boolean;
   scheduled_for: Date | null;
   /**
    * Scheduled delivery slot (owner, 2026-10-10): its end (migration 036) and
@@ -376,15 +380,28 @@ export class OrderRepository {
       });
 
       const discountAmount = Number((offerDiscount + (points?.discount_amount ?? 0)).toFixed(2));
-      const totalAmount = Number((data.subtotal_amount + deliveryFee - discountAmount).toFixed(2));
+      const dueAmount = Number((data.subtotal_amount + deliveryFee - discountAmount).toFixed(2));
+      // 0f. Blynk Wallet (migration 049): a payment after every discount and
+      //     the points, towards the total INCLUDING the delivery fee. Not part
+      //     of discount_amount: total_amount is what is still to pay.
+      const walletUsed = await decideWalletUse(trx, {
+        customerId: data.customer_id,
+        due: dueAmount,
+        use: data.use_wallet,
+        now: rewardsNow,
+      });
+      const totalAmount = Number((dueAmount - walletUsed).toFixed(2));
 
       // PayHere (migration 047): nothing to charge online - place it as COD.
-      const paymentMethod = data.online_payment ? ('ONLINE' as const) : ('COD' as const);
+      // When the wallet paid it all, the order simply goes in as COD with
+      // nothing to collect (no PayHere step).
+      const walletPaidAll = walletUsed > 0 && totalAmount <= 0;
+      const paymentMethod = data.online_payment && !walletPaidAll ? ('ONLINE' as const) : ('COD' as const);
       if (paymentMethod === 'ONLINE' && totalAmount <= 0) {
         throw new AppError('This order has nothing to pay online. Place it as cash on delivery.', 422, 'NOTHING_TO_PAY_ONLINE');
       }
       const initialStatus = initialOrderStatus(paymentMethod);
-      const paymentExpiresAt = data.online_payment ? new Date(Date.now() + data.online_payment.window_minutes * 60_000) : null;
+      const paymentExpiresAt = paymentMethod === 'ONLINE' && data.online_payment ? new Date(Date.now() + data.online_payment.window_minutes * 60_000) : null;
 
       // 1. Insert orders record
       const [order] = await trx
@@ -411,6 +428,7 @@ export class OrderRepository {
           birthday_discount_amount: birthday?.discount_amount ?? 0,
           ...orderRewardColumns(referral, points),
           coupon_code: coupon?.code ?? null,
+          ...(walletUsed > 0 ? { wallet_amount_used: walletUsed } : {}),
           total_amount: totalAmount,
           scheduled_for: data.scheduled_for,
           scheduled_until: data.delivery_slot?.until ?? null,
@@ -486,6 +504,7 @@ export class OrderRepository {
       if (coupon) await recordRedemption(trx, coupon, order.id, data.customer_id);
       if (birthday) await recordBirthdayRedemption(trx, birthday, order.id, data.customer_id);
       await recordOrderRewards(trx, { orderId: order.id, customerId: data.customer_id, referral, points, now: rewardsNow });
+      await recordWalletPayment(trx, { orderId: order.id, customerId: data.customer_id, amount: walletUsed, now: rewardsNow });
 
       // 4. Record initial status in order_status_history (lifecycle PLACE_ORDER)
       await recordOrderPlaced(trx, order.id, data.customer_id, initialStatus);
@@ -501,6 +520,7 @@ export class OrderRepository {
         birthday_discount_amount: Number(Number(order.birthday_discount_amount ?? 0).toFixed(2)),
         referral_discount_amount: Number(Number(order.referral_discount_amount ?? 0).toFixed(2)),
         points_discount_amount: Number(Number(order.points_discount_amount ?? 0).toFixed(2)),
+        wallet_amount_used: Number(Number(order.wallet_amount_used ?? 0).toFixed(2)),
         total_amount: Number(Number(order.total_amount).toFixed(2)),
         delivery_latitude: Number(order.delivery_latitude),
         delivery_longitude: Number(order.delivery_longitude),
@@ -580,6 +600,7 @@ export class OrderRepository {
       birthday_discount_amount: Number(Number(order.birthday_discount_amount ?? 0).toFixed(2)),
       referral_discount_amount: Number(Number(order.referral_discount_amount ?? 0).toFixed(2)),
       points_discount_amount: Number(Number(order.points_discount_amount ?? 0).toFixed(2)),
+      wallet_amount_used: Number(Number(order.wallet_amount_used ?? 0).toFixed(2)),
       total_amount: Number(Number(order.total_amount).toFixed(2)),
       items: items.map((it) => ({
         ...it,
@@ -653,6 +674,7 @@ export class OrderRepository {
       birthday_discount_amount: Number(Number(o.birthday_discount_amount ?? 0).toFixed(2)),
       referral_discount_amount: Number(Number(o.referral_discount_amount ?? 0).toFixed(2)),
       points_discount_amount: Number(Number(o.points_discount_amount ?? 0).toFixed(2)),
+      wallet_amount_used: Number(Number(o.wallet_amount_used ?? 0).toFixed(2)),
       total_amount: Number(Number(o.total_amount).toFixed(2)),
       items: items
         .filter((it) => it.order_id === o.id)
@@ -755,6 +777,7 @@ export class OrderRepository {
         birthday_discount_amount: Number(Number(o.birthday_discount_amount ?? 0).toFixed(2)),
         referral_discount_amount: Number(Number(o.referral_discount_amount ?? 0).toFixed(2)),
         points_discount_amount: Number(Number(o.points_discount_amount ?? 0).toFixed(2)),
+        wallet_amount_used: Number(Number(o.wallet_amount_used ?? 0).toFixed(2)),
         total_amount: Number(Number(o.total_amount).toFixed(2)),
         items_summary: {
           total: summary?.total ?? 0,
