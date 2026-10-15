@@ -52,6 +52,13 @@
       track('open_app_click', { button_location: 'install_guide', platform: platform });
       return;
     }
+    // "Order now" on the area, category and Sinhala / Tamil pages (SEO brief,
+    // 2026-10-15): a plain link to the shop; data-order says which button.
+    var order = target.closest('[data-order]');
+    if (order) {
+      track('order_now_click', { button_location: order.getAttribute('data-order') || where(order), page_path: location.pathname, platform: platform });
+      return;
+    }
     var link = target.closest('a[href]');
     if (!link) return;
     var href = link.getAttribute('href') || '';

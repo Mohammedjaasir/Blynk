@@ -215,3 +215,14 @@ test('the Dockerfile wires GTM_ID and CONSENT_DEFAULT to the inject script for b
   // After the shop is copied in, so its index.html is the one processed.
   assert.ok(docker.indexOf('COPY --from=app') < docker.indexOf('gtm.sh'));
 });
+
+test('SEO pages: Order now reports order_now_click with the button and page, never a number', () => {
+  const { layer, click } = runAnalytics();
+  click(new Element({ '[data-order]': true }, { 'data-order': 'hero' }));
+  click(new Element({ '[data-order]': true, '.nav': new Element() }, { 'data-order': 'header' }));
+  const events = layer.slice(1);
+  assert.deepEqual(events.map((e) => e.event), ['order_now_click', 'order_now_click']);
+  assert.deepEqual(events.map((e) => e.button_location), ['hero', 'header']);
+  assert.equal(events[0].page_path, '/');
+  assert.equal(events[0].platform, 'ios');
+});

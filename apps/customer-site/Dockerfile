@@ -42,6 +42,11 @@ COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-s
      apps/customer-site/walkthrough.js apps/customer-site/analytics.js \
      apps/customer-site/privacy.html apps/customer-site/terms.html apps/customer-site/refunds.html /usr/share/nginx/html/
 COPY apps/customer-site/assets /usr/share/nginx/html/assets
+# SEO pages (owner's SEO brief, 2026-10-15): pages/ goes to the site root as it
+# is - the area and category pages (<name>/index.html), the Sinhala and Tamil
+# versions (si/, ta/), sitemap.xml, robots.txt and pages.css. Built by
+# apps/customer-site/scripts/build-seo-pages.mjs; nginx serves /<name> clean.
+COPY apps/customer-site/pages/ /usr/share/nginx/html/
 # Android App Links. The fingerprint is the key the Blynk APK is signed with;
 # a build signed with another key needs ANDROID_CERT_SHA256 set to its SHA-256.
 COPY apps/customer-site/.well-known /usr/share/nginx/html/.well-known
@@ -50,6 +55,8 @@ RUN if [ -n "$ANDROID_CERT_SHA256" ]; then sed -i "s#\"sha256_cert_fingerprints\
 COPY --from=app /src/build/web /usr/share/nginx/html/app
 # Google Tag Manager (owner, 2026-10-10): fill in the container ID and the
 # consent default in both pages, or remove the snippet when GTM_ID is empty.
+# The SEO pages (every <folder>/index.html outside /app/) carry the same
+# markers and are filled in the same way; a page without them fails the build.
 ARG GTM_ID=
 ARG CONSENT_DEFAULT=granted
 COPY apps/customer-site/gtm-inject.sh /tmp/gtm-inject.sh
@@ -57,5 +64,6 @@ COPY apps/customer-site/gtm-inject.sh /tmp/gtm-inject.sh
 RUN tr -d '\r' < /tmp/gtm-inject.sh > /tmp/gtm.sh \
  && GTM_ID="$GTM_ID" CONSENT_DEFAULT="$CONSENT_DEFAULT" sh /tmp/gtm.sh \
       /usr/share/nginx/html/index.html /usr/share/nginx/html/app/index.html \
+      $(find /usr/share/nginx/html -mindepth 2 -name index.html ! -path '/usr/share/nginx/html/app/*' | sort) \
  && rm /tmp/gtm-inject.sh /tmp/gtm.sh
 EXPOSE 80

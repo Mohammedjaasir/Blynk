@@ -167,7 +167,7 @@ function () {
 
 | Trigger name | Event name | Use regex matching |
 |---|---|---|
-| `CE - all Blynk events` | `^(page_view\|get_blynk_click\|install_guide_step\|open_app_click\|contact_click\|sign_up\|login\|view_item_list\|view_item\|add_to_cart\|remove_from_cart\|view_cart\|begin_checkout\|add_shipping_info\|purchase\|search\|select_promotion\|share\|pwa_installed)$` | **yes** |
+| `CE - all Blynk events` | `^(page_view\|get_blynk_click\|install_guide_step\|open_app_click\|order_now_click\|contact_click\|sign_up\|login\|view_item_list\|view_item\|add_to_cart\|remove_from_cart\|view_cart\|begin_checkout\|add_shipping_info\|purchase\|search\|select_promotion\|share\|pwa_installed)$` | **yes** |
 | `CE - page_view` | `page_view` | no |
 | `CE - purchase` | `purchase` | no |
 | `CE - sign_up` | `sign_up` | no |
@@ -320,6 +320,7 @@ Every shop event also carries **`user_id`**: the hashed customer id when signed 
 | `get_blynk_click` | landing | Any "Get Blynk" button | `button_location` (`header`, `hero`, `products`, `products_grid`, `about`), `platform` (`ios`, `android`, `desktop`) | key event | Get Blynk click conversion | Lead |
 | `install_guide_step` | landing | Each step of the "add to Home Screen" walkthrough is shown | `platform` (`ios`, `android`), `step_number`, `step_total`, `step_title`, `from_computer` | event | - | - |
 | `open_app_click` | landing | "Open Blynk" at the end of the walkthrough | `button_location` = `install_guide`, `platform` | event | - | - |
+| `order_now_click` | landing | "Order now" on the area pages (/aluthgama ...), the category pages and the Sinhala / Tamil pages (/si/, /ta/), added 2026-10-15. These buttons link straight to the shop with `utm_source=blynk.lk`, `utm_medium` (`area_page`, `category_page`, `landing`) and `utm_campaign` (the page, e.g. `aluthgama`) | `button_location` (`header`, `hero`, `products`, `products_grid`, `band`, `about`), `page_path`, `platform` | event (optional: key event) | - | (optional: Lead) |
 | `contact_click` | landing | The "Call" or "WhatsApp us" link | `method` (`call`, `whatsapp`), `link_location` (`footer`). The phone number is never sent | event | - | (optional: Contact) |
 | `login` | shop | A returning customer signs in with the SMS code | `method` = `phone_otp` | login | - | - |
 | `sign_up` | shop | A new customer gives their name after the SMS code | `method` = `phone_otp` | key event | Sign up conversion | CompleteRegistration |
