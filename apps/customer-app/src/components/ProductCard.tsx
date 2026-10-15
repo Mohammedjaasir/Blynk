@@ -4,9 +4,11 @@ import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay } from 'r
 import type { Product } from '@/blynk/api/types';
 import { openProduct } from '@/blynk/catalog/openProduct';
 import { tileLabel } from '@/blynk/catalog/tileLabel';
-import { deliveredFromText, hasVariants, priceText, VARIANT_COPY } from '@/blynk/catalog/variants';
+import { deliveredFromText, hasVariants, priceRange, priceText, VARIANT_COPY } from '@/blynk/catalog/variants';
 import { formatLkr } from '@/blynk/lib/money';
 import { priceDisplay, sizedStruck } from '@/blynk/lib/pricing';
+import { priceRoll, rollPhase } from '@/blynk/lib/priceRoll';
+import { pointsRuleOf } from '@/blynk/store/pointsPromo';
 import { useStore } from '@/blynk/store/StoreContext';
 import { extraOf } from '@/demo/extras';
 import { DEMO } from '@/demo/mode';
@@ -15,6 +17,7 @@ import { withSpring } from '@/lib/motion';
 import { useCartSelect } from '@/lib/cart';
 import { C, F, T } from '@/lib/theme';
 import { NonVegMark, StarIcon, VegMark } from './icons';
+import { PriceRoll } from './PriceRoll';
 import { ProductImage } from './ProductImage';
 import { StruckPrice as StruckPriceText } from './StruckPrice';
 import { AddButton, DemoTicker } from './ui';
@@ -26,8 +29,9 @@ const money = (n: number) => (DEMO ? rupees(n) : formatLkr(n));
  * Dish tile, measured off the reference: photo slot (square on Home's "Meals under ₹99"
  * rail, 134 × 100 inside a store card) with a "Popular" tag, a ★ rating tab and the "+"
  * that opens into "− 1 +"; then the restaurant line, veg mark + name and the price.
- * Live (clean pass, 2026-10-14): the offer price in green, the regular price struck after it,
- * and at most one small label (sold out > offer > "Delivered from", src/blynk/catalog/tileLabel.ts).
+ * Live (clean pass, 2026-10-14): the offer price in green, then one small line that rolls between
+ * the struck reference and the saving (PriceRoll, 2026-10-15), and at most one small label
+ * (sold out > offer > "Delivered from", src/blynk/catalog/tileLabel.ts).
  * In the design mock the photo is an emoji stand-in on a neutral tile, with its
  * "Other apps / Our app" footer.
  */
@@ -43,7 +47,8 @@ export const ProductCard = memo(function ProductCard({
   seen?: boolean;
 }) {
   const inCart = useCartSelect((c) => (c.qty[p.id] ?? 0) > 0);
-  const showSavings = useStore()?.show_offer_savings === true;
+  const store = useStore();
+  const showSavings = store?.show_offer_savings === true;
   // the one price rule (offer, MRP; src/blynk/lib/pricing.ts priceDisplay): struck only while
   // Admin's show_offer_savings is on
   const shown = priceDisplay(p, { showStruck: DEMO || showSavings });
@@ -55,6 +60,13 @@ export const ProductCard = memo(function ProductCard({
   // tile shows one starting price ("From LKR 50" / one price) - never beside a full range, where
   // the regular price stays the reference on an offer (as before)
   const struckPrice = sizedStruck(shown, sized && priceLine.includes('–'), p.selling_price);
+  // live: the struck reference rolls with the saving under the price (src/blynk/lib/priceRoll.ts)
+  const shownMin = sized ? priceRange(p).min : shown.price;
+  const roll = DEMO ? null : priceRoll({
+    shown, struck: struckPrice, offerKind: p.offer_kind, available: p.is_available, points: pointsRuleOf(store), money,
+    priceShown: { amount: shownMin, single: !sized || priceLine === money(shownMin) },
+    maxChars: Math.floor((width - 15) / 6.4), // the tag icon, then ~6.4 pt a character at 12 pt
+  });
   const lead = DEMO ? null : deliveredFromText(p);
   const struck = struckPrice !== null;
   const label = DEMO ? null : tileLabel({ available: p.is_available, offer, struckShown: struck, lead });
@@ -70,7 +82,12 @@ export const ProductCard = memo(function ProductCard({
   const line = sub ?? (wide ? undefined : x?.store);
   return (
     // the whole card opens the product page; the "+" inside keeps its own tap
-    <Pressable style={{ width }} onPress={() => openProduct(p)} accessibilityRole="link" accessibilityLabel={p.name}>
+    <Pressable
+      style={{ width }}
+      onPress={() => openProduct(p)}
+      accessibilityRole="link"
+      accessibilityLabel={DEMO ? p.name : [p.name, priceLine, roll?.label].filter(Boolean).join(', ')}
+    >
       <View style={[styles.img, { width, height: h, borderRadius: wide ? 10 : 14 }, !!tileColor && { backgroundColor: tileColor }]}>
         <Animated.View style={[ea, !p.is_available && { opacity: 0.45 }]}>
           {x?.emoji ? (
@@ -106,20 +123,23 @@ export const ProductCard = memo(function ProductCard({
       {!x && !!unitText(p) && <Text style={styles.unit} numberOfLines={1}>{unitText(p)}</Text>}
       {/*
         Offer (owner, 2026-10-09 / 2026-10-14): the offer price first and prominent, then the regular
-        price struck through. The row wraps, so on a narrow tile the struck price drops to its own
-        line instead of being cut off. Sized products: the offer range, then the cheapest size's
-        regular price struck. Live, the struck price shows while Admin's show_offer_savings is on
-        (as in the cart); it already says "offer", so no "Offer price" / "You save" line under it.
+        price struck through. Live, the struck price shows while Admin's show_offer_savings is on
+        (as in the cart); it already says "offer", so no "Offer price" caption under it.
         MRP (migration 048): when the price is under the MRP, "MRP LKR 300" (amount struck) is the
         struck reference instead - with or without an offer; at the MRP nothing is struck. A sized
         tile strikes its cheapest size's MRP only beside "From LKR 50" / one price, not a full range.
+        Live (2026-10-15, Toing's rolling line): the struck reference sits on its own full-width line
+        under the price (never cut off) and rolls with the saving ("Save LKR 20", "5% off") when the
+        saving is clean - PriceRoll / src/blynk/lib/priceRoll.ts. The design mock keeps the struck
+        price beside the price (the row wraps on a narrow tile) and its "Other apps / Our app" ticker.
       */}
       <View style={styles.priceRow}>
         <Text style={[styles.price, offer && styles.priceOffer]} numberOfLines={1}>
           {priceLine}
         </Text>
-        {struckPrice && <StruckPriceText struck={struckPrice} money={money} style={styles.mrp} />}
+        {DEMO && struckPrice && <StruckPriceText struck={struckPrice} money={money} style={styles.mrp} />}
       </View>
+      {roll && <PriceRoll roll={roll} phase={rollPhase(index, p.id)} money={money} />}
       {!!label && <Text style={[styles.label, label.kind === 'offer' && styles.labelOffer]} numberOfLines={1}>{label.text}</Text>}
       {x && (
         <DemoTicker other={x.other} lowerPct={x.lowerPct} seen={seen} forceSave={inCart} money={money} delay={1400 + Math.min(index, 4) * 140} />

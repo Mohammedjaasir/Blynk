@@ -104,3 +104,27 @@ export const PLACED = {
   track: 'Track order',
   home: 'Back to home',
 } as const;
+
+/**
+ * The one small line under a product tile's price that rolls between the struck reference and
+ * the saving (src/components/PriceRoll.tsx, decided in src/blynk/lib/priceRoll.ts). True facts
+ * only: the saving against the struck regular price / MRP the tile already shows.
+ */
+export const PRICE_ROLL = {
+  save: (amount: string) => `Save ${amount}`,
+  /** Added after the saving when the struck reference is the MRP and the tile has room. */
+  vsMrp: ' vs MRP',
+  /** A category offer's saving ("5% off", as the aisle's "5% off everything here"). */
+  pctOff: (pct: number) => `${pct}% off`,
+  /** Screen reader: the struck reference. */
+  mrp: (amount: string) => `MRP ${amount}`,
+  regular: (amount: string) => `Regular price ${amount}`,
+} as const;
+
+/** The end of Home's list: two quiet lines over the rider bouncing on a trampoline (src/components/HomeFooter.tsx). */
+export const HOME_FOOTER = {
+  small: 'Fresh groceries delivered',
+  large: 'to your door in Dharga Town',
+  /** Read by a screen reader for the (decorative) picture. */
+  label: 'Fresh groceries delivered to your door in Dharga Town',
+} as const;

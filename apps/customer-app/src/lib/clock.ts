@@ -41,3 +41,51 @@ export function runAisleBeat(on: boolean) {
   aisleBeat.value = 0;
   aisleBeat.value = withRepeat(withTiming(1, { duration: AISLE_BEAT_MS, easing: Easing.linear }), -1);
 }
+
+/*
+ * The rolling line under product tiles' prices (src/components/PriceRoll.tsx): one linear 0→1
+ * clock every rolling tile reads with its own phase (rollPhase), so twenty tiles cost twenty
+ * cheap style worklets and no timers or re-renders. It runs while at least one focused screen
+ * shows a rolling tile (holdPriceRoll / its release), and resumes where it paused.
+ */
+export const ROLL_MS = 5600; // ~2.5 s on each line, 0.3 s slides
+export const rollBeat = makeMutable(0);
+let rollHolders = 0;
+const ROLL_TIMING = { duration: ROLL_MS, easing: Easing.linear };
+function startRoll() {
+  const from = rollBeat.value % 1;
+  rollBeat.value = from;
+  rollBeat.value = withTiming(1, { duration: Math.max(1, ROLL_MS * (1 - from)), easing: Easing.linear }, (done) => {
+    if (!done) return;
+    rollBeat.value = 0;
+    rollBeat.value = withRepeat(withTiming(1, ROLL_TIMING), -1);
+  });
+}
+/** Keeps the roll clock running until the returned release is called (ref-counted). */
+export function holdPriceRoll(): () => void {
+  rollHolders += 1;
+  if (rollHolders === 1) startRoll();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    rollHolders = Math.max(0, rollHolders - 1);
+    if (rollHolders === 0) cancelAnimation(rollBeat);
+  };
+}
+
+/*
+ * Home's end-of-list footer (src/components/HomeFooter.tsx): one linear 0→1 clock over 4 s. The
+ * rider's bounce reads it 4× (a 1 s bounce), the floating groceries once or twice. Runs only while
+ * the footer is on screen and Home is focused.
+ */
+export const FOOTER_BEAT_MS = 4000;
+export const footerBeat = makeMutable(0);
+let footerRunning = false;
+export function runFooterBeat(on: boolean) {
+  if (on === footerRunning) return;
+  footerRunning = on;
+  if (!on) { cancelAnimation(footerBeat); return; }
+  footerBeat.value = 0;
+  footerBeat.value = withRepeat(withTiming(1, { duration: FOOTER_BEAT_MS, easing: Easing.linear }), -1);
+}

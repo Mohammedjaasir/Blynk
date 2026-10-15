@@ -30,6 +30,7 @@ import { ClosedBanner } from '@/components/ClosedBanner';
 import {
   BagBadge, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
+import { HomeFooter } from '@/components/HomeFooter';
 import { ProductCard } from '@/components/ProductCard';
 import { PromoBand } from '@/components/PromoBand';
 import { DoctorsHomeEntry } from '@/blynk/doctors/DoctorsHomeEntry';
@@ -87,6 +88,8 @@ const MEAL_W = 155; // "Meals under ₹99" photo
 const DISH_W = 134; // dish photo inside a store card
 const DISH_H = 100;
 const BANNER_H = 183;
+/** Room under the feed for the fee strip, cart bar and Search pill (the footer sits above it). */
+const HOME_PAD_BOTTOM = 160;
 
 type Phase = 'locating' | 'skeleton' | 'content' | 'banner';
 
@@ -130,6 +133,13 @@ export default function Home() {
   const bannerOpen = useSharedValue(0);
   const scrim = useSharedValue(granted ? 0 : 1);
   const rise = useSharedValue(fromSplash ? 1 : 0);
+  // the end-of-list footer animates only while it is on screen (content / viewport sizes, not its
+  // onLayout y: on web that only fires on size changes, and the feed moves when the banner unfolds)
+  const contentH = useSharedValue(0);
+  const viewH = useSharedValue(0);
+  const footerH = useSharedValue(0);
+  const [footerSeen, setFooterSeen] = useState(false);
+  const [focused, setFocused] = useState(true);
 
   const loading = phase === 'locating' || phase === 'skeleton';
   const dark = phase === 'banner';
@@ -205,6 +215,14 @@ export default function Home() {
     },
   );
 
+  // the footer is the last thing above the scroll padding: on screen once the viewport reaches it
+  useAnimatedReaction(
+    () => footerH.value > 0 && y.value + viewH.value > contentH.value - HOME_PAD_BOTTOM - footerH.value + 24,
+    (v, prev) => {
+      if (v !== prev) scheduleOnRN(setFooterSeen, v);
+    },
+  );
+
   const statusA = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       y.value, [headerH.value - 80, headerH.value - 10],
@@ -228,7 +246,8 @@ export default function Home() {
   // the aisle cards' corner animation runs only while Home is the screen in front
   useFocusEffect(useCallback(() => {
     runAisleBeat(true);
-    return () => runAisleBeat(false);
+    setFocused(true);
+    return () => { runAisleBeat(false); setFocused(false); };
   }, []));
   const live = useMemo(() => {
     if (DEMO) return null;
@@ -298,7 +317,9 @@ export default function Home() {
           stickyHeaderIndices={[1]}
           showsVerticalScrollIndicator={false}
           scrollEnabled={!loading}
-          contentContainerStyle={{ paddingBottom: 160 }}
+          contentContainerStyle={{ paddingBottom: HOME_PAD_BOTTOM }}
+          onLayout={(e) => viewH.set(e.nativeEvent.layout.height)}
+          onContentSizeChange={(_w, h) => contentH.set(h)}
         >
           {/* 0 — header: white while locating, ink once the banner unfolds */}
           <Animated.View onLayout={(e) => headerH.set(e.nativeEvent.layout.height)} style={headerA}>
@@ -400,6 +421,12 @@ export default function Home() {
                     ))}
                   </>
                 )}
+
+                {/* the end of the list: "Fresh groceries delivered" over the bouncing rider (clear of
+                    the fee strip / cart bar: HOME_PAD_BOTTOM stays below it) */}
+                <View onLayout={(e) => footerH.set(e.nativeEvent.layout.height)}>
+                  <HomeFooter active={footerSeen && focused} />
+                </View>
               </Animated.View>
             )}
           </View>

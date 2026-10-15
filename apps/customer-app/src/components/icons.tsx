@@ -186,3 +186,11 @@ export const SlidersIcon = ({ size = 16, color = '#333' }: P) => (
     <Circle cx={9} cy={16} r={2.6} stroke={color} strokeWidth={1.8} />
   </Svg>
 );
+
+/** A small price tag (a tile's "Save LKR 20" line). */
+export const TagIcon = ({ size = 12, color = '#0C831F' }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Path d="M2.5 4.2A1.7 1.7 0 014.2 2.5h7.1c.45 0 .88.18 1.2.5l9 9a1.7 1.7 0 010 2.4l-7.1 7.1a1.7 1.7 0 01-2.4 0l-9-9a1.7 1.7 0 01-.5-1.2z" fill={color} />
+    <Circle cx={7.6} cy={7.6} r={1.9} fill="#fff" />
+  </Svg>
+);
