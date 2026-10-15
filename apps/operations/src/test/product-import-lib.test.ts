@@ -53,6 +53,8 @@ describe('productImport: template', () => {
       'parent_sku',
       'variant',
       'delivery_lead_days',
+      // Migration 048 (owner, 2026-10-14): the optional MRP, last.
+      'mrp',
     ]);
   });
 

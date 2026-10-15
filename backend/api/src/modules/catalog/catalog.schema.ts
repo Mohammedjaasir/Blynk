@@ -132,6 +132,19 @@ const focalPercent = z
   .min(0, 'Focal point must be between 0 and 100')
   .max(100, 'Focal point must be between 0 and 100');
 
+/**
+ * Migration 048 (owner, 2026-10-14): the MRP (Maximum Retail Price) of a
+ * product or a size, LKR above 0 with at most 2 decimals; null clears it.
+ * The selling price is capped at it (pricing/index.ts capAtMrp).
+ */
+export const mrpSchema = z
+  .number({ invalid_type_error: 'MRP must be a number' })
+  .positive('MRP must be above 0')
+  .max(99_999_999.99, 'MRP cannot exceed 99,999,999.99')
+  .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'MRP can have at most 2 decimals')
+  .nullable()
+  .optional();
+
 const productBaseSchema = z.object({
   category_id: z.string().uuid('category_id must be a valid UUID'),
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(255),
@@ -174,6 +187,8 @@ const productBaseSchema = z.object({
     .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'Selling price can have at most 2 decimals')
     .nullable()
     .optional(),
+  // Migration 048: the MRP; null/omitted = none. The customer never pays more.
+  mrp: mrpSchema,
   is_available: z.boolean().default(true).optional(),
   is_active: z.boolean().default(true).optional(),
   // Migration 045 (owner, 2026-10-14): "items that can only be delivered

@@ -6,7 +6,7 @@ import { PageHeader } from '../../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Spinner } from '../../components/ui';
 import { catalogErrorMessage, leadTimeLabel, productPriceText } from '../../lib/catalog';
 import { staffStockBadge } from '../../lib/inventory';
-import { percentText, pricingSourceLabel } from '../../lib/pricing';
+import { mrpCappedNote, percentText, pricingSourceLabel } from '../../lib/pricing';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -183,8 +183,16 @@ export function Products() {
                 {/* A product with variants shows its price range (migration 045). */}
                 <p className="cat-row__price">
                   {productPriceText(product) ?? `LKR ${Number(product.calculated_selling_price ?? 0).toFixed(2)}`}
+                  {/* MRP (migration 048): compact, on the price line. */}
+                  {!product.has_variants && product.mrp != null ? (
+                    <span className="cat-row__meta">{` · MRP LKR ${Number(product.mrp).toFixed(2)}`}</span>
+                  ) : null}
                 </p>
+                {!product.has_variants && product.mrp_capped && product.computed_selling_price != null ? (
+                  <p className="mrp-capped">{mrpCappedNote(product.pricing_mode, Number(product.computed_selling_price))}</p>
+                ) : null}
                 {!product.has_variants &&
+                !product.mrp_capped &&
                 product.pricing_source &&
                 product.pricing_source !== 'FIXED' &&
                 product.effective_markup_percent != null ? (

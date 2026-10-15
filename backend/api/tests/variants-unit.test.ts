@@ -141,6 +141,8 @@ describe('customer price range of a product with variants', () => {
       offer_ends_at: null,
       offer_kind: 'CATEGORY',
       price: 45.5,
+      // Migration 048: no MRP on this row.
+      mrp: null,
       is_available: true,
     });
     for (const key of STAFF_ONLY) expect(dto).not.toHaveProperty(key);

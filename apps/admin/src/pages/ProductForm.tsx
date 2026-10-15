@@ -21,10 +21,13 @@ import { formatMoney } from '../lib/orders';
 import { MAX_LEAD_DAYS, parseWhole } from '../lib/stock';
 import {
   MAX_SELLING_PRICE,
+  capAtMrp,
   formatLkr,
   formatPercent,
   inheritedMarkup,
   markupSourceText,
+  mrpCappedNote,
+  parseMrpInput,
   previewPrice,
   round2 as roundCents,
   type InheritedMarkup,
@@ -44,6 +47,7 @@ const INLINE_FIELDS = [
   'purchase_cost',
   'custom_markup_percent',
   'fixed_selling_price',
+  'mrp',
   'offer_price',
   'offer_ends_at',
   'delivery_lead_days',
@@ -101,6 +105,8 @@ interface FormState {
   custom_markup_percent: string;
   /** The fixed selling price as typed (Fixed price mode). */
   fixed_selling_price: string;
+  /** MRP (migration 048) as typed; blank = none. The selling price is capped at it. */
+  mrp: string;
   /** Offer price (owner, 2026-10-09); blank = no offer. */
   offer_price: string;
   /** YYYY-MM-DD in Colombo; blank = no end date. */
@@ -133,6 +139,7 @@ const EMPTY: FormState = {
   pricing_mode: 'MARKUP',
   custom_markup_percent: '',
   fixed_selling_price: '',
+  mrp: '',
   offer_price: '',
   offer_ends_on: '',
   offer_mode: 'price',
@@ -156,9 +163,12 @@ interface StoredPricing {
   pricing_mode: PricingMode;
   custom_markup_percent: string;
   fixed_selling_price: string;
+  /** The price the rule gave before the MRP cap (migration 048). */
   price: number | null;
   source: PricingSource | null;
   markup: number | null;
+  /** The saved MRP as text ('' = none). */
+  mrp: string;
 }
 
 /** The preview line's data; `legacy` = an API from before pricing sources (price only). */
@@ -251,6 +261,7 @@ export function ProductForm() {
           product.fixed_selling_price === null || product.fixed_selling_price === undefined
             ? ''
             : String(product.fixed_selling_price);
+        const mrpText = product.mrp === null || product.mrp === undefined ? '' : String(product.mrp);
         setForm({
           category_id: product.category_id,
           name: product.name,
@@ -264,6 +275,7 @@ export function ProductForm() {
           pricing_mode: mode,
           custom_markup_percent: customMarkup,
           fixed_selling_price: fixedPrice,
+          mrp: mrpText,
           offer_price:
             product.offer_price === null || product.offer_price === undefined
               ? ''
@@ -294,9 +306,11 @@ export function ProductForm() {
           pricing_mode: mode,
           custom_markup_percent: customMarkup,
           fixed_selling_price: fixedPrice,
-          price: product.calculated_selling_price ?? product.selling_price ?? null,
+          // Migration 048: the price before the MRP cap (the form applies the cap itself).
+          price: product.computed_selling_price ?? product.calculated_selling_price ?? product.selling_price ?? null,
           source: product.pricing_source ?? null,
           markup: product.effective_markup_percent ?? null,
+          mrp: mrpText,
         });
         setProductGlobalMarkup(product.global_markup_percent ?? null);
         setStoredOffer({ price: product.offer_price ?? null, endsAt: product.offer_ends_at ?? null });
@@ -364,11 +378,22 @@ export function ProductForm() {
     });
   }, [form, storedPricing, inherited, selectedCategory, categories]);
 
-  /** The selling price the offer must beat: the preview, else the saved one. */
+  /** The MRP as typed (migration 048): a number, null = none, undefined = not valid yet. */
+  const mrpValue = useMemo(() => {
+    const parsed = parseMrpInput(form.mrp);
+    return 'value' in parsed ? parsed.value : undefined;
+  }, [form.mrp]);
+
+  /**
+   * The selling price the offer must beat: the preview (else the saved
+   * price), capped at the MRP (migration 048).
+   */
   const sellingPrice = useMemo(() => {
     const price = preview?.price ?? storedPricing?.price ?? null;
-    return price === null || !Number.isFinite(price) ? null : Math.round(price * 100) / 100;
-  }, [preview, storedPricing]);
+    if (price === null || !Number.isFinite(price)) return null;
+    return capAtMrp(Math.round(price * 100) / 100, mrpValue).price;
+  }, [preview, storedPricing, mrpValue]);
+  const mrpCapped = preview !== null && mrpValue !== undefined && capAtMrp(preview.price, mrpValue).capped;
 
   /** Markup | Fixed price. Switching to Fixed with no price starts from the current one. */
   function setPricingMode(mode: PricingMode) {
@@ -456,6 +481,9 @@ export function ProductForm() {
         next.custom_markup_percent = 'Markup must be between 0 and 999.99';
       }
     }
+    // MRP (migration 048): optional, above 0.
+    const mrp = parseMrpInput(form.mrp);
+    if ('error' in mrp) next.mrp = mrp.error;
     // Offer (owner, 2026-10-09). An ended offer left untouched is not
     // re-checked: it is not sent, and the backend keeps it as stored.
     if (offerText !== '' && (offerChanged || !storedOfferEnded)) {
@@ -467,7 +495,9 @@ export function ProductForm() {
       } else if (!Number.isFinite(offer) || offer <= 0 || (form.offer_mode === 'price' && !MONEY_INPUT.test(offerText))) {
         next.offer_price = 'Enter a price above 0 with at most 2 decimals';
       } else if (sellingPrice !== null && offer >= sellingPrice) {
-        next.offer_price = `The offer price must be lower than the selling price (${formatMoney(sellingPrice)}).`;
+        next.offer_price = mrpCapped
+          ? `The offer price must be lower than the selling price (${formatMoney(sellingPrice)}, capped at the MRP).`
+          : `The offer price must be lower than the selling price (${formatMoney(sellingPrice)}).`;
       }
       if (form.offer_ends_on && form.offer_ends_on !== storedOfferDay && form.offer_ends_on < colomboDate()) {
         next.offer_ends_at = 'Pick today or a later day';
@@ -554,6 +584,8 @@ export function ProductForm() {
       payload.custom_markup_percent =
         form.custom_markup_percent.trim() === '' ? null : Number(form.custom_markup_percent);
     }
+    // MRP (migration 048): sent only when it changed (blank clears it).
+    if (form.mrp.trim() !== (storedPricing?.mrp ?? '')) payload.mrp = form.mrp.trim() === '' ? null : Number(form.mrp.trim());
     // Offer fields go only when they changed (owner, 2026-10-09): a cleared
     // price removes the offer (the backend clears its end too), and an
     // unchanged end is resent exactly as stored.
@@ -766,7 +798,19 @@ export function ProductForm() {
               />
             </Field>
           )}
-          <PricePreviewNote preview={preview} mode={form.pricing_mode} />
+          <Field
+            label="MRP (LKR)"
+            hint="Optional. The Maximum Retail Price on the pack. If the selling price is higher, customers pay the MRP"
+            error={errors.mrp}
+          >
+            <input
+              className="input"
+              inputMode="decimal"
+              value={form.mrp}
+              onChange={(event) => setForm({ ...form, mrp: event.target.value })}
+            />
+          </Field>
+          <PricePreviewNote preview={preview} mode={form.pricing_mode} mrp={mrpValue ?? null} />
         </section>
 
         <section className="form__section" aria-label="Offer">
@@ -1000,7 +1044,11 @@ export function ProductForm() {
 }
 
 /** The live selling price under the pricing fields (the server recalculates on save). */
-function PricePreviewNote({ preview, mode }: { preview: FormPreview | null; mode: PricingMode }) {
+function PricePreviewNote({ preview, mode, mrp }: { preview: FormPreview | null; mode: PricingMode; mrp: number | null }) {
+  // Migration 048: a price above the MRP is capped at it.
+  if (preview && mrp !== null && capAtMrp(preview.price, mrp).capped) {
+    return <MrpCappedNote computed={preview.price} mrp={mrp} mode={preview.mode} />;
+  }
   if (!preview) {
     return (
       <p className="form__note" role="status">
@@ -1033,12 +1081,40 @@ function PricePreviewNote({ preview, mode }: { preview: FormPreview | null; mode
             Below purchase cost — you lose {formatLkr(preview.lossPerUnit)} per unit. You can still save it.
           </p>
         ) : null}
+        {mrp !== null ? <MrpBelowNote price={preview.price} mrp={mrp} /> : null}
       </>
     );
   }
   return (
+    <>
+      <p className="form__note" role="status">
+        Selling price {formatLkr(preview.price)} ({markupSourceText(preview.source, preview.markup, preview.categoryName)})
+      </p>
+      {mrp !== null ? <MrpBelowNote price={preview.price} mrp={mrp} /> : null}
+    </>
+  );
+}
+
+/** Migration 048: the selling price is the MRP; says what the markup / fixed price would give. */
+export function MrpCappedNote({ computed, mrp, mode }: { computed: number; mrp: number; mode: PricingMode }) {
+  return (
+    <>
+      <p className="form__note" role="status">
+        Selling price {formatLkr(mrp)} (the MRP)
+      </p>
+      <p className="form__note mrp-capped" role="status">
+        {mrpCappedNote(mode, computed)}
+      </p>
+    </>
+  );
+}
+
+/** Migration 048: the price is under the MRP, so the app shows the MRP struck through. */
+function MrpBelowNote({ price, mrp }: { price: number; mrp: number }) {
+  if (!(price < mrp)) return null;
+  return (
     <p className="form__note" role="status">
-      Selling price {formatLkr(preview.price)} ({markupSourceText(preview.source, preview.markup, preview.categoryName)})
+      Below the MRP ({formatLkr(mrp)}): customers see the MRP struck through next to the price.
     </p>
   );
 }

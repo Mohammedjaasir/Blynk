@@ -254,6 +254,8 @@ export class CatalogRepository {
         'has_variants',
         'is_orderable',
         'delivery_lead_days',
+        // Migration 048: the MRP (shown only when above the price paid).
+        'mrp',
       ])
       .where('is_active', '=', true);
 
@@ -377,6 +379,8 @@ export class CatalogRepository {
         'has_variants',
         'is_orderable',
         'delivery_lead_days',
+        // Migration 048: the MRP (shown only when above the price paid).
+        'mrp',
       ])
       .where('is_active', '=', true);
 
@@ -500,6 +504,8 @@ export class CatalogRepository {
     custom_markup_percent?: number | null;
     pricing_mode?: 'MARKUP' | 'FIXED';
     fixed_selling_price?: number | null;
+    /** Migration 048: the MRP (null = none). */
+    mrp?: number | null;
     is_available?: boolean;
     is_active?: boolean;
     delivery_lead_days?: number;
@@ -526,6 +532,7 @@ export class CatalogRepository {
         custom_markup_percent: data.custom_markup_percent ?? null,
         pricing_mode: data.pricing_mode ?? 'MARKUP',
         fixed_selling_price: data.fixed_selling_price ?? null,
+        mrp: data.mrp ?? null,
         is_available: data.is_available ?? true,
         is_active: data.is_active ?? true,
         delivery_lead_days: data.delivery_lead_days ?? 0,
@@ -559,6 +566,7 @@ export class CatalogRepository {
       custom_markup_percent?: number | null;
       pricing_mode?: 'MARKUP' | 'FIXED';
       fixed_selling_price?: number | null;
+      mrp?: number | null;
       is_available?: boolean;
       is_active?: boolean;
       delivery_lead_days?: number;

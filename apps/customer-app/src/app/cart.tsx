@@ -54,7 +54,7 @@ import { PAY } from '@/blynk/payments/copy';
 import { effectiveMethod, methodBody, onlineInfo, onlineOffered, type PayMethod } from '@/blynk/payments/method';
 import { PaymentChoice } from '@/blynk/payments/PaymentChoice';
 import { requestPushPermission } from '@/blynk/push';
-import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
+import { effectivePrice, isOfferActive, priceDisplay } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
 import { invalidateFreeClaim } from '@/blynk/store/useFreeClaim';
 import { cartEarn, cartPointsLine, pointsRuleOf } from '@/blynk/store/pointsPromo';
@@ -62,6 +62,7 @@ import { ClosedBanner, useStoreClosed } from '@/components/ClosedBanner';
 import { FEE, FeeHeader } from '@/components/FeeHeader';
 import { BackIcon, ChevronIcon, CloseIcon, NavIcon, VegMark } from '@/components/icons';
 import { ProductImage } from '@/components/ProductImage';
+import { StruckPrice } from '@/components/StruckPrice';
 import { Collapsible, PressScale, Skeleton, StampBadge, tap } from '@/components/ui';
 import { BILL, COPY, MEAL_PICKS, rupee } from '@/demo/cart';
 import { LIVE, liveBill, liveOfferRows, type LiveBill } from '@/demo/cartLive';
@@ -862,8 +863,9 @@ function LiveLine({ line, showSavings }: { line: CartLine; showSavings: boolean 
   const { product: p, quantity: qty, variant } = line;
   const ok = lineAvailable(line);
   const priced = linePriced(line);
-  // the struck regular price shows only while Admin's show_offer_savings is on
-  const offer = showSavings && ok && isOfferActive(priced);
+  // the struck reference (the regular price on an offer, or "MRP LKR 300" when the price is under
+  // the MRP - migration 048) shows only while Admin's show_offer_savings is on
+  const struck = priceDisplay(priced, { showStruck: showSavings && ok }).struck;
   const why = needsVariant(line) ? VARIANT_COPY.pickSizeAgain : variant || p.is_available === false ? VARIANT_COPY.soldOut : LIVE.unavailable;
   return (
     <Animated.View exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={[styles.itemRow, variant && { height: undefined, minHeight: 50, paddingVertical: 6 }]}>
@@ -879,7 +881,7 @@ function LiveLine({ line, showSavings }: { line: CartLine; showSavings: boolean 
         <PressScale onPress={() => cartActions.setQty(p, 0, variant)} style={styles.removeBtn}><Text style={styles.removeTxt}>{LIVE.remove}</Text></PressScale>
       )}
       <View style={[styles.priceCol, { width: 78 }]}>
-        {offer && <Text style={styles.itemStrike}>{formatLkr(round2(priced.selling_price * qty))}</Text>}
+        {struck && <StruckPrice struck={{ ...struck, amount: round2(struck.amount * qty) }} money={formatLkr} style={styles.itemStrike} />}
         {ok && <Text style={[styles.itemPrice, { fontSize: 13 }]}>{formatLkr(round2(lineUnitPrice(line) * qty))}</Text>}
       </View>
     </Animated.View>

@@ -112,6 +112,8 @@ export interface CreateOrderData {
     /** Migration 045: the variant ordered (null/absent = the product itself) and its label. */
     variant_id?: string | null;
     variant_label_snapshot?: string | null;
+    /** Migration 048: the MRP of the product / size when ordered (null = none). */
+    mrp_snapshot?: number | null;
     product_name_snapshot: string;
     sku_snapshot: string;
     unit_snapshot: string;
@@ -278,6 +280,8 @@ export class OrderRepository {
         'pv.custom_markup_percent',
         'pv.offer_price',
         'pv.offer_ends_at',
+        // Migration 048: the size's MRP (its price is capped at it).
+        'pv.mrp',
         'v.is_active',
         'v.is_available',
       ])
@@ -456,6 +460,8 @@ export class OrderRepository {
         order_combo_id: item.combo_index !== undefined ? comboRows[item.combo_index].id : null,
         // Migration 045: written only for a variant line (NULL defaults otherwise).
         ...(item.variant_id ? { variant_id: item.variant_id, variant_label_snapshot: item.variant_label_snapshot ?? null } : {}),
+        // Migration 048: written only when the line had an MRP (NULL default otherwise).
+        ...(item.mrp_snapshot != null ? { mrp_snapshot: item.mrp_snapshot } : {}),
       }));
 
       const items = await trx

@@ -172,16 +172,22 @@ export function assertOfferAllowed(args: {
   sellingPrice: number;
   endsAt: string | null;
   endsAtChanged: boolean;
+  /** Migration 048: the selling price is the MRP (the markup / fixed price was higher). */
+  mrpCapped?: boolean;
   now?: Date;
 }) {
-  const { offerPrice, sellingPrice, endsAt, endsAtChanged, now = new Date() } = args;
+  const { offerPrice, sellingPrice, endsAt, endsAtChanged, mrpCapped = false, now = new Date() } = args;
   if (offerPrice === null) return;
+  // Migration 048: sellingPrice is already capped at the MRP, so an offer at
+  // or above the MRP is refused here too.
   if (!(offerPrice < sellingPrice)) {
     throw new AppError(
-      `The offer price must be lower than the selling price (LKR ${sellingPrice.toFixed(2)}).`,
+      mrpCapped
+        ? `The offer price must be lower than the selling price (LKR ${sellingPrice.toFixed(2)}, capped at the MRP).`
+        : `The offer price must be lower than the selling price (LKR ${sellingPrice.toFixed(2)}).`,
       400,
       'OFFER_PRICE_NOT_LOWER',
-      { offer_price: offerPrice, selling_price: sellingPrice }
+      { offer_price: offerPrice, selling_price: sellingPrice, ...(mrpCapped ? { mrp_capped: true } : {}) }
     );
   }
   if (endsAt !== null && endsAtChanged && new Date(endsAt).getTime() <= now.getTime()) {

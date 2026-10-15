@@ -16,7 +16,10 @@ import { staffStockBadge } from '../../lib/inventory';
 import {
   FALLBACK_DEFAULT_MARKUP_PERCENT,
   belowCostText,
+  capAtMrp,
+  mrpCappedNote,
   parseMarkupPercent,
+  parseMrpInput,
   parseSellingPrice,
   percentText,
   resolveVariantPrice,
@@ -128,7 +131,14 @@ export function ProductVariants({
                   <p className="cat-row__meta">
                     {variant.sku ?? 'No SKU'} · cost LKR {Number(variant.purchase_cost).toFixed(2)}
                   </p>
-                  <p className="cat-row__price">LKR {Number(variant.selling_price).toFixed(2)}</p>
+                  <p className="cat-row__price">
+                    LKR {Number(variant.selling_price).toFixed(2)}
+                    {variant.mrp != null ? <span className="cat-row__meta"> · MRP LKR {Number(variant.mrp).toFixed(2)}</span> : null}
+                  </p>
+                  {/* Migration 048: the size's price is its MRP. */}
+                  {variant.mrp_capped && variant.computed_selling_price != null ? (
+                    <p className="mrp-capped">{mrpCappedNote(variant.pricing_mode, Number(variant.computed_selling_price))}</p>
+                  ) : null}
                   <div className="cat-row__badges product-chips">
                     <Badge tone={variant.is_active ? 'active' : 'inactive'}>{variant.is_active ? 'Active' : 'Inactive'}</Badge>
                     {!variant.is_available ? <Badge tone="muted">Unavailable</Badge> : null}
@@ -244,6 +254,8 @@ interface VariantFormState {
   pricing_mode: PricingMode;
   custom_markup_percent: string;
   fixed_selling_price: string;
+  /** Migration 048: this size's MRP; '' = none. */
+  mrp: string;
   offer_price: string;
   offer_end_day: string;
   is_active: boolean;
@@ -266,6 +278,7 @@ function initialState(variant: StaffVariant | null): VariantFormState {
       pricing_mode: 'MARKUP',
       custom_markup_percent: '',
       fixed_selling_price: '',
+      mrp: '',
       offer_price: '',
       offer_end_day: '',
       is_active: true,
@@ -284,6 +297,7 @@ function initialState(variant: StaffVariant | null): VariantFormState {
     pricing_mode: variant.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP',
     custom_markup_percent: str(variant.custom_markup_percent),
     fixed_selling_price: str(variant.fixed_selling_price),
+    mrp: str(variant.mrp),
     offer_price: str(variant.offer_price),
     offer_end_day: variant.offer_ends_at ? colomboDay(variant.offer_ends_at) : '',
     is_active: variant.is_active,
@@ -376,11 +390,20 @@ function VariantDialog({
       return null;
     }
   }, [form.pricing_mode, form.fixed_selling_price, form.custom_markup_percent, cost, product, globalMarkup]);
-  const previewPrice = preview?.sellingPrice ?? variant?.selling_price ?? null;
-  const belowCost = preview && cost !== null && preview.pricingMode === 'FIXED' ? belowCostText(cost, preview.sellingPrice) : null;
+  // Migration 048: the size's MRP caps its price.
+  const mrpParsed = parseMrpInput(form.mrp);
+  const mrpValue = 'value' in mrpParsed ? mrpParsed.value : undefined;
+  const capped = preview ? capAtMrp(preview.sellingPrice, mrpValue) : null;
+  const previewPrice = capped?.price ?? variant?.selling_price ?? null;
+  const belowCost =
+    capped && cost !== null && (preview?.pricingMode === 'FIXED' || capped.capped) ? belowCostText(cost, capped.price) : null;
 
   const offerText = form.offer_price.trim();
-  const offerParsed = offerText === '' ? null : parseOfferPrice(form.offer_price, previewPrice);
+  const offerRaw = offerText === '' ? null : parseOfferPrice(form.offer_price, previewPrice);
+  const offerParsed =
+    offerRaw && 'error' in offerRaw && capped?.capped && offerRaw.error.startsWith('The offer price must be lower')
+      ? { error: offerRaw.error.replace(/\)\.$/, ', capped at the MRP).') }
+      : offerRaw;
   const offerPriceChanged = offerText !== saved.offer_price;
   const offerEndChanged = form.offer_end_day !== saved.offer_end_day;
 
@@ -402,7 +425,8 @@ function VariantDialog({
       const markup = parseMarkupPercent(form.custom_markup_percent);
       if ('error' in markup) next.custom_markup_percent = markup.error;
     }
-    if (offerParsed && 'error' in offerParsed && (offerPriceChanged || offerEndChanged)) next.offer_price = offerParsed.error;
+    if ('error' in mrpParsed) next.mrp = mrpParsed.error;
+    if (offerParsed && 'error' in offerParsed && (offerPriceChanged || offerEndChanged || form.mrp !== saved.mrp)) next.offer_price = offerParsed.error;
     if (form.offer_end_day !== '') {
       if (offerText === '') next.offer_end_day = 'Enter an offer price first';
       else if (offerEndChanged && form.offer_end_day < colomboTodayDay()) next.offer_end_day = 'Pick today or a later day';
@@ -449,6 +473,8 @@ function VariantDialog({
       barcode: form.barcode.trim() || null,
       purchase_cost: cost,
       ...pricingFields(),
+      // Migration 048: the size's MRP - only when set (new) or changed (blank clears it).
+      ...((variant ? form.mrp.trim() !== saved.mrp.trim() : form.mrp.trim() !== '') ? { mrp: 'value' in mrpParsed ? mrpParsed.value : null } : {}),
       is_active: form.is_active,
       is_available: form.is_available,
     };
@@ -561,11 +587,27 @@ function VariantDialog({
             />
           </Field>
         )}
-        <p className="form__note" aria-live="polite">
-          {preview
-            ? `Selling price LKR ${preview.sellingPrice.toFixed(2)} (${variantPriceSourceText(preview)})`
-            : 'Enter the purchase cost to see the selling price.'}
-        </p>
+        <Field
+          label="MRP (LKR)"
+          hint="Optional. This size's printed Maximum Retail Price. If its selling price is higher, customers pay the MRP"
+          error={errors.mrp}
+        >
+          <input className="input" inputMode="decimal" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: e.target.value })} />
+        </Field>
+        {preview && capped?.capped ? (
+          <>
+            <p className="form__note" aria-live="polite">{`Selling price LKR ${capped.price.toFixed(2)} (the MRP)`}</p>
+            <p className="form__note mrp-capped" role="status">
+              {mrpCappedNote(preview.pricingMode, preview.sellingPrice)}
+            </p>
+          </>
+        ) : (
+          <p className="form__note" aria-live="polite">
+            {preview
+              ? `Selling price LKR ${preview.sellingPrice.toFixed(2)} (${variantPriceSourceText(preview)})`
+              : 'Enter the purchase cost to see the selling price.'}
+          </p>
+        )}
         {belowCost ? (
           <p className="field__error" role="alert">
             {`${belowCost}. You can still save it.`}

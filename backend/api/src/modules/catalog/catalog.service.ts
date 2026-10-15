@@ -29,6 +29,7 @@ import {
 import type { CategoryOfferInput } from './catalog.schema.js';
 import {
   customerVariantsFor,
+  publicMrp,
   staffStockFor,
   staffVariantsFor,
   variantPriceRange,
@@ -60,8 +61,15 @@ export interface CustomerProductDto {
    */
   image_focal_x: number;
   image_focal_y: number;
-  /** The regular price; the app strikes it through while an offer is on. */
+  /** The regular price (capped at the MRP); the app strikes it through while an offer is on. */
   selling_price: number;
+  /**
+   * Migration 048 (owner, 2026-10-14): the MRP, sent ONLY when it is above
+   * the price the customer pays right now (offer_price ?? selling_price);
+   * null otherwise (no MRP, or the price equals it). The app shows it struck
+   * through as "MRP LKR 300". With variants: the cheapest size's.
+   */
+  mrp: number | null;
   /**
    * Migration 031 (owner, 2026-10-09): the price charged while the product
    * is on offer. Both fields are null unless the offer is active right now.
@@ -128,6 +136,7 @@ function toCustomerProduct(p: CustomerCatalogRow, variants: CustomerVariantDto[]
     image_focal_y: clampFocal(p.image_focal_y),
     selling_price: headline ? headline.selling_price : selling,
     ...(headline ? { offer_price: headline.offer_price, offer_ends_at: headline.offer_ends_at, offer_kind: headline.offer_kind } : own),
+    mrp: headline ? headline.mrp : publicMrp(p.mrp, ownPrice),
     is_available: p.is_orderable === true,
     has_variants: p.has_variants === true,
     variant_count: variants?.length ?? 0,
@@ -659,12 +668,14 @@ export class CatalogService {
         pricingMode,
         fixedSellingPrice: input.fixed_selling_price ?? null,
         customMarkupPercent: input.custom_markup_percent ?? null,
+        mrp: input.mrp ?? null,
       });
       assertOfferAllowed({
         offerPrice,
         sellingPrice: price.sellingPrice,
         endsAt: input.offer_ends_at ?? null,
         endsAtChanged: true,
+        mrpCapped: price.mrpCapped,
       });
     }
 
@@ -687,6 +698,7 @@ export class CatalogService {
       custom_markup_percent: input.custom_markup_percent,
       pricing_mode: pricingMode,
       fixed_selling_price: input.fixed_selling_price ?? null,
+      mrp: input.mrp ?? null,
       is_available: input.is_available ?? true,
       is_active: input.is_active ?? true,
       delivery_lead_days: input.delivery_lead_days ?? 0,
@@ -775,11 +787,12 @@ export class CatalogService {
       input.custom_markup_percent !== undefined ||
       input.pricing_mode !== undefined ||
       input.fixed_selling_price !== undefined ||
+      // Migration 048: a lower MRP can push the (capped) price under the offer.
+      input.mrp !== undefined ||
       (input.category_id !== undefined && input.category_id !== existing.category_id);
     if (offerPrice !== null && (input.offer_price !== undefined || costTouched || endsAtChanged)) {
-      const sellingPrice = costTouched
-        ? (
-            await priceForProduct({
+      const after = costTouched
+        ? await priceForProduct({
               categoryId: input.category_id ?? existing.category_id,
               purchaseCost: input.purchase_cost ?? Number(existing.purchase_cost),
               pricingMode,
@@ -790,10 +803,10 @@ export class CatalogService {
                   : existing.custom_markup_percent === null
                     ? null
                     : Number(existing.custom_markup_percent),
+              mrp: input.mrp !== undefined ? input.mrp : existing.mrp === null || existing.mrp === undefined ? null : Number(existing.mrp),
             })
-          ).sellingPrice
-        : Number(Number(existing.calculated_selling_price).toFixed(2));
-      assertOfferAllowed({ offerPrice, sellingPrice, endsAt: offerEnds, endsAtChanged });
+        : { sellingPrice: Number(Number(existing.calculated_selling_price).toFixed(2)), mrpCapped: existing.mrp_capped === true };
+      assertOfferAllowed({ offerPrice, sellingPrice: after.sellingPrice, endsAt: offerEnds, endsAtChanged, mrpCapped: after.mrpCapped });
     }
     const offerChanged = input.offer_price !== undefined || input.offer_ends_at !== undefined;
 
@@ -815,6 +828,7 @@ export class CatalogService {
         : {}),
       ...(input.pricing_mode !== undefined ? { pricing_mode: input.pricing_mode } : {}),
       ...(input.fixed_selling_price !== undefined ? { fixed_selling_price: input.fixed_selling_price } : {}),
+      ...(input.mrp !== undefined ? { mrp: input.mrp } : {}),
       ...(input.is_available !== undefined ? { is_available: input.is_available } : {}),
       ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
       ...(input.delivery_lead_days !== undefined ? { delivery_lead_days: input.delivery_lead_days } : {}),

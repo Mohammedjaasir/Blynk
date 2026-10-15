@@ -2492,6 +2492,17 @@ a.cat-row__main {
   color: var(--danger);
   font-weight: 600;
 }
+/* MRP (migration 048): "Capped at MRP (markup would give LKR 150.00)" under
+   a price - the amber used for a cash surplus, never the danger red. */
+.mrp-capped {
+  display: block;
+  margin-top: 2px;
+  color: #8a5a00;
+  font-weight: 600;
+  font-size: var(--text-meta);
+  white-space: normal;
+}
+
 .import-steps ul {
   margin: 4px 0 0;
   padding-left: 18px;

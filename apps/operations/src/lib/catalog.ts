@@ -34,6 +34,17 @@ export function catalogErrorMessage(err: unknown): string {
   return err.message;
 }
 
+/**
+ * The server's reason for one field of a VALIDATION_ERROR (details[].field),
+ * or null - so a form can show it under that field (e.g. 'mrp', migration 048).
+ */
+export function serverFieldError(err: unknown, field: string): string | null {
+  if (!(err instanceof ApiError) || err.code !== 'VALIDATION_ERROR') return null;
+  const details = err.details as Array<{ field?: string; message?: string }> | undefined;
+  if (!Array.isArray(details)) return null;
+  return details.find((d) => d.field === field && d.message)?.message ?? null;
+}
+
 /** The delivery fee the API accepts: LKR 0-1000, at most 2 decimals. */
 export const MAX_DELIVERY_FEE_LKR = 1000;
 

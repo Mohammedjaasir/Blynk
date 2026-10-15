@@ -5,6 +5,7 @@ import type { ImportResult, ImportRowResult } from '../../api/types';
 import { PageHeader } from '../../components/Layout';
 import { Badge, Spinner } from '../../components/ui';
 import { catalogErrorMessage } from '../../lib/catalog';
+import { mrpCappedNote } from '../../lib/pricing';
 import {
   CATEGORY_HELP,
   TEMPLATE_COLUMNS,
@@ -222,6 +223,7 @@ export function ProductImport() {
             {dryRun
               ? ` · ${dryRun.summary.created} new · ${dryRun.summary.updated} updates · ${dryRun.summary.skipped} unchanged`
               : ''}
+            {dryRun?.mrp_capped ? ` · ${dryRun.mrp_capped} capped at MRP` : ''}
             {errorCountBeforeImport > 0 ? ` · ${errorCountBeforeImport} with errors` : ''}
           </p>
           <div className="import-table__wrap">
@@ -247,6 +249,9 @@ export function ProductImport() {
                   const isVariant = isVariantImportRow(r.data) || server?.kind === 'variant';
                   const parentSku = r.data.parent_sku ?? server?.parent_sku ?? '';
                   const variantLabel = r.data.variant ?? server?.variant ?? '';
+                  // MRP (migration 048): the dry run's word, else the file's cell.
+                  const mrp = server?.pricing ? server.pricing.mrp : r.data.mrp;
+                  const capped = server?.pricing?.mrp_capped && server.pricing.computed_selling_price != null;
                   return (
                     <tr key={r.row} className={bad ? 'import-table__row--bad' : undefined}>
                       <td className="mono">{r.row}</td>
@@ -270,7 +275,16 @@ export function ProductImport() {
                       <td className="mono">{r.data.sku}</td>
                       <td>{isVariant ? '—' : r.data.sub_category ? `${r.data.category} › ${r.data.sub_category}` : r.data.category}</td>
                       <td className="mono">{r.data.purchase_cost.toFixed(2)}</td>
-                      <td className="mono">{bad || pricing.price === null ? '—' : pricing.price.toFixed(2)}</td>
+                      <td className="mono">
+                        {bad || pricing.price === null ? '—' : pricing.price.toFixed(2)}
+                        {bad ? null : capped ? (
+                          <span className="import-table__parent mrp-capped">
+                            {mrpCappedNote(server?.pricing?.pricing_mode, Number(server?.pricing?.computed_selling_price))}
+                          </span>
+                        ) : mrp != null ? (
+                          <span className="import-table__parent">{`MRP ${Number(mrp).toFixed(2)}`}</span>
+                        ) : null}
+                      </td>
                       <td>{bad ? '—' : <Badge tone="muted">{pricing.label}</Badge>}</td>
                       <td>
                         {r.errors.length > 0
@@ -334,6 +348,7 @@ export function ProductImport() {
               <span className="card__value mono">{result.summary.errors + notSent}</span>
             </p>
           </div>
+          {result.mrp_capped ? <p className="quiet">{`${result.mrp_capped} capped at MRP`}</p> : null}
           {notSent > 0 ? <p className="quiet">Includes {notSent} {notSent === 1 ? 'row' : 'rows'} not sent because of errors.</p> : null}
           <div className="actions-row">
             {result.summary.errors + notSent > 0 ? (

@@ -7,9 +7,12 @@ import { formatMoney } from '../lib/orders';
 import {
   MAX_SELLING_PRICE,
   PRICING_SOURCE_LABEL,
+  capAtMrp,
   formatLkr,
   formatPercent,
+  mrpCappedNote,
   parseMarkupInput,
+  parseMrpInput,
   resolveVariantPrice,
   variantSourceText,
   type ResolvedVariantPrice,
@@ -49,6 +52,7 @@ const VARIANT_FIELDS = [
   'purchase_cost',
   'custom_markup_percent',
   'fixed_selling_price',
+  'mrp',
   'offer_price',
   'offer_ends_at',
   'stock_count',
@@ -170,6 +174,7 @@ export function ProductVariants({
                 <th scope="col">Variant</th>
                 <th scope="col" className="num">Cost</th>
                 <th scope="col" className="num">Price</th>
+                <th scope="col" className="num">MRP</th>
                 <th scope="col">Offer</th>
                 <th scope="col">Stock</th>
                 <th scope="col">Status</th>
@@ -190,6 +195,13 @@ export function ProductVariants({
                       <Badge tone="muted">{PRICING_SOURCE_LABEL[v.pricing_source] ?? v.pricing_source}</Badge>
                     </span>
                     {v.price_warning ? <span className="cell__secondary field__error">Below cost</span> : null}
+                    {/* Migration 048: the size's price is its MRP. */}
+                    {v.mrp_capped && v.computed_selling_price != null ? (
+                      <span className="cell__secondary mrp-capped">{mrpCappedNote(v.pricing_mode, Number(v.computed_selling_price))}</span>
+                    ) : null}
+                  </td>
+                  <td className="num">
+                    {v.mrp != null ? formatLkr(Number(v.mrp)) : <span className="cell__secondary">-</span>}
                   </td>
                   <td>
                     {v.offer_price != null ? (
@@ -303,6 +315,8 @@ interface VariantFormState {
   pricing_mode: PricingMode;
   custom_markup_percent: string;
   fixed_selling_price: string;
+  /** Migration 048: this size's MRP; blank = none. */
+  mrp: string;
   offer_price: string;
   offer_ends_on: string;
   is_active: boolean;
@@ -324,6 +338,7 @@ function formFrom(v: StaffVariant | null): VariantFormState {
       pricing_mode: 'MARKUP',
       custom_markup_percent: '',
       fixed_selling_price: '',
+      mrp: '',
       offer_price: '',
       offer_ends_on: '',
       is_active: true,
@@ -341,6 +356,7 @@ function formFrom(v: StaffVariant | null): VariantFormState {
     pricing_mode: v.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP',
     custom_markup_percent: text(v.custom_markup_percent),
     fixed_selling_price: text(v.fixed_selling_price),
+    mrp: text(v.mrp),
     offer_price: text(v.offer_price),
     offer_ends_on: v.offer_ends_at ? colomboDate(v.offer_ends_at) : '',
     is_active: v.is_active,
@@ -390,6 +406,11 @@ export function VariantDialog({
     });
   }, [form, pricing]);
 
+  /** Migration 048: the MRP as typed (null = none, undefined = not valid yet) and the capped price. */
+  const mrpParsed = parseMrpInput(form.mrp);
+  const mrpValue = 'value' in mrpParsed ? mrpParsed.value : undefined;
+  const capped = preview ? capAtMrp(preview.sellingPrice, mrpValue) : null;
+
   const offerText = form.offer_price.trim();
   const storedOfferDay = original.offer_ends_on;
   const offerChanged = offerText !== original.offer_price.trim() || form.offer_ends_on !== storedOfferDay;
@@ -413,10 +434,13 @@ export function VariantDialog({
       const markup = parseMarkupInput(form.custom_markup_percent);
       if ('error' in markup) next.custom_markup_percent = markup.error;
     }
-    if (offerText !== '' && offerChanged) {
+    if ('error' in mrpParsed) next.mrp = mrpParsed.error;
+    if (offerText !== '' && (offerChanged || form.mrp !== original.mrp)) {
       if (!MONEY_INPUT.test(offerText) || Number(offerText) <= 0) next.offer_price = 'Enter a price above 0 with at most 2 decimals';
-      else if (preview && Number(offerText) >= preview.sellingPrice) {
-        next.offer_price = `The offer price must be lower than the selling price (${formatMoney(preview.sellingPrice)}).`;
+      else if (capped && Number(offerText) >= capped.price) {
+        next.offer_price = capped.capped
+          ? `The offer price must be lower than the selling price (${formatMoney(capped.price)}, capped at the MRP).`
+          : `The offer price must be lower than the selling price (${formatMoney(capped.price)}).`;
       }
       if (form.offer_ends_on && form.offer_ends_on !== storedOfferDay && form.offer_ends_on < colomboDate()) {
         next.offer_ends_at = 'Pick today or a later day';
@@ -463,6 +487,8 @@ export function VariantDialog({
               : null;
       }
     }
+    // Migration 048: blank clears the size's MRP.
+    if (isNew ? form.mrp.trim() !== '' : changed('mrp')) out.mrp = form.mrp.trim() === '' ? null : Number(form.mrp.trim());
     if (changed('is_active')) out.is_active = form.is_active;
     if (changed('is_available')) out.is_available = form.is_available;
     return out;
@@ -617,7 +643,14 @@ export function VariantDialog({
               />
             </Field>
           )}
-          <VariantPreview preview={preview} mode={form.pricing_mode} />
+          <Field
+            label="MRP (LKR)"
+            hint="Optional. This size's printed Maximum Retail Price. If its selling price is higher, customers pay the MRP"
+            error={errors.mrp}
+          >
+            <input className="input" inputMode="decimal" value={form.mrp} onChange={(e) => set({ mrp: e.target.value })} />
+          </Field>
+          <VariantPreview preview={preview} mode={form.pricing_mode} mrp={mrpValue ?? null} />
           <div className="form__row">
             <Field label="Offer price (LKR)" hint="Optional. Customers pay this instead" error={errors.offer_price}>
               <input
@@ -701,7 +734,20 @@ export function VariantDialog({
   );
 }
 
-function VariantPreview({ preview, mode }: { preview: ResolvedVariantPrice | null; mode: PricingMode }) {
+function VariantPreview({ preview, mode, mrp }: { preview: ResolvedVariantPrice | null; mode: PricingMode; mrp: number | null }) {
+  // Migration 048: a price above the size's MRP is capped at it.
+  if (preview && mrp !== null && capAtMrp(preview.sellingPrice, mrp).capped) {
+    return (
+      <>
+        <p className="form__note" role="status">
+          Selling price {formatLkr(mrp)} (the MRP)
+        </p>
+        <p className="form__note mrp-capped" role="status">
+          {mrpCappedNote(preview.pricingMode, preview.sellingPrice)}
+        </p>
+      </>
+    );
+  }
   if (!preview) {
     return (
       <p className="form__note" role="status">

@@ -67,6 +67,8 @@ export async function priceForProduct(
     pricingMode: PricingMode;
     fixedSellingPrice: number | null;
     customMarkupPercent: number | null;
+    /** Migration 048: the MRP after the edit (null = none); the price is capped at it. */
+    mrp?: number | null;
   },
   executor: Executor = db
 ): Promise<ResolvedPrice> {
@@ -77,6 +79,7 @@ export async function priceForProduct(
     fixedSellingPrice: args.fixedSellingPrice,
     productMarkupPercent: args.customMarkupPercent,
     ...inherited,
+    mrp: args.mrp ?? null,
   });
 }
 
@@ -92,10 +95,16 @@ export interface StaffPricingFields {
   effective_markup_percent: number | null;
   pricing_source: PricingSource;
   calculated_selling_price: number;
-  /** Same as calculated_selling_price (the regular price customers see). */
+  /** Same as calculated_selling_price (the regular price customers see; capped at the MRP). */
   selling_price: number;
-  /** A FIXED price below the purchase cost; null otherwise. */
+  /** A selling price below the purchase cost (a low fixed price, or an MRP under cost); null otherwise. */
   price_warning: PriceWarning | null;
+  /** Migration 048: the MRP (null when none). */
+  mrp: number | null;
+  /** Migration 048: the price the markup / fixed price gives before the MRP cap. */
+  computed_selling_price: number;
+  /** Migration 048: true when computed_selling_price > mrp (selling_price is then the MRP). */
+  mrp_capped: boolean;
 }
 
 const money = (v: unknown) => Number(Number(v).toFixed(2));
@@ -112,9 +121,13 @@ export function staffPricing(row: {
   effective_markup_percent: unknown;
   pricing_source?: unknown;
   calculated_selling_price: unknown;
+  mrp?: unknown;
+  computed_selling_price?: unknown;
+  mrp_capped?: unknown;
 }): StaffPricingFields {
   const cost = money(row.purchase_cost);
   const selling = money(row.calculated_selling_price);
+  const computed = row.computed_selling_price === null || row.computed_selling_price === undefined ? selling : money(row.computed_selling_price);
   const mode: PricingMode = row.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP';
   return {
     purchase_cost: cost,
@@ -128,7 +141,10 @@ export function staffPricing(row: {
     pricing_source: ((row.pricing_source as PricingSource | undefined) ?? (row.custom_markup_percent != null ? 'PRODUCT_MARKUP' : 'GLOBAL_MARKUP')) as PricingSource,
     calculated_selling_price: selling,
     selling_price: selling,
-    price_warning: mode === 'FIXED' ? belowCostWarning(cost, selling) : null,
+    price_warning: belowCostWarning(cost, selling),
+    mrp: row.mrp === null || row.mrp === undefined ? null : money(row.mrp),
+    computed_selling_price: computed,
+    mrp_capped: row.mrp_capped === true,
   };
 }
 

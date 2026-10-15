@@ -68,6 +68,13 @@ import { getGlobalMarkup } from './catalog.pricing.js';
  *   variant is created). Idempotent: a variant is matched by its product and
  *   label (ignoring case), so re-importing changes nothing. Product rows are
  *   applied first, then variant rows; results come back in file order.
+ * - mrp (migration 048; owner, 2026-10-14): the MRP of the product (product
+ *   row) or of the size (variant row), LKR above 0. Blank = none for a new
+ *   product/size, unchanged for an existing one (like every blank price
+ *   cell; remove an MRP in the product form). When the selling price the row
+ *   gives is above the MRP, the customer pays the MRP: the row's pricing says
+ *   mrp_capped with the price before the cap, a warning names it, and the
+ *   summary counts the capped rows.
  */
 
 export const MAX_IMPORT_ROWS = 1000;
@@ -92,6 +99,12 @@ export interface ImportRowPricing {
   effective_markup_percent: number | null;
   /** True when both price cells were blank on an existing product, so its current pricing is kept. */
   kept_current?: boolean;
+  /** Migration 048: the MRP after this row (null = none). */
+  mrp: number | null;
+  /** Migration 048: the price before the MRP cap (markup or fixed). */
+  computed_selling_price: number;
+  /** Migration 048: selling_price is the MRP because computed_selling_price was higher. */
+  mrp_capped: boolean;
 }
 
 export interface ImportRowResult {
@@ -123,6 +136,8 @@ interface CleanRow {
   cost_price: number;
   selling_price?: number;
   markup_percent?: number;
+  /** Migration 048: blank = none for a new product, unchanged for an existing one. */
+  mrp?: number;
   sku: string;
   barcode?: string;
   description?: string;
@@ -200,6 +215,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
   const cost = purchaseCostCell !== undefined ? purchaseCostCell : costPriceCell;
   const selling = numberCell(raw.selling_price);
   const markup = numberCell(raw.markup_percent);
+  const mrp = numberCell(raw.mrp);
   const tracked = yesNo(raw.tracked);
   const opening = numberCell(raw.opening_stock);
   const leadDays = numberCell(raw.delivery_lead_days);
@@ -249,6 +265,8 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
     else if (!hasAtMost2Decimals(markup)) errors.push({ field: 'markup_percent', message: 'Markup can have at most 2 decimals' });
   }
 
+  errors.push(...mrpErrors(mrp));
+
   if (tracked === null) errors.push({ field: 'tracked', message: 'Tracked must be yes or no' });
 
   if (opening !== undefined) {
@@ -280,6 +298,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
       cost_price: cost!,
       selling_price: selling,
       markup_percent: markup,
+      mrp,
       sku: sku!,
       barcode,
       description,
@@ -288,6 +307,30 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
       image_url: imageUrl,
       delivery_lead_days: leadDays,
     },
+  };
+}
+
+/** Migration 048: the mrp cell's checks (blank is fine). */
+function mrpErrors(mrp: number | undefined): FieldError[] {
+  if (mrp === undefined) return [];
+  if (!Number.isFinite(mrp)) return [{ field: 'mrp', message: 'MRP must be a number' }];
+  if (mrp <= 0) return [{ field: 'mrp', message: 'MRP must be above 0' }];
+  if (mrp > 99_999_999.99) return [{ field: 'mrp', message: 'MRP is too large' }];
+  if (!hasAtMost2Decimals(mrp)) return [{ field: 'mrp', message: 'MRP can have at most 2 decimals' }];
+  return [];
+}
+
+/** Migration 048: the MRP after a row - its cell, else the stored one (blank keeps it). */
+const mrpAfter = (cell: number | undefined, stored: number | string | null | undefined): number | null =>
+  cell !== undefined ? cell : stored === null || stored === undefined ? null : Number(stored);
+
+/** Migration 048: the row result's MRP fields and the "capped" warning. */
+function mrpOutcome(price: { mrp: number | null; computedSellingPrice: number; mrpCapped: boolean }) {
+  return {
+    fields: { mrp: price.mrp, computed_selling_price: price.computedSellingPrice, mrp_capped: price.mrpCapped },
+    warning: price.mrpCapped
+      ? `Capped at MRP LKR ${price.mrp!.toFixed(2)} (the price would be LKR ${price.computedSellingPrice.toFixed(2)})`
+      : null,
   };
 }
 
@@ -320,7 +363,14 @@ function pricingFor(row: CleanRow, existing?: RowPricing): RowPricing {
 type CategoryMarkups = Map<string, { own: number | null; parent: number | null }>;
 
 /** The price the row gives the product, with a warning when a fixed price is below cost. */
-function pricingResult(row: CleanRow, categoryId: string, markups: CategoryMarkups, globalMarkup: number, existing?: RowPricing) {
+function pricingResult(
+  row: CleanRow,
+  categoryId: string,
+  markups: CategoryMarkups,
+  globalMarkup: number,
+  existing?: RowPricing,
+  existingMrp?: number | string | null
+) {
   const want = pricingFor(row, existing);
   const inherited = markups.get(categoryId);
   const price = resolveSellingPrice({
@@ -331,17 +381,21 @@ function pricingResult(row: CleanRow, categoryId: string, markups: CategoryMarku
     categoryMarkupPercent: inherited?.own ?? null,
     parentCategoryMarkupPercent: inherited?.parent ?? null,
     globalMarkupPercent: globalMarkup,
+    mrp: mrpAfter(row.mrp, existingMrp),
   });
+  const capped = mrpOutcome(price);
   const pricing: ImportRowPricing = {
     pricing_mode: price.pricingMode,
     pricing_source: price.pricingSource,
     purchase_cost: price.purchaseCost,
     selling_price: price.sellingPrice,
     effective_markup_percent: price.effectiveMarkupPercent,
+    ...capped.fields,
   };
   // Both price cells blank on an existing product: its pricing is kept as it is.
   pricing.kept_current = existing !== undefined && noPriceCells(row);
-  return { pricing, ...(price.warning ? { warnings: [price.warning.message] } : {}) };
+  const warnings = [capped.warning, price.warning?.message].filter((w): w is string => !!w);
+  return { pricing, ...(warnings.length ? { warnings } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +412,7 @@ type ExistingProduct = {
   custom_markup_percent: number | string | null;
   pricing_mode: string;
   fixed_selling_price: number | string | null;
+  mrp: number | string | null;
   barcode: string | null;
   description: string | null;
   image_url: string | null;
@@ -384,6 +439,8 @@ function changesFor(row: CleanRow, categoryId: string, existing: ExistingProduct
     const currentMarkup = existing.custom_markup_percent === null ? null : Number(existing.custom_markup_percent);
     if (want.markup !== currentMarkup) changes.custom_markup_percent = want.markup;
   }
+  // Migration 048: a blank mrp cell keeps the stored MRP.
+  if (row.mrp !== undefined && row.mrp !== (existing.mrp === null ? null : Number(existing.mrp))) changes.mrp = row.mrp;
   if (row.barcode !== undefined && row.barcode !== existing.barcode) changes.barcode = row.barcode;
   if (row.description !== undefined && row.description !== existing.description) changes.description = row.description;
   if (row.image_url !== undefined && row.image_url !== existing.image_url) changes.image_url = row.image_url;
@@ -416,6 +473,7 @@ async function findExisting(executor: Transaction<Database> | typeof db, sku: st
       'p.custom_markup_percent',
       'p.pricing_mode',
       'p.fixed_selling_price',
+      'p.mrp',
       'p.barcode',
       'p.description',
       'p.image_url',
@@ -513,8 +571,11 @@ export async function importProducts(input: ImportProductsInput, actorId: string
       const outcome = dryRun
         ? await planRow(row, categoryId, slugsUsed)
         : await db.transaction().execute((trx) => applyRow(trx, row, categoryId!, slugsUsed, actorId));
-      const { existingPricing, ...result } = outcome as typeof outcome & { existingPricing?: RowPricing };
-      const priced = pricingResult(row, categoryId, markups, globalMarkup, existingPricing);
+      const { existingPricing, existingMrp, ...result } = outcome as typeof outcome & {
+        existingPricing?: RowPricing;
+        existingMrp?: number | string | null;
+      };
+      const priced = pricingResult(row, categoryId, markups, globalMarkup, existingPricing, existingMrp);
       results.push({ row: row.row, sku: row.sku, kind: 'product', ...result, ...priced });
       parents.set(row.sku, {
         productId: (result as { product_id?: string }).product_id ?? null,
@@ -539,12 +600,15 @@ export async function importProducts(input: ImportProductsInput, actorId: string
   results.sort((a, b) => a.row - b.row);
 
   const summary = { created: 0, updated: 0, skipped: 0, errors: 0 };
+  // Migration 048: rows (created/updated/skipped) whose selling price is capped at the MRP.
+  let mrpCapped = 0;
   for (const r of results) {
     if (r.status === 'error') summary.errors += 1;
     else summary[r.status] += 1;
+    if (r.status !== 'error' && r.pricing?.mrp_capped) mrpCapped += 1;
   }
-  logger.info({ ...summary, dryRun, actorId, rows: input.rows.length }, 'Product import processed');
-  return { dry_run: dryRun, summary, results };
+  logger.info({ ...summary, mrpCapped, dryRun, actorId, rows: input.rows.length }, 'Product import processed');
+  return { dry_run: dryRun, summary, mrp_capped: mrpCapped, results };
 }
 
 type CategoryRef = { id: string; name: string; slug: string; parent_id: string | null };
@@ -617,6 +681,7 @@ async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>
     status: changed ? ('updated' as const) : ('skipped' as const),
     product_id: existing.id,
     existingPricing: storedPricing(existing),
+    existingMrp: existing.mrp,
     ...(row.opening_stock ? { message: 'Opening stock is ignored for an existing product' } : {}),
   };
 }
@@ -644,6 +709,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
         custom_markup_percent: want.markup,
         pricing_mode: want.mode,
         fixed_selling_price: want.fixed,
+        mrp: row.mrp ?? null,
         is_available: true,
         is_active: true,
         delivery_lead_days: row.delivery_lead_days ?? 0,
@@ -672,7 +738,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
   const changes = changesFor(row, categoryId, existing);
   const tracking = trackingChange(row, existing);
   if (Object.keys(changes).length === 0 && tracking === null) {
-    return { status: 'skipped' as const, product_id: existing.id, existingPricing: storedPricing(existing) };
+    return { status: 'skipped' as const, product_id: existing.id, existingPricing: storedPricing(existing), existingMrp: existing.mrp };
   }
   if (Object.keys(changes).length > 0) {
     await trx
@@ -686,6 +752,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
     status: 'updated' as const,
     product_id: existing.id,
     existingPricing: storedPricing(existing),
+    existingMrp: existing.mrp,
     ...(row.opening_stock ? { message: 'Opening stock is ignored for an existing product' } : {}),
   };
 }
@@ -715,6 +782,8 @@ interface CleanVariantRow {
   cost_price: number;
   selling_price?: number;
   markup_percent?: number;
+  /** Migration 048: the size's MRP; blank = none (new) / unchanged (existing). */
+  mrp?: number;
   tracked?: boolean;
   opening_stock?: number;
 }
@@ -736,6 +805,7 @@ export function validateVariantRow(
   const cost = purchaseCostCell !== undefined ? purchaseCostCell : costPriceCell;
   const selling = numberCell(raw.selling_price);
   const markup = numberCell(raw.markup_percent);
+  const mrp = numberCell(raw.mrp);
   const tracked = yesNo(raw.tracked);
   const opening = numberCell(raw.opening_stock);
 
@@ -763,6 +833,8 @@ export function validateVariantRow(
     else if (!hasAtMost2Decimals(markup)) errors.push({ field: 'markup_percent', message: 'Markup can have at most 2 decimals' });
   }
 
+  errors.push(...mrpErrors(mrp));
+
   if (tracked === null) errors.push({ field: 'tracked', message: 'Tracked must be yes or no' });
   if (opening !== undefined) {
     if (!Number.isInteger(opening) || opening < 0) errors.push({ field: 'opening_stock', message: 'Opening stock must be a whole number, 0 or more' });
@@ -783,6 +855,7 @@ export function validateVariantRow(
       cost_price: cost!,
       selling_price: selling,
       markup_percent: markup,
+      mrp,
       tracked: tracked ?? undefined,
       opening_stock: opening,
     },
@@ -798,6 +871,7 @@ type ExistingVariant = {
   pricing_mode: string;
   fixed_selling_price: string | number | null;
   custom_markup_percent: string | number | null;
+  mrp: string | number | null;
   tracking_mode: string | null;
 };
 
@@ -823,6 +897,8 @@ function variantChanges(row: CleanVariantRow, existing: ExistingVariant) {
       changes.custom_markup_percent = want.markup;
     }
   }
+  // Migration 048: a blank mrp cell keeps the stored MRP.
+  if (row.mrp !== undefined && row.mrp !== (existing.mrp === null ? null : Number(existing.mrp))) changes.mrp = row.mrp;
   return changes;
 }
 
@@ -841,6 +917,7 @@ async function findExistingVariant(executor: Transaction<Database> | typeof db, 
       'v.pricing_mode',
       'v.fixed_selling_price',
       'v.custom_markup_percent',
+      'v.mrp',
       'inv.tracking_mode',
     ])
     .where('v.product_id', '=', productId)
@@ -932,7 +1009,9 @@ async function importVariantRow(
       categoryMarkupPercent: inherited?.own ?? null,
       parentCategoryMarkupPercent: inherited?.parent ?? null,
       globalMarkupPercent: ctx.globalMarkup,
+      mrp: mrpAfter(row.mrp, existing?.mrp),
     });
+    const capped = mrpOutcome(price);
     const pricing: ImportRowPricing = {
       pricing_mode: price.pricingMode,
       pricing_source: price.pricingSource,
@@ -940,8 +1019,10 @@ async function importVariantRow(
       selling_price: price.sellingPrice,
       effective_markup_percent: price.effectiveMarkupPercent,
       kept_current: existing !== undefined && row.selling_price === undefined && row.markup_percent === undefined,
+      ...capped.fields,
     };
-    const priced = { pricing, ...(price.warning ? { warnings: [price.warning.message] } : {}) };
+    const warnings = [capped.warning, price.warning?.message].filter((w): w is string => !!w);
+    const priced = { pricing, ...(warnings.length ? { warnings } : {}) };
     const trackingWant = row.tracked === undefined ? null : row.tracked ? 'TRACKED' : 'UNTRACKED';
     const ignoredStock = existing && row.opening_stock ? { message: 'Opening stock is ignored for an existing variant' } : {};
 
@@ -984,6 +1065,7 @@ async function importVariantRow(
           pricing_mode: want.mode,
           fixed_selling_price: want.fixed,
           custom_markup_percent: want.markup,
+          mrp: row.mrp ?? null,
         })
         .returning('id')
         .executeTakeFirstOrThrow();

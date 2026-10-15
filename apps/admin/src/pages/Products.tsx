@@ -10,7 +10,7 @@ import { categoryOptions } from '../lib/categoryTree';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 import { formatMoney } from '../lib/orders';
-import { PRICING_SOURCE_LABEL, formatPercent, formatPriceRange } from '../lib/pricing';
+import { PRICING_SOURCE_LABEL, formatLkr, formatPercent, formatPriceRange, mrpCappedNote } from '../lib/pricing';
 import { leadTimeText } from '../lib/stock';
 import { StockChip } from '../components/ProductVariants';
 
@@ -181,6 +181,7 @@ export function Products() {
               <th scope="col">Product</th>
               <th scope="col">Category</th>
               <th scope="col" className="num">Selling price</th>
+              <th scope="col" className="num">MRP</th>
               <th scope="col">Status</th>
               <th scope="col">Updated</th>
               <th scope="col">Actions</th>
@@ -237,12 +238,27 @@ export function Products() {
                   {product.price_warning ? (
                     <span className="cell__secondary field__error">Below cost</span>
                   ) : null}
+                  {/* MRP (migration 048): the selling price is the MRP. */}
+                  {product.mrp_capped && product.computed_selling_price != null && !product.has_variants ? (
+                    <span className="cell__secondary mrp-capped">
+                      {mrpCappedNote(product.pricing_mode, Number(product.computed_selling_price))}
+                    </span>
+                  ) : null}
                   {/* Offer price, while it applies (owner, 2026-10-09). */}
                   {product.offer_active && product.offer_price != null ? (
                     <span className="cell__secondary">
                       <Badge tone="offer">Offer {formatMoney(product.offer_price)}</Badge>
                     </span>
                   ) : null}
+                </td>
+                <td className="num">
+                  {product.has_variants ? (
+                    <span className="cell__secondary">Per size</span>
+                  ) : product.mrp != null ? (
+                    formatLkr(Number(product.mrp))
+                  ) : (
+                    <span className="cell__secondary">-</span>
+                  )}
                 </td>
                 <td>
                   <Badge tone={product.is_active ? 'active' : 'inactive'}>

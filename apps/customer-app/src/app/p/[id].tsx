@@ -24,7 +24,7 @@ import { recallProduct } from '@/blynk/catalog/productCache';
 import { ComboAdd } from '@/blynk/combos/ComboViews';
 import { requestPushPermission } from '@/blynk/push';
 import { formatLkr } from '@/blynk/lib/money';
-import { effectivePrice, isOfferActive, savingsPerUnit } from '@/blynk/lib/pricing';
+import { effectivePrice, isOfferActive, priceDisplay } from '@/blynk/lib/pricing';
 import { orderTime } from '@/blynk/orders/status';
 import { productShareText } from '@/blynk/share/links';
 import { shareText } from '@/blynk/share/share';
@@ -33,6 +33,7 @@ import { Badge, Button, StateView, useToast } from '@/blynk/ui/kit';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { BackIcon, ShareIcon } from '@/components/icons';
 import { ProductImage } from '@/components/ProductImage';
+import { StruckPrice } from '@/components/StruckPrice';
 import { Chevron as Caret, Collapsible, PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
 import { cartActions, useCartSelect } from '@/lib/cart';
@@ -103,6 +104,10 @@ export default function ProductPage() {
   const variant = sized ? selectVariant(variants, pickedId) : null;
   const priced = variant ? variantPriced(variant) : product;
   const onOffer = variant ? variantOnOffer(variant) : !!product && isOfferActive(product);
+  // the one price rule (offer, MRP - migration 048): struck only while show_offer_savings is on
+  const shown = priced ? priceDisplay(priced, { showStruck: showSavings }) : null;
+  // "Save" on an offer counts from the struck reference (the MRP when that is what is struck)
+  const saved = shown?.offer && shown.struck ? Math.round((shown.struck.amount - shown.price) * 100) / 100 : 0;
   const orderable = !!product && product.is_available && (!variant || variant.is_available);
   const lead = product && !DEMO ? deliveredFromText(product) : null;
   // GTM: once per product, after the fresh copy (current price, sizes) or a failed fetch
@@ -186,10 +191,8 @@ export default function ProductPage() {
                 <Text style={styles.price}>
                   {variant ? formatLkr(variantPrice(variant)) : sized ? priceText(product) : formatLkr(effectivePrice(product))}
                 </Text>
-                {onOffer && showSavings && priced && <Text style={styles.mrp}>{formatLkr(priced.selling_price)}</Text>}
-                {onOffer && showSavings && priced && savingsPerUnit(priced) > 0 && (
-                  <Text style={styles.save}>Save {formatLkr(savingsPerUnit(priced))}</Text>
-                )}
+                {shown?.struck && <StruckPrice struck={shown.struck} money={formatLkr} style={styles.mrp} />}
+                {saved > 0 && <Text style={styles.save}>Save {formatLkr(saved)}</Text>}
                 <Badge tone={orderable ? 'positive' : 'neutral'} label={orderable ? 'Available' : VARIANT_COPY.soldOut} />
               </View>
               {onOffer && !!priced?.offer_ends_at && (

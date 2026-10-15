@@ -421,6 +421,8 @@ export interface ImportRow {
   variant?: string | null;
   /** Product rows: whole days 0..30 before it can be delivered; null = unchanged / 0 for new. */
   delivery_lead_days?: number | null;
+  /** Migration 048: the product's / size's MRP; null = none (new) / unchanged (existing). */
+  mrp?: number | null;
 }
 
 export type ImportStatus = 'created' | 'updated' | 'skipped' | 'error';
@@ -435,6 +437,10 @@ export interface ImportRowPricing {
   effective_markup_percent: number | null;
   /** Both price cells were empty on an existing SKU: its current pricing is kept. */
   kept_current?: boolean;
+  /** Migration 048: the MRP after this row, the price before the cap, and whether it capped. */
+  mrp?: number | null;
+  computed_selling_price?: number;
+  mrp_capped?: boolean;
 }
 
 export interface ImportResultRow {
@@ -458,6 +464,8 @@ export interface ImportResultRow {
 export interface ImportResponse {
   dry_run: boolean;
   summary: { created: number; updated: number; skipped: number; errors: number };
+  /** Migration 048: rows whose selling price is capped at their MRP. */
+  mrp_capped?: number;
   results: ImportResultRow[];
 }
 
@@ -506,8 +514,13 @@ export interface StaffVariant {
   global_markup_percent?: number | null;
   effective_markup_percent: number | null;
   pricing_source: VariantPricingSource;
+  /** What customers pay before offers (capped at the MRP). */
   selling_price: number;
   price_warning?: { code: 'SELLING_BELOW_COST'; message: string } | null;
+  /** Migration 048: the size's own MRP (null = none), the price before the cap, and whether it capped. */
+  mrp?: number | null;
+  computed_selling_price?: number;
+  mrp_capped?: boolean;
   offer_price: number | null;
   offer_ends_at: string | null;
   offer_active?: boolean;
@@ -585,8 +598,16 @@ export interface AdminProduct {
   /** The regular selling price. */
   calculated_selling_price?: number;
   selling_price?: number;
-  /** A FIXED price below the purchase cost (a warning; saving is allowed). */
+  /** A selling price below the purchase cost (a warning; saving is allowed). */
   price_warning?: { code: 'SELLING_BELOW_COST'; message: string } | null;
+  /**
+   * MRP (migration 048; owner, 2026-10-14): the Maximum Retail Price (null =
+   * none). selling_price is capped at it; computed_selling_price is what the
+   * markup / fixed price gives, mrp_capped says the cap applied.
+   */
+  mrp?: number | null;
+  computed_selling_price?: number;
+  mrp_capped?: boolean;
   /**
    * Offer price (owner, 2026-10-09): a reduced price customers pay, as
    * stored, with an optional end (ISO). `offer_active` is true only while it

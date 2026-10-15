@@ -1,6 +1,6 @@
 import { orderRepository, CreateOrderData } from './order.repository.js';
 import { CreateOrderInput, OrderQueryInput } from './order.schema.js';
-import { recordableMarkupPercent, resolveSellingPrice, resolveVariantPrice } from '../pricing/index.js';
+import { impliedMarkupPercent, recordableMarkupPercent, resolveSellingPrice, resolveVariantPrice } from '../pricing/index.js';
 import { leadForCart, leadInfo, leadTimeRequiresSlotError, slotBeforeLeadTimeError, type CartLead } from './lead-time.js';
 import { assertWithinServiceZone } from './delivery-zone.js';
 import { orderingClock } from '../../utils/time.js';
@@ -149,6 +149,15 @@ export function sanitizeCustomerOrder(order: any) {
  * (400 VARIANT_REQUIRED); a variant that is switched off, deleted or not of
  * that product is refused (400 VARIANT_UNAVAILABLE / VARIANT_NOT_FOUND).
  */
+/**
+ * The markup to snapshot on an order line: the rule's markup, or - when the
+ * price was capped at the MRP (migration 048) - the markup the MRP gives over
+ * the cost (reporting only).
+ */
+function appliedMarkup(price: { mrpCapped: boolean; purchaseCost: number; sellingPrice: number; effectiveMarkupPercent: number | null }) {
+  return price.mrpCapped ? impliedMarkupPercent(price.purchaseCost, price.sellingPrice) : price.effectiveMarkupPercent;
+}
+
 export async function priceCart(items: CreateOrderInput['items'], comboLines: NonNullable<CreateOrderInput['combos']> = []) {
   // Migration 045: two variants of one product are two lines of the same product.
   const productIds = [...new Set(items.map((it) => it.product_id))];
@@ -208,6 +217,8 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
         categoryMarkupPercent: catalogRow?.category_markup_percent ?? null,
         parentCategoryMarkupPercent: catalogRow?.parent_category_markup_percent ?? null,
         globalMarkupPercent: defaultMarkup,
+        // Migration 048: capped at the size's own MRP.
+        mrp: variant.mrp,
       });
       const variantUnit = effectivePrice(
         {
@@ -230,7 +241,8 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
         unit_snapshot: variant.label,
         unit_selling_price: variantUnit,
         estimated_unit_cost: Number(Number(variant.purchase_cost).toFixed(2)),
-        markup_percentage_applied: recordableMarkupPercent(variantPrice.effectiveMarkupPercent),
+        markup_percentage_applied: recordableMarkupPercent(appliedMarkup(variantPrice)),
+        mrp_snapshot: variantPrice.mrp,
         quantity: item.quantity,
         subtotal: variantSubtotal,
       } as CreateOrderData['items'][number];
@@ -252,6 +264,8 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
       categoryMarkupPercent: catalogRow?.category_markup_percent ?? null,
       parentCategoryMarkupPercent: catalogRow?.parent_category_markup_percent ?? null,
       globalMarkupPercent: defaultMarkup,
+      // Migration 048: capped at the product's MRP.
+      mrp: prod.mrp,
     });
 
     const unitPrice = effectivePrice({ ...prod, ...catalogRow }, priceResult.sellingPrice);
@@ -265,7 +279,8 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
       unit_snapshot: prod.unit,
       unit_selling_price: unitPrice,
       estimated_unit_cost: Number(Number(prod.purchase_cost).toFixed(2)),
-      markup_percentage_applied: recordableMarkupPercent(priceResult.effectiveMarkupPercent),
+      markup_percentage_applied: recordableMarkupPercent(appliedMarkup(priceResult)),
+      mrp_snapshot: priceResult.mrp,
       quantity: item.quantity,
       subtotal: lineSubtotal,
     } as CreateOrderData['items'][number];
