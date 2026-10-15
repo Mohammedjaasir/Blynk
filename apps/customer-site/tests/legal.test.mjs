@@ -75,6 +75,38 @@ test('the phone number is never shown as text on the legal pages, only in the Ca
   assert.match(home, /href="https:\/\/wa\.me\/94717107374"/);
 });
 
+test('the phone number is not shown as text anywhere on the site (owner, 2026-10-15)', () => {
+  const files = [...NAMES.map((n) => `${n}.html`), 'index.html',
+    ...walk(join(site, 'pages')).filter((f) => f.endsWith('.html')).map((f) => f.slice(site.length + 1))];
+  assert.ok(files.length >= 25, `${files.length} pages`);
+  for (const f of files) {
+    const html = read(f);
+    const text = visible(html);
+    assert.ok(!text.replace(/[\s\-()+.]/g, '').includes('717107374'), `${f}: the number is visible`);
+    // The footer still offers the call, as a link.
+    assert.match(html, /<p class="footer__help">[^<]*<a href="tel:\+94717107374">[^<0-9]+<\/a>/, `${f}: footer Call us link`);
+  }
+  // Nor in the scripts that write text into the pages.
+  for (const f of ['app.js', 'walkthrough.js', 'analytics.js']) {
+    assert.ok(!read(f).replace(/[\s\-()+.]/g, '').includes('717107374'), `${f} carries the number`);
+  }
+  // The structured data keeps it (search engines, not visitors).
+  assert.match(read('index.html'), /"telephone": "\+94717107374"/);
+});
+
+test('footer legal links use the owner\'s titles on every page', () => {
+  const files = [...NAMES.map((n) => `${n}.html`), 'index.html',
+    ...walk(join(site, 'pages')).filter((f) => f.endsWith('.html')).map((f) => f.slice(site.length + 1))];
+  for (const f of files) {
+    const html = read(f);
+    assert.doesNotMatch(html, /Terms of Service|Cancellations &amp; Refunds/, f);
+    if (/^pages[\\/](si|ta)[\\/]/.test(f)) continue;
+    assert.match(html, /<a href="\/terms"[^>]*>Terms and Conditions<\/a>/, f);
+    assert.match(html, /<a href="\/privacy"[^>]*>Privacy Policy<\/a>/, f);
+    assert.match(html, /<a href="\/refunds"[^>]*>Return, Refund and Cancellation Policy<\/a>/, f);
+  }
+});
+
 test('the owner\'s choices are filled in', () => {
   const t = visible(pages.terms);
   for (const s of [

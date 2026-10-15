@@ -35,7 +35,7 @@ export const LEGAL_PAGES = [
     title: 'Terms and Conditions',
     lead: 'The rules for using the Blynk app, website and delivery service: orders, delivery, payment, Blynk Points and the Blynk Wallet.',
     description: 'The terms for ordering from Blynk in Aluthgama and Dharga Town, Sri Lanka: orders, delivery, payment, Blynk Points and the Blynk Wallet.',
-    footer: 'Terms of Service',
+    footer: 'Terms and Conditions',
   },
   {
     name: 'privacy',
@@ -47,7 +47,7 @@ export const LEGAL_PAGES = [
     name: 'refunds',
     title: 'Return, Refund and Cancellation Policy',
     description: 'How to report missing, damaged or wrong items from a Blynk order, what can be returned, how refunds to your Blynk Wallet work and how to cancel.',
-    footer: 'Cancellations & Refunds',
+    footer: 'Return, Refund and Cancellation Policy',
   },
 ];
 
