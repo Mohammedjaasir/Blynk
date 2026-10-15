@@ -537,6 +537,28 @@ html, body { overflow-x: clip; }
 .legal-contact { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .legal-contact li { margin: 0; }
 
+/* Tables in the owner's policy text (2026-10-15): a plain table from tablet up,
+   one card per row on a phone so nothing scrolls sideways. */
+/* The contents entries carry the owner's own section numbers. */
+.legal-toc .legal-toc__list { list-style: none; padding-left: 0; }
+.legal-body .legal-contact { padding-left: 0; }
+.legal-table-wrap { margin: 4px 0 18px; }
+.legal-table { width: 100%; border-collapse: collapse; font-size: 15.5px; line-height: 1.5; }
+.legal-table th, .legal-table td { padding: 11px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.legal-table thead th { background: var(--stone, #f4f0e3); color: var(--ink); font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.legal-table thead th:first-child { border-top-left-radius: 12px; }
+.legal-table thead th:last-child { border-top-right-radius: 12px; }
+.legal-table tbody th { color: var(--ink); font-weight: 600; }
+@media (max-width: 639px) {
+  .legal-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .legal-table, .legal-table tbody, .legal-table tr, .legal-table th, .legal-table td { display: block; }
+  .legal-table tr { margin: 0 0 10px; padding: 6px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+  .legal-table th, .legal-table td { padding: 7px 0; border: 0; }
+  .legal-table td + td, .legal-table th + td { border-top: 1px dashed var(--line); }
+  .legal-table td::before { content: attr(data-label); display: block; color: var(--ink-3); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .legal-table tbody th { font-size: 16.5px; }
+}
+
 @media (min-width: 1024px) {
   .legal { grid-template-columns: 280px minmax(0, 1fr); gap: 56px; align-items: start; }
   .legal-toc { position: sticky; top: 24px; }
