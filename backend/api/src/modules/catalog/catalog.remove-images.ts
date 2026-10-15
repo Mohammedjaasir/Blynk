@@ -22,8 +22,8 @@ import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.
  *    restored): image_url -> null, image_focal_x/y -> 50 (the columns are
  *    NOT NULL; 50/50 is their default, the centre).
  *  - combos (combo packs, migration 033 - sold like products and their photo
- *    is uploaded to the same products/ folder): image_url -> null. There is
- *    no variants table.
+ *    is uploaded to the same products/ folder): image_url -> null. Variants
+ *    (migration 045) have no image of their own.
  *  - NOT category images, promotion images or doctor photos.
  *  - Files: only those a cleared product/combo URL pointed at under
  *    /uploads/products/ (one flat file name), deleted through the media
@@ -132,52 +132,62 @@ export interface RemoveImagesResult {
  * back); otherwise the DB work commits before any file is removed, so a
  * failed write never leaves products pointing at deleted files.
  */
+/**
+ * Clears every product's (soft-deleted ones too) and combo pack's image link
+ * and returns the distinct uploaded files those links pointed at. Run inside
+ * the caller's transaction; delete the files only after it commits.
+ * Shared with "Remove all products" (catalog.remove-products.ts).
+ */
+export async function clearProductImageLinks(trx: Executor, storage: MediaStorage = mediaStorage) {
+  const { products, combos } = await imageRows(trx);
+  const urls = [...products, ...combos].map((r) => r.image_url!).filter(Boolean);
+  if (products.length) {
+    await trx
+      .updateTable('products')
+      .set({ image_url: null, image_focal_x: 50, image_focal_y: 50, updated_at: new Date() })
+      .where('image_url', 'is not', null)
+      .execute();
+  }
+  if (combos.length) {
+    await trx.updateTable('combos').set({ image_url: null, updated_at: new Date() }).where('image_url', 'is not', null).execute();
+  }
+  return { productsCleared: products.length, combosCleared: combos.length, keys: distinctKeys(storage, urls) };
+}
+
+/**
+ * Deletes the files clearProductImageLinks returned, skipping any a category,
+ * promotion, doctor, product or combo still uses. Best effort per file.
+ */
+export async function deleteProductImageFiles(executor: Executor, keys: Map<string, string>, storage: MediaStorage = mediaStorage) {
+  let deleted = 0;
+  let missing = 0;
+  let kept = 0;
+  for (const [key, url] of keys) {
+    try {
+      if (await fileUsedElsewhere(executor, url, key)) {
+        kept += 1;
+        continue;
+      }
+      if (!(await storage.exists(key))) {
+        missing += 1;
+        continue;
+      }
+      await storage.delete(key);
+      deleted += 1;
+    } catch (err) {
+      // One unreadable file must not stop the rest; it stays on disk.
+      logger.warn({ err, key }, 'Remove product images: could not delete a file');
+      kept += 1;
+    }
+  }
+  return { deleted, missing, kept };
+}
+
 export async function removeAllProductImages(
   actor: AuditActor,
   opts: { executor?: Executor; storage?: MediaStorage } = {}
 ): Promise<RemoveImagesResult> {
   const storage = opts.storage ?? mediaStorage;
-
-  const clear = async (trx: Executor) => {
-    const { products, combos } = await imageRows(trx);
-    const urls = [...products, ...combos].map((r) => r.image_url!).filter(Boolean);
-    if (products.length) {
-      await trx
-        .updateTable('products')
-        .set({ image_url: null, image_focal_x: 50, image_focal_y: 50, updated_at: new Date() })
-        .where('image_url', 'is not', null)
-        .execute();
-    }
-    if (combos.length) {
-      await trx.updateTable('combos').set({ image_url: null, updated_at: new Date() }).where('image_url', 'is not', null).execute();
-    }
-    return { productsCleared: products.length, combosCleared: combos.length, keys: distinctKeys(storage, urls) };
-  };
-
-  const deleteFiles = async (executor: Executor, keys: Map<string, string>) => {
-    let deleted = 0;
-    let missing = 0;
-    let kept = 0;
-    for (const [key, url] of keys) {
-      try {
-        if (await fileUsedElsewhere(executor, url, key)) {
-          kept += 1;
-          continue;
-        }
-        if (!(await storage.exists(key))) {
-          missing += 1;
-          continue;
-        }
-        await storage.delete(key);
-        deleted += 1;
-      } catch (err) {
-        // One unreadable file must not stop the rest; it stays on disk.
-        logger.warn({ err, key }, 'Remove product images: could not delete a file');
-        kept += 1;
-      }
-    }
-    return { deleted, missing, kept };
-  };
 
   const audit = async (executor: Executor, result: RemoveImagesResult) => {
     await writeAudit(executor, actor, {
@@ -190,21 +200,21 @@ export async function removeAllProductImages(
 
   let result: RemoveImagesResult;
   if (opts.executor) {
-    const cleared = await clear(opts.executor);
-    const files = await deleteFiles(opts.executor, cleared.keys);
-    result = summary(cleared, files);
+    const cleared = await clearProductImageLinks(opts.executor, storage);
+    const files = await deleteProductImageFiles(opts.executor, cleared.keys, storage);
+    result = imagesSummary(cleared, files);
     await audit(opts.executor, result);
   } else {
-    const cleared = await db.transaction().execute((trx) => clear(trx));
-    const files = await deleteFiles(db, cleared.keys);
-    result = summary(cleared, files);
+    const cleared = await db.transaction().execute((trx) => clearProductImageLinks(trx, storage));
+    const files = await deleteProductImageFiles(db, cleared.keys, storage);
+    result = imagesSummary(cleared, files);
     await audit(db, result);
   }
   logger.info({ ...result, actorId: actor.actorId }, 'All product images removed');
   return result;
 }
 
-function summary(
+export function imagesSummary(
   cleared: { productsCleared: number; combosCleared: number },
   files: { deleted: number; missing: number; kept: number }
 ): RemoveImagesResult {

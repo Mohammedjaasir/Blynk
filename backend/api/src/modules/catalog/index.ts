@@ -10,6 +10,7 @@ import { validate } from '../../middleware/validate.middleware.js';
 import { idParamSchema } from './catalog.schema.js';
 import { arrangeController } from './catalog.arrange.js';
 import { removeImagesController } from './catalog.remove-images.js';
+import { removeAllProductsController } from './catalog.remove-products.js';
 import { categoryImportController } from './catalog.category-import.js';
 import { variantsController } from './catalog.variants.js';
 
@@ -78,6 +79,10 @@ adminCatalogRouter.post('/products/import', requireAuth, requireRoles(['ADMIN', 
 // and irreversible (catalog.remove-images.ts). Before /products/:id.
 adminCatalogRouter.get('/products/remove-images/preview', requireAuth, requireRoles('ADMIN'), removeImagesController.preview);
 adminCatalogRouter.post('/products/remove-images', requireAuth, requireRoles('ADMIN'), removeImagesController.remove);
+// Remove all products (owner, 2026-10-14) - ADMIN ONLY: soft-deletes the
+// whole catalog before a fresh bulk upload (catalog.remove-products.ts).
+adminCatalogRouter.get('/products/remove-all/preview', requireAuth, requireRoles('ADMIN'), removeAllProductsController.preview);
+adminCatalogRouter.post('/products/remove-all', requireAuth, requireRoles('ADMIN'), removeAllProductsController.remove);
 adminCatalogRouter.get('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.listProductsAdmin.bind(catalogController));
 adminCatalogRouter.get('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.getProductByIdAdmin.bind(catalogController));
 // Variants (migration 045; owner, 2026-10-14): sizes/packs with their own
@@ -116,5 +121,6 @@ export * from './catalog.groups.js';
 export * from './catalog.combos.js';
 export * from './catalog.arrange.js';
 export * from './catalog.remove-images.js';
+export * from './catalog.remove-products.js';
 export * from './catalog.category-import.js';
 export * from './catalog.variants.js';

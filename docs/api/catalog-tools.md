@@ -1,8 +1,8 @@
 # Catalog tools (2026-10-14)
 
-Four owner requests, built for the Admin site and the Ops app (owner rule:
-everything controllable in both, except the destructive image wipe, which is
-Admin-only). No database migration: everything fits the existing schema.
+Five owner requests, built for the Admin site and the Ops app (owner rule:
+everything controllable in both, except the destructive image wipe and the
+"remove all products" wipe, which are Admin-only). No database migration: everything fits the existing schema.
 
 All endpoints are under `/api/v1`. Staff endpoints need a staff Bearer token.
 
@@ -208,3 +208,81 @@ Category, promotion and doctor images are not touched. Audited
 
 Customer apps: products simply have `image_url: null` afterwards (already
 handled by the placeholder tile).
+
+---
+
+## 5. Remove all products (ADMIN only)
+
+Owner (2026-10-14): "remove all the existing products and images" - then load
+a fresh product list (without images) with the Excel bulk upload. Admin-only
+(Operations gets 403; not in the Ops app), like section 4.
+
+- `GET /admin/products/remove-all/preview` (dry run) ->
+
+```json
+{
+  "products": 120, "variants": 14, "products_with_images": 80,
+  "combos": 3, "promotions": 2, "banners_linked": 0, "stock_alerts": 5,
+  "open_orders": 4, "products_in_open_orders": 9,
+  "images": { "products": 82, "combos": 1, "files": 70, "files_on_disk": 68, "external_links": 0 }
+}
+```
+
+  `products` = live products; `variants` = their live sizes/packs;
+  `combos` = active combo packs holding one; `promotions` = active home
+  carousel banners whose button opens one; `banners_linked` = hero banner /
+  promo band settings whose button opens one (left as they are, see below);
+  `stock_alerts` = "notify me" subscriptions; `open_orders` = orders not yet
+  DELIVERED / CANCELLED / FAILED holding one; `images` = the section 4 dry run.
+
+- `POST /admin/products/remove-all` with
+  `{ "confirm": "DELETE ALL PRODUCTS", "also_remove_images": true }`
+  (`also_remove_images` optional, default `true`) ->
+
+```json
+{
+  "products_removed": 120, "variants_removed": 14, "combos_switched_off": 3,
+  "promotions_switched_off": 2, "stock_alerts_cleared": 5, "open_orders_kept": 4,
+  "images": { "products_cleared": 82, "combos_cleared": 1, "files_deleted": 66, "files_missing": 2, "files_kept_in_use": 2 }
+}
+```
+
+  `images` is `null` when `also_remove_images` is `false`. Any other
+  `confirm` (or a non-boolean `also_remove_images`) -> 400 `VALIDATION_ERROR`
+  and nothing changes (the same validation status as section 4).
+
+What it changes, in ONE transaction (every live product locked first, so an
+order being placed for one either commits before it or is refused after it):
+
+| What | Change |
+| --- | --- |
+| products (live) | **soft-deleted**: `deleted_at` set, `is_active` / `is_available` false. Never hard-deleted (order items and inventory reference them). |
+| product_variants of those products | soft-deleted the same way |
+| combos holding one (active) | `is_active = false`; their items are kept |
+| promotions (active) opening one | `is_active = false` (the target value is kept so staff can see what it was; re-point and switch on again) |
+| stock_alerts for them | deleted |
+| images (`also_remove_images`) | exactly section 4: every product (soft-deleted too) and combo image link cleared; after commit the unused files under `products/` deleted |
+
+Promotions are switched off rather than re-pointed at the whole catalog: a
+banner made for one product would otherwise keep advertising something that
+no longer exists. The hero banner and promo band are settings and are not
+touched: a deleted target already makes their button fall back to the app's
+own behaviour.
+
+Not touched: categories, category groups, settings, orders and order items,
+inventory rows and their ledger, customers, riders, doctors.
+
+Open orders stay fulfillable: order screens (customer, Ops, Rider) read the
+order item snapshots (name, SKU, unit, variant label, prices), never the
+live product; packing takes stock from the inventory rows, which stay; a
+soft-deleted variant is still the row an item's `variant_id` points at.
+
+Re-import: SKU and slug are unique only among live products (migration 017)
+and variant SKUs only among live variants, so the bulk upload re-creates the
+same SKUs as new products (new ids). Removed products are not restored by it.
+
+Audited once: `PRODUCTS_REMOVED_ALL` with the result counts and
+`also_remove_images`. Idempotent: a second run removes 0. Open customer apps
+refresh straight away (the catalog triggers NOTIFY `catalog_changed` on
+commit; the API also queues a catalog event itself). No rate limit (section 4
+has none either); the typed words are the guard.
