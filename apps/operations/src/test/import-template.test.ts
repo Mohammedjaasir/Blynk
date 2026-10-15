@@ -62,7 +62,8 @@ describe('import template', () => {
 
   it('explains variant rows (parent_sku, variant) and delivery_lead_days', () => {
     const notes = TEMPLATE_NOTES.map((r) => r.join(' | '));
-    expect(TEMPLATE_COLUMNS.slice(-3)).toEqual(['parent_sku', 'variant', 'delivery_lead_days']);
+    // Migration 048: mrp follows them, last.
+    expect(TEMPLATE_COLUMNS.slice(-4)).toEqual(['parent_sku', 'variant', 'delivery_lead_days', 'mrp']);
     expect(notes.some((n) => /^parent_sku \| variant rows \| .*SKU of the product this variant belongs to/.test(n))).toBe(true);
     expect(notes.some((n) => /^variant \| variant rows \| .*size or pack/.test(n))).toBe(true);
     expect(notes.some((n) => /^delivery_lead_days \| no \| .*0 or empty = same day, up to 30/.test(n))).toBe(true);

@@ -53,6 +53,11 @@ export interface ResolvePriceInput {
   categoryMarkupPercent?: number | string | null;
   parentCategoryMarkupPercent?: number | string | null;
   globalMarkupPercent?: number | string | null;
+  /**
+   * Migration 048: the MRP (Maximum Retail Price). When the computed price is
+   * higher, the selling price is capped at it. Null/absent = no cap.
+   */
+  mrp?: number | string | null;
 }
 
 export interface PriceWarning {
@@ -71,8 +76,14 @@ export interface ResolvedPrice {
    * the cost is 0.
    */
   effectiveMarkupPercent: number | null;
-  /** Set when a FIXED price is below the purchase cost (a warning, never a block). */
+  /** Set when the selling price is below the purchase cost (a warning, never a block). */
   warning: PriceWarning | null;
+  /** Migration 048: the price the rule gives before the MRP cap (markup or fixed). */
+  computedSellingPrice: number;
+  /** Migration 048: the MRP (null when none). */
+  mrp: number | null;
+  /** Migration 048: true when computedSellingPrice > mrp, so sellingPrice is the MRP. */
+  mrpCapped: boolean;
 }
 
 const present = (v: unknown): v is number | string =>
@@ -111,8 +122,20 @@ export function belowCostWarning(purchaseCost: number, sellingPrice: number): Pr
   };
 }
 
-/** The single selling-price rule (see the module comment). */
-export function resolveSellingPrice(input: ResolvePriceInput): ResolvedPrice {
+/**
+ * Migration 048 (owner, 2026-10-14): "if the selling price is higher than the
+ * MRP, the customer pays the MRP". The ONE TypeScript place the cap is
+ * applied (v_product_catalog / v_product_variant_catalog do the same with
+ * LEAST(computed, mrp)). Returns the capped price and whether it was capped.
+ */
+export function capAtMrp(computed: number, mrp: number | string | null | undefined): { sellingPrice: number; mrp: number | null; mrpCapped: boolean } {
+  const m = present(mrp) && Number(mrp) > 0 ? round2(Number(mrp)) : null;
+  if (m !== null && computed > m) return { sellingPrice: m, mrp: m, mrpCapped: true };
+  return { sellingPrice: computed, mrp: m, mrpCapped: false };
+}
+
+/** The price rule before the MRP cap (see the module comment). */
+function resolveUncapped(input: ResolvePriceInput): Omit<ResolvedPrice, 'computedSellingPrice' | 'mrp' | 'mrpCapped'> {
   const cost = Number(input.purchaseCost);
   if (!Number.isFinite(cost) || cost < 0) throw new Error('Purchase cost cannot be negative');
 
@@ -127,7 +150,7 @@ export function resolveSellingPrice(input: ResolvePriceInput): ResolvedPrice {
       purchaseCost: cost,
       sellingPrice: price,
       effectiveMarkupPercent: impliedMarkupPercent(cost, price),
-      warning: belowCostWarning(cost, price),
+      warning: null,
     };
   }
 
@@ -155,6 +178,26 @@ export function resolveSellingPrice(input: ResolvePriceInput): ResolvedPrice {
     sellingPrice: markupPrice(cost, markup),
     effectiveMarkupPercent: markup,
     warning: null,
+  };
+}
+
+/**
+ * The single selling-price rule (see the module comment), capped at the MRP
+ * (migration 048). effectiveMarkupPercent / pricingSource describe the rule
+ * that produced computedSellingPrice; sellingPrice is what customers pay
+ * before offers. A price below cost (a low fixed price, or an MRP under the
+ * cost) carries a warning, never a block.
+ */
+export function resolveSellingPrice(input: ResolvePriceInput): ResolvedPrice {
+  const base = resolveUncapped(input);
+  const capped = capAtMrp(base.sellingPrice, input.mrp);
+  return {
+    ...base,
+    sellingPrice: capped.sellingPrice,
+    warning: belowCostWarning(base.purchaseCost, capped.sellingPrice),
+    computedSellingPrice: base.sellingPrice,
+    mrp: capped.mrp,
+    mrpCapped: capped.mrpCapped,
   };
 }
 

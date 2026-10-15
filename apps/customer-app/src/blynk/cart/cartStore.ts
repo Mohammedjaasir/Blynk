@@ -1,5 +1,5 @@
 import type { Combo, Product, ProductVariant } from '../api/types';
-import { effectivePrice, type PricedItem } from '../lib/pricing';
+import { effectivePrice, type MrpPriced } from '../lib/pricing';
 import { storage } from '../lib/storage';
 
 /** Its own key: the web app at / and this app at /app share an origin, and their carts stay apart. */
@@ -9,7 +9,7 @@ export const MAX_QTY = 100;
  * The size/pack a line is for (migration 045): a snapshot of the variant as it was added, kept
  * fresh from the product page / size picker. The server prices it again at POST /orders.
  */
-export type CartVariant = Pick<ProductVariant, 'id' | 'label' | 'selling_price' | 'offer_price' | 'offer_ends_at' | 'is_available'>;
+export type CartVariant = Pick<ProductVariant, 'id' | 'label' | 'selling_price' | 'offer_price' | 'offer_ends_at' | 'is_available' | 'mrp'>;
 /**
  * One cart line: a product, or one size of it. Lines are keyed by product + variant
  * (`lineKey`), so 100 g and 250 g of the same chilli powder are two lines.
@@ -51,10 +51,12 @@ export const keyOf = (l: Pick<CartLine, 'product' | 'variant'>) => lineKey(l.pro
 export const toCartVariant = (v: CartVariant): CartVariant => ({
   id: v.id, label: v.label, selling_price: v.selling_price, offer_price: v.offer_price ?? null,
   offer_ends_at: v.offer_ends_at ?? null, is_available: v.is_available,
+  // migration 048: the size's MRP, for the cart line's struck price
+  ...(v.mrp != null ? { mrp: v.mrp } : {}),
 });
 
 /** The price fields that apply to a line: the variant's for a size, else the product's. */
-export const linePriced = (l: Pick<CartLine, 'product' | 'variant'>): PricedItem => (l.variant ? l.variant : l.product);
+export const linePriced = (l: Pick<CartLine, 'product' | 'variant'>): MrpPriced => (l.variant ? l.variant : l.product);
 /** One unit of the line right now (offer-aware). */
 export const lineUnitPrice = (l: Pick<CartLine, 'product' | 'variant'>, now = new Date()) => effectivePrice(linePriced(l), now);
 

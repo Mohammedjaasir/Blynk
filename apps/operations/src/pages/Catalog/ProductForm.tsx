@@ -18,6 +18,7 @@ import {
   parseOfferPrice,
   parseStockNumber,
   percentOff,
+  serverFieldError,
 } from '../../lib/catalog';
 import { staffStockBadge } from '../../lib/inventory';
 import { ProductVariants } from './ProductVariants';
@@ -25,11 +26,14 @@ import { replacedImages } from '../../lib/image';
 import {
   FALLBACK_DEFAULT_MARKUP_PERCENT,
   belowCostText,
+  capAtMrp,
   inheritedMarkup,
   marginPercent,
   markupPrice,
   markupSourceText,
+  mrpCappedNote,
   parseMarkupPercent,
+  parseMrpInput,
   parseSellingPrice,
   percentText,
   resolveMarkup,
@@ -58,6 +62,8 @@ interface FormState {
   custom_markup_percent: string;
   /** FIXED mode: the exact selling price. */
   fixed_selling_price: string;
+  /** MRP (migration 048) as typed; '' = none. The selling price is capped at it. */
+  mrp: string;
   is_available: boolean;
   is_active: boolean;
   /** Offer price in LKR as typed; '' = no offer (owner, 2026-10-09). */
@@ -131,6 +137,7 @@ const EMPTY: FormState = {
   pricing_mode: 'MARKUP',
   custom_markup_percent: '',
   fixed_selling_price: '',
+  mrp: '',
   is_available: true,
   is_active: true,
   offer_price: '',
@@ -153,6 +160,15 @@ const EMPTY: FormState = {
  * to let the backend recompute the real value (common.md rule 8 - no
  * client-side price authority).
  */
+/**
+ * Migration 048: when the selling price is the MRP, an offer refused for not
+ * being lower says so ("..., capped at the MRP").
+ */
+function withMrpReason<T extends { value: number } | { error: string }>(parsed: T | null, capped: boolean): T | null {
+  if (!parsed || !capped || !('error' in parsed) || !parsed.error.startsWith('The offer price must be lower')) return parsed;
+  return { ...parsed, error: parsed.error.replace(/\)\.$/, ', capped at the MRP).') };
+}
+
 export function ProductForm() {
   const { id } = useParams();
   const isEditing = Boolean(id);
@@ -172,6 +188,8 @@ export function ProductForm() {
   const [savedImageUrl, setSavedImageUrl] = useState<string | null>(null);
   /** The saved product's own selling price, for when no preview can be worked out. */
   const [savedSellingPrice, setSavedSellingPrice] = useState<number | null>(null);
+  /** The saved MRP as text ('' = none) - the MRP is sent only when it changed. */
+  const [savedMrp, setSavedMrp] = useState('');
   const [savedOffer, setSavedOffer] = useState<SavedOffer>(NO_OFFER);
   /** The saved product (edit only) - its markups price the variants. */
   const [savedProduct, setSavedProduct] = useState<AdminProduct | null>(null);
@@ -214,9 +232,11 @@ export function ProductForm() {
           active: product.offer_active === true,
         };
         setSavedOffer(offer);
-        setSavedSellingPrice(
-          product.calculated_selling_price === undefined ? null : Number(product.calculated_selling_price)
-        );
+        // Migration 048: the price before the MRP cap (the form applies the cap itself).
+        const storedPrice = product.computed_selling_price ?? product.calculated_selling_price ?? product.selling_price;
+        setSavedSellingPrice(storedPrice === undefined || storedPrice === null ? null : Number(storedPrice));
+        const mrpText = product.mrp === null || product.mrp === undefined ? '' : String(product.mrp);
+        setSavedMrp(mrpText);
         setForm({
           category_id: product.category_id,
           name: product.name,
@@ -242,6 +262,7 @@ export function ProductForm() {
             product.fixed_selling_price === null || product.fixed_selling_price === undefined
               ? ''
               : String(product.fixed_selling_price),
+          mrp: mrpText,
           is_available: product.is_available,
           is_active: product.is_active,
           // A stored offer opens as its price; "LKR off" shows the same
@@ -305,21 +326,34 @@ export function ProductForm() {
     return { price: markupPrice(cost, markup.percent), markup };
   }, [form.pricing_mode, form.fixed_selling_price, form.custom_markup_percent, cost, inherited]);
   const previewPrice = preview?.price ?? null;
-  const margin = previewPrice !== null && cost !== null ? marginPercent(cost, previewPrice) : null;
-  const belowCost = previewPrice !== null && cost !== null ? belowCostText(cost, previewPrice) : null;
+
+  /** The MRP as typed (migration 048): a number, null = none, undefined = not valid yet. */
+  const mrpValue = useMemo(() => {
+    const parsed = parseMrpInput(form.mrp);
+    return 'value' in parsed ? parsed.value : undefined;
+  }, [form.mrp]);
+  /** The preview capped at the MRP - what customers actually pay before offers. */
+  const previewCapped = previewPrice !== null ? capAtMrp(previewPrice, mrpValue) : null;
+  const effectivePrice = previewCapped?.price ?? null;
+  const margin = effectivePrice !== null && cost !== null ? marginPercent(cost, effectivePrice) : null;
+  const belowCost = effectivePrice !== null && cost !== null ? belowCostText(cost, effectivePrice) : null;
 
   /** The selling price the offer is measured against: the preview above, else
-   * the saved product's own price. */
-  const sellingForOffer = previewPrice ?? savedSellingPrice;
+   * the saved product's own price - capped at the MRP (migration 048). */
+  const uncappedForOffer = previewPrice ?? savedSellingPrice;
+  const offerCap = uncappedForOffer !== null ? capAtMrp(uncappedForOffer, mrpValue) : null;
+  const sellingForOffer = offerCap?.price ?? null;
 
   /** What the operator typed in the active offer field; '' = no offer. */
   const offerText = (form.offer_mode === 'off' ? form.offer_off : form.offer_price).trim();
-  const offerParsed =
+  const offerParsed = withMrpReason(
     offerText === ''
       ? null
       : form.offer_mode === 'off'
         ? parseOfferAmountOff(form.offer_off, sellingForOffer)
-        : parseOfferPrice(form.offer_price, sellingForOffer);
+        : parseOfferPrice(form.offer_price, sellingForOffer),
+    offerCap?.capped === true
+  );
   const offerPriceChanged =
     form.offer_mode === 'off'
       ? offerText === ''
@@ -403,6 +437,9 @@ export function ProductForm() {
       const markup = parseMarkupPercent(form.custom_markup_percent);
       if ('error' in markup) next.custom_markup_percent = markup.error;
     }
+    // MRP (migration 048): optional, above 0.
+    const mrp = parseMrpInput(form.mrp);
+    if ('error' in mrp) next.mrp = mrp.error;
     // Offer (owner, 2026-10-09). An ended offer left as it is does not block
     // an unrelated edit; anything the operator touches is checked.
     if (offerParsed && 'error' in offerParsed && (offerPriceChanged || offerEndChanged || !offerEnded)) {
@@ -448,6 +485,10 @@ export function ProductForm() {
       const markup = parseMarkupPercent(form.custom_markup_percent);
       payload.custom_markup_percent = 'value' in markup ? markup.value : null;
     }
+    // MRP (migration 048): sent only when it changed (blank clears it), so an
+    // unrelated edit never re-checks the running offer against it.
+    const mrpText = form.mrp.trim();
+    if (mrpText !== savedMrp) payload.mrp = mrpText === '' ? null : Number(mrpText);
     // Offer fields go only when they changed (owner, 2026-10-09): resending
     // an untouched end date the form only knows as a day could move it.
     // An emptied price removes the offer, and the backend clears its end too.
@@ -484,7 +525,14 @@ export function ProductForm() {
       const warning = saved?.price_warning?.message;
       navigate('/catalog/products', warning ? { state: { notice: `${form.name.trim()} saved. ${warning}` } } : undefined);
     } catch (err) {
-      setServerError(catalogErrorMessage(err));
+      // An MRP the server refused shows under the MRP field (migration 048).
+      const mrpError = serverFieldError(err, 'mrp');
+      if (mrpError) {
+        setErrors((current) => ({ ...current, mrp: mrpError }));
+        setServerError('Check the MRP and save again.');
+      } else {
+        setServerError(catalogErrorMessage(err));
+      }
     } finally {
       setSaving(false);
     }
@@ -618,6 +666,25 @@ export function ProductForm() {
               </p>
             </>
           )}
+          <Field
+            label="MRP (LKR)"
+            hint="Optional. The Maximum Retail Price on the pack. If the selling price is higher, customers pay the MRP"
+            error={errors.mrp}
+          >
+            <input className="input" inputMode="decimal" value={form.mrp} onChange={(event) => setForm({ ...form, mrp: event.target.value })} />
+          </Field>
+          {previewCapped?.capped && previewPrice !== null ? (
+            <>
+              <p className="form__note" aria-live="polite">{`Selling price LKR ${previewCapped.price.toFixed(2)} (the MRP)`}</p>
+              <p className="form__note mrp-capped" role="status">
+                {mrpCappedNote(form.pricing_mode, previewPrice)}
+              </p>
+            </>
+          ) : previewPrice !== null && mrpValue != null && previewPrice < mrpValue ? (
+            <p className="form__note" aria-live="polite">
+              {`Below the MRP (LKR ${mrpValue.toFixed(2)}): customers see the MRP struck through next to the price.`}
+            </p>
+          ) : null}
           <p className="field__hint">The server works the selling price out again when you save.</p>
         </section>
 

@@ -2025,6 +2025,20 @@ th.cell__secondary {
   margin-top: 2px;
 }
 
+/* MRP (migration 048): "Capped at MRP (markup would give LKR 150.00)". */
+.mrp-capped {
+  color: #8a5a00;
+  font-weight: 600;
+  font-size: var(--text-meta);
+}
+td .mrp-capped {
+  display: block;
+  margin-top: 2px;
+  max-width: 220px;
+  margin-left: auto;
+  white-space: normal;
+}
+
 /* -------------------------------------------- sales, coupons, customers, cash */
 .figure__value--sm {
   font-size: 24px;

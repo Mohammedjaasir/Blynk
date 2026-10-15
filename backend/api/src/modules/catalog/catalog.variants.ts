@@ -8,6 +8,7 @@ import { logger } from '../../utils/logger.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { belowCostWarning, resolveVariantPrice, type PriceWarning, type PricingMode, type VariantPricingSource } from '../pricing/index.js';
 import { activeOfferPrice, assertOfferAllowed, publicOffer } from './catalog.offers.js';
+import { mrpSchema } from './catalog.schema.js';
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { inventoryRepository } from '../inventory/inventory.repository.js';
 import { staffStockFor, UNTRACKED_STOCK, type StaffStock } from '../inventory/stock-view.js';
@@ -42,6 +43,16 @@ type Executor = typeof db | Transaction<Database>;
 const twoDecimals = (v: number) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6;
 const money = (v: unknown) => Number(Number(v).toFixed(2));
 const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+
+/**
+ * Migration 048: the MRP a customer is shown - only when it is above what
+ * they pay now (catalog.service uses the same rule for products).
+ */
+export function publicMrp(mrp: unknown, pricePaid: number): number | null {
+  if (mrp === null || mrp === undefined) return null;
+  const m = money(mrp);
+  return Number.isFinite(m) && m > pricePaid ? m : null;
+}
 
 // ----------------------------------------------------------------------------
 // Schemas
@@ -97,6 +108,8 @@ const variantFields = {
     .datetime({ offset: true, message: 'Offer end must be a date and time, e.g. 2026-10-31T23:59:59+05:30' })
     .nullable()
     .optional(),
+  // Migration 048: this size's own MRP (null = none); its price is capped at it.
+  mrp: mrpSchema,
   is_active: z.boolean().optional(),
   is_available: z.boolean().optional(),
 };
@@ -160,8 +173,13 @@ export interface StaffVariant {
   global_markup_percent: number | null;
   effective_markup_percent: number | null;
   pricing_source: VariantPricingSource;
+  /** The regular price customers see (capped at the MRP). */
   selling_price: number;
   price_warning: PriceWarning | null;
+  /** Migration 048: the size's MRP (null = none), the price before the cap, and whether it capped. */
+  mrp: number | null;
+  computed_selling_price: number;
+  mrp_capped: boolean;
   offer_price: number | null;
   offer_ends_at: string | null;
   offer_active: boolean;
@@ -213,7 +231,10 @@ function toStaffVariant(row: VariantViewRow, stock: StaffStock | undefined): Sta
     effective_markup_percent: row.effective_markup_percent === null ? null : money(row.effective_markup_percent),
     pricing_source: row.pricing_source,
     selling_price: selling,
-    price_warning: mode === 'FIXED' ? belowCostWarning(cost, selling) : null,
+    price_warning: belowCostWarning(cost, selling),
+    mrp: row.mrp === null ? null : money(row.mrp),
+    computed_selling_price: row.computed_selling_price === null ? selling : money(row.computed_selling_price),
+    mrp_capped: row.mrp_capped === true,
     offer_price: offerPrice,
     offer_ends_at: row.offer_ends_at ? new Date(row.offer_ends_at).toISOString() : null,
     offer_active: activeOfferPrice({ offer_price: offerPrice, offer_ends_at: row.offer_ends_at }, selling) !== null,
@@ -258,13 +279,15 @@ export interface CustomerVariantDto {
   sku: string | null;
   barcode: string | null;
   sort_order: number;
-  /** The regular price; struck through while an offer is on. */
+  /** The regular price (capped at the MRP); struck through while an offer is on. */
   selling_price: number;
   offer_price: number | null;
   offer_ends_at: string | null;
   offer_kind: 'PRODUCT' | 'CATEGORY' | null;
   /** What one unit costs right now (offer_price ?? selling_price) - what the basket charges. */
   price: number;
+  /** Migration 048: the size's MRP only when it is above `price` (shown struck as "MRP"); else null. */
+  mrp: number | null;
   /** Can be added to the basket now (switched on and in stock). */
   is_available: boolean;
 }
@@ -281,6 +304,7 @@ export function toCustomerVariant(row: VariantViewRow, now: Date = new Date()): 
     selling_price: selling,
     ...offer,
     price: offer.offer_price ?? selling,
+    mrp: publicMrp(row.mrp, offer.offer_price ?? selling),
     is_available: row.is_orderable,
   };
 }
@@ -368,9 +392,10 @@ async function assertUnique(executor: Executor, args: { productId: string; label
 /** The variant's selling price after an edit (for the offer check). */
 function priceAfter(
   product: Awaited<ReturnType<typeof productForVariants>>,
-  v: { purchase_cost: number; pricing_mode: PricingMode; fixed_selling_price: number | null; custom_markup_percent: number | null }
+  v: { purchase_cost: number; pricing_mode: PricingMode; fixed_selling_price: number | null; custom_markup_percent: number | null; mrp: number | null }
 ) {
   return resolveVariantPrice({
+    mrp: v.mrp,
     purchaseCost: v.purchase_cost,
     pricingMode: v.pricing_mode,
     fixedSellingPrice: v.fixed_selling_price,
@@ -390,6 +415,7 @@ const auditShape = (v: Record<string, unknown>) => ({
   fixed_selling_price: v.fixed_selling_price === null || v.fixed_selling_price === undefined ? null : Number(v.fixed_selling_price),
   custom_markup_percent: v.custom_markup_percent === null || v.custom_markup_percent === undefined ? null : Number(v.custom_markup_percent),
   offer_price: v.offer_price === null || v.offer_price === undefined ? null : Number(v.offer_price),
+  mrp: v.mrp === null || v.mrp === undefined ? null : Number(v.mrp),
   is_active: v.is_active,
   is_available: v.is_available,
 });
@@ -413,8 +439,9 @@ export async function createVariant(productId: string, input: CreateVariantInput
       pricing_mode: mode,
       fixed_selling_price: fixed,
       custom_markup_percent: input.custom_markup_percent ?? null,
+      mrp: input.mrp ?? null,
     });
-    assertOfferAllowed({ offerPrice: offer, sellingPrice: price.sellingPrice, endsAt: input.offer_ends_at ?? null, endsAtChanged: true });
+    assertOfferAllowed({ offerPrice: offer, sellingPrice: price.sellingPrice, endsAt: input.offer_ends_at ?? null, endsAtChanged: true, mrpCapped: price.mrpCapped });
   }
 
   const id = await db.transaction().execute(async (trx) => {
@@ -444,6 +471,7 @@ export async function createVariant(productId: string, input: CreateVariantInput
         custom_markup_percent: input.custom_markup_percent ?? null,
         offer_price: offer,
         offer_ends_at: offer === null ? null : input.offer_ends_at ?? null,
+        mrp: input.mrp ?? null,
         is_active: input.is_active ?? true,
         is_available: input.is_available ?? true,
       })
@@ -493,6 +521,7 @@ export async function updateVariant(productId: string, variantId: string, input:
   }
   const markup = input.custom_markup_percent !== undefined ? input.custom_markup_percent : num(existing.custom_markup_percent);
   const cost = input.purchase_cost ?? Number(existing.purchase_cost);
+  const mrp = input.mrp !== undefined ? input.mrp : num(existing.mrp);
   const offer = input.offer_price !== undefined ? input.offer_price : num(existing.offer_price);
   const existingEnds = existing.offer_ends_at ? new Date(existing.offer_ends_at).toISOString() : null;
   const requestedEnds = input.offer_ends_at !== undefined ? input.offer_ends_at : existingEnds;
@@ -504,10 +533,11 @@ export async function updateVariant(productId: string, variantId: string, input:
     input.purchase_cost !== undefined ||
     input.pricing_mode !== undefined ||
     input.fixed_selling_price !== undefined ||
-    input.custom_markup_percent !== undefined;
+    input.custom_markup_percent !== undefined ||
+    input.mrp !== undefined;
   if (offer !== null && (input.offer_price !== undefined || priceTouched || endsAtChanged)) {
-    const price = priceAfter(product, { purchase_cost: cost, pricing_mode: mode, fixed_selling_price: fixed, custom_markup_percent: markup });
-    assertOfferAllowed({ offerPrice: offer, sellingPrice: price.sellingPrice, endsAt: offerEnds, endsAtChanged });
+    const price = priceAfter(product, { purchase_cost: cost, pricing_mode: mode, fixed_selling_price: fixed, custom_markup_percent: markup, mrp });
+    assertOfferAllowed({ offerPrice: offer, sellingPrice: price.sellingPrice, endsAt: offerEnds, endsAtChanged, mrpCapped: price.mrpCapped });
   }
   const offerChanged = input.offer_price !== undefined || input.offer_ends_at !== undefined;
 
@@ -523,6 +553,7 @@ export async function updateVariant(productId: string, variantId: string, input:
         ...(input.pricing_mode !== undefined ? { pricing_mode: input.pricing_mode } : {}),
         ...(input.fixed_selling_price !== undefined ? { fixed_selling_price: input.fixed_selling_price } : {}),
         ...(input.custom_markup_percent !== undefined ? { custom_markup_percent: input.custom_markup_percent } : {}),
+        ...(input.mrp !== undefined ? { mrp: input.mrp } : {}),
         ...(offerChanged ? { offer_price: offer, offer_ends_at: offerEnds } : {}),
         ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
         ...(input.is_available !== undefined ? { is_available: input.is_available } : {}),

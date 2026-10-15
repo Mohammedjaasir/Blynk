@@ -300,6 +300,11 @@ export interface ProductsTable {
    * days (0 = same day / as soon as possible). Variants inherit it.
    */
   delivery_lead_days: ColumnType<number, number | undefined, number>;
+  /**
+   * Migration 048 (owner, 2026-10-14): the MRP (Maximum Retail Price), > 0;
+   * NULL = none. The selling price is capped at it (pricing/index.ts capAtMrp).
+   */
+  mrp: ColumnType<string | null, number | string | null | undefined, number | string | null>;
 }
 
 /**
@@ -325,6 +330,8 @@ export interface ProductVariantsTable {
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
   deleted_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  /** Migration 048: this size's own MRP (NULL = none; the product's MRP does not apply to it). */
+  mrp: ColumnType<string | null, number | string | null | undefined, number | string | null>;
 }
 
 export interface InventoryTable {
@@ -453,6 +460,8 @@ export interface OrderItemsTable {
   /** Migration 045: the variant ordered (null = the product itself) and its label then. */
   variant_id: ColumnType<string | null, string | null | undefined, string | null>;
   variant_label_snapshot: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Migration 048: the product's / size's MRP when ordered (NULL = none). Reporting only. */
+  mrp_snapshot: ColumnType<string | null, number | string | null | undefined, number | string | null>;
 }
 
 /** Migration 033 (owner, 2026-10-09): a combo pack - several products at one price. */
@@ -750,6 +759,11 @@ export interface ProductCatalogView {
   stock_tracked: boolean;
   stock_sellable: number | null;
   is_orderable: boolean;
+  // Migration 048: calculated_selling_price above is capped at the MRP.
+  // Staff reads: the MRP, the price before the cap, and whether it capped.
+  mrp: ColumnType<string | null, never, never>;
+  computed_selling_price: ColumnType<string, never, never>;
+  mrp_capped: boolean;
 }
 
 /** Migration 045: each live variant of a live product, priced (resolveVariantPrice's SQL twin). */
@@ -785,6 +799,10 @@ export interface ProductVariantCatalogView {
   stock_tracked: boolean;
   stock_sellable: number | null;
   is_orderable: boolean;
+  // Migration 048 (see ProductCatalogView).
+  mrp: ColumnType<string | null, never, never>;
+  computed_selling_price: ColumnType<string, never, never>;
+  mrp_capped: boolean;
 }
 
 /** Migration 045: inventory rows with units in open (unpacked) orders and what is left to sell. */

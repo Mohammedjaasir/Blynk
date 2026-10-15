@@ -5,7 +5,7 @@ import { products as productsApi } from '../api/resources';
 import type { ImportResponse, ImportResultRow, ImportRow } from '../api/types';
 import { PageHeader } from '../components/Layout';
 import { Badge, EmptyState, Spinner, useToast } from '../components/ui';
-import { PRICING_SOURCE_LABEL, formatLkr, formatPercent } from '../lib/pricing';
+import { PRICING_SOURCE_LABEL, formatLkr, formatPercent, mrpCappedNote } from '../lib/pricing';
 import { leadTimeText } from '../lib/stock';
 import {
   CATEGORY_HELP,
@@ -60,6 +60,12 @@ function SellingCell({ data, server }: { data: ImportRow; server: ImportResultRo
         ) : null}
         {/* Both price cells empty on an existing SKU (owner, 2026-10-13). */}
         {pricing.kept_current ? <span className="cell__secondary">Current pricing kept</span> : null}
+        {/* MRP (migration 048). */}
+        {pricing.mrp_capped && pricing.computed_selling_price != null ? (
+          <span className="cell__secondary mrp-capped">{mrpCappedNote(pricing.pricing_mode, Number(pricing.computed_selling_price))}</span>
+        ) : pricing.mrp != null ? (
+          <span className="cell__secondary">MRP {formatLkr(Number(pricing.mrp))}</span>
+        ) : null}
       </>
     );
   }
@@ -72,6 +78,7 @@ function SellingCell({ data, server }: { data: ImportRow; server: ImportResultRo
     );
   }
   if (data.markup_percent != null) return <span className="cell__secondary">{`Markup ${formatPercent(data.markup_percent)}%`}</span>;
+  if (data.mrp != null) return <span className="cell__secondary">{`MRP ${formatLkr(data.mrp)}`}</span>;
   return <span className="cell__secondary">Category / global markup (new) or current pricing (existing)</span>;
 }
 
@@ -238,6 +245,7 @@ export function ProductImport() {
           <p className="panel__body">
             {result.summary.created} created · {result.summary.updated} updated · {result.summary.skipped} skipped ·{' '}
             {result.summary.errors + clientErrorCount} errors
+            {result.mrp_capped ? ` · ${result.mrp_capped} capped at MRP` : ''}
           </p>
           <div className="row-actions">
             {result.summary.errors + clientErrorCount > 0 ? (
@@ -264,6 +272,7 @@ export function ProductImport() {
                 {dryRun
                   ? ` · ${dryRun.summary.created} new, ${dryRun.summary.updated} updates, ${dryRun.summary.skipped} unchanged`
                   : ''}
+                {dryRun?.mrp_capped ? ` · ${dryRun.mrp_capped} capped at MRP` : ''}
               </p>
               {checking ? <Spinner label="Checking with the store" /> : null}
               {dryRunError ? <p className="field__error">{dryRunError}</p> : null}

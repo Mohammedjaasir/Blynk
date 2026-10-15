@@ -41,6 +41,8 @@ describe('productImport lib', () => {
       'name', 'category', 'sub_category', 'unit', 'pack_size', 'purchase_cost', 'selling_price', 'markup_percent',
       'sku', 'barcode', 'description', 'tracked', 'opening_stock', 'image_url',
       'parent_sku', 'variant', 'delivery_lead_days',
+      // Migration 048 (owner, 2026-10-14): the optional MRP, last.
+      'mrp',
     ]);
     expect(templateCsv().split('\r\n')[0]).toBe(TEMPLATE_COLUMNS.join(','));
 

@@ -21,6 +21,11 @@ export interface Product {
   earliest_delivery_date?: string | null;
   /** Only on GET /catalog/products/:id: the active variants in staff order ([] without variants). */
   variants?: ProductVariant[];
+  /**
+   * MRP (migration 048; docs/api/catalog-mrp.md): sent only when it is above what the customer
+   * pays now, else null (absent on an older server). With sizes: the cheapest size's.
+   */
+  mrp?: number | null;
 }
 /** One size/pack of a product ("50 g", "3 pack"), as GET /catalog/products/:id lists it. */
 export interface ProductVariant {
@@ -30,6 +35,8 @@ export interface ProductVariant {
   price: number;
   /** False = sold out or switched off (shown greyed out). */
   is_available: boolean;
+  /** This size's MRP when above `price` (migration 048), else null / absent. */
+  mrp?: number | null;
 }
 export interface Category {
   id: string; name: string; slug: string; description: string | null; image_url: string | null;

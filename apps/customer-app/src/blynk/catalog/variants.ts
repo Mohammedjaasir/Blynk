@@ -1,6 +1,6 @@
 import type { Product, ProductVariant } from '@/blynk/api/types';
 import { formatLkr } from '@/blynk/lib/money';
-import { effectivePrice, isOfferActive, type PricedItem } from '@/blynk/lib/pricing';
+import { effectivePrice, isOfferActive, type MrpPriced } from '@/blynk/lib/pricing';
 
 /*
  * Variants, sold out and delivery lead time on the shop side (migration 045, owner 2026-10-14:
@@ -55,9 +55,9 @@ export function priceText(p: Product, opts: { compact?: boolean; now?: Date; mon
   return opts.compact || full.length > RANGE_MAX_CHARS ? VARIANT_COPY.from(money(min)) : full;
 }
 
-/** A variant's price fields as the pricing helpers read them. */
-export const variantPriced = (v: Pick<ProductVariant, 'selling_price' | 'offer_price' | 'offer_ends_at'>): PricedItem => ({
-  selling_price: v.selling_price, offer_price: v.offer_price, offer_ends_at: v.offer_ends_at,
+/** A variant's price fields as the pricing helpers read them (with its MRP, migration 048). */
+export const variantPriced = (v: Pick<ProductVariant, 'selling_price' | 'offer_price' | 'offer_ends_at' | 'mrp'>): MrpPriced => ({
+  selling_price: v.selling_price, offer_price: v.offer_price, offer_ends_at: v.offer_ends_at, mrp: v.mrp ?? null,
 });
 
 /** What one unit of this variant costs now (its own offer or the category one, already in offer_price). */
@@ -86,6 +86,8 @@ export function parseVariants(raw: unknown): ProductVariant[] {
       offer_kind: v.offer_kind === 'PRODUCT' || v.offer_kind === 'CATEGORY' ? v.offer_kind : null,
       price: num(v.price) ?? offer ?? selling,
       is_available: v.is_available === true,
+      // migration 048: the size's MRP (only sent when above its price)
+      mrp: v.mrp == null ? null : num(v.mrp),
     });
   }
   return out.sort((a, b) => a.sort_order - b.sort_order);
@@ -96,6 +98,7 @@ export function normalizeProductExtras<T extends Product>(p: T): T {
   const out: T = { ...p };
   if (p.price_min != null) out.price_min = num(p.price_min) ?? undefined;
   if (p.price_max != null) out.price_max = num(p.price_max) ?? undefined;
+  if (p.mrp != null) out.mrp = num(p.mrp);
   if (p.delivery_lead_days != null) out.delivery_lead_days = Math.max(0, Math.floor(num(p.delivery_lead_days) ?? 0));
   if (p.variants !== undefined) out.variants = parseVariants(p.variants);
   return out;

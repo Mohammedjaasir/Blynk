@@ -165,6 +165,15 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
     } else if (!atMost2Decimals(markup)) errors.push({ field: 'markup_percent', message: 'Markup can have at most 2 decimals.' });
   }
 
+  // mrp (migration 048): optional, above 0; blank keeps an existing MRP.
+  const mrp = cellNumber(record.mrp);
+  if (mrp !== null) {
+    if (Number.isNaN(mrp)) errors.push({ field: 'mrp', message: 'MRP must be a number.' });
+    else if (mrp <= 0) errors.push({ field: 'mrp', message: 'MRP must be above 0.' });
+    else if (mrp > MAX_IMPORT_PRICE) errors.push({ field: 'mrp', message: 'MRP can be at most 99,999,999.99.' });
+    else if (!atMost2Decimals(mrp)) errors.push({ field: 'mrp', message: 'MRP can have at most 2 decimals.' });
+  }
+
   const trackedText = text('tracked').toLowerCase();
   let tracked: 'yes' | 'no' | null = null;
   if (trackedText) {
@@ -198,6 +207,8 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
     purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : 0,
     selling_price: selling !== null && !Number.isNaN(selling) ? selling : null,
     markup_percent: markup !== null && !Number.isNaN(markup) ? markup : null,
+    // Migration 048: only when filled, so a row without it is sent as before (blank keeps the MRP).
+    ...(mrp !== null && !Number.isNaN(mrp) && mrp > 0 ? { mrp } : {}),
     sku,
     barcode: optional('barcode'),
     description: optional('description'),

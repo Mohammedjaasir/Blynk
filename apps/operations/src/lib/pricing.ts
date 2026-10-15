@@ -277,3 +277,38 @@ export function resolveVariantPrice(input: ResolveVariantPriceInput): ResolvedVa
 export function variantPricingSourceLabel(source: VariantPricingSource | null | undefined): string {
   return source === 'VARIANT_MARKUP' ? 'Variant markup' : pricingSourceLabel(source);
 }
+
+// ---------------------------------------------------------------------- MRP
+/**
+ * MRP (migration 048; owner, 2026-10-14): a product or a size may have a
+ * Maximum Retail Price. When the selling price the rule gives (markup or
+ * fixed) is higher, customers pay the MRP - the backend's capAtMrp
+ * (pricing/index.ts) and v_product_catalog's LEAST(computed, mrp). These
+ * twins drive the live previews; the server applies the cap.
+ */
+export const MAX_MRP = 99_999_999.99;
+
+/** An MRP typed into a form: '' = none, else above 0 with at most 2 decimals. */
+export function parseMrpInput(text: string): { value: number | null } | { error: string } {
+  const raw = text.trim();
+  if (raw === '') return { value: null };
+  if (!/^\d+(\.\d{1,2})?$/.test(raw) || !(Number(raw) > 0)) return { error: 'Enter an MRP above 0 with at most 2 decimals, or leave it blank' };
+  if (Number(raw) > MAX_MRP) return { error: 'MRP can be at most LKR 99,999,999.99' };
+  return { value: Number(raw) };
+}
+
+/** The price customers pay before offers: the lower of the price and the MRP. */
+export function capAtMrp(price: number, mrp: number | null | undefined): { price: number; capped: boolean } {
+  if (mrp === null || mrp === undefined || !Number.isFinite(mrp) || !(mrp > 0)) return { price, capped: false };
+  return price > mrp ? { price: round2(mrp), capped: true } : { price, capped: false };
+}
+
+/**
+ * The note on a capped product or size (owner: "Capped at MRP (markup would
+ * give LKR X)"): "Capped at MRP (markup would give LKR 150.00)" or
+ * "Capped at MRP (fixed price LKR 300.00)".
+ */
+export function mrpCappedNote(mode: PricingMode | null | undefined, computed: number): string {
+  const lkr = `LKR ${computed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return mode === 'FIXED' ? `Capped at MRP (fixed price ${lkr})` : `Capped at MRP (markup would give ${lkr})`;
+}

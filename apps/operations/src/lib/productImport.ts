@@ -1,6 +1,6 @@
 import type { ImportRow, ImportRowResult } from '../api/types';
 import { TEMPLATE_COLUMNS, buildTemplateWorkbook } from './importTemplate';
-import { MAX_MARKUP_PERCENT, MAX_SELLING_PRICE, markupPrice, variantPricingSourceLabel, type VariantPricingSource } from './pricing';
+import { MAX_MARKUP_PERCENT, MAX_SELLING_PRICE, capAtMrp, markupPrice, variantPricingSourceLabel, type VariantPricingSource } from './pricing';
 
 /**
  * Bulk product import (spreadsheet -> `POST /admin/products/import`).
@@ -204,6 +204,16 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
       errors.push({ field: 'markup_percent', message: 'markup_percent can have at most 2 decimals.' });
   }
 
+  // mrp (migration 048): optional on product and variant rows, above 0;
+  // blank = none for a new product / size, unchanged for an existing one.
+  const mrp = number(cells.mrp);
+  if (mrp !== null) {
+    if (Number.isNaN(mrp)) errors.push({ field: 'mrp', message: 'MRP must be a number.' });
+    else if (mrp <= 0) errors.push({ field: 'mrp', message: 'MRP must be above 0.' });
+    else if (mrp > MAX_SELLING_PRICE) errors.push({ field: 'mrp', message: 'MRP can be at most 99,999,999.99.' });
+    else if (!hasTwoDecimalsAtMost(mrp)) errors.push({ field: 'mrp', message: 'MRP can have at most 2 decimals.' });
+  }
+
   const trackedValue = tracked(cells.tracked);
   if (trackedValue === undefined) errors.push({ field: 'tracked', message: 'tracked must be yes or no.' });
 
@@ -237,6 +247,7 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
   };
   // Only sent when the row uses them, so a plain product row stays as before.
   // A variant row takes its category from the product, so no sub_category.
+  if (mrp !== null && !Number.isNaN(mrp) && mrp > 0) data.mrp = mrp;
   if (variantRow) {
     data.parent_sku = parentSku;
     data.variant = variantLabel;
@@ -375,12 +386,13 @@ export function rowPricing(
   const warnings = server?.warnings ?? [];
   const variant = isVariantImportRow(data);
   if (data.selling_price !== null && data.selling_price !== undefined) {
-    return { price: data.selling_price, source: 'FIXED', label: variantPricingSourceLabel('FIXED'), warnings };
+    // Migration 048: a price above the row's MRP is capped at it.
+    return { price: capAtMrp(data.selling_price, data.mrp).price, source: 'FIXED', label: variantPricingSourceLabel('FIXED'), warnings };
   }
   if (data.markup_percent !== null && data.markup_percent !== undefined) {
     const source: VariantPricingSource = variant ? 'VARIANT_MARKUP' : 'PRODUCT_MARKUP';
     return {
-      price: markupPrice(data.purchase_cost, data.markup_percent),
+      price: capAtMrp(markupPrice(data.purchase_cost, data.markup_percent), data.mrp).price,
       source,
       label: variantPricingSourceLabel(source),
       warnings,

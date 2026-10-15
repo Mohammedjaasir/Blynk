@@ -110,6 +110,10 @@ describe('resolveSellingPrice - FIXED', () => {
       sellingPrice: 275,
       effectiveMarkupPercent: 37.5,
       warning: null,
+      // Migration 048: no MRP, so nothing is capped.
+      computedSellingPrice: 275,
+      mrp: null,
+      mrpCapped: false,
     });
   });
 

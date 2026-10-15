@@ -6,7 +6,7 @@ import { openProduct } from '@/blynk/catalog/openProduct';
 import { tileLabel } from '@/blynk/catalog/tileLabel';
 import { deliveredFromText, hasVariants, priceText, VARIANT_COPY } from '@/blynk/catalog/variants';
 import { formatLkr } from '@/blynk/lib/money';
-import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
+import { priceDisplay, sizedStruck } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
 import { extraOf } from '@/demo/extras';
 import { DEMO } from '@/demo/mode';
@@ -16,6 +16,7 @@ import { useCartSelect } from '@/lib/cart';
 import { C, F, T } from '@/lib/theme';
 import { NonVegMark, StarIcon, VegMark } from './icons';
 import { ProductImage } from './ProductImage';
+import { StruckPrice as StruckPriceText } from './StruckPrice';
 import { AddButton, DemoTicker } from './ui';
 
 export const unitText = (p: Pick<Product, 'unit' | 'pack_size'>) => [p.unit, p.pack_size].filter(Boolean).join(' · ');
@@ -43,11 +44,19 @@ export const ProductCard = memo(function ProductCard({
 }) {
   const inCart = useCartSelect((c) => (c.qty[p.id] ?? 0) > 0);
   const showSavings = useStore()?.show_offer_savings === true;
-  const offer = isOfferActive(p);
+  // the one price rule (offer, MRP; src/blynk/lib/pricing.ts priceDisplay): struck only while
+  // Admin's show_offer_savings is on
+  const shown = priceDisplay(p, { showStruck: DEMO || showSavings });
+  const offer = shown.offer;
   // sold in sizes: "LKR 50 – 350" ("From LKR 50" when narrow); a lead time: "Delivered from Fri 17 Oct"
   const sized = hasVariants(p);
+  const priceLine = sized ? priceText(p, { compact: width < 116, money }) : money(shown.price);
+  // MRP (migration 048): a sized tile's MRP is its cheapest size's, so it is struck only where the
+  // tile shows one starting price ("From LKR 50" / one price) - never beside a full range, where
+  // the regular price stays the reference on an offer (as before)
+  const struckPrice = sizedStruck(shown, sized && priceLine.includes('–'), p.selling_price);
   const lead = DEMO ? null : deliveredFromText(p);
-  const struck = offer && (DEMO || showSavings);
+  const struck = struckPrice !== null;
   const label = DEMO ? null : tileLabel({ available: p.is_available, offer, struckShown: struck, lead });
   const x = extraOf(p.id);
   const h = height ?? width;
@@ -101,12 +110,15 @@ export const ProductCard = memo(function ProductCard({
         line instead of being cut off. Sized products: the offer range, then the cheapest size's
         regular price struck. Live, the struck price shows while Admin's show_offer_savings is on
         (as in the cart); it already says "offer", so no "Offer price" / "You save" line under it.
+        MRP (migration 048): when the price is under the MRP, "MRP LKR 300" (amount struck) is the
+        struck reference instead - with or without an offer; at the MRP nothing is struck. A sized
+        tile strikes its cheapest size's MRP only beside "From LKR 50" / one price, not a full range.
       */}
       <View style={styles.priceRow}>
         <Text style={[styles.price, offer && styles.priceOffer]} numberOfLines={1}>
-          {sized ? priceText(p, { compact: width < 116, money }) : money(effectivePrice(p))}
+          {priceLine}
         </Text>
-        {struck && <Text style={styles.mrp} numberOfLines={1}>{money(p.selling_price)}</Text>}
+        {struckPrice && <StruckPriceText struck={struckPrice} money={money} style={styles.mrp} />}
       </View>
       {!!label && <Text style={[styles.label, label.kind === 'offer' && styles.labelOffer]} numberOfLines={1}>{label.text}</Text>}
       {x && (

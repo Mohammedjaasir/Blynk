@@ -6,12 +6,14 @@ import type { Product, ProductVariant } from '@/blynk/api/types';
 import { lineKey } from '@/blynk/cart/cartStore';
 import { fetchProductDetail } from '@/blynk/catalog/product';
 import { closeSizePicker, recallDetail, rememberDetail, sizePickerProduct, subscribeSizePicker } from '@/blynk/catalog/sizePicker';
-import { deliveredFromText, priceText, VARIANT_COPY, variantOnOffer, variantPrice } from '@/blynk/catalog/variants';
+import { deliveredFromText, priceText, VARIANT_COPY, variantPriced } from '@/blynk/catalog/variants';
 import { formatLkr } from '@/blynk/lib/money';
+import { priceDisplay } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
 import { cartActions, useCartSelect } from '@/lib/cart';
 import { C, F } from '@/lib/theme';
 import { ProductImage } from './ProductImage';
+import { StruckPrice } from './StruckPrice';
 import { PressScale, Skeleton } from './ui';
 
 /** The one app-wide size picker (mounted in the root layout); opened by openSizePicker(product). */
@@ -91,16 +93,19 @@ function SizePickerSheet({ product }: { product: Product }) {
   );
 }
 
-/** One size: label, its price (struck regular price on an offer), and Add / − n + / Sold out. */
+/**
+ * One size: label, its price (struck regular price on an offer; its own "MRP LKR 300" struck when
+ * the price is under its MRP - migration 048), and Add / − n + / Sold out.
+ */
 function VariantRow({ product, variant: v, showSavings }: { product: Product; variant: ProductVariant; showSavings: boolean }) {
-  const offer = variantOnOffer(v);
+  const shown = priceDisplay(variantPriced(v), { showStruck: showSavings });
   return (
     <View style={[styles.row, !v.is_available && { opacity: 0.55 }]}>
       <View style={{ flex: 1 }}>
         <Text style={styles.label}>{v.label}</Text>
         <View style={styles.priceRow}>
-          <Text style={[styles.price, offer && { color: C.brandText }]}>{formatLkr(variantPrice(v))}</Text>
-          {offer && showSavings && <Text style={styles.mrp}>{formatLkr(v.selling_price)}</Text>}
+          <Text style={[styles.price, shown.offer && { color: C.brandText }]}>{formatLkr(shown.price)}</Text>
+          {shown.struck && <StruckPrice struck={shown.struck} money={formatLkr} style={styles.mrp} />}
         </View>
       </View>
       {v.is_available ? <VariantStepper product={product} variant={v} /> : <Text style={styles.soldOut}>{VARIANT_COPY.soldOut}</Text>}
