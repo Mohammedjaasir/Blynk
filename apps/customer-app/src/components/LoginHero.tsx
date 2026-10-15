@@ -1,6 +1,5 @@
-import { useIsFocused } from 'expo-router';
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from 'react';
-import { AppState, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, type SharedValue, useAnimatedStyle, useReducedMotion, useSharedValue,
   withDelay, withRepeat, withSequence, withTiming,
@@ -10,6 +9,7 @@ import { HERO, HERO_ITEMS, type HeroLayout, nextHeadline } from '@/blynk/ui/logi
 import { LOGIN } from '@/blynk/ui/strings';
 import { withSpring } from '@/lib/motion';
 import { splashHandover } from '@/lib/splash';
+import { useActive } from '@/lib/useActive';
 import { C, F } from '@/lib/theme';
 
 /** Blynk's rider illustration (the promo band's mascot): illustrated, never a photo. */
@@ -71,23 +71,6 @@ export function LoginHero({ layout, topInset, leading, trailing }: {
       )}
     </View>
   );
-}
-
-/** Focused screen, visible tab, foreground app: only then do the loops run. */
-function useActive(): boolean {
-  const focused = useIsFocused();
-  const [fg, setFg] = useState(true);
-  useEffect(() => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const on = () => setFg(document.visibilityState !== 'hidden');
-      on();
-      document.addEventListener('visibilitychange', on);
-      return () => document.removeEventListener('visibilitychange', on);
-    }
-    const sub = AppState.addEventListener('change', (s) => setFg(s === 'active'));
-    return () => sub.remove();
-  }, []);
-  return focused && fg;
 }
 
 /** One headline at a time: it holds, slides up and out, and the next rises in. */

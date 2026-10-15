@@ -1,13 +1,22 @@
-import type { ReactNode } from 'react';
+import { Children, createContext, isValidElement, useContext, useEffect, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation, Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown, useAnimatedStyle, useReducedMotion, useSharedValue,
+  withDelay, withRepeat, withSequence, withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ENTER, enterDelay } from '@/blynk/account/tabHeroes';
 import { BackIcon, ChevronIcon } from '@/components/icons';
 import { PressScale } from '@/components/ui';
+import { withSpring } from '@/lib/motion';
 import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
+import { useActive } from '@/lib/useActive';
 
 /* Small shared pieces of the account screens, in the app's look (white cards on the pale grey). */
+
+/** The wash behind a card's row icons (Profile / Help give each section its own; elsewhere the pale grey). */
+const ToneContext = createContext<string>(C.bg);
 
 /** `onBack={null}`: no back button (a tab of the shell has nowhere to go back to). */
 export function ScreenHeader({ title, top, onBack = goBack }: { title: string; top: number; onBack?: (() => void) | null }) {
@@ -19,21 +28,92 @@ export function ScreenHeader({ title, top, onBack = goBack }: { title: string; t
   );
 }
 
-export function Card({ children, style }: { children: ReactNode; style?: object }) {
-  return <View style={[s.card, style]}>{children}</View>;
+/**
+ * A white card of rows. `tone` washes its row icons in one colour. `stagger` (the first row's
+ * slot): the card fades in and each row slides in after the one above, once, as the screen first
+ * shows (src/blynk/account/tabHeroes.ts ENTER). A row added to the card joins the stagger by itself.
+ */
+export function Card({ children, style, tone, stagger }: { children: ReactNode; style?: object; tone?: string; stagger?: number }) {
+  const body = stagger == null
+    ? children
+    : Children.toArray(children).map((child, i) => (
+      <Enter key={isValidElement(child) && child.key != null ? child.key : i} slot={stagger + i}>{child}</Enter>
+    ));
+  const card = <View style={[s.card, style]}>{body}</View>;
+  const toned = tone ? <ToneContext.Provider value={tone}>{card}</ToneContext.Provider> : card;
+  return stagger == null ? toned : <Enter slot={stagger} rise={0}>{toned}</Enter>;
 }
 
-export function Row({
-  icon, title, sub, onPress, last, danger, right,
-}: { icon?: string; title: string; sub?: string | null; onPress?: () => void; last?: boolean; danger?: boolean; right?: ReactNode }) {
+/**
+ * Fades (and lifts `rise` px) into place after `enterDelay(slot)`, once, when it mounts (a tab
+ * mounts on its first focus). Reduced motion: a plain short fade. Opacity / transform only.
+ */
+export function Enter({ slot, rise = 10, children }: { slot: number; rise?: number; children: ReactNode }) {
+  const reduced = useReducedMotion();
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = withDelay(reduced ? 0 : enterDelay(slot), withTiming(1, { duration: reduced ? 180 : ENTER.durationMs, easing: Easing.out(Easing.cubic) }));
+  }, []);
+  const lift = reduced ? 0 : rise;
+  const a = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * lift }] }));
+  return <Animated.View style={a}>{children}</Animated.View>;
+}
+
+/**
+ * A small green dot that pulses while `on` (the store is open), beside Call / WhatsApp. The pulse
+ * runs only while its screen is showing; reduced motion: a still dot.
+ */
+export function LiveDot({ on, size = 8, label }: { on: boolean; size?: number; label?: string }) {
+  const reduced = useReducedMotion();
+  const active = useActive();
+  const p = useSharedValue(0);
+  const run = on && active && !reduced;
+  useEffect(() => {
+    if (!run) { cancelAnimation(p); p.value = 0; return; }
+    p.value = 0;
+    p.value = withRepeat(withSequence(withTiming(1, { duration: 1300, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 500 })), -1);
+    return () => cancelAnimation(p);
+  }, [run]);
+  const ring = useAnimatedStyle(() => ({ opacity: p.value > 0 && p.value < 1 ? 0.5 * (1 - p.value) : 0, transform: [{ scale: 1 + 1.6 * p.value }] }));
+  if (!on) return null;
   return (
-    <PressScale onPress={onPress} disabled={!onPress} scaleTo={0.985} style={[s.row, !last && s.rowLine]}>
-      {!!icon && <View style={s.iconBox}><Text style={s.icon}>{icon}</Text></View>}
+    <View style={{ width: size, height: size }} accessible={!!label} accessibilityLabel={label}>
+      <Animated.View style={[StyleSheet.absoluteFill, { borderRadius: size, backgroundColor: C.green }, ring]} />
+      <View style={[StyleSheet.absoluteFill, { borderRadius: size, backgroundColor: C.green }]} />
+    </View>
+  );
+}
+
+/**
+ * One row: icon tile, title, optional line under it, chevron. On press the emoji gives a small
+ * hop and the chevron nudges right (no hop under reduced motion). `live`: a pulsing green dot
+ * before the chevron (Help's Call / WhatsApp while the store is open).
+ */
+export function Row({
+  icon, title, sub, onPress, last, danger, right, live, liveLabel,
+}: {
+  icon?: string; title: string; sub?: string | null; onPress?: () => void; last?: boolean; danger?: boolean; right?: ReactNode;
+  live?: boolean; liveLabel?: string;
+}) {
+  const tone = useContext(ToneContext);
+  const reduced = useReducedMotion();
+  const press = useSharedValue(0);
+  const onIn = () => { press.value = withSpring(1, { damping: 14, stiffness: 420 }); };
+  const onOut = () => { press.value = withSequence(withTiming(1, { duration: 70 }), withSpring(0, { damping: 7, stiffness: 260 })); };
+  const hop = reduced ? 0 : 1;
+  const iconA = useAnimatedStyle(() => ({
+    transform: [{ translateY: -3 * hop * press.value }, { scale: 1 + 0.16 * hop * press.value }, { rotate: `${-8 * hop * press.value}deg` }],
+  }));
+  const chevA = useAnimatedStyle(() => ({ transform: [{ translateX: 3 * press.value }, { rotate: '-90deg' }] }));
+  return (
+    <PressScale onPress={onPress} disabled={!onPress} scaleTo={0.985} style={[s.row, !last && s.rowLine]} onPressIn={onPress ? onIn : undefined} onPressOut={onPress ? onOut : undefined}>
+      {!!icon && <View style={[s.iconBox, { backgroundColor: tone }]}><Animated.Text style={[s.icon, iconA]}>{icon}</Animated.Text></View>}
       <View style={{ flex: 1 }}>
         <Text style={[s.rowTitle, danger && { color: C.problem }]}>{title}</Text>
         {!!sub && <Text style={s.rowSub} numberOfLines={1}>{sub}</Text>}
       </View>
-      {right ?? (onPress ? <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={14} color={C.sub} stroke={2.2} /></View> : null)}
+      {!!live && <LiveDot on label={liveLabel} />}
+      {right ?? (onPress ? <Animated.View style={chevA}><ChevronIcon size={14} color={C.sub} stroke={2.2} /></Animated.View> : null)}
     </PressScale>
   );
 }

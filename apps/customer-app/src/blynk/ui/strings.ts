@@ -128,3 +128,36 @@ export const HOME_FOOTER = {
   /** Read by a screen reader for the (decorative) picture. */
   label: 'Fresh groceries delivered to your door in Dharga Town',
 } as const;
+
+/** Profile's hero (src/components/TabHero.tsx ProfileHero): a guest's invitation, or the greeting. */
+export const PROFILE_HERO = {
+  title: 'My account',
+  guestSub: 'Log in to see your orders, addresses and points',
+  login: 'Log in',
+  hi: (first: string) => `Hi, ${first}`,
+  hiNoName: 'Hi there',
+  /** Screen reader: the (decorative) rider picture is skipped; this reads for the avatar. */
+  avatar: (name: string) => `${name}'s account`,
+  pointsUnit: (n: number) => (n === 1 ? 'Blynk Point' : 'Blynk Points'),
+  /** The quick chips under the greeting. */
+  chips: { orders: 'Orders', addresses: 'Addresses', points: 'Points' },
+} as const;
+
+/** Help's hero (src/components/TabHero.tsx HelpHero) and its contact rows. */
+export const HELP_HERO = {
+  title: 'Need a hand?',
+  sub: 'Answers to the questions we get most.',
+  openNow: (hours: string) => `We're open now · ${hours}`,
+  openNowShort: "We're open now",
+  opensAt: (time: string) => `Opens at ${time}`,
+  opensTomorrow: (time: string) => `Opens tomorrow at ${time}`,
+  opensOn: (weekday: string, time: string) => `Opens ${weekday} at ${time}`,
+  closedNow: 'Closed right now',
+  call: 'Call us',
+  whatsApp: 'WhatsApp us',
+  feedback: 'Send feedback',
+  /** Where the dialler cannot open: the number goes to the clipboard, never onto the screen. */
+  copied: 'Number copied',
+  /** Screen reader: the pulsing dot beside Call / WhatsApp while the store is open. */
+  liveHint: 'The store is open now',
+} as const;
