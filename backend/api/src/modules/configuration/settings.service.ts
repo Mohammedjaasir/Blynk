@@ -14,6 +14,8 @@ import { publicOnlinePayment } from '../payments/gateway-settings.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
 import { RIDER_BATCHING_KEY, getBatchingRules, type BatchingRules } from '../riders/batching.js';
 import { kmTiersFrom, kmTiersSchema, type KmTier } from '../pricing/km-tiers.js';
+import { pointsSettings } from '../loyalty/points.service.js';
+import { publicPointsProgram } from '../loyalty/points.rules.js';
 
 /**
  * Store-wide settings and the public store facts (GET /store).
@@ -824,6 +826,9 @@ export class SettingsService {
       // Home hero banner: Admin's / Ops' custom words while live; null = the
       // app's automatic banner (AUTO, or outside its schedule) (hero-banner.ts).
       hero_banner: await heroBannerService.readPublic(now),
+      // Blynk Points (owner, 2026-10-14: "for 100 LKR order 1 Blynk point" instead of free
+      // delivery): the earn rule the app and the landing site advertise; null while it is off.
+      points_program: publicPointsProgram(await pointsSettings.read()),
     };
   }
 }

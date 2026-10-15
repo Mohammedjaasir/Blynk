@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { catalog, settings } from '../../api/resources';
+import { referralPoints } from '../../api/referralPoints';
 import type { Category, CategoryGroup, HeroBannerFields, HeroBannerSetting } from '../../api/types';
 import { HeroBannerPreview } from '../../components/HeroBannerPreview';
 import { PageHeader } from '../../components/Layout';
@@ -12,8 +13,11 @@ import {
   HERO_STATUS_TEXT,
   HERO_TOKENS,
   heroPayload,
+  HERO_SAMPLE,
   heroPreviewModel,
   heroProblem,
+  heroSampleFrom,
+  type HeroSample,
   heroStatus,
 } from '../../lib/heroBanner';
 import { fromLocalInput, toLocalInput } from '../../lib/promoBand';
@@ -62,7 +66,19 @@ export function HeroBanner() {
   const set = <K extends keyof HeroBannerFields>(key: K, value: HeroBannerFields[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
 
-  const model = useMemo(() => heroPreviewModel(draft), [draft]);
+  // the live Blynk Points / free-delivery switches, so "Automatic" previews what customers see now
+  const [sample, setSample] = useState<HeroSample>(HERO_SAMPLE);
+  useEffect(() => {
+    let alive = true;
+    void Promise.allSettled([referralPoints.getPointsSetting(), settings.checkout.get()]).then(([p, c]) => {
+      if (!alive) return;
+      setSample(heroSampleFrom(p.status === 'fulfilled' ? p.value : null, c.status === 'fulfilled' ? c.value : null));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const model = useMemo(() => heroPreviewModel(draft, sample), [draft, sample]);
   const problem = heroProblem(draft);
   const dirty = saved ? JSON.stringify(heroPayload(draft)) !== JSON.stringify(heroPayload(heroFieldsOf(saved))) : false;
   const status = heroStatus(draft);
@@ -221,7 +237,7 @@ function HeroBannerForm({
         <p className="field__hint">
           {custom
             ? 'Your words below. Outside the schedule (if you set one) the banner goes back to automatic.'
-            : 'Automatic: "FREE DELIVERY" while new customers get free deliveries, otherwise "FRESH GROCERIES"; the line under it rolls between the offer and "Groceries starting at" the cheapest price.'}
+            : 'Automatic: "EARN POINTS" with the points rule while Blynk Points are on, else "FREE DELIVERY" while new customers get free deliveries, otherwise "FRESH GROCERIES"; the line under it rolls between that and "Groceries starting at" the cheapest price.'}
         </p>
       </section>
 
@@ -266,7 +282,7 @@ function HeroBannerForm({
                   </li>
                 ))}
               </ul>
-              A line whose token has no value right now (no free deliveries on, or no products) is skipped.
+              A line whose token has no value right now (no free deliveries on, Blynk Points off, or no products) is skipped.
             </div>
             <div className="band-list" style={{ marginTop: 8 }}>
               {draft.lines.map((line, i) => (

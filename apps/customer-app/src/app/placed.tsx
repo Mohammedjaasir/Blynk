@@ -20,6 +20,7 @@ import { placedLayout } from '@/blynk/orders/placedLayout';
 import { slotWindowText } from '@/blynk/orders/status';
 import { PAY } from '@/blynk/payments/copy';
 import { PLACED } from '@/blynk/ui/strings';
+import { placedPointsLine } from '@/blynk/store/pointsPromo';
 import { useStore } from '@/blynk/store/StoreContext';
 import type { Order } from '@/blynk/orders/types';
 import { Confetti, PressScale } from '@/components/ui';
@@ -77,6 +78,7 @@ export default function Placed() {
   const dropAt = order ? { lat: Number(order.delivery_latitude), lng: Number(order.delivery_longitude) } : null;
   const scheduled = !DEMO && !!order?.scheduled_for;
   const slot = order ? slotWindowText(order.scheduled_for, order.scheduled_until) : null;
+  const pointsLine = placedPointsLine(order);
 
   useEffect(() => {
     const t = reduced ? undefined : setTimeout(() => setBurst(Date.now()), T.confettiAt);
@@ -136,6 +138,8 @@ export default function Placed() {
                 <Text style={styles.factLabel}>{PLACED.amount}</Text>
                 <Text style={styles.factValue}>{formatLkr(order.total_amount)} · {paidOnline ? PAY.paidOnline : order.payment_method === 'ONLINE' ? PAY.online : PAY.cod}</Text>
               </View>
+              {/* Blynk Points (owner, 2026-10-14): the server's points_earn_preview, added on delivery */}
+              {!!pointsLine && <Text style={styles.points}>✦ {pointsLine}</Text>}
               {!reduced && <Shine delay={at(T.shineAt)} width={L.column} />}
             </Animated.View>
           )}
@@ -385,6 +389,7 @@ const styles = StyleSheet.create({
   factRow: { paddingVertical: 5 },
   factLabel: { fontFamily: F.medium, color: 'rgba(26,29,46,0.65)', fontSize: 12 },
   factValue: { fontFamily: F.bold, color: C.brandInk, fontSize: 16, marginTop: 1, flexShrink: 1 },
+  points: { fontFamily: F.medium, color: 'rgba(26,29,46,0.72)', fontSize: 12.5, lineHeight: 17, marginTop: 4 },
   charRow: { flexDirection: 'row', flexWrap: 'wrap' },
   shineClip: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', borderRadius: 16 },
   shine: { position: 'absolute', top: -40, bottom: -40, left: 0, width: 70 },

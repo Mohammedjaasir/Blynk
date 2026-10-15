@@ -127,6 +127,11 @@ export interface Order {
   coupon_code: string | null;
   total_amount: number;
   free_delivery_reason?: 'BASKET_THRESHOLD' | 'NEW_CUSTOMER' | null;
+  /**
+   * POST /orders and GET /orders/:id (owner, 2026-10-14): the Blynk Points this order earns once
+   * delivered (what it earned, once delivered; 0 while the program is off or cancelled).
+   */
+  points_earn_preview?: number;
   scheduled_for: string | null;
   /** The end of a booked delivery slot (null = as soon as possible). */
   scheduled_until?: string | null;

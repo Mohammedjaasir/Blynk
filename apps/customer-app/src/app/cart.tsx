@@ -55,6 +55,7 @@ import { requestPushPermission } from '@/blynk/push';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
 import { useStore } from '@/blynk/store/StoreContext';
 import { invalidateFreeClaim } from '@/blynk/store/useFreeClaim';
+import { cartEarn, cartPointsLine, pointsRuleOf } from '@/blynk/store/pointsPromo';
 import { ClosedBanner, useStoreClosed } from '@/components/ClosedBanner';
 import { FEE, FeeHeader } from '@/components/FeeHeader';
 import { BackIcon, ChevronIcon, CloseIcon, NavIcon, VegMark } from '@/components/icons';
@@ -166,6 +167,12 @@ export default function Cart() {
   const addrId = addr?.id ?? null;
   const quoteFor = quote && addrId && quote.delivery_fee_address_id === addrId ? quote : null;
   const checkout: CheckoutBill | null = addrId ? checkoutBill(total, quoteFor, coupon, usePoints) : null;
+  // Blynk Points instead of free delivery (owner, 2026-10-14): "You'll earn N Blynk Points on this
+  // order" (a guest: "Sign in to earn N ..."); hidden while points are off or N = 0
+  const pointsLine = cartPointsLine({
+    signedIn: !!phone,
+    earn: cartEarn({ rule: pointsRuleOf(store), itemTotal: total, quoted: quoteFor && checkout ? { earn: checkout.earn } : null }),
+  });
   const payInfo = onlineInfo(store?.online_payment, quoteFor?.online_payment);
   const payMethod = effectiveMethod(payChoice, payInfo, checkout?.toPay ?? null);
   // "For someone else" only while staff allow it (checkout-info; absent = off)
@@ -511,7 +518,7 @@ export default function Cart() {
           <CouponCard coupon={coupon} error={couponErr} onApply={applyCoupon} onRemove={() => { setCoupon(null); setCouponErr(null); }} />
         )}
 
-        {/* referral reward, Use points, points to earn: only what applies */}
+        {/* referral reward, Use points: only what applies (the points to earn are a line in the bill) */}
         {!DEMO && checkout && quoteFor && (
           <RewardsCard
             referral={referralOf(quoteFor)}
@@ -519,11 +526,10 @@ export default function Cart() {
             usePoints={usePoints}
             onUsePoints={setUsePoints}
             redeem={checkout.points}
-            earn={checkout.earn}
           />
         )}
 
-        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} freeCount={quoteFor?.free_delivery?.count ?? 0} payMethod={payMethod} /> : (
+        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} freeCount={quoteFor?.free_delivery?.count ?? 0} payMethod={payMethod} pointsLine={pointsLine} /> : (
         <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
           <StampBadge size={78} style={{ position: 'absolute', right: -6, top: -4 }} />
           <View style={styles.billHead}>
@@ -954,9 +960,11 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
  * address (GET /orders/checkout-info: free deliveries, the basket amount, per-km distance);
  * otherwise it is what /store says. No taxes or invented savings.
  */
-function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, payMethod }: {
+function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, payMethod, pointsLine }: {
   bill: LiveBill; itemTotal: number; mrpTotal: number; checkout: CheckoutBill | null; coupon: CouponPreview | null;
   payMethod: PayMethod;
+  /** "You'll earn N Blynk Points on this order" (a guest: "Sign in to earn ..."), or null. */
+  pointsLine: string | null;
   /** New-customer free deliveries in all (checkout-info free_delivery.count). */
   freeCount: number;
 }) {
@@ -1034,6 +1042,12 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, 
         )}
         {!!checkout && (estimated || checkout.points.value > 0) && (
           <Text style={styles.freeNote}>Estimated. The final amount is confirmed when you place the order.</Text>
+        )}
+        {!!pointsLine && (
+          <Animated.View entering={FadeIn.duration(220)} style={styles.pointsRow}>
+            <Text style={styles.pointsStar}>✦</Text>
+            <Text style={styles.pointsTxt}>{pointsLine}</Text>
+          </Animated.View>
         )}
       </View>
       <Animated.View entering={FadeIn.duration(250)} style={styles.thatsIt}>
@@ -1386,6 +1400,10 @@ const styles = StyleSheet.create({
   billR: { fontFamily: F.regular, fontSize: 12.6, color: TEXT },
   billStrike: { color: '#6E6E76', textDecorationLine: 'line-through' },
   freeNote: { fontFamily: F.regular, fontSize: 11.5, color: '#7A7A82', marginTop: 8, lineHeight: 16 },
+  // the bill's quiet Blynk Points line
+  pointsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 10 },
+  pointsStar: { fontSize: 11, lineHeight: 16, color: C.brandText },
+  pointsTxt: { flex: 1, fontFamily: F.medium, fontSize: 12, lineHeight: 16, color: '#5E5E66' },
   thatsIt: { height: 28, justifyContent: 'center', paddingHorizontal: 15, marginTop: 15, overflow: 'hidden' },
   thatsItTxt: { fontFamily: F.medium, fontSize: 12.3, color: C.brandText, letterSpacing: -0.1 },
   payTotal: { fontFamily: F.semi, fontSize: 12.8, color: INK },

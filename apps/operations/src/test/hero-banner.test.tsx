@@ -38,6 +38,9 @@ const catalogMocks = {
       categories: [{ id: 'c1', name: 'Rice', slug: 'rice', is_active: true, display_order: 1, parent_id: null }],
     }),
   'GET /admin/category-groups': () => ok({ groups: [], ungrouped: [] }),
+  // the live switches the "Automatic" preview follows (owner, 2026-10-14: points instead of free delivery)
+  'GET /admin/settings/points': () => ok({ enabled: true, earn_points: 1, earn_per_lkr: 100 }),
+  'GET /admin/settings/checkout': () => ok({ new_customer_free_deliveries: { enabled: false, count: 2 } }),
 };
 
 describe('Home banner editor (Blynk Ops)', () => {
@@ -52,7 +55,8 @@ describe('Home banner editor (Blynk Ops)', () => {
 
     expect(await screen.findByRole('heading', { name: 'Home banner' })).toBeInTheDocument();
     expect(screen.getByTestId('hero-status')).toHaveTextContent('Automatic');
-    expect(screen.getByTestId('hero-banner')).toHaveTextContent('FREE');
+    expect(screen.getByTestId('hero-banner')).toHaveTextContent('EARN');
+    expect(screen.getByTestId('hero-banner')).not.toHaveTextContent('FREE');
 
     await user.click(within(screen.getByRole('group', { name: 'Banner words' })).getByRole('button', { name: 'Custom' }));
     // the whole Ops shell re-renders per keystroke: set the values directly

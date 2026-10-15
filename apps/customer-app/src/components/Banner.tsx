@@ -176,24 +176,27 @@ function useRoll(lines: string[]) {
 
 /**
  * Home's hero. Design mock: the reference's own copy and emoji dishes. Live, AUTO (the
- * default): "FREE / DELIVERY" while this customer may be told of free deliveries (a guest: the
+ * default): "EARN / POINTS" with the live rule while Blynk Points are on (owner, 2026-10-14),
+ * else "FREE / DELIVERY" while this customer may be told of free deliveries (a guest: the
  * new-customer offer; signed in: their own left), otherwise "FRESH / GROCERIES"; the sub-line
  * rolls between that line and "Groceries starting at" the
  * cheapest effective price, and the beam lifts illustrated grocery items. Live, CUSTOM (GET
  * /store `hero_banner`, set in Admin / Ops): their two words, sub-lines, button and items,
  * with the same animation (src/blynk/promo/heroBanner.ts, docs/promo-surfaces.md §3).
  */
-export function Banner({ minPrice, freeCount, freeKind, onOrderNow, demo, hero }: {
+export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, demo, hero }: {
   /** Kept for callers; the banner no longer shows product photos. */
   images?: string[]; minPrice: number | null; freeCount: number; onOrderNow?: () => void;
   /** Whose free deliveries freeCount is (useFreeClaim): a guest's new-customer offer by default. */
   freeKind?: 'personal' | 'new-customer' | 'none';
+  /** "1 point for every LKR 100" while Blynk Points are on: AUTO says EARN / POINTS (pointsPromo.ts). */
+  pointsRule?: string | null;
   /** Design mock: the reference's own copy, with emoji stand-ins for the abducted dishes. */
   demo?: { title: [string, string]; line: string; accent: string; emojis: string[] };
   /** GET /store `hero_banner`: Admin / Ops' custom banner; null / missing = automatic. */
   hero?: PublicHeroBanner | null;
 }) {
-  const model = useMemo(() => (demo ? null : resolveHero(hero, { minPrice, freeCount, freeKind })), [demo, hero, minPrice, freeCount, freeKind]);
+  const model = useMemo(() => (demo ? null : resolveHero(hero, { minPrice, freeCount, freeKind, pointsRule })), [demo, hero, minPrice, freeCount, freeKind, pointsRule]);
   // Illustrated grocery items in both modes (owner: no real product photos in the banner).
   const items = demo ? demo.emojis : model!.items;
   const [idx, setIdx] = useState(0);

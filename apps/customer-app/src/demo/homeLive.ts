@@ -14,6 +14,7 @@ import { formatLkr } from '../blynk/lib/money';
 import { effectivePrice, isOfferActive, savingsPerUnit } from '../blynk/lib/pricing';
 import { flatFee, formatHours, freeDeliveryCount } from '../blynk/lib/storeText';
 import { claimFee, claimLine, claimTitle, freeDeliveryClaim, NO_CLAIM, type FreeClaim } from '../blynk/store/freeClaim';
+import { homeMessage, NEUTRAL_COPY, POINTS_COPY, pointsRuleOf, type PointsRule } from '../blynk/store/pointsPromo';
 
 /** The "Under LKR 300" rail (the video's "Meals under ₹99"). */
 export const UNDER_LKR = 300;
@@ -66,7 +67,11 @@ export type LiveVsTile = {
   aisle: Pick<Category, 'slug' | 'name'> | null;
 };
 
-export type LiveVs = { kicker: [string, string, string]; title: string; tiles: LiveVsTile[] };
+/**
+ * kicker: the small line over the title - [a, '&', b] (the fees, in capitals) or [line] (one
+ * sentence-case line, e.g. "1 point for every LKR 100 · No packaging or platform fee").
+ */
+export type LiveVs = { kicker: [string, string, string] | [string]; title: string; tiles: LiveVsTile[] };
 
 /** Lowest effective price among available products, or null (CatalogContext.minPrice without React). */
 export function lowestPrice(products: Product[], now: Date = new Date()): number | null {
@@ -94,8 +99,11 @@ export function liveHints(data: CatalogData | null): string[] {
   return (short.length >= 3 ? short : names).slice(0, 6);
 }
 
-/** Banner props: product photos for the beam, the cheapest price and the free deliveries. */
-export function liveBanner(data: CatalogData | null, store: StoreInfo | null, now: Date = new Date(), claim: FreeClaim = guestClaim(store)) {
+/** Banner props: product photos for the beam, the cheapest price, the points rule and the free deliveries. */
+export function liveBanner(
+  data: CatalogData | null, store: StoreInfo | null, now: Date = new Date(), claim: FreeClaim = guestClaim(store),
+  rule: PointsRule | null = pointsRuleOf(store),
+) {
   const products = data?.products ?? [];
   return {
     images: products.filter((p) => p.is_available && p.image_url).slice(0, 6).map((p) => p.image_url as string),
@@ -103,6 +111,8 @@ export function liveBanner(data: CatalogData | null, store: StoreInfo | null, no
     freeCount: claim.count,
     /** Whose count: the banner says "for new customers" to a guest, "left" to a signed-in customer. */
     freeKind: claim.kind,
+    /** "1 point for every LKR 100" while Blynk Points are on (AUTO's EARN / POINTS and {points_rule}). */
+    pointsRule: rule ? POINTS_COPY.rule(rule) : null,
   };
 }
 
@@ -161,11 +171,15 @@ export function liveAisles(
 }
 
 /**
- * The video's "BLYNK vs OTHER APPS / 40-60% LOWER PRICES" band, with true copy only:
- * Blynk's fees, then the free deliveries (or the offers), and tiles of products on offer
- * (else aisles with their "FROM" price).
+ * The video's "BLYNK vs OTHER APPS / 40-60% LOWER PRICES" band, with true copy only and tiles
+ * of products on offer (else aisles with their "FROM" price). Title: EARN BLYNK POINTS while
+ * points are on (the rule and the fees in the small line), else the free deliveries this
+ * customer may be told of, else the offers / aisles (pointsPromo.ts homeMessage).
  */
-export function liveVs(data: CatalogData | null, store: StoreInfo | null, now: Date = new Date(), claim: FreeClaim = guestClaim(store)): LiveVs | null {
+export function liveVs(
+  data: CatalogData | null, store: StoreInfo | null, now: Date = new Date(), claim: FreeClaim = guestClaim(store),
+  rule: PointsRule | null = pointsRuleOf(store),
+): LiveVs | null {
   if (!data) return null;
   const showSave = store?.show_offer_savings === true;
   const topAisle = (p: Product) => {
@@ -194,8 +208,10 @@ export function liveVs(data: CatalogData | null, store: StoreInfo | null, now: D
       };
     });
   if (!tiles.length) return null;
-  const title = claimTitle(claim) ?? (offers.length ? 'OFFER PRICES TODAY' : 'SHOP BY AISLE');
-  return { kicker: ['NO PACKAGING FEE', '&', 'NO PLATFORM FEE'], title, tiles };
+  const msg = homeMessage(rule, claim);
+  if (msg.kind === 'points') return { kicker: [POINTS_COPY.bandLine(msg.rule)], title: POINTS_COPY.bandTitle, tiles };
+  const title = (msg.kind === 'free' ? claimTitle(msg.claim) : null) ?? (offers.length ? 'OFFER PRICES TODAY' : 'SHOP BY AISLE');
+  return { kicker: NEUTRAL_COPY.bandKicker, title, tiles };
 }
 
 /**
@@ -210,12 +226,14 @@ export function livePromo(_store?: StoreInfo | null, _claim?: FreeClaim): { line
   };
 }
 
-/** The bottom fee strip: [coin, label], true labels only. */
-export function liveFees(store: StoreInfo | null, claim: FreeClaim = guestClaim(store)): [string, string][] {
+/** The bottom fee strip: [coin, label], true labels only; the points rule while points are on. */
+export function liveFees(store: StoreInfo | null, claim: FreeClaim = guestClaim(store), rule: PointsRule | null = pointsRuleOf(store)): [string, string][] {
   const flat = flatFee(store);
+  const msg = homeMessage(rule, claim);
   return [
     ['0', 'Packaging fee'],
     ['0', 'Platform fee'],
-    claimFee(claim) ?? (flat != null ? ['LKR', `Delivery ${formatLkr(flat)}`] : ['km', 'Fee at checkout']),
+    msg.kind === 'points' ? POINTS_COPY.fee(msg.rule)
+      : (msg.kind === 'free' ? claimFee(msg.claim) : null) ?? (flat != null ? ['LKR', `Delivery ${formatLkr(flat)}`] : ['km', 'Fee at checkout']),
   ];
 }

@@ -9,6 +9,7 @@ import type { CatalogData } from '@/blynk/catalog/CatalogContext';
 import { categoryOfferActive } from '@/blynk/lib/categories';
 import { formatLkr } from '@/blynk/lib/money';
 import { flatFee, formatHours, formatOfferEnd, freeDeliveryCount } from '@/blynk/lib/storeText';
+import { POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
 
 export type LiveSection = { id: string; title: string; items: Product[] };
 
@@ -22,7 +23,7 @@ export type LiveAisle = {
   hero: { kind: 'category'; uri: string } | { kind: 'product'; product: Product } | null;
   /** "24 items", "8 AM – 9 PM", hub name: each only when known. */
   meta: string[];
-  /** The pink offer row: a running category offer, else new-customer free deliveries, else null. */
+  /** The pink offer row: a running category offer, else Blynk Points, else new-customer free deliveries, else null. */
   offer: { title: string; sub: string | null } | null;
   /** New-customer free deliveries (0 when Ops has the switch off). */
   freeCount: number;
@@ -58,6 +59,9 @@ export function aisleOffer(cat: Category, store: StoreInfo | null, now: Date = n
       sub: cat.offer_ends_at ? `Offer until ${formatOfferEnd(cat.offer_ends_at)}` : 'Offer prices across this aisle',
     };
   }
+  // Blynk Points instead of free delivery (owner, 2026-10-14), while Admin / Ops have them on
+  const rule = pointsRuleOf(store);
+  if (rule) return { title: POINTS_COPY.aisleTitle, sub: POINTS_COPY.rule(rule) };
   const free = freeDeliveryCount(store);
   if (free > 0) {
     const fee = flatFee(store);

@@ -745,7 +745,7 @@ export interface HeroBannerFields {
   mode: HeroBannerMode;
   title_1: string;
   title_2: string;
-  /** 1-4 rolling sub-lines; tokens {min_price} and {free_count}. */
+  /** 1-4 rolling sub-lines; tokens {min_price}, {free_count} and {points_rule}. */
   lines: string[];
   cta_label: string;
   /** null = the app's own (scroll down to the aisles). */

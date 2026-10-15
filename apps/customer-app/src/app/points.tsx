@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useSession } from '@/blynk/auth/session';
+import { useStore } from '@/blynk/store/StoreContext';
+import { POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
 import { fetchPoints } from '@/blynk/rewards/api';
 import { entryLabel, entryPoints, formatPointsDate, howItWorks, pointsBalanceText } from '@/blynk/rewards/models';
 import { Body, ListSkeleton, Page, SectionTitle, StateView } from '@/blynk/ui/kit';
@@ -17,10 +19,12 @@ export default function Points() {
   const load = useLoad(() => fetchPoints(), [session?.user.id], !!session && !DEMO);
   const info = load.data;
   const failed = !!load.error;
+  // a guest hears the earn rule while points are on (GET /store points_program)
+  const rule = pointsRuleOf(useStore());
 
   let body: React.ReactNode;
   if (DEMO) body = <StateView title="Blynk Points" message="Your points show here once the shop is live." />;
-  else if (!session) body = <StateView title="Log in to see your points" action="Log in" onAction={openSignIn} />;
+  else if (!session) body = <StateView title="Log in to see your points" message={rule ? POINTS_COPY.guestHow(rule) : undefined} action="Log in" onAction={openSignIn} />;
   else if (!info) body = failed
     ? <StateView title="Couldn't load your points" message="Check your connection and try again." action="Try again" onAction={load.reload} />
     : <ListSkeleton rows={3} h={70} />;

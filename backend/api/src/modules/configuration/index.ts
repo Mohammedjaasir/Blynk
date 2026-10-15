@@ -349,7 +349,7 @@ adminSettingsRouter.patch(
 // Home hero banner: the purple banner at the top of the customer app's Home
 // (saucer, two jumping title words, rolling sub-line, ORDER NOW). AUTO = the
 // app's automatic words (the default); CUSTOM = Admin's / Operations' words,
-// sub-lines with {min_price} / {free_count}, button, items and an optional
+// sub-lines with {min_price} / {free_count} / {points_rule}, button, items and an optional
 // schedule. Any subset of fields per PATCH; the merged banner is validated as
 // a whole. Audited (HERO_BANNER_UPDATED). Customers read it from GET /store
 // (`hero_banner`). See modules/configuration/hero-banner.ts.

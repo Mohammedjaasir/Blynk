@@ -31,6 +31,7 @@ import { effectivePrice } from '../catalog/catalog.offers.js';
 import { looseQuantities, priceComboLines } from '../catalog/catalog.combos.js';
 // Refer a friend and Blynk Points (owner, 2026-10-10; migration 037).
 import { checkoutRewardsInfo, previewReferral } from '../loyalty/order-rewards.js';
+import { pointsEarnPreview } from '../loyalty/points.service.js';
 // PayHere online payments (migration 047; owner, 2026-10-14).
 import { isReady, paymentGateway, publicOnlinePayment } from '../payments/gateway-settings.js';
 
@@ -283,6 +284,15 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
   };
 }
 
+/**
+ * Blynk Points (owner, 2026-10-14: points instead of free delivery): the customer's own order
+ * (POST /orders, GET /orders/:id) says how many points it earns once delivered, so "Order
+ * placed" can say so. The same rule the delivery applies (loyalty/points.service.ts).
+ */
+async function withPointsPreview<T extends Record<string, any>>(order: T): Promise<T & { points_earn_preview: number }> {
+  return { ...order, points_earn_preview: await pointsEarnPreview(db, order as any) };
+}
+
 export class OrderService {
   /**
    * Atomic Checkout & Order Creation.
@@ -302,7 +312,7 @@ export class OrderService {
         { orderId: existingOrder.id, idempotencyKey },
         'Idempotent checkout request replayed'
       );
-      return { order: sanitizeCustomerOrder(existingOrder), is_idempotent_replay: true };
+      return { order: await withPointsPreview(sanitizeCustomerOrder(existingOrder)), is_idempotent_replay: true };
     }
 
     // 1b. Store timing (owner, 2026-10-10: set by Ops and Admin - opening
@@ -451,7 +461,7 @@ export class OrderService {
     const createdOrder = await createWithUniqueNumber(orderData);
     logger.info({ orderId: createdOrder.id, orderNumber: createdOrder.order_number }, 'Order placed successfully');
 
-    return { order: sanitizeCustomerOrder(createdOrder), is_idempotent_replay: false };
+    return { order: await withPointsPreview(sanitizeCustomerOrder(createdOrder)), is_idempotent_replay: false };
   }
 
   /**
@@ -623,7 +633,7 @@ export class OrderService {
     // `delivery` block itself still never says which rider.
     const contact =
       order.order_status === 'OUT_FOR_DELIVERY' ? await orderRepository.findRiderContactForCustomer(order.id, customerId) : null;
-    return { ...sanitizeCustomerOrder(order), delivery_code: deliveryCode, rider_contact: toRiderContact(contact) };
+    return { ...(await withPointsPreview(sanitizeCustomerOrder(order))), delivery_code: deliveryCode, rider_contact: toRiderContact(contact) };
   }
 
   /**

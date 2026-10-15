@@ -100,7 +100,7 @@ describe('Hero banner setting', () => {
         mode: 'CUSTOM',
         title_1: ' weekend ',
         title_2: 'Deals',
-        lines: ['Up to 20% off rice', 'Groceries starting at {min_price}', 'First {free_count} deliveries free'],
+        lines: ['Up to 20% off rice', 'Groceries starting at {min_price}', 'First {free_count} deliveries free', 'Earn {points_rule}'],
         cta_label: 'Shop rice',
         cta_destination_type: 'CATEGORY',
         cta_destination_value: categoryId, // an id is stored as the slug
@@ -123,7 +123,8 @@ describe('Hero banner setting', () => {
     expect(await publicHero()).toEqual({
       mode: 'CUSTOM',
       title: ['WEEKEND', 'DEALS'],
-      lines: ['Up to 20% off rice', 'Groceries starting at {min_price}', 'First {free_count} deliveries free'],
+      // {points_rule} (owner, 2026-10-14): the app fills in the Blynk Points earn rule.
+      lines: ['Up to 20% off rice', 'Groceries starting at {min_price}', 'First {free_count} deliveries free', 'Earn {points_rule}'],
       cta_label: 'SHOP RICE',
       cta_target: expect.objectContaining({ level: 'CATEGORY', slug: categorySlug, is_active: true }),
       items: ['milk', 'bread'],

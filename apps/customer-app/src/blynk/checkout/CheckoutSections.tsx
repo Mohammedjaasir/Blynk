@@ -8,7 +8,7 @@ import {
   DETAILS_COPY, NOTE_MAX, RECIPIENT_NAME_MAX, recipientNameError, recipientPhoneError, type CheckoutDetails,
 } from './details';
 import {
-  balanceLine, BIRTHDAY_SUB, birthdayBanner, canRedeem, earnLine, redeemLine, REFERRAL_SUB, referralLine,
+  balanceLine, BIRTHDAY_SUB, birthdayBanner, canRedeem, redeemLine, REFERRAL_SUB, referralLine,
   type Birthday, type PointsProgram, type Referral,
 } from './rewards';
 import { asapOffered, SLOT_COPY, slotsByDay, type DeliverySlots } from './slots';
@@ -16,7 +16,7 @@ import { asapOffered, SLOT_COPY, slotsByDay, type DeliverySlots } from './slots'
 /*
  * The checkout sections the Flutter shop has and the cart lacked (owner, 2026-10-09..12):
  * the birthday banner, "Delivery time" (slots), "Delivery details" (for someone else, needs
- * help, note for the rider) and the rewards card (referral reward, Use points, points to earn).
+ * help, note for the rider) and the rewards card (referral reward, Use points).
  * Each draws nothing when the server says it does not apply. Pure presentation: the cart owns
  * the state and sends it with the order.
  */
@@ -247,15 +247,16 @@ export function DeliveryDetailsCard({ details, setDetails, allowForSomeoneElse, 
 }
 
 /**
- * Referral reward, "Use points" (default off) and the points to earn: only for what applies.
+ * Referral reward and "Use points" (default off): only for what applies. The points this order
+ * earns are one quiet line in the bill, for guests too (cart.tsx, pointsPromo.ts).
  */
-export function RewardsCard({ referral, points, usePoints, onUsePoints, redeem, earn }: {
+export function RewardsCard({ referral, points, usePoints, onUsePoints, redeem }: {
   referral: Referral | null; points: PointsProgram | null; usePoints: boolean; onUsePoints: (on: boolean) => void;
-  redeem: { points: number; value: number }; earn: number;
+  redeem: { points: number; value: number };
 }) {
   const showReferral = !!referral?.available;
   const redeemable = canRedeem(points);
-  if (!showReferral && !redeemable && earn <= 0) return null;
+  if (!showReferral && !redeemable) return null;
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={[s.card, s.pad, { gap: 12 }]}>
       {showReferral && (
@@ -286,12 +287,6 @@ export function RewardsCard({ referral, points, usePoints, onUsePoints, redeem, 
           {usePoints && (
             <Text style={[s.muted, { marginTop: 4 }, redeem.points > 0 && { color: C.green }]}>{redeemLine(redeem)}</Text>
           )}
-        </View>
-      )}
-      {earn > 0 && (
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Text style={{ fontSize: 16 }}>✨</Text>
-          <Text style={[s.muted, { flex: 1, fontSize: 12.5 }]}>{earnLine(earn)}</Text>
         </View>
       )}
     </Animated.View>
