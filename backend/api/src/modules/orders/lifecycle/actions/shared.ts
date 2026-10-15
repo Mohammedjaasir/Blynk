@@ -75,6 +75,10 @@ export async function closeDeliveryAsFailed(trx: Trx, delivery: DeliveryRow, rea
  * released so the customer can use it again, and so is a birthday gift.
  */
 export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reason: string, extra: OrderFields = {}) {
+  // Owner, 2026-10-15: a cancel that follows a failed delivery attempt keeps
+  // the delivery fee in the auto-refund below - the rider already made the
+  // trip. Read before setOrderStatus overwrites order_status to CANCELLED.
+  const keepDeliveryFee = order.order_status === 'FAILED' || order.order_status === 'CUSTOMER_UNAVAILABLE';
   const updated = await setOrderStatus(trx, order, 'CANCELLED', actor, reason, {
     ...extra,
     cancellation_reason: reason,
@@ -94,7 +98,7 @@ export async function cancelOrder(trx: Trx, order: OrderRow, actor: Actor, reaso
   // to the customer's wallet at once, whatever the payment method (policy:
   // "Payments for cancelled orders are refunded to your Blynk Wallet"). Cash
   // orders cancelled before delivery get back only what the wallet paid.
-  await refundCancelledOrderToWallet(trx, order);
+  await refundCancelledOrderToWallet(trx, order, new Date(), { keepDeliveryFee });
   // An online order that was never paid was never confirmed to the customer:
   // no "cancelled" SMS for it (owner: SMS cost); the app shows the state.
   if (order.order_status === 'AWAITING_PAYMENT') return updated;

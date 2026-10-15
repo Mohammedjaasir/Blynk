@@ -203,7 +203,7 @@ export async function recordWalletPayment(executor: DBConnection, p: { orderId: 
 // An order's money
 // ---------------------------------------------------------------------------
 
-type MoneyOrder = Pick<OrderRow, 'id' | 'customer_id' | 'payment_method' | 'payment_status' | 'total_amount' | 'wallet_amount_used'>;
+type MoneyOrder = Pick<OrderRow, 'id' | 'customer_id' | 'payment_method' | 'payment_status' | 'total_amount' | 'wallet_amount_used' | 'delivery_fee'>;
 
 /**
  * What was paid for an order (wallet, PayHere, cash collected on delivery),
@@ -238,14 +238,27 @@ export async function orderMoney(executor: DBConnection, order: MoneyOrder) {
  * order goes to the wallet - the wallet part as ORDER_PAYMENT_RETURNED, the
  * online part as REFUND_ORDER_CANCELLED. Idempotent: what is credited counts
  * against what was paid, so a second call credits nothing.
+ *
+ * `keepDeliveryFee` (owner, 2026-10-15): a cancel that follows a failed
+ * delivery attempt (the order was FAILED or CUSTOMER_UNAVAILABLE) keeps the
+ * delivery fee - the rider already made the trip. Only the items are
+ * refunded. A fee already given back by staff (REFUND_DELIVERY_FEE) is never
+ * withheld twice.
  */
-export async function refundCancelledOrderToWallet(executor: DBConnection, order: MoneyOrder & { order_number: string }, now = new Date()) {
+export async function refundCancelledOrderToWallet(
+  executor: DBConnection,
+  order: MoneyOrder & { order_number: string },
+  now = new Date(),
+  opts: { keepDeliveryFee?: boolean } = {}
+) {
   const m = await orderMoney(executor, order);
-  if (!(m.refundable > 0)) return { wallet_returned: 0, online_refunded: 0 };
+  const feeToKeep = opts.keepDeliveryFee ? round2(Math.max(0, money(order.delivery_fee) - m.fee_refunded)) : 0;
+  const refundable = round2(Math.max(0, m.refundable - feeToKeep));
+  if (!(refundable > 0)) return { wallet_returned: 0, online_refunded: 0 };
   await lockCustomer(executor, order.customer_id);
   // wallet_amount_used is what the wallet still pays (RESOLVE_ITEM lowers it as it returns the surplus).
-  const walletPart = round2(Math.min(money(order.wallet_amount_used), m.refundable));
-  const rest = round2(m.refundable - walletPart);
+  const walletPart = round2(Math.min(money(order.wallet_amount_used), refundable));
+  const rest = round2(refundable - walletPart);
   if (walletPart > 0) {
     await credit(executor, {
       customerId: order.customer_id,

@@ -364,17 +364,43 @@ describe('Automatic refunds on every cancel path (idempotent)', () => {
     expect((await request(app).patch(`/api/v1/admin/orders/${a.id}/status`).set(auth(opsToken)).send({ status: 'CANCELLED', notes: 'Out of area' })).status).toBe(200);
     expect((await walletOf(me.token)).balance).toBe(80);
 
+    // Enough credit that the wallet covers order b in full (the exact items
+    // and fee come from the fixture; what matters is the wallet, not cash,
+    // pays for it, and the fee alone is less than what the wallet paid).
+    await credit(me.id, 1000);
     const b = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 2 }], { use_wallet: true }));
+    const bRow = await orderDb(b.id);
+    expect(bRow.total).toBe(0); // the wallet covered it all; nothing collected on delivery
     expect((await fx.pack(b.id)).status).toBe(200);
     const deliveryId = (await fx.assign(b.id)).body.data.delivery.id;
     expect((await fx.riderStep(deliveryId, { status: 'PICKED_UP' })).status).toBe(200);
     expect((await fx.setStatus(b.id, 'FAILED', tokens.admin, 'Bike broke down')).status).toBe(200);
-    expect((await walletOf(me.token)).balance).toBe(0);
-    expect((await fx.setStatus(b.id, 'CANCELLED', opsToken, 'Could not deliver - our fault')).status).toBe(200);
-    expect((await walletOf(me.token)).balance).toBe(80);
+    const beforeCancel = (await walletOf(me.token)).balance;
+    // Owner, 2026-10-15: a cancel after a failed delivery attempt keeps the
+    // delivery fee - the rider already made the trip - so only the item cost
+    // comes back.
+    expect((await fx.setStatus(b.id, 'CANCELLED', opsToken, 'Could not deliver - the rider was unavailable')).status).toBe(200);
+    const returned = r2(Math.max(0, bRow.wallet - bRow.fee));
+    expect(returned).toBeGreaterThan(0); // the fixture must actually exercise a partial refund
+    expect((await walletOf(me.token)).balance).toBe(r2(beforeCancel + returned));
     expect((await entriesOf(me.id)).filter((e) => e.order_id === b.id).map((e) => [e.kind, e.amount])).toEqual([
-      ['ORDER_PAYMENT', -80],
-      ['ORDER_PAYMENT_RETURNED', 80],
+      ['ORDER_PAYMENT', -bRow.wallet],
+      ['ORDER_PAYMENT_RETURNED', returned],
+    ]);
+
+    // A cancel for a reason that is Blynk's own fault (no prior failed
+    // delivery attempt) still refunds everything, delivery fee included -
+    // placing and then fully cancelling a wallet-paid order leaves the
+    // balance unchanged.
+    const afterB = (await walletOf(me.token)).balance;
+    const c = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 2 }], { use_wallet: true }));
+    const cRow = await orderDb(c.id);
+    expect(cRow.wallet).toBeGreaterThan(0);
+    expect((await fx.setStatus(c.id, 'CANCELLED', opsToken, 'Out of stock after all')).status).toBe(200);
+    expect((await walletOf(me.token)).balance).toBe(afterB);
+    expect((await entriesOf(me.id)).filter((e) => e.order_id === c.id).map((e) => [e.kind, e.amount])).toEqual([
+      ['ORDER_PAYMENT', -cRow.wallet],
+      ['ORDER_PAYMENT_RETURNED', cRow.wallet],
     ]);
   });
 });
@@ -527,7 +553,9 @@ describe('Staff refunds', () => {
     expect((await orderWallet(order.id, tokens.rider)).status).toBe(403);
     expect((await refund('00000000-0000-0000-0000-00000000dead', { amount: 1, kind: 'REFUND_ITEM', reason: 'Nobody' })).status).toBe(404);
 
-    const audit = (await pool.query(`SELECT new_values FROM audit_logs WHERE action = 'WALLET_ORDER_REFUND' AND entity_id = $1`, [order.id])).rows;
+    const audit = (
+      await pool.query(`SELECT new_values FROM audit_logs WHERE action = 'WALLET_ORDER_REFUND' AND entity_id = $1 ORDER BY created_at`, [order.id])
+    ).rows;
     expect(audit.length).toBeGreaterThanOrEqual(1);
     expect(audit[0].new_values).toMatchObject({ customer_id: me.id, kind: 'REFUND_ITEM', amount: 100 });
     // Racing refunds never pass the cap.
