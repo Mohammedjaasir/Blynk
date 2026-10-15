@@ -1,0 +1,66 @@
+/* "Remove all products" danger card (RemoveAllProductsDialog.tsx). */
+.rap {
+  padding: 0;
+}
+
+.rap__card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border-top: 4px solid var(--danger);
+  border-radius: var(--radius-lg);
+}
+
+.rap__title {
+  color: var(--danger);
+}
+
+.rap__counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.rap__counts div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  padding: 8px 10px;
+}
+
+.rap__counts dt {
+  font-size: var(--text-label);
+  font-weight: 700;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rap__counts dd {
+  margin: 2px 0 0;
+  font-size: var(--text-title);
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rap__list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  color: var(--ink-2);
+}
+
+/* The header button that opens it (Products page): ghost, in the danger colour. */
+.button.button--danger-ghost {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.button.button--danger-ghost:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(179, 38, 30, 0.06);
+}

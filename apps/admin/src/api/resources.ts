@@ -91,6 +91,8 @@ import type {
   CategoryProductOrder,
   RemoveImagesPreview,
   RemoveImagesResult,
+  RemoveAllProductsPreview,
+  RemoveAllProductsResult,
   CategoryImportInput,
   CategoryImportResult,
   CategoryImportTemplate,
@@ -347,6 +349,16 @@ export const products = {
   /** Clears every product and combo image and deletes the unused uploaded files. Cannot be undone. */
   removeAllImages: (confirm: string) =>
     apiRequest<RemoveImagesResult>('/admin/products/remove-images', { method: 'POST', body: { confirm } }),
+
+  /** Remove all products (ADMIN only): what would change, nothing written. */
+  removeAllPreview: () => apiRequest<RemoveAllProductsPreview>('/admin/products/remove-all/preview'),
+
+  /** Hides (soft-deletes) every product; orders keep their items. */
+  removeAll: (confirm: string, alsoRemoveImages: boolean) =>
+    apiRequest<RemoveAllProductsResult>('/admin/products/remove-all', {
+      method: 'POST',
+      body: { confirm, also_remove_images: alsoRemoveImages },
+    }),
 
   /** Rows parsed in the browser; dry_run validates against the DB without writing. */
   importRows: (rows: ImportRow[], dryRun: boolean) =>

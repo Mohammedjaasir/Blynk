@@ -271,6 +271,37 @@ export interface RemoveImagesResult {
   files_kept_in_use: number;
 }
 
+/** GET /admin/products/remove-all/preview (owner, 2026-10-14; ADMIN only). */
+export interface RemoveAllProductsPreview {
+  /** Live (not yet deleted) products. */
+  products: number;
+  variants: number;
+  products_with_images: number;
+  /** Active combo packs holding one of them (switched off). */
+  combos: number;
+  /** Active home banners opening one of them (switched off). */
+  promotions: number;
+  /** Hero banner / promo band buttons opening one of them (fall back on their own). */
+  banners_linked: number;
+  stock_alerts: number;
+  /** Orders still in progress that hold one of them (kept; still packed and delivered). */
+  open_orders: number;
+  products_in_open_orders: number;
+  /** What "Also delete product images" would clear. */
+  images: RemoveImagesPreview;
+}
+
+/** POST /admin/products/remove-all {confirm: "DELETE ALL PRODUCTS", also_remove_images}. */
+export interface RemoveAllProductsResult {
+  products_removed: number;
+  variants_removed: number;
+  combos_switched_off: number;
+  promotions_switched_off: number;
+  stock_alerts_cleared: number;
+  open_orders_kept: number;
+  images: RemoveImagesResult | null;
+}
+
 /** DELETE /admin/products/:id - HARD when never ordered, SOFT (hidden) otherwise. */
 export interface ProductDeleteResult {
   product_id: string;

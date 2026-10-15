@@ -5,6 +5,7 @@ import type { AdminProduct, Category } from '../api/types';
 import { useSignedInUser } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { RemoveProductImagesDialog } from '../components/RemoveProductImagesDialog';
+import { RemoveAllProductsDialog } from '../components/RemoveAllProductsDialog';
 import { categoryOptions } from '../lib/categoryTree';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
@@ -35,6 +36,7 @@ export function Products() {
   // Remove all product images (owner, 2026-10-14): destructive, ADMIN only.
   const isAdmin = useSignedInUser()?.role === 'ADMIN';
   const [removingImages, setRemovingImages] = useState(false);
+  const [removingAll, setRemovingAll] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -104,9 +106,14 @@ export function Products() {
         actions={
           <>
             {isAdmin ? (
-              <button type="button" className="button button--ghost" onClick={() => setRemovingImages(true)}>
-                Remove all product images
-              </button>
+              <>
+                <button type="button" className="button button--ghost" onClick={() => setRemovingImages(true)}>
+                  Remove all product images
+                </button>
+                <button type="button" className="button button--ghost button--danger-ghost" onClick={() => setRemovingAll(true)}>
+                  Remove all products
+                </button>
+              </>
             ) : null}
             <button type="button" className="button button--ghost" onClick={() => navigate('/products/import')}>
               Bulk upload (Excel)
@@ -311,6 +318,7 @@ export function Products() {
       {removingImages ? (
         <RemoveProductImagesDialog onClose={() => setRemovingImages(false)} onDone={() => load()} />
       ) : null}
+      {removingAll ? <RemoveAllProductsDialog onClose={() => setRemovingAll(false)} onDone={() => load()} /> : null}
     </>
   );
 }
