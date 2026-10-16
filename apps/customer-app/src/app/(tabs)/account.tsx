@@ -163,8 +163,8 @@ export default function Account() {
           {/* a guest hears the earn rule while points are on (owner, 2026-10-14) */}
           {!signedIn && !DEMO && !!pointsRule && <Row icon="⭐" title="Blynk Points" sub={POINTS_COPY.profileGuest(pointsRule)} onPress={() => router.push('/points')} />}
           {signedIn && referOn && <Row icon="🎁" title="Refer a friend" sub="Invite friends with your code" onPress={() => router.push('/refer')} />}
-          <Row icon="🧾" title="Your orders" onPress={() => router.push('/orders')} />
-          <Row icon="📍" title="Address book" onPress={() => router.push('/addresses')} />
+          <Row icon="🧾" title="Your orders" sub="Track, reorder or get help" onPress={() => router.push('/orders')} />
+          <Row icon="📍" title="Address book" sub="Home, work and anywhere else" onPress={() => router.push('/addresses')} />
           {/* a guest is sent to log in first (Flutter SmsPreferencesScreen.open) */}
           <Row icon="💬" title="SMS & offers" sub={smsSub} onPress={() => router.push(signedIn ? '/settings' : '/login')} last />
         </Card>
@@ -191,9 +191,9 @@ export default function Account() {
 
         <Card tone={TONE.more} stagger={8}>
           <Row icon="🛟" title="Help & support" sub="Call or WhatsApp the store" onPress={() => router.push('/help')} />
-          <Row icon="✍️" title="Send feedback" onPress={() => router.push(signedIn ? '/feedback' : '/login')} />
-          <Row icon="📤" title="Share the app" onPress={() => void shareApp()} />
-          <Row icon="ℹ️" title="About us" onPress={() => router.push('/about')} last={!signedIn} />
+          <Row icon="✍️" title="Send feedback" sub="Tell us what you think" onPress={() => router.push(signedIn ? '/feedback' : '/login')} />
+          <Row icon="📤" title="Share the app" sub="Spread the word" onPress={() => void shareApp()} />
+          <Row icon="ℹ️" title="About us" sub="Who we are and what we promise" onPress={() => router.push('/about')} last={!signedIn} />
           {signedIn && <Row icon="↩️" title="Log out" onPress={() => setLogout(true)} last />}
         </Card>
 

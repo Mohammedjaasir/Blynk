@@ -111,8 +111,11 @@ describe('Home surfaces in every combination', () => {
       // guests and signed-in customers alike, and no free-delivery words even when it is on too
       expect(all).not.toMatch(FREE_WORDS);
     } else if (c.free) {
+      // other surfaces (the band, the fee strip, the aisle offer) still say it - the purple
+      // hero banner never does (owner, 2026-10-15: "remove that, add some other catchy thing")
       expect(all).toMatch(FREE_WORDS);
-      expect(hero.title).toEqual(['FREE', 'DELIVERY']);
+      expect(hero.title).toEqual(['FRESH', 'GROCERIES']);
+      expect(hero.lines).toEqual(['Quality groceries, delivered with care', 'Groceries starting at LKR 253']);
     } else {
       // neither: neutral, true words and no gaps
       expect(all).not.toMatch(FREE_WORDS);
@@ -120,7 +123,7 @@ describe('Home surfaces in every combination', () => {
       expect(vs.kicker).toEqual(['NO PACKAGING FEE', '&', 'NO PLATFORM FEE']);
       expect(vs.title.length).toBeGreaterThan(0);
       expect(hero.title).toEqual(['FRESH', 'GROCERIES']);
-      expect(hero.lines).toEqual(['Groceries starting at LKR 253']);
+      expect(hero.lines).toEqual(['Quality groceries, delivered with care', 'Groceries starting at LKR 253']);
       expect(fees[2]).toEqual(['LKR', 'Delivery LKR 100']);
     }
     expect(fees.slice(0, 2)).toEqual([['0', 'Packaging fee'], ['0', 'Platform fee']]);

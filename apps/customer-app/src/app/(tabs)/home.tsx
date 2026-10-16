@@ -90,6 +90,13 @@ const DISH_H = 100;
 const BANNER_H = 183;
 /** Room under the feed for the fee strip, cart bar and Search pill (the footer sits above it). */
 const HOME_PAD_BOTTOM = 160;
+/**
+ * Extra room while the location permission bar is showing (`!granted`): it is a second
+ * absolute sheet on top of the cart bar, taller than HOME_PAD_BOTTOM alone allows for, so the
+ * footer's rider could be scrolled in only half-clear of it (owner, 2026-10-15: "biker head is
+ * not visible").
+ */
+const HOME_PAD_BOTTOM_NO_LOCATION = 300;
 
 type Phase = 'locating' | 'skeleton' | 'content' | 'banner';
 
@@ -216,8 +223,9 @@ export default function Home() {
   );
 
   // the footer is the last thing above the scroll padding: on screen once the viewport reaches it
+  const padBottom = granted ? HOME_PAD_BOTTOM : HOME_PAD_BOTTOM_NO_LOCATION;
   useAnimatedReaction(
-    () => footerH.value > 0 && y.value + viewH.value > contentH.value - HOME_PAD_BOTTOM - footerH.value + 24,
+    () => footerH.value > 0 && y.value + viewH.value > contentH.value - padBottom - footerH.value + 24,
     (v, prev) => {
       if (v !== prev) scheduleOnRN(setFooterSeen, v);
     },
@@ -317,7 +325,7 @@ export default function Home() {
           stickyHeaderIndices={[1]}
           showsVerticalScrollIndicator={false}
           scrollEnabled={!loading}
-          contentContainerStyle={{ paddingBottom: HOME_PAD_BOTTOM }}
+          contentContainerStyle={{ paddingBottom: padBottom }}
           onLayout={(e) => viewH.set(e.nativeEvent.layout.height)}
           onContentSizeChange={(_w, h) => contentH.set(h)}
         >

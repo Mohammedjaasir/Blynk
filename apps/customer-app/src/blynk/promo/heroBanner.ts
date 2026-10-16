@@ -26,13 +26,10 @@ import { NEUTRAL_COPY, POINTS_COPY } from '../store/pointsPromo';
 
 /** Customer-facing words (kept together for the Sinhala / Tamil phase). */
 export const HERO_COPY = {
-  titleFree: ['FREE', 'DELIVERY'] as [string, string],
   titleFresh: NEUTRAL_COPY.heroTitle,
   titlePoints: POINTS_COPY.heroTitle,
-  /** Guest: the store's new-customer offer. */
-  newCustomers: (n: number) => (n === 1 ? 'First order for new customers' : `First ${n} orders for new customers`),
-  /** Signed in: this customer's own free deliveries left. */
-  left: (n: number) => (n === 1 ? '1 free delivery left' : `${n} free deliveries left`),
+  /** AUTO, no points: a catchy line, no free-delivery claim (owner, 2026-10-15). */
+  catchy: 'Quality groceries, delivered with care',
   startingAt: (price: string) => `Groceries starting at ${price}`,
   cta: 'ORDER NOW',
 };
@@ -102,23 +99,22 @@ export function fillHeroTokens(line: string, facts: HeroFacts): string | null {
 function autoHero(facts: HeroFacts): HeroModel {
   const price = facts.minPrice != null ? formatLkr(facts.minPrice) : null;
   const lines: string[] = [];
-  // Points first (owner, 2026-10-14); free deliveries only while they are on and points are not.
+  // Points first (owner, 2026-10-14); otherwise a catchy line, never free delivery (owner,
+  // 2026-10-15: "remove that, add some other catchy thing" - the purple banner was still
+  // showing FREE DELIVERY while the setting was on; it never does again).
   const points = facts.pointsRule || null;
-  const free = !points && facts.freeCount > 0 && facts.freeKind !== 'none';
-  const personal = facts.freeKind === 'personal';
   if (points) lines.push(points);
-  else if (free) lines.push(personal ? HERO_COPY.left(facts.freeCount) : HERO_COPY.newCustomers(facts.freeCount));
+  else lines.push(HERO_COPY.catchy);
   if (price) lines.push(HERO_COPY.startingAt(price));
   return {
-    title: points ? HERO_COPY.titlePoints : free ? HERO_COPY.titleFree : HERO_COPY.titleFresh,
+    title: points ? HERO_COPY.titlePoints : HERO_COPY.titleFresh,
     lines,
     accent: price,
     items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]!),
     cta: HERO_COPY.cta,
     link: null,
     custom: false,
-    // the guest line ("First 2 orders for new customers") is longer than the 196 pt column
-    fit: free && !personal,
+    fit: false,
   };
 }
 

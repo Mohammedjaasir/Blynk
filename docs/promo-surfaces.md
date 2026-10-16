@@ -43,9 +43,11 @@ the last aisle when the store has fewer).
 }
 ```
 
-No row (or a malformed one) = the defaults above = exactly the band the app
-drew before this existed. A text colour must reach WCAG AA (4.5:1) on both
-gradient stops or the API refuses it:
+No row (or a malformed one) = the defaults above, with the app's own built-in
+headline and ticks ("No sneaky fees. Ever." / No Platform Fee / No Packaging
+Fee, `livePromo()` in `src/demo/homeLive.ts`; owner, 2026-10-15: a catchy line
+over the true ticks, not bare checkmarks). A text colour must reach WCAG AA
+(4.5:1) on both gradient stops or the API refuses it:
 
 | background | gradient (top -> bottom) | readable text (first = automatic) |
 | --- | --- | --- |
@@ -200,11 +202,11 @@ AUTO (no row, a malformed row, mode AUTO, or a CUSTOM banner outside its
 schedule): "EARN / POINTS" while Blynk Points are on (owner, 2026-10-14: points
 instead of free delivery; guests and signed-in customers alike), sub-lines "1 point
 for every LKR 100" (the live rule) and "Groceries starting at <price>"; else
-"FREE / DELIVERY" while this customer may be told of free deliveries (a guest: the
-new-customer offer; signed in: at least one left), sub-lines "First N orders for
-new customers" (guest) or "N free deliveries left" / "1 free delivery left"
-(signed in), and "Groceries starting at <price>"; else "FRESH / GROCERIES" with
-"Groceries starting at <price>"; the six AUTO items;
+"FRESH / GROCERIES" with sub-lines "Quality groceries, delivered with care" and
+"Groceries starting at <price>" - the purple banner never claims free delivery,
+even while the free-deliveries setting is on (owner, 2026-10-15: "remove that,
+add some other catchy thing"; other surfaces - the yellow band title, the fee
+strip, the aisle offer row - still say it); the six AUTO items;
 ORDER NOW scrolls to the aisles. Switching back to AUTO keeps the custom fields
 for next time; "Reset to automatic" saves the defaults above.
 
@@ -263,7 +265,7 @@ tested in `pointsPromo.test.ts` for free on/off x points on/off x guest/signed i
 
 | Surface | Blynk Points on | Free deliveries on, points off | Both off |
 | --- | --- | --- | --- |
-| Hero AUTO | EARN / POINTS, "1 point for every LKR 100", "Groceries starting at ..." | FREE / DELIVERY (as §3) | FRESH / GROCERIES, "Groceries starting at ..." |
+| Hero AUTO | EARN / POINTS, "1 point for every LKR 100", "Groceries starting at ..." | FRESH / GROCERIES, "Quality groceries, delivered with care" (owner, 2026-10-15: never free delivery here), "Groceries starting at ..." | same |
 | Yellow band over the offer tiles | "1 point for every LKR 100 · No packaging or platform fee" / EARN BLYNK POINTS | NO PACKAGING FEE & NO PLATFORM FEE / FIRST 2 DELIVERIES FREE (or NEXT N ...) | NO PACKAGING FEE & NO PLATFORM FEE / OFFER PRICES TODAY (or SHOP BY AISLE) |
 | Fee strip | 0 Packaging fee · 0 Platform fee · 1 pt / LKR 100 | ... · 2 Free · new users | ... · LKR Delivery LKR X (or km Fee at checkout) |
 | Aisle cards | "Items from LKR X" | same | same |

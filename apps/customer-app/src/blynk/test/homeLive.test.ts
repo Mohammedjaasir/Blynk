@@ -93,9 +93,10 @@ describe('live home content', () => {
   });
 
   it('promo band and fee strip carry only true labels', () => {
-    // the built-in band has no free-delivery headline (the band title and the fee strip say it)
-    expect(livePromo(store)).toEqual({ line1: null, fees: ['No Platform Fee', 'No Packaging Fee'] });
-    expect(livePromo(noFree).line1).toBeNull();
+    // the built-in band has no free-delivery headline (the band title and the fee strip say
+    // it), just a catchy line over its true ticks (owner, 2026-10-15)
+    expect(livePromo(store)).toEqual({ line1: 'No sneaky fees. Ever.', fees: ['No Platform Fee', 'No Packaging Fee'] });
+    expect(livePromo(noFree).line1).toBe('No sneaky fees. Ever.');
     expect(liveFees(store)[0]).toEqual(['0', 'Packaging fee']);
     expect(liveFees(store)[2]).toEqual(['2', 'Free · new users']);
     expect(liveFees(noFree)[2]).toEqual(['LKR', 'Delivery LKR 100']);
@@ -117,8 +118,8 @@ describe('live home content', () => {
     expect(liveFees(flat, none)[2]).toEqual(['LKR', 'Delivery LKR 100']);
     expect(liveFees(store, two)[2]).toEqual(['2', 'Free left']);
     expect(liveFees(store, one)[2]).toEqual(['1', 'Free delivery left']);
-    expect(livePromo(store, none).line1).toBeNull();
-    expect(livePromo(store, two).line1).toBeNull();
+    expect(livePromo(store, none).line1).toBe('No sneaky fees. Ever.');
+    expect(livePromo(store, two).line1).toBe('No sneaky fees. Ever.');
     expect(liveBanner(catalog(), store, now, none).freeCount).toBe(0);
     expect(liveBanner(catalog(), store, now, one).freeCount).toBe(1);
     const usedAll = JSON.stringify([liveFees(store, none), livePromo(store, none), used, liveAisles(catalog(), store, 'all', [], now)]);
