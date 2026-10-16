@@ -29,7 +29,7 @@ export const AREA = {
   radiusLabel: (c: Coverage) => `${radiusText(c.radiusKm)} delivery area`,
   within: (c: Coverage) => `We deliver within ${radiusText(c.radiusKm)} of the ${centreName(c)}.`,
   withinShort: (c: Coverage) => `We deliver within ${radiusText(c.radiusKm)} of ${centreName(c)}`,
-  farLine: (km: number, c: Coverage) => `This spot is ${kmText(km)} from the store. We deliver within ${radiusText(c.radiusKm)}. Move the pin closer, or try anyway and we'll check.`,
+  farLine: (km: number, c: Coverage) => `This spot is ${kmText(km)} from the store. We deliver within ${radiusText(c.radiusKm)}. Move the pin closer to continue.`,
   farHead: 'Looks outside our delivery area',
   areaLine: (name: string) => `We put the pin in the middle of ${name}. Move the map so the pin sits on your house.`,
 };

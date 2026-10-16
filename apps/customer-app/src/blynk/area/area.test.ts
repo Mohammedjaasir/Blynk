@@ -178,11 +178,11 @@ describe('address flow when location access is denied', () => {
     expect(leavesScreen(start({ edit: true, editing: cov.center }))).toBe(true);
   });
 
-  test('a GPS fix later in the flow opens the map there, even outside (the card warns, the server decides)', () => {
+  test('a GPS fix later in the flow opens the map there, even outside (the card warns; owner, 2026-10-16: no "Confirm & proceed" while it does)', () => {
     const far = { lat: 6.9271, lng: 79.8612 };
     const s = flowReducer(flowReducer(start(), { type: 'useGps' }), { type: 'gpsOk', fix: far, coverage: cov });
     expect(s).toMatchObject({ step: 'map', start: far, asking: false });
     expect(insideCoverage(cov, far).inside).toBe(false);
-    expect(AREA.farLine(insideCoverage(cov, far).km, cov)).toMatch(/We deliver within 4 km\./);
+    expect(AREA.farLine(insideCoverage(cov, far).km, cov)).toMatch(/We deliver within 4 km\. Move the pin closer to continue\./);
   });
 });

@@ -230,7 +230,8 @@ export function LiveAddressScreen() {
 
   const pinA = useAnimatedStyle(() => ({ transform: [{ translateY: -lift.value * 16 }] }));
   const placed = !!pin && !moving && mapState === 'ready';
-  // advisory: the drawn circle (the server still decides when the address is saved or ordered to)
+  // the drawn circle: outside it, "Confirm & proceed" is withheld until the pin moves back in
+  // (owner, 2026-10-16); the server still has the final say once the address is saved
   const far = pin ? insideCoverage(coverage, pin) : null;
   const outside = !!far && !far.inside;
   const near = pin ? nearestPlace(coverage, pin) : null;
@@ -331,9 +332,12 @@ export function LiveAddressScreen() {
                   <Text style={styles.placeName} numberOfLines={1}>{title}</Text>
                 </View>
                 <Text style={styles.placeLine}>{outOfArea ? COPY.outBody : outside && far ? AREA.farLine(far.km, coverage) : line}</Text>
-                <PressScale onPress={() => dispatch({ type: 'confirmPin' })} style={styles.cta} haptic scaleTo={0.96}>
-                  <Text style={styles.ctaTxt}>{T.cta}</Text>
-                </PressScale>
+                {/* outside the area: move the pin to continue, no "Confirm & proceed" (owner, 2026-10-16) */}
+                {outOfArea || outside ? null : (
+                  <PressScale onPress={() => dispatch({ type: 'confirmPin' })} style={styles.cta} haptic scaleTo={0.96}>
+                    <Text style={styles.ctaTxt}>{T.cta}</Text>
+                  </PressScale>
+                )}
               </Animated.View>
             ) : (
               <View key="loading" style={{ paddingHorizontal: 15, paddingTop: 14 }}>
