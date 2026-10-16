@@ -16,7 +16,7 @@ describe('hero banner render model', () => {
     for (const config of [undefined, null]) {
       expect(resolveHero(config, { minPrice: 253, freeCount: 2 }, now)).toEqual({
         title: ['FRESH', 'GROCERIES'],
-        lines: ['Quality groceries, delivered with care', 'Groceries starting at LKR 253'],
+        lines: ['Quality groceries, delivered with care', 'From LKR 253'],
         accent: 'LKR 253',
         items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]),
         cta: 'ORDER NOW',
@@ -34,13 +34,13 @@ describe('hero banner render model', () => {
   it("AUTO never advertises free delivery, even with the customer's own free deliveries left (owner, 2026-10-15: the purple banner, specifically)", () => {
     const one = resolveHero(null, { minPrice: 253, freeCount: 1, freeKind: 'personal' }, now);
     expect(one.title).toEqual(['FRESH', 'GROCERIES']);
-    expect(one.lines).toEqual(['Quality groceries, delivered with care', 'Groceries starting at LKR 253']);
+    expect(one.lines).toEqual(['Quality groceries, delivered with care', 'From LKR 253']);
     expect(one.fit).toBe(false);
     expect(resolveHero(null, { minPrice: 253, freeCount: 2, freeKind: 'personal' }, now).lines[0]).toBe('Quality groceries, delivered with care');
     // none left (or not known yet): same catchy line, same title
     const none = resolveHero(null, { minPrice: 253, freeCount: 0, freeKind: 'none' }, now);
     expect(none.title).toEqual(['FRESH', 'GROCERIES']);
-    expect(none.lines).toEqual(['Quality groceries, delivered with care', 'Groceries starting at LKR 253']);
+    expect(none.lines).toEqual(['Quality groceries, delivered with care', 'From LKR 253']);
     expect(none.fit).toBe(false);
   });
 

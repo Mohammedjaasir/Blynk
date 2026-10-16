@@ -30,7 +30,8 @@ export const HERO_COPY = {
   titlePoints: POINTS_COPY.heroTitle,
   /** AUTO, no points: a catchy line, no free-delivery claim (owner, 2026-10-15). */
   catchy: 'Quality groceries, delivered with care',
-  startingAt: (price: string) => `Groceries starting at ${price}`,
+  /** Owner, 2026-10-16: not "Groceries starting at" - matches the aisle cards' "Items from LKR X". */
+  startingAt: (price: string) => `From ${price}`,
   cta: 'ORDER NOW',
 };
 
