@@ -267,7 +267,7 @@ function StoreScreen() {
         </Animated.View>
 
         <View style={styles.sheet}>
-          {DEMO ? <StampBadge size={84} style={styles.stamp} /> : !!live?.freeCount && <StampBadge variant="free" size={84} style={styles.stamp} />}
+          {DEMO ? <StampBadge size={84} style={styles.stamp} /> : null}
           <Text style={styles.name}>{name}</Text>
           {DEMO ? <View style={styles.metaRow}>
             <Text style={styles.star}>★</Text>

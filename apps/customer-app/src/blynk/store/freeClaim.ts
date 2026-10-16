@@ -1,13 +1,17 @@
 import type { FreeDeliveryStatus } from '../orders/types';
 
 /*
- * What Home (and the cart bar) may say about free deliveries (owner, 2026-10-14: "Heavy marketing
- * for free delivery, but this account I logged in has ordered multiple times").
+ * What Home (and the cart bar) may say about free deliveries. Always nothing now (owner,
+ * 2026-10-16: "we are not giving free delivery remove that or replace with any other
+ * wordings" - said again on the Home band, the fee strip and the cart bar strip after the
+ * hero banner, the promo band and the cart bill were already fixed). The free-delivery
+ * feature and its Admin / Ops switches are untouched; this only stops the claim being made,
+ * everywhere it is asked.
  *
- * - Guest: GET /store's new-customer offer, always worded "for new customers".
- * - Signed in: only what GET /orders/checkout-info says for this customer (`free_delivery.remaining`,
- *   counted by the server across the same verified phone number). Until that is known, or when it
- *   cannot be asked (no saved address yet), nothing is claimed - no flash of a wrong promise.
+ * Earlier rule, kept here for when the owner wants it back: a guest heard GET /store's
+ * new-customer offer ("for new customers"); signed in, only what GET /orders/checkout-info
+ * said for that customer (`free_delivery.remaining`, counted across the same verified phone
+ * number), nothing claimed until that was known.
  * Pure: no React, no network.
  */
 
@@ -20,6 +24,7 @@ export type FreeClaim =
 
 export const NO_CLAIM: FreeClaim = { kind: 'none', count: 0 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function freeDeliveryClaim(input: {
   /** freeDeliveryCount(GET /store): 0 when Ops has the offer off. */
   storeCount: number;
@@ -27,11 +32,7 @@ export function freeDeliveryClaim(input: {
   /** checkout-info free_delivery for this customer; null/undefined = not known (yet). */
   status?: Pick<FreeDeliveryStatus, 'enabled' | 'remaining'> | null;
 }): FreeClaim {
-  const { storeCount, signedIn, status } = input;
-  if (!signedIn) return storeCount > 0 ? { kind: 'new-customer', count: Math.floor(storeCount) } : NO_CLAIM;
-  if (!status || !status.enabled) return NO_CLAIM;
-  const left = Math.floor(Number(status.remaining));
-  return Number.isFinite(left) && left > 0 ? { kind: 'personal', count: left } : NO_CLAIM;
+  return NO_CLAIM;
 }
 
 const deliveries = (n: number) => `${n} deliver${n === 1 ? 'y' : 'ies'}`;

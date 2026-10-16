@@ -33,11 +33,11 @@ describe('live home content', () => {
     expect(liveHints(null)).toEqual([]);
   });
 
-  it('banner: photos, the cheapest effective price, the free deliveries', () => {
+  it('banner: photos, the cheapest effective price, no free-delivery claim (owner, 2026-10-16)', () => {
     const b = liveBanner(catalog(), store, now);
     expect(b.images).toEqual(['https://x/cheese.png']);
     expect(b.minPrice).toBe(253);
-    expect(b.freeCount).toBe(2);
+    expect(b.freeCount).toBe(0);
     expect(liveBanner(catalog(), noFree, now).freeCount).toBe(0);
   });
 
@@ -67,8 +67,8 @@ describe('live home content', () => {
     expect(liveAisles(catalog(), flat, 'c-groc', ['offer'], now)).toEqual([]);
   });
 
-  it('delivery line follows /store', () => {
-    expect(deliveryLine({ ...store, new_customer_free_deliveries: { ...store.new_customer_free_deliveries, count: 1 } })).toBe('First delivery free for new customers');
+  it('delivery line follows /store (no free-delivery claim, ever)', () => {
+    expect(deliveryLine({ ...store, new_customer_free_deliveries: { ...store.new_customer_free_deliveries, count: 1 } })).toBe('Delivery fee at checkout');
     expect(deliveryLine(noFree)).toBe('Delivery LKR 100');
     expect(deliveryLine({ ...store, new_customer_free_deliveries: { ...store.new_customer_free_deliveries, enabled: false } })).toBe('Delivery fee at checkout');
   });
@@ -76,7 +76,7 @@ describe('live home content', () => {
   it('vs band: offer tiles with "You save" only when Admin turns savings on', () => {
     const v = liveVs(catalog(), store, now)!;
     expect(v.kicker).toEqual(['NO PACKAGING FEE', '&', 'NO PLATFORM FEE']);
-    expect(v.title).toBe('FIRST 2 DELIVERIES FREE');
+    expect(v.title).toBe('OFFER PRICES TODAY'); // no free-delivery claim, ever (owner, 2026-10-16)
     expect(v.tiles).toHaveLength(1);
     expect(v.tiles[0]).toMatchObject({ id: 'p-milk', overlay: ['NOW', 'LKR 513'], line: 'Dairy & Eggs', strike: false, save: null });
     expect(v.tiles[0].aisle?.slug).toBe('dairy-eggs');
@@ -93,12 +93,12 @@ describe('live home content', () => {
   });
 
   it('promo band and fee strip carry only true labels', () => {
-    // the built-in band has no free-delivery headline (the band title and the fee strip say
-    // it), just a catchy line over its true ticks (owner, 2026-10-15)
+    // the built-in band has no free-delivery headline (no free-delivery claim, ever - owner,
+    // 2026-10-16), just a catchy line over its true ticks (owner, 2026-10-15)
     expect(livePromo(store)).toEqual({ line1: 'No sneaky fees. Ever.', fees: ['No Platform Fee', 'No Packaging Fee'] });
     expect(livePromo(noFree).line1).toBe('No sneaky fees. Ever.');
     expect(liveFees(store)[0]).toEqual(['0', 'Packaging fee']);
-    expect(liveFees(store)[2]).toEqual(['2', 'Free · new users']);
+    expect(liveFees(store)[2]).toEqual(['km', 'Fee at checkout']); // store's delivery_fee_mode is DISTANCE_TIERS, no flat fee
     expect(liveFees(noFree)[2]).toEqual(['LKR', 'Delivery LKR 100']);
     expect(liveFees({ ...store, new_customer_free_deliveries: { ...store.new_customer_free_deliveries, enabled: false } })[2]).toEqual(['km', 'Fee at checkout']);
     const all = JSON.stringify([liveFees(store), livePromo(store), liveVs(catalog(), store, now)]);

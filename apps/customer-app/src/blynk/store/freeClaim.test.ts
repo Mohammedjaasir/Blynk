@@ -4,27 +4,14 @@ import { claimFee, claimLine, claimPromoLine, claimTitle, freeDeliveryClaim, NO_
 const on = (remaining: number) => ({ enabled: true, remaining });
 
 describe('freeDeliveryClaim', () => {
-  it('guest: the store-wide new-customer offer, or nothing when Ops has it off', () => {
-    expect(freeDeliveryClaim({ storeCount: 2, signedIn: false })).toEqual({ kind: 'new-customer', count: 2 });
+  it('owner, 2026-10-16: never claims free delivery any more, whatever the inputs say', () => {
+    expect(freeDeliveryClaim({ storeCount: 2, signedIn: false })).toEqual(NO_CLAIM);
     expect(freeDeliveryClaim({ storeCount: 0, signedIn: false })).toEqual(NO_CLAIM);
-    // a guest never uses a personal status even if one is lying around
-    expect(freeDeliveryClaim({ storeCount: 2, signedIn: false, status: on(0) })).toEqual({ kind: 'new-customer', count: 2 });
-  });
-
-  it('signed in: nothing until checkout-info is known (no flash of a wrong claim)', () => {
+    expect(freeDeliveryClaim({ storeCount: 2, signedIn: false, status: on(0) })).toEqual(NO_CLAIM);
     expect(freeDeliveryClaim({ storeCount: 2, signedIn: true })).toEqual(NO_CLAIM);
     expect(freeDeliveryClaim({ storeCount: 2, signedIn: true, status: null })).toEqual(NO_CLAIM);
-  });
-
-  it('signed in: the free deliveries this customer still has', () => {
-    expect(freeDeliveryClaim({ storeCount: 2, signedIn: true, status: on(2) })).toEqual({ kind: 'personal', count: 2 });
-    expect(freeDeliveryClaim({ storeCount: 2, signedIn: true, status: on(1) })).toEqual({ kind: 'personal', count: 1 });
-    expect(freeDeliveryClaim({ storeCount: 2, signedIn: true, status: on(0) })).toEqual(NO_CLAIM);
-    expect(freeDeliveryClaim({ storeCount: 2, signedIn: true, status: { enabled: false, remaining: 2 } })).toEqual(NO_CLAIM);
-    expect(freeDeliveryClaim({ storeCount: 2, signedIn: true, status: on(-1) })).toEqual(NO_CLAIM);
-    expect(freeDeliveryClaim({ storeCount: 2, signedIn: true, status: on(Number.NaN) })).toEqual(NO_CLAIM);
-    // the server is the authority: a status saying 1 left wins over the store's 2
-    expect(freeDeliveryClaim({ storeCount: 0, signedIn: true, status: on(1) })).toEqual({ kind: 'personal', count: 1 });
+    expect(freeDeliveryClaim({ storeCount: 2, signedIn: true, status: on(2) })).toEqual(NO_CLAIM);
+    expect(freeDeliveryClaim({ storeCount: 0, signedIn: true, status: on(1) })).toEqual(NO_CLAIM);
   });
 });
 

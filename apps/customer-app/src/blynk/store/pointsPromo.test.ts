@@ -14,9 +14,10 @@ import {
 
 /*
  * Owner, 2026-10-14: "remove completely free delivery - instead of that, for 100 LKR order 1 Blynk
- * point". Every surface is checked for free deliveries on/off x points on/off x guest/signed in:
- * no free-delivery claim unless Admin / Ops have it on, Points while they are on, and neutral true
- * words when neither is.
+ * point", said again 2026-10-16: "we are not giving free delivery, remove that or replace with any
+ * other wordings". Every surface is checked for free deliveries on/off x points on/off x guest/signed
+ * in: no free-delivery claim ever, whatever Admin / Ops have set, Points while they are on, and
+ * neutral true words otherwise.
  */
 
 const now = new Date('2026-10-13T06:00:00Z');
@@ -84,11 +85,11 @@ describe('pointsFor = the server rule (backend points.rules.ts pointsEarned)', (
   });
 });
 
-describe('homeMessage: points first, then free deliveries, else neutral', () => {
+describe('homeMessage: points while on, else neutral (no free-delivery claim, ever)', () => {
   it.each(CASES)('free %o', (c) => {
     const { s, claim } = setup(c);
     const m = homeMessage(pointsRuleOf(s), claim);
-    expect(m.kind).toBe(c.points ? 'points' : c.free ? 'free' : 'none');
+    expect(m.kind).toBe(c.points ? 'points' : 'none');
   });
 });
 
@@ -110,14 +111,9 @@ describe('Home surfaces in every combination', () => {
       expect(hero.lines).toEqual(['1 point for every LKR 100', 'Shop smart, earn more']);
       // guests and signed-in customers alike, and no free-delivery words even when it is on too
       expect(all).not.toMatch(FREE_WORDS);
-    } else if (c.free) {
-      // other surfaces (the band, the fee strip, the aisle offer) still say it - the purple
-      // hero banner never does (owner, 2026-10-15: "remove that, add some other catchy thing")
-      expect(all).toMatch(FREE_WORDS);
-      expect(hero.title).toEqual(['FRESH', 'GROCERIES']);
-      expect(hero.lines).toEqual(['Quality groceries, delivered with care', 'Fresh picks, every day']);
     } else {
-      // neither: neutral, true words and no gaps
+      // no free-delivery claim, ever (owner, 2026-10-16), whatever Admin / Ops have the
+      // offer set to: neutral, true words and no gaps
       expect(all).not.toMatch(FREE_WORDS);
       expect(all).not.toMatch(/point/i);
       expect(vs.kicker).toEqual(['NO PACKAGING FEE', '&', 'NO PLATFORM FEE']);
@@ -138,10 +134,10 @@ describe('Home surfaces in every combination', () => {
     expect(resolveHero(custom, off, now).lines).toEqual(['From LKR 253']);
   });
 
-  it('aisle screen: a category offer, else points, else the free deliveries, else nothing', () => {
+  it('aisle screen: a category offer, else points, else nothing (no free-delivery claim, ever)', () => {
     const plain = { ...dairy, offer_percent: null };
     expect(aisleOffer(plain, { ...flat, points_program: rule100 }, now)).toEqual({ title: 'EARN BLYNK POINTS', sub: '1 point for every LKR 100' });
-    expect(aisleOffer(plain, flat, now)?.title).toMatch(/FREE DELIVERY/);
+    expect(aisleOffer(plain, flat, now)).toBeNull();
     expect(aisleOffer(plain, freeOff, now)).toBeNull();
   });
 });
