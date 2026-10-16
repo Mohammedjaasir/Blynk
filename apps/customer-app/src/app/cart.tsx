@@ -277,7 +277,6 @@ export default function Cart() {
       ...(pointsOn ? { use_points: true } : {}),
       ...(walletOn ? { use_wallet: true } : {}),
       ...(more.for_someone_else ? { for_someone_else: true, recipient: more.recipient } : {}),
-      ...(more.needs_help ? { needs_help: true } : {}),
       ...methodBody(payMethod),
     };
     const note = more.delivery_note ?? '';

@@ -126,14 +126,6 @@ function Toggle({ on }: { on: boolean }) {
   );
 }
 
-function Check({ on }: { on: boolean }) {
-  return (
-    <View style={[s.check, on && { backgroundColor: C.brand, borderColor: C.brandDeep }]}>
-      {on && <Text style={s.tick}>✓</Text>}
-    </View>
-  );
-}
-
 function Field({ label, value, onChange, error, hint, keyboard, max, multiline }: {
   label: string; value: string; onChange: (v: string) => void; error?: string | null; hint?: string;
   keyboard?: 'phone-pad' | 'default'; max?: number; multiline?: boolean;
@@ -160,9 +152,9 @@ function Field({ label, value, onChange, error, hint, keyboard, max, multiline }
 const QUICK_NOTES = ['Leave at door', 'Avoid calling', "Don't ring bell", 'Pet at home'];
 
 /**
- * "Delivery details": For someone else (only while staff allow it), Needs help at the door,
- * quick notes and a note for the rider. `showErrors` turns on the receiver checks after a
- * Place order tap (or once a field was touched).
+ * "Delivery details": For someone else (only while staff allow it), quick notes and a note
+ * for the rider. `showErrors` turns on the receiver checks after a Place order tap (or once
+ * a field was touched).
  */
 export function DeliveryDetailsCard({ details, setDetails, allowForSomeoneElse, codeToReceiver, showErrors }: {
   details: CheckoutDetails; setDetails: (f: (d: CheckoutDetails) => CheckoutDetails) => void;
@@ -212,19 +204,6 @@ export function DeliveryDetailsCard({ details, setDetails, allowForSomeoneElse, 
           </Collapsible>
         </>
       )}
-      <Pressable
-        onPress={() => set({ needsHelp: !details.needsHelp })}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: details.needsHelp }}
-        accessibilityLabel={DETAILS_COPY.needsHelp}
-        style={[s.optRow, { alignItems: 'flex-start' }]}
-      >
-        <Check on={details.needsHelp} />
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={s.optTitle}>{DETAILS_COPY.needsHelp}</Text>
-          <Text style={s.muted}>{DETAILS_COPY.needsHelpHint}</Text>
-        </View>
-      </Pressable>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
         {QUICK_NOTES.map((o) => {
           const a = details.noteChips.includes(o);
@@ -345,8 +324,6 @@ const s = StyleSheet.create({
   optTitle: { fontFamily: F.semi, fontSize: 13.5, color: INK },
   track: { width: 38, height: 22, borderRadius: 11, borderWidth: 1.2, borderColor: '#D5D5DC', backgroundColor: '#EDEDF0', padding: 2 },
   knob: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' },
-  check: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.4, borderColor: '#9A9AA2', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  tick: { color: C.brandInk, fontSize: 11, fontFamily: F.black, lineHeight: 13 },
   fieldLabel: { fontFamily: F.medium, fontSize: 12, color: MUTED, marginBottom: 4 },
   input: {
     height: 40, borderRadius: 10, borderWidth: 1.2, borderColor: '#E2E2E6', paddingHorizontal: 12,

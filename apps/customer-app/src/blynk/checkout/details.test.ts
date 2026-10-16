@@ -28,10 +28,10 @@ test('receiver checks use the Flutter wording', () => {
   expect(recipientPhoneError('0731234567')).not.toBeNull();
 });
 
-test('note joins the quick picks and the typed note; needs help is a flag', () => {
-  const x = d({ noteChips: ['Leave at door'], note: ' Gate code 12 ', needsHelp: true });
+test('note joins the quick picks and the typed note', () => {
+  const x = d({ noteChips: ['Leave at door'], note: ' Gate code 12 ' });
   expect(deliveryNote(x)).toBe('Leave at door, Gate code 12');
-  expect(detailsBody(x, true)).toEqual({ delivery_note: 'Leave at door, Gate code 12', needs_help: true });
+  expect(detailsBody(x, true)).toEqual({ delivery_note: 'Leave at door, Gate code 12' });
 });
 
 test('an over-long note stops the order', () => {
