@@ -58,6 +58,10 @@ export const LIVE = {
   feePill: 'No packaging fee · No platform fee',
   burst1: ['NO PACKAGING FEE', 'NO PLATFORM FEE'] as const,
   burst2: { big: 'LKR 0', lines: ['Packaging fee', 'Platform fee'] as const },
+  /** The cart's pop-up, kept but reworded (owner, 2026-10-16: "pop up is good but change the
+   * wordings") - calmer and factual, no "Free delivery" headline. */
+  hurrayTitle: 'No delivery fee\nthis time!',
+  hurrayCta: 'Got it!',
   hurraySub: (n: number) => `On your first ${n} order${n > 1 ? 's' : ''} with Blynk`,
   mealTitle: 'COMPLETE YOUR BASKET',
   freeNote: (n: number) => `Applied at checkout to your first ${n} order${n > 1 ? 's' : ''}.`,

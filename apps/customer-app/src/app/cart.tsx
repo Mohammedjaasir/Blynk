@@ -685,7 +685,14 @@ export default function Cart() {
         </Animated.View>
       )}
 
-      {hurray && <HurrayModal onClose={closeHurray} sub={DEMO ? COPY.hurraySub : LIVE.hurraySub(live.freeCount)} />}
+      {hurray && (
+        <HurrayModal
+          onClose={closeHurray}
+          title={DEMO ? COPY.hurrayTitle : LIVE.hurrayTitle}
+          cta={DEMO ? COPY.hurrayCta : LIVE.hurrayCta}
+          sub={DEMO ? COPY.hurraySub : LIVE.hurraySub(live.freeCount)}
+        />
+      )}
       {login && <LoginSheet onClose={() => setLogin(false)} />}
       {confirmClear && (
         <Sheet label={CLEAR_CART.title} onClose={() => setConfirmClear(false)}>
@@ -835,8 +842,8 @@ function MealAdd({ product }: { product: Product }) {
   );
 }
 
-/** "Hurray! Free delivery Unlocked!" — pops in fast, a right-anchored bar drains for 5 s. */
-function HurrayModal({ onClose, sub }: { onClose: () => void; sub: string }) {
+/** The no-delivery-fee pop-up — pops in fast, a right-anchored bar drains for 5 s. */
+function HurrayModal({ onClose, title, cta, sub }: { onClose: () => void; title: string; cta: string; sub: string }) {
   const drain = useSharedValue(1);
   const pop = useSharedValue(0);
   const [open, setOpen] = useState(true);
@@ -856,10 +863,10 @@ function HurrayModal({ onClose, sub }: { onClose: () => void; sub: string }) {
       <Animated.View style={[styles.modal, box]}>
         <Pressable onPress={() => { tap(); close(); }} style={styles.modalX} hitSlop={8}><CloseIcon size={10} color="#fff" stroke={3} /></Pressable>
         <View style={styles.mascotCircle}><Text style={{ fontSize: 70 }}>🛵</Text></View>
-        <Text style={styles.modalTitle}>{COPY.hurrayTitle}</Text>
+        <Text style={styles.modalTitle}>{title}</Text>
         <Text style={styles.modalSub}>{sub}</Text>
         <PressScale onPress={() => { tap(); close(); }} style={styles.yay} scaleTo={0.95}>
-          <Text style={styles.yayTxt}>{COPY.hurrayCta}</Text>
+          <Text style={styles.yayTxt}>{cta}</Text>
         </PressScale>
         <View style={styles.drainTrack}><Animated.View style={[styles.drain, bar]} /></View>
       </Animated.View>
