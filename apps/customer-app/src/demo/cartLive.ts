@@ -42,13 +42,14 @@ export function liveBill(store: StoreInfo | null, total: number, mrpTotal: numbe
   };
 }
 
-/** Rows of the offers card: only what is true right now. An empty list hides the card. */
+/**
+ * Rows of the offers card: only what is true right now. An empty list hides the card. No
+ * free-delivery row (owner, 2026-10-16: "we are not giving free delivery, remove that or
+ * replace with any other wordings").
+ */
 export function liveOfferRows(bill: LiveBill): { key: string; label: string; right: string; kind: 'tag' | 'bag' }[] {
   const rows: { key: string; label: string; right: string; kind: 'tag' | 'bag' }[] = [];
   if (bill.showSaved) rows.push({ key: 'saved', label: `${formatLkr(bill.saved)} saved with offer prices`, right: '✓ Applied', kind: 'tag' });
-  if (bill.freeCount > 0) {
-    rows.push({ key: 'free', label: `Free delivery on your first ${bill.freeCount} order${bill.freeCount > 1 ? 's' : ''}`, right: '✓ At checkout', kind: 'bag' });
-  }
   return rows;
 }
 

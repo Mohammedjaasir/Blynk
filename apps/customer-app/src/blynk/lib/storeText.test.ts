@@ -18,8 +18,8 @@ test('hours and radius hide when the store is missing', () => {
   expect(radiusText({ ...store, radius_km: 5 })).toBe('Groceries delivered within 5 km');
 });
 
-test('delivery fee text: free deliveries, flat fee, or calculated at checkout', () => {
-  expect(deliveryFeeText(store, formatLkr)).toBe('FREE · first 2 deliveries');
+test('delivery fee text: a plain number while free deliveries apply (owner, 2026-10-16: no "FREE" wording), the flat fee, or calculated at checkout', () => {
+  expect(deliveryFeeText(store, formatLkr)).toBe('LKR 0');
   const off = { ...store, new_customer_free_deliveries: { ...store.new_customer_free_deliveries, enabled: false } };
   expect(freeDeliveryCount(off)).toBe(0);
   expect(deliveryFeeText(off, formatLkr)).toBe('Calculated at checkout');

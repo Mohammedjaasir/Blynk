@@ -38,10 +38,14 @@ export function freeDeliveryCount(store: StoreInfo | null): number {
   return f?.enabled && typeof f.count === 'number' && f.count > 0 ? f.count : 0;
 }
 
-/** What the bill says for delivery: free deliveries, the flat fee, or "calculated at checkout". */
+/**
+ * What the bill says for delivery: a plain number (the flat fee, or 0 while free deliveries
+ * apply - no "FREE" wording; owner, 2026-10-16: "we are not giving free delivery, remove that
+ * or replace with any other wordings"), or "Calculated at checkout" when the fee depends on the
+ * address.
+ */
 export function deliveryFeeText(store: StoreInfo | null, format: (n: number) => string): string {
-  const free = freeDeliveryCount(store);
-  if (free > 0) return `FREE · first ${free} deliveries`;
+  if (freeDeliveryCount(store) > 0) return format(0);
   const flat = flatFee(store);
   return flat != null ? format(flat) : 'Calculated at checkout';
 }

@@ -42,7 +42,7 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { availableSlot, SLOT_COPY, slotForOrder, type DeliverySlots } from '@/blynk/checkout/slots';
 import { getCheckoutInfo, getDeliverySlots, placeOrder, previewCoupon } from '@/blynk/orders/api';
 import {
-  basketProgress, basketPrompt, checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, freeDeliveryNote, orderCombos, orderItems,
+  checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, orderCombos, orderItems,
   rememberPlaced, type CheckoutBill,
 } from '@/blynk/orders/checkout';
 import { OUTSIDE_AREA, placeErrorCopy, refusedProduct, stockRefusal, stockRefusalNote, type PlaceErrorCopy } from '@/blynk/orders/errors';
@@ -552,7 +552,7 @@ export default function Cart() {
           />
         )}
 
-        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} freeCount={quoteFor?.free_delivery?.count ?? 0} payMethod={payMethod} pointsLine={pointsLine} /> : (
+        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} payMethod={payMethod} pointsLine={pointsLine} /> : (
         <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
           <StampBadge size={78} style={{ position: 'absolute', right: -6, top: -4 }} />
           <View style={styles.billHead}>
@@ -991,16 +991,13 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
  * address (GET /orders/checkout-info: free deliveries, the basket amount, per-km distance);
  * otherwise it is what /store says. No taxes or invented savings.
  */
-function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, payMethod, pointsLine }: {
+function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, pointsLine }: {
   bill: LiveBill; itemTotal: number; mrpTotal: number; checkout: CheckoutBill | null; coupon: CouponPreview | null;
   payMethod: PayMethod;
   /** "You'll earn N Blynk Points on this order" (a guest: "Sign in to earn ..."), or null. */
   pointsLine: string | null;
-  /** New-customer free deliveries in all (checkout-info free_delivery.count). */
-  freeCount: number;
 }) {
   const quoted = !!checkout && checkout.deliveryFee !== null;
-  const free = quoted ? checkout!.freeReason !== null : bill.freeCount > 0;
   const toPay = quoted ? (checkout!.toPay as number) : bill.toPay;
   const feeKnown = quoted || bill.feeKnown;
   // the header counts every saving: offer prices (while shown), the coupon / birthday / referral discount and points
@@ -1012,27 +1009,25 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, 
   const walletPaid = quoted ? checkout!.wallet : 0;
   const allByWallet = walletPaid > 0 && toPay <= 0;
   const distance = quoted && checkout!.distanceKm != null ? ` · ${checkout!.distanceEstimated ? '~' : ''}${checkout!.distanceKm.toFixed(1)} km` : '';
+  // Owner, 2026-10-16: "we are not giving free delivery, remove that or replace with any other
+  // wordings" - the fee row is now a plain number like any other price, never a "FREE" claim, a
+  // stamp or an explanatory note, whatever the server quotes (0 included). Turning off "Free
+  // deliveries for new customers" / "Free delivery above a basket amount" in Admin or Ops is
+  // still the real switch for whether a fee is actually charged; this only stops it being
+  // advertised.
   const feeRight = !checkout ? (
-    <Text style={[styles.billR, free && { color: C.brandText }]}>{bill.feeText}</Text>
+    <Text style={styles.billR}>{bill.feeText}</Text>
   ) : !quoted ? (
     <Text style={[styles.billR, { color: '#8A8A90' }]}>Calculating…</Text>
-  ) : free ? (
-    <Text style={styles.billR}>
-      {checkout.standardFee ? <Text style={styles.billStrike}>{formatLkr(checkout.standardFee)} </Text> : null}
-      <Text style={{ color: C.brandText }}>FREE</Text>
-    </Text>
   ) : (
     <Text style={styles.billR}>{formatLkr(checkout.deliveryFee as number)}</Text>
   );
-  const freeNote = !checkout
-    ? (free ? LIVE.freeNote(bill.freeCount) : null)
-    : freeDeliveryNote(checkout, freeCount);
+  const freeNote: string | null = null;
   // the one discount used (coupon, birthday gift or referral reward), then the points
   const discountName = checkout ? discountLabel(checkout.discountKind, coupon?.code) : '';
   const estimated = !!checkout && !coupon && checkout.discount > 0;
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
-      {free && <StampBadge variant="free" size={70} style={{ position: 'absolute', right: -2, top: -2 }} />}
       <View style={styles.billHead}>
         <View style={styles.sq}><ReceiptGlyph /></View>
         <View>
@@ -1055,14 +1050,6 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, freeCount, 
         <Dashed style={{ marginVertical: 11 }} />
         <BillRow dashed l={`Delivery Fee${distance}`} r={feeRight} />
         {!!freeNote && <Text style={styles.freeNote}>{freeNote}</Text>}
-        {checkout?.basketRemaining != null && (
-          <View accessible accessibilityLabel={basketPrompt(checkout.basketRemaining)} style={{ marginTop: 8 }}>
-            <Text style={[styles.freeNote, { marginTop: 0, color: C.brandText, fontFamily: F.medium }]}>{basketPrompt(checkout.basketRemaining)}</Text>
-            <View style={styles.progressTrack}>
-              <Animated.View layout={LinearTransition.duration(260)} style={[styles.progressFill, { width: `${Math.round(basketProgress(itemTotal, checkout.basketMin) * 100)}%` }]} />
-            </View>
-          </View>
-        )}
         {!!checkout && checkout.discount > 0 && (
           <>
             <Dashed style={{ marginVertical: 11 }} />
