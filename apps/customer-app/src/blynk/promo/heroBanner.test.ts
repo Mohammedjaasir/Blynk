@@ -12,12 +12,12 @@ const facts = { minPrice: 253, freeCount: 0 };
 const now = new Date('2026-10-14T06:00:00Z');
 
 describe('hero banner render model', () => {
-  it('AUTO (null or an older API without the field) draws the catchy line, never free delivery', () => {
+  it('AUTO (null or an older API without the field) draws two catchy lines, no price, never free delivery', () => {
     for (const config of [undefined, null]) {
       expect(resolveHero(config, { minPrice: 253, freeCount: 2 }, now)).toEqual({
         title: ['FRESH', 'GROCERIES'],
-        lines: ['Quality groceries, delivered with care', 'From LKR 253'],
-        accent: 'LKR 253',
+        lines: ['Quality groceries, delivered with care', 'Fresh picks, every day'],
+        accent: null,
         items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]),
         cta: 'ORDER NOW',
         link: null,
@@ -25,23 +25,31 @@ describe('hero banner render model', () => {
         fit: false,
       });
     }
+    // no price, no catalog yet: the same two catchy lines regardless
     const fresh = resolveHero(null, { minPrice: null, freeCount: 0 }, now);
     expect(fresh.title).toEqual(['FRESH', 'GROCERIES']);
-    expect(fresh.lines).toEqual(['Quality groceries, delivered with care']);
+    expect(fresh.lines).toEqual(['Quality groceries, delivered with care', 'Fresh picks, every day']);
     expect(resolveHero(null, { minPrice: 100, freeCount: 1 }, now).lines[0]).toBe('Quality groceries, delivered with care');
   });
 
   it("AUTO never advertises free delivery, even with the customer's own free deliveries left (owner, 2026-10-15: the purple banner, specifically)", () => {
     const one = resolveHero(null, { minPrice: 253, freeCount: 1, freeKind: 'personal' }, now);
     expect(one.title).toEqual(['FRESH', 'GROCERIES']);
-    expect(one.lines).toEqual(['Quality groceries, delivered with care', 'From LKR 253']);
+    expect(one.lines).toEqual(['Quality groceries, delivered with care', 'Fresh picks, every day']);
     expect(one.fit).toBe(false);
     expect(resolveHero(null, { minPrice: 253, freeCount: 2, freeKind: 'personal' }, now).lines[0]).toBe('Quality groceries, delivered with care');
-    // none left (or not known yet): same catchy line, same title
+    // none left (or not known yet): same catchy lines, same title
     const none = resolveHero(null, { minPrice: 253, freeCount: 0, freeKind: 'none' }, now);
     expect(none.title).toEqual(['FRESH', 'GROCERIES']);
-    expect(none.lines).toEqual(['Quality groceries, delivered with care', 'From LKR 253']);
+    expect(none.lines).toEqual(['Quality groceries, delivered with care', 'Fresh picks, every day']);
     expect(none.fit).toBe(false);
+  });
+
+  it('AUTO with Blynk Points on: the live rule, then a second catchy line, no price (owner, 2026-10-16)', () => {
+    const m = resolveHero(null, { minPrice: 253, freeCount: 0, pointsRule: '1 point for every LKR 100' }, now);
+    expect(m.title).toEqual(['EARN', 'POINTS']);
+    expect(m.lines).toEqual(['1 point for every LKR 100', 'Shop smart, earn more']);
+    expect(m.accent).toBeNull();
   });
 
   it('CUSTOM {free_count}: the personal count signed in, the store count "for new customers" for a guest', () => {

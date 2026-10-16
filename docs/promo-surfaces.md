@@ -201,13 +201,14 @@ deliveries off / Blynk Points off) is skipped.
 AUTO (no row, a malformed row, mode AUTO, or a CUSTOM banner outside its
 schedule): "EARN / POINTS" while Blynk Points are on (owner, 2026-10-14: points
 instead of free delivery; guests and signed-in customers alike), sub-lines "1 point
-for every LKR 100" (the live rule) and "From <price>"; else
+for every LKR 100" (the live rule) and "Shop smart, earn more"; else
 "FRESH / GROCERIES" with sub-lines "Quality groceries, delivered with care" and
-"From <price>" (owner, 2026-10-16: not "Groceries starting at", to match the
-aisle cards' "Items from LKR X") - the purple banner never claims free delivery,
-even while the free-deliveries setting is on (owner, 2026-10-15: "remove that,
-add some other catchy thing"; other surfaces - the yellow band title, the fee
-strip, the aisle offer row - still say it); the six AUTO items;
+"Fresh picks, every day" - no price line (owner, 2026-10-16: "i don't need this
+line, instead change some other catchy"; the aisle cards still say "Items from
+LKR X") and the purple banner never claims free delivery, even while the
+free-deliveries setting is on (owner, 2026-10-15: "remove that, add some other
+catchy thing"; other surfaces - the yellow band title, the fee strip, the aisle
+offer row - still say it); the six AUTO items;
 ORDER NOW scrolls to the aisles. Switching back to AUTO keeps the custom fields
 for next time; "Reset to automatic" saves the defaults above.
 
@@ -266,7 +267,7 @@ tested in `pointsPromo.test.ts` for free on/off x points on/off x guest/signed i
 
 | Surface | Blynk Points on | Free deliveries on, points off | Both off |
 | --- | --- | --- | --- |
-| Hero AUTO | EARN / POINTS, "1 point for every LKR 100", "From ..." | FRESH / GROCERIES, "Quality groceries, delivered with care" (owner, 2026-10-15: never free delivery here), "From ..." | same |
+| Hero AUTO | EARN / POINTS, "1 point for every LKR 100", "Shop smart, earn more" | FRESH / GROCERIES, "Quality groceries, delivered with care", "Fresh picks, every day" (owner, 2026-10-15/16: never free delivery or a price line here) | same |
 | Yellow band over the offer tiles | "1 point for every LKR 100 · No packaging or platform fee" / EARN BLYNK POINTS | NO PACKAGING FEE & NO PLATFORM FEE / FIRST 2 DELIVERIES FREE (or NEXT N ...) | NO PACKAGING FEE & NO PLATFORM FEE / OFFER PRICES TODAY (or SHOP BY AISLE) |
 | Fee strip | 0 Packaging fee · 0 Platform fee · 1 pt / LKR 100 | ... · 2 Free · new users | ... · LKR Delivery LKR X (or km Fee at checkout) |
 | Aisle cards | "Items from LKR X" | same | same |

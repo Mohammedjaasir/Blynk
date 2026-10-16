@@ -28,10 +28,14 @@ import { NEUTRAL_COPY, POINTS_COPY } from '../store/pointsPromo';
 export const HERO_COPY = {
   titleFresh: NEUTRAL_COPY.heroTitle,
   titlePoints: POINTS_COPY.heroTitle,
-  /** AUTO, no points: a catchy line, no free-delivery claim (owner, 2026-10-15). */
-  catchy: 'Quality groceries, delivered with care',
-  /** Owner, 2026-10-16: not "Groceries starting at" - matches the aisle cards' "Items from LKR X". */
-  startingAt: (price: string) => `From ${price}`,
+  /**
+   * AUTO, no points: two catchy lines that roll, no free-delivery claim (owner, 2026-10-15)
+   * and no price line any more (owner, 2026-10-16: "i don't need this line, instead change
+   * some other catchy").
+   */
+  catchy: ['Quality groceries, delivered with care', 'Fresh picks, every day'],
+  /** AUTO, points on: the live rule, then a second catchy line (owner, 2026-10-16). */
+  catchyPoints: 'Shop smart, earn more',
   cta: 'ORDER NOW',
 };
 
@@ -98,19 +102,15 @@ export function fillHeroTokens(line: string, facts: HeroFacts): string | null {
 }
 
 function autoHero(facts: HeroFacts): HeroModel {
-  const price = facts.minPrice != null ? formatLkr(facts.minPrice) : null;
-  const lines: string[] = [];
-  // Points first (owner, 2026-10-14); otherwise a catchy line, never free delivery (owner,
-  // 2026-10-15: "remove that, add some other catchy thing" - the purple banner was still
-  // showing FREE DELIVERY while the setting was on; it never does again).
+  // Points first (owner, 2026-10-14); otherwise two catchy lines, never free delivery (owner,
+  // 2026-10-15: "remove that, add some other catchy thing") and no price line any more (owner,
+  // 2026-10-16: "i don't need this line, instead change some other catchy").
   const points = facts.pointsRule || null;
-  if (points) lines.push(points);
-  else lines.push(HERO_COPY.catchy);
-  if (price) lines.push(HERO_COPY.startingAt(price));
+  const lines = points ? [points, HERO_COPY.catchyPoints] : HERO_COPY.catchy;
   return {
     title: points ? HERO_COPY.titlePoints : HERO_COPY.titleFresh,
     lines,
-    accent: price,
+    accent: null,
     items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]!),
     cta: HERO_COPY.cta,
     link: null,
@@ -138,10 +138,13 @@ export function resolveHero(config: PublicHeroBanner | null | undefined, facts: 
   const link = config.cta_target
     ? promoDestination({ cta_target: config.cta_target, cta_destination_type: null, cta_destination_value: null })
     : null;
+  // CUSTOM lines may still name the price themselves ({min_price}); the firework highlights it
+  // there even though AUTO no longer shows a price line (owner, 2026-10-16).
+  const accent = facts.minPrice != null ? formatLkr(facts.minPrice) : null;
   return {
     title: [w1, w2],
     lines,
-    accent: auto.accent,
+    accent,
     items: items.length ? items : auto.items,
     cta,
     link,

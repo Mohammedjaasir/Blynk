@@ -107,7 +107,7 @@ describe('Home surfaces in every combination', () => {
       expect(vs.kicker).toEqual(['1 point for every LKR 100 · No packaging or platform fee']);
       expect(fees[2]).toEqual(['1', 'pt / LKR 100']);
       expect(hero.title).toEqual(['EARN', 'POINTS']);
-      expect(hero.lines).toEqual(['1 point for every LKR 100', 'From LKR 253']);
+      expect(hero.lines).toEqual(['1 point for every LKR 100', 'Shop smart, earn more']);
       // guests and signed-in customers alike, and no free-delivery words even when it is on too
       expect(all).not.toMatch(FREE_WORDS);
     } else if (c.free) {
@@ -115,7 +115,7 @@ describe('Home surfaces in every combination', () => {
       // hero banner never does (owner, 2026-10-15: "remove that, add some other catchy thing")
       expect(all).toMatch(FREE_WORDS);
       expect(hero.title).toEqual(['FRESH', 'GROCERIES']);
-      expect(hero.lines).toEqual(['Quality groceries, delivered with care', 'From LKR 253']);
+      expect(hero.lines).toEqual(['Quality groceries, delivered with care', 'Fresh picks, every day']);
     } else {
       // neither: neutral, true words and no gaps
       expect(all).not.toMatch(FREE_WORDS);
@@ -123,7 +123,7 @@ describe('Home surfaces in every combination', () => {
       expect(vs.kicker).toEqual(['NO PACKAGING FEE', '&', 'NO PLATFORM FEE']);
       expect(vs.title.length).toBeGreaterThan(0);
       expect(hero.title).toEqual(['FRESH', 'GROCERIES']);
-      expect(hero.lines).toEqual(['Quality groceries, delivered with care', 'From LKR 253']);
+      expect(hero.lines).toEqual(['Quality groceries, delivered with care', 'Fresh picks, every day']);
       expect(fees[2]).toEqual(['LKR', 'Delivery LKR 100']);
     }
     expect(fees.slice(0, 2)).toEqual([['0', 'Packaging fee'], ['0', 'Platform fee']]);

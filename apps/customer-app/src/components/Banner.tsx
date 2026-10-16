@@ -176,10 +176,10 @@ function useRoll(lines: string[]) {
 
 /**
  * Home's hero. Design mock: the reference's own copy and emoji dishes. Live, AUTO (the
- * default): "EARN / POINTS" with the live rule while Blynk Points are on (owner, 2026-10-14),
- * else "FRESH / GROCERIES" with a catchy line - never free delivery, even while that setting
- * is on (owner, 2026-10-15/16); the sub-line rolls between that line and "From" the cheapest
- * effective price, and the beam lifts illustrated grocery items. Live, CUSTOM (GET
+ * default): "EARN / POINTS" with the live rule then a second catchy line while Blynk Points
+ * are on (owner, 2026-10-14), else "FRESH / GROCERIES" with two catchy lines that roll - no
+ * price line, and never free delivery, even while that setting is on (owner, 2026-10-15/16) -
+ * and the beam lifts illustrated grocery items. Live, CUSTOM (GET
  * /store `hero_banner`, set in Admin / Ops): their two words, sub-lines, button and items,
  * with the same animation (src/blynk/promo/heroBanner.ts, docs/promo-surfaces.md §3).
  */
