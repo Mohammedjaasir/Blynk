@@ -12,7 +12,11 @@ import type { HeroBannerFields, HeroBannerItem } from '../api/types';
 
 export const HERO_LIMITS = { titleChars: 12, lines: 4, lineChars: 40, ctaChars: 16 } as const;
 
-/** The illustrated items the beam can lift (the app draws the same emoji art). */
+/**
+ * The illustrated items the beam can lift (the app draws the same emoji art). Owner, 2026-10-17:
+ * "can we add custom icons... we have diapers as well, maybe we can give multiple things" - a
+ * few non-grocery items alongside the original produce.
+ */
 export const HERO_ITEMS: { key: HeroBannerItem; label: string; emoji: string }[] = [
   { key: 'milk', label: 'Milk', emoji: '🥛' },
   { key: 'bread', label: 'Bread', emoji: '🍞' },
@@ -21,6 +25,10 @@ export const HERO_ITEMS: { key: HeroBannerItem; label: string; emoji: string }[]
   { key: 'egg', label: 'Egg', emoji: '🥚' },
   { key: 'broccoli', label: 'Broccoli', emoji: '🥦' },
   { key: 'banana', label: 'Banana', emoji: '🍌' },
+  { key: 'diaper', label: 'Diapers', emoji: '🧷' },
+  { key: 'soap', label: 'Soap', emoji: '🧼' },
+  { key: 'biscuit', label: 'Biscuits', emoji: '🍪' },
+  { key: 'bottle', label: 'Drinks', emoji: '🧃' },
 ];
 /** What the automatic banner lifts. */
 export const HERO_AUTO_ITEMS: HeroBannerItem[] = ['bread', 'apple', 'carrot', 'egg', 'broccoli', 'banana'];
@@ -46,7 +54,7 @@ export const DEFAULT_HERO: HeroBannerFields = {
   mode: 'AUTO',
   title_1: 'FRESH',
   title_2: 'GROCERIES',
-  lines: ['Groceries starting at {min_price}'],
+  lines: ['Quality groceries, delivered with care'],
   cta_label: 'ORDER NOW',
   cta_destination_type: null,
   cta_destination_value: null,
@@ -129,18 +137,15 @@ export function heroPreviewModel(h: HeroBannerFields, s: HeroSample = HERO_SAMPL
   const price = s.minPrice != null ? lkr(s.minPrice) : null;
   const emoji = (keys: HeroBannerItem[]) => keys.map((k) => HERO_ITEMS.find((i) => i.key === k)?.emoji).filter((e): e is string => !!e);
   if (h.mode !== 'CUSTOM') {
-    // the app's AUTO words: Blynk Points while they are on (owner, 2026-10-14), else the free
-    // deliveries while they are on, else FRESH / GROCERIES
-    const lines: string[] = [];
+    // the app's AUTO words: Blynk Points while they are on (owner, 2026-10-14), else two catchy
+    // lines - no free-delivery claim and no price line any more (owner, 2026-10-15/16), matching
+    // src/blynk/promo/heroBanner.ts autoHero() in the customer app
     const points = s.pointsRule || null;
-    const free = !points && s.freeCount > 0;
-    if (points) lines.push(points);
-    else if (free) lines.push(`On your first ${s.freeCount} order${s.freeCount > 1 ? 's' : ''}`);
-    if (price) lines.push(`Groceries starting at ${price}`);
+    const lines = points ? [points, 'Shop smart, earn more'] : ['Quality groceries, delivered with care', 'Fresh picks, every day'];
     return {
-      title: points ? ['EARN', 'POINTS'] : free ? ['FREE', 'DELIVERY'] : ['FRESH', 'GROCERIES'],
+      title: points ? ['EARN', 'POINTS'] : ['FRESH', 'GROCERIES'],
       lines,
-      accent: price,
+      accent: null,
       items: emoji(HERO_AUTO_ITEMS),
       cta: 'ORDER NOW',
       custom: false,

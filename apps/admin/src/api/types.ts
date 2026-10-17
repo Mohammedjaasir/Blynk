@@ -792,7 +792,7 @@ export interface PromoBandSetting extends PromoBandFields {
  * AUTO = the app's automatic words; CUSTOM = these.
  */
 export type HeroBannerMode = 'AUTO' | 'CUSTOM';
-export type HeroBannerItem = 'milk' | 'bread' | 'apple' | 'carrot' | 'egg' | 'broccoli' | 'banana';
+export type HeroBannerItem = 'milk' | 'bread' | 'apple' | 'carrot' | 'egg' | 'broccoli' | 'banana' | 'diaper' | 'soap' | 'biscuit' | 'bottle';
 export interface HeroBannerFields {
   mode: HeroBannerMode;
   title_1: string;

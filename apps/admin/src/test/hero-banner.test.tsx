@@ -75,14 +75,15 @@ describe('hero banner rules (same as the API)', () => {
     expect(fillTokens('First {free_count} free', { minPrice: 253, freeCount: 0 })).toBeNull();
     expect(fillTokens('Earn {points_rule}', { minPrice: 253, freeCount: 0, pointsRule: '1 point for every LKR 100' })).toBe('Earn 1 point for every LKR 100');
     expect(fillTokens('Earn {points_rule}', { minPrice: 253, freeCount: 2, pointsRule: null })).toBeNull();
-    // Automatic: Blynk Points while on (owner, 2026-10-14), else the free deliveries, else FRESH
+    // Automatic: Blynk Points while on (owner, 2026-10-14), else two catchy lines - no
+    // free-delivery claim and no price any more (owner, 2026-10-15/16)
     const auto = heroPreviewModel(DEFAULT_HERO);
     expect(auto.title).toEqual(['EARN', 'POINTS']);
-    expect(auto.lines).toEqual(['1 point for every LKR 100', 'Groceries starting at LKR 253']);
+    expect(auto.lines).toEqual(['1 point for every LKR 100', 'Shop smart, earn more']);
     expect(auto.cta).toBe('ORDER NOW');
     const free = heroPreviewModel(DEFAULT_HERO, { minPrice: 253, freeCount: 2, pointsRule: null });
-    expect(free.title).toEqual(['FREE', 'DELIVERY']);
-    expect(free.lines).toEqual(['On your first 2 orders', 'Groceries starting at LKR 253']);
+    expect(free.title).toEqual(['FRESH', 'GROCERIES']);
+    expect(free.lines).toEqual(['Quality groceries, delivered with care', 'Fresh picks, every day']);
     expect(heroPreviewModel(DEFAULT_HERO, { minPrice: 99, freeCount: 2, pointsRule: '1 point for every LKR 100' }).title).toEqual(['EARN', 'POINTS']);
     expect(heroPreviewModel(DEFAULT_HERO, { minPrice: 99, freeCount: 0 }).title).toEqual(['FRESH', 'GROCERIES']);
   });

@@ -237,7 +237,7 @@ function HeroBannerForm({
         <p className="field__hint">
           {custom
             ? 'Your words below. Outside the schedule (if you set one) the banner goes back to automatic.'
-            : 'Automatic: "EARN POINTS" with the points rule while Blynk Points are on, else "FREE DELIVERY" while new customers get free deliveries, otherwise "FRESH GROCERIES"; the line under it rolls between that and "Groceries starting at" the cheapest price.'}
+            : 'Automatic: "EARN POINTS" with the points rule while Blynk Points are on, else "FRESH GROCERIES" with two catchy lines underneath - no free-delivery claim or price shown.'}
         </p>
       </section>
 
@@ -292,7 +292,7 @@ function HeroBannerForm({
                     aria-label={`Sub-line ${i + 1}`}
                     value={line}
                     maxLength={HERO_LIMITS.lineChars}
-                    placeholder="e.g. Groceries starting at {min_price}"
+                    placeholder="e.g. Fresh picks, every day"
                     onChange={(e) => updateLine(i, e.target.value)}
                   />
                   <span className="band-count">

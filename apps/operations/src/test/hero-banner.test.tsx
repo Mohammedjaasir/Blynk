@@ -63,7 +63,7 @@ describe('Home banner editor (Blynk Ops)', () => {
     fireEvent.change(screen.getByLabelText('First word (white)'), { target: { value: 'Weekend' } });
     fireEvent.change(screen.getByLabelText('Second word (yellow)'), { target: { value: 'Deals' } });
     expect(screen.getByTestId('hero-banner')).toHaveTextContent('WEEKEND');
-    expect(screen.getByTestId('hero-line')).toHaveTextContent('Groceries starting at LKR 253');
+    expect(screen.getByTestId('hero-line')).toHaveTextContent('Quality groceries, delivered with care');
     fireEvent.change(screen.getByLabelText(/^Button text/), { target: { value: 'Shop deals' } });
     expect(screen.getByTestId('hero-cta')).toHaveTextContent('SHOP DEALS');
 

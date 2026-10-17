@@ -13,11 +13,11 @@ import { promotionDestinationTypes } from '../promotions/promotion.schema.js';
 /**
  * The purple hero banner at the top of the customer app's Home (the saucer
  * lifting illustrated groceries, two big jumping words, a rolling sub-line and
- * the ORDER NOW button). Until now its words were automatic: "FREE / DELIVERY"
- * while new-customer free deliveries are on, else "FRESH / GROCERIES", and the
- * sub-line rolls between the terms and "Groceries starting at <cheapest price>".
- * This lets Admin and Operations write their own (the same way as the yellow
- * promo band, promo-band.ts).
+ * the ORDER NOW button). Its automatic words: "EARN / POINTS" with the live
+ * rule while Blynk Points are on, else "FRESH / GROCERIES" with two catchy
+ * sub-lines - no free-delivery claim and no price line any more (owner,
+ * 2026-10-15/16). This lets Admin and Operations write their own (the same
+ * way as the yellow promo band, promo-band.ts).
  *
  * Stored in system_configurations 'hero_banner' (no migration). No row - or a
  * malformed one - means the defaults below: mode AUTO, i.e. exactly the banner
@@ -45,8 +45,13 @@ import { promotionDestinationTypes } from '../promotions/promotion.schema.js';
  */
 export const HERO_BANNER_KEY = 'hero_banner';
 
-/** Illustrated items the saucer's beam can lift (the app draws its own artwork for each key). */
-export const HERO_BANNER_ITEMS = ['milk', 'bread', 'apple', 'carrot', 'egg', 'broccoli', 'banana'] as const;
+/**
+ * Illustrated items the saucer's beam can lift (the app draws its own artwork for each key).
+ * Owner, 2026-10-17: "can we add custom icons... we have diapers as well, maybe we can give
+ * multiple things" - a few non-grocery items alongside the original produce, so a banner can
+ * point at any of the store's main sections, not only Grocery.
+ */
+export const HERO_BANNER_ITEMS = ['milk', 'bread', 'apple', 'carrot', 'egg', 'broccoli', 'banana', 'diaper', 'soap', 'biscuit', 'bottle'] as const;
 export type HeroBannerItem = (typeof HERO_BANNER_ITEMS)[number];
 export const HERO_BANNER_MODES = ['AUTO', 'CUSTOM'] as const;
 /** The tokens a sub-line may use. */
@@ -128,7 +133,7 @@ export const DEFAULT_HERO_BANNER: HeroBannerSetting = {
   mode: 'AUTO',
   title_1: 'FRESH',
   title_2: 'GROCERIES',
-  lines: ['Groceries starting at {min_price}'],
+  lines: ['Quality groceries, delivered with care'],
   cta_label: 'ORDER NOW',
   cta_destination_type: null,
   cta_destination_value: null,
