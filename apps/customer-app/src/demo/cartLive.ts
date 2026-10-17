@@ -53,18 +53,34 @@ export function liveOfferRows(bill: LiveBill): { key: string; label: string; rig
   return rows;
 }
 
+/**
+ * The cart pop-up's sub-line: no fees, no delivery, just a catchy greeting (owner, 2026-10-17:
+ * "no fees related topic we need different different wording each time they adding"). One is
+ * picked at random each time the pop-up shows.
+ */
+export const HURRAY_LINES = [
+  'Great picks today!',
+  'Your basket is looking great!',
+  'Thanks for shopping with Blynk!',
+  'Quality you can count on.',
+  'Happy shopping!',
+  "You've got good taste.",
+] as const;
+
+export const randomHurrayLine = (): string => HURRAY_LINES[Math.floor(Math.random() * HURRAY_LINES.length)];
+
 export const LIVE = {
   storeTitle: (store: StoreInfo | null) => (store?.hub_name ? `Blynk · ${store.hub_name}` : 'Blynk'),
   /** Fee header: Blynk adds no packaging or platform fee, so this is the one true claim it makes. */
   feePill: 'No packaging fee · No platform fee',
   burst1: ['NO PACKAGING FEE', 'NO PLATFORM FEE'] as const,
   burst2: { big: 'LKR 0', lines: ['Packaging fee', 'Platform fee'] as const },
-  /** The cart's pop-up, back with different content (owner, 2026-10-17: "i need that pop up
-   * but with different conent inside", then "allignment is not good and also generate some
-   * other catchy its too big" - shortened to one line, no delivery wording). */
+  /** The cart's pop-up (owner, 2026-10-17: "i need that pop up but with different conent
+   * inside", then "allignment is not good and also generate some other catchy its too big",
+   * then "no fees related topic we need different different wording each time they adding" -
+   * the sub-line is one of HURRAY_LINES below, picked fresh each time the pop-up shows). */
   hurrayTitle: 'You\'re all set!',
   hurrayCta: 'Got it!',
-  hurraySub: 'No sneaky fees. Ever.',
   mealTitle: 'COMPLETE YOUR BASKET',
   freeNote: (n: number) => `Applied at checkout to your first ${n} order${n > 1 ? 's' : ''}.`,
   thatsIt: 'No packaging or platform fee.',

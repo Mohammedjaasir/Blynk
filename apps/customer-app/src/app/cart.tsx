@@ -67,7 +67,7 @@ import { ProductImage } from '@/components/ProductImage';
 import { StruckPrice } from '@/components/StruckPrice';
 import { Collapsible, PressScale, Skeleton, StampBadge, tap } from '@/components/ui';
 import { BILL, COPY, MEAL_PICKS, rupee } from '@/demo/cart';
-import { LIVE, liveBill, liveOfferRows, type LiveBill } from '@/demo/cartLive';
+import { LIVE, liveBill, liveOfferRows, randomHurrayLine, type LiveBill } from '@/demo/cartLive';
 import { DEMO } from '@/demo/mode';
 import { withSpring } from '@/lib/motion';
 import { cartActions, getCartSnapshot, useCart, useCartSelect } from '@/lib/cart';
@@ -125,6 +125,7 @@ export default function Cart() {
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hurray, setHurray] = useState(false);
+  const [hurraySub, setHurraySub] = useState('');
   const [burst, setBurst] = useState(0);
   const [login, setLogin] = useState(false);
   const [cutlery, setCutlery] = useState(false);
@@ -356,13 +357,13 @@ export default function Cart() {
     return () => clearTimeout(a);
   }, []);
 
-  // live: the "Hurray" modal, back (owner, 2026-10-17: "i need that pop up but with different
-  // conent inside") with no delivery wording this time - the one true, always-on claim (no
-  // packaging or platform fee) instead of anything tied to Admin's free-delivery switches
+  // live: the "Hurray" modal, with a catchy greeting picked fresh each time (owner, 2026-10-17:
+  // "no fees related topic we need different different wording each time they adding") - no
+  // delivery, no fees, just one of HURRAY_LINES
   const storeSeen = !!store;
   useEffect(() => {
     if (DEMO || loading || !storeSeen || !(lines.length || cart.combos.length)) return;
-    const t = setTimeout(() => setHurray(true), 60);
+    const t = setTimeout(() => { setHurraySub(randomHurrayLine()); setHurray(true); }, 60);
     return () => clearTimeout(t);
   }, [loading, storeSeen]);
 
@@ -689,7 +690,7 @@ export default function Cart() {
           onClose={closeHurray}
           title={DEMO ? COPY.hurrayTitle : LIVE.hurrayTitle}
           cta={DEMO ? COPY.hurrayCta : LIVE.hurrayCta}
-          sub={DEMO ? COPY.hurraySub : LIVE.hurraySub}
+          sub={DEMO ? COPY.hurraySub : hurraySub}
         />
       )}
       {login && <LoginSheet onClose={() => setLogin(false)} />}
