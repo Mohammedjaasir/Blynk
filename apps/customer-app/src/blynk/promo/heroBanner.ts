@@ -39,9 +39,14 @@ export const HERO_COPY = {
   cta: 'ORDER NOW',
 };
 
-/** The illustrated items the saucer's beam can lift (the same keys Admin and Ops offer). */
+/**
+ * The illustrated items the saucer's beam can lift (the same keys Admin and Ops offer). Owner,
+ * 2026-10-17: "can we add custom icons... we have diapers as well, maybe we can give multiple
+ * things" - a few non-grocery items alongside the original produce.
+ */
 export const HERO_ITEMS: Record<string, string> = {
   milk: '🥛', bread: '🍞', apple: '🍎', carrot: '🥕', egg: '🥚', broccoli: '🥦', banana: '🍌',
+  diaper: '🧷', soap: '🧼', biscuit: '🍪', bottle: '🧃',
 };
 /** What AUTO lifts: illustrated grocery stand-ins, never product photos. */
 export const HERO_AUTO_ITEMS = ['bread', 'apple', 'carrot', 'egg', 'broccoli', 'banana'];
