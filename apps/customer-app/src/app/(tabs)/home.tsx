@@ -703,14 +703,12 @@ function VsSection({ live }: { live: LiveVs | null }) {
     <View style={{ marginTop: 34 }}>
       <Wave color={C.brandTint} />
       <LinearGradient colors={[C.brandTint, '#FFFCEB', '#FFFFFF']} style={{ paddingTop: 12, paddingBottom: 6 }}>
-        {kicker && (
-          <View style={styles.vsKicker}>
-            <HeartsIcon size={15} color={C.brandInk} pupil="#3A3A40" />
-            {kicker.length === 1
-              ? <Text style={[styles.vsSmall, styles.vsLine]}>{kicker[0]}</Text>
-              : <Text style={styles.vsSmall}>{kicker[0]} <Text style={styles.vsVs}>{kicker[1]}</Text> {kicker[2]}</Text>}
-          </View>
-        )}
+        <View style={styles.vsKicker}>
+          <HeartsIcon size={15} color={C.brandInk} pupil="#3A3A40" />
+          {kicker.length === 1
+            ? <Text style={[styles.vsSmall, styles.vsLine]}>{kicker[0]}</Text>
+            : <Text style={styles.vsSmall}>{kicker[0]} <Text style={styles.vsVs}>{kicker[1]}</Text> {kicker[2]}</Text>}
+        </View>
         <Text style={styles.vsBig}>{live ? live.title : VS.title}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 14, marginTop: 10 }}>
           {live?.tiles.map((t) => (

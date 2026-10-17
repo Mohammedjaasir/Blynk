@@ -82,12 +82,13 @@ export const POINTS_COPY = {
 };
 
 /**
- * Neutral words for when neither points nor free deliveries are on. No band kicker any more
- * (owner, 2026-10-17: "we should not make them confused by saying these fees - what they care
- * is product, pricings, offers, and delivery fees"); the band's title and tiles already show
- * that.
+ * Neutral words for when neither points nor free deliveries are on. The band kicker is back
+ * (owner, 2026-10-17: "i need that but differeent wordings which is not related to fee" - said
+ * right after the fee-negation kicker was removed), with a catchy line that has nothing to do
+ * with fees.
  */
 export const NEUTRAL_COPY = {
+  bandKicker: ['Fresh picks, great prices'] as [string],
   heroTitle: ['FRESH', 'GROCERIES'] as [string, string],
 };
 

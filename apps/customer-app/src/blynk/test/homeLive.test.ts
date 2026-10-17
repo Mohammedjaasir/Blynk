@@ -75,7 +75,7 @@ describe('live home content', () => {
 
   it('vs band: offer tiles with "You save" only when Admin turns savings on', () => {
     const v = liveVs(catalog(), store, now)!;
-    expect(v.kicker).toBeNull(); // no fee kicker (owner, 2026-10-17: "we should not make them confused by saying these fees")
+    expect(v.kicker).toEqual(['Fresh picks, great prices']); // owner, 2026-10-17: a catchy kicker, nothing about fees
     expect(v.title).toBe('OFFER PRICES TODAY'); // no free-delivery claim, ever (owner, 2026-10-16)
     expect(v.tiles).toHaveLength(1);
     expect(v.tiles[0]).toMatchObject({ id: 'p-milk', overlay: ['NOW', 'LKR 513'], line: 'Dairy & Eggs', strike: false, save: null });
