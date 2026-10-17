@@ -356,13 +356,13 @@ export default function Cart() {
     return () => clearTimeout(a);
   }, []);
 
-  // live: no "Hurray" modal (owner, 2026-10-17: "we dont need any delivery realted wordings" -
-  // said again of this pop-up's "No delivery fee on this order" line); the fee header just
-  // bursts once the cart has shown
+  // live: the "Hurray" modal, back (owner, 2026-10-17: "i need that pop up but with different
+  // conent inside") with no delivery wording this time - the one true, always-on claim (no
+  // packaging or platform fee) instead of anything tied to Admin's free-delivery switches
   const storeSeen = !!store;
   useEffect(() => {
     if (DEMO || loading || !storeSeen || !(lines.length || cart.combos.length)) return;
-    const t = setTimeout(() => setBurst(Date.now()), BURST_AFTER_MODAL);
+    const t = setTimeout(() => setHurray(true), 60);
     return () => clearTimeout(t);
   }, [loading, storeSeen]);
 
@@ -684,8 +684,14 @@ export default function Cart() {
         </Animated.View>
       )}
 
-      {/* DEMO only: the video's own pop-up - live has none (no delivery wording, ever) */}
-      {hurray && <HurrayModal onClose={closeHurray} title={COPY.hurrayTitle} cta={COPY.hurrayCta} sub={COPY.hurraySub} />}
+      {hurray && (
+        <HurrayModal
+          onClose={closeHurray}
+          title={DEMO ? COPY.hurrayTitle : LIVE.hurrayTitle}
+          cta={DEMO ? COPY.hurrayCta : LIVE.hurrayCta}
+          sub={DEMO ? COPY.hurraySub : LIVE.hurraySub}
+        />
+      )}
       {login && <LoginSheet onClose={() => setLogin(false)} />}
       {confirmClear && (
         <Sheet label={CLEAR_CART.title} onClose={() => setConfirmClear(false)}>
