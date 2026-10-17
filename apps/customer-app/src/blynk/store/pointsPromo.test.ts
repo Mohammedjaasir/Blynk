@@ -134,11 +134,11 @@ describe('Home surfaces in every combination', () => {
     expect(resolveHero(custom, off, now).lines).toEqual(['From LKR 253']);
   });
 
-  it('aisle screen: a category offer, else points, else nothing (no free-delivery claim, ever)', () => {
+  it('aisle screen: a category offer, else points, else a catchy row (no free-delivery claim, ever)', () => {
     const plain = { ...dairy, offer_percent: null };
     expect(aisleOffer(plain, { ...flat, points_program: rule100 }, now)).toEqual({ title: 'EARN BLYNK POINTS', sub: '1 point for every LKR 100' });
-    expect(aisleOffer(plain, flat, now)).toBeNull();
-    expect(aisleOffer(plain, freeOff, now)).toBeNull();
+    expect(aisleOffer(plain, flat, now)).toEqual({ title: 'QUALITY YOU CAN TRUST', sub: 'Fresh picks, every day' });
+    expect(aisleOffer(plain, freeOff, now)).toEqual({ title: 'QUALITY YOU CAN TRUST', sub: 'Fresh picks, every day' });
   });
 });
 

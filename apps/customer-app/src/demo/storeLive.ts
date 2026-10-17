@@ -8,7 +8,7 @@ import type { Category, Product, StoreInfo } from '@/blynk/api/types';
 import type { CatalogData } from '@/blynk/catalog/CatalogContext';
 import { categoryOfferActive } from '@/blynk/lib/categories';
 import { formatHours, formatOfferEnd } from '@/blynk/lib/storeText';
-import { POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
+import { NEUTRAL_COPY, POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
 
 export type LiveSection = { id: string; title: string; items: Product[] };
 
@@ -56,11 +56,12 @@ export function aisleOffer(cat: Category, store: StoreInfo | null, now: Date = n
       sub: cat.offer_ends_at ? `Offer until ${formatOfferEnd(cat.offer_ends_at)}` : 'Offer prices across this aisle',
     };
   }
-  // Blynk Points instead of free delivery (owner, 2026-10-14), while Admin / Ops have them on.
-  // No free-delivery row (owner, 2026-10-16: "we are not giving free delivery, remove that").
+  // Blynk Points instead of free delivery (owner, 2026-10-14), while Admin / Ops have them on;
+  // else a catchy row with nothing about fees or delivery (owner, 2026-10-17: reworded, not
+  // removed, when the free-delivery row was dropped).
   const rule = pointsRuleOf(store);
   if (rule) return { title: POINTS_COPY.aisleTitle, sub: POINTS_COPY.rule(rule) };
-  return null;
+  return NEUTRAL_COPY.aisleOffer;
 }
 
 export function liveAisle(data: CatalogData | null, id: string | undefined, store: StoreInfo | null, now: Date = new Date()): LiveAisle | null {

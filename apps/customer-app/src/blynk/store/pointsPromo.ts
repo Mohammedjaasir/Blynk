@@ -82,14 +82,15 @@ export const POINTS_COPY = {
 };
 
 /**
- * Neutral words for when neither points nor free deliveries are on. The band kicker is back
- * (owner, 2026-10-17: "i need that but differeent wordings which is not related to fee" - said
- * right after the fee-negation kicker was removed), with a catchy line that has nothing to do
- * with fees.
+ * Neutral words for when neither points nor free deliveries are on. Owner, 2026-10-17: "undo
+ * the deleted thing just change the wording" - a surface loses its claim, it gets a catchy
+ * replacement, never a gap. aisleOffer: the aisle screen's offer row when there is no category
+ * offer and no points (it used to drop to nothing).
  */
 export const NEUTRAL_COPY = {
   bandKicker: ['Fresh picks, great prices'] as [string],
   heroTitle: ['FRESH', 'GROCERIES'] as [string, string],
+  aisleOffer: { title: 'QUALITY YOU CAN TRUST', sub: 'Fresh picks, every day' },
 };
 
 /** What Home's headline surfaces (hero AUTO, the yellow band, the fee strip) promote. */

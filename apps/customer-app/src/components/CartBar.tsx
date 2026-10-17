@@ -7,8 +7,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { formatLkr } from '@/blynk/lib/money';
-import { claimPromoLine } from '@/blynk/store/freeClaim';
-import { useFreeDeliveryClaimWithItems } from '@/blynk/store/freeDelivery';
 import { DEMO } from '@/demo/mode';
 import { rupees } from '@/demo/money';
 import { STORE } from '@/demo/store';
@@ -42,30 +40,36 @@ function TrolleyIcon({ size = 18, color = C.brandInk }: { size?: number; color?:
   );
 }
 
-/** Demo mode: the reference unlocks free delivery from a ₹129 basket. */
+/**
+ * DEMO: the reference unlocks free delivery from a ₹129 basket. Live: a catchy strip whenever
+ * the cart has items - no free-delivery claim (owner, 2026-10-16/17: reworded, not removed, when
+ * the claim was dropped).
+ */
+const LIVE_STRIP_LINE = 'Great picks, every time!';
 function useStripOn(total: number, count: number) {
-  const live = useFreeDeliveryClaimWithItems();
-  return DEMO ? { count: count > 0 && total >= STORE.freeDeliveryAbove ? 1 : 0, line: null } : { count: live.count, line: claimPromoLine(live) };
+  return DEMO
+    ? { count: count > 0 && total >= STORE.freeDeliveryAbove ? 1 : 0, line: null }
+    : { count: count > 0 ? 1 : 0, line: LIVE_STRIP_LINE };
 }
 
 /**
  * Green "1 Item | ₹79 — View Cart" bar. Slides up on first add, its numbers roll, it
- * jiggles on every add, and when free delivery unlocks the "Yay! You've unlocked Free
- * Delivery" strip unfurls on top while confetti bursts out of the bar. The page content
- * fades to white behind it.
+ * jiggles on every add, and a catchy strip unfurls on top once there is something in the
+ * cart (DEMO: also bursts confetti, "Yay! You've unlocked Free Delivery", the first time the
+ * reference's basket threshold is crossed). The page content fades to white behind it.
  */
 export function CartBar() {
   const count = useCartSelect((c) => c.count);
   const total = useCartSelect((c) => c.total);
-  const freeStrip = useStripOn(total, count);
-  const freeDelivery = freeStrip.count > 0;
+  const stripOn = useStripOn(total, count);
+  const showStrip = stripOn.count > 0;
   // inside the tabs the tab bar already keeps clear of the home indicator
   const insets = { bottom: useBottomInset() };
   const { width, height } = useWindowDimensions();
   const jiggle = useSharedValue(0);
-  const strip = useSharedValue(freeDelivery ? 1 : 0);
+  const strip = useSharedValue(showStrip ? 1 : 0);
   const [burst, setBurst] = useState(0);
-  const wasFree = useRef(freeDelivery);
+  const wasShown = useRef(showStrip);
   const prevCount = useRef(count);
   const money = DEMO ? rupees : formatLkr;
 
@@ -77,20 +81,18 @@ export function CartBar() {
   }, [count]);
 
   useEffect(() => {
-    strip.value = withSpring(freeDelivery ? 1 : 0, { damping: 18, stiffness: 170 });
-    // live: the strip is an offer line for new customers, not an unlock, so no confetti
-    if (DEMO && freeDelivery && !wasFree.current) setBurst(Date.now());
-    wasFree.current = freeDelivery;
-  }, [freeDelivery]);
+    strip.value = withSpring(showStrip ? 1 : 0, { damping: 18, stiffness: 170 });
+    // live: the strip is shown from the first item, not unlocked, so no confetti
+    if (DEMO && showStrip && !wasShown.current) setBurst(Date.now());
+    wasShown.current = showStrip;
+  }, [showStrip]);
 
   const barA = useAnimatedStyle(() => ({ transform: [{ translateY: jiggle.value }] }));
   const stripA = useAnimatedStyle(() => ({ height: strip.value * CART_BAR.stripH, opacity: interpolate(strip.value, [0, 0.5, 1], [0, 0.6, 1]) }));
   const rowA = useAnimatedStyle(() => ({ height: CART_BAR.h + (ROW_STRIP - CART_BAR.h) * strip.value }));
 
   if (count === 0) return null;
-  // live: a guest sees the new-customer offer; a signed-in customer only the free deliveries
-  // checkout-info says they still have (src/blynk/store/freeClaim.ts)
-  const freeLine = DEMO ? "Yay! You've unlocked Free Delivery" : freeStrip.line ?? '';
+  const stripLine = DEMO ? "Yay! You've unlocked Free Delivery" : stripOn.line ?? '';
   return (
     <>
       {/* the page fades to white behind the bar */}
@@ -104,7 +106,7 @@ export function CartBar() {
       >
         <PressScale onPress={() => router.push('/cart')} style={styles.bar} scaleTo={0.97} haptic>
           <Animated.View style={[styles.strip, stripA]}>
-            <Text style={styles.stripTxt} numberOfLines={1}>{freeLine}</Text>
+            <Text style={styles.stripTxt} numberOfLines={1}>{stripLine}</Text>
           </Animated.View>
           <Animated.View style={[styles.row, rowA]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
