@@ -1453,7 +1453,7 @@ const styles = StyleSheet.create({
   modalX: { position: 'absolute', right: 12, top: 12, width: 22, height: 22, borderRadius: 11, backgroundColor: '#D6D6DA', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   mascotCircle: { width: 135, height: 135, borderRadius: 68, backgroundColor: C.brandSoft, alignItems: 'center', justifyContent: 'center' },
   modalTitle: { fontFamily: F.bold, fontSize: 21.5, color: '#141414', textAlign: 'center', marginTop: 22, lineHeight: 24, letterSpacing: -0.3 },
-  modalSub: { fontFamily: F.regular, fontSize: 13, color: '#55555C', marginTop: 4 },
+  modalSub: { fontFamily: F.regular, fontSize: 13, color: '#55555C', marginTop: 4, textAlign: 'center', paddingHorizontal: 22 },
   yay: { alignSelf: 'stretch', marginHorizontal: 15, marginTop: 38, height: 50, borderRadius: 25, backgroundColor: C.brand, alignItems: 'center', justifyContent: 'center' },
   yayTxt: { color: C.brandInk, fontFamily: F.semi, fontSize: 15.5 },
   drainTrack: { position: 'absolute', left: 0, right: 0, bottom: 2, height: 4, alignItems: 'flex-end' },

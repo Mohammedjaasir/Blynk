@@ -60,10 +60,11 @@ export const LIVE = {
   burst1: ['NO PACKAGING FEE', 'NO PLATFORM FEE'] as const,
   burst2: { big: 'LKR 0', lines: ['Packaging fee', 'Platform fee'] as const },
   /** The cart's pop-up, back with different content (owner, 2026-10-17: "i need that pop up
-   * but with different conent inside") - the one true, always-on claim, no delivery wording. */
+   * but with different conent inside", then "allignment is not good and also generate some
+   * other catchy its too big" - shortened to one line, no delivery wording). */
   hurrayTitle: 'You\'re all set!',
   hurrayCta: 'Got it!',
-  hurraySub: 'No packaging fee, no platform fee - just honest prices',
+  hurraySub: 'No sneaky fees. Ever.',
   mealTitle: 'COMPLETE YOUR BASKET',
   freeNote: (n: number) => `Applied at checkout to your first ${n} order${n > 1 ? 's' : ''}.`,
   thatsIt: 'No packaging or platform fee.',
