@@ -78,6 +78,7 @@ export async function orderMap(range: OrderMapRange, status: 'delivered' | 'all'
       sql<number>`floor(delivery_longitude / ${CELL_DEG})::int`.as('cx'),
       'order_status',
       'total_amount',
+      'wallet_amount_used',
       'delivery_city',
       'delivery_address_line1',
       'customer_id',
