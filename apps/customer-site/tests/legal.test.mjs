@@ -126,7 +126,7 @@ test('the owner\'s choices are filled in', () => {
   ]) assert.ok(t.includes(s), `terms: "${s}"`);
   const p = visible(pages.privacy);
   for (const s of ['up to 12 months after you close it', 'up to 6 years for tax', 'up to 6 months', 'respond within 21 working days',
-    'Send requests to us by phone or WhatsApp .']) {
+    'Send requests to help@blynk.lk .']) {
     assert.ok(p.includes(s), `privacy: "${s}"`);
   }
   const r = visible(pages.refunds);
@@ -143,7 +143,9 @@ test('details the owner has not given are left out cleanly', () => {
     if (k === 'privacyEmail' && c.supportEmail) continue;
     for (const n of NAMES) assert.doesNotMatch(visible(pages[n]), label, `${n} shows ${k} without a value`);
   }
-  for (const n of NAMES) assert.doesNotMatch(pages[n], /mailto:/, `${n}: no email given yet`);
+  if (!c.supportEmail && !c.privacyEmail) {
+    for (const n of NAMES) assert.doesNotMatch(pages[n], /mailto:/, `${n}: no email given yet`);
+  }
 });
 
 test('once the owner fills in the details they appear on the pages', () => {
