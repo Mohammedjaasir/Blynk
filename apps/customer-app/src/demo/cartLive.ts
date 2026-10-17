@@ -59,14 +59,6 @@ export const LIVE = {
   feePill: 'No packaging fee · No platform fee',
   burst1: ['NO PACKAGING FEE', 'NO PLATFORM FEE'] as const,
   burst2: { big: 'LKR 0', lines: ['Packaging fee', 'Platform fee'] as const },
-  /** The cart's pop-up, kept but reworded again (owner, 2026-10-16: same trigger - delivery is
-   * free for this order - but a different, catchier line than "No delivery fee this time!"). */
-  hurrayTitle: 'You\'re all set!',
-  hurrayCta: 'Got it!',
-  /** Owner, 2026-10-16 (a third pass): no "first N orders" framing either - just the one true
-   * fact for this order, nothing about a recurring perk. `n` stays the parameter so the pop-up's
-   * trigger (a free delivery for this order) is unchanged. */
-  hurraySub: (_n: number) => 'No delivery fee on this order',
   mealTitle: 'COMPLETE YOUR BASKET',
   freeNote: (n: number) => `Applied at checkout to your first ${n} order${n > 1 ? 's' : ''}.`,
   thatsIt: 'No packaging or platform fee.',

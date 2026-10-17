@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { milk, sugar, MemoryStorage } from '../test/fixtures';
-import { basketProgress, basketPrompt, checkoutBill, checkoutKeyFor, freeDeliveryNote, checkoutSignature, forgetCheckoutKey, newIdempotencyKey, orderItems } from './checkout';
+import { checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, newIdempotencyKey, orderItems } from './checkout';
 import type { CheckoutInfo, CouponPreview } from './types';
 
 beforeEach(() => { vi.stubGlobal('localStorage', new MemoryStorage()); });
@@ -135,16 +135,8 @@ test('bill: basket free delivery makes the fee 0 and the total the items', () =>
   expect(b).toMatchObject({ deliveryFee: 0, standardFee: 150, freeReason: 'BASKET', toPay: 5200 });
 });
 
-test('basket free delivery: "add more" from this basket, progress, and the notes', () => {
+test('basket free delivery: "add more" from this basket', () => {
   const short = checkoutBill(4200, quote({ basket_free_delivery: { enabled: true, min_subtotal_lkr: 5000, applies: false, remaining_lkr: 900 } }));
-  // the quote was for an older basket; the prompt follows this one
+  // the quote was for an older basket; basketRemaining follows this one
   expect(short.basketRemaining).toBe(800);
-  expect(basketPrompt(800)).toBe('Add LKR 800 more for free delivery');
-  expect(basketProgress(4200, 5000)).toBeCloseTo(0.84);
-  expect(basketProgress(6000, 5000)).toBe(1);
-  expect(basketProgress(100, null)).toBe(0);
-  const free = checkoutBill(5200, quote({ delivery_fee_lkr: 0, basket_free_delivery: { enabled: true, min_subtotal_lkr: 5000, applies: true, remaining_lkr: 0 } }));
-  expect(freeDeliveryNote(free, 0)).toBe('Free delivery on orders of LKR 5,000 or more.');
-  const nc = checkoutBill(800, quote({ delivery_fee_lkr: 0, free_delivery: { enabled: true, count: 2, since: 'x', used: 1, remaining: 1, applies: true } }));
-  expect(freeDeliveryNote(nc, 2)).toBe('Free delivery — 1 of 2 free deliveries left.');
 });

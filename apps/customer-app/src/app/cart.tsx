@@ -356,13 +356,13 @@ export default function Cart() {
     return () => clearTimeout(a);
   }, []);
 
-  // live: the "Hurray" modal is Admin's new-customer free deliveries; without them the fee
-  // header still bursts once the cart has shown (there is no modal to wait for)
-  const liveFree = live.freeCount > 0;
+  // live: no "Hurray" modal (owner, 2026-10-17: "we dont need any delivery realted wordings" -
+  // said again of this pop-up's "No delivery fee on this order" line); the fee header just
+  // bursts once the cart has shown
   const storeSeen = !!store;
   useEffect(() => {
     if (DEMO || loading || !storeSeen || !(lines.length || cart.combos.length)) return;
-    const t = liveFree ? setTimeout(() => setHurray(true), 60) : setTimeout(() => setBurst(Date.now()), BURST_AFTER_MODAL);
+    const t = setTimeout(() => setBurst(Date.now()), BURST_AFTER_MODAL);
     return () => clearTimeout(t);
   }, [loading, storeSeen]);
 
@@ -684,14 +684,8 @@ export default function Cart() {
         </Animated.View>
       )}
 
-      {hurray && (
-        <HurrayModal
-          onClose={closeHurray}
-          title={DEMO ? COPY.hurrayTitle : LIVE.hurrayTitle}
-          cta={DEMO ? COPY.hurrayCta : LIVE.hurrayCta}
-          sub={DEMO ? COPY.hurraySub : LIVE.hurraySub(live.freeCount)}
-        />
-      )}
+      {/* DEMO only: the video's own pop-up - live has none (no delivery wording, ever) */}
+      {hurray && <HurrayModal onClose={closeHurray} title={COPY.hurrayTitle} cta={COPY.hurrayCta} sub={COPY.hurraySub} />}
       {login && <LoginSheet onClose={() => setLogin(false)} />}
       {confirmClear && (
         <Sheet label={CLEAR_CART.title} onClose={() => setConfirmClear(false)}>

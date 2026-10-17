@@ -1,5 +1,4 @@
 import { lineAvailable, type CartLine, type ComboLine } from '@/blynk/cart/cartStore';
-import { formatLkr } from '@/blynk/lib/money';
 import { storage } from '@/blynk/lib/storage';
 import { rewardsSummary, type DiscountKind } from '@/blynk/checkout/rewards';
 import type { CheckoutInfo, CouponPreview, PlaceOrderBody } from './types';
@@ -142,19 +141,3 @@ export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coup
 let lastPlaced: import('./types').Order | null = null;
 export const rememberPlaced = (o: import('./types').Order) => { lastPlaced = o; };
 export const placedFromMemory = (id: string) => (lastPlaced && lastPlaced.id === id ? lastPlaced : null);
-
-/** How far the basket is towards free delivery by the basket amount, 0..1. */
-export function basketProgress(itemTotal: number, min: number | null): number {
-  if (!min || min <= 0) return 0;
-  return Math.max(0, Math.min(1, itemTotal / min));
-}
-
-/** The line under a FREE delivery fee (the Flutter shop's wording). */
-export function freeDeliveryNote(bill: CheckoutBill, count: number): string | null {
-  if (bill.freeReason === 'BASKET' && bill.basketMin) return `Free delivery on orders of ${formatLkr(bill.basketMin)} or more.`;
-  if (bill.freeReason === 'NEW_CUSTOMER') return `Free delivery — ${bill.freeRemaining} of ${count} free ${count === 1 ? 'delivery' : 'deliveries'} left.`;
-  return null;
-}
-
-/** "Add LKR 450 more for free delivery". */
-export const basketPrompt = (remaining: number) => `Add ${formatLkr(remaining)} more for free delivery`;
