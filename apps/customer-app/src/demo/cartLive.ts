@@ -71,10 +71,14 @@ export const randomHurrayLine = (): string => HURRAY_LINES[Math.floor(Math.rando
 
 export const LIVE = {
   storeTitle: (store: StoreInfo | null) => (store?.hub_name ? `Blynk · ${store.hub_name}` : 'Blynk'),
-  /** Fee header: Blynk adds no packaging or platform fee, so this is the one true claim it makes. */
-  feePill: 'No packaging fee · No platform fee',
-  burst1: ['NO PACKAGING FEE', 'NO PLATFORM FEE'] as const,
-  burst2: { big: 'LKR 0', lines: ['Packaging fee', 'Platform fee'] as const },
+  /**
+   * Fee header: Blynk adds no packaging or platform fee, worded as honest pricing rather than
+   * naming the fees again (owner, 2026-10-17: "the above yellow animation change the wordings" -
+   * the pill, burst1 and burst2 said "packaging fee" / "platform fee" three times on one screen).
+   */
+  feePill: 'Honest pricing, always',
+  burst1: ['HONEST PRICING', 'ZERO HIDDEN COSTS'] as const,
+  burst2: { big: 'LKR 0', lines: ['Hidden costs', 'Extra charges'] as const },
   /** The cart's pop-up (owner, 2026-10-17: "i need that pop up but with different conent
    * inside", then "allignment is not good and also generate some other catchy its too big",
    * then "no fees related topic we need different different wording each time they adding" -
