@@ -14,7 +14,7 @@ import { formatLkr } from '../blynk/lib/money';
 import { effectivePrice, isOfferActive, savingsPerUnit } from '../blynk/lib/pricing';
 import { flatFee, formatHours, freeDeliveryCount } from '../blynk/lib/storeText';
 import { claimFee, claimLine, claimTitle, freeDeliveryClaim, NO_CLAIM, type FreeClaim } from '../blynk/store/freeClaim';
-import { homeMessage, NEUTRAL_COPY, POINTS_COPY, pointsRuleOf, type PointsRule } from '../blynk/store/pointsPromo';
+import { homeMessage, POINTS_COPY, pointsRuleOf, type PointsRule } from '../blynk/store/pointsPromo';
 
 /** The "Under LKR 300" rail (the video's "Meals under ₹99"). */
 export const UNDER_LKR = 300;
@@ -68,10 +68,11 @@ export type LiveVsTile = {
 };
 
 /**
- * kicker: the small line over the title - [a, '&', b] (the fees, in capitals) or [line] (one
- * sentence-case line, e.g. "1 point for every LKR 100 · No packaging or platform fee").
+ * kicker: the small line over the title - [line] (e.g. "1 point for every LKR 100 · No
+ * packaging or platform fee") while points are on, else null (the title and tiles already say
+ * what matters: products, prices, offers - owner, 2026-10-17).
  */
-export type LiveVs = { kicker: [string, string, string] | [string]; title: string; tiles: LiveVsTile[] };
+export type LiveVs = { kicker: [string] | null; title: string; tiles: LiveVsTile[] };
 
 /** Lowest effective price among available products, or null (CatalogContext.minPrice without React). */
 export function lowestPrice(products: Product[], now: Date = new Date()): number | null {
@@ -211,7 +212,7 @@ export function liveVs(
   const msg = homeMessage(rule, claim);
   if (msg.kind === 'points') return { kicker: [POINTS_COPY.bandLine(msg.rule)], title: POINTS_COPY.bandTitle, tiles };
   const title = (msg.kind === 'free' ? claimTitle(msg.claim) : null) ?? (offers.length ? 'OFFER PRICES TODAY' : 'SHOP BY AISLE');
-  return { kicker: NEUTRAL_COPY.bandKicker, title, tiles };
+  return { kicker: null, title, tiles };
 }
 
 /**

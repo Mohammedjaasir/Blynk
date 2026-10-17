@@ -81,9 +81,13 @@ export const POINTS_COPY = {
   placed: (n: number) => `You'll earn ${pts(n)} when it's delivered`,
 };
 
-/** Neutral words for when neither points nor free deliveries are on. */
+/**
+ * Neutral words for when neither points nor free deliveries are on. No band kicker any more
+ * (owner, 2026-10-17: "we should not make them confused by saying these fees - what they care
+ * is product, pricings, offers, and delivery fees"); the band's title and tiles already show
+ * that.
+ */
 export const NEUTRAL_COPY = {
-  bandKicker: ['NO PACKAGING FEE', '&', 'NO PLATFORM FEE'] as [string, string, string],
   heroTitle: ['FRESH', 'GROCERIES'] as [string, string],
 };
 

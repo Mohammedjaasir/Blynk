@@ -116,7 +116,7 @@ describe('Home surfaces in every combination', () => {
       // offer set to: neutral, true words and no gaps
       expect(all).not.toMatch(FREE_WORDS);
       expect(all).not.toMatch(/point/i);
-      expect(vs.kicker).toEqual(['NO PACKAGING FEE', '&', 'NO PLATFORM FEE']);
+      expect(vs.kicker).toBeNull(); // owner, 2026-10-17: no fee kicker, the title and tiles already say enough
       expect(vs.title.length).toBeGreaterThan(0);
       expect(hero.title).toEqual(['FRESH', 'GROCERIES']);
       expect(hero.lines).toEqual(['Quality groceries, delivered with care', 'Fresh picks, every day']);
