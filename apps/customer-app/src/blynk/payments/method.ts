@@ -22,8 +22,11 @@ export const onlineOffered = (info: OnlinePaymentInfo | null | undefined) => inf
 export type PayOption = { method: PayMethod; title: string; sub: string; enabled: boolean };
 
 /**
- * The two rows of the payment choice (online only while offered). `nothingNote` replaces the
- * "nothing to pay online" line (e.g. the Blynk Wallet covers the order).
+ * The two rows of the payment choice. Online payment shows even while Admin has it switched off
+ * (owner, 2026-10-18: "show to the user at the time of buying this option is coming soon like
+ * that" - it used to disappear entirely) - disabled, labelled "Coming soon" instead of a real
+ * price/method line. `nothingNote` replaces the "nothing to pay online" line when it IS offered
+ * (e.g. the Blynk Wallet covers the order).
  */
 export function payOptions(info: OnlinePaymentInfo | null | undefined, toPay: number | null, nothingNote?: string): PayOption[] {
   const rows: PayOption[] = [{ method: 'COD', title: PAY.cod, sub: PAY.codSub, enabled: true }];
@@ -35,6 +38,8 @@ export function payOptions(info: OnlinePaymentInfo | null | undefined, toPay: nu
       sub: nothing ? (nothingNote ?? PAY.nothingToPay) : (info?.methods_note?.trim() || PAY.onlineSubDefault),
       enabled: !nothing,
     });
+  } else {
+    rows.push({ method: 'ONLINE', title: PAY.online, sub: PAY.onlineComingSoon, enabled: false });
   }
   return rows;
 }

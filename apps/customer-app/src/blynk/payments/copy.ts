@@ -5,6 +5,9 @@ export const PAY = {
   codSub: 'Pay the rider in cash',
   online: 'Pay online (card, wallet)',
   onlineSubDefault: 'Card or mobile wallet, through PayHere',
+  /** Shown instead of hiding the row (owner, 2026-10-18: "show to the user at the time of
+   * buying this option is coming soon") while Admin has online payment switched off. */
+  onlineComingSoon: 'Coming soon',
   window: (min: number) => `Pay within ${min} minutes of placing the order.`,
   nothingToPay: 'Nothing to pay online for this order.',
   placeCod: (amount: string) => `Place order  |  ${amount}`,

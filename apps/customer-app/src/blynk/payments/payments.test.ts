@@ -44,9 +44,13 @@ const RAW = {
 };
 
 describe('payment method selection', () => {
-  test('only cash on delivery while online payment is off or missing', () => {
-    expect(payOptions(OFF, 1000).map((o) => o.method)).toEqual(['COD']);
-    expect(payOptions(null, 1000).map((o) => o.method)).toEqual(['COD']);
+  test('online still shows while off or missing, disabled and labelled "Coming soon" (owner, 2026-10-18)', () => {
+    for (const info of [OFF, null]) {
+      const rows = payOptions(info, 1000);
+      expect(rows.map((o) => o.method)).toEqual(['COD', 'ONLINE']);
+      expect(rows[1]!.enabled).toBe(false);
+      expect(rows[1]!.sub).toBe('Coming soon');
+    }
     expect(effectiveMethod('ONLINE', OFF, 1000)).toBe('COD');
     expect(effectiveMethod('ONLINE', undefined, 1000)).toBe('COD');
   });
