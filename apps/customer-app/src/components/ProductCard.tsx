@@ -89,7 +89,9 @@ export const ProductCard = memo(function ProductCard({
       accessibilityRole="link"
       accessibilityLabel={DEMO ? p.name : [p.name, priceLine, roll?.label].filter(Boolean).join(', ')}
     >
-      <View style={[styles.img, { width, height: h, borderRadius: wide ? 10 : 14 }, !!tileColor && { backgroundColor: tileColor }]}>
+      {/* a photo's well is white with a hairline edge so the photo's own white background blends
+          in instead of showing as a pasted rectangle on grey (owner, 2026-10-18: "still this img problem") */}
+      <View style={[styles.img, { width, height: h, borderRadius: wide ? 10 : 14 }, !x?.emoji && !!p.image_url && styles.imgPhoto, !!tileColor && { backgroundColor: tileColor }]}>
         <Animated.View style={[ea, !p.is_available && { opacity: 0.45 }]}>
           {x?.emoji ? (
             <Text style={{ fontSize: Math.round(h * 0.5), lineHeight: Math.round(h * 0.62) }}>{x.emoji}</Text>
@@ -155,6 +157,7 @@ export function ProductCardEntering({ children, index }: { children: React.React
 
 const styles = StyleSheet.create({
   img: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: C.tile },
+  imgPhoto: { backgroundColor: C.white, borderWidth: 1, borderColor: C.line },
   popular: { position: 'absolute', left: 6, top: 6, backgroundColor: C.brandSoft, borderRadius: 9, paddingHorizontal: 6, height: 19, justifyContent: 'center' },
   popularTxt: { fontFamily: F.semi, fontSize: 11, color: C.brandInk },
   rating: {

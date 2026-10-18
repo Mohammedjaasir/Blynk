@@ -25,7 +25,10 @@ export function ProductImage({ product, size, radius = 14, inset = 0.92, style }
   const [failed, setFailed] = useState(false);
   const uri = product.image_url && !failed ? product.image_url : null;
   return (
-    <View style={[styles.tile, { width: size, height: size, borderRadius: radius }, style]}>
+    // a photo sits on white: product shots are on white backgrounds, and on the grey tile the
+    // photo's own white edge showed as a pasted rectangle that read as a bad crop (owner,
+    // 2026-10-18: "still this img problem")
+    <View style={[styles.tile, { width: size, height: size, borderRadius: radius }, !!uri && styles.photoTile, style]}>
       {uri ? (
         <Image
           source={{ uri }}
@@ -43,5 +46,6 @@ export function ProductImage({ product, size, radius = 14, inset = 0.92, style }
 
 const styles = StyleSheet.create({
   tile: { backgroundColor: C.tile, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  photoTile: { backgroundColor: C.white },
   initial: { fontFamily: F.bold, color: C.faint },
 });
