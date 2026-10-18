@@ -34,8 +34,27 @@ function categoryIdsForSlug(slug: string) {
     );
 }
 
-/** Migration 050: the per-product struck-price switch, read off products (the views don't carry it). */
-const showOfferCut = sql<boolean>`(SELECT p.show_offer_cut FROM products p WHERE p.id = v_product_catalog.id)`.as('show_offer_cut');
+/**
+ * Migration 050: the per-product struck-price switch, read off products (the views don't carry it).
+ * Coolify runs migrations by hand, so the column may not exist yet when this code is live: until
+ * it does, every product reads as "on" (today's behaviour) and the switch is not written. Checked
+ * once a minute until found, then cached - running the migration turns it on without a restart.
+ */
+let offerCutColumn: { ok: boolean; at: number } | null = null;
+export async function hasOfferCutColumn(): Promise<boolean> {
+  if (offerCutColumn && (offerCutColumn.ok || Date.now() - offerCutColumn.at < 60_000)) return offerCutColumn.ok;
+  const r = await sql<{ n: number }>`
+    SELECT count(*)::int AS n FROM information_schema.columns
+    WHERE table_name = 'products' AND column_name = 'show_offer_cut'`.execute(db);
+  offerCutColumn = { ok: (r.rows[0]?.n ?? 0) > 0, at: Date.now() };
+  return offerCutColumn.ok;
+}
+const showOfferCut = (ok: boolean) =>
+  ok
+    ? sql<boolean>`(SELECT p.show_offer_cut FROM products p WHERE p.id = v_product_catalog.id)`.as('show_offer_cut')
+    : sql<boolean>`true`.as('show_offer_cut');
+const staffShowOfferCut = (ok: boolean) =>
+  ok ? sql<boolean>`products.show_offer_cut`.as('show_offer_cut') : sql<boolean>`true`.as('show_offer_cut');
 
 function categoryIdsForId(id: string) {
   return db
@@ -226,6 +245,7 @@ export class CatalogRepository {
    * Customer: Queries active products from the v_product_catalog view.
    */
   async findActiveProducts(params: ProductQueryParams) {
+    const cut = await hasOfferCutColumn();
     let query = db
       .selectFrom('v_product_catalog')
       .select([
@@ -260,7 +280,7 @@ export class CatalogRepository {
         // Migration 048: the MRP (shown only when above the price paid).
         'mrp',
         // Migration 050: show the struck price / saving for this product.
-        showOfferCut,
+        showOfferCut(cut),
       ])
       .where('is_active', '=', true);
 
@@ -352,6 +372,7 @@ export class CatalogRepository {
    */
   async findActiveProductById(idOrSlug: string) {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+    const cut = await hasOfferCutColumn();
 
     let query = db
       .selectFrom('v_product_catalog')
@@ -387,7 +408,7 @@ export class CatalogRepository {
         // Migration 048: the MRP (shown only when above the price paid).
         'mrp',
         // Migration 050: show the struck price / saving for this product.
-        showOfferCut,
+        showOfferCut(cut),
       ])
       .where('is_active', '=', true);
 
@@ -418,11 +439,12 @@ export class CatalogRepository {
     // v_product_catalog has the customer-facing and priced columns;
     // updated_at lives on products itself and operations wants it in the
     // table. (tracking_mode is an inventory concern, not a product one.)
+    const cut = await hasOfferCutColumn();
     let query = db
       .selectFrom('v_product_catalog')
       .innerJoin('products', 'products.id', 'v_product_catalog.id')
       .selectAll('v_product_catalog')
-      .select(['products.updated_at', 'products.show_offer_cut']);
+      .select(['products.updated_at', staffShowOfferCut(cut)]);
 
     if (params.category_id) {
       query = query.where('v_product_catalog.category_id', '=', params.category_id);
@@ -449,11 +471,12 @@ export class CatalogRepository {
   }
 
   async findProductByIdAdmin(id: string) {
+    const cut = await hasOfferCutColumn();
     return await db
       .selectFrom('v_product_catalog')
       .innerJoin('products', 'products.id', 'v_product_catalog.id')
       .selectAll('v_product_catalog')
-      .select(['products.updated_at', 'products.show_offer_cut'])
+      .select(['products.updated_at', staffShowOfferCut(cut)])
       .where('v_product_catalog.id', '=', id)
       .executeTakeFirst();
   }
@@ -521,6 +544,7 @@ export class CatalogRepository {
     /** Migration 050: show the struck price / saving (default on). */
     show_offer_cut?: boolean;
   }) {
+    const cut = await hasOfferCutColumn();
     const [record] = await db
       .insertInto('products')
       .values({
@@ -547,7 +571,7 @@ export class CatalogRepository {
         delivery_lead_days: data.delivery_lead_days ?? 0,
         offer_price: data.offer_price ?? null,
         offer_ends_at: data.offer_ends_at ?? null,
-        show_offer_cut: data.show_offer_cut ?? true,
+        ...(cut ? { show_offer_cut: data.show_offer_cut ?? true } : {}),
       })
       .returningAll()
       .execute();
@@ -585,10 +609,14 @@ export class CatalogRepository {
       show_offer_cut?: boolean;
     }
   ) {
+    // before migration 050 has run there is no column to write the switch to
+    const { show_offer_cut: showCut, ...rest } = data;
+    const cut = showCut !== undefined && (await hasOfferCutColumn());
     const [record] = await db
       .updateTable('products')
       .set({
-        ...data,
+        ...rest,
+        ...(cut ? { show_offer_cut: showCut } : {}),
         updated_at: new Date(),
       })
       .where('id', '=', id)
