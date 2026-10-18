@@ -7,11 +7,19 @@ import { C, F } from '@/lib/theme';
  * A product photo on a neutral tile. While the photo is missing or fails to load,
  * the tile shows the product's initial instead of a broken image.
  */
-export function ProductImage({ product, size, radius = 14, inset = 1, style }: {
+export function ProductImage({ product, size, radius = 14, inset = 0.92, style }: {
   product: Pick<Product, 'name' | 'image_url' | 'image_focal_x' | 'image_focal_y'>;
   size: number; radius?: number;
-  /** How much of the tile the photo fills, 0-1 (owner, 2026-10-18: "image are not fully covered
-   * in screen" - every tile fills its box now, not just the product page's hero). */
+  /**
+   * How much of the tile the photo fills, 0-1 (owner, 2026-10-18: "image are not fully covered
+   * in screen" - every tile fills its box now, not just the product page's hero).
+   *
+   * A wide product photo (e.g. 1200x800) in a square tile at inset 1 touched the tile's left and
+   * right edges exactly, with no margin, while still leaving a visible gap top and bottom
+   * (`contain` never crops) - the mismatch read as a bad crop rather than a clean fit (owner,
+   * 2026-10-18: "the photo itself looks cropped/zoomed oddly", the Baby Care Diapers tile). A
+   * small, even margin on every side fixes that without bringing back the old, much emptier look.
+   */
   inset?: number; style?: StyleProp<ViewStyle>;
 }) {
   const [failed, setFailed] = useState(false);

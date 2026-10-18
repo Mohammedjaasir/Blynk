@@ -507,16 +507,11 @@ export default function Cart() {
           />
         )}
 
-        {/* signed in with an address: who it is for, needs help, the rider note; else the quick notes */}
-        {!DEMO && checkout ? (
-          <DeliveryDetailsCard
-            details={details}
-            setDetails={setDetails}
-            allowForSomeoneElse={allowForOthers}
-            codeToReceiver={forOthers?.send_code_to_receiver !== false}
-            showErrors={showDetailErrors}
-          />
-        ) : (
+        {/* signed in with an address: who it is for, needs help, the rider note (DeliveryDetailsCard
+            has its own quick notes); DEMO only below - the video's "Add Delivery Instructions" pen
+            row (owner, 2026-10-18: "remove add delivery intrusction" - it was the DEMO fallback
+            still showing live before `checkout` loaded, labelled with raw demo copy) */}
+        {DEMO ? (
           <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0 }]}>
             <Pressable onPress={() => setInstr((v) => !v)}>
               <Row icon={<PenGlyph white />} label={COPY.instructions} right={<ChevronIcon size={16} color={INK} stroke={2.2} />} h={48} />
@@ -525,7 +520,15 @@ export default function Cart() {
               <InstructionChips on={notes} setOn={setNotes} />
             </Collapsible>
           </Animated.View>
-        )}
+        ) : checkout ? (
+          <DeliveryDetailsCard
+            details={details}
+            setDetails={setDetails}
+            allowForSomeoneElse={allowForOthers}
+            codeToReceiver={forOthers?.send_code_to_receiver !== false}
+            showErrors={showDetailErrors}
+          />
+        ) : null}
 
         {/* bill */}
         {/* coupons: only while Admin has them switched on (checkout-info) */}
