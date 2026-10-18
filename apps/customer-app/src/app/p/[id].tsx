@@ -241,14 +241,26 @@ export default function ProductPage() {
 
 /**
  * The product's hero photo, "full frame" (owner, 2026-10-18): the box height follows the
- * photo's own aspect ratio (once known from onLoad) instead of a fixed square, so "contain"
- * fills it completely with no letterboxing - the photo is still never cropped. Capped to
- * 0.6-1.3x the width so an unusually tall or wide photo cannot distort the layout.
+ * photo's own aspect ratio (fetched via Image.getSize, cross-platform unlike onLoad's event
+ * shape which differs on web) instead of a fixed square, so "contain" fills it completely with
+ * no letterboxing - the photo is still never cropped. Capped to 0.6-1.3x the width so an
+ * unusually tall or wide photo cannot distort the layout.
  */
 function HeroPhoto({ product, size }: { product: Product; size: number }) {
   const [ratio, setRatio] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   const uri = product.image_url && !failed ? product.image_url : null;
+  useEffect(() => {
+    setRatio(null);
+    if (!uri) return;
+    let alive = true;
+    Image.getSize(
+      uri,
+      (iw, ih) => { if (alive && iw > 0 && ih > 0) setRatio(iw / ih); },
+      () => { if (alive) setFailed(true); },
+    );
+    return () => { alive = false; };
+  }, [uri]);
   const height = uri && ratio ? Math.round(Math.min(Math.max(size / ratio, size * 0.6), size * 1.3)) : size;
   return (
     <View style={[styles.hero, { width: size, height }, !product.is_available && { opacity: 0.45 }]}>
@@ -257,10 +269,6 @@ function HeroPhoto({ product, size }: { product: Product; size: number }) {
           source={{ uri }}
           accessibilityLabel={product.name}
           resizeMode="contain"
-          onLoad={(e) => {
-            const { width: iw, height: ih } = e.nativeEvent.source;
-            if (iw > 0 && ih > 0) setRatio(iw / ih);
-          }}
           onError={() => setFailed(true)}
           style={{ width: size, height }}
         />
