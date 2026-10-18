@@ -128,4 +128,22 @@ describe('live home content', () => {
     const usedAll = JSON.stringify([liveFees(store, none), livePromo(store, none), used, liveAisles(catalog(), store, 'all', [], now)]);
     expect(usedAll).not.toMatch(/free deliver|deliveries free|delivery free/i);
   });
+
+  it('Admin / Ops words replace the aisle lines, the offer row, the band words and the Under amount (owner, 2026-10-18)', () => {
+    const own = {
+      ...store,
+      app_texts: {
+        home_aisle_lines: ['One', 'Two', 'Three'], home_aisle_offer: 'Save {percent}% today',
+        home_band_kicker: 'Our kicker', home_band_title_offers: 'DEALS NOW', home_under_amount: 600,
+      },
+    };
+    const cards = liveAisles(catalog(), own, 'all', [], now);
+    expect([cards[0]!.meta, cards[0]!.delivery]).toEqual(['One', 'Two']);
+    expect(cards[0]!.offer).toMatch(/^Save \d+% today$/);
+    const vs = liveVs(catalog(), own, now)!;
+    expect(vs.kicker).toEqual(['Our kicker']);
+    expect(vs.title).toBe('DEALS NOW');
+    expect(liveUnder(catalog(), 'all', [], now, 600).map((p) => p.id)).toContain(milk.id);
+    expect(liveUnder(catalog(), 'all', [], now).map((p) => p.id)).not.toContain(milk.id);
+  });
 });

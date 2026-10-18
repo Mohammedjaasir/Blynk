@@ -58,6 +58,7 @@ import { WALLET_COPY } from '@/blynk/wallet/copy';
 import { canUseWallet, checkoutWalletOf } from '@/blynk/wallet/models';
 import { effectivePrice, isOfferActive, priceDisplay } from '@/blynk/lib/pricing';
 import { offerSavingsOn } from '@/blynk/lib/storeText';
+import { appText } from '@/blynk/lib/appTexts';
 import { useStore } from '@/blynk/store/StoreContext';
 import { invalidateFreeClaim } from '@/blynk/store/useFreeClaim';
 import { cartEarn, cartPointsLine, pointsRuleOf } from '@/blynk/store/pointsPromo';
@@ -944,6 +945,7 @@ function ComboCartLine({ line }: { line: ComboLine }) {
 
 /** "COMPLETE YOUR BASKET": other available Blynk products, nearest aisles first. Hidden when there are none. */
 function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Product[]; inCart: Product[] }) {
+  const store = useStore();
   const [shown, setShown] = useState(false);
   useEffect(() => {
     if (!ready) return;
@@ -957,7 +959,7 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
   if (!picks.length) return null;
   return (
     <View style={[styles.card, { paddingTop: 17, paddingBottom: 12 }]}>
-      <Text style={styles.mealTitle}>{LIVE.mealTitle}</Text>
+      <Text style={styles.mealTitle}>{appText(store, 'cart_basket_title', LIVE.mealTitle)}</Text>
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 13 }}>
         {picks.map((p, i) => (
           <View key={p.id} style={{ width: 69 }}>
@@ -991,6 +993,7 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
   /** "You'll earn N Blynk Points on this order" (a guest: "Sign in to earn ..."), or null. */
   pointsLine: string | null;
 }) {
+  const store = useStore();
   const quoted = !!checkout && checkout.deliveryFee !== null;
   const toPay = quoted ? (checkout!.toPay as number) : bill.toPay;
   const feeKnown = quoted || bill.feeKnown;
@@ -1074,7 +1077,7 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
       </View>
       <Animated.View entering={FadeIn.duration(250)} style={styles.thatsIt}>
         <LinearGradient colors={[C.brandTint, 'rgba(255,248,214,0)']} start={{ x: 0.55, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
-        <Text style={styles.thatsItTxt}>{LIVE.thatsIt}</Text>
+        <Text style={styles.thatsItTxt}>{appText(store, 'cart_bill_note', LIVE.thatsIt)}</Text>
       </Animated.View>
       <View style={[styles.billRow, { paddingHorizontal: 15, height: 46 }]}>
         <Text style={styles.payTotal}>To Pay</Text>

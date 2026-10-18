@@ -114,6 +114,28 @@ export interface StoreInfo {
    * while Admin / Ops have the program on; null = off; missing = an older API (off).
    */
   points_program?: PublicPointsProgram | null;
+  /**
+   * The app's other words and Home's aisle colours as set in Admin / Ops (owner, 2026-10-18:
+   * "make sure each and everything was editable from the admin"). Only the fields staff set;
+   * anything missing keeps the app's own (src/blynk/lib/appTexts.ts).
+   */
+  app_texts?: PublicAppTexts;
+}
+
+export interface PublicAppTexts {
+  home_explore_title?: string; home_aisle_offer?: string; home_band_kicker?: string;
+  home_band_title_offers?: string; home_band_title_aisles?: string; home_footer_title?: string; home_footer_sub?: string;
+  aisle_banner_title?: string; aisle_banner_sub?: string;
+  cart_header_pill?: string; cart_burst_top?: string; cart_burst_bottom?: string; cart_burst_big?: string;
+  cart_burst_line_1?: string; cart_burst_line_2?: string; cart_bar_line?: string; cart_basket_title?: string; cart_bill_note?: string;
+  pay_online_coming_soon?: string; placed_title?: string; placed_sub?: string;
+  home_aisle_lines?: string[]; login_headlines?: string[];
+  home_under_amount?: number;
+  /** Surface colours (#RRGGBB): the Home banner's top/bottom, the offers band, the cart header, the cart bar and its strip. */
+  hero_bg_top?: string; hero_bg_bottom?: string; home_band_bg?: string;
+  cart_header_bg?: string; cart_bar_bg?: string; cart_bar_strip_bg?: string;
+  /** Category id -> #RRGGBB card colour. */
+  aisle_colors?: Record<string, string>;
 }
 
 /** GET /store `points_program`. */

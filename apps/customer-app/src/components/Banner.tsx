@@ -6,6 +6,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, LinearGradient as SvgGrad, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { PublicHeroBanner } from '@/blynk/api/types';
+import { appColor } from '@/blynk/lib/appTexts';
+import { useStore } from '@/blynk/store/StoreContext';
 import { HERO_COPY, HERO_LAYOUT, heroSubSize, heroWaveSpan, heroWordSize, resolveHero } from '@/blynk/promo/heroBanner';
 import { openPromoDestination } from '@/lib/nav';
 import { withSpring } from '@/lib/motion';
@@ -32,6 +34,20 @@ const P = 2600; // ms per dish
 
 /** The banner's top purple. Home paints its header the same, so header and banner read as one block, as in the reference. */
 export const BANNER_TOP = '#2E0C66';
+
+/** The banner's top colour, Admin / Ops' when set (app_texts.hero_bg_top; owner, 2026-10-18). */
+export function useBannerTop(): string {
+  return appColor(useStore(), 'hero_bg_top', BANNER_TOP);
+}
+
+/** The banner's background gradient: Admin / Ops' top and bottom colours when set, else the purple. */
+function useBannerBg(demo: boolean): readonly [string, string, ...string[]] {
+  const store = useStore();
+  if (demo) return V.bg;
+  const top = appColor(store, 'hero_bg_top', V.bg[0]);
+  const bottom = appColor(store, 'hero_bg_bottom', V.bg[2]);
+  return top === V.bg[0] && bottom === V.bg[2] ? V.bg : [top, bottom];
+}
 
 /** Reference palette, sampled off the frames. */
 const V = {
@@ -195,6 +211,7 @@ export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, 
   /** GET /store `hero_banner`: Admin / Ops' custom banner; null / missing = automatic. */
   hero?: PublicHeroBanner | null;
 }) {
+  const bg = useBannerBg(!!demo);
   const model = useMemo(() => (demo ? null : resolveHero(hero, { minPrice, freeCount, freeKind, pointsRule })), [demo, hero, minPrice, freeCount, freeKind, pointsRule]);
   // Illustrated grocery items in both modes (owner: no real product photos in the banner).
   const items = demo ? demo.emojis : model!.items;
@@ -281,7 +298,7 @@ export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, 
 
   return (
     <View style={styles.wrap}>
-      <LinearGradient colors={V.bg} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={bg} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={StyleSheet.absoluteFill} />
       {/* the beam lights the ground under the dish */}
       <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>

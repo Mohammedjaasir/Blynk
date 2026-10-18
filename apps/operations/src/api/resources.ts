@@ -1,5 +1,6 @@
 import { UPLOAD_TIMEOUT_MS, apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
+import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
 import type {
   AppShareLinks,
   AppUpdatePolicySetting,
@@ -1227,6 +1228,12 @@ export const settings = {
       apiRequest<PromoBandSetting>('/admin/settings/promo-band', { method: 'PATCH', body: { ...body } }),
   },
   /** Home hero banner (the purple banner at the top of Home): any subset of fields per PATCH. Audited. */
+  /** The customer app's other words and aisle colours (owner, 2026-10-18); any subset per PATCH. Audited. */
+  appTexts: {
+    get: () => apiRequest<AppTextsSetting>('/admin/settings/app-texts'),
+    update: (body: Partial<AppTextsFields>) =>
+      apiRequest<AppTextsSetting>('/admin/settings/app-texts', { method: 'PATCH', body: { ...body } }),
+  },
   heroBanner: {
     get: () => apiRequest<HeroBannerSetting>('/admin/settings/hero-banner'),
     update: (body: Partial<HeroBannerFields>) =>

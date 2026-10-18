@@ -114,6 +114,10 @@ export function Layout() {
               <NavLink to="/home-banner" className="nav__item">
                 Home banner
               </NavLink>
+              {/* App texts (owner, 2026-10-18): the app's other words and aisle colours. */}
+              <NavLink to="/app-texts" className="nav__item">
+                App texts
+              </NavLink>
               <NavLink to="/coupons" className="nav__item">
                 Coupons
               </NavLink>

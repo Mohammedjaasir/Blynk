@@ -16,7 +16,8 @@ import { useHomeLocation } from '@/blynk/address/homeLocation';
 import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import type { Product } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
-import { FILTERS as LIVE_FILTERS, toggle, type FilterId } from '@/blynk/lib/filters';
+import { filterChips, toggle, type FilterId } from '@/blynk/lib/filters';
+import { aisleColor, appColor, appText, underAmount } from '@/blynk/lib/appTexts';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice } from '@/blynk/lib/pricing';
 import { aisleArt, aislePhase, aisleTint } from '@/blynk/lib/aisleArt';
@@ -24,7 +25,7 @@ import { useFreeClaim } from '@/blynk/store/useFreeClaim';
 import { AisleStamp } from '@/components/AisleStamp';
 import { runAisleBeat } from '@/lib/clock';
 import { useStore } from '@/blynk/store/StoreContext';
-import { Banner, BANNER_TOP } from '@/components/Banner';
+import { Banner, useBannerTop } from '@/components/Banner';
 import { CART_BAR, CartBar } from '@/components/CartBar';
 import { ClosedBanner } from '@/components/ClosedBanner';
 import {
@@ -48,7 +49,7 @@ import {
 } from '@/demo/home';
 import {
   liveAisles, liveBanner, liveHints, livePromo, liveRail,
-  liveUnder, liveVs, UNDER_LKR, type LiveAisleCard, type LiveVs,
+  liveUnder, liveVs, type LiveAisleCard, type LiveVs,
 } from '@/demo/homeLive';
 import { extraOf } from '@/demo/extras';
 import { DEMO } from '@/demo/mode';
@@ -79,7 +80,7 @@ const money = (n: number) => (DEMO ? rupees(n) : formatLkr(n));
 /** A category-rail tile: the video's emoji (demo) or the aisle's photo (live). */
 type RailCat = { id: string; name: string; from: number | null; emoji?: string; image?: string | null };
 type Chip = { id: string; label: string; hearts?: boolean; caret?: boolean };
-const LIVE_CHIPS: Chip[] = LIVE_FILTERS.map((f) => ({ ...f, hearts: f.id === 'offer' }));
+const liveChips = (under: number): Chip[] => filterChips(under).map((f) => ({ ...f, hearts: f.id === 'offer' }));
 
 const CAT_W = 90; // one category slot (the reference's tiles sit 90 pt apart)
 const TILE_W = 81;
@@ -231,13 +232,15 @@ export default function Home() {
     },
   );
 
+  // the header matches the banner's top colour (Admin / Ops' when set; owner, 2026-10-18)
+  const bannerTop = useBannerTop();
   const statusA = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       y.value, [headerH.value - 80, headerH.value - 10],
-      [interpolateColor(ink.value, [0, 1], ['#FFFFFF', BANNER_TOP]), '#FFFFFF'],
+      [interpolateColor(ink.value, [0, 1], ['#FFFFFF', bannerTop]), '#FFFFFF'],
     ),
   }));
-  const headerA = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(ink.value, [0, 1], ['#FFFFFF', BANNER_TOP]) }));
+  const headerA = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(ink.value, [0, 1], ['#FFFFFF', bannerTop]) }));
   const bannerA = useAnimatedStyle(() => ({ height: bannerOpen.value * BANNER_H, opacity: interpolate(bannerOpen.value, [0, 0.35, 1], [0, 0.7, 1]) }));
   const chipsA = useAnimatedStyle(() => ({ top: catH.value, opacity: stuckChips.value, shadowOpacity: stuckChips.value * 0.09 }));
   const stickyShadow = useAnimatedStyle(() => {
@@ -262,7 +265,7 @@ export default function Home() {
     const on = filters as FilterId[];
     return {
       rail: liveRail(data) as RailCat[],
-      under: liveUnder(data, cat, on),
+      under: liveUnder(data, cat, on, undefined, underAmount(store)),
       aisles: liveAisles(data, store, cat, on),
       vs: liveVs(data, store, undefined, claim),
       promo: livePromo(store, claim),
@@ -273,7 +276,8 @@ export default function Home() {
 
   const cats: RailCat[] = live ? live.rail : granted ? CATEGORIES : CATEGORIES_PRE;
   const meals = live ? live.under : granted ? MEALS : MEALS_PRE;
-  useTrackList(live ? `Under ${formatLkr(UNDER_LKR)}` : null, live ? live.under : []);
+  const under = underAmount(store);
+  useTrackList(live ? `Under ${formatLkr(under)}` : null, live ? live.under : []);
   const stores = useMemo(() => (DEMO ? filterStores(cat, filters as DemoFilter[]) : []), [cat, filters]);
   const fees = FEES; // the fee strip is DEMO only now (owner, 2026-10-18)
   const sheet = DEMO ? LOCATION_SHEET : here.sheet;
@@ -309,7 +313,7 @@ export default function Home() {
     scrollRef.current?.scrollTo({ y: Math.max(0, feedY.get() + exploreY.get() - catH.get() - 52), animated: true });
   };
   const toggleFilter = (f: string) => setFilters((s) => toggle(s, f));
-  const chips: readonly Chip[] = DEMO ? FILTERS : LIVE_CHIPS;
+  const chips: readonly Chip[] = DEMO ? FILTERS : liveChips(under);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -378,7 +382,7 @@ export default function Home() {
                 {meals.length > 0 && (
                   <>
                     <View style={styles.sectionHead}>
-                      <Text style={styles.h2}>{DEMO ? 'Meals under ₹99' : `Under ${formatLkr(UNDER_LKR)}`}</Text>
+                      <Text style={styles.h2}>{DEMO ? 'Meals under ₹99' : `Under ${formatLkr(under)}`}</Text>
                       <Pressable onPress={toExplore} hitSlop={8} style={styles.seeAll}>
                         <Text style={styles.seeAllTxt}>See all</Text>
                         <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={13} color={C.sub} stroke={2.2} /></View>
@@ -401,7 +405,7 @@ export default function Home() {
                   <FilterChips items={chips} on={filters} onToggle={toggleFilter} />
                 </View>
                 <Text onLayout={(e) => exploreY.set(e.nativeEvent.layout.y)} style={styles.explore}>
-                  {DEMO ? 'Explore all restaurants' : 'Explore all aisles'}
+                  {DEMO ? 'Explore all restaurants' : appText(store, 'home_explore_title', 'Explore all aisles')}
                 </Text>
 
                 {DEMO ? (
@@ -423,6 +427,7 @@ export default function Home() {
                         key={a.cat.id}
                         aisle={a}
                         index={i}
+                        color={aisleColor(store, a.cat.id) ?? aisleTint(a.cat, i)}
                         promo={i === Math.min(PROMO_AFTER, live.aisles.length) - 1 ? live.promo : null}
                       />
                     ))}
@@ -702,10 +707,13 @@ function Wave({ color, flip }: { color: string; flip?: boolean }) {
  */
 function VsSection({ live }: { live: LiveVs | null }) {
   const kicker = live ? live.kicker : VS.kicker;
+  // the band's colour: Admin / Ops' when set (app_texts.home_band_bg; owner, 2026-10-18)
+  const store = useStore();
+  const tint = live ? appColor(store, 'home_band_bg', C.brandTint) : C.brandTint;
   return (
     <View style={{ marginTop: 34 }}>
-      <Wave color={C.brandTint} />
-      <LinearGradient colors={[C.brandTint, '#FFFCEB', '#FFFFFF']} style={{ paddingTop: 12, paddingBottom: 6 }}>
+      <Wave color={tint} />
+      <LinearGradient colors={tint === C.brandTint ? [C.brandTint, '#FFFCEB', '#FFFFFF'] : [tint, '#FFFFFF']} style={{ paddingTop: 12, paddingBottom: 6 }}>
         <View style={styles.vsKicker}>
           <HeartsIcon size={15} color={C.brandInk} pupil="#3A3A40" />
           {kicker.length === 1
@@ -812,14 +820,16 @@ const StoreCard = memo(function StoreCard({ store: s, y, feedY, screenH, promo }
  * is no "Ad" tag. The corner holds the aisle's illustrated items swaying in a stamp ring
  * (owner, 2026-10-14: the "FREE DELIVERY" stamp misled customers who had used theirs).
  */
-const AisleCard = memo(function AisleCard({ aisle: a, index, promo }: {
+const AisleCard = memo(function AisleCard({ aisle: a, index, color, promo }: {
   aisle: LiveAisleCard; index: number;
+  /** The card's colour: Admin / Ops' (app_texts.aisle_colors) or aisleTint's. */
+  color: string;
   /** The yellow promo band follows this card. */
   promo: { line1: string | null; fees: string[] } | null;
 }) {
   return (
     <View>
-      <PressScale scaleTo={0.985} onPress={() => openAisle(a.cat)} style={[styles.store, styles.aisle, { backgroundColor: aisleTint(a.cat, index) }]}>
+      <PressScale scaleTo={0.985} onPress={() => openAisle(a.cat)} style={[styles.store, styles.aisle, { backgroundColor: color }]}>
         <AisleStamp items={aisleArt(a.cat, index)} phase={aislePhase(index)} style={styles.aisleStamp} />
         {!!a.offer && <Text style={styles.lower}>{a.offer}</Text>}
         <View style={styles.storeNameRow}>

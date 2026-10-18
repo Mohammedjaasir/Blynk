@@ -8,6 +8,7 @@ import type { Category, Product, StoreInfo } from '@/blynk/api/types';
 import type { CatalogData } from '@/blynk/catalog/CatalogContext';
 import { categoryOfferActive } from '@/blynk/lib/categories';
 import { formatHours, formatOfferEnd } from '@/blynk/lib/storeText';
+import { appText } from '@/blynk/lib/appTexts';
 import { NEUTRAL_COPY, POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
 
 export type LiveSection = { id: string; title: string; items: Product[] };
@@ -61,7 +62,11 @@ export function aisleOffer(cat: Category, store: StoreInfo | null, now: Date = n
   // removed, when the free-delivery row was dropped).
   const rule = pointsRuleOf(store);
   if (rule) return { title: POINTS_COPY.aisleTitle, sub: POINTS_COPY.rule(rule) };
-  return NEUTRAL_COPY.aisleOffer;
+  // Admin / Ops' words when set (app_texts; owner, 2026-10-18)
+  return {
+    title: appText(store, 'aisle_banner_title', NEUTRAL_COPY.aisleOffer.title),
+    sub: appText(store, 'aisle_banner_sub', NEUTRAL_COPY.aisleOffer.sub),
+  };
 }
 
 export function liveAisle(data: CatalogData | null, id: string | undefined, store: StoreInfo | null, now: Date = new Date()): LiveAisle | null {

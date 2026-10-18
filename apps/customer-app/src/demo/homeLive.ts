@@ -13,6 +13,7 @@ import { applyFilters, type FilterId } from '../blynk/lib/filters';
 import { formatLkr } from '../blynk/lib/money';
 import { effectivePrice, isOfferActive, savingsPerUnit } from '../blynk/lib/pricing';
 import { flatFee, freeDeliveryCount, offerSavingsOn } from '../blynk/lib/storeText';
+import { appLines, appText, underAmount } from '../blynk/lib/appTexts';
 import { claimFee, claimLine, claimTitle, freeDeliveryClaim, type FreeClaim } from '../blynk/store/freeClaim';
 import { homeMessage, NEUTRAL_COPY, POINTS_COPY, pointsRuleOf, type PointsRule } from '../blynk/store/pointsPromo';
 
@@ -142,11 +143,11 @@ export function liveRail(data: CatalogData | null, now: Date = new Date()): Live
   return [{ id: 'all', name: 'All', image: null, from: null, emoji: '🛒' }, ...aisles];
 }
 
-/** "Under LKR 300": in-stock products at or under the line, in the chosen aisle, with the chips applied. */
-export function liveUnder(data: CatalogData | null, cat: string, filters: FilterId[], now: Date = new Date()): Product[] {
+/** "Under LKR 300" (the amount is Admin / Ops' app_texts.home_under_amount): in-stock products at or under the line, in the chosen aisle, with the chips applied. */
+export function liveUnder(data: CatalogData | null, cat: string, filters: FilterId[], now: Date = new Date(), under = UNDER_LKR): Product[] {
   if (!data) return [];
   const scope = cat === 'all' ? data.products : inAisle(data, cat);
-  return applyFilters(scope, filters, now).filter((p) => p.is_available && effectivePrice(p, now) <= UNDER_LKR).slice(0, 12);
+  return applyFilters(scope, filters, now, under).filter((p) => p.is_available && effectivePrice(p, now) <= under).slice(0, 12);
 }
 
 /** What a card says about delivery: free deliveries, the flat fee, or "at checkout". */
@@ -166,14 +167,19 @@ export function liveAisles(
     .filter((c) => cat === 'all' || c.id === cat)
     .map((c, i) => {
       const all = inAisle(data, c.id);
-      const items = applyFilters(all, filters, now);
-      const [meta, delivery] = AISLE_LINES[i % AISLE_LINES.length]!;
+      const items = applyFilters(all, filters, now, underAmount(store));
+      // Admin / Ops' lines (app_texts.home_aisle_lines), two per card, else the built-in pairs
+      const own = appLines(store, 'home_aisle_lines', []);
+      const [meta, delivery] = own.length
+        ? [own[(i * 2) % own.length]!, own[(i * 2 + 1) % own.length]!]
+        : AISLE_LINES[i % AISLE_LINES.length]!;
+      const offerWords = appText(store, 'home_aisle_offer', '{percent}% off everything here');
       return {
         cat: c,
         items,
         meta,
         delivery,
-        offer: categoryOfferActive(c, now) ? `${c.offer_percent}% off everything here` : null,
+        offer: categoryOfferActive(c, now) ? offerWords.replace(/\{percent\}/g, String(c.offer_percent)) : null,
       };
     })
     .filter((a) => a.items.length > 0);
@@ -219,8 +225,10 @@ export function liveVs(
   if (!tiles.length) return null;
   const msg = homeMessage(rule, claim);
   if (msg.kind === 'points') return { kicker: [POINTS_COPY.bandLine(msg.rule)], title: POINTS_COPY.bandTitle, tiles };
-  const title = (msg.kind === 'free' ? claimTitle(msg.claim) : null) ?? (offers.length ? 'OFFER PRICES TODAY' : 'SHOP BY AISLE');
-  return { kicker: NEUTRAL_COPY.bandKicker, title, tiles };
+  // the words are Admin / Ops' when set (app_texts; owner, 2026-10-18)
+  const title = (msg.kind === 'free' ? claimTitle(msg.claim) : null)
+    ?? (offers.length ? appText(store, 'home_band_title_offers', 'OFFER PRICES TODAY') : appText(store, 'home_band_title_aisles', 'SHOP BY AISLE'));
+  return { kicker: [appText(store, 'home_band_kicker', NEUTRAL_COPY.bandKicker[0])], title, tiles };
 }
 
 /**

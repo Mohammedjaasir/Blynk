@@ -4,6 +4,9 @@ import Animated, { useAnimatedStyle, useReducedMotion, type SharedValue } from '
 import Svg, { Ellipse, Line, Path } from 'react-native-svg';
 import { BEAM_ITEMS } from '@/blynk/lib/aisleArt';
 import { HOME_FOOTER } from '@/blynk/ui/strings';
+import { appText } from '@/blynk/lib/appTexts';
+import { useStore } from '@/blynk/store/StoreContext';
+import { DEMO } from '@/demo/mode';
 import { footerBeat, runFooterBeat } from '@/lib/clock';
 import { C, F } from '@/lib/theme';
 
@@ -54,14 +57,18 @@ export const HomeFooter = memo(function HomeFooter({ active }: {
 }) {
   const reduced = useReducedMotion();
   const run = active && !reduced;
+  const store = useStore();
   useEffect(() => {
     runFooterBeat(run);
     return () => runFooterBeat(false);
   }, [run]);
+  // Admin / Ops' words when set (app_texts; owner, 2026-10-18)
+  const small = DEMO ? HOME_FOOTER.small : appText(store, 'home_footer_title', HOME_FOOTER.small);
+  const large = DEMO ? HOME_FOOTER.large : appText(store, 'home_footer_sub', HOME_FOOTER.large);
   return (
-    <View style={styles.root} accessible accessibilityRole="text" accessibilityLabel={HOME_FOOTER.label}>
-      <Text style={styles.small}>{HOME_FOOTER.small}</Text>
-      <Text style={styles.large}>{HOME_FOOTER.large}</Text>
+    <View style={styles.root} accessible accessibilityRole="text" accessibilityLabel={`${small} ${large}`}>
+      <Text style={styles.small}>{small}</Text>
+      <Text style={styles.large}>{large}</Text>
       <View style={styles.stage} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Trampoline beat={footerBeat} still={reduced} />
         {ITEMS.map((it, k) => (

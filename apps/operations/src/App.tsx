@@ -15,6 +15,7 @@ import { Products } from './pages/Catalog/Products';
 import { Promotions } from './pages/Catalog/Promotions';
 import { PromoBand } from './pages/Catalog/PromoBand';
 import { HeroBanner } from './pages/Catalog/HeroBanner';
+import { AppTexts } from './pages/Catalog/AppTexts';
 import { DeliverMyself } from './pages/DeliverMyself';
 import { Detail as DeliveryDetail } from './pages/Delivery/Detail';
 import { MyDay as DeliveryMyDay } from './pages/Delivery/MyDay';
@@ -157,6 +158,8 @@ export function AppRoutes() {
         <Route path="catalog/promo-band" element={<PromoBand />} />
         {/* Home hero banner: the purple banner at the top of Home, with a live preview. */}
         <Route path="catalog/home-banner" element={<HeroBanner />} />
+        {/* App texts (owner, 2026-10-18): the customer app's other words and aisle colours. */}
+        <Route path="catalog/app-texts" element={<AppTexts />} />
         <Route path="catalog/combos" element={<Combos />} />
         <Route path="catalog/inventory" element={<InventoryOverview />} />
         <Route path="catalog/inventory/stock" element={<InventoryStock />} />

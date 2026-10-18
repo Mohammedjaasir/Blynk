@@ -397,7 +397,7 @@ const fieldsOf = (s: PromoBandSetting): PromoBandFields => ({
 });
 
 /** An editable list of short lines (headlines / ticked points). */
-function TextList({
+export function TextList({
   items,
   max,
   maxChars,

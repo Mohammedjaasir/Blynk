@@ -20,6 +20,7 @@ import {
 import { doctorsAccessService, updateDoctorsAccessSchema } from './doctors-access.js';
 import { promoBandService, updatePromoBandSchema } from './promo-band.js';
 import { heroBannerService, updateHeroBannerSchema } from './hero-banner.js';
+import { appTextsService, updateAppTextsSchema } from './app-texts.js';
 import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
@@ -374,6 +375,38 @@ adminSettingsRouter.patch(
     try {
       const input = updateHeroBannerSchema.parse(req.body);
       res.json({ success: true, data: await heroBannerService.set(input, actorOf(req)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// App texts (owner, 2026-10-18: "make sure each and everything was editable
+// from the admin"): the customer app's other words (Home, cart, order placed,
+// login, online payment) and Home's aisle card colours; blank = the app's own.
+// Any subset per PATCH. Audited (APP_TEXTS_UPDATED). Customers read it from
+// GET /store (`app_texts`). See modules/configuration/app-texts.ts.
+adminSettingsRouter.get(
+  '/settings/app-texts',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await appTextsService.get() });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+adminSettingsRouter.patch(
+  '/settings/app-texts',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  async (req, res, next) => {
+    try {
+      const input = updateAppTextsSchema.parse(req.body);
+      res.json({ success: true, data: await appTextsService.set(input, actorOf(req)) });
     } catch (err) {
       next(err);
     }

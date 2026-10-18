@@ -7,6 +7,8 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 import { HERO, HERO_ITEMS, type HeroLayout, nextHeadline } from '@/blynk/ui/loginHero';
 import { LOGIN } from '@/blynk/ui/strings';
+import { appLines } from '@/blynk/lib/appTexts';
+import { useStore } from '@/blynk/store/StoreContext';
 import { withSpring } from '@/lib/motion';
 import { splashHandover } from '@/lib/splash';
 import { useActive } from '@/lib/useActive';
@@ -75,7 +77,8 @@ export function LoginHero({ layout, topInset, leading, trailing }: {
 
 /** One headline at a time: it holds, slides up and out, and the next rises in. */
 function Headline({ size, lineH, rows, active, reduced }: { size: number; lineH: number; rows: 1 | 2; active: boolean; reduced: boolean }) {
-  const lines = LOGIN.headlines;
+  // Admin / Ops' headlines when set (app_texts; owner, 2026-10-18)
+  const lines = appLines(useStore(), 'login_headlines', LOGIN.headlines);
   const [i, setI] = useState(0);
   const y = useSharedValue(0);
   const o = useSharedValue(1);
@@ -104,7 +107,7 @@ function Headline({ size, lineH, rows, active, reduced }: { size: number; lineH:
       y.value = 0;
       o.value = 1;
     };
-  }, [active, reduced, lineH]);
+  }, [active, reduced, lineH, lines.length]);
 
   const a = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateY: y.value }] }));
   return (

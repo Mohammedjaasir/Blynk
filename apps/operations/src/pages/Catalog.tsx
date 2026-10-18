@@ -122,6 +122,13 @@ export function Catalog() {
             <span className="cat-hub__count">{heroStatus ?? '—'}</span>
           </Link>
         </li>
+        {/* App texts (owner, 2026-10-18): the customer app's other words and aisle colours. */}
+        <li>
+          <Link className="cat-hub__card" to="/catalog/app-texts">
+            <span className="cat-hub__title">App texts</span>
+            <span className="cat-hub__count">Edit</span>
+          </Link>
+        </li>
         <li>
           <Link className="cat-hub__card" to="/catalog/combos">
             <span className="cat-hub__title">Combo packs</span>

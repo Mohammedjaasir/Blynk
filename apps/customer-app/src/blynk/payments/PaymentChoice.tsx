@@ -2,6 +2,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 import type { OnlinePaymentInfo } from '@/blynk/api/types';
 import { PolicyRow } from '@/blynk/legal/PolicyLinks';
+import { appText } from '@/blynk/lib/appTexts';
+import { useStore } from '@/blynk/store/StoreContext';
 import { C, F } from '@/lib/theme';
 import { PAY } from './copy';
 import { payOptions, windowNote, type PayMethod } from './method';
@@ -15,7 +17,7 @@ export function PaymentChoice({ info, toPay, method, onChange, nothingNote }: {
   /** The online row's line when there is nothing to pay online (e.g. the wallet covers it). */
   nothingNote?: string;
 }) {
-  const rows = payOptions(info, toPay, nothingNote);
+  const rows = payOptions(info, toPay, nothingNote, appText(useStore(), 'pay_online_coming_soon', PAY.onlineComingSoon));
   const note = windowNote(info);
   return (
     <Animated.View layout={LinearTransition.duration(220)} style={styles.card}>

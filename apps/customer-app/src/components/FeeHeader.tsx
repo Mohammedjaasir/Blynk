@@ -5,6 +5,9 @@ import Animated, {
   Easing, FadeIn, interpolate, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Path, Rect } from 'react-native-svg';
+import type { StoreInfo } from '@/blynk/api/types';
+import { appColor, appText, inkOn } from '@/blynk/lib/appTexts';
+import { useStore } from '@/blynk/store/StoreContext';
 import { COPY } from '@/demo/cart';
 import { LIVE } from '@/demo/cartLive';
 import { DEMO } from '@/demo/mode';
@@ -12,10 +15,19 @@ import { C, F } from '@/lib/theme';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-/** Demo: the video's copy. Live: Blynk's one true fee claim (no packaging or platform fee). */
-const TXT = DEMO
-  ? { pill: COPY.feePill, burst1: COPY.burst1, burst2: COPY.burst2, chef: '🧑‍🍳' }
-  : { pill: LIVE.feePill, burst1: LIVE.burst1, burst2: LIVE.burst2, chef: '🛒' };
+/** Demo: the video's copy. Live: Admin / Ops' words (app_texts; owner, 2026-10-18), else the app's own. */
+function headerText(store: StoreInfo | null) {
+  if (DEMO) return { pill: COPY.feePill, burst1: COPY.burst1, burst2: COPY.burst2, chef: '🧑‍🍳' };
+  return {
+    pill: appText(store, 'cart_header_pill', LIVE.feePill),
+    burst1: [appText(store, 'cart_burst_top', LIVE.burst1[0]), appText(store, 'cart_burst_bottom', LIVE.burst1[1])],
+    burst2: {
+      big: appText(store, 'cart_burst_big', LIVE.burst2.big),
+      lines: [appText(store, 'cart_burst_line_1', LIVE.burst2.lines[0]), appText(store, 'cart_burst_line_2', LIVE.burst2.lines[1])],
+    },
+    chef: '🛒',
+  };
+}
 
 /*
  * Geometry read off the reference (video 0:48–0:53, 384 px wide, status bar = 44):
@@ -107,6 +119,12 @@ function Mascot({ emoji, rise }: { emoji: string; rise: boolean }) {
  * No platform fee"; the video's "OFFLINE PRICE MATCH" claim is never shown.
  */
 export function FeeHeader({ topInset, burstKey, backRow }: { topInset: number; burstKey: number; backRow: ReactNode }) {
+  const store = useStore();
+  const TXT = headerText(store);
+  // the header's colour: Admin / Ops' when set (app_texts.cart_header_bg; owner, 2026-10-18), its words readable on it
+  const bg = DEMO ? C.brand : appColor(store, 'cart_header_bg', C.brand);
+  const ink = { color: bg === C.brand ? C.brandInk : inkOn(bg) };
+  const fadeIn = bg === C.brand ? 'rgba(255,225,65,0)' : `${bg}00`;
   const { width } = useWindowDimensions();
   const sweep = useSharedValue(0);
   const shrink = useSharedValue(0);
@@ -158,9 +176,9 @@ export function FeeHeader({ topInset, burstKey, backRow }: { topInset: number; b
       <View style={[styles.back, { top: topInset + FEE.backCenter - 19 }]}>{backRow}</View>
 
       {/* resting pill */}
-      <View pointerEvents="none" style={[styles.pill, { top: pillTop }]}>
+      <View pointerEvents="none" style={[styles.pill, { top: pillTop, backgroundColor: bg }]}>
         <Animated.View style={[styles.pillRow, pillA]}>
-          <Text style={styles.pillTxt} numberOfLines={1}>{TXT.pill}</Text>
+          <Text style={[styles.pillTxt, ink]} numberOfLines={1}>{TXT.pill}</Text>
         </Animated.View>
         <Text style={styles.pillMascot}>👍</Text>
       </View>
@@ -168,16 +186,16 @@ export function FeeHeader({ topInset, burstKey, backRow }: { topInset: number; b
       {/* burst */}
       <Animated.View pointerEvents="none" style={[styles.panel, panel]}>
         <Animated.View style={[styles.band, { width: width + 220 }, band]}>
-          <LinearGradient colors={['rgba(255,225,65,0)', C.brand]} start={{ x: 0, y: 0.1 }} end={{ x: 1, y: 0.9 }} style={{ width: 220, height: '100%' }} />
-          <View style={{ flex: 1, backgroundColor: C.brand }} />
+          <LinearGradient colors={[fadeIn, bg]} start={{ x: 0, y: 0.1 }} end={{ x: 1, y: 0.9 }} style={{ width: 220, height: '100%' }} />
+          <View style={{ flex: 1, backgroundColor: bg }} />
         </Animated.View>
         {phase !== 0 && (
           <Animated.View key={burstKey} style={[StyleSheet.absoluteFill, content]}>
             {phase === 1 ? (
               <View style={styles.s1}>
-                <Line delay={T.l1In} out={T.s1Out}><Text style={styles.big}>{TXT.burst1[0]}</Text></Line>
+                <Line delay={T.l1In} out={T.s1Out}><Text style={[styles.big, ink]}>{TXT.burst1[0]}</Text></Line>
                 <Line delay={T.l2In} out={T.s1Out + 150} style={styles.row}>
-                  <Text style={styles.big}>{TXT.burst1[1]}</Text>
+                  <Text style={[styles.big, ink]}>{TXT.burst1[1]}</Text>
                   <DrawCheck delay={T.checkIn} />
                 </Line>
               </View>
@@ -185,10 +203,10 @@ export function FeeHeader({ topInset, burstKey, backRow }: { topInset: number; b
               <View style={StyleSheet.absoluteFill}>
                 <Animated.View entering={FadeIn.duration(200)} style={StyleSheet.absoluteFill}><Rays /></Animated.View>
                 <View style={styles.s2}>
-                  <Line delay={T.zeroIn - S2} rise={14}><Text style={styles.zero}>{TXT.burst2.big}</Text></Line>
+                  <Line delay={T.zeroIn - S2} rise={14}><Text style={[styles.zero, ink]}>{TXT.burst2.big}</Text></Line>
                   <View>
-                    <Line delay={T.f1In - S2}><Text style={styles.feeLine}>{TXT.burst2.lines[0]}</Text></Line>
-                    <Line delay={T.f2In - S2}><Text style={styles.feeLine}>{TXT.burst2.lines[1]}</Text></Line>
+                    <Line delay={T.f1In - S2}><Text style={[styles.feeLine, ink]}>{TXT.burst2.lines[0]}</Text></Line>
+                    <Line delay={T.f2In - S2}><Text style={[styles.feeLine, ink]}>{TXT.burst2.lines[1]}</Text></Line>
                   </View>
                 </View>
               </View>

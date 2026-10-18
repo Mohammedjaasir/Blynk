@@ -28,7 +28,11 @@ export type PayOption = { method: PayMethod; title: string; sub: string; enabled
  * price/method line. `nothingNote` replaces the "nothing to pay online" line when it IS offered
  * (e.g. the Blynk Wallet covers the order).
  */
-export function payOptions(info: OnlinePaymentInfo | null | undefined, toPay: number | null, nothingNote?: string): PayOption[] {
+export function payOptions(
+  info: OnlinePaymentInfo | null | undefined, toPay: number | null, nothingNote?: string,
+  /** Admin / Ops' "coming soon" words (app_texts.pay_online_coming_soon). */
+  comingSoon: string = PAY.onlineComingSoon,
+): PayOption[] {
   const rows: PayOption[] = [{ method: 'COD', title: PAY.cod, sub: PAY.codSub, enabled: true }];
   if (onlineOffered(info)) {
     const nothing = toPay !== null && toPay <= 0;
@@ -39,7 +43,7 @@ export function payOptions(info: OnlinePaymentInfo | null | undefined, toPay: nu
       enabled: !nothing,
     });
   } else {
-    rows.push({ method: 'ONLINE', title: PAY.online, sub: PAY.onlineComingSoon, enabled: false });
+    rows.push({ method: 'ONLINE', title: PAY.online, sub: comingSoon, enabled: false });
   }
   return rows;
 }

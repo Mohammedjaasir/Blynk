@@ -1,4 +1,5 @@
 import { apiRequest, tokenStore } from './client';
+import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
 import type {
   AppShareLinks,
   AppUpdatePolicySetting,
@@ -591,6 +592,14 @@ export const heroBanner = {
   get: () => apiRequest<HeroBannerSetting>('/admin/settings/hero-banner'),
   update: (body: Partial<HeroBannerFields>) =>
     apiRequest<HeroBannerSetting>('/admin/settings/hero-banner', { method: 'PATCH', body: { ...body } }),
+};
+
+// ------------------------------------------------------------ app texts
+/** The customer app's other words and aisle colours (owner, 2026-10-18); any subset per PATCH. */
+export const appTexts = {
+  get: () => apiRequest<AppTextsSetting>('/admin/settings/app-texts'),
+  update: (body: Partial<AppTextsFields>) =>
+    apiRequest<AppTextsSetting>('/admin/settings/app-texts', { method: 'PATCH', body: { ...body } }),
 };
 
 // ---------------------------------------------------------------- orders

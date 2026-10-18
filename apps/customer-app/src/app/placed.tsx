@@ -20,6 +20,7 @@ import { placedLayout } from '@/blynk/orders/placedLayout';
 import { slotWindowText } from '@/blynk/orders/status';
 import { PAY } from '@/blynk/payments/copy';
 import { PLACED } from '@/blynk/ui/strings';
+import { appText } from '@/blynk/lib/appTexts';
 import { WALLET_COPY } from '@/blynk/wallet/copy';
 import { paidByWallet } from '@/blynk/wallet/models';
 import { placedPointsLine } from '@/blynk/store/pointsPromo';
@@ -110,9 +111,10 @@ export default function Placed() {
       >
         <View style={{ width: L.column }}>
           <Hero size={L.check} mascot={L.mascot} mascotLeft={L.mascotLeft} screenW={width} column={L.column} reduced={reduced} live={live} />
-          <Animated.Text entering={ENTER(reduced, T.title)} style={styles.title}>{PLACED.title}</Animated.Text>
+          {/* Admin / Ops' words when set (app_texts; owner, 2026-10-18) */}
+          <Animated.Text entering={ENTER(reduced, T.title)} style={styles.title}>{appText(store, 'placed_title', PLACED.title)}</Animated.Text>
           <Animated.View entering={ENTER(reduced, T.sub)} style={styles.subRow}>
-            <Text style={styles.sub}>{scheduled ? PLACED.scheduled : PLACED.packing} </Text>
+            <Text style={styles.sub}>{scheduled ? PLACED.scheduled : appText(store, 'placed_sub', PLACED.packing)} </Text>
             <Basket live={live} />
           </Animated.View>
           <Animated.View entering={ENTER(reduced, T.stage)}>

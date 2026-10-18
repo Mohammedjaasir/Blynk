@@ -8,6 +8,7 @@ import { storeSchedule } from './store-schedule.js';
 import { doctorsAccess, doctorsShown } from './doctors-access.js';
 import { promoBandService } from './promo-band.js';
 import { heroBannerService } from './hero-banner.js';
+import { appTextsService } from './app-texts.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { publicOnlinePayment } from '../payments/gateway-settings.js';
@@ -829,6 +830,9 @@ export class SettingsService {
       // Blynk Points (owner, 2026-10-14: "for 100 LKR order 1 Blynk point" instead of free
       // delivery): the earn rule the app and the landing site advertise; null while it is off.
       points_program: publicPointsProgram(await pointsSettings.read()),
+      // Owner, 2026-10-18: the app's other words and aisle colours as set in
+      // Admin / Ops; only the fields that are set (app-texts.ts).
+      app_texts: await appTextsService.readPublic(),
     };
   }
 }

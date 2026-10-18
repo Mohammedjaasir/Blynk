@@ -6,7 +6,9 @@ import Animated, {
   FadeIn, FadeOut, interpolate, SlideInDown, SlideOutDown, useAnimatedStyle, useSharedValue, withSequence, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { appColor, appText, inkOn } from '@/blynk/lib/appTexts';
 import { formatLkr } from '@/blynk/lib/money';
+import { useStore } from '@/blynk/store/StoreContext';
 import { DEMO } from '@/demo/mode';
 import { rupees } from '@/demo/money';
 import { STORE } from '@/demo/store';
@@ -47,9 +49,11 @@ function TrolleyIcon({ size = 18, color = C.brandInk }: { size?: number; color?:
  */
 const LIVE_STRIP_LINE = 'Great picks, every time!';
 function useStripOn(total: number, count: number) {
+  // the line is Admin / Ops' when set (app_texts; owner, 2026-10-18)
+  const line = appText(useStore(), 'cart_bar_line', LIVE_STRIP_LINE);
   return DEMO
     ? { count: count > 0 && total >= STORE.freeDeliveryAbove ? 1 : 0, line: null }
-    : { count: count > 0 ? 1 : 0, line: LIVE_STRIP_LINE };
+    : { count: count > 0 ? 1 : 0, line };
 }
 
 /**
@@ -63,6 +67,12 @@ export function CartBar() {
   const total = useCartSelect((c) => c.total);
   const stripOn = useStripOn(total, count);
   const showStrip = stripOn.count > 0;
+  // the bar's colours: Admin / Ops' when set (app_texts; owner, 2026-10-18), its words readable on them
+  const store = useStore();
+  const barBg = DEMO ? C.brand : appColor(store, 'cart_bar_bg', C.brand);
+  const stripBg = DEMO ? C.brandDeep : appColor(store, 'cart_bar_strip_bg', C.brandDeep);
+  const barInk = barBg === C.brand ? C.brandInk : inkOn(barBg);
+  const stripInk = stripBg === C.brandDeep ? C.brandInk : inkOn(stripBg);
   // inside the tabs the tab bar already keeps clear of the home indicator
   const insets = { bottom: useBottomInset() };
   const { width, height } = useWindowDimensions();
@@ -104,19 +114,19 @@ export function CartBar() {
         exiting={SlideOutDown.duration(220)}
         style={[styles.wrap, { bottom: insets.bottom + CART_BAR.bottom }, barA]}
       >
-        <PressScale onPress={() => router.push('/cart')} style={styles.bar} scaleTo={0.97} haptic>
-          <Animated.View style={[styles.strip, stripA]}>
-            <Text style={styles.stripTxt} numberOfLines={1}>{stripLine}</Text>
+        <PressScale onPress={() => router.push('/cart')} style={[styles.bar, { backgroundColor: barBg }]} scaleTo={0.97} haptic>
+          <Animated.View style={[styles.strip, { backgroundColor: stripBg }, stripA]}>
+            <Text style={[styles.stripTxt, { color: stripInk }]} numberOfLines={1}>{stripLine}</Text>
           </Animated.View>
           <Animated.View style={[styles.row, rowA]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <RollingText text={`${count} Item${count > 1 ? 's' : ''}`} numeric={count} style={styles.txt} />
-              <Text style={styles.txt}>{'  |  '}</Text>
-              <RollingText text={money(total)} numeric={total} style={styles.txt} />
+              <RollingText text={`${count} Item${count > 1 ? 's' : ''}`} numeric={count} style={[styles.txt, { color: barInk }]} />
+              <Text style={[styles.txt, { color: barInk }]}>{'  |  '}</Text>
+              <RollingText text={money(total)} numeric={total} style={[styles.txt, { color: barInk }]} />
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.txt}>View Cart</Text>
-              <TrolleyIcon size={17} />
+              <Text style={[styles.txt, { color: barInk }]}>View Cart</Text>
+              <TrolleyIcon size={17} color={barInk} />
             </View>
           </Animated.View>
         </PressScale>

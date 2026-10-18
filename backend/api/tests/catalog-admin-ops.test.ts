@@ -225,7 +225,9 @@ describe('Delivery fee setting and GET /store', () => {
     // its own contract is tests/hero-banner.test.ts.
     // Blynk Points (owner, 2026-10-14): the public earn rule, null while the program is off -
     // its own contract is tests/referrals-and-points.test.ts.
-    const { promo_band: promoBand, hero_banner: heroBanner, points_program: pointsProgram, ...facts } = res.body.data;
+    // App texts (owner, 2026-10-18): only the words/colours staff set - its own contract is tests/app-texts.test.ts.
+    const { promo_band: promoBand, hero_banner: heroBanner, points_program: pointsProgram, app_texts: appTexts, ...facts } = res.body.data;
+    expect(typeof appTexts).toBe('object');
     expect(promoBand === null || typeof promoBand === 'object').toBe(true);
     expect('points_program' in res.body.data).toBe(true);
     if (pointsProgram !== null) {
