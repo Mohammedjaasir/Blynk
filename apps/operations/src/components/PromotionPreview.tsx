@@ -27,29 +27,29 @@ export function PromotionPreview({ promotion, compact = false }: { promotion: Pr
   // exist. Matching the flat 0.66 both lightens the left and makes the preview
   // truthful. Keep this number in step with BlynkPromo.scrimOpacity in
   // apps/customer/.../lib/design/components.dart.
-  // 2026-09-24 (migration 009): the card crops its background with `cover`,
-  // and that crop used to be anchored at `center` - so a banner whose wording
-  // runs along the top lost the wording. The stored focal point moves the
-  // anchor, and the preview has to use it or it stops being truthful: the
-  // customer app anchors its own `BoxFit.cover` at exactly this point.
   //
-  // A promotion saved before 009 has no focal point, and 50% 50% IS `center`,
-  // so nothing about an existing card changes.
-  const focalPosition = `${promotion.background_focal_x ?? 50}% ${promotion.background_focal_y ?? 50}%`;
-
+  // Owner, 2026-10-18: "give me a option to upload photo in anysize but it
+  // should automatically fit" - the card no longer crops the background with
+  // `cover`; it fits the whole upload with `contain`, centred, any size or
+  // shape, with the card's own background (#F1F4F9) showing through on the
+  // sides. `background_focal_x/y` are still stored but no longer read here.
   const background = isArtwork
     ? {
         // No scrim layer at all - not even a transparent one. The operator's
         // file is the card.
         backgroundImage: `url(${promotion.background_image_url})`,
-        backgroundSize: 'cover',
-        backgroundPosition: focalPosition,
+        backgroundSize: 'contain',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundColor: '#F1F4F9',
       }
     : isImage
       ? {
           backgroundImage: `linear-gradient(rgba(16,19,25,0.66), rgba(16,19,25,0.66)), url(${promotion.background_image_url})`,
-          backgroundSize: 'cover',
-          backgroundPosition: focalPosition,
+          backgroundSize: 'cover, contain',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundColor: '#F1F4F9',
         }
       : isGradient
         ? { backgroundImage: `linear-gradient(135deg, ${promotion.background_color}, ${promotion.background_color_end})` }

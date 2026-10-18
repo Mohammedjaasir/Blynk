@@ -119,9 +119,11 @@ is not tappable.
 - Background by `background_type`:
   - SOLID: `background_color` (`#F1F4F9` when empty).
   - GRADIENT: 135 deg `background_color -> background_color_end`.
-  - IMAGE: `background_image_url`, `cover`, anchored at `background_focal_x/y` %,
-    under a flat ink scrim `rgba(16,19,25,0.66)`.
-  - ARTWORK: the uploaded banner full-bleed (`cover` at the focal point), **no
+  - IMAGE: `background_image_url`, scaled to fit the card with nothing cropped
+    out (any upload size/shape), centred - the card's own background fills
+    any gap on the sides, under a flat ink scrim `rgba(16,19,25,0.66)`.
+    `background_focal_x/y` are stored but no longer used for cropping.
+  - ARTWORK: the uploaded banner scaled to fit the card the same way, **no
     scrim, no headline, no subtitle**; a CTA pill only when `cta_label` is set,
     otherwise the whole card is the tap target. `title` is its accessibility label.
 - Text colour: white on IMAGE and on a background colour with relative
@@ -136,7 +138,8 @@ lines, 6 pt below; CTA pill 12 pt below: height 30, padding 0 14, radius 15,
 Outfit Bold 12: `#FFE141` with ink text on dark slides (IMAGE, ARTWORK, dark
 colours), ink `#1A1D2E` with white text on light slides (a yellow pill would
 vanish on a yellow card). Keep words in a promotion's ARTWORK
-inside this same area so they survive the crop on narrower phones.
+inside this same area so they stay clear of the CTA pill and read well on
+narrower phones.
 
 Foreground `image_url`: right 12, bottom 0, `contain`, max 42 % of the card
 width (151 pt) x 150 pt.

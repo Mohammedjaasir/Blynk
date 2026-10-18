@@ -1151,7 +1151,7 @@ describe('Image focal point', () => {
     });
   });
 
-  it('PromotionPreview anchors the card crop at the stored focal point', async () => {
+  it('PromotionPreview fits the uploaded banner without cropping it, any size (owner, 2026-10-18)', async () => {
     const banner = 'http://localhost:4000/uploads/promotions/supermarket.png';
     renderAs(ADMIN_WITH_RIDER, '/catalog/promotions', {
       'GET /admin/promotions': () => ok({ promotions: [] }),
@@ -1172,13 +1172,11 @@ describe('Image focal point', () => {
     await screen.findByText('What customers see now');
 
     const card = document.querySelector('.promo-preview:not(.promo-preview--compact)') as HTMLElement;
-    expect(card).toHaveStyle({ backgroundPosition: '50% 12%' });
+    expect(card).toHaveStyle({ backgroundSize: 'contain', backgroundPosition: 'center' });
     expect(card.getAttribute('style')).toContain(banner);
   });
 
-  it('a promotion with no focal point renders exactly as it does today: the centre', async () => {
-    // The whole feature is additive. A row saved before migration 009 carries
-    // no focal point, and 50% 50% IS `center` - the crop it already had.
+  it('an IMAGE promotion also fits without cropping, under the same flat ink scrim', async () => {
     const legacy = promotion({
       title: 'Unchanged',
       background_type: 'IMAGE',
@@ -1195,7 +1193,7 @@ describe('Image focal point', () => {
     await screen.findByText('What customers see now');
 
     const card = document.querySelector('.promo-preview:not(.promo-preview--compact)') as HTMLElement;
-    expect(card).toHaveStyle({ backgroundPosition: '50% 50%' });
+    expect(card).toHaveStyle({ backgroundPosition: 'center' });
     // And the IMAGE treatment is untouched: the same flat 0.66 ink scrim.
     expect(card.getAttribute('style')).toContain('rgba(16,19,25,0.66)');
   });

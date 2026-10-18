@@ -137,7 +137,7 @@ function Slide({ look, w, animate, onOpen }: { look: SlideLook; w: number; anima
     >
       {bg.kind === 'solid' && <View style={[StyleSheet.absoluteFill, { backgroundColor: bg.color }]} />}
       {bg.kind === 'gradient' && <LinearGradient colors={[bg.from, bg.to]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
-      {(bg.kind === 'image' || bg.kind === 'artwork') && <FocalImage uri={bg.uri} w={w} h={K.height} fx={bg.focalX} fy={bg.focalY} />}
+      {(bg.kind === 'image' || bg.kind === 'artwork') && <FocalImage uri={bg.uri} w={w} h={K.height} />}
       {bg.kind === 'image' && <View style={[StyleSheet.absoluteFill, { backgroundColor: bg.scrim }]} />}
 
       {look.foreground && (
@@ -165,22 +165,28 @@ function Slide({ look, w, animate, onOpen }: { look: SlideLook; w: number; anima
   );
 }
 
-/** `cover`, anchored at the stored focal point (% of the picture) instead of the centre. */
-function FocalImage({ uri, w, h, fx, fy }: { uri: string; w: number; h: number; fx: number; fy: number }) {
+/**
+ * The uploaded banner photo, any size or shape (owner, 2026-10-18: "give me a option to upload
+ * photo in anysize but it should automatically fit"): scaled to fit inside the card with nothing
+ * cropped out, centred - the card's own background (styles.card) shows through on any side the
+ * photo doesn't reach, same "never crop, size to the photo" approach as the product page's hero
+ * photo (p/[id].tsx's HeroPhoto).
+ */
+function FocalImage({ uri, w, h }: { uri: string; w: number; h: number }) {
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => {
     let alive = true;
     Image.getSize(uri, (iw, ih) => { if (alive && iw > 0 && ih > 0) setSize({ w: iw, h: ih }); }, () => {});
     return () => { alive = false; };
   }, [uri]);
-  if (!size) return <Image source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} />;
-  const s = Math.max(w / size.w, h / size.h);
+  if (!size) return <Image source={{ uri }} resizeMode="contain" style={StyleSheet.absoluteFill} />;
+  const s = Math.min(w / size.w, h / size.h);
   const dw = size.w * s;
   const dh = size.h * s;
   return (
     <Image
       source={{ uri }}
-      style={{ position: 'absolute', width: dw, height: dh, left: -(dw - w) * (fx / 100), top: -(dh - h) * (fy / 100) }}
+      style={{ position: 'absolute', width: dw, height: dh, left: (w - dw) / 2, top: (h - dh) / 2 }}
     />
   );
 }

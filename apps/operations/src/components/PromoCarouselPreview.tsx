@@ -179,9 +179,11 @@ export function Slide({ look }: { look: SlideLook }) {
       : bg.kind === 'gradient'
         ? { backgroundImage: `linear-gradient(135deg, ${bg.from}, ${bg.to})` }
         : {
+            // Any size/shape fits without cropping, centred - .pc-card's own background (#f1f4f9)
+            // shows through on the sides, same as the customer app's FocalImage.
             backgroundImage: `${bg.kind === 'image' ? `linear-gradient(${CAROUSEL.scrim}, ${CAROUSEL.scrim}), ` : ''}url(${bg.uri})`,
-            backgroundSize: 'cover',
-            backgroundPosition: `${bg.focalX}% ${bg.focalY}%`,
+            backgroundSize: bg.kind === 'image' ? 'cover, contain' : 'contain',
+            backgroundPosition: 'center',
           };
   return (
     <>

@@ -80,13 +80,15 @@ describe('ARTWORK promotions', () => {
     const dialog = screen.getByRole('dialog', { name: 'Promotion' });
     expect(within(dialog).getByRole('button', { name: 'Designed banner (full picture)' })).toHaveAttribute('aria-pressed', 'true');
 
-    // The live carousel preview (owner, 2026-10-14) draws the banner full-bleed
-    // at its focal point, with no headline over it.
+    // The live carousel preview (owner, 2026-10-14) draws the banner full-bleed,
+    // with no headline over it; it now fits any upload without cropping (owner,
+    // 2026-10-18), centred rather than at the stored focal point.
     const preview = dialog.querySelector('.pc-bg[data-background="artwork"]') as HTMLElement;
     expect(preview).not.toBeNull();
     expect(preview.style.backgroundImage).toContain(ARTWORK_URL);
     expect(preview.style.backgroundImage).not.toContain('gradient');
-    expect(preview.style.backgroundPosition).toBe('50% 20%');
+    expect(preview.style.backgroundSize).toBe('contain');
+    expect(preview.style.backgroundPosition).toBe('center');
     expect(within(dialog.querySelector('.pc-card') as HTMLElement).queryByText('Avurudu sale')).toBeNull();
 
     // A destination with no button label is fine for ARTWORK.

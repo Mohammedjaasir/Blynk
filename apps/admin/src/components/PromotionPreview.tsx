@@ -17,24 +17,28 @@ export function PromotionPreview({
   // ARTWORK: a finished banner, full-bleed - no scrim and none of the app's
   // own words over it (backend promotion.schema.ts).
   const isArtwork = promotion.background_type === 'ARTWORK' && promotion.background_image_url;
-  // The customer app anchors its `cover` crop at the stored focal point.
-  const focalPosition = `${promotion.background_focal_x ?? 50}% ${promotion.background_focal_y ?? 50}%`;
   const isGradient =
     promotion.background_type === 'GRADIENT' &&
     promotion.background_color &&
     promotion.background_color_end;
 
+  // Any size/shape fits without cropping, centred - the card's own background
+  // (#F1F4F9) shows through on the sides, same as the customer app's FocalImage.
   const background = isArtwork
     ? {
         backgroundImage: `url(${promotion.background_image_url})`,
-        backgroundSize: 'cover',
-        backgroundPosition: focalPosition,
+        backgroundSize: 'contain',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundColor: '#F1F4F9',
       }
     : isImage
     ? {
         backgroundImage: `linear-gradient(90deg, rgba(16,19,25,0.90) 5%, rgba(16,19,25,0.40) 85%), url(${promotion.background_image_url})`,
-        backgroundSize: 'cover',
-        backgroundPosition: focalPosition,
+        backgroundSize: 'cover, contain',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundColor: '#F1F4F9',
       }
     : isGradient
       ? {
