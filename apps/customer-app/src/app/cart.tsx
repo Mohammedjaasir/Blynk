@@ -96,8 +96,6 @@ import { C, F } from '@/lib/theme';
  * offer rows appear only when true. A closed store blocks "Place order".
  */
 
-/** Demo rupees, or LKR at Blynk's prices. */
-const money = (n: number) => (DEMO ? rupee(n) : formatLkr(n));
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const INK = '#222';

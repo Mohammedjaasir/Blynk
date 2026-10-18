@@ -43,7 +43,6 @@ export function freeDeliveryCount(store: StoreInfo | null): number {
  * enable always" - no longer reads Admin's show_offer_savings; an active offer always shows
  * what it saves.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function offerSavingsOn(store?: StoreInfo | null): boolean {
   return true;
 }

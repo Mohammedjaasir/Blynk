@@ -24,7 +24,6 @@ export type FreeClaim =
 
 export const NO_CLAIM: FreeClaim = { kind: 'none', count: 0 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function freeDeliveryClaim(input: {
   /** freeDeliveryCount(GET /store): 0 when Ops has the offer off. */
   storeCount: number;
