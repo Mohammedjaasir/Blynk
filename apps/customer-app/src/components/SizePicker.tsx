@@ -31,7 +31,7 @@ export function SizePickerHost() {
  */
 function SizePickerSheet({ product }: { product: Product }) {
   const insets = useSafeAreaInsets();
-  const showSavings = offerSavingsOn(useStore());
+  const showSavings = offerSavingsOn(useStore(), product);
   const [detail, setDetail] = useState<Product | null>(() => recallDetail(product.id));
   const [failed, setFailed] = useState(false);
   const [tick, setTick] = useState(0);

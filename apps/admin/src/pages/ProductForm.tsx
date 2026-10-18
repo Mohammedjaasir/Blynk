@@ -115,6 +115,8 @@ interface FormState {
   offer_mode: OfferMode;
   /** LKR off as typed, used when offer_mode is 'off'. */
   offer_off: string;
+  /** Show the struck "was" price and the saving in the app (migration 050; owner, 2026-10-18). */
+  show_offer_cut: boolean;
   is_available: boolean;
   is_active: boolean;
   /** Whole days 0..30 before it can be delivered (migration 045); '0' = same day. */
@@ -144,6 +146,7 @@ const EMPTY: FormState = {
   offer_ends_on: '',
   offer_mode: 'price',
   offer_off: '',
+  show_offer_cut: true,
   is_available: true,
   is_active: true,
   delivery_lead_days: '0',
@@ -283,6 +286,7 @@ export function ProductForm() {
           offer_ends_on: product.offer_ends_at ? colomboDate(product.offer_ends_at) : '',
           offer_mode: 'price',
           offer_off: '',
+          show_offer_cut: product.show_offer_cut !== false,
           is_available: product.is_available,
           is_active: product.is_active,
           delivery_lead_days: String(product.delivery_lead_days ?? 0),
@@ -572,6 +576,7 @@ export function ProductForm() {
       is_available: form.is_available,
       is_active: form.is_active,
       delivery_lead_days: Number(form.delivery_lead_days.trim() || '0'),
+      show_offer_cut: form.show_offer_cut,
     };
     // Markup sends the custom markup (null = inherit) and leaves the stored
     // fixed price alone; Fixed price sends the price and leaves the stored
@@ -897,6 +902,17 @@ export function ProductForm() {
               </button>
             </div>
           ) : null}
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={form.show_offer_cut}
+              onChange={(event) => setForm({ ...form, show_offer_cut: event.target.checked })}
+            />
+            <span>
+              <strong>Show offer price cut</strong>
+              <em>Customers see the old price struck through and how much they save (offer or MRP).</em>
+            </span>
+          </label>
         </section>
 
         <section className="form__section" aria-label="Delivery">

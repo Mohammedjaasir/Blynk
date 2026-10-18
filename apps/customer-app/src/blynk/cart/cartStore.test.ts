@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { loadCart, saveCart, setQuantity, quantityOf, itemCount, subtotal, regularTotal, reconcile, validLine, CART_KEY, MAX_QTY, type CartState } from './cartStore';
 import { milk, sugar, MemoryStorage } from '../test/fixtures';
+import { offerSavingsOn } from '../lib/storeText';
 
 const g = globalThis as { localStorage?: unknown };
 let ls: MemoryStorage;
@@ -25,6 +26,16 @@ test('totals use the offer price, regular total the selling price', () => {
   expect(itemCount(s)).toBe(3);
   expect(subtotal(s)).toBe(1279);
   expect(regularTotal(s)).toBe(1333);
+});
+
+test('a product with "Show offer price cut" off adds nothing to the struck total (migration 050)', () => {
+  let s = setQuantity({ lines: [] }, { ...milk, show_offer_cut: false }, 2);
+  s = setQuantity(s, sugar, 1);
+  expect(subtotal(s)).toBe(1279);
+  expect(regularTotal(s)).toBe(1279);
+  expect(offerSavingsOn(null, { show_offer_cut: false })).toBe(false);
+  expect(offerSavingsOn(null, milk)).toBe(true);
+  expect(offerSavingsOn(null)).toBe(true);
 });
 
 test('persists and reloads; corrupt or old storage gives an empty cart', () => {

@@ -26,6 +26,11 @@ export interface Product {
    * pays now, else null (absent on an older server). With sizes: the cheapest size's.
    */
   mrp?: number | null;
+  /**
+   * Migration 050 (owner, 2026-10-18): Admin / Ops' per-product "show offer price cut"; false
+   * hides the struck "was" price and the saving for this product. Absent (older server) = on.
+   */
+  show_offer_cut?: boolean;
 }
 /** One size/pack of a product ("50 g", "3 pack"), as GET /catalog/products/:id lists it. */
 export interface ProductVariant {

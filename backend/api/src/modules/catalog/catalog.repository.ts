@@ -34,6 +34,9 @@ function categoryIdsForSlug(slug: string) {
     );
 }
 
+/** Migration 050: the per-product struck-price switch, read off products (the views don't carry it). */
+const showOfferCut = sql<boolean>`(SELECT p.show_offer_cut FROM products p WHERE p.id = v_product_catalog.id)`.as('show_offer_cut');
+
 function categoryIdsForId(id: string) {
   return db
     .selectFrom('categories')
@@ -256,6 +259,8 @@ export class CatalogRepository {
         'delivery_lead_days',
         // Migration 048: the MRP (shown only when above the price paid).
         'mrp',
+        // Migration 050: show the struck price / saving for this product.
+        showOfferCut,
       ])
       .where('is_active', '=', true);
 
@@ -381,6 +386,8 @@ export class CatalogRepository {
         'delivery_lead_days',
         // Migration 048: the MRP (shown only when above the price paid).
         'mrp',
+        // Migration 050: show the struck price / saving for this product.
+        showOfferCut,
       ])
       .where('is_active', '=', true);
 
@@ -415,7 +422,7 @@ export class CatalogRepository {
       .selectFrom('v_product_catalog')
       .innerJoin('products', 'products.id', 'v_product_catalog.id')
       .selectAll('v_product_catalog')
-      .select('products.updated_at');
+      .select(['products.updated_at', 'products.show_offer_cut']);
 
     if (params.category_id) {
       query = query.where('v_product_catalog.category_id', '=', params.category_id);
@@ -446,7 +453,7 @@ export class CatalogRepository {
       .selectFrom('v_product_catalog')
       .innerJoin('products', 'products.id', 'v_product_catalog.id')
       .selectAll('v_product_catalog')
-      .select('products.updated_at')
+      .select(['products.updated_at', 'products.show_offer_cut'])
       .where('v_product_catalog.id', '=', id)
       .executeTakeFirst();
   }
@@ -511,6 +518,8 @@ export class CatalogRepository {
     delivery_lead_days?: number;
     offer_price?: number | null;
     offer_ends_at?: string | null;
+    /** Migration 050: show the struck price / saving (default on). */
+    show_offer_cut?: boolean;
   }) {
     const [record] = await db
       .insertInto('products')
@@ -538,6 +547,7 @@ export class CatalogRepository {
         delivery_lead_days: data.delivery_lead_days ?? 0,
         offer_price: data.offer_price ?? null,
         offer_ends_at: data.offer_ends_at ?? null,
+        show_offer_cut: data.show_offer_cut ?? true,
       })
       .returningAll()
       .execute();
@@ -572,6 +582,7 @@ export class CatalogRepository {
       delivery_lead_days?: number;
       offer_price?: number | null;
       offer_ends_at?: string | null;
+      show_offer_cut?: boolean;
     }
   ) {
     const [record] = await db

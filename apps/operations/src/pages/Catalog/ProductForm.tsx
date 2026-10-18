@@ -66,6 +66,8 @@ interface FormState {
   mrp: string;
   is_available: boolean;
   is_active: boolean;
+  /** Show the struck "was" price and the saving in the app (migration 050; owner, 2026-10-18). */
+  show_offer_cut: boolean;
   /** Offer price in LKR as typed; '' = no offer (owner, 2026-10-09). */
   offer_price: string;
   /** The offer's last day (Colombo), YYYY-MM-DD; '' = no end date. */
@@ -140,6 +142,7 @@ const EMPTY: FormState = {
   mrp: '',
   is_available: true,
   is_active: true,
+  show_offer_cut: true,
   offer_price: '',
   offer_end_day: '',
   offer_mode: 'price',
@@ -265,6 +268,7 @@ export function ProductForm() {
           mrp: mrpText,
           is_available: product.is_available,
           is_active: product.is_active,
+          show_offer_cut: product.show_offer_cut !== false,
           // A stored offer opens as its price; "LKR off" shows the same
           // offer as an amount off the current selling price.
           offer_price: offer.price,
@@ -473,6 +477,7 @@ export function ProductForm() {
       pricing_mode: form.pricing_mode,
       is_available: form.is_available,
       is_active: form.is_active,
+      show_offer_cut: form.show_offer_cut,
     };
     const lead = parseLeadDays(form.delivery_lead_days);
     payload.delivery_lead_days = 'value' in lead ? lead.value : 0;
@@ -774,6 +779,13 @@ export function ProductForm() {
               </button>
             </div>
           ) : null}
+          <label className="toggle">
+            <input type="checkbox" checked={form.show_offer_cut} onChange={(event) => setForm({ ...form, show_offer_cut: event.target.checked })} />
+            <span>
+              <strong>Show offer price cut</strong>
+              <em>Customers see the old price struck through and how much they save (offer or MRP).</em>
+            </span>
+          </label>
         </section>
 
         <section className="form__section" aria-labelledby="stock-title">

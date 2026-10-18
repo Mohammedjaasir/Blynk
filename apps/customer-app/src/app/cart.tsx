@@ -437,7 +437,7 @@ export default function Cart() {
                 </View>
               </Animated.View>
             ) : (
-              <LiveLine key={lineKey(p.id, variant?.id)} line={{ product: p, quantity, variant }} showSavings={offerSavingsOn(store)} />
+              <LiveLine key={lineKey(p.id, variant?.id)} line={{ product: p, quantity, variant }} showSavings={offerSavingsOn(store, p)} />
             )))}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={{ marginTop: 9 }}>
               <PressScale onPress={goBack} style={styles.chip}>

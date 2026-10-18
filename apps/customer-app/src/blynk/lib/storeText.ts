@@ -1,4 +1,4 @@
-import type { StoreInfo } from '../api/types';
+import type { Product, StoreInfo } from '../api/types';
 
 /** "08:00" -> "8 AM", "21:30" -> "9:30 PM". Returns null for anything that is not HH:MM. */
 export function formatClock(hhmm: string | undefined | null): string | null {
@@ -41,10 +41,11 @@ export function freeDeliveryCount(store: StoreInfo | null): number {
 /**
  * Whether an offer's struck price and "Save LKR n" may show. Owner, 2026-10-18: "it should
  * enable always" - no longer reads Admin's show_offer_savings; an active offer always shows
- * what it saves.
+ * what it saves - unless Admin / Ops switched "Show offer price cut" off for that product
+ * (migration 050, the same day: "the admin can choose the option for offer price cut down to show").
  */
-export function offerSavingsOn(store?: StoreInfo | null): boolean {
-  return true;
+export function offerSavingsOn(store?: StoreInfo | null, product?: Pick<Product, 'show_offer_cut'> | null): boolean {
+  return product?.show_offer_cut !== false;
 }
 
 /**

@@ -49,7 +49,7 @@ export const ProductCard = memo(function ProductCard({
 }) {
   const inCart = useCartSelect((c) => (c.qty[p.id] ?? 0) > 0);
   const store = useStore();
-  const showSavings = offerSavingsOn(store);
+  const showSavings = offerSavingsOn(store, p);
   // the one price rule (offer, MRP; src/blynk/lib/pricing.ts priceDisplay): struck while an
   // offer is active (owner, 2026-10-18: "it should enable always")
   const shown = priceDisplay(p, { showStruck: DEMO || showSavings });

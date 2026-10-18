@@ -214,6 +214,9 @@ const productBaseSchema = z.object({
     .datetime({ offset: true, message: 'Offer end must be a date and time, e.g. 2026-10-31T23:59:59+05:30' })
     .nullable()
     .optional(),
+  // Migration 050 (owner, 2026-10-18): show the struck "was" price and the
+  // saving in the app for this product. Omitted on create = on.
+  show_offer_cut: z.boolean({ invalid_type_error: 'show_offer_cut must be true or false' }).optional(),
 });
 
 export const createProductSchema = productBaseSchema.superRefine((v, ctx) => {

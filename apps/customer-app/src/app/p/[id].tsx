@@ -97,7 +97,7 @@ export default function ProductPage() {
   }, [id]);
 
   const product = gone ? null : fresh ?? listed;
-  const showSavings = DEMO || offerSavingsOn(store);
+  const showSavings = DEMO || offerSavingsOn(store, product);
   // sold in sizes: chips pick one; the price, stock and Add are that size's
   const sized = !!product && hasVariants(product);
   const variants = product?.variants ?? [];

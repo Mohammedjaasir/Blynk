@@ -305,6 +305,11 @@ export interface ProductsTable {
    * NULL = none. The selling price is capped at it (pricing/index.ts capAtMrp).
    */
   mrp: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  /**
+   * Migration 050 (owner, 2026-10-18): whether the customer app shows the
+   * struck "was" price and the saving for this product. Default true.
+   */
+  show_offer_cut: ColumnType<boolean, boolean | undefined, boolean>;
 }
 
 /**

@@ -891,6 +891,8 @@ export interface AdminProduct {
   updated_at?: string;
   /** Migration 045: delivered only from today + N days (0 = same day). */
   delivery_lead_days?: number;
+  /** Migration 050: the app shows the struck "was" price and the saving (default true). */
+  show_offer_cut?: boolean;
   /** Migration 045: the customer must pick a variant. */
   has_variants?: boolean;
   /** Customers can order it right now (on, and not sold out). */

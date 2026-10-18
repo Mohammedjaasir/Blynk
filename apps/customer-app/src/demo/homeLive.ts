@@ -196,7 +196,6 @@ export function liveVs(
   rule: PointsRule | null = pointsRuleOf(store),
 ): LiveVs | null {
   if (!data) return null;
-  const showSave = offerSavingsOn(store);
   const topAisle = (p: Product) => {
     const top = data.topOf(p.category_id);
     return data.aisles.find((c) => c.id === top) ?? data.categories.find((c) => c.id === top) ?? null;
@@ -205,6 +204,7 @@ export function liveVs(
   const tiles: LiveVsTile[] = offers.length
     ? offers.map((p) => {
       const save = savingsPerUnit(p, now);
+      const showSave = offerSavingsOn(store, p);
       return {
         id: p.id, name: p.name, image: p.image_url,
         overlay: ['NOW', formatLkr(effectivePrice(p, now))],

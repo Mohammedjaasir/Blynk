@@ -141,9 +141,14 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export const subtotal = (s: CartState, now = new Date()) =>
   round2(s.lines.filter(lineAvailable).reduce((a, l) => a + lineUnitPrice(l, now) * l.quantity, 0)
     + comboPacks(s).reduce((a, l) => a + l.combo.price * l.quantity, 0));
-/** The same at regular prices: a combo counts at its items' own total (the struck price). */
-export const regularTotal = (s: CartState) =>
-  round2(s.lines.filter(lineAvailable).reduce((a, l) => a + linePriced(l).selling_price * l.quantity, 0)
+/**
+ * The same at regular prices: a combo counts at its items' own total (the struck price). A
+ * product whose "Show offer price cut" is off (migration 050) counts at what it costs now, so the
+ * bill's struck total and "saved" line never include it.
+ */
+export const regularTotal = (s: CartState, now = new Date()) =>
+  round2(s.lines.filter(lineAvailable).reduce((a, l) =>
+    a + (l.product.show_offer_cut === false ? lineUnitPrice(l, now) : linePriced(l).selling_price) * l.quantity, 0)
     + comboPacks(s).reduce((a, l) => a + Math.max(l.combo.items_total, l.combo.price) * l.quantity, 0));
 /**
  * Fresh prices and availability from the catalogue; a product that vanished is kept but flagged

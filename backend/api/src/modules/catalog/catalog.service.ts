@@ -103,6 +103,11 @@ export interface CustomerProductDto {
   delivery_lead_days: number;
   /** 'YYYY-MM-DD' (Colombo) of the first delivery day when delivery_lead_days > 0, else null. */
   earliest_delivery_date: string | null;
+  /**
+   * Migration 050 (owner, 2026-10-18): show the struck "was" price (offer or
+   * MRP) and the saving for this product. Display only; prices are the same.
+   */
+  show_offer_cut: boolean;
   /** Product page only: the active variants, sold-out ones marked is_available false. */
   variants?: CustomerVariantDto[];
 }
@@ -144,6 +149,7 @@ function toCustomerProduct(p: CustomerCatalogRow, variants: CustomerVariantDto[]
     price_max: range ? range.price_max : ownPrice,
     delivery_lead_days: lead,
     earliest_delivery_date: lead > 0 ? earliestDeliveryDay(orderingClock.now(), lead).date : null,
+    show_offer_cut: p.show_offer_cut !== false,
     ...(withVariants ? { variants: variants ?? [] } : {}),
   };
 }
@@ -705,6 +711,7 @@ export class CatalogService {
       offer_price: offerPrice,
       // No offer, no end date.
       offer_ends_at: offerPrice === null ? null : input.offer_ends_at ?? null,
+      show_offer_cut: input.show_offer_cut ?? true,
     });
 
     logger.info({ productId: created.id, sku: created.sku }, 'Product created by admin');
@@ -833,6 +840,7 @@ export class CatalogService {
       ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
       ...(input.delivery_lead_days !== undefined ? { delivery_lead_days: input.delivery_lead_days } : {}),
       ...(offerChanged ? { offer_price: offerPrice, offer_ends_at: offerEnds } : {}),
+      ...(input.show_offer_cut !== undefined ? { show_offer_cut: input.show_offer_cut } : {}),
     });
 
     logger.info({ productId: id }, 'Product updated by admin');
