@@ -47,7 +47,7 @@ import {
   SEARCH_HINTS, STORES, STORES_BY_CATEGORY, VS, type DemoFilter, type DemoStore,
 } from '@/demo/home';
 import {
-  liveAisles, liveBanner, liveFees, liveHints, livePromo, liveRail,
+  liveAisles, liveBanner, liveHints, livePromo, liveRail,
   liveUnder, liveVs, UNDER_LKR, type LiveAisleCard, type LiveVs,
 } from '@/demo/homeLive';
 import { extraOf } from '@/demo/extras';
@@ -266,7 +266,6 @@ export default function Home() {
       aisles: liveAisles(data, store, cat, on),
       vs: liveVs(data, store, undefined, claim),
       promo: livePromo(store, claim),
-      fees: liveFees(store, claim),
       banner: liveBanner(data, store, undefined, claim),
       hints: liveHints(data),
     };
@@ -276,7 +275,7 @@ export default function Home() {
   const meals = live ? live.under : granted ? MEALS : MEALS_PRE;
   useTrackList(live ? `Under ${formatLkr(UNDER_LKR)}` : null, live ? live.under : []);
   const stores = useMemo(() => (DEMO ? filterStores(cat, filters as DemoFilter[]) : []), [cat, filters]);
-  const fees = live ? live.fees : FEES;
+  const fees = FEES; // the fee strip is DEMO only now (owner, 2026-10-18)
   const sheet = DEMO ? LOCATION_SHEET : here.sheet;
   const feedError = !DEMO && !data && !!error && timedPhase !== 'locating';
 
@@ -457,17 +456,21 @@ export default function Home() {
         </PressScale>
       </Animated.View>
 
-      {/* fee strip (after location is granted) */}
-      <Animated.View style={[styles.feeStripWrap, stripA]} pointerEvents="none">
-        <LinearGradient colors={[C.brand, C.brandDeep]} style={[styles.feeStrip, { paddingBottom: bottomInset + 27 }]}>
-          {fees.map(([c, l]) => (
-            <View key={l} style={styles.fee}>
-              <View style={styles.coin}><Text style={styles.coinTxt}>{c}</Text></View>
-              <Text style={styles.feeTxt} numberOfLines={1}>{l}</Text>
-            </View>
-          ))}
-        </LinearGradient>
-      </Animated.View>
+      {/* fee strip: DEMO only, matching the reference video exactly (owner, 2026-10-18: "the
+          marked things we dont want" - live no longer claims anything about fees here; the one
+          true claim stays on the pill at the top of the cart, FeeHeader.tsx) */}
+      {DEMO && (
+        <Animated.View style={[styles.feeStripWrap, stripA]} pointerEvents="none">
+          <LinearGradient colors={[C.brand, C.brandDeep]} style={[styles.feeStrip, { paddingBottom: bottomInset + 27 }]}>
+            {fees.map(([c, l]) => (
+              <View key={l} style={styles.fee}>
+                <View style={styles.coin}><Text style={styles.coinTxt}>{c}</Text></View>
+                <Text style={styles.feeTxt} numberOfLines={1}>{l}</Text>
+              </View>
+            ))}
+          </LinearGradient>
+        </Animated.View>
+      )}
 
       <CartBar />
 

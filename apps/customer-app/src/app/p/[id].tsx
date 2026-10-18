@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrackOnce } from '@/blynk/analytics/AnalyticsHost';
@@ -33,7 +33,6 @@ import { useStore } from '@/blynk/store/StoreContext';
 import { Badge, Button, StateView, useToast } from '@/blynk/ui/kit';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { BackIcon, ShareIcon } from '@/components/icons';
-import { ProductImage } from '@/components/ProductImage';
 import { StruckPrice } from '@/components/StruckPrice';
 import { Chevron as Caret, Collapsible, PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
@@ -172,11 +171,7 @@ export default function ProductPage() {
         <>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 150 }}>
             <Animated.View entering={FadeIn.duration(220)} style={{ alignItems: 'center', marginTop: 4 }}>
-              <View style={[styles.hero, { width: hero, height: hero }]}>
-                <View style={!product.is_available && { opacity: 0.45 }}>
-                  <ProductImage product={product} size={hero} inset={1} style={{ backgroundColor: 'transparent' }} />
-                </View>
-              </View>
+              <HeroPhoto product={product} size={hero} />
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(60).duration(300)}>
@@ -240,6 +235,38 @@ export default function ProductPage() {
         </>
       )}
       {toast}
+    </View>
+  );
+}
+
+/**
+ * The product's hero photo, "full frame" (owner, 2026-10-18): the box height follows the
+ * photo's own aspect ratio (once known from onLoad) instead of a fixed square, so "contain"
+ * fills it completely with no letterboxing - the photo is still never cropped. Capped to
+ * 0.6-1.3x the width so an unusually tall or wide photo cannot distort the layout.
+ */
+function HeroPhoto({ product, size }: { product: Product; size: number }) {
+  const [ratio, setRatio] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+  const uri = product.image_url && !failed ? product.image_url : null;
+  const height = uri && ratio ? Math.round(Math.min(Math.max(size / ratio, size * 0.6), size * 1.3)) : size;
+  return (
+    <View style={[styles.hero, { width: size, height }, !product.is_available && { opacity: 0.45 }]}>
+      {uri ? (
+        <Image
+          source={{ uri }}
+          accessibilityLabel={product.name}
+          resizeMode="contain"
+          onLoad={(e) => {
+            const { width: iw, height: ih } = e.nativeEvent.source;
+            if (iw > 0 && ih > 0) setRatio(iw / ih);
+          }}
+          onError={() => setFailed(true)}
+          style={{ width: size, height }}
+        />
+      ) : (
+        <Text style={[styles.heroInitial, { fontSize: size * 0.34 }]}>{product.name.trim().charAt(0).toUpperCase() || '·'}</Text>
+      )}
     </View>
   );
 }
@@ -361,6 +388,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 6, backgroundColor: '#fff' },
   round: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
   hero: { borderRadius: 18, backgroundColor: C.tile, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  heroInitial: { fontFamily: F.bold, color: C.faint },
   cat: { fontFamily: F.regular, fontSize: 12.5, color: C.sub, marginTop: 22 },
   name: { fontFamily: F.bold, fontSize: 24, color: C.ink, lineHeight: 30, marginTop: 6 },
   unit: { fontFamily: F.regular, fontSize: 14, color: C.sub, marginTop: 4 },
