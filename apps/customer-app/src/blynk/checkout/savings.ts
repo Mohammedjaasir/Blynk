@@ -1,7 +1,7 @@
 /*
  * The checkout bill's header: "To Pay ~~before~~ now" and "LKR X saved on the total!".
- * Everything the customer saves counts: offer prices (only while Admin's show_offer_savings is
- * on, as everywhere else), plus the one discount (coupon, birthday gift or referral reward) and
+ * Everything the customer saves counts: offer prices (always shown, as everywhere else since
+ * owner, 2026-10-18), plus the one discount (coupon, birthday gift or referral reward) and
  * Blynk Points. "To Pay" itself is computed elsewhere and is already right; this only words it.
  */
 
@@ -11,7 +11,7 @@ const money = (n: number | null | undefined) => (typeof n === 'number' && Number
 export interface SavingsInput {
   /** Regular prices minus offer prices for the cart's lines. */
   offerSaved: number;
-  /** Admin's show_offer_savings is on (offer savings may be shown). */
+  /** Offer savings may be shown (owner, 2026-10-18: always true). */
   showOfferSavings: boolean;
   /** The coupon / birthday / referral discount on this bill (0 when none). */
   discount: number;

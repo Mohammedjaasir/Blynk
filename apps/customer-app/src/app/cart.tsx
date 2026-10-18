@@ -57,6 +57,7 @@ import { requestPushPermission } from '@/blynk/push';
 import { WALLET_COPY } from '@/blynk/wallet/copy';
 import { canUseWallet, checkoutWalletOf } from '@/blynk/wallet/models';
 import { effectivePrice, isOfferActive, priceDisplay } from '@/blynk/lib/pricing';
+import { offerSavingsOn } from '@/blynk/lib/storeText';
 import { useStore } from '@/blynk/store/StoreContext';
 import { invalidateFreeClaim } from '@/blynk/store/useFreeClaim';
 import { cartEarn, cartPointsLine, pointsRuleOf } from '@/blynk/store/pointsPromo';
@@ -439,7 +440,7 @@ export default function Cart() {
                 </View>
               </Animated.View>
             ) : (
-              <LiveLine key={lineKey(p.id, variant?.id)} line={{ product: p, quantity, variant }} showSavings={store?.show_offer_savings === true} />
+              <LiveLine key={lineKey(p.id, variant?.id)} line={{ product: p, quantity, variant }} showSavings={offerSavingsOn(store)} />
             )))}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={{ marginTop: 9 }}>
               <PressScale onPress={goBack} style={styles.chip}>
@@ -885,7 +886,7 @@ function LiveLine({ line, showSavings }: { line: CartLine; showSavings: boolean 
   const ok = lineAvailable(line);
   const priced = linePriced(line);
   // the struck reference (the regular price on an offer, or "MRP LKR 300" when the price is under
-  // the MRP - migration 048) shows only while Admin's show_offer_savings is on
+  // the MRP - migration 048), always on (owner, 2026-10-18)
   const struck = priceDisplay(priced, { showStruck: showSavings && ok }).struck;
   const why = needsVariant(line) ? VARIANT_COPY.pickSizeAgain : variant || p.is_available === false ? VARIANT_COPY.soldOut : LIVE.unavailable;
   return (

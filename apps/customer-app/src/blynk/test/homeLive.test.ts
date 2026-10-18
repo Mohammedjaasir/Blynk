@@ -73,14 +73,13 @@ describe('live home content', () => {
     expect(deliveryLine({ ...store, new_customer_free_deliveries: { ...store.new_customer_free_deliveries, enabled: false } })).toBe('Delivery fee at checkout');
   });
 
-  it('vs band: offer tiles with "You save" only when Admin turns savings on', () => {
+  it('vs band: offer tiles always show "You save" (owner, 2026-10-18: offer savings always on)', () => {
     const v = liveVs(catalog(), store, now)!;
     expect(v.kicker).toEqual(['Fresh picks, great prices']); // owner, 2026-10-17: a catchy kicker, nothing about fees
     expect(v.title).toBe('OFFER PRICES TODAY'); // no free-delivery claim, ever (owner, 2026-10-16)
     expect(v.tiles).toHaveLength(1);
-    expect(v.tiles[0]).toMatchObject({ id: 'p-milk', overlay: ['NOW', 'LKR 513'], line: 'Dairy & Eggs', strike: false, save: null });
+    expect(v.tiles[0]).toMatchObject({ id: 'p-milk', overlay: ['NOW', 'LKR 513'], line: 'LKR 540', strike: true, save: 'You save LKR 27' });
     expect(v.tiles[0].aisle?.slug).toBe('dairy-eggs');
-    expect(liveVs(catalog(), { ...noFree, show_offer_savings: true }, now)!.tiles[0]).toMatchObject({ line: 'LKR 540', strike: true, save: 'You save LKR 27' });
     expect(liveVs(catalog(), noFree, now)!.title).toBe('OFFER PRICES TODAY');
   });
 

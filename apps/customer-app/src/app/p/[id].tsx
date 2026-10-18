@@ -25,6 +25,7 @@ import { ComboAdd } from '@/blynk/combos/ComboViews';
 import { requestPushPermission } from '@/blynk/push';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive, priceDisplay } from '@/blynk/lib/pricing';
+import { offerSavingsOn } from '@/blynk/lib/storeText';
 import { orderTime } from '@/blynk/orders/status';
 import { productShareText } from '@/blynk/share/links';
 import { shareText } from '@/blynk/share/share';
@@ -97,14 +98,14 @@ export default function ProductPage() {
   }, [id]);
 
   const product = gone ? null : fresh ?? listed;
-  const showSavings = DEMO || store?.show_offer_savings === true;
+  const showSavings = DEMO || offerSavingsOn(store);
   // sold in sizes: chips pick one; the price, stock and Add are that size's
   const sized = !!product && hasVariants(product);
   const variants = product?.variants ?? [];
   const variant = sized ? selectVariant(variants, pickedId) : null;
   const priced = variant ? variantPriced(variant) : product;
   const onOffer = variant ? variantOnOffer(variant) : !!product && isOfferActive(product);
-  // the one price rule (offer, MRP - migration 048): struck only while show_offer_savings is on
+  // the one price rule (offer, MRP - migration 048): struck, always on (owner, 2026-10-18)
   const shown = priced ? priceDisplay(priced, { showStruck: showSavings }) : null;
   // "Save" on an offer counts from the struck reference (the MRP when that is what is struck)
   const saved = shown?.offer && shown.struck ? Math.round((shown.struck.amount - shown.price) * 100) / 100 : 0;

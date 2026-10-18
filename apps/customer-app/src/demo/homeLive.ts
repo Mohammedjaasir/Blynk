@@ -12,7 +12,7 @@ import { categoryOfferActive } from '../blynk/lib/categories';
 import { applyFilters, type FilterId } from '../blynk/lib/filters';
 import { formatLkr } from '../blynk/lib/money';
 import { effectivePrice, isOfferActive, savingsPerUnit } from '../blynk/lib/pricing';
-import { flatFee, formatHours, freeDeliveryCount } from '../blynk/lib/storeText';
+import { flatFee, formatHours, freeDeliveryCount, offerSavingsOn } from '../blynk/lib/storeText';
 import { claimFee, claimLine, claimTitle, freeDeliveryClaim, NO_CLAIM, type FreeClaim } from '../blynk/store/freeClaim';
 import { homeMessage, NEUTRAL_COPY, POINTS_COPY, pointsRuleOf, type PointsRule } from '../blynk/store/pointsPromo';
 
@@ -61,7 +61,7 @@ export type LiveVsTile = {
   /** Line under the name (struck through when `strike`). */
   line: string;
   strike: boolean;
-  /** Last row ("You save LKR n"), only with an active offer and show_offer_savings on. */
+  /** Last row ("You save LKR n"), only with an active offer. */
   save: string | null;
   /** The aisle the tile opens. */
   aisle: Pick<Category, 'slug' | 'name'> | null;
@@ -182,7 +182,7 @@ export function liveVs(
   rule: PointsRule | null = pointsRuleOf(store),
 ): LiveVs | null {
   if (!data) return null;
-  const showSave = store?.show_offer_savings === true;
+  const showSave = offerSavingsOn(store);
   const topAisle = (p: Product) => {
     const top = data.topOf(p.category_id);
     return data.aisles.find((c) => c.id === top) ?? data.categories.find((c) => c.id === top) ?? null;
@@ -194,7 +194,7 @@ export function liveVs(
       return {
         id: p.id, name: p.name, image: p.image_url,
         overlay: ['NOW', formatLkr(effectivePrice(p, now))],
-        // the struck regular price only while Admin's show_offer_savings is on (as in the cart)
+        // the struck regular price, always on (owner, 2026-10-18; as in the cart)
         line: showSave ? formatLkr(p.selling_price) : p.category_name, strike: showSave,
         save: showSave && save > 0 ? `You save ${formatLkr(save)}` : null,
         aisle: topAisle(p),

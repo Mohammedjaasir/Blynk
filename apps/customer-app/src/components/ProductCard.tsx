@@ -8,6 +8,7 @@ import { deliveredFromText, hasVariants, priceRange, priceText, VARIANT_COPY } f
 import { formatLkr } from '@/blynk/lib/money';
 import { priceDisplay, sizedStruck } from '@/blynk/lib/pricing';
 import { priceRoll, rollPhase } from '@/blynk/lib/priceRoll';
+import { offerSavingsOn } from '@/blynk/lib/storeText';
 import { pointsRuleOf } from '@/blynk/store/pointsPromo';
 import { useStore } from '@/blynk/store/StoreContext';
 import { extraOf } from '@/demo/extras';
@@ -48,9 +49,9 @@ export const ProductCard = memo(function ProductCard({
 }) {
   const inCart = useCartSelect((c) => (c.qty[p.id] ?? 0) > 0);
   const store = useStore();
-  const showSavings = store?.show_offer_savings === true;
-  // the one price rule (offer, MRP; src/blynk/lib/pricing.ts priceDisplay): struck only while
-  // Admin's show_offer_savings is on
+  const showSavings = offerSavingsOn(store);
+  // the one price rule (offer, MRP; src/blynk/lib/pricing.ts priceDisplay): struck while an
+  // offer is active (owner, 2026-10-18: "it should enable always")
   const shown = priceDisplay(p, { showStruck: DEMO || showSavings });
   const offer = shown.offer;
   // sold in sizes: "LKR 50 – 350" ("From LKR 50" when narrow); a lead time: "Delivered from Fri 17 Oct"
@@ -123,8 +124,8 @@ export const ProductCard = memo(function ProductCard({
       {!x && !!unitText(p) && <Text style={styles.unit} numberOfLines={1}>{unitText(p)}</Text>}
       {/*
         Offer (owner, 2026-10-09 / 2026-10-14): the offer price first and prominent, then the regular
-        price struck through. Live, the struck price shows while Admin's show_offer_savings is on
-        (as in the cart); it already says "offer", so no "Offer price" caption under it.
+        price struck through. Live, the struck price always shows (owner, 2026-10-18; as in the
+        cart); it already says "offer", so no "Offer price" caption under it.
         MRP (migration 048): when the price is under the MRP, "MRP LKR 300" (amount struck) is the
         struck reference instead - with or without an offer; at the MRP nothing is struck. A sized
         tile strikes its cheapest size's MRP only beside "From LKR 50" / one price, not a full range.

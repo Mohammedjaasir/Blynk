@@ -5,7 +5,7 @@
  */
 import type { StoreInfo } from '@/blynk/api/types';
 import { formatLkr } from '@/blynk/lib/money';
-import { deliveryFeeText, flatFee, freeDeliveryCount } from '@/blynk/lib/storeText';
+import { deliveryFeeText, flatFee, freeDeliveryCount, offerSavingsOn } from '@/blynk/lib/storeText';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -20,7 +20,7 @@ export type LiveBill = {
   /** Struck "before" amount (regular prices + the same fee); only meaningful when `showSaved`. */
   toPayRegular: number;
   saved: number;
-  /** Offer savings are shown only when Admin's show_offer_savings is on and an offer is active. */
+  /** Offer savings are shown whenever an offer is active (owner, 2026-10-18: always on). */
   showSaved: boolean;
 };
 
@@ -38,7 +38,7 @@ export function liveBill(store: StoreInfo | null, total: number, mrpTotal: numbe
     toPay: round2(total + added),
     toPayRegular: round2(mrpTotal + added),
     saved,
-    showSaved: store?.show_offer_savings === true && saved > 0,
+    showSaved: offerSavingsOn(store) && saved > 0,
   };
 }
 

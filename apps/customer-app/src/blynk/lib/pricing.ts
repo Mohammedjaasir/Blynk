@@ -41,8 +41,8 @@ const validMrp = (m: unknown): m is number => typeof m === 'number' && Number.is
  *   - price == MRP (or no MRP)         -> price only
  *   - offer, MRP at/above the selling  -> offer price, then "MRP LKR 300" struck
  *   - offer, no MRP                    -> offer price, then the regular price struck (as before)
- * `showStruck` is Admin's show_offer_savings: off = no struck price at all (the MRP follows the
- * same switch as the struck offer price).
+ * `showStruck`: false = no struck price at all (the MRP follows the same switch as the struck
+ * offer price); always true now (owner, 2026-10-18).
  */
 export function priceDisplay(p: MrpPriced, opts: { showStruck: boolean; now?: Date }): PriceDisplay {
   const now = opts.now ?? new Date();

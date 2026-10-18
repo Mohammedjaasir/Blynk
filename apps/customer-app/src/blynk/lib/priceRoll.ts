@@ -9,8 +9,7 @@ import type { PriceDisplay, StruckPrice } from './pricing';
  * other apps' prices, so the line rolls between two TRUE facts the tile already knows:
  *
  *   line A  the struck reference priceDisplay already decides (the regular price on an offer, or
- *           "MRP LKR 300"), so Admin's show_offer_savings switch applies exactly as before:
- *           savings hidden -> no struck price -> no line at all.
+ *           "MRP LKR 300"), shown whenever there is one (owner, 2026-10-18: always on).
  *   line B  the saving against that reference, ONE wording:
  *             - a category offer (offer_kind CATEGORY, regular price struck): "5% off", the same
  *               words as the aisle's "5% off everything here";

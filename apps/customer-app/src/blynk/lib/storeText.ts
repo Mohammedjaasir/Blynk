@@ -39,6 +39,16 @@ export function freeDeliveryCount(store: StoreInfo | null): number {
 }
 
 /**
+ * Whether an offer's struck price and "Save LKR n" may show. Owner, 2026-10-18: "it should
+ * enable always" - no longer reads Admin's show_offer_savings; an active offer always shows
+ * what it saves.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function offerSavingsOn(store?: StoreInfo | null): boolean {
+  return true;
+}
+
+/**
  * What the bill says for delivery: a plain number (the flat fee, or 0 while free deliveries
  * apply - no "FREE" wording; owner, 2026-10-16: "we are not giving free delivery, remove that
  * or replace with any other wordings"), or "Calculated at checkout" when the fee depends on the

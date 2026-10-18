@@ -9,6 +9,7 @@ import { closeSizePicker, recallDetail, rememberDetail, sizePickerProduct, subsc
 import { deliveredFromText, priceText, VARIANT_COPY, variantPriced } from '@/blynk/catalog/variants';
 import { formatLkr } from '@/blynk/lib/money';
 import { priceDisplay } from '@/blynk/lib/pricing';
+import { offerSavingsOn } from '@/blynk/lib/storeText';
 import { useStore } from '@/blynk/store/StoreContext';
 import { cartActions, useCartSelect } from '@/lib/cart';
 import { C, F } from '@/lib/theme';
@@ -30,7 +31,7 @@ export function SizePickerHost() {
  */
 function SizePickerSheet({ product }: { product: Product }) {
   const insets = useSafeAreaInsets();
-  const showSavings = useStore()?.show_offer_savings === true;
+  const showSavings = offerSavingsOn(useStore());
   const [detail, setDetail] = useState<Product | null>(() => recallDetail(product.id));
   const [failed, setFailed] = useState(false);
   const [tick, setTick] = useState(0);

@@ -5,6 +5,7 @@ import { getCombos } from '@/blynk/api/catalog';
 import type { Combo } from '@/blynk/api/types';
 import { MAX_COMBO_QTY } from '@/blynk/cart/cartStore';
 import { formatLkr } from '@/blynk/lib/money';
+import { offerSavingsOn } from '@/blynk/lib/storeText';
 import { useStore } from '@/blynk/store/StoreContext';
 import { ProductImage } from '@/components/ProductImage';
 import { PressScale, tap } from '@/components/ui';
@@ -132,7 +133,7 @@ export function ComboRail({ style }: { style?: StyleProp<ViewStyle> }) {
   const combos = useCombos();
   const store = useStore();
   if (!combos.length) return null;
-  const showSavings = store?.show_offer_savings === true;
+  const showSavings = offerSavingsOn(store);
   return (
     <Animated.View entering={FadeIn.duration(220)} style={style}>
       <Text style={s.h2} accessibilityRole="header">Combo packs</Text>
