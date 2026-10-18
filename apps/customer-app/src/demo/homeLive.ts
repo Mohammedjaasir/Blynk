@@ -227,12 +227,13 @@ export function liveVs(
  * The promo band's built-in copy (before Admin / Ops set their own): only what Blynk really
  * does. No free-delivery headline: Home says that once, in the band title and the fee strip
  * (clean pass, 2026-10-14). A catchy headline over the true ticks, not bare checkmarks (owner,
- * 2026-10-15: "here also, no packing and platform free, change, any other catchy").
+ * 2026-10-15: "here also, no packing and platform free, change, any other catchy"). Nothing about
+ * fees at all now (owner, 2026-10-18: "better add this but with totally different content inside").
  */
 export function livePromo(_store?: StoreInfo | null, _claim?: FreeClaim): { line1: string | null; fees: string[] } {
   return {
-    line1: 'No sneaky fees. Ever.',
-    fees: ['No Platform Fee', 'No Packaging Fee'],
+    line1: 'Handpicked fresh, every single day',
+    fees: ['Quality checked', 'Local favourites'],
   };
 }
 

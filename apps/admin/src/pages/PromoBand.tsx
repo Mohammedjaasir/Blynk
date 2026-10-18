@@ -161,8 +161,8 @@ export function PromoBand() {
           <section className="editor__section">
             <h3 className="editor__legend">Headlines</h3>
             <p className="field__hint">
-              They slide in one after another, 2.8 s each. Leave empty to keep the app&apos;s own line (the free-delivery
-              offer while it is on).
+              They slide in one after another, 2.8 s each. Leave empty to keep the app&apos;s own line (&quot;Handpicked
+              fresh, every single day&quot;).
             </p>
             <TextList
               items={draft.lines}
@@ -176,13 +176,13 @@ export function PromoBand() {
 
           <section className="editor__section">
             <h3 className="editor__legend">Ticked points</h3>
-            <p className="field__hint">Short facts with a tick, side by side. Leave empty for "No Platform Fee", "No Packaging Fee".</p>
+            <p className="field__hint">Short facts with a tick, side by side. Leave empty for "Quality checked", "Local favourites".</p>
             <TextList
               items={draft.ticks}
               max={BAND_LIMITS.ticks}
               maxChars={BAND_LIMITS.tickChars}
               noun="ticked point"
-              placeholder="e.g. No Platform Fee"
+              placeholder="e.g. Quality checked"
               onChange={(v) => set('ticks', v)}
             />
           </section>

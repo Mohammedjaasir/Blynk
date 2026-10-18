@@ -64,8 +64,8 @@ export const BAND_TIMING = { lineHold: 2800, lineOut: 200, lineIn: 220 } as cons
 
 /** The app's own copy, shown while no headlines / points are set. */
 export const BAND_APP_COPY = {
-  lines: ['Free delivery on your first 2 orders'],
-  ticks: ['No Platform Fee', 'No Packaging Fee'],
+  lines: ['Handpicked fresh, every single day'],
+  ticks: ['Quality checked', 'Local favourites'],
 };
 
 export const DEFAULT_BAND: PromoBandFields = {

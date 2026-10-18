@@ -76,8 +76,8 @@ describe('promo band rules (same as the API)', () => {
 
   it('with nothing set the preview shows the app\'s own copy and look', () => {
     const m = bandPreviewModel(DEFAULT_BAND);
-    expect(m.lines).toEqual(['Free delivery on your first 2 orders']);
-    expect(m.ticks).toEqual(['No Platform Fee', 'No Packaging Fee']);
+    expect(m.lines).toEqual(['Handpicked fresh, every single day']);
+    expect(m.ticks).toEqual(['Quality checked', 'Local favourites']);
     expect(m.colors).toEqual({ start: '#FFE141', end: '#F2C600', text: '#1A1D2E' });
     expect(m.appCopy).toEqual({ lines: true, ticks: true });
     expect(bandStatus({ enabled: true, starts_at: '2999-01-01T00:00:00Z', ends_at: null })).toBe('SCHEDULED');
@@ -142,7 +142,7 @@ describe('Promo band editor', () => {
     expect(await screen.findByRole('heading', { name: 'Promo band' })).toBeInTheDocument();
     expect(screen.getByTestId('band-status')).toHaveTextContent('Live in the app');
     // nothing set yet: the app's own words, the waving rider
-    expect(screen.getByTestId('band-line')).toHaveTextContent('Free delivery on your first 2 orders');
+    expect(screen.getByTestId('band-line')).toHaveTextContent('Handpicked fresh, every single day');
     expect(screen.getByTestId('band-mascot')).toHaveClass('pb-mascot--wave');
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 

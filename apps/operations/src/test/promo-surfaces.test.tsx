@@ -73,7 +73,7 @@ describe('Promo band editor (Blynk Ops)', () => {
 
     expect(await screen.findByRole('heading', { name: 'Promo band' })).toBeInTheDocument();
     expect(screen.getByTestId('band-status')).toHaveTextContent('Live in the app');
-    expect(screen.getByTestId('band-line')).toHaveTextContent('Free delivery on your first 2 orders');
+    expect(screen.getByTestId('band-line')).toHaveTextContent('Handpicked fresh, every single day');
     expect(screen.getByTestId('band-mascot')).toHaveClass('pb-mascot--wave');
 
     await user.click(screen.getByRole('button', { name: 'Add headline' }));
