@@ -19,7 +19,7 @@ import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { FILTERS as LIVE_FILTERS, toggle, type FilterId } from '@/blynk/lib/filters';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice } from '@/blynk/lib/pricing';
-import { aisleArt, aislePhase } from '@/blynk/lib/aisleArt';
+import { aisleArt, aislePhase, aisleTint } from '@/blynk/lib/aisleArt';
 import { useFreeClaim } from '@/blynk/store/useFreeClaim';
 import { AisleStamp } from '@/components/AisleStamp';
 import { runAisleBeat } from '@/lib/clock';
@@ -819,7 +819,7 @@ const AisleCard = memo(function AisleCard({ aisle: a, index, promo }: {
 }) {
   return (
     <View>
-      <PressScale scaleTo={0.985} onPress={() => openAisle(a.cat)} style={[styles.store, styles.aisle]}>
+      <PressScale scaleTo={0.985} onPress={() => openAisle(a.cat)} style={[styles.store, styles.aisle, { backgroundColor: aisleTint(a.cat, index) }]}>
         <AisleStamp items={aisleArt(a.cat, index)} phase={aislePhase(index)} style={styles.aisleStamp} />
         {!!a.offer && <Text style={styles.lower}>{a.offer}</Text>}
         <View style={styles.storeNameRow}>
@@ -934,8 +934,9 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#EDEDF0', overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
   },
-  // live aisle cards: a flat light surface, no border or shadow (clean pass)
-  aisle: { backgroundColor: '#F7F7F9', borderWidth: 0, shadowOpacity: 0, elevation: 0, marginTop: 8, marginBottom: 8 },
+  // live aisle cards: a soft, category-matched tint (owner, 2026-10-18: "give each different
+  // colors for the categories"), no border or shadow (clean pass); aisleTint sets the colour
+  aisle: { borderWidth: 0, shadowOpacity: 0, elevation: 0, marginTop: 8, marginBottom: 8 },
   stamp: { position: 'absolute', right: -10, top: -9 },
   // clear of the title (storeNameRow keeps 52 pt free) and of the product row below
   aisleStamp: { position: 'absolute', right: -5, top: -5 },

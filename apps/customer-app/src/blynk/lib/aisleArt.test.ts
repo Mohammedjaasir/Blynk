@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aisleArt, aislePhase, BEAM_ITEMS } from './aisleArt';
+import { aisleArt, aislePhase, aisleTint, BEAM_ITEMS } from './aisleArt';
 
 describe('aisleArt', () => {
   it('picks illustrated items by the aisle name or slug', () => {
@@ -36,5 +36,20 @@ describe('aisleArt', () => {
     for (const x of p) expect(x >= 0 && x < 3).toBe(true);
     expect(new Set(p.map((x) => x.toFixed(2))).size).toBe(4);
     expect(Math.abs(p[1] - p[0])).toBeGreaterThan(0.5);
+  });
+
+  it('gives each category a different card colour (owner, 2026-10-18)', () => {
+    const dairy = aisleTint({ name: 'Dairy & Eggs', slug: 'dairy-eggs' });
+    const rice = aisleTint({ name: 'Rice & Groceries', slug: 'groceries' });
+    const fruit = aisleTint({ name: 'Fruits & Vegetables', slug: 'fruits-veg' });
+    expect(new Set([dairy, rice, fruit]).size).toBe(3);
+    for (const hex of [dairy, rice, fruit]) expect(hex).toMatch(/^#[0-9A-F]{6}$/i);
+  });
+
+  it('a category with no matching rule still gets a colour, varied by position', () => {
+    const a = aisleTint({ name: 'Stationery', slug: 'stationery' }, 0);
+    const b = aisleTint({ name: 'Stationery', slug: 'stationery' }, 1);
+    expect(a).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(a).not.toBe(b);
   });
 });
