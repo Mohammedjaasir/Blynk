@@ -12,8 +12,8 @@ import { categoryOfferActive } from '../blynk/lib/categories';
 import { applyFilters, type FilterId } from '../blynk/lib/filters';
 import { formatLkr } from '../blynk/lib/money';
 import { effectivePrice, isOfferActive, savingsPerUnit } from '../blynk/lib/pricing';
-import { flatFee, formatHours, freeDeliveryCount, offerSavingsOn } from '../blynk/lib/storeText';
-import { claimFee, claimLine, claimTitle, freeDeliveryClaim, NO_CLAIM, type FreeClaim } from '../blynk/store/freeClaim';
+import { flatFee, freeDeliveryCount, offerSavingsOn } from '../blynk/lib/storeText';
+import { claimFee, claimLine, claimTitle, freeDeliveryClaim, type FreeClaim } from '../blynk/store/freeClaim';
 import { homeMessage, NEUTRAL_COPY, POINTS_COPY, pointsRuleOf, type PointsRule } from '../blynk/store/pointsPromo';
 
 /** The "Under LKR 300" rail (the video's "Meals under ₹99"). */
@@ -41,16 +41,27 @@ export type LiveRailItem = {
 export type LiveAisleCard = {
   cat: Category;
   items: Product[];
-  /** "24 items • 8 AM – 9 PM" */
-  meta: string;
   /**
-   * "Items from LKR 120" (the fee line when nothing is priced). Free deliveries are not
-   * repeated on every card: the band title and the fee strip carry them (clean pass).
+   * A catchy line, not the item count or hours (owner, 2026-10-18: "we dont need timing items
+   * istead change any other wordings which is not related to timing and lkr").
    */
+  meta: string;
+  /** A second catchy line, not a price (same owner note). */
   delivery: string;
   /** "5% off everything here" while a category offer runs, else null. */
   offer: string | null;
 };
+
+/**
+ * Catchy line pairs for the aisle cards, picked by position so a scroll of cards does not
+ * repeat the same words (owner, 2026-10-18).
+ */
+const AISLE_LINES: readonly [string, string][] = [
+  ['Freshly stocked, daily', 'Great quality, honest prices'],
+  ['Carefully selected items', 'Shop with confidence'],
+  ['Trusted local favourites', 'Handpicked, every time'],
+  ['Picked for your kitchen', 'Quality you can taste'],
+];
 
 export type LiveVsTile = {
   id: string;
@@ -151,20 +162,17 @@ export function liveAisles(
   data: CatalogData | null, store: StoreInfo | null, cat: string, filters: FilterId[], now: Date = new Date(),
 ): LiveAisleCard[] {
   if (!data) return [];
-  const hours = formatHours(store);
-  // the fee only (no free-delivery claim): Home says that once, in the band title and the fee strip
-  const delivery = deliveryLine(store, NO_CLAIM);
   return data.aisles
     .filter((c) => cat === 'all' || c.id === cat)
-    .map((c) => {
+    .map((c, i) => {
       const all = inAisle(data, c.id);
       const items = applyFilters(all, filters, now);
-      const from = lowestPrice(all, now);
+      const [meta, delivery] = AISLE_LINES[i % AISLE_LINES.length]!;
       return {
         cat: c,
         items,
-        meta: [plural(all.length, 'item'), ...(hours ? [hours] : [])].join(' • '),
-        delivery: from != null ? `Items from ${formatLkr(from)}` : delivery,
+        meta,
+        delivery,
         offer: categoryOfferActive(c, now) ? `${c.offer_percent}% off everything here` : null,
       };
     })

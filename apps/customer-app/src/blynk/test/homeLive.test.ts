@@ -55,15 +55,16 @@ describe('live home content', () => {
     expect(liveUnder(catalog(), 'all', ['offer'], now)).toEqual([]);
   });
 
-  it('aisle cards: real counts, hours, delivery and category offers; no ratings or ETAs', () => {
+  it('aisle cards: real item filtering and category offers; no timing, price, ratings or ETAs (owner, 2026-10-18)', () => {
     const a = liveAisles(catalog(), flat, 'all', [], now);
     expect(a.map((x) => x.cat.id)).toEqual(['c-dairy', 'c-groc']);
-    expect(a[0].meta).toBe('2 items • 8 AM – 9 PM');
-    // free deliveries are said once (band title + fee strip), not on every aisle card
-    expect(a[0].delivery).toBe('Items from LKR 513');
+    // a catchy line pair per card position, not the item count/hours or a price
+    expect(a[0].meta).toBe('Freshly stocked, daily');
+    expect(a[0].delivery).toBe('Great quality, honest prices');
+    expect(a[1].meta).toBe('Carefully selected items');
+    expect(a[1].delivery).toBe('Shop with confidence');
     expect(a[0].offer).toBe('5% off everything here');
     expect(a[1].offer).toBeNull();
-    expect(liveAisles(catalog(), noFree, 'all', [], now)[1].delivery).toBe('Items from LKR 253');
     expect(liveAisles(catalog(), flat, 'c-groc', ['offer'], now)).toEqual([]);
   });
 
