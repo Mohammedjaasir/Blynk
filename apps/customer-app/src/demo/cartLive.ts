@@ -72,17 +72,19 @@ export const randomHurrayLine = (): string => HURRAY_LINES[Math.floor(Math.rando
 export const LIVE = {
   storeTitle: (store: StoreInfo | null) => (store?.hub_name ? `Blynk · ${store.hub_name}` : 'Blynk'),
   /**
-   * Fee header: Blynk adds no packaging or platform fee, worded as honest pricing rather than
-   * naming the fees again (owner, 2026-10-17: "the above yellow animation change the wordings" -
-   * the pill, burst1 and burst2 said "packaging fee" / "platform fee" three times on one screen).
+   * Fee header: catchy, nothing about fees or delivery at all (owner, 2026-10-18: "in top we
+   * dont need content or wording related to fee delivery something replace with any other" -
+   * said again after "Honest pricing" / "Zero hidden costs" turned out to still read as a fee
+   * topic).
    */
-  feePill: 'Honest pricing, always',
-  burst1: ['HONEST PRICING', 'ZERO HIDDEN COSTS'] as const,
-  burst2: { big: 'LKR 0', lines: ['Hidden costs', 'Extra charges'] as const },
-  /** The cart's pop-up (owner, 2026-10-17: "i need that pop up but with different conent
-   * inside", then "allignment is not good and also generate some other catchy its too big",
-   * then "no fees related topic we need different different wording each time they adding" -
-   * the sub-line is one of HURRAY_LINES below, picked fresh each time the pop-up shows). */
+  feePill: 'Fresh groceries, every day',
+  burst1: ['FRESH GROCERIES', 'EVERY DAY'] as const,
+  burst2: { big: 'FRESH', lines: ['Groceries', 'Every day'] as const },
+  /**
+   * The cart's pop-up: not shown live any more (owner, 2026-10-18: "remove that pop up", the
+   * third round after "bring it back" then "reword it"). Kept here, unused, in case it comes
+   * back a fourth time - HURRAY_LINES above picks a fresh sub-line when it does.
+   */
   hurrayTitle: 'You\'re all set!',
   hurrayCta: 'Got it!',
   mealTitle: 'COMPLETE YOUR BASKET',

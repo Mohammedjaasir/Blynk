@@ -171,7 +171,7 @@ export default function ProductPage() {
         <>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 150 }}>
             <Animated.View entering={FadeIn.duration(220)} style={{ alignItems: 'center', marginTop: 4 }}>
-              <HeroPhoto product={product} size={hero} />
+              <HeroPhoto key={product.id} product={product} size={hero} />
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(60).duration(300)}>
@@ -251,7 +251,6 @@ function HeroPhoto({ product, size }: { product: Product; size: number }) {
   const [failed, setFailed] = useState(false);
   const uri = product.image_url && !failed ? product.image_url : null;
   useEffect(() => {
-    setRatio(null);
     if (!uri) return;
     let alive = true;
     Image.getSize(

@@ -68,7 +68,7 @@ import { ProductImage } from '@/components/ProductImage';
 import { StruckPrice } from '@/components/StruckPrice';
 import { Collapsible, PressScale, Skeleton, StampBadge, tap } from '@/components/ui';
 import { BILL, COPY, MEAL_PICKS, rupee } from '@/demo/cart';
-import { LIVE, liveBill, liveOfferRows, randomHurrayLine, type LiveBill } from '@/demo/cartLive';
+import { LIVE, liveBill, liveOfferRows, type LiveBill } from '@/demo/cartLive';
 import { DEMO } from '@/demo/mode';
 import { withSpring } from '@/lib/motion';
 import { cartActions, getCartSnapshot, useCart, useCartSelect } from '@/lib/cart';
@@ -124,7 +124,6 @@ export default function Cart() {
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hurray, setHurray] = useState(false);
-  const [hurraySub, setHurraySub] = useState('');
   const [burst, setBurst] = useState(0);
   const [login, setLogin] = useState(false);
   const [cutlery, setCutlery] = useState(false);
@@ -356,13 +355,12 @@ export default function Cart() {
     return () => clearTimeout(a);
   }, []);
 
-  // live: the "Hurray" modal, with a catchy greeting picked fresh each time (owner, 2026-10-17:
-  // "no fees related topic we need different different wording each time they adding") - no
-  // delivery, no fees, just one of HURRAY_LINES
+  // live: no "Hurray" modal (owner, 2026-10-18: "remove that pop up", after it had already
+  // been reworded a few times); the fee header still bursts once the cart has shown
   const storeSeen = !!store;
   useEffect(() => {
     if (DEMO || loading || !storeSeen || !(lines.length || cart.combos.length)) return;
-    const t = setTimeout(() => { setHurraySub(randomHurrayLine()); setHurray(true); }, 60);
+    const t = setTimeout(() => setBurst(Date.now()), BURST_AFTER_MODAL);
     return () => clearTimeout(t);
   }, [loading, storeSeen]);
 
@@ -684,14 +682,8 @@ export default function Cart() {
         </Animated.View>
       )}
 
-      {hurray && (
-        <HurrayModal
-          onClose={closeHurray}
-          title={DEMO ? COPY.hurrayTitle : LIVE.hurrayTitle}
-          cta={DEMO ? COPY.hurrayCta : LIVE.hurrayCta}
-          sub={DEMO ? COPY.hurraySub : hurraySub}
-        />
-      )}
+      {/* DEMO only: the video's own pop-up - live has none (owner, 2026-10-18: "remove that pop up") */}
+      {hurray && <HurrayModal onClose={closeHurray} title={COPY.hurrayTitle} cta={COPY.hurrayCta} sub={COPY.hurraySub} />}
       {login && <LoginSheet onClose={() => setLogin(false)} />}
       {confirmClear && (
         <Sheet label={CLEAR_CART.title} onClose={() => setConfirmClear(false)}>
