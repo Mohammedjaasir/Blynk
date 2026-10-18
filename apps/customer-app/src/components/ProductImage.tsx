@@ -7,10 +7,11 @@ import { C, F } from '@/lib/theme';
  * A product photo on a neutral tile. While the photo is missing or fails to load,
  * the tile shows the product's initial instead of a broken image.
  */
-export function ProductImage({ product, size, radius = 14, inset = 0.86, style }: {
+export function ProductImage({ product, size, radius = 14, inset = 1, style }: {
   product: Pick<Product, 'name' | 'image_url' | 'image_focal_x' | 'image_focal_y'>;
   size: number; radius?: number;
-  /** How much of the tile the photo fills, 0-1 (owner, 2026-10-18: the product page's hero wants it closer to edge to edge). */
+  /** How much of the tile the photo fills, 0-1 (owner, 2026-10-18: "image are not fully covered
+   * in screen" - every tile fills its box now, not just the product page's hero). */
   inset?: number; style?: StyleProp<ViewStyle>;
 }) {
   const [failed, setFailed] = useState(false);
