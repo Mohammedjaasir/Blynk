@@ -173,7 +173,7 @@ export default function ProductPage() {
             <Animated.View entering={FadeIn.duration(220)} style={{ alignItems: 'center', marginTop: 4 }}>
               <View style={[styles.hero, { width: hero, height: hero }]}>
                 <View style={!product.is_available && { opacity: 0.45 }}>
-                  <ProductImage product={product} size={hero} inset={0.96} style={{ backgroundColor: 'transparent' }} />
+                  <ProductImage product={product} size={hero} inset={1} style={{ backgroundColor: 'transparent' }} />
                 </View>
               </View>
             </Animated.View>
