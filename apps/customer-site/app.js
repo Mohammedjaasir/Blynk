@@ -142,6 +142,29 @@
     counters.forEach((el) => co.observe(el));
   }
 
+  // Category photos (owner, 2026-10-19: "animatied moving animations effects real images"): two
+  // rows sliding past in opposite directions. Each row is doubled so the loop has no seam; the
+  // copies are hidden from screen readers. Without motion the single row stays swipeable.
+  const rail = document.querySelector('[data-rail]');
+  const railRow = rail && rail.querySelector('.lp-rail__row');
+  if (railRow && !still) {
+    const back = railRow.cloneNode(true);
+    back.append(...[...back.children].reverse());
+    const track = (row, extra) => {
+      const t = document.createElement('div');
+      t.className = 'lp-rail__track' + (extra ? ` ${extra}` : '');
+      const copy = row.cloneNode(true);
+      copy.setAttribute('aria-hidden', 'true');
+      for (const img of copy.querySelectorAll('img')) img.alt = '';
+      t.append(row, copy);
+      return t;
+    };
+    back.setAttribute('aria-hidden', 'true');
+    for (const img of back.querySelectorAll('img')) img.alt = '';
+    rail.append(track(railRow), track(back, 'lp-rail__track--back'));
+    rail.classList.add('is-moving');
+  }
+
   // Phones: the "Order on Blynk" bar shows once the hero's buttons have scrolled away, and hides
   // again over the last call to order (owner, 2026-10-19 mobile landing page).
   const sticky = document.querySelector('[data-sticky-cta]');
