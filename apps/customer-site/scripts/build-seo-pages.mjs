@@ -39,10 +39,25 @@ const OG_IMAGE = `${SITE}/assets/og-image.jpg`;
 const CSS = '/styles.css?v=20261014b';
 const PAGES_CSS = '/pages.css?v=20261015c';
 const ANALYTICS = '/analytics.js?v=20261015a';
+const STORE_HOURS = '/store-hours.js?v=20261020a';
 const LANGS = ['en', 'si', 'ta'];
 
 // ---------------------------------------------------------------- helpers
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// Store hours as written in the copy below. On the page, store-hours.js replaces them with the
+// hours Admin and Ops set (owner, 2026-10-20), so a change there shows here without a rebuild.
+// hrs() marks them in already-escaped body text; meta descriptions keep the written hours.
+const HOURS = [
+  ['to', ['8 AM to 9 PM', 'පෙ.ව. 8 සිට ප.ව. 9 දක්වා', 'காலை 8 முதல் இரவு 9 வரை']],
+  ['dash', ['8 AM – 9 PM', 'පෙ.ව. 8 – ප.ව. 9', 'காலை 8 – இரவு 9']],
+];
+const DAYS = [['Every day', 'days'], ['every day', 'days-lower'], ['සෑම දිනකම', 'days'], ['தினமும்', 'days']];
+const hrs = (html, withDays = false) => {
+  for (const [kind, list] of HOURS) for (const s of list) html = html.split(s).join(`<span data-hours="${kind}">${s}</span>`);
+  if (withDays) for (const [d, kind] of DAYS) html = html.replace(d, `<span data-hours="${kind}">${d}</span>`);
+  return html;
+};
 const jsonLd = (data) => `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
 const fill = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 const orderUrl = (medium, campaign, lang) =>
@@ -463,7 +478,8 @@ function footer(lang, alternates) {
   </footer>`;
 }
 
-const scripts = (extra = '') => `  <script src="${ANALYTICS}" defer></script>${extra}`;
+const scripts = (extra = '') => `  <script src="${ANALYTICS}" defer></script>${extra}
+  <script src="${STORE_HOURS}" defer></script>`;
 
 function ctaButton(lang, href, where) {
   const t = T[lang];
@@ -514,11 +530,11 @@ function statsSection(lang, { lead = '', areaText } = {}) {
       <div class="wrap delivery">
         <div class="head">
           <p class="kicker">${esc(t.delKicker)}</p>
-          <h2 id="delivery-title">${esc(t.delH2)}</h2>${lead ? `\n          <p class="lead">${esc(lead)}</p>` : ''}
+          <h2 id="delivery-title">${esc(t.delH2)}</h2>${lead ? `\n          <p class="lead">${hrs(esc(lead))}</p>` : ''}
         </div>
         <dl class="stats">
           <div><dt>${esc(t.stArea)}</dt><dd><b>4<small>KM</small></b><span>${esc(areaText || t.stAreaT)}</span></dd></div>
-          <div><dt>${esc(t.stHours)}</dt><dd><b>8–9</b><span>${esc(t.stHoursT)}</span></dd></div>
+          <div><dt>${hrs(esc(t.stHours), true)}</dt><dd><b data-hours="short">8–9</b><span>${hrs(esc(t.stHoursT))}</span></dd></div>
           <div><dt>${esc(t.stPay)}</dt><dd><b class="stats__words">${esc(t.stPayB)}</b><span>${esc(t.stPayT)}</span></dd></div>
           <div><dt>${esc(t.stPts)}</dt><dd><b>1</b><span>${esc(t.stPtsT)}</span></dd></div>
         </dl>
@@ -545,7 +561,7 @@ function band(lang, href) {
 function factsLine(lang) {
   const t = T[lang];
   return `<ul class="facts-line">
-            <li>${ICON.star}${esc(t.factHours)}</li>
+            <li>${ICON.star}${hrs(esc(t.factHours), true)}</li>
             <li>${ICON.shield}${esc(t.factCash)}</li>
             <li>${ICON.pin}${esc(t.factRange)}</li>
           </ul>`;
@@ -596,7 +612,7 @@ function areaPage(area, lang) {
         </div>
         <p class="kicker">${esc(t.kicker)}</p>
         <h1 id="page-title">${esc(fill(t.areaH1, vars))}</h1>
-        <p class="lead">${esc(area.lead[lang])}</p>
+        <p class="lead">${hrs(esc(area.lead[lang]))}</p>
         <div class="page-hero__cta">
           ${ctaButton(lang, order, 'hero')}
         </div>
@@ -655,7 +671,7 @@ function categoryPage(c) {
         </div>
         <p class="kicker">Home delivery</p>
         <h1 id="page-title">${esc(c.h1)}</h1>
-        <p class="lead">${esc(c.lead)}</p>
+        <p class="lead">${hrs(esc(c.lead))}</p>
         <div class="page-hero__cta">
           ${ctaButton(lang, order, 'hero')}
         </div>
@@ -749,7 +765,7 @@ function homePage(lang) {
           <span class="chip">${esc(h.chip2)}</span>
         </div>
         <h1 class="hero__title">${esc(h.h1a)} <span>${esc(h.h1b)}</span></h1>
-        <p class="hero__lead">${esc(h.lead)}</p>
+        <p class="hero__lead">${hrs(esc(h.lead))}</p>
         <ul class="perks" aria-label="Blynk">
 ${h.perks.map((p, i) => `          <li><span class="perk-icon perk-icon--${perkIcons[i][0]}">${perkIcons[i][1]}</span><span>${p}</span></li>`).join('\n')}
         </ul>

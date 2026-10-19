@@ -37,6 +37,15 @@
 .lp-assure { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; font-weight: 500; color: #4a4630; }
 .lp-assure li { display: inline-flex; align-items: center; gap: 6px; }
 .lp-assure .i { width: 16px; height: 16px; color: var(--green); stroke-width: 2.6; }
+/* live open / closed line, from the store hours Admin and Ops set (store-hours.js) */
+.lp-status {
+  display: inline-flex; align-items: center; gap: 8px; margin: 12px 0 0; padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7); font-size: 13.5px; font-weight: 600; color: #a1271b;
+}
+.lp-status[hidden] { display: none; }
+.lp-status__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.lp-status.is-open { color: var(--green); }
+.lp-status.is-open .lp-status__dot { animation: lp-pulse 2s ease-in-out infinite; }
 
 .lp-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
