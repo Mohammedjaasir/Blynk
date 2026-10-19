@@ -142,6 +142,31 @@
     counters.forEach((el) => co.observe(el));
   }
 
+  // Phones: the "Order on Blynk" bar shows once the hero's buttons have scrolled away, and hides
+  // again over the last call to order (owner, 2026-10-19 mobile landing page).
+  const sticky = document.querySelector('[data-sticky-cta]');
+  const heroCtas = document.querySelector('.lp-ctas');
+  const finalCta = document.querySelector('.lp-final');
+  if (sticky && heroCtas && 'IntersectionObserver' in window) {
+    const seen = new Set();
+    const place = () => {
+      const show = !seen.has(heroCtas) && !seen.has(finalCta);
+      sticky.hidden = false;
+      sticky.classList.toggle('is-off', !show);
+    };
+    sticky.hidden = false;
+    sticky.classList.add('is-off');
+    const so = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) seen.add(e.target);
+        else seen.delete(e.target);
+      }
+      place();
+    });
+    so.observe(heroCtas);
+    if (finalCta) so.observe(finalCta);
+  }
+
   // Footer year.
   const year = document.querySelector('[data-year]');
   if (year) year.textContent = String(new Date().getFullYear());

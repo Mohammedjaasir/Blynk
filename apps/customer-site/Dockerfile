@@ -37,7 +37,7 @@ RUN EXPO_PUBLIC_DEMO=0 EXPO_PUBLIC_API_BASE_URL="$API_BASE_URL" \
 # ---- 2. The website ---------------------------------------------------------
 FROM nginx:1.27-alpine
 COPY apps/customer-site/nginx.conf /etc/nginx/conf.d/default.conf
-COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-site/app.js \
+COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-site/landing.css apps/customer-site/app.js \
      apps/customer-site/manifest.webmanifest apps/customer-site/firebase-messaging-sw.js \
      apps/customer-site/walkthrough.js apps/customer-site/analytics.js \
      apps/customer-site/privacy.html apps/customer-site/terms.html apps/customer-site/refunds.html /usr/share/nginx/html/
