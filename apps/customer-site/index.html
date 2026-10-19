@@ -119,7 +119,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20261014b">
-  <link rel="stylesheet" href="/landing.css?v=20261019b">
+  <link rel="stylesheet" href="/landing.css?v=20261020a">
 </head>
 <body>
   <!-- GTM-BODY-START -->
@@ -146,55 +146,77 @@
   </header>
 
   <main id="top">
+    <!-- Line icons for this page (owner, 2026-10-20: "more attractive and proffesional landing page":
+         clean icons in place of emoji). -->
+    <svg class="lp-sprite" aria-hidden="true" focusable="false">
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></symbol>
+      <symbol id="i-bag" viewBox="0 0 24 24"><path d="M5.5 8h13l-1.2 12.5H6.7L5.5 8z"/><path d="M9 10V6.5a3 3 0 0 1 6 0V10"/></symbol>
+      <symbol id="i-scooter" viewBox="0 0 24 24"><circle cx="6" cy="17" r="2.6"/><circle cx="18" cy="17" r="2.6"/><path d="M8.6 17h6.8M13.5 5.5H16l2.6 9M15.4 17l-2.4-6.5H6.5a3 3 0 0 0-3 3V15"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+      <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v.01M18 14.5v.01"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></symbol>
+      <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6M9 16h3"/></symbol>
+      <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8"/></symbol>
+      <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M5 19C5 10 10 5 20 4c0 10-5.5 15-14 15"/><path d="M5 19c2.5-4 6-7 10-9"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    </svg>
+
     <!-- ============================== Hero ==============================
-         Mobile-first (owner, 2026-10-19: "redesign the landing page for mobile users to looks
-         more attractive" / "we have to give proper landing page for mobile users"). The phone
-         shows the real app (assets/app-welcome.webp, a screenshot of blynk.lk/app), on the same
-         yellow so it never looks pasted on. -->
+         Mobile-first (owner, 2026-10-19/20). A real photo of local vegetables, with an order's
+         progress appearing over it step by step. -->
     <section class="hero lp-hero">
       <div class="hero__copy lp-hero__copy">
-        <span class="lp-badge"><span class="lp-dot" aria-hidden="true"></span>Delivering in Dharga Town &amp; Aluthgama</span>
+        <span class="lp-badge"><span class="lp-dot" aria-hidden="true"></span>Now delivering in Dharga Town &amp; Aluthgama</span>
         <h1 class="lp-title">Groceries,<br>delivered <span>fast.</span></h1>
         <p class="lp-lead">Rice, vegetables, milk, bread and home essentials from your local Blynk store. Order in a few taps, pay cash when it arrives.</p>
         <div class="lp-ctas">
           <button type="button" class="lp-btn lp-btn--ink lp-btn--shine" data-install>
             Order on Blynk
-            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            <svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg>
           </button>
           <a class="lp-btn lp-btn--ghost" href="#how">How it works</a>
         </div>
-        <p class="lp-assure">Free · No Play Store needed · iPhone &amp; Android</p>
+        <ul class="lp-assure">
+          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>No Play Store needed</li>
+          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>iPhone &amp; Android</li>
+        </ul>
       </div>
 
-      <div class="lp-hero__art">
-        <div class="lp-phone">
-          <img src="/assets/app-welcome.webp" alt="The Blynk app's welcome screen: Groceries, delivered fast" width="780" height="1688" fetchpriority="high">
+      <div class="lp-shot">
+        <img class="lp-shot__img" src="/assets/hero-market.webp" alt="Fresh local vegetables: long beans, snake gourd, greens and tomatoes" width="720" height="864" fetchpriority="high">
+        <ol class="lp-chips" aria-label="How your order comes to you">
+          <li><span class="lp-chips__ic"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span><span><b>Order placed</b><small>in a few taps</small></span></li>
+          <li><span class="lp-chips__ic"><svg class="i" aria-hidden="true"><use href="#i-bag"/></svg></span><span><b>Packed at the store</b><small>near the Clock Tower</small></span></li>
+          <li><span class="lp-chips__ic lp-chips__ic--go"><svg class="i" aria-hidden="true"><use href="#i-scooter"/></svg></span><span><b>Rider on the way</b><small>pay cash at your door</small></span></li>
+        </ol>
+        <div class="lp-sticker" aria-hidden="true">
+          <svg class="lp-sticker__ring" viewBox="0 0 120 120">
+            <defs><path id="lp-ring-path" d="M60 60m-45 0a45 45 0 1 1 90 0a45 45 0 1 1-90 0"/></defs>
+            <text><textPath href="#lp-ring-path" textLength="276">CASH ON DELIVERY · CASH ON DELIVERY · </textPath></text>
+          </svg>
+          <svg class="i lp-sticker__ic"><use href="#i-cash"/></svg>
         </div>
-        <!-- owner, 2026-10-19: "animatied moving animations effects real images would be goof":
-             real photos (assets/aisles/) float round the phone, and an order update slides in. -->
-        <div class="lp-toast" aria-hidden="true"><span>🛵</span><div><b>Your rider is on the way</b><small>Blynk order update</small></div></div>
-        <span class="lp-float lp-float--a" aria-hidden="true"><img src="/assets/aisles/vegetables.webp" alt="" width="360" height="360" fetchpriority="low"></span>
-        <span class="lp-float lp-float--b" aria-hidden="true"><img src="/assets/aisles/dairy.webp" alt="" width="360" height="360" fetchpriority="low"></span>
-        <span class="lp-float lp-float--c" aria-hidden="true"><img src="/assets/aisles/bakery.webp" alt="" width="360" height="360" fetchpriority="low"></span>
-        <div class="lp-pop lp-pop--cash"><b>💵 Cash</b><span>at your door</span></div>
       </div>
     </section>
 
     <!-- Quick facts -->
     <section class="lp-facts" aria-label="Blynk at a glance">
-      <div><b>4 km</b><span>delivery area</span></div>
-      <div><b>LKR 100</b><span>delivery from</span></div>
-      <div><b>Cash</b><span>on delivery</span></div>
+      <div><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><b>4 km</b><span>delivery area</span></div>
+      <div><svg class="i" aria-hidden="true"><use href="#i-scooter"/></svg><b>LKR 100</b><span>delivery from</span></div>
+      <div><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg><b>8 AM–9 PM</b><span>every day</span></div>
     </section>
 
     <!-- ============================ Products ============================ -->
     <section class="lp-section" id="products" aria-labelledby="products-title">
-      <div class="wrap">
+      <div class="wrap lp-head">
         <p class="lp-kicker">Shop by category</p>
         <h2 class="lp-h2" id="products-title" data-reveal>Everything for your kitchen and home.</h2>
       </div>
       <!-- Real photos; app.js turns this into two rows sliding past in opposite directions
-           (without script it is a row you can swipe). Baby & Mom is the store's own photo. -->
+           (without script it is a row you can swipe). -->
       <div class="lp-rail" data-rail>
         <ul class="lp-rail__row">
           <li><img src="/assets/aisles/vegetables.webp" alt="Fresh vegetables" width="360" height="360" loading="lazy"><span>Vegetables</span></li>
@@ -204,28 +226,41 @@
           <li><img src="/assets/aisles/bakery.webp" alt="Fresh bread" width="360" height="360" loading="lazy"><span>Bakery</span></li>
           <li><img src="/assets/aisles/drinks.webp" alt="Fruit juices" width="360" height="360" loading="lazy"><span>Beverages</span></li>
           <li><img src="/assets/aisles/household.webp" alt="Cleaning products" width="360" height="360" loading="lazy"><span>Household</span></li>
-          <li><img src="/assets/aisles/baby.webp" alt="Baby Care diapers" width="360" height="360" loading="lazy"><span>Baby &amp; Mom</span></li>
+          <li><img src="/assets/aisles/baby.webp" alt="Baby feeding bottles" width="360" height="360" loading="lazy"><span>Baby &amp; Mom</span></li>
         </ul>
       </div>
       <div class="wrap">
         <button type="button" class="lp-btn lp-btn--yellow lp-btn--block" data-install>
           See everything in the app
-          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          <svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg>
         </button>
       </div>
     </section>
 
-    <!-- ============================== Why ============================== -->
-    <section class="lp-section lp-section--tint" aria-labelledby="why-title">
-      <div class="wrap">
-        <p class="lp-kicker">Why Blynk</p>
-        <h2 class="lp-h2" id="why-title" data-reveal>Your local store, made easy.</h2>
-        <ul class="lp-why lp-stagger" data-reveal>
-          <li><span class="lp-why__ic" style="--c:#FFF4BF">⚡</span><div><b>Fast local delivery</b><p>Our own riders from the store near the Clock Tower.</p></div></li>
-          <li><span class="lp-why__ic" style="--c:#E6F4E9">🥬</span><div><b>Fresh, checked items</b><p>Freshly sourced groceries and quality essentials.</p></div></li>
-          <li><span class="lp-why__ic" style="--c:#EAF4FC">💵</span><div><b>Pay cash at the door</b><p>No card needed. You see the delivery fee before you order.</p></div></li>
-          <li><span class="lp-why__ic" style="--c:#FDE8F3">🛵</span><div><b>Follow your rider</b><p>See your order on the map until it reaches you.</p></div></li>
-        </ul>
+    <!-- ============================ The app ============================ -->
+    <section class="lp-app" aria-labelledby="app-title">
+      <div class="lp-app__inner">
+        <div class="lp-app__copy">
+          <p class="lp-kicker lp-kicker--yellow">The Blynk app</p>
+          <h2 class="lp-h2" id="app-title" data-reveal>Your whole store, in your pocket.</h2>
+          <ul class="lp-feats lp-stagger" data-reveal>
+            <li><span class="lp-feats__ic"><svg class="i" aria-hidden="true"><use href="#i-grid"/></svg></span><div><b>Shop by aisle</b><p>Vegetables, rice, milk, bread and home essentials in one place.</p></div></li>
+            <li><span class="lp-feats__ic"><svg class="i" aria-hidden="true"><use href="#i-receipt"/></svg></span><div><b>See the fee first</b><p>The delivery fee shows before you place the order.</p></div></li>
+            <li><span class="lp-feats__ic"><svg class="i" aria-hidden="true"><use href="#i-route"/></svg></span><div><b>Follow your rider</b><p>Watch your order on the map until it reaches you.</p></div></li>
+            <li><span class="lp-feats__ic"><svg class="i" aria-hidden="true"><use href="#i-cash"/></svg></span><div><b>Pay cash at the door</b><p>No card needed. Pay your rider when it arrives.</p></div></li>
+          </ul>
+        </div>
+        <!-- The real app (assets/app-welcome.webp, a screenshot of blynk.lk/app); real photos float
+             round it and an order update slides in. -->
+        <div class="lp-app__art" data-reveal>
+          <div class="lp-phone">
+            <img src="/assets/app-welcome.webp" alt="The Blynk app's welcome screen: Groceries, delivered fast" width="780" height="1688" loading="lazy">
+          </div>
+          <div class="lp-toast" aria-hidden="true"><span><svg class="i"><use href="#i-scooter"/></svg></span><div><b>Your rider is on the way</b><small>Blynk order update</small></div></div>
+          <span class="lp-float lp-float--a" aria-hidden="true"><img src="/assets/aisles/vegetables.webp" alt="" width="360" height="360" loading="lazy"></span>
+          <span class="lp-float lp-float--b" aria-hidden="true"><img src="/assets/aisles/dairy.webp" alt="" width="360" height="360" loading="lazy"></span>
+          <span class="lp-float lp-float--c" aria-hidden="true"><img src="/assets/aisles/bakery.webp" alt="" width="360" height="360" loading="lazy"></span>
+        </div>
       </div>
     </section>
 
@@ -235,9 +270,9 @@
         <p class="lp-kicker">How it works</p>
         <h2 class="lp-h2" id="how-title" data-reveal>Three steps to your door.</h2>
         <ol class="lp-steps lp-stagger" data-reveal>
-          <li><span class="lp-steps__n">1</span><div><b>Pin your location</b><p>Set your address in Dharga Town, Aluthgama or anywhere within 4 km on the map.</p></div></li>
-          <li><span class="lp-steps__n">2</span><div><b>Fill your basket</b><p>Choose fresh groceries and quality essentials.</p></div></li>
-          <li><span class="lp-steps__n">3</span><div><b>Pay at your door</b><p>Your rider brings the order. Pay in cash when it arrives.</p></div></li>
+          <li><span class="lp-steps__n"><svg class="i" aria-hidden="true"><use href="#i-pin"/></svg></span><div><small>Step 1</small><b>Pin your location</b><p>Set your address in Dharga Town, Aluthgama or anywhere within 4 km on the map.</p></div></li>
+          <li><span class="lp-steps__n"><svg class="i" aria-hidden="true"><use href="#i-bag"/></svg></span><div><small>Step 2</small><b>Fill your basket</b><p>Choose fresh groceries and quality essentials.</p></div></li>
+          <li><span class="lp-steps__n"><svg class="i" aria-hidden="true"><use href="#i-cash"/></svg></span><div><small>Step 3</small><b>Pay at your door</b><p>Your rider brings the order. Pay in cash when it arrives.</p></div></li>
         </ol>
       </div>
     </section>
@@ -246,7 +281,7 @@
     <section class="lp-section lp-section--tight" id="delivery" aria-labelledby="delivery-title">
       <div class="wrap">
         <div class="lp-area" data-reveal>
-          <div class="lp-area__ring" aria-hidden="true"><span>📍</span></div>
+          <div class="lp-area__ring" aria-hidden="true"><svg class="i"><use href="#i-pin"/></svg></div>
           <p class="lp-kicker lp-kicker--yellow">Where we deliver</p>
           <h2 class="lp-area__km" id="delivery-title"><span data-count="4">4</span> km</h2>
           <p class="lp-area__sub">around the Clock Tower, Dharga Town. Orders every day, 8 AM to 9 PM.</p>
@@ -267,11 +302,11 @@
         <p class="lp-kicker">Questions</p>
         <h2 class="lp-h2" id="faq-title" data-reveal>Good to know.</h2>
         <div class="lp-faq" data-reveal>
-          <details open><summary>How much is delivery?</summary><p>From LKR 100, depending on how far you are. The app shows the exact fee before you place the order.</p></details>
-          <details><summary>How do I pay?</summary><p>In cash to your rider when the order arrives.</p></details>
-          <details><summary>When can I order?</summary><p>Every day, from 8 AM to 9 PM.</p></details>
-          <details><summary>Do you deliver to my area?</summary><p>Within 4 km of the Clock Tower in Dharga Town, including Aluthgama. The app checks your pin for you.</p></details>
-          <details><summary>Do I need the Play Store?</summary><p>No. Open Blynk in your browser and add it to your Home Screen. It is free.</p></details>
+          <details open><summary>How much is delivery?<svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p>From LKR 100, depending on how far you are. The app shows the exact fee before you place the order.</p></details>
+          <details><summary>How do I pay?<svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p>In cash to your rider when the order arrives.</p></details>
+          <details><summary>When can I order?<svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p>Every day, from 8 AM to 9 PM.</p></details>
+          <details><summary>Do you deliver to my area?<svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p>Within 4 km of the Clock Tower in Dharga Town, including Aluthgama. The app checks your pin for you.</p></details>
+          <details><summary>Do I need the Play Store?<svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></summary><p>No. Open Blynk in your browser and add it to your Home Screen. It is free.</p></details>
         </div>
       </div>
     </section>
@@ -281,9 +316,9 @@
       <div class="wrap lp-final__inner">
         <h2 id="about-title">Your groceries are a tap away.</h2>
         <p>Blynk brings freshly sourced groceries and quality essentials to your door in Dharga Town and its 4 km surroundings, including Aluthgama.</p>
-        <button type="button" class="lp-btn lp-btn--ink lp-btn--block lp-btn--shine" data-install>
+        <button type="button" class="lp-btn lp-btn--yellow lp-btn--block lp-btn--shine" data-install>
           Order on Blynk
-          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          <svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg>
         </button>
       </div>
     </section>
@@ -292,7 +327,7 @@
   <!-- Phones: the order button stays at hand once the hero's buttons have scrolled away. -->
   <div class="lp-sticky" data-sticky-cta hidden>
     <button type="button" class="lp-btn lp-btn--ink lp-btn--block" data-install>Order on Blynk
-      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></button>
   </div>
 
   <footer class="footer">
@@ -348,6 +383,6 @@
 
   <script src="/analytics.js?v=20261015a" defer></script>
   <script src="/walkthrough.js?v=20261010a" defer></script>
-  <script src="/app.js?v=20261019b" defer></script>
+  <script src="/app.js?v=20261020a" defer></script>
 </body>
 </html>
