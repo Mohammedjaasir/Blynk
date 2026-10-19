@@ -163,6 +163,8 @@ describe('GET /store never shows the km prices', () => {
     const res = await request(app).get('/api/v1/store');
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ delivery_fee_lkr: null, delivery_fee_mode: 'DISTANCE_TIERS', delivery_fee_by_distance: true });
+    // only the lowest fee - the first km's - so the app can say "From LKR 100" (owner, 2026-10-19)
+    expect(res.body.data.delivery_fee_from_lkr).toBe(100);
     // the delivery-area map's centre (customer app, 2026-10-14): the active store's location
     const hub = (await pool.query('SELECT latitude, longitude FROM dark_stores WHERE is_active = true ORDER BY created_at LIMIT 1')).rows[0];
     expect(res.body.data.store_location).toEqual(hub ? { lat: Number(hub.latitude), lng: Number(hub.longitude) } : null);
@@ -172,7 +174,7 @@ describe('GET /store never shows the km prices', () => {
 
     await setRow({ fee_lkr: 100 });
     const flat = (await request(app).get('/api/v1/store')).body.data;
-    expect(flat).toMatchObject({ delivery_fee_lkr: 100, delivery_fee_mode: 'FLAT', delivery_fee_by_distance: false });
+    expect(flat).toMatchObject({ delivery_fee_lkr: 100, delivery_fee_mode: 'FLAT', delivery_fee_by_distance: false, delivery_fee_from_lkr: 100 });
   });
 });
 

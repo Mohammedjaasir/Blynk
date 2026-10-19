@@ -56,7 +56,11 @@ export const ProductCard = memo(function ProductCard({
   const offer = shown.offer;
   // sold in sizes: "LKR 50 – 350" ("From LKR 50" when narrow); a lead time: "Delivered from Fri 17 Oct"
   const sized = hasVariants(p);
-  const priceLine = sized ? priceText(p, { compact: width < 116, money }) : money(shown.price);
+  // a sized product with an MRP to strike reads "From LKR 240" so the struck MRP can show beside it
+  // (owner, 2026-10-19: "the offer price cut down is not showing here" - the Baby Care tile's range
+  // hid it)
+  const mrpToStrike = sized && !DEMO && shown.struck?.kind === 'mrp';
+  const priceLine = sized ? priceText(p, { compact: width < 116 || mrpToStrike, money }) : money(shown.price);
   // MRP (migration 048): a sized tile's MRP is its cheapest size's, so it is struck only where the
   // tile shows one starting price ("From LKR 50" / one price) - never beside a full range, where
   // the regular price stays the reference on an offer (as before)

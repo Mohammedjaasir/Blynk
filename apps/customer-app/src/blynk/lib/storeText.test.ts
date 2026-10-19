@@ -27,6 +27,8 @@ test('delivery fee text: a plain number while free deliveries apply (owner, 2026
   expect(flatFee(flat)).toBe(100);
   expect(deliveryFeeText(flat, formatLkr)).toBe('LKR 100');
   expect(deliveryFeeText(null, formatLkr)).toBe('Calculated at checkout');
+  // per-km fees: the lowest one before the address is known (owner, 2026-10-19)
+  expect(deliveryFeeText({ ...off, delivery_fee_from_lkr: 100 }, formatLkr)).toBe('From LKR 100');
 });
 
 test('reopens text uses Sri Lanka time and hides when unknown', () => {

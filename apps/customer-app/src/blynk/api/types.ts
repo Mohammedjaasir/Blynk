@@ -90,6 +90,8 @@ export interface OnlinePaymentInfo {
 }
 export interface StoreInfo {
   delivery_fee_lkr: number | null; delivery_fee_mode: 'FLAT' | 'DISTANCE_TIERS';
+  /** The lowest delivery fee (per-km tiers: the first km's), for "From LKR 100" before an address is known. */
+  delivery_fee_from_lkr?: number | null;
   /** Name of the active dark store, e.g. "Dharga Town Central Dark Store"; null when none is set up. */
   hub_name?: string | null;
   radius_km: number | null; coupons_enabled: boolean; show_offer_savings: boolean;

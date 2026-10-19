@@ -246,6 +246,7 @@ describe('Delivery fee setting and GET /store', () => {
       // Per-km tiers (owner, 2026-10-10): FLAT here; the tier table is never public.
       delivery_fee_mode: 'FLAT',
       delivery_fee_by_distance: false,
+      delivery_fee_from_lkr: expect.any(Number),
       hub_name: expect.any(String),
       delivery_hours: { start: '08:00', end: '21:00', timezone: 'Asia/Colombo' },
       radius_km: expect.any(Number),

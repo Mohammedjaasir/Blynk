@@ -57,7 +57,11 @@ export function offerSavingsOn(store?: StoreInfo | null, product?: Pick<Product,
 export function deliveryFeeText(store: StoreInfo | null, format: (n: number) => string): string {
   if (freeDeliveryCount(store) > 0) return format(0);
   const flat = flatFee(store);
-  return flat != null ? format(flat) : 'Calculated at checkout';
+  if (flat != null) return format(flat);
+  // per-km fees: the lowest one until the address is known (owner, 2026-10-19: "we have to show
+  // case the delivery amount" instead of "Calculated at checkout")
+  const from = store?.delivery_fee_from_lkr;
+  return typeof from === 'number' && Number.isFinite(from) && from > 0 ? `From ${format(from)}` : 'Calculated at checkout';
 }
 
 /** "Reopens Tue, 8 AM" from next_open_at / reopens_at (shown in Sri Lanka time); null when unknown. */

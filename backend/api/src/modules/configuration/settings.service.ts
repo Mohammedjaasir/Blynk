@@ -14,7 +14,7 @@ import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.
 import { publicOnlinePayment } from '../payments/gateway-settings.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
 import { RIDER_BATCHING_KEY, getBatchingRules, type BatchingRules } from '../riders/batching.js';
-import { kmTiersFrom, kmTiersSchema, type KmTier } from '../pricing/km-tiers.js';
+import { kmTiersFrom, kmTiersSchema, priceByKmTiers, type KmTier } from '../pricing/km-tiers.js';
 import { pointsSettings } from '../loyalty/points.service.js';
 import { publicPointsProgram } from '../loyalty/points.rules.js';
 
@@ -798,6 +798,9 @@ export class SettingsService {
       delivery_fee_lkr: byDistance ? null : fee.fee_lkr,
       delivery_fee_mode: fee.fee_mode,
       delivery_fee_by_distance: byDistance,
+      // Owner, 2026-10-19: "we have to show case the delivery amount" - per-km tiers: the
+      // lowest fee (the first km's), so the app can say "From LKR 100" before it has an address.
+      delivery_fee_from_lkr: byDistance ? priceByKmTiers(fee.tiers, 0, fee.max_fee_lkr).total : fee.fee_lkr,
       hub_name: store?.name ?? null,
       // Today's hours, or the next open day's when today is closed.
       delivery_hours: { ...displayHours(schedule, now), timezone: STORE_TIMEZONE },
