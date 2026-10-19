@@ -58,6 +58,44 @@ export async function enqueueOrderStatusPush(
 }
 
 /**
+ * "New order" on every Admin / Operations staff device (owner, 2026-10-19: "Ops app should send
+ * notifications when order received"). Queued when an order becomes PLACED - at checkout for cash
+ * on delivery, or when an online payment is confirmed - in that transaction (sent after commit).
+ * Best effort: never fails or blocks the order.
+ */
+export async function enqueueNewOrderStaffPush(
+  trx: Trx,
+  order: { id: string; order_number: string; total_amount: number | string },
+): Promise<void> {
+  if (!isPushEnabled()) return;
+  await bestEffort(
+    trx,
+    async () => {
+      const staff = await trx
+        .selectFrom('users as u')
+        .select('u.id')
+        .where('u.role', 'in', ['ADMIN', 'OPERATIONS'])
+        .where('u.is_active', '=', true)
+        .where((eb) => eb.exists(eb.selectFrom('device_tokens as d').select('d.id').whereRef('d.user_id', '=', 'u.id')))
+        .execute();
+      const total = Number(order.total_amount);
+      const amount = Number.isFinite(total) ? ` · LKR ${total.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '';
+      const body = `Order ${order.order_number}${amount}. Open Blynk Ops to pack it.`;
+      for (const s of staff) {
+        await enqueuePush(trx, {
+          userId: s.id,
+          orderId: order.id,
+          type: PUSH_TYPES.NEW_ORDER,
+          idempotencyKey: `new-order:${order.id}:${s.id}`,
+          payload: { title: 'New order received', body, data: { type: 'staff_order', order_id: order.id } },
+        });
+      }
+    },
+    (err) => logger.error({ err, orderId: order.id }, 'Could not queue the new-order staff push; the order goes ahead')
+  );
+}
+
+/**
  * "Back in stock": when a product is available to customers again
  * (is_active and is_available, not deleted), queues one push per pending
  * subscriber and marks each alert notified, so every alert fires once.

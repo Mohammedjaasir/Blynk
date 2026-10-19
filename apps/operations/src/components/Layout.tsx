@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { BackgroundLocationPrompt } from './BackgroundLocationPrompt';
 import { LowStockProvider, useLowStock } from './LowStock';
+import { NewOrderAlert } from './NewOrderAlert';
 
 /**
  * Operations shell: a bottom tab bar, not a desktop sidebar - a deliberate
@@ -57,6 +58,8 @@ function Shell() {
       <main className="content">
         <Outlet />
       </main>
+      {/* New order: chime, buzz, banner and a phone notification (owner, 2026-10-19). */}
+      <NewOrderAlert />
       <BackgroundLocationPrompt />
 
       <nav className="tabbar" aria-label="Primary">

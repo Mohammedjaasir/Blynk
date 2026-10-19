@@ -74,6 +74,8 @@ describe('push broadcast', () => {
     const again = await send({ title: 'Store is open now', body: 'Start ordering on Blynk' });
     expect(again.status).toBe(409);
     expect(again.body.error.code).toBe('BROADCAST_TOO_SOON');
+    // out of the shared outbox at once, so other files' worker batches never meet them
+    await pool.query(`DELETE FROM notifications WHERE notification_type = 'PUSH_BROADCAST' AND created_at >= $1`, [testStart]);
   });
 
   it('refuses bad input and other roles', async () => {

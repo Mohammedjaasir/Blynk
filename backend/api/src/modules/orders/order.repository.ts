@@ -4,6 +4,7 @@ import { db } from '../../database/connection.js';
 import { Database, OrderStatus, ItemFulfillmentStatus } from '../../database/types.js';
 import { ACTIVE_DELIVERY_STATUSES, initialOrderStatus, isUncostedSubstitution } from './lifecycle/catalogue.js';
 import { recordOrderPlaced } from './lifecycle/status-writer.js';
+import { enqueueNewOrderStaffPush } from '../notifications/push/push.events.js';
 import { DELIVERY_PUBLIC_SELECT } from './delivery.columns.js';
 import { evaluateCoupon, recordRedemption } from '../coupons/coupon.service.js';
 import {
@@ -508,6 +509,8 @@ export class OrderRepository {
 
       // 4. Record initial status in order_status_history (lifecycle PLACE_ORDER)
       await recordOrderPlaced(trx, order.id, data.customer_id, initialStatus);
+      // Staff "New order" push (owner, 2026-10-19); an online order waits for its payment
+      if (initialStatus === 'PLACED') await enqueueNewOrderStaffPush(trx, order);
 
       // 5. No "order placed" SMS (owner, 2026-10-07: SMS cost) - the app
       // shows the confirmation. See CUSTOMER_ORDER_SMS (lifecycle/notify.ts).

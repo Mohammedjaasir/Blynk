@@ -3,7 +3,7 @@ import type { OrderStatus, OrdersTable } from '../../../database/types.js';
 import { AppError } from '../../../middleware/error.middleware.js';
 import type { Actor, OrderRow, Trx } from './types.js';
 import { INITIAL_ORDER_STATUS } from './catalogue.js';
-import { enqueueOrderStatusPush } from '../../notifications/push/push.events.js';
+import { enqueueNewOrderStaffPush, enqueueOrderStatusPush } from '../../notifications/push/push.events.js';
 
 /** Order columns an action may change alongside the status - never the status itself. */
 export type OrderFields = Omit<Updateable<OrdersTable>, 'order_status' | 'id'>;
@@ -56,6 +56,8 @@ export async function setOrderStatus(
   // The customer's app push, sent by the outbox worker after commit. Best
   // effort: it can never fail or block the transition.
   await enqueueOrderStatusPush(trx, updated, order.order_status, to);
+  // an online order whose payment just went through is a new order for staff (owner, 2026-10-19)
+  if (order.order_status === 'AWAITING_PAYMENT' && to === 'PLACED') await enqueueNewOrderStaffPush(trx, updated);
 
   return updated;
 }

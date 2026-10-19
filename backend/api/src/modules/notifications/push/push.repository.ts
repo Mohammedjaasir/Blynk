@@ -10,6 +10,8 @@ export const PUSH_TYPES = {
   BACK_IN_STOCK: 'PUSH_BACK_IN_STOCK',
   APPOINTMENT_REMINDER: 'PUSH_APPOINTMENT_REMINDER',
   RATING_PROMPT: 'PUSH_RATING_PROMPT',
+  /** Staff: an order to pack (owner, 2026-10-19). */
+  NEW_ORDER: 'PUSH_NEW_ORDER',
 } as const;
 
 /** What a PUSH outbox row carries; the worker sends exactly this. */
