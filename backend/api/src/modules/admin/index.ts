@@ -16,6 +16,7 @@ import { smsOffersRouter } from '../sms-offers/index.js';
 import { adminCashRouter } from '../cash/index.js';
 import { adminRewardsRouter } from '../loyalty/index.js';
 import { adminWalletRouter } from '../wallet/index.js';
+import { adminPushBroadcastRouter } from '../notifications/push/broadcast.js';
 import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
 import { purchaseList } from '../inventory/purchase-list.js';
@@ -98,6 +99,10 @@ adminRouter.use(adminRewardsRouter);
 // wallet, order refunds (ADMIN and OPERATIONS) and adjustments (ADMIN only),
 // guarded inside.
 adminRouter.use(adminWalletRouter);
+
+// Push notification to every customer who allowed notifications (owner,
+// 2026-10-19: "store is open now, start ordering"); ADMIN and OPERATIONS.
+adminRouter.use(adminPushBroadcastRouter);
 
 // Store Operations & Fulfillment Queue (Guarded by ADMIN and PACKING_STAFF)
 adminRouter.get(

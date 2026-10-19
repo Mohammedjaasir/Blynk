@@ -30,6 +30,7 @@ import { Settings } from './pages/Settings';
 import { RiderEarnings } from './pages/RiderEarnings';
 import { RiderRequests } from './pages/RiderRequests';
 import { SmsOffers } from './pages/SmsOffers';
+import { Notifications } from './pages/Notifications';
 import { Staff } from './pages/Staff';
 
 /**
@@ -111,6 +112,8 @@ export function AppRoutes() {
         <Route path="customers" element={<AdminOnly><Customers /></AdminOnly>} />
         <Route path="customers/:id" element={<AdminOnly><CustomerDetail /></AdminOnly>} />
         <Route path="sms-offers" element={<AdminOnly><SmsOffers /></AdminOnly>} />
+        {/* Push to every customer who allowed notifications (owner, 2026-10-19). */}
+        <Route path="notifications" element={<AdminOnly><Notifications /></AdminOnly>} />
         <Route path="feedback" element={<AdminOnly><Feedback /></AdminOnly>} />
         <Route path="dental-doctors" element={<AdminOnly><DentalDoctors /></AdminOnly>} />
         <Route path="staff" element={<AdminOnly><Staff /></AdminOnly>} />

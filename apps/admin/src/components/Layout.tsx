@@ -133,6 +133,10 @@ export function Layout() {
               <NavLink to="/sms-offers" className="nav__item">
                 SMS offers
               </NavLink>
+              {/* Push to every customer who allowed notifications (owner, 2026-10-19). */}
+              <NavLink to="/notifications" className="nav__item">
+                Notifications
+              </NavLink>
               <NavLink to="/feedback" className="nav__item">
                 Feedback
               </NavLink>

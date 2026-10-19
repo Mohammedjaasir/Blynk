@@ -163,6 +163,12 @@ export function More() {
           </Link>
         </li>
         <li>
+          {/* Push to every customer who allowed notifications (owner, 2026-10-19). */}
+          <Link className="cat-hub__card" to="/more/notifications">
+            <span className="cat-hub__title">Notifications</span>
+          </Link>
+        </li>
+        <li>
           {/* Birthday-week gift and birthday SMS (owner, 2026-10-09). */}
           <Link className="cat-hub__card" to="/more/birthday-offer">
             <span className="cat-hub__title">Birthday offer</span>

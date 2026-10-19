@@ -47,6 +47,7 @@ import { Riders } from './pages/Riders';
 import { RiderEarnings } from './pages/RiderEarnings';
 import { RiderPay } from './pages/RiderPay';
 import { SmsOffers } from './pages/SmsOffers';
+import { Notifications } from './pages/Notifications';
 import { BirthdayOffer } from './pages/BirthdayOffer';
 import { StoreHours } from './pages/StoreHours';
 import { Coupons } from './pages/Coupons';
@@ -185,6 +186,8 @@ export function AppRoutes() {
         <Route path="more/deliver" element={<DeliverMyself />} />
         <Route path="more/staff" element={<StaffAccounts />} />
         <Route path="more/sms-offers" element={<SmsOffers />} />
+        {/* Push to every customer who allowed notifications (owner, 2026-10-19). */}
+        <Route path="more/notifications" element={<Notifications />} />
         <Route path="more/birthday-offer" element={<BirthdayOffer />} />
         {/* Opening hours, close-now, holidays, delivery slots (owner, 2026-10-10). */}
         <Route path="more/opening-hours" element={<StoreHours />} />
