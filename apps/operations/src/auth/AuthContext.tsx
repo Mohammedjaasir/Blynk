@@ -12,6 +12,7 @@ import { auth as authApi } from '../api/resources';
 import type { AuthUser } from '../api/types';
 import { probeRiderCapability, type RiderCapability } from './riderProbe';
 import { stopTracking } from '../lib/tracker-session';
+import { stopStaffPush } from '../lib/staffPush';
 
 /**
  * Operations session, built on the existing Blynk OTP authentication - there
@@ -170,6 +171,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    // this phone stops getting "New order" pushes (while still signed in, so the API accepts it)
+    await stopStaffPush();
     try {
       await authApi.logout();
     } catch {

@@ -4,13 +4,14 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { orders } from '../api/resources';
 import { isNativeApp } from '../api/native-client';
 import { NEW_ORDER_POLL_MS, newOrdersSince, newOrderText, type SeenOrder } from '../lib/newOrders';
+import { hasStaffPushToken, startStaffPush } from '../lib/staffPush';
 
 /**
  * New-order alert (owner, 2026-10-19: "Ops app should send notifications when order received").
  * While the app runs - on any tab, also in the background until Android stops it - it checks the
  * packing queue every 20 s; a newly placed order chimes, vibrates, shows a banner here and a phone
- * notification (Capacitor local notifications; no Firebase needed). With the app fully closed the
- * server's "New order" push reaches the phone once Firebase is set up for the app.
+ * notification (Capacitor local notifications). With the app fully closed the server's
+ * "New order received" Firebase push reaches the phone (lib/staffPush.ts).
  */
 export function NewOrderAlert() {
   const navigate = useNavigate();
@@ -18,14 +19,21 @@ export function NewOrderAlert() {
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
 
   useEffect(() => {
-    if (isNativeApp()) {
-      void LocalNotifications.requestPermissions().catch(() => {});
-      const sub = LocalNotifications.addListener('localNotificationActionPerformed', () => navigate('/orders'));
-      return () => {
-        void sub.then((s) => s.remove()).catch(() => {});
-      };
-    }
-    return undefined;
+    if (!isNativeApp()) return undefined;
+    void LocalNotifications.requestPermissions().catch(() => {});
+    const sub = LocalNotifications.addListener('localNotificationActionPerformed', () => navigate('/orders'));
+    // Firebase push: the server's "New order received" reaches the phone with the app closed
+    let stopPush: (() => void) | null = null;
+    let alive = true;
+    void startStaffPush(() => navigate('/orders')).then((stop) => {
+      if (alive) stopPush = stop;
+      else stop();
+    });
+    return () => {
+      alive = false;
+      stopPush?.();
+      void sub.then((s) => s.remove()).catch(() => {});
+    };
   }, [navigate]);
 
   useEffect(() => {
@@ -41,7 +49,9 @@ export function NewOrderAlert() {
         const text = newOrderText(fresh);
         setBanner(text);
         ring();
-        if (isNativeApp()) {
+        // in the background a registered phone already gets the server's push: no second one
+        const pushCovers = document.visibilityState !== 'visible' && hasStaffPushToken();
+        if (isNativeApp() && !pushCovers) {
           await LocalNotifications.schedule({
             notifications: [{ id: next++, title: text.title, body: text.body, extra: { to: '/orders' } }],
           }).catch(() => {});

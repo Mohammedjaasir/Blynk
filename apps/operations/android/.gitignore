@@ -61,8 +61,8 @@ captures/
 .externalNativeBuild
 .cxx/
 
-# Google Services (e.g. APIs or Firebase)
-# google-services.json
+# Google Services (e.g. APIs or Firebase): kept out of git (docs/06-deployment/deployment.md)
+google-services.json
 
 # Freeline
 freeline.py
