@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, LinearTransition, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { Collapsible, PressScale } from '@/components/ui';
+import { Collapsible } from '@/components/ui';
 import { withSpring } from '@/lib/motion';
 import { C, F } from '@/lib/theme';
 import {
-  DETAILS_COPY, NOTE_MAX, RECIPIENT_NAME_MAX, recipientNameError, recipientPhoneError, type CheckoutDetails,
+  DETAILS_COPY, RECIPIENT_NAME_MAX, recipientNameError, recipientPhoneError, type CheckoutDetails,
 } from './details';
 import {
   balanceLine, BIRTHDAY_SUB, birthdayBanner, canRedeem, redeemLine, REFERRAL_SUB, referralLine,
@@ -149,18 +149,18 @@ function Field({ label, value, onChange, error, hint, keyboard, max, multiline }
   );
 }
 
-const QUICK_NOTES = ['Leave at door', 'Avoid calling', "Don't ring bell", 'Pet at home'];
-
 /**
- * "Delivery details": For someone else (only while staff allow it), quick notes and a note
- * for the rider. `showErrors` turns on the receiver checks after a Place order tap (or once
- * a field was touched).
+ * "Delivery details": For someone else (only while staff allow it). No quick notes or note for
+ * the rider any more (owner, 2026-10-19: "dont want this"), so with "For someone else" switched
+ * off in Admin / Ops the card is not shown. `showErrors` turns on the receiver checks after a
+ * Place order tap (or once a field was touched).
  */
 export function DeliveryDetailsCard({ details, setDetails, allowForSomeoneElse, codeToReceiver, showErrors }: {
   details: CheckoutDetails; setDetails: (f: (d: CheckoutDetails) => CheckoutDetails) => void;
   allowForSomeoneElse: boolean; codeToReceiver: boolean; showErrors: boolean;
 }) {
   const [touched, setTouched] = useState({ name: false, phone: false });
+  if (!allowForSomeoneElse) return null;
   const on = allowForSomeoneElse && details.forSomeoneElse;
   const set = (patch: Partial<CheckoutDetails>) => setDetails((d) => ({ ...d, ...patch }));
   return (
@@ -204,25 +204,6 @@ export function DeliveryDetailsCard({ details, setDetails, allowForSomeoneElse, 
           </Collapsible>
         </>
       )}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-        {QUICK_NOTES.map((o) => {
-          const a = details.noteChips.includes(o);
-          return (
-            <PressScale key={o} haptic onPress={() => set({ noteChips: a ? details.noteChips.filter((x) => x !== o) : [...details.noteChips, o] })}
-              style={[s.chip, a && { borderColor: C.brandDeep, backgroundColor: C.brand }]}>
-              <Text style={[s.chipTxt, a && { color: C.brandInk }]}>{o}</Text>
-            </PressScale>
-          );
-        })}
-      </View>
-      <Field
-        label={DETAILS_COPY.noteLabel}
-        hint={DETAILS_COPY.noteHint}
-        value={details.note}
-        max={NOTE_MAX}
-        multiline
-        onChange={(v) => set({ note: v })}
-      />
     </Animated.View>
   );
 }
@@ -330,6 +311,4 @@ const s = StyleSheet.create({
     fontFamily: F.medium, fontSize: 13.5, color: INK, outlineStyle: 'none',
   } as object,
   err: { fontFamily: F.medium, fontSize: 11.5, color: C.problem, marginTop: 3 },
-  chip: { height: 30, borderRadius: 15, borderWidth: 1, borderColor: '#E2E2E6', paddingHorizontal: 12, justifyContent: 'center', backgroundColor: '#fff' },
-  chipTxt: { fontFamily: F.regular, fontSize: 12, color: '#4A4A52' },
 });
