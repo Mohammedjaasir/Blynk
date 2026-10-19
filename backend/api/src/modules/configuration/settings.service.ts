@@ -100,7 +100,11 @@ export const FREE_DELIVERIES_KEY = 'new_customer_free_deliveries';
 export const DEFAULT_COUPONS_ENABLED = false;
 /** Owner, 2026-10-09: midnight in Asia/Colombo on the day it went to everyone. */
 export const DEFAULT_FREE_DELIVERIES_SINCE = new Date('2026-10-09T00:00:00+05:30').toISOString();
-export const DEFAULT_FREE_DELIVERIES = { enabled: true, count: 2, since: DEFAULT_FREE_DELIVERIES_SINCE } as const;
+/**
+ * Off unless Admin / Ops turn it on (owner, 2026-10-19: "First two orders free is still applying
+ * automatically in the platform remove this" - with no stored row it used to default to on).
+ */
+export const DEFAULT_FREE_DELIVERIES = { enabled: false, count: 2, since: DEFAULT_FREE_DELIVERIES_SINCE } as const;
 export const MAX_FREE_DELIVERIES = 10;
 /** A "since" may run this far ahead of the server clock (client clock skew). */
 const SINCE_FUTURE_SKEW_MS = 5 * 60 * 1000;

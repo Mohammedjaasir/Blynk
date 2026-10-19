@@ -76,12 +76,12 @@ afterAll(async () => {
 describe('Checkout settings', () => {
   beforeEach(deleteRows);
 
-  it('defaults to coupons off and two free deliveries when the rows are missing', async () => {
+  it('defaults to coupons off and free deliveries off when the rows are missing (owner, 2026-10-19)', async () => {
     const res = await request(app).get('/api/v1/admin/settings/checkout').set(auth(opsToken));
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({
       coupons_enabled: false,
-      new_customer_free_deliveries: { enabled: true, count: 2, since: DEFAULT_SINCE },
+      new_customer_free_deliveries: { enabled: false, count: 2, since: DEFAULT_SINCE },
       show_offer_savings: false,
       // Owner, 2026-10-12: basket free delivery off, ordering for someone else on.
       basket_free_delivery: { enabled: false, min_subtotal_lkr: 3000 },
@@ -91,13 +91,13 @@ describe('Checkout settings', () => {
     const store = await request(app).get('/api/v1/store');
     expect(store.body.data.coupons_enabled).toBe(false);
     expect(store.body.data.show_offer_savings).toBe(false);
-    expect(store.body.data.new_customer_free_deliveries).toEqual({ enabled: true, count: 2, since: DEFAULT_SINCE });
+    expect(store.body.data.new_customer_free_deliveries).toEqual({ enabled: false, count: 2, since: DEFAULT_SINCE });
   });
 
   it('Admin and Operations change each switch on its own, audited', async () => {
     const a = await patch({ coupons_enabled: true });
     expect(a.status).toBe(200);
-    expect(a.body.data).toMatchObject({ coupons_enabled: true, new_customer_free_deliveries: { enabled: true, count: 2, since: DEFAULT_SINCE } });
+    expect(a.body.data).toMatchObject({ coupons_enabled: true, new_customer_free_deliveries: { enabled: false, count: 2, since: DEFAULT_SINCE } });
 
     const b = await patch({ new_customer_free_deliveries: { enabled: false, count: 3 } }, opsToken);
     expect(b.status).toBe(200);
@@ -169,7 +169,11 @@ describe('Checkout settings', () => {
 });
 
 describe('Free deliveries for every customer', () => {
-  beforeAll(deleteRows);
+  // off by default now (owner, 2026-10-19): these cases switch it on first
+  beforeAll(async () => {
+    await deleteRows();
+    expect((await patch({ new_customer_free_deliveries: { enabled: true, count: 2 } })).status).toBe(200);
+  });
 
   it('the first two orders go out free; a cancelled one does not use one up', async () => {
     const me = await people.customer(1);
@@ -231,6 +235,7 @@ describe('Free deliveries for every customer', () => {
 
   it('orders placed before since do not use a free delivery; orders after it do', async () => {
     // An existing customer whose two orders were placed before 9 October 2026.
+    expect((await patch({ new_customer_free_deliveries: { enabled: true, count: 2 } })).status).toBe(200);
     const me = await people.customer(6);
     const info = async () => (await request(app).get('/api/v1/orders/checkout-info').set(auth(me.token))).body.data;
     const old1 = await expectCreated(await me.placeOrder([{ product_id: productId, quantity: 1 }]));
@@ -269,6 +274,7 @@ describe('Free deliveries for every customer', () => {
 describe('Coupons switched off', () => {
   beforeAll(async () => {
     await deleteRows();
+    expect((await patch({ new_customer_free_deliveries: { enabled: true, count: 2 } })).status).toBe(200);
     const res = await request(app)
       .post('/api/v1/admin/coupons')
       .set(auth(tokens.admin))
