@@ -119,7 +119,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20261014b">
-  <link rel="stylesheet" href="/landing.css?v=20261020a">
+  <link rel="stylesheet" href="/landing.css?v=20261020b">
 </head>
 <body>
   <!-- GTM-BODY-START -->
@@ -185,8 +185,13 @@
         </ul>
       </div>
 
-      <div class="lp-shot">
-        <img class="lp-shot__img" src="/assets/hero-market.webp" alt="Fresh local vegetables: long beans, snake gourd, greens and tomatoes" width="720" height="864" fetchpriority="high">
+      <!-- owner, 2026-10-20: a market photo here was "not matching"; the picture is the real app
+           (assets/app-welcome.webp, a screenshot of blynk.lk/app) on the same yellow. -->
+      <div class="lp-hero__art">
+        <div class="lp-phone lp-phone--hero">
+          <img src="/assets/app-welcome.webp" alt="The Blynk app's welcome screen: Groceries, delivered fast" width="780" height="1688" fetchpriority="high">
+        </div>
+        <span class="lp-float lp-float--a" aria-hidden="true"><img src="/assets/aisles/vegetables.webp" alt="" width="360" height="360" fetchpriority="low"></span>
         <ol class="lp-chips" aria-label="How your order comes to you">
           <li><span class="lp-chips__ic"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span><span><b>Order placed</b><small>in a few taps</small></span></li>
           <li><span class="lp-chips__ic"><svg class="i" aria-hidden="true"><use href="#i-bag"/></svg></span><span><b>Packed at the store</b><small>near the Clock Tower</small></span></li>
@@ -250,16 +255,13 @@
             <li><span class="lp-feats__ic"><svg class="i" aria-hidden="true"><use href="#i-cash"/></svg></span><div><b>Pay cash at the door</b><p>No card needed. Pay your rider when it arrives.</p></div></li>
           </ul>
         </div>
-        <!-- The real app (assets/app-welcome.webp, a screenshot of blynk.lk/app); real photos float
-             round it and an order update slides in. -->
+        <!-- The real app's map (assets/app-map.webp, a screenshot of blynk.lk/app, 2026-10-20);
+             an order update slides in over it. -->
         <div class="lp-app__art" data-reveal>
           <div class="lp-phone">
-            <img src="/assets/app-welcome.webp" alt="The Blynk app's welcome screen: Groceries, delivered fast" width="780" height="1688" loading="lazy">
+            <img src="/assets/app-map.webp" alt="The Blynk app's map: place the pin at your exact delivery spot" width="780" height="1688" loading="lazy">
           </div>
           <div class="lp-toast" aria-hidden="true"><span><svg class="i"><use href="#i-scooter"/></svg></span><div><b>Your rider is on the way</b><small>Blynk order update</small></div></div>
-          <span class="lp-float lp-float--a" aria-hidden="true"><img src="/assets/aisles/vegetables.webp" alt="" width="360" height="360" loading="lazy"></span>
-          <span class="lp-float lp-float--b" aria-hidden="true"><img src="/assets/aisles/dairy.webp" alt="" width="360" height="360" loading="lazy"></span>
-          <span class="lp-float lp-float--c" aria-hidden="true"><img src="/assets/aisles/bakery.webp" alt="" width="360" height="360" loading="lazy"></span>
         </div>
       </div>
     </section>
