@@ -5,6 +5,7 @@ import { catalog, inventory as inventoryApi, settings } from '../../api/resource
 import type { AdminProduct, Category, PricingMode, SetStockInput, StaffStock, StaffVariant } from '../../api/types';
 import { CENTRE_FOCAL, ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
+import { ProductAdLinks } from '../../components/ProductAdLinks';
 import { Field, Spinner } from '../../components/ui';
 import {
   catalogErrorMessage,
@@ -798,6 +799,9 @@ export function ProductForm() {
             <StockFields form={form} setForm={setForm} errors={errors} stock={isEditing ? savedStock : null} />
           )}
         </section>
+
+        {isEditing && id ? <ProductAdLinks productId={id} productName={form.name} /> : null}
+
 
         <section className="form__section">
           <h2 className="form__section-title">Availability</h2>

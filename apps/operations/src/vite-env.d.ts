@@ -2,6 +2,8 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
+  /** The customer site product ad links point to (default https://blynk.lk). */
+  readonly VITE_SHOP_URL?: string;
   /** Dev builds only: operator phone used by the sign-in page's Skip button. */
   readonly VITE_DEV_OPERATOR_PHONE?: string;
   /** LAN test builds only: show Skip sign-in (works only against a development API). */

@@ -12,6 +12,7 @@ import { ImageUploader } from '../components/ImageUploader';
 import { ProductVariants, StockFigures, type VariantPricingContext } from '../components/ProductVariants';
 import { Switch } from '../components/Switch';
 import { PageHeader } from '../components/Layout';
+import { ProductAdLinks } from '../components/ProductAdLinks';
 import { ApiError } from '../api/client';
 import { Field, Spinner, useToast } from '../components/ui';
 import { errorMessage, splitServerErrors } from '../lib/apiErrors';
@@ -1011,6 +1012,9 @@ export function ProductForm() {
             </p>
           </section>
         )}
+
+        {isEditing && id ? <ProductAdLinks productId={id} productName={form.name} /> : null}
+
 
         <section className="form__section">
           <h2 className="form__section-title">Availability</h2>

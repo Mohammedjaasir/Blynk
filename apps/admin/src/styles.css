@@ -3365,3 +3365,11 @@ td .mrp-capped {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* Product ad links (owner, 2026-10-20): one row per platform, link + Copy. */
+.ad-links { display: grid; gap: 10px; margin: 8px 0; }
+.ad-links__row { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+@media (max-width: 600px) {
+  .ad-links__row { grid-template-columns: minmax(0, 1fr) auto; }
+  .ad-links__row .field__label { grid-column: 1 / -1; }
+}
