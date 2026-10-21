@@ -78,3 +78,6 @@ skills-lock.json
 
 # Firebase service-account keys (secrets: they go in Coolify, never in git)
 *firebase-adminsdk*.json
+
+# Firebase config for the Rider app (owner, 2026-10-21) - never committed
+apps/rider/android/app/google-services.json

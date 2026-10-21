@@ -3,6 +3,7 @@ import { AppError } from '../../../../middleware/error.middleware.js';
 import { ACTIVE_DELIVERY_STATUSES, CATALOGUE, type ActionName } from '../catalogue.js';
 import { confirmWithCode, confirmWithOverride } from '../delivery-code.js';
 import { enqueueCustomerSms } from '../notify.js';
+import { enqueueRiderAssignedPush } from '../../../notifications/push/push.events.js';
 import { isPrepaidOnline, settleCod, type CodSettlement } from '../settlement.js';
 import { setOrderStatus } from '../status-writer.js';
 import type { ActionImpl, DeliveryRow, LockedState, OrderRow, Trx } from '../types.js';
@@ -94,6 +95,8 @@ export const assignRider: ActionImpl<DeliveryRow> = {
       rider_name: 'Blynk Rider',
       vehicle_registration_number: rider.vehicle_registration_number,
     });
+    // The rider's phone hears about it at once (owner, 2026-10-21).
+    await enqueueRiderAssignedPush(trx, { riderUserId: rider.user_id, deliveryId: delivery.id, order });
     return delivery;
   },
 };

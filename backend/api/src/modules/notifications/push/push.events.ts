@@ -96,6 +96,36 @@ export async function enqueueNewOrderStaffPush(
 }
 
 /**
+ * "New delivery" on the rider's phone when staff assign an order to them (owner, 2026-10-21: "if
+ * we assign new delivery to the rider, they don't get any notifications"). Queued in the
+ * assignment's transaction, one per assignment (a replacement rider is told too). Best effort:
+ * never fails or blocks the assignment.
+ */
+export async function enqueueRiderAssignedPush(
+  trx: Trx,
+  input: { riderUserId: string; deliveryId: string; order: { id: string; order_number: string } },
+): Promise<void> {
+  if (!isPushEnabled()) return;
+  await bestEffort(
+    trx,
+    async () => {
+      await enqueuePush(trx, {
+        userId: input.riderUserId,
+        orderId: input.order.id,
+        type: PUSH_TYPES.RIDER_ASSIGNED,
+        idempotencyKey: `rider-assigned:${input.deliveryId}`,
+        payload: {
+          title: 'New delivery assigned',
+          body: `Order ${input.order.order_number} is yours. Open Blynk Rider to pick it up.`,
+          data: { type: 'rider_delivery', order_id: input.order.id, delivery_id: input.deliveryId },
+        },
+      });
+    },
+    (err) => logger.error({ err, deliveryId: input.deliveryId }, 'Could not queue the new-delivery rider push; the assignment goes ahead')
+  );
+}
+
+/**
  * "Back in stock": when a product is available to customers again
  * (is_active and is_available, not deleted), queues one push per pending
  * subscriber and marks each alert notified, so every alert fires once.

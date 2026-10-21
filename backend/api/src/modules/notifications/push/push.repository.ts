@@ -12,6 +12,8 @@ export const PUSH_TYPES = {
   RATING_PROMPT: 'PUSH_RATING_PROMPT',
   /** Staff: an order to pack (owner, 2026-10-19). */
   NEW_ORDER: 'PUSH_NEW_ORDER',
+  /** Rider: a delivery assigned to them (owner, 2026-10-21). */
+  RIDER_ASSIGNED: 'PUSH_RIDER_ASSIGNED',
 } as const;
 
 /** What a PUSH outbox row carries; the worker sends exactly this. */
