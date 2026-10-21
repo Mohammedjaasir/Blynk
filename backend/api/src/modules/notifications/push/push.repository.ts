@@ -14,6 +14,8 @@ export const PUSH_TYPES = {
   NEW_ORDER: 'PUSH_NEW_ORDER',
   /** Rider: a delivery assigned to them (owner, 2026-10-21). */
   RIDER_ASSIGNED: 'PUSH_RIDER_ASSIGNED',
+  /** Staff: the 1st / 100th / 1,000th order, for marketing (owner, 2026-10-21). */
+  ORDER_MILESTONE: 'PUSH_ORDER_MILESTONE',
 } as const;
 
 /** What a PUSH outbox row carries; the worker sends exactly this. */

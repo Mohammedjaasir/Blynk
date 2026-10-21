@@ -1,6 +1,6 @@
 import { db } from '../../../database/connection.js';
 import type { Database, OrderStatus } from '../../../database/types.js';
-import type { Transaction } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { logger } from '../../../utils/logger.js';
 import { bestEffort, enqueuePush, PUSH_TYPES } from './push.repository.js';
 import { isPushEnabled } from './push.sender.js';
@@ -90,9 +90,64 @@ export async function enqueueNewOrderStaffPush(
           payload: { title: 'New order received', body, data: { type: 'staff_order', order_id: order.id } },
         });
       }
+      if (staff.length) await enqueueOrderMilestonePush(trx, order, staff.map((s) => s.id));
     },
     (err) => logger.error({ err, orderId: order.id }, 'Could not queue the new-order staff push; the order goes ahead')
   );
+}
+
+/** "1st", "2nd", "100th", "1,000th". */
+export function ordinal(n: number): string {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
+  return `${n.toLocaleString('en-US')}${suffix}`;
+}
+
+/**
+ * The order counts staff hear about, for marketing (owner, 2026-10-21: "notifications like which
+ * order is 1st order, 100th order, 1000 order for marketing things"): the 1st, 100th, 500th and
+ * 1,000th, then every 1,000th.
+ */
+export function isOrderMilestone(n: number): boolean {
+  return n === 1 || n === 100 || n === 500 || (n >= 1000 && n % 1000 === 0);
+}
+
+/**
+ * Counts this order among every order ever placed (an online order only once it is paid) and,
+ * on a milestone, tells the staff phones. The transaction lock makes two orders placed at the
+ * same moment count one after the other, so no milestone is skipped or told twice.
+ */
+async function enqueueOrderMilestonePush(trx: Trx, order: { id: string; order_number: string }, staffIds: string[]): Promise<void> {
+  await sql`SELECT pg_advisory_xact_lock(hashtext('blynk-order-milestone'))`.execute(trx);
+  const row = await trx
+    .selectFrom('order_status_history')
+    .select((eb) => eb.fn.count<string>('order_id').distinct().as('n'))
+    .where('new_status', '=', 'PLACED')
+    .executeTakeFirst();
+  const n = Number(row?.n ?? 0);
+  if (!isOrderMilestone(n)) return;
+  const customer = await trx
+    .selectFrom('orders as o')
+    .innerJoin('users as u', 'u.id', 'o.customer_id')
+    .select('u.full_name')
+    .where('o.id', '=', order.id)
+    .executeTakeFirst();
+  const who = customer?.full_name?.trim() ? ` from ${customer.full_name.trim()}` : '';
+  const title = n === 1 ? 'Blynk\'s first order!' : `Blynk's ${ordinal(n)} order!`;
+  for (const id of staffIds) {
+    await enqueuePush(trx, {
+      userId: id,
+      orderId: order.id,
+      type: PUSH_TYPES.ORDER_MILESTONE,
+      idempotencyKey: `order-milestone:${n}:${id}`,
+      payload: {
+        title,
+        body: `Order ${order.order_number}${who} is the ${ordinal(n)} order. A good one to celebrate on social media.`,
+        data: { type: 'staff_order', order_id: order.id },
+      },
+    });
+  }
+  logger.info({ orderId: order.id, milestone: n }, 'Order milestone reached');
 }
 
 /**
