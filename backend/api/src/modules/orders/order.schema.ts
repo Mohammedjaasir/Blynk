@@ -229,6 +229,18 @@ export const resolveItemSchema = z.object({
   item_id: z.string().uuid('item_id must be a valid UUID').optional(),
 });
 
+/** POST /admin/orders/:id/waive-delivery-fee (owner, 2026-10-21): an optional staff reason. */
+export const waiveDeliveryFeeSchema = z
+  .object({
+    reason: z
+      .string({ invalid_type_error: 'reason must be text' })
+      .trim()
+      .max(200, 'reason must be 200 characters or fewer')
+      .optional()
+      .nullable(),
+  })
+  .default({});
+
 /** Route params for /admin/orders/:id[/items/:itemId] - malformed ids are a 400. */
 export const orderItemParamsSchema = z.object({
   id: z.string().uuid('Invalid order ID'),

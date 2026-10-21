@@ -24,7 +24,9 @@ export function OrderBill({ order }: { order: OrderDetail }) {
       {order.delivery_fee != null ? (
         <div className="order-bill__row">
           <dt>Delivery</dt>
-          <dd className="mono">{formatMoney(order.delivery_fee)}</dd>
+          <dd className="mono" data-testid="bill-delivery">
+            {order.delivery_fee_waiver && !(order.delivery_fee > 0) ? 'Free (waived by staff)' : formatMoney(order.delivery_fee)}
+          </dd>
         </div>
       ) : null}
       {discount > 0 ? (

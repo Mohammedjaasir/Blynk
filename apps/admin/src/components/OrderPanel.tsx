@@ -21,6 +21,7 @@ import { Spinner } from './ui';
 import { OrderBill } from './OrderBill';
 import { OrderItems } from './OrderItems';
 import { OrderWalletRefund } from './OrderWalletRefund';
+import { OrderFreeDelivery } from './OrderFreeDelivery';
 import { walletUsed } from '../lib/wallet';
 
 /**
@@ -49,6 +50,8 @@ export function OrderPanel({
 }) {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped after a change made inside the panel (Make delivery free), so it re-reads.
+  const [localVersion, setLocalVersion] = useState(0);
   const number = shortNumber(order.order_number);
 
   useEffect(() => {
@@ -65,7 +68,7 @@ export function OrderPanel({
     return () => {
       cancelled = true;
     };
-  }, [order.id, version]);
+  }, [order.id, version, localVersion]);
 
   const actions = allowedActions(order, role);
   const primary = primaryAction(order, role);
@@ -121,6 +124,8 @@ export function OrderPanel({
               }
             />
             <OrderBill order={detail} />
+            {/* Make delivery free (owner, 2026-10-21): ADMIN and OPERATIONS. */}
+            <OrderFreeDelivery order={detail} role={role} onChanged={() => setLocalVersion((v) => v + 1)} />
           </section>
 
           <PaymentSection detail={detail} canRefund={role === 'ADMIN' || role === 'OPERATIONS'} />

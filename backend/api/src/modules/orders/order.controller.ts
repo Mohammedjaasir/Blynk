@@ -9,6 +9,7 @@ import {
   adminOrderQuerySchema,
   resolveItemSchema,
   orderItemParamsSchema,
+  waiveDeliveryFeeSchema,
 } from './order.schema.js';
 import { validateCouponSchema } from '../coupons/coupon.schema.js';
 import { z } from 'zod';
@@ -173,6 +174,22 @@ export class OrderController {
         success: true,
         data: { order },
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /admin/orders/:id/waive-delivery-fee - "Make delivery free" (owner, 2026-10-21). */
+  async waiveDeliveryFeeAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = orderItemParamsSchema.parse(req.params);
+      const input = waiveDeliveryFeeSchema.parse(req.body ?? {});
+      const order = await orderService.waiveDeliveryFee(id, input.reason, {
+        actorId: req.user!.id,
+        ipAddress: req.ip ?? null,
+        userAgent: req.get('user-agent') ?? null,
+      });
+      res.status(200).json({ success: true, data: { order } });
     } catch (err) {
       next(err);
     }

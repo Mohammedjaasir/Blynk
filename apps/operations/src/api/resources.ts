@@ -343,6 +343,15 @@ export const orders = {
           : { status: 'DELIVERED', notes: proof.overrideNote },
     }),
 
+  /** "Make delivery free" (owner, 2026-10-21; Ops is the backup admin): open
+   * cash-on-delivery orders only. The API sets the fee to 0, works out the
+   * total (the cash to collect) again and returns the order. */
+  waiveDeliveryFee: (id: string, reason?: string) =>
+    apiRequest<{ order: OrderDetail }>(`/admin/orders/${id}/waive-delivery-fee`, {
+      method: 'POST',
+      body: reason ? { reason } : {},
+    }).then((d) => d.order),
+
   /** An item that is not on the shelf (lifecycle RESOLVE_ITEM): the API
    * removes it from the bill, recalculates the total and tells the customer. */
   markItemUnavailable: (orderId: string, itemId: string) =>

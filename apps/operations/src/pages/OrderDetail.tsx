@@ -8,6 +8,7 @@ import { deliveryCodeError } from '../lib/delivery';
 import { PaymentStatus } from '../components/PaymentStatus';
 import { refundNeeded } from '../lib/payments';
 import { OrderWalletRefund } from '../components/Wallet';
+import { OrderFreeDelivery } from '../components/OrderFreeDelivery';
 import { cashToCollectText, mayRefundToWallet, walletPaidLine } from '../lib/wallet';
 import {
   ACTION_LABEL,
@@ -244,6 +245,9 @@ export function OrderDetail() {
         {grouped.loose.length > 0 ? <ul className="order-items">{grouped.loose.map(itemRow)}</ul> : null}
         <OrderBill order={detail} />
       </section>
+
+      {/* Make delivery free (owner, 2026-10-21): open cash-on-delivery orders. */}
+      <OrderFreeDelivery order={detail} onChanged={() => void load()} />
 
       <section className="order-detail__section" aria-label="Customer">
         <h2 className="order-detail__label">Customer</h2>

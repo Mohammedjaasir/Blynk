@@ -682,6 +682,17 @@ export const orders = {
           : { status: 'DELIVERED', notes: proof.notes },
     }),
 
+  /**
+   * "Make delivery free" (owner, 2026-10-21): ADMIN and OPERATIONS, open
+   * cash-on-delivery orders only. The API sets the fee to 0, works out the
+   * total (the cash to collect) again and returns the order.
+   */
+  waiveDeliveryFee: (id: string, reason?: string) =>
+    apiRequest<{ order: OrderDetail }>(`/admin/orders/${id}/waive-delivery-fee`, {
+      method: 'POST',
+      body: reason ? { reason } : {},
+    }).then((d) => d.order),
+
   /** A pending item the store cannot supply (lifecycle RESOLVE_ITEM). */
   markItemUnavailable: (id: string, itemId: string) =>
     apiRequest<{ order: unknown }>(`/admin/orders/${id}/resolve-item`, {

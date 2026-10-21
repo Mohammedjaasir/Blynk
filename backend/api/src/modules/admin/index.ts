@@ -133,6 +133,16 @@ adminRouter.patch(
   orderController.updateOrderStatusAdmin.bind(orderController)
 );
 
+// "Make delivery free" for one order (owner, 2026-10-21): Admin and
+// Operations (Ops is the backup admin). Open cash-on-delivery orders only;
+// audited (orders/waive-delivery-fee.ts).
+adminRouter.post(
+  '/orders/:id/waive-delivery-fee',
+  requireAuth,
+  requireRoles(['ADMIN', 'OPERATIONS']),
+  orderController.waiveDeliveryFeeAdmin.bind(orderController)
+);
+
 // Out-of-stock / Item Unavailable resolution (both POST /resolve-item and PATCH /items/:itemId)
 adminRouter.patch(
   '/orders/:id/items/:itemId',

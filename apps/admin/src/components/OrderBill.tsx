@@ -22,6 +22,8 @@ export function OrderBill({
     wallet_amount_used?: number;
     payment_method?: 'COD' | 'ONLINE';
     payment_status?: string;
+    /** Staff made the delivery free (owner, 2026-10-21); absent on an older API. */
+    delivery_fee_waiver?: { original_fee: number } | null;
   };
 }) {
   const discount = order.discount_amount ?? 0;
@@ -38,7 +40,9 @@ export function OrderBill({
         </div>
         <div className="bill__row">
           <dt>Delivery</dt>
-          <dd className="mono">{formatMoney(order.delivery_fee)}</dd>
+          <dd className="mono" data-testid="bill-delivery">
+            {order.delivery_fee_waiver && !(order.delivery_fee > 0) ? 'Free (waived by staff)' : formatMoney(order.delivery_fee)}
+          </dd>
         </div>
         {discount > 0 ? (
           <div className="bill__row bill__row--discount">

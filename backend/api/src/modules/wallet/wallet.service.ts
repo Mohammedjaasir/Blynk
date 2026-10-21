@@ -289,13 +289,17 @@ export async function refundCancelledOrderToWallet(
  * goes back (ORDER_PAYMENT_RETURNED). On an order already paid online, money
  * held beyond what the order now costs is refunded to the wallet
  * (REFUND_ITEM). Returns the new wallet_amount_used and total_amount.
+ *
+ * `reasons` replaces the "Item unavailable" wording when the order got
+ * cheaper for another reason (staff made the delivery free, 2026-10-21).
  */
 export async function settleWalletAfterItemChange(
   executor: DBConnection,
   order: MoneyOrder & { order_number: string },
   due: number,
   itemName: string,
-  now = new Date()
+  now = new Date(),
+  reasons?: { refund: string; returned: string }
 ): Promise<{ wallet_amount_used: number; total_amount: number }> {
   const used = money(order.wallet_amount_used);
   const keep = round2(Math.min(used, Math.max(0, due)));
@@ -311,7 +315,7 @@ export async function settleWalletAfterItemChange(
         kind: 'REFUND_ITEM',
         amount: surplus,
         orderId: order.id,
-        reason: `Item unavailable: ${itemName}`,
+        reason: reasons?.refund ?? `Item unavailable: ${itemName}`,
         now,
       });
     }
@@ -322,7 +326,7 @@ export async function settleWalletAfterItemChange(
       kind: 'ORDER_PAYMENT_RETURNED',
       amount: round2(used - keep),
       orderId: order.id,
-      reason: `Item unavailable: ${itemName} - wallet payment returned`,
+      reason: reasons?.returned ?? `Item unavailable: ${itemName} - wallet payment returned`,
       now,
     });
   }

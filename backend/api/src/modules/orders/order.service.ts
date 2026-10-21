@@ -1,4 +1,6 @@
 import { orderRepository, CreateOrderData } from './order.repository.js';
+import { deliveryFeeWaiver, waiveDeliveryFee } from './waive-delivery-fee.js';
+import type { AuditActor } from '../audit/audit.writer.js';
 import { CreateOrderInput, OrderQueryInput } from './order.schema.js';
 import { impliedMarkupPercent, recordableMarkupPercent, resolveSellingPrice, resolveVariantPrice } from '../pricing/index.js';
 import { leadForCart, leadInfo, leadTimeRequiresSlotError, slotBeforeLeadTimeError, type CartLead } from './lead-time.js';
@@ -707,7 +709,14 @@ export class OrderService {
     if (!order) {
       throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
     }
-    return order;
+    // "Make delivery free" (owner, 2026-10-21): who waived the fee, what it was, why.
+    return { ...order, delivery_fee_waiver: await deliveryFeeWaiver(order.id) };
+  }
+
+  /** POST /admin/orders/:id/waive-delivery-fee (Admin and Operations): see waive-delivery-fee.ts. */
+  async waiveDeliveryFee(orderId: string, reason: string | null | undefined, actor: AuditActor) {
+    await waiveDeliveryFee(orderId, reason ?? undefined, actor);
+    return await this.getAdminOrderById(orderId);
   }
 
   /**
