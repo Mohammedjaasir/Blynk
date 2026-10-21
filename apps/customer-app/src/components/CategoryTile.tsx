@@ -19,7 +19,9 @@ export function CategoryArt({ category, size, radius = 16, index = 0 }: { catego
   return (
     <View style={[styles.well, { width: size, height: size, borderRadius: radius, backgroundColor: wellFor(index) }]}>
       {uri && !failed ? (
-        <Image source={{ uri }} resizeMode="contain" onError={() => setFailed(true)} style={{ width: size * 0.8, height: size * 0.8 }} accessibilityIgnoresInvertColors />
+        // The picture fills the whole rounded tile (owner, 2026-10-21: a smaller picture sat as a
+        // white square inside the grey well).
+        <Image source={{ uri }} resizeMode="cover" onError={() => setFailed(true)} style={{ width: size, height: size }} accessibilityIgnoresInvertColors />
       ) : (
         <Text style={[styles.initial, { fontSize: Math.round(size * 0.42) }]}>{category.name.trim().charAt(0).toUpperCase() || '·'}</Text>
       )}
