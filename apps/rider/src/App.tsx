@@ -9,6 +9,7 @@ import { Queue } from './pages/Queue';
 import { LaunchScreen } from './components/LaunchScreen';
 import { AndroidBackButton } from './components/AndroidBackButton';
 import { AppUpdatePrompt } from './components/AppUpdate';
+import { RiderPush } from './components/RiderPush';
 
 /**
  * Route protection is for the rider's benefit only: every rider endpoint is
@@ -110,6 +111,8 @@ export function App() {
           <AppRoutes />
           {/* In-app updates (owner, 2026-10-12): signed-in staff only. */}
           <AppUpdateGate />
+          {/* "New delivery assigned" push (owner, 2026-10-21). */}
+          <RiderPush />
         </AuthProvider>
       </BrowserRouter>
       <LaunchScreen />

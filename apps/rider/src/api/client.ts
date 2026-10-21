@@ -70,7 +70,7 @@ export const tokenStore = {
 type Json = Record<string, unknown>;
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH';
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: Json;
   auth?: boolean;
 }

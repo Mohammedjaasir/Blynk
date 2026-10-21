@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { ApiError, onSessionEnded, tokenStore } from '../api/client';
 import { authApi } from '../api/resources';
 import { stopTracking } from '../lib/tracker-session';
+import { stopRiderPush } from '../lib/riderPush';
 import type { AuthUser } from '../api/types';
 
 interface AuthState {
@@ -126,6 +127,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    // This phone stops getting this rider's "New delivery" pushes (while still signed in).
+    await stopRiderPush().catch(() => undefined);
     try {
       await authApi.logout();
     } catch {
