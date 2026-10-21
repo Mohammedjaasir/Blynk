@@ -89,6 +89,12 @@ function ordersHandlers(live: BoardOrder[], closed: BoardOrder[] = []) {
 
 const lane = (name: string) => screen.findByRole('region', { name: new RegExp(`^${name}`) });
 
+/**
+ * Order-list calls that are not the board's own paging: the awaiting-payment strip, and the
+ * new-order alert's packing-queue check (NewOrderAlert, 2026-10-19), which polls once on load.
+ */
+const isSideQuery = (c: Call) => c.query.status === 'AWAITING_PAYMENT' || c.query.status === 'PLACED,ITEM_UNAVAILABLE';
+
 describe('Orders board', () => {
   it('reads every page of live orders in turn, so none is hidden', async () => {
     const all = Array.from({ length: 140 }, () => boardOrder());
@@ -103,7 +109,7 @@ describe('Orders board', () => {
     const toPack = await lane('To pack');
     await waitFor(() => expect(within(toPack).getAllByRole('listitem')).toHaveLength(140), { timeout: 5_000 });
     expect(screen.queryByText(/Showing \d+ of/)).not.toBeInTheDocument();
-    const live = api.find('GET', '/admin/orders').filter((c) => !c.query.since && c.query.status !== 'AWAITING_PAYMENT');
+    const live = api.find('GET', '/admin/orders').filter((c) => !c.query.since && !isSideQuery(c));
     expect(live.map((c) => [c.query.page, c.query.limit])).toEqual([
       ['1', '100'],
       ['2', '100'],
@@ -125,7 +131,7 @@ describe('Orders board', () => {
         timeout: 20_000,
       })
     ).toBeInTheDocument();
-    expect(api.find('GET', '/admin/orders').filter((c) => !c.query.since && c.query.status !== 'AWAITING_PAYMENT')).toHaveLength(20);
+    expect(api.find('GET', '/admin/orders').filter((c) => !c.query.since && !isSideQuery(c))).toHaveLength(20);
   }, 30_000);
 
   it('a substitution with its cost packs; one without shows "Substitution needs a cost"', async () => {

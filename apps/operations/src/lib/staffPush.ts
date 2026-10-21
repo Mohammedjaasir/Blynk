@@ -1,6 +1,11 @@
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { apiRequest } from '../api/client';
 import { isNativeApp } from '../api/native-client';
+
+/** The new-order push title; the in-app alert (NewOrderAlert) already covers those while open. */
+const NEW_ORDER_TITLE = 'New order received';
+let foregroundId = 50_000;
 
 /*
  * Firebase push for the Ops app (owner, 2026-10-19: "Ops app should send notifications when order
@@ -40,6 +45,16 @@ export async function startStaffPush(onOpenOrders: () => void): Promise<() => vo
       }),
     );
     handles.push(await PushNotifications.addListener('registrationError', () => {}));
+    // With the app open Android shows no push: show the others (e.g. "Blynk's 100th order!",
+    // owner 2026-10-21) as a phone notification; new orders already ring in the app.
+    handles.push(
+      await PushNotifications.addListener('pushNotificationReceived', (n) => {
+        if (!n.title || n.title === NEW_ORDER_TITLE) return;
+        void LocalNotifications.schedule({
+          notifications: [{ id: foregroundId++, title: n.title, body: n.body ?? '', extra: { to: '/orders' } }],
+        }).catch(() => {});
+      }),
+    );
     handles.push(await PushNotifications.addListener('pushNotificationActionPerformed', () => onOpenOrders()));
     await PushNotifications.register();
   } catch {
