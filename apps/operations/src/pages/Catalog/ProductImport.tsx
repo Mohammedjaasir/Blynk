@@ -274,7 +274,7 @@ export function ProductImport() {
                       </td>
                       <td className="mono">{r.data.sku}</td>
                       <td>{isVariant ? '—' : r.data.sub_category ? `${r.data.category} › ${r.data.sub_category}` : r.data.category}</td>
-                      <td className="mono">{r.data.purchase_cost.toFixed(2)}</td>
+                      <td className="mono">{r.data.purchase_cost !== null && r.data.purchase_cost > 0 ? r.data.purchase_cost.toFixed(2) : 'Not set'}</td>
                       <td className="mono">
                         {bad || pricing.price === null ? '—' : pricing.price.toFixed(2)}
                         {bad ? null : capped ? (

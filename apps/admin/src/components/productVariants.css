@@ -90,3 +90,9 @@
   font-weight: 800;
   color: var(--ink-2);
 }
+
+/* A cost of 0 = not set yet (owner, 2026-10-21). */
+.pv-cost-unset {
+  color: var(--ink-3);
+  font-family: inherit;
+}

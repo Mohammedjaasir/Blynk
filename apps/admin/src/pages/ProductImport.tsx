@@ -190,7 +190,7 @@ export function ProductImport() {
       <section className="panel import__steps" aria-label="File">
         <p className="panel__body">
           Columns, in this order: <span className="mono">{TEMPLATE_COLUMNS.join(', ')}</span>. Required: name,
-          category (must already exist), unit, purchase_cost (or cost_price), sku (sub_category is optional). Variant rows need parent_sku, variant and purchase_cost only.
+          category (must already exist), unit, purchase_cost (or cost_price), sku (sub_category is optional). Variant rows need parent_sku, variant and purchase_cost only. purchase_cost may be empty when selling_price is filled (no cost yet).
         </p>
         <p className="panel__body">{CATEGORY_HELP}</p>
         <div>
@@ -350,7 +350,7 @@ export function ProductImport() {
                             </>
                           )}
                         </td>
-                        <td className="num">{formatLkr(r.data.purchase_cost)}</td>
+                        <td className="num">{r.data.purchase_cost !== null && r.data.purchase_cost > 0 ? formatLkr(r.data.purchase_cost) : 'Not set'}</td>
                         <td className="num">
                           <SellingCell data={r.data} server={r.errors.length ? undefined : server} />
                         </td>

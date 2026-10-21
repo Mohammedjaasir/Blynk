@@ -25,9 +25,12 @@ import { staffStockBadge } from '../../lib/inventory';
 import { ProductVariants } from './ProductVariants';
 import { replacedImages } from '../../lib/image';
 import {
+  COST_REQUIRED_FOR_MARKUP,
   FALLBACK_DEFAULT_MARKUP_PERCENT,
   belowCostText,
   capAtMrp,
+  costInput,
+  parseCostInput,
   inheritedMarkup,
   marginPercent,
   markupPrice,
@@ -137,7 +140,9 @@ const EMPTY: FormState = {
   // The centre, which is precisely what a `cover` crop already did.
   image_focal: CENTRE_FOCAL,
   purchase_cost: '',
-  pricing_mode: 'MARKUP',
+  // New products start on Fixed price (owner, 2026-10-21): type the selling
+  // price, add the cost later.
+  pricing_mode: 'FIXED',
   custom_markup_percent: '',
   fixed_selling_price: '',
   mrp: '',
@@ -256,7 +261,7 @@ export function ProductForm() {
             x: product.image_focal_x ?? 50,
             y: product.image_focal_y ?? 50,
           },
-          purchase_cost: String(product.purchase_cost ?? ''),
+          purchase_cost: costInput(product.purchase_cost),
           pricing_mode: product.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP',
           custom_markup_percent:
             product.custom_markup_percent === null || product.custom_markup_percent === undefined
@@ -305,12 +310,8 @@ export function ProductForm() {
   /** Each category followed by its sub-categories ("Category › Sub-category"), in customer order. */
   const pickerOptions = useMemo(() => categoryOptions(categories), [categories]);
 
-  /** The purchase cost as typed, or null when it is not a valid amount yet. */
-  const cost = useMemo(() => {
-    const s = form.purchase_cost.trim();
-    const n = Number(s);
-    return s !== '' && Number.isFinite(n) && n >= 0 ? n : null;
-  }, [form.purchase_cost]);
+  /** The cost price as typed (empty = 0, not set yet), or null when it is not a valid amount. */
+  const cost = useMemo(() => parseCostInput(form.purchase_cost), [form.purchase_cost]);
 
   /**
    * Preview only - the same rule and rounding as the server (lib/pricing.ts),
@@ -324,7 +325,8 @@ export function ProductForm() {
       if ('error' in parsed) return null;
       return { price: parsed.value, markup: null };
     }
-    if (cost === null) return null;
+    // No cost price yet: a markup price cannot be worked out.
+    if (cost === null || !(cost > 0)) return null;
     const custom = parseMarkupPercent(form.custom_markup_percent);
     if ('error' in custom) return null;
     const markup = resolveMarkup(custom.value, inherited);
@@ -433,8 +435,9 @@ export function ProductForm() {
     if (form.name.trim().length < 2) next.name = 'Enter the product name';
     if (form.sku.trim().length < 3) next.sku = 'SKU must be at least 3 characters';
     if (form.unit.trim().length < 1) next.unit = 'Enter the unit, e.g. 1 L';
-    const costValue = Number(form.purchase_cost);
-    if (!Number.isFinite(costValue) || costValue < 0) next.purchase_cost = 'Enter a valid cost';
+    // Optional: empty = 0, not set yet (owner, 2026-10-21) - but Markup needs it.
+    if (cost === null) next.purchase_cost = 'Enter a valid cost';
+    else if (form.pricing_mode === 'MARKUP' && !(cost > 0)) next.purchase_cost = COST_REQUIRED_FOR_MARKUP;
     if (form.pricing_mode === 'FIXED') {
       const fixed = parseSellingPrice(form.fixed_selling_price);
       if ('error' in fixed) next.fixed_selling_price = fixed.error;
@@ -474,7 +477,8 @@ export function ProductForm() {
       image_url: form.image_url,
       image_focal_x: form.image_focal.x,
       image_focal_y: form.image_focal.y,
-      purchase_cost: Number(form.purchase_cost),
+      // Empty = 0: no cost price yet (owner, 2026-10-21).
+      purchase_cost: cost ?? 0,
       pricing_mode: form.pricing_mode,
       is_available: form.is_available,
       is_active: form.is_active,
@@ -610,7 +614,7 @@ export function ProductForm() {
           <h2 className="form__section-title" id="pricing-title">
             Pricing
           </h2>
-          <Field label="Purchase cost (LKR)" error={errors.purchase_cost}>
+          <Field label="Cost price (LKR)" hint="Optional. Leave empty until the supplier confirms it." error={errors.purchase_cost}>
             <input className="input" inputMode="decimal" value={form.purchase_cost} onChange={(event) => setForm({ ...form, purchase_cost: event.target.value })} />
           </Field>
           <p className="field__label" id="pricing-mode-label">
@@ -668,7 +672,7 @@ export function ProductForm() {
               <p className="form__note" aria-live="polite">
                 {preview?.markup
                   ? `Selling price LKR ${preview.price.toFixed(2)} (${markupSourceText(preview.markup)})`
-                  : 'Enter the purchase cost to see the selling price.'}
+                  : 'Enter the cost price to see the selling price.'}
               </p>
             </>
           )}

@@ -137,8 +137,10 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
   const costPriceCell = cellNumber(record.cost_price);
   const cost = purchaseCell !== null ? purchaseCell : costPriceCell;
   const costField = purchaseCell === null && costPriceCell !== null ? 'cost_price' : 'purchase_cost';
-  if (cost === null) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required.' });
-  else if (Number.isNaN(cost)) errors.push({ field: costField, message: 'Purchase cost must be a number.' });
+  if (cost === null) {
+    // Blank is fine with a selling_price: no cost yet - 0 for a new product, unchanged for an existing one (owner, 2026-10-21).
+    if (cellNumber(record.selling_price) === null) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required.' });
+  } else if (Number.isNaN(cost)) errors.push({ field: costField, message: 'Purchase cost must be a number.' });
   else if (cost < 0) errors.push({ field: costField, message: 'Purchase cost cannot be negative.' });
   else if (cost > MAX_IMPORT_PRICE) errors.push({ field: costField, message: 'Purchase cost can be at most 99,999,999.99.' });
   else if (!atMost2Decimals(cost)) errors.push({ field: costField, message: 'Purchase cost can have at most 2 decimals.' });
@@ -204,7 +206,8 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
     ...(!isVariant && optional('sub_category') ? { sub_category: text('sub_category') } : {}),
     unit,
     pack_size: optional('pack_size'),
-    purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : 0,
+    // Blank = null (allowed with a selling_price): the server keeps an existing product's cost.
+    purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : null,
     selling_price: selling !== null && !Number.isNaN(selling) ? selling : null,
     markup_percent: markup !== null && !Number.isNaN(markup) ? markup : null,
     // Migration 048: only when filled, so a row without it is sent as before (blank keeps the MRP).

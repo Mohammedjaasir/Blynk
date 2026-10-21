@@ -6,6 +6,8 @@ import {
   CreateProductInput,
   UpdateProductInput,
   ProductQueryInput,
+  COST_REQUIRED_FOR_MARKUP,
+  markupWithoutCost,
 } from './catalog.schema.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
@@ -670,7 +672,7 @@ export class CatalogService {
     if (offerPrice !== null) {
       const price = await priceForProduct({
         categoryId: input.category_id,
-        purchaseCost: input.purchase_cost,
+        purchaseCost: input.purchase_cost ?? 0,
         pricingMode,
         fixedSellingPrice: input.fixed_selling_price ?? null,
         customMarkupPercent: input.custom_markup_percent ?? null,
@@ -700,7 +702,8 @@ export class CatalogService {
       // cropped before migration 009.
       image_focal_x: input.image_focal_x ?? 50,
       image_focal_y: input.image_focal_y ?? 50,
-      purchase_cost: input.purchase_cost,
+      // Owner, 2026-10-21: no cost price yet = 0 (a FIXED product only).
+      purchase_cost: input.purchase_cost ?? 0,
       custom_markup_percent: input.custom_markup_percent,
       pricing_mode: pricingMode,
       fixed_selling_price: input.fixed_selling_price ?? null,
@@ -788,6 +791,15 @@ export class CatalogService {
       throw new AppError('Enter the selling price for a fixed-price product.', 400, 'FIXED_PRICE_REQUIRED', {
         field: 'fixed_selling_price',
       });
+    }
+    // Owner, 2026-10-21: no cost price yet is fine, but only at a fixed price
+    // (cost x markup would be 0). Checked when the pricing is edited, so other
+    // edits of an older row (availability, offer, name...) still work.
+    if (
+      (input.purchase_cost !== undefined || input.pricing_mode !== undefined || input.custom_markup_percent !== undefined) &&
+      markupWithoutCost(pricingMode, input.purchase_cost ?? Number(existing.purchase_cost))
+    ) {
+      throw new AppError(COST_REQUIRED_FOR_MARKUP, 400, 'PURCHASE_COST_REQUIRED', { field: 'purchase_cost' });
     }
     const costTouched =
       input.purchase_cost !== undefined ||

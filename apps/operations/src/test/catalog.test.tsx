@@ -239,7 +239,8 @@ describe('Product form', () => {
     await user.type(screen.getByLabelText('Product name'), 'Coconut Water');
     await user.type(screen.getByLabelText('SKU'), 'CW-500');
     await user.type(screen.getByLabelText(/^Unit/), '500 ml');
-    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '150');
+    await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), '150');
+    await user.click(screen.getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
     await user.click(screen.getByRole('button', { name: 'Create product' }));
 
     await waitFor(() => {
@@ -269,7 +270,7 @@ describe('Product form', () => {
     await user.type(screen.getByLabelText('Product name'), 'X');
     await user.type(screen.getByLabelText('SKU'), 'ab');
     await user.type(screen.getByLabelText(/^Unit/), 'ea');
-    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '10');
+    await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), '10');
     await user.click(screen.getByRole('button', { name: 'Create product' }));
 
     expect(await screen.findByText('SKU must be at least 3 characters')).toBeInTheDocument();
@@ -286,7 +287,8 @@ describe('Product form', () => {
     await user.type(screen.getByLabelText('Product name'), 'Coconut Water');
     await user.type(screen.getByLabelText('SKU'), 'CW-500');
     await user.type(screen.getByLabelText(/^Unit/), '500 ml');
-    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '150');
+    await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), '150');
+    await user.click(screen.getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
     await user.click(screen.getByRole('button', { name: 'Create product' }));
 
     expect(await screen.findByText("Product with SKU 'CW-500' already exists.")).toBeInTheDocument();
@@ -971,7 +973,8 @@ describe('Image focal point', () => {
     await user.type(screen.getByLabelText('Product name'), 'Coconut Oil 1L');
     await user.type(screen.getByLabelText('SKU'), 'SKU-CO-1');
     await user.type(screen.getByLabelText(/^Unit/), '1 L');
-    await user.type(screen.getByLabelText(/^Purchase cost/), '500');
+    await user.type(screen.getByLabelText(/^Cost price/), '500');
+    await user.click(screen.getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
     await user.click(screen.getByRole('button', { name: 'Create product' }));
 
     await waitFor(() => {
@@ -1042,7 +1045,8 @@ describe('Image focal point', () => {
     await user.type(screen.getByLabelText('Product name'), 'Plain Item');
     await user.type(screen.getByLabelText('SKU'), 'SKU-PL-1');
     await user.type(screen.getByLabelText(/^Unit/), '1 pc');
-    await user.type(screen.getByLabelText(/^Purchase cost/), '100');
+    await user.type(screen.getByLabelText(/^Cost price/), '100');
+    await user.click(screen.getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
     await user.click(screen.getByRole('button', { name: 'Create product' }));
 
     await waitFor(() => {

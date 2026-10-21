@@ -137,7 +137,8 @@ describe('Product form - lead time and stock', () => {
     await user.type(screen.getByLabelText('Product name'), 'Ribbon Cake');
     await user.type(screen.getByLabelText('SKU'), 'CAKE-1');
     await user.type(screen.getByLabelText(/^Unit/), '1 kg');
-    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '2500');
+    await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), '2500');
+    await user.click(screen.getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
     const lead = screen.getByLabelText(/^Delivery lead time \(days\)/);
     expect(screen.getByText('Customers can pick delivery from today + N days. 0 = same day.')).toBeInTheDocument();
     await user.clear(lead);
@@ -164,7 +165,8 @@ describe('Product form - lead time and stock', () => {
     await user.type(screen.getByLabelText('Product name'), 'Soap');
     await user.type(screen.getByLabelText('SKU'), 'SOAP-1');
     await user.type(screen.getByLabelText(/^Unit/), '100 g');
-    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '80');
+    await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), '80');
+    await user.click(screen.getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
     const lead = screen.getByLabelText(/^Delivery lead time/);
     await user.clear(lead);
     await user.type(lead, '45');
@@ -262,7 +264,8 @@ describe('Product form - variants', () => {
     const dialog = screen.getByRole('dialog', { name: 'Add variant' });
     await user.type(within(dialog).getByLabelText(/^Variant name/), '500 g');
     await user.type(within(dialog).getByLabelText(/^Variant SKU/), 'CHILLI-PWD-500G');
-    await user.type(within(dialog).getByLabelText('Variant purchase cost (LKR)'), '280');
+    await user.type(within(dialog).getByLabelText(/^Variant cost price \(LKR\)/), '280');
+    await user.click(within(dialog).getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
     // No variant or product markup: the category's 25%.
     expect(within(dialog).getByText('Selling price LKR 350.00 (category markup 25%)')).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText(/^Variant markup %/), '12.5');

@@ -22,7 +22,9 @@ import { formatMoney } from '../lib/orders';
 import { MAX_LEAD_DAYS, parseWhole } from '../lib/stock';
 import {
   MAX_SELLING_PRICE,
+  COST_REQUIRED_FOR_MARKUP,
   capAtMrp,
+  costInput,
   formatLkr,
   formatPercent,
   inheritedMarkup,
@@ -139,7 +141,9 @@ const EMPTY: FormState = {
   description: '',
   image_url: null,
   purchase_cost: '',
-  pricing_mode: 'MARKUP',
+  // New products start on Fixed price (owner, 2026-10-21): type the selling
+  // price, add the cost later.
+  pricing_mode: 'FIXED',
   custom_markup_percent: '',
   fixed_selling_price: '',
   mrp: '',
@@ -275,7 +279,7 @@ export function ProductForm() {
           barcode: product.barcode ?? '',
           description: product.description ?? '',
           image_url: product.image_url,
-          purchase_cost: String(product.purchase_cost ?? ''),
+          purchase_cost: costInput(product.purchase_cost),
           pricing_mode: mode,
           custom_markup_percent: customMarkup,
           fixed_selling_price: fixedPrice,
@@ -307,7 +311,7 @@ export function ProductForm() {
         });
         setStoredPricing({
           category_id: product.category_id,
-          purchase_cost: String(product.purchase_cost ?? ''),
+          purchase_cost: costInput(product.purchase_cost),
           pricing_mode: mode,
           custom_markup_percent: customMarkup,
           fixed_selling_price: fixedPrice,
@@ -341,7 +345,10 @@ export function ProductForm() {
    * inputs are as saved, this is the server's own price and source.
    */
   const preview = useMemo<FormPreview | null>(() => {
-    const cost = form.purchase_cost.trim() === '' ? NaN : Number(form.purchase_cost);
+    // An empty cost is 0 (not set yet): a fixed price shows without a margin
+    // or a loss; a markup price cannot be worked out without a cost.
+    const cost = form.purchase_cost.trim() === '' ? 0 : Number(form.purchase_cost);
+    if (form.pricing_mode === 'MARKUP' && !(cost > 0)) return null;
     const stored = storedPricing;
     const unchanged =
       stored !== null &&
@@ -368,7 +375,7 @@ export function ProductForm() {
             : source === 'PARENT_CATEGORY_MARKUP'
               ? parent?.name ?? null
               : null,
-        lossPerUnit: Number.isFinite(cost) && stored.price < cost ? roundCents(cost - stored.price) : null,
+        lossPerUnit: Number.isFinite(cost) && cost > 0 && stored.price < cost ? roundCents(cost - stored.price) : null,
         legacy: source === null,
       };
     }
@@ -465,11 +472,15 @@ export function ProductForm() {
     if (form.name.trim().length < 2) next.name = 'Enter the product name';
     if (form.sku.trim().length < 3) next.sku = 'SKU must be at least 3 characters';
     if (form.unit.trim().length < 1) next.unit = 'Enter the unit, e.g. 1 L';
-    const cost = Number(form.purchase_cost);
-    if (!Number.isFinite(cost) || cost < 0) {
+    // Optional: empty = 0, not set yet (owner, 2026-10-21).
+    const costText = form.purchase_cost.trim();
+    const cost = costText === '' ? 0 : Number(costText);
+    if (costText !== '' && (!Number.isFinite(cost) || cost < 0)) {
       next.purchase_cost = 'Enter a valid cost';
     } else if (cost > MAX_PURCHASE_COST) {
       next.purchase_cost = 'Purchase cost can be at most LKR 99,999,999.99';
+    } else if (form.pricing_mode === 'MARKUP' && !(cost > 0)) {
+      next.purchase_cost = COST_REQUIRED_FOR_MARKUP;
     }
     if (form.pricing_mode === 'FIXED') {
       const fixed = form.fixed_selling_price.trim();
@@ -573,7 +584,8 @@ export function ProductForm() {
       barcode: form.barcode.trim() || null,
       description: form.description.trim() || null,
       image_url: form.image_url,
-      purchase_cost: Number(form.purchase_cost),
+      // Empty = 0: no cost price yet (owner, 2026-10-21).
+      purchase_cost: form.purchase_cost.trim() === '' ? 0 : Number(form.purchase_cost.trim()),
       is_available: form.is_available,
       is_active: form.is_active,
       delivery_lead_days: Number(form.delivery_lead_days.trim() || '0'),
@@ -749,7 +761,11 @@ export function ProductForm() {
 
         <section className="form__section" aria-label="Pricing">
           <h2 className="form__section-title">Pricing</h2>
-          <Field label="Purchase cost (LKR)" error={errors.purchase_cost}>
+          <Field
+            label="Cost price (LKR)"
+            hint="Optional. Leave empty until the supplier confirms it."
+            error={errors.purchase_cost}
+          >
             <input
               className="input"
               inputMode="decimal"
@@ -1072,9 +1088,7 @@ function PricePreviewNote({ preview, mode, mrp }: { preview: FormPreview | null;
   if (!preview) {
     return (
       <p className="form__note" role="status">
-        {mode === 'FIXED'
-          ? 'Enter the purchase cost and the selling price to see the margin.'
-          : 'Enter the purchase cost to see the selling price.'}
+        {mode === 'FIXED' ? 'Enter the selling price.' : 'Enter the cost price to see the selling price.'}
       </p>
     );
   }

@@ -403,8 +403,8 @@ export interface ImportRow {
   sub_category?: string | null;
   unit: string;
   pack_size?: string | null;
-  /** The purchase cost (the older header cost_price is read into this). */
-  purchase_cost: number;
+  /** The purchase cost (the older header cost_price is read into this). null = blank: allowed with a selling_price (owner, 2026-10-21) - 0 for a new product, unchanged for an existing one. */
+  purchase_cost: number | null;
   /** Given = FIXED at exactly this price (migration 044). */
   selling_price?: number | null;
   /** Given = MARKUP with this custom markup; neither = category/parent/global markup. */
@@ -912,6 +912,14 @@ export interface OrderPayment {
   [key: string]: unknown;
 }
 
+/** Who made an order's delivery free, what the fee was and why (POST /admin/orders/:id/waive-delivery-fee). */
+export interface DeliveryFeeWaiver {
+  original_fee: number;
+  reason: string | null;
+  waived_by_name: string | null;
+  waived_at: string;
+}
+
 /** GET /admin/orders/:id - only the fields the Orders panel shows. */
 export interface OrderDetail {
   id: string;
@@ -951,6 +959,8 @@ export interface OrderDetail {
   delivery_needs_help?: boolean;
   /** Migration 043: why the delivery was free (NEW_CUSTOMER / BASKET_THRESHOLD), null when charged. */
   free_delivery_reason?: 'NEW_CUSTOMER' | 'BASKET_THRESHOLD' | null;
+  /** "Make delivery free" (owner, 2026-10-21): staff waived this order's fee; null when not, absent on an older API. */
+  delivery_fee_waiver?: DeliveryFeeWaiver | null;
   cancellation_reason: string | null;
   items: OrderItemRow[];
   /** Combo pack lines (owner, 2026-10-09); absent on older API responses. */

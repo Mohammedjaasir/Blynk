@@ -144,7 +144,8 @@ describe('product form: MRP', () => {
     await waitFor(() => expect(screen.getByRole('option', { name: 'Rice' })).toBeInTheDocument());
     await user.type(screen.getByLabelText('SKU'), 'TEST-RICE');
     await user.type(screen.getByLabelText(/^Unit/), '1 kg');
-    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '100');
+    await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), '100');
+    await user.click(screen.getByRole('button', { name: 'Markup' })); // new products start on Fixed price
     await user.type(screen.getByLabelText(/^Custom markup %/), '50');
     expect(within(pricing()).getByText('Selling price LKR 150.00 (product markup 50%)')).toBeInTheDocument();
 
@@ -232,7 +233,8 @@ describe('product form: MRP', () => {
     await user.click(within(variants).getByRole('button', { name: 'Add variant' }));
     const dialog = screen.getByRole('dialog', { name: 'Add variant' });
     await user.type(within(dialog).getByLabelText(/^Variant name/), '5 kg');
-    await user.type(within(dialog).getByLabelText('Purchase cost (LKR)'), '1000');
+    await user.type(within(dialog).getByLabelText(/^Cost price \(LKR\)/), '1000');
+    await user.click(within(dialog).getByRole('button', { name: 'Markup' })); // a new size starts on Fixed price
     await user.type(within(dialog).getByLabelText(/^MRP \(LKR\)/), '1200');
     expect(within(dialog).getByText('Selling price LKR 1,200.00 (the MRP)')).toBeInTheDocument();
     expect(within(dialog).getByText('Capped at MRP (markup would give LKR 1,250.00)')).toBeInTheDocument();

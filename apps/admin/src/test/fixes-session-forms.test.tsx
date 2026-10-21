@@ -249,7 +249,7 @@ describe('product form limits and server field errors', () => {
   it('checks markup 0-999.99 and cost up to 99,999,999.99 before sending', async () => {
     const user = userEvent.setup();
     const { api } = renderProductForm(() => undefined);
-    const cost = await screen.findByLabelText('Purchase cost (LKR)');
+    const cost = await screen.findByLabelText(/^Cost price \(LKR\)/);
     await user.clear(cost);
     await user.type(cost, '100000000');
     await user.type(screen.getByLabelText(/Custom markup %/), '1000');

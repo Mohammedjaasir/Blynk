@@ -107,7 +107,9 @@ async function fillNewProduct(user: ReturnType<typeof userEvent.setup>, category
   await user.selectOptions(screen.getByLabelText('Category'), categoryId);
   await user.type(screen.getByLabelText('SKU'), 'TEST-1');
   await user.type(screen.getByLabelText(/^Unit/), '1 kg');
-  if (cost) await user.type(screen.getByLabelText('Purchase cost (LKR)'), cost);
+  if (cost) await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), cost);
+  // New products start on Fixed price (owner, 2026-10-21); these flows test Markup.
+  await user.click(screen.getByRole('button', { name: 'Markup' }));
 }
 
 const pricing = () => screen.getByRole('region', { name: 'Pricing' });

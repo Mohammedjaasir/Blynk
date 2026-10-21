@@ -133,16 +133,18 @@ describe('Product import: selling-price modes (migration 044)', () => {
   /** A dry run shaped like the server's: pricing + warnings on every non-error row. */
   function priced(rows: ImportRow[], dryRun: boolean): ImportResult {
     const results = rows.map((r) => {
+      // The server answers with the cost it used: a blank cell (null) is 0 for a new product.
+      const cost = r.purchase_cost ?? 0;
       if (r.selling_price != null) {
         const warnings =
-          r.selling_price < r.purchase_cost
-            ? [`The selling price LKR ${r.selling_price.toFixed(2)} is below the purchase cost LKR ${r.purchase_cost.toFixed(2)}.`]
+          r.selling_price < cost
+            ? [`The selling price LKR ${r.selling_price.toFixed(2)} is below the purchase cost LKR ${cost.toFixed(2)}.`]
             : [];
         return {
           row: r.row!,
           sku: r.sku,
           status: 'created' as const,
-          pricing: { pricing_mode: 'FIXED' as const, pricing_source: 'FIXED' as const, purchase_cost: r.purchase_cost, selling_price: r.selling_price, effective_markup_percent: null },
+          pricing: { pricing_mode: 'FIXED' as const, pricing_source: 'FIXED' as const, purchase_cost: cost, selling_price: r.selling_price, effective_markup_percent: null },
           warnings,
         };
       }
@@ -151,14 +153,14 @@ describe('Product import: selling-price modes (migration 044)', () => {
           row: r.row!,
           sku: r.sku,
           status: 'created' as const,
-          pricing: { pricing_mode: 'MARKUP' as const, pricing_source: 'PRODUCT_MARKUP' as const, purchase_cost: r.purchase_cost, selling_price: 130, effective_markup_percent: r.markup_percent },
+          pricing: { pricing_mode: 'MARKUP' as const, pricing_source: 'PRODUCT_MARKUP' as const, purchase_cost: cost, selling_price: 130, effective_markup_percent: r.markup_percent },
         };
       }
       return {
         row: r.row!,
         sku: r.sku,
         status: 'skipped' as const,
-        pricing: { pricing_mode: 'MARKUP' as const, pricing_source: 'CATEGORY_MARKUP' as const, purchase_cost: r.purchase_cost, selling_price: 125, effective_markup_percent: 25 },
+        pricing: { pricing_mode: 'MARKUP' as const, pricing_source: 'CATEGORY_MARKUP' as const, purchase_cost: cost, selling_price: 125, effective_markup_percent: 25 },
       };
     });
     const count = (st: string) => results.filter((x) => x.status === st).length;

@@ -151,7 +151,8 @@ describe('Ops product form: MRP', () => {
     await user.click(await screen.findByRole('button', { name: 'Add variant' }));
     const dialog = screen.getByRole('dialog', { name: 'Add variant' });
     await user.type(within(dialog).getByLabelText(/^Variant name/), '5 kg');
-    await user.type(within(dialog).getByLabelText('Variant purchase cost (LKR)'), '1000');
+    await user.type(within(dialog).getByLabelText(/^Variant cost price \(LKR\)/), '1000');
+    await user.click(within(dialog).getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
     await user.type(within(dialog).getByLabelText(/^MRP \(LKR\)/), '1200');
     expect(within(dialog).getByText('Selling price LKR 1200.00 (the MRP)')).toBeInTheDocument();
     expect(within(dialog).getByText('Capped at MRP (markup would give LKR 1,250.00)')).toBeInTheDocument();

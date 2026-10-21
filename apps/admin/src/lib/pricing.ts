@@ -12,6 +12,20 @@ import type { Category, PricingMode, PricingSource, VariantPricingSource } from 
  *            the global default markup (20% when unknown).
  */
 
+/**
+ * Owner, 2026-10-21: "add products without cost price for now, until we get
+ * accurate cost from the supplier". The cost may be left empty (sent as 0);
+ * a stored 0 shows as empty. Markup needs a cost (cost x markup), so with no
+ * cost the product must be Fixed price - the server's own message.
+ */
+export const COST_REQUIRED_FOR_MARKUP = 'Enter the cost price, or choose Fixed price and enter the selling price.';
+
+/** A stored cost as form text: 0 / none = '' (not set yet). */
+export function costInput(cost: number | string | null | undefined): string {
+  if (cost === null || cost === undefined || cost === '') return '';
+  return Number(cost) === 0 ? '' : String(cost);
+}
+
 /** The server's global default when the setting is missing. */
 export const FALLBACK_GLOBAL_MARKUP = 20;
 /** products.custom_markup_percent / categories.markup_percent limit. */

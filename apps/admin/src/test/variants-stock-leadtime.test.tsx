@@ -281,7 +281,8 @@ describe('product form: stock section', () => {
     await user.selectOptions(screen.getByLabelText('Category'), 'spices');
     await user.type(screen.getByLabelText(/^SKU/), 'CAKE-1');
     await user.type(screen.getByLabelText(/^Unit/), '1 kg');
-    await user.type(screen.getByLabelText('Purchase cost (LKR)'), '2500');
+    await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), '2500');
+    await user.click(screen.getByRole('button', { name: 'Markup' })); // new products start on Fixed price
     const lead = screen.getByLabelText(/^Delivery lead time/);
     await user.clear(lead);
     await user.type(lead, '2');
@@ -333,7 +334,8 @@ describe('product form: variants', () => {
     const dialog = screen.getByRole('dialog', { name: 'Add variant' });
     await user.type(within(dialog).getByLabelText(/^Variant name/), '100 g');
     await user.type(within(dialog).getByLabelText(/^SKU/), 'CHILLI-PWD-100G');
-    await user.type(within(dialog).getByLabelText('Purchase cost (LKR)'), '70');
+    await user.type(within(dialog).getByLabelText(/^Cost price \(LKR\)/), '70');
+    await user.click(within(dialog).getByRole('button', { name: 'Markup' })); // a new size starts on Fixed price
     // No markup of its own yet: the category's 25%.
     expect(within(dialog).getByText('Selling price LKR 87.50 (category markup 25%)')).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText(/^Variant markup %/), '30');
@@ -411,7 +413,8 @@ describe('product form: variants', () => {
     await user.click(await within(await screen.findByRole('region', { name: 'Variants' })).findByRole('button', { name: 'Add variant' }));
     const dialog = screen.getByRole('dialog', { name: 'Add variant' });
     await user.type(within(dialog).getByLabelText(/^Variant name/), '50 g');
-    await user.type(within(dialog).getByLabelText('Purchase cost (LKR)'), '40');
+    await user.type(within(dialog).getByLabelText(/^Cost price \(LKR\)/), '40');
+    await user.click(within(dialog).getByRole('button', { name: 'Markup' })); // a new size starts on Fixed price
     await user.click(within(dialog).getByRole('button', { name: 'Add variant' }));
     expect(await within(dialog).findByText("This product already has a variant called '50 g'.")).toBeInTheDocument();
   });

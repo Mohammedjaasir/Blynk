@@ -179,6 +179,14 @@ export interface OrderHistoryRow {
   created_at: string;
 }
 
+/** Who made an order's delivery free, what the fee was and why (POST /admin/orders/:id/waive-delivery-fee). */
+export interface DeliveryFeeWaiver {
+  original_fee: number;
+  reason: string | null;
+  waived_by_name: string | null;
+  waived_at: string;
+}
+
 /**
  * `GET /admin/orders/:id`. Mirrors Admin's own `OrderDetail`, with one
  * deliberate widening: `delivery.rider_id` is kept (Admin's own type omits
@@ -231,6 +239,8 @@ export interface OrderDetail {
   /** The customer's own note on the order (packing slip). */
   customer_notes?: string | null;
   delivery_postal_code?: string | null;
+  /** "Make delivery free" (owner, 2026-10-21): staff waived this order's fee; null when not, absent on an older API. */
+  delivery_fee_waiver?: DeliveryFeeWaiver | null;
   cancellation_reason: string | null;
   items: OrderItemRow[];
   /** Combo pack lines (migration 033). Absent on older data - no combos. */
@@ -1503,7 +1513,8 @@ export interface ImportRow {
   sub_category?: string | null;
   unit: string;
   pack_size?: string | null;
-  purchase_cost: number;
+  /** null = blank: allowed with a selling_price (owner, 2026-10-21) - 0 for a new product, unchanged for an existing one. */
+  purchase_cost: number | null;
   selling_price?: number | null;
   markup_percent?: number | null;
   sku: string;

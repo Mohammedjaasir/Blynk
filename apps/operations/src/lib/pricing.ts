@@ -18,6 +18,28 @@ export type PricingMode = 'MARKUP' | 'FIXED';
 export type PricingSource = 'FIXED' | 'PRODUCT_MARKUP' | 'CATEGORY_MARKUP' | 'PARENT_CATEGORY_MARKUP' | 'GLOBAL_MARKUP';
 export type InheritedSource = Extract<PricingSource, 'CATEGORY_MARKUP' | 'PARENT_CATEGORY_MARKUP' | 'GLOBAL_MARKUP'>;
 
+/**
+ * Owner, 2026-10-21: "add products without cost price for now, until we get
+ * accurate cost from the supplier". The cost may be left empty (sent as 0);
+ * a stored 0 shows as empty. Markup needs a cost (cost x markup), so with no
+ * cost the product must be Fixed price - the server's own message.
+ */
+export const COST_REQUIRED_FOR_MARKUP = 'Enter the cost price, or choose Fixed price and enter the selling price.';
+
+/** A stored cost as form text: 0 / none = '' (not set yet). */
+export function costInput(cost: number | string | null | undefined): string {
+  if (cost === null || cost === undefined || cost === '') return '';
+  return Number(cost) === 0 ? '' : String(cost);
+}
+
+/** The cost as typed: empty = 0 (not set yet), null = not a valid amount. */
+export function parseCostInput(text: string): number | null {
+  const s = text.trim();
+  if (s === '') return 0;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 /** The global default when none is saved (backend FALLBACK_DEFAULT_MARKUP_PERCENT). */
 export const FALLBACK_DEFAULT_MARKUP_PERCENT = 20;
 /** products.custom_markup_percent / categories.markup_percent / default markup limit. */

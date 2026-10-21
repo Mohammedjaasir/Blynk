@@ -14,9 +14,12 @@ import {
 } from '../../lib/catalog';
 import { staffStockBadge } from '../../lib/inventory';
 import {
+  COST_REQUIRED_FOR_MARKUP,
   FALLBACK_DEFAULT_MARKUP_PERCENT,
   belowCostText,
   capAtMrp,
+  costInput,
+  parseCostInput,
   mrpCappedNote,
   parseMarkupPercent,
   parseMrpInput,
@@ -129,7 +132,9 @@ export function ProductVariants({
                 <div className="variant-row__main">
                   <p className="variant-row__title">{variant.label}</p>
                   <p className="cat-row__meta">
-                    {variant.sku ?? 'No SKU'} · cost LKR {Number(variant.purchase_cost).toFixed(2)}
+                    {variant.sku ?? 'No SKU'} ·{' '}
+                    {/* Cost 0 = not set yet (owner, 2026-10-21). */}
+                    {Number(variant.purchase_cost) > 0 ? `cost LKR ${Number(variant.purchase_cost).toFixed(2)}` : <span className="quiet">cost not set</span>}
                   </p>
                   <p className="cat-row__price">
                     LKR {Number(variant.selling_price).toFixed(2)}
@@ -275,7 +280,8 @@ function initialState(variant: StaffVariant | null): VariantFormState {
       sku: '',
       barcode: '',
       purchase_cost: '',
-      pricing_mode: 'MARKUP',
+      // A new size starts on Fixed price; the cost can come later (owner, 2026-10-21).
+      pricing_mode: 'FIXED',
       custom_markup_percent: '',
       fixed_selling_price: '',
       mrp: '',
@@ -293,7 +299,7 @@ function initialState(variant: StaffVariant | null): VariantFormState {
     label: variant.label,
     sku: variant.sku ?? '',
     barcode: variant.barcode ?? '',
-    purchase_cost: str(variant.purchase_cost),
+    purchase_cost: costInput(variant.purchase_cost),
     pricing_mode: variant.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP',
     custom_markup_percent: str(variant.custom_markup_percent),
     fixed_selling_price: str(variant.fixed_selling_price),
@@ -358,11 +364,8 @@ function VariantDialog({
   const submitting = useRef(false);
   const isNew = variant === null;
 
-  const cost = useMemo(() => {
-    const s = form.purchase_cost.trim();
-    const n = Number(s);
-    return s !== '' && Number.isFinite(n) && n >= 0 ? n : null;
-  }, [form.purchase_cost]);
+  /** The cost price as typed (empty = 0, not set yet), or null when it is not a valid amount. */
+  const cost = useMemo(() => parseCostInput(form.purchase_cost), [form.purchase_cost]);
 
   /** Preview only: the backend twin (lib/pricing.ts resolveVariantPrice); the server recomputes on save. */
   const preview = useMemo((): ResolvedVariantPrice | null => {
@@ -374,7 +377,8 @@ function VariantDialog({
       if ('error' in parsed) return null;
       markup = parsed.value;
     }
-    if (cost === null && form.pricing_mode === 'MARKUP') return null;
+    // No cost price yet: a markup price cannot be worked out.
+    if ((cost === null || !(cost > 0)) && form.pricing_mode === 'MARKUP') return null;
     try {
       return resolveVariantPrice({
         purchaseCost: cost ?? 0,
@@ -417,7 +421,9 @@ function VariantDialog({
     const sku = form.sku.trim();
     if (sku && (sku.length < 3 || sku.length > 64)) next.sku = 'SKU must be 3 to 64 characters (or leave it empty)';
     else if (sku && sku === product.sku) next.sku = "Use a different SKU from the product's (or leave it empty)";
+    // Optional: empty = 0, not set yet (owner, 2026-10-21) - but Markup needs it.
     if (cost === null) next.purchase_cost = 'Enter a valid cost';
+    else if (form.pricing_mode === 'MARKUP' && !(cost > 0)) next.purchase_cost = COST_REQUIRED_FOR_MARKUP;
     if (form.pricing_mode === 'FIXED') {
       const fixed = parseSellingPrice(form.fixed_selling_price);
       if ('error' in fixed) next.fixed_selling_price = fixed.error;
@@ -471,7 +477,7 @@ function VariantDialog({
       label: form.label.trim(),
       sku: form.sku.trim() || null,
       barcode: form.barcode.trim() || null,
-      purchase_cost: cost,
+      purchase_cost: cost ?? 0,
       ...pricingFields(),
       // Migration 048: the size's MRP - only when set (new) or changed (blank clears it).
       ...((variant ? form.mrp.trim() !== saved.mrp.trim() : form.mrp.trim() !== '') ? { mrp: 'value' in mrpParsed ? mrpParsed.value : null } : {}),
@@ -539,7 +545,7 @@ function VariantDialog({
             <input className="input" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
           </Field>
         </div>
-        <Field label="Variant purchase cost (LKR)" error={errors.purchase_cost}>
+        <Field label="Variant cost price (LKR)" hint="Optional. Leave empty until the supplier confirms it." error={errors.purchase_cost}>
           <input
             className="input"
             inputMode="decimal"
@@ -605,7 +611,9 @@ function VariantDialog({
           <p className="form__note" aria-live="polite">
             {preview
               ? `Selling price LKR ${preview.sellingPrice.toFixed(2)} (${variantPriceSourceText(preview)})`
-              : 'Enter the purchase cost to see the selling price.'}
+              : form.pricing_mode === 'FIXED'
+                ? 'Enter the selling price.'
+                : 'Enter the cost price to see the selling price.'}
           </p>
         )}
         {belowCost ? (

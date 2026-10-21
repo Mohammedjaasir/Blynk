@@ -6,7 +6,7 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import { lockInventoryRow, recordStockMovement } from '../inventory/stock-ledger.js';
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
-import { slugify } from './catalog.schema.js';
+import { COST_REQUIRED_FOR_MARKUP, markupWithoutCost, slugify } from './catalog.schema.js';
 import { generateUniqueSlug } from './catalog.slugs.js';
 import { resolveSellingPrice, resolveVariantPrice, type PricingMode, type PricingSource, type VariantPricingSource } from '../pricing/index.js';
 import { getGlobalMarkup } from './catalog.pricing.js';
@@ -35,7 +35,12 @@ import { getGlobalMarkup } from './catalog.pricing.js';
  *   category (e.g. "Rice" as a category and as a sub-category of "Rice &
  *   Flour") is an error asking for the parent or the slug - never a guess.
  * - Pricing (migration 044; owner, 2026-10-13). purchase_cost (or the older
- *   header cost_price) is the purchase cost. Then:
+ *   header cost_price) is the purchase cost. It may be blank when the row
+ *   gives a selling_price (owner, 2026-10-21: "add products without cost
+ *   price for now"): blank = 0 ("not set yet") for a new product/variant,
+ *   unchanged for an existing one. A row that would leave the price as
+ *   cost x markup with no cost (0) is an error - that price would be 0.
+ *   Then:
  *     selling_price given  -> FIXED at exactly that price (a price below cost
  *                             is allowed and reported as a warning);
  *     markup_percent given -> MARKUP with that custom markup;
@@ -133,7 +138,8 @@ interface CleanRow {
   sub_category?: string;
   unit: string;
   pack_size?: string;
-  cost_price: number;
+  /** Blank (only with a selling_price) = 0 for a new product, unchanged for an existing one. */
+  cost_price?: number;
   selling_price?: number;
   markup_percent?: number;
   /** Migration 048: blank = none for a new product, unchanged for an existing one. */
@@ -242,8 +248,10 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
   if (imageUrl && !isHttpUrl(imageUrl)) errors.push({ field: 'image_url', message: 'Image URL must be a valid http(s) URL' });
 
   const costField = purchaseCostCell !== undefined ? 'purchase_cost' : 'cost_price';
-  if (cost === undefined) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required' });
-  else if (!Number.isFinite(cost)) errors.push({ field: costField, message: 'Purchase cost must be a number' });
+  if (cost === undefined) {
+    // Blank is fine with a fixed selling price (owner, 2026-10-21).
+    if (selling === undefined) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required' });
+  } else if (!Number.isFinite(cost)) errors.push({ field: costField, message: 'Purchase cost must be a number' });
   else if (cost < 0) errors.push({ field: costField, message: 'Purchase cost cannot be negative' });
   else if (cost > 99_999_999.99) errors.push({ field: costField, message: 'Purchase cost is too large' });
   else if (!hasAtMost2Decimals(cost)) errors.push({ field: costField, message: 'Purchase cost can have at most 2 decimals' });
@@ -295,7 +303,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
       sub_category: subCategory,
       unit: unit!,
       pack_size: packSize,
-      cost_price: cost!,
+      cost_price: cost,
       selling_price: selling,
       markup_percent: markup,
       mrp,
@@ -334,14 +342,15 @@ function mrpOutcome(price: { mrp: number | null; computedSellingPrice: number; m
   };
 }
 
-type RowPricing = { mode: PricingMode; fixed: number | null; markup: number | null };
+type RowPricing = { mode: PricingMode; fixed: number | null; markup: number | null; /** The stored purchase cost (existing rows). */ cost?: number };
 
 /** Both price cells blank: an existing product keeps its pricing (owner, 2026-10-13). */
 const noPriceCells = (row: CleanRow) => row.selling_price === undefined && row.markup_percent === undefined;
 
 /** An existing product's stored pricing. */
-function storedPricing(existing: Pick<ExistingProduct, 'pricing_mode' | 'fixed_selling_price' | 'custom_markup_percent'>): RowPricing {
+function storedPricing(existing: Pick<ExistingProduct, 'pricing_mode' | 'fixed_selling_price' | 'custom_markup_percent' | 'purchase_cost'>): RowPricing {
   return {
+    cost: Number(existing.purchase_cost),
     mode: existing.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP',
     fixed: existing.fixed_selling_price === null ? null : Number(existing.fixed_selling_price),
     markup: existing.custom_markup_percent === null ? null : Number(existing.custom_markup_percent),
@@ -374,7 +383,7 @@ function pricingResult(
   const want = pricingFor(row, existing);
   const inherited = markups.get(categoryId);
   const price = resolveSellingPrice({
-    purchaseCost: row.cost_price,
+    purchaseCost: row.cost_price ?? existing?.cost ?? 0,
     pricingMode: want.mode,
     fixedSellingPrice: want.fixed,
     productMarkupPercent: want.markup,
@@ -427,7 +436,7 @@ function changesFor(row: CleanRow, categoryId: string, existing: ExistingProduct
   if (categoryId !== existing.category_id) changes.category_id = categoryId;
   if (row.unit !== existing.unit) changes.unit = row.unit;
   if (row.pack_size !== undefined && row.pack_size !== existing.pack_size) changes.pack_size = row.pack_size;
-  if (Number(existing.purchase_cost) !== row.cost_price) changes.purchase_cost = row.cost_price;
+  if (row.cost_price !== undefined && Number(existing.purchase_cost) !== row.cost_price) changes.purchase_cost = row.cost_price;
   const want = pricingFor(row, storedPricing(existing));
   if (want.mode !== existing.pricing_mode) changes.pricing_mode = want.mode;
   if (noPriceCells(row)) {
@@ -590,7 +599,8 @@ export async function importProducts(input: ImportProductsInput, actorId: string
             ? 'Another product already uses this SKU or name (try again, or change the SKU)'
             : 'This row could not be saved';
       if (!(err instanceof AppError)) logger.warn({ err, row: row.row, sku: row.sku }, 'Product import row failed');
-      results.push({ row: row.row, sku: row.sku, status: 'error', message, errors: [{ field: 'row', message }] });
+      const field = err instanceof AppError && err.code === 'PURCHASE_COST_REQUIRED' ? 'purchase_cost' : 'row';
+      results.push({ row: row.row, sku: row.sku, status: 'error', message, errors: [{ field, message }] });
     }
   }
 
@@ -669,8 +679,15 @@ async function pickSlug(executor: Transaction<Database> | typeof db, row: CleanR
   return generateUniqueSlug(row.name, 'product', async (s) => slugsUsed.has(s) || (await slugTaken(executor, s)), 255);
 }
 
+/** Owner, 2026-10-21: no cost is fine at a fixed price only (cost x markup would be 0). */
+function assertRowPriced(want: RowPricing, cost: number | undefined) {
+  if (markupWithoutCost(want.mode, cost)) throw new AppError(COST_REQUIRED_FOR_MARKUP, 400, 'PURCHASE_COST_REQUIRED');
+}
+
 async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>) {
   const existing = await findExisting(db, row.sku, false);
+  const stored = existing ? storedPricing(existing) : undefined;
+  assertRowPriced(pricingFor(row, stored), row.cost_price ?? stored?.cost);
   if (!existing) {
     await assertSkuNotAVariant(db, row.sku);
     slugsUsed.add(await pickSlug(db, row, slugsUsed));
@@ -688,6 +705,8 @@ async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>
 
 async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: string, slugsUsed: Set<string>, actorId: string) {
   const existing = await findExisting(trx, row.sku, true);
+  const stored = existing ? storedPricing(existing) : undefined;
+  assertRowPriced(pricingFor(row, stored), row.cost_price ?? stored?.cost);
 
   if (!existing) {
     await assertSkuNotAVariant(trx, row.sku);
@@ -705,7 +724,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
         pack_size: row.pack_size ?? null,
         description: row.description ?? null,
         image_url: row.image_url ?? null,
-        purchase_cost: row.cost_price,
+        purchase_cost: row.cost_price ?? 0,
         custom_markup_percent: want.markup,
         pricing_mode: want.mode,
         fixed_selling_price: want.fixed,
@@ -779,7 +798,8 @@ interface CleanVariantRow {
   label: string;
   sku?: string;
   barcode?: string;
-  cost_price: number;
+  /** Blank (only with a selling_price) = 0 for a new variant, unchanged for an existing one. */
+  cost_price?: number;
   selling_price?: number;
   markup_percent?: number;
   /** Migration 048: the size's MRP; blank = none (new) / unchanged (existing). */
@@ -816,8 +836,10 @@ export function validateVariantRow(
   if (sku && parentSku && sku === parentSku) errors.push({ field: 'sku', message: "A variant's SKU must differ from its product's SKU (or leave it blank)" });
   if (barcode && barcode.length > 64) errors.push({ field: 'barcode', message: 'Barcode must be at most 64 characters' });
 
-  if (cost === undefined) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required' });
-  else if (!Number.isFinite(cost)) errors.push({ field: 'purchase_cost', message: 'Purchase cost must be a number' });
+  if (cost === undefined) {
+    // Blank is fine with a fixed selling price (owner, 2026-10-21).
+    if (selling === undefined) errors.push({ field: 'purchase_cost', message: 'Purchase cost is required' });
+  } else if (!Number.isFinite(cost)) errors.push({ field: 'purchase_cost', message: 'Purchase cost must be a number' });
   else if (cost < 0) errors.push({ field: 'purchase_cost', message: 'Purchase cost cannot be negative' });
   else if (cost > 99_999_999.99) errors.push({ field: 'purchase_cost', message: 'Purchase cost is too large' });
   else if (!hasAtMost2Decimals(cost)) errors.push({ field: 'purchase_cost', message: 'Purchase cost can have at most 2 decimals' });
@@ -852,7 +874,7 @@ export function validateVariantRow(
       label: label!,
       sku,
       barcode,
-      cost_price: cost!,
+      cost_price: cost,
       selling_price: selling,
       markup_percent: markup,
       mrp,
@@ -887,7 +909,7 @@ function variantChanges(row: CleanVariantRow, existing: ExistingVariant) {
   if (row.label !== existing.label) changes.label = row.label;
   if (row.sku !== undefined && row.sku !== existing.sku) changes.sku = row.sku;
   if (row.barcode !== undefined && row.barcode !== existing.barcode) changes.barcode = row.barcode;
-  if (Number(existing.purchase_cost) !== row.cost_price) changes.purchase_cost = row.cost_price;
+  if (row.cost_price !== undefined && Number(existing.purchase_cost) !== row.cost_price) changes.purchase_cost = row.cost_price;
   if (row.selling_price !== undefined || row.markup_percent !== undefined) {
     const want = variantRowPricing(row, existing);
     if (want.mode !== existing.pricing_mode) changes.pricing_mode = want.mode;
@@ -999,9 +1021,13 @@ async function importVariantRow(
     }
 
     const want = variantRowPricing(row, existing);
+    const cost = row.cost_price ?? (existing ? Number(existing.purchase_cost) : 0);
+    if (markupWithoutCost(want.mode, cost)) {
+      return { ...head, status: 'error', message: COST_REQUIRED_FOR_MARKUP, errors: [{ field: 'purchase_cost', message: COST_REQUIRED_FOR_MARKUP }] };
+    }
     const inherited = ctx.markups.get(categoryId);
     const price = resolveVariantPrice({
-      purchaseCost: row.cost_price,
+      purchaseCost: cost,
       pricingMode: want.mode,
       fixedSellingPrice: want.fixed,
       variantMarkupPercent: want.markup,
@@ -1061,7 +1087,7 @@ async function importVariantRow(
           sku: row.sku ?? null,
           barcode: row.barcode ?? null,
           sort_order: Number(sortRow?.m ?? -1) + 1,
-          purchase_cost: row.cost_price,
+          purchase_cost: row.cost_price ?? 0,
           pricing_mode: want.mode,
           fixed_selling_price: want.fixed,
           custom_markup_percent: want.markup,

@@ -80,7 +80,7 @@ export const TEMPLATE_EXAMPLE_ROWS: Array<Array<string | number>> = [
 
 /** How the price columns work (the import screens and the "How to fill" sheet). */
 export const PRICING_RULES = [
-  'purchase_cost is required (older files with a cost_price column still work).',
+  'purchase_cost is required, unless selling_price is filled: then it may be left empty until the supplier confirms the cost (older files with a cost_price column still work).',
   'selling_price filled: the product gets that FIXED selling price, exactly. A price below the purchase cost is allowed and shown as a warning.',
   'markup_percent filled: the selling price is purchase_cost + that markup (0 to 999.99, up to 2 decimals).',
   'Both empty on a NEW product: the category markup applies, else its parent category markup, else the global default markup.',
@@ -111,7 +111,7 @@ export const TEMPLATE_NOTES: string[][] = [
   ['sub_category', 'no', 'Optional: the sub-category (sidebar item) inside category, e.g. category Rice & Flour + sub_category Rice (empty on variant rows)'],
   ['unit', 'yes', 'e.g. 1 L, 500 g, each (empty on variant rows)'],
   ['pack_size', 'no', 'e.g. 6 x 1 L'],
-  ['purchase_cost', 'yes', 'LKR you pay, 0 or more, up to 2 decimals (older files may call this column cost_price)'],
+  ['purchase_cost', 'yes', 'LKR you pay, 0 or more, up to 2 decimals (older files may call this column cost_price). May be left empty when selling_price is filled'],
   ['selling_price', 'no', 'LKR. Filled = a FIXED price: customers pay exactly this. Below the cost is allowed (shown as a warning)'],
   ['markup_percent', 'no', "Filled = this product's own markup (0 to 999.99): price = purchase_cost + this %"],
   ['', '', 'Neither selling_price nor markup_percent: a NEW product uses the category markup, else the parent category markup, else the global default markup'],

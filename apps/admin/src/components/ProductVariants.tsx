@@ -5,9 +5,11 @@ import { errorMessage, splitServerErrors } from '../lib/apiErrors';
 import { colomboDate, formatDay } from '../lib/coupons';
 import { formatMoney } from '../lib/orders';
 import {
+  COST_REQUIRED_FOR_MARKUP,
   MAX_SELLING_PRICE,
   PRICING_SOURCE_LABEL,
   capAtMrp,
+  costInput,
   formatLkr,
   formatPercent,
   mrpCappedNote,
@@ -188,7 +190,10 @@ export function ProductVariants({
                     <span className="cell__primary">{v.label}</span>
                     <span className="cell__secondary">{v.sku ?? 'No SKU'}</span>
                   </td>
-                  <td className="num mono">{formatLkr(Number(v.purchase_cost))}</td>
+                  <td className="num mono">
+                    {/* Cost 0 = not set yet (owner, 2026-10-21). */}
+                    {Number(v.purchase_cost) > 0 ? formatLkr(Number(v.purchase_cost)) : <span className="pv-cost-unset">Not set</span>}
+                  </td>
                   <td className="num">
                     {formatLkr(Number(v.selling_price))}
                     <span className="price-source">
@@ -335,7 +340,8 @@ function formFrom(v: StaffVariant | null): VariantFormState {
       sku: '',
       barcode: '',
       purchase_cost: '',
-      pricing_mode: 'MARKUP',
+      // A new size starts on Fixed price; the cost can come later (owner, 2026-10-21).
+      pricing_mode: 'FIXED',
       custom_markup_percent: '',
       fixed_selling_price: '',
       mrp: '',
@@ -352,7 +358,7 @@ function formFrom(v: StaffVariant | null): VariantFormState {
     label: v.label,
     sku: v.sku ?? '',
     barcode: v.barcode ?? '',
-    purchase_cost: text(v.purchase_cost),
+    purchase_cost: costInput(v.purchase_cost),
     pricing_mode: v.pricing_mode === 'FIXED' ? 'FIXED' : 'MARKUP',
     custom_markup_percent: text(v.custom_markup_percent),
     fixed_selling_price: text(v.fixed_selling_price),
@@ -394,8 +400,12 @@ export function VariantDialog({
 
   const preview = useMemo<ResolvedVariantPrice | null>(() => {
     const markup = parseMarkupInput(form.custom_markup_percent);
+    // Empty cost = 0 (not set yet): fine at a fixed price, no markup price without it.
+    const costText = form.purchase_cost.trim();
+    const cost = costText === '' ? '0' : MONEY_INPUT.test(costText) ? costText : null;
+    if (form.pricing_mode === 'MARKUP' && !(Number(cost) > 0)) return null;
     return resolveVariantPrice({
-      purchaseCost: MONEY_INPUT.test(form.purchase_cost.trim()) ? form.purchase_cost.trim() : null,
+      purchaseCost: cost,
       pricingMode: form.pricing_mode,
       fixedSellingPrice: form.fixed_selling_price.trim() || null,
       variantMarkupPercent: 'value' in markup ? markup.value : null,
@@ -422,9 +432,11 @@ export function VariantDialog({
     else if (label.length > 64) next.label = 'The variant name must be at most 64 characters';
     const sku = form.sku.trim();
     if (sku && (sku.length < 3 || sku.length > 64)) next.sku = 'SKU must be 3 to 64 characters, or leave it blank';
+    // Optional: empty = 0, not set yet (owner, 2026-10-21).
     const cost = form.purchase_cost.trim();
-    if (!MONEY_INPUT.test(cost)) next.purchase_cost = 'Enter a valid cost, at most 2 decimals';
+    if (cost !== '' && !MONEY_INPUT.test(cost)) next.purchase_cost = 'Enter a valid cost, at most 2 decimals';
     else if (Number(cost) > MAX_PURCHASE_COST) next.purchase_cost = 'Purchase cost can be at most LKR 99,999,999.99';
+    else if (form.pricing_mode === 'MARKUP' && !(Number(cost) > 0)) next.purchase_cost = COST_REQUIRED_FOR_MARKUP;
     if (form.pricing_mode === 'FIXED') {
       const fixed = form.fixed_selling_price.trim();
       if (!fixed) next.fixed_selling_price = 'Enter the selling price for a fixed-price variant';
@@ -463,7 +475,7 @@ export function VariantDialog({
     if (changed('label')) out.label = form.label.trim();
     if (changed('sku')) out.sku = form.sku.trim() || null;
     if (changed('barcode')) out.barcode = form.barcode.trim() || null;
-    if (changed('purchase_cost')) out.purchase_cost = Number(form.purchase_cost.trim());
+    if (changed('purchase_cost')) out.purchase_cost = form.purchase_cost.trim() === '' ? 0 : Number(form.purchase_cost.trim());
     if (form.pricing_mode === 'FIXED') {
       if (changed('pricing_mode') || changed('fixed_selling_price')) {
         out.pricing_mode = 'FIXED';
@@ -593,7 +605,7 @@ export function VariantDialog({
 
         <div className="pv-dialog__group">
           <p className="pv-dialog__group-title">Price</p>
-          <Field label="Purchase cost (LKR)" error={errors.purchase_cost}>
+          <Field label="Cost price (LKR)" hint="Optional. Leave empty until the supplier confirms it." error={errors.purchase_cost}>
             <input
               className="input"
               inputMode="decimal"
@@ -751,7 +763,7 @@ function VariantPreview({ preview, mode, mrp }: { preview: ResolvedVariantPrice 
   if (!preview) {
     return (
       <p className="form__note" role="status">
-        {mode === 'FIXED' ? 'Enter the purchase cost and the selling price to see the margin.' : 'Enter the purchase cost to see the selling price.'}
+        {mode === 'FIXED' ? 'Enter the selling price.' : 'Enter the cost price to see the selling price.'}
       </p>
     );
   }

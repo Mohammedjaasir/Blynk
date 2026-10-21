@@ -165,10 +165,14 @@ const productBaseSchema = z.object({
   image_focal_y: focalPercent.default(50).optional(),
   // products.purchase_cost is NUMERIC(10,2) and custom_markup_percent
   // NUMERIC(5,2): anything larger was a Postgres overflow (a 500).
+  // Optional (owner, 2026-10-21: "add products without cost price for now,
+  // until we get accurate cost from the supplier"): omitted on create = 0,
+  // which means "not set yet". A MARKUP price needs a cost above 0.
   purchase_cost: z
-    .number()
+    .number({ invalid_type_error: 'Cost price must be a number' })
     .min(0, 'Purchase cost cannot be negative')
-    .max(99_999_999.99, 'Purchase cost cannot exceed 99,999,999.99'),
+    .max(99_999_999.99, 'Purchase cost cannot exceed 99,999,999.99')
+    .optional(),
   custom_markup_percent: z
     .number()
     .min(0, 'Markup cannot be negative')
@@ -219,9 +223,23 @@ const productBaseSchema = z.object({
   show_offer_cut: z.boolean({ invalid_type_error: 'show_offer_cut must be true or false' }).optional(),
 });
 
+/**
+ * Owner, 2026-10-21: the cost price may be left empty (stored as 0) until the
+ * supplier confirms it - but a MARKUP price is cost x markup, so with no cost
+ * the customer price would be 0. Such a product/variant must be FIXED.
+ */
+export const COST_REQUIRED_FOR_MARKUP = 'Enter the cost price, or choose Fixed price and enter the selling price.';
+
+/** True when the price would come out at 0: MARKUP with no cost price. */
+export const markupWithoutCost = (mode: string | null | undefined, cost: number | string | null | undefined): boolean =>
+  (mode ?? 'MARKUP') !== 'FIXED' && !(Number(cost ?? 0) > 0);
+
 export const createProductSchema = productBaseSchema.superRefine((v, ctx) => {
   if (v.pricing_mode === 'FIXED' && (v.fixed_selling_price === null || v.fixed_selling_price === undefined)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fixed_selling_price'], message: 'Enter the selling price for a fixed-price product' });
+  }
+  if (markupWithoutCost(v.pricing_mode, v.purchase_cost)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['purchase_cost'], message: COST_REQUIRED_FOR_MARKUP });
   }
 });
 

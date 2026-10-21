@@ -175,8 +175,10 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
   const costPrice = number(cells[LEGACY_COST_COLUMN]);
   const cost = purchaseCost ?? costPrice;
   const costField = purchaseCost !== null ? 'purchase_cost' : costPrice !== null ? LEGACY_COST_COLUMN : 'purchase_cost';
-  if (cost === null) errors.push({ field: 'purchase_cost', message: 'purchase_cost is required.' });
-  else if (Number.isNaN(cost)) errors.push({ field: costField, message: `${costField} must be a number.` });
+  if (cost === null) {
+    // Blank is fine with a selling_price: no cost yet - 0 for a new product, unchanged for an existing one (owner, 2026-10-21).
+    if (number(cells.selling_price) === null) errors.push({ field: 'purchase_cost', message: 'purchase_cost is required.' });
+  } else if (Number.isNaN(cost)) errors.push({ field: costField, message: `${costField} must be a number.` });
   else if (cost < 0) errors.push({ field: costField, message: `${costField} cannot be negative.` });
   else if (cost > MAX_SELLING_PRICE) errors.push({ field: costField, message: `${costField} is too large.` });
   else if (!hasTwoDecimalsAtMost(cost)) errors.push({ field: costField, message: `${costField} can have at most 2 decimals.` });
@@ -235,7 +237,8 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
     category,
     unit,
     pack_size: text(cells.pack_size),
-    purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : 0,
+    // Blank = null (allowed with a selling_price): the server keeps an existing product's cost.
+    purchase_cost: cost !== null && !Number.isNaN(cost) ? cost : null,
     selling_price: selling !== null && !Number.isNaN(selling) ? selling : null,
     markup_percent: markup !== null && !Number.isNaN(markup) ? markup : null,
     sku,
@@ -392,7 +395,7 @@ export function rowPricing(
   if (data.markup_percent !== null && data.markup_percent !== undefined) {
     const source: VariantPricingSource = variant ? 'VARIANT_MARKUP' : 'PRODUCT_MARKUP';
     return {
-      price: capAtMrp(markupPrice(data.purchase_cost, data.markup_percent), data.mrp).price,
+      price: capAtMrp(markupPrice(data.purchase_cost ?? 0, data.markup_percent), data.mrp).price,
       source,
       label: variantPricingSourceLabel(source),
       warnings,

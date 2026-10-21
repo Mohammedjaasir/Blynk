@@ -129,7 +129,7 @@ describe('Product form - offer', () => {
     const { api } = openForm(product());
     await user.type(await screen.findByLabelText(/^Offer price \(LKR\)/), '220');
     // 160 x 1.25 = 200, now below the offer.
-    const cost = screen.getByLabelText('Purchase cost (LKR)');
+    const cost = screen.getByLabelText(/^Cost price \(LKR\)/);
     await user.clear(cost);
     await user.type(cost, '160');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));

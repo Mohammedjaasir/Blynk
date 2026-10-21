@@ -78,7 +78,8 @@ async function fillNewProduct(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Product name'), 'Samba Rice');
   await user.type(screen.getByLabelText('SKU'), 'RICE-1');
   await user.type(screen.getByLabelText(/^Unit/), '1 kg');
-  await user.type(screen.getByLabelText('Purchase cost (LKR)'), '100');
+  await user.type(screen.getByLabelText(/^Cost price \(LKR\)/), '100');
+  await user.click(screen.getByRole('radio', { name: 'Markup' })); // new products and sizes start on Fixed price
 }
 
 describe('Product form - selling price mode', () => {

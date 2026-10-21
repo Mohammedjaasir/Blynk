@@ -8,7 +8,7 @@ import { logger } from '../../utils/logger.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { belowCostWarning, resolveVariantPrice, type PriceWarning, type PricingMode, type VariantPricingSource } from '../pricing/index.js';
 import { activeOfferPrice, assertOfferAllowed, publicOffer } from './catalog.offers.js';
-import { mrpSchema } from './catalog.schema.js';
+import { COST_REQUIRED_FOR_MARKUP, markupWithoutCost, mrpSchema } from './catalog.schema.js';
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { inventoryRepository } from '../inventory/inventory.repository.js';
 import { staffStockFor, UNTRACKED_STOCK, type StaffStock } from '../inventory/stock-view.js';
@@ -76,11 +76,13 @@ const variantFields = {
   sku: optionalCode(3, 'SKU'),
   barcode: optionalCode(1, 'Barcode'),
   sort_order: z.number().int().min(0).max(100_000).optional(),
+  // Optional (owner, 2026-10-21): omitted = 0, "not set yet"; MARKUP needs a cost above 0.
   purchase_cost: z
-    .number({ required_error: 'Enter the purchase cost', invalid_type_error: 'Purchase cost must be a number' })
+    .number({ invalid_type_error: 'Purchase cost must be a number' })
     .min(0, 'Purchase cost cannot be negative')
     .max(99_999_999.99, 'Purchase cost cannot exceed 99,999,999.99')
-    .refine(twoDecimals, 'Purchase cost can have at most 2 decimals'),
+    .refine(twoDecimals, 'Purchase cost can have at most 2 decimals')
+    .optional(),
   pricing_mode: z.enum(['MARKUP', 'FIXED'], { errorMap: () => ({ message: "pricing_mode must be 'MARKUP' or 'FIXED'" }) }).optional(),
   fixed_selling_price: z
     .number({ invalid_type_error: 'Selling price must be a number' })
@@ -125,6 +127,9 @@ export const createVariantSchema = z.object({ ...variantFields, ...stockOnCreate
   if (v.pricing_mode === 'FIXED' && (v.fixed_selling_price === null || v.fixed_selling_price === undefined)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fixed_selling_price'], message: 'Enter the selling price for a fixed-price variant' });
   }
+  if (markupWithoutCost(v.pricing_mode, v.purchase_cost)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['purchase_cost'], message: COST_REQUIRED_FOR_MARKUP });
+  }
   if (v.stock_count !== undefined && v.stock_count > 0 && v.track_stock !== true) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['stock_count'], message: 'Turn on stock tracking to set a stock count' });
   }
@@ -135,7 +140,6 @@ export const updateVariantSchema = z
   .object({
     ...variantFields,
     label: variantFields.label.optional(),
-    purchase_cost: variantFields.purchase_cost.optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
 export type UpdateVariantInput = z.infer<typeof updateVariantSchema>;
@@ -432,10 +436,11 @@ export async function createVariant(productId: string, input: CreateVariantInput
   await assertUnique(db, { productId, label: input.label, sku: input.sku ?? null });
   const mode: PricingMode = input.pricing_mode ?? 'MARKUP';
   const fixed = input.fixed_selling_price ?? null;
+  const cost = input.purchase_cost ?? 0;
   const offer = input.offer_price ?? null;
   if (offer !== null) {
     const price = priceAfter(product, {
-      purchase_cost: input.purchase_cost,
+      purchase_cost: cost,
       pricing_mode: mode,
       fixed_selling_price: fixed,
       custom_markup_percent: input.custom_markup_percent ?? null,
@@ -465,7 +470,7 @@ export async function createVariant(productId: string, input: CreateVariantInput
         sku: input.sku ?? null,
         barcode: input.barcode ?? null,
         sort_order: sortOrder,
-        purchase_cost: input.purchase_cost,
+        purchase_cost: cost,
         pricing_mode: mode,
         fixed_selling_price: fixed,
         custom_markup_percent: input.custom_markup_percent ?? null,
@@ -521,6 +526,12 @@ export async function updateVariant(productId: string, variantId: string, input:
   }
   const markup = input.custom_markup_percent !== undefined ? input.custom_markup_percent : num(existing.custom_markup_percent);
   const cost = input.purchase_cost ?? Number(existing.purchase_cost);
+  // Owner, 2026-10-21: no cost price yet is fine, but only at a fixed price
+  // (checked when the pricing is edited, so other edits of an older row work).
+  const pricingEdited = input.purchase_cost !== undefined || input.pricing_mode !== undefined || input.custom_markup_percent !== undefined;
+  if (pricingEdited && markupWithoutCost(mode, cost)) {
+    throw new AppError(COST_REQUIRED_FOR_MARKUP, 400, 'PURCHASE_COST_REQUIRED', { field: 'purchase_cost' });
+  }
   const mrp = input.mrp !== undefined ? input.mrp : num(existing.mrp);
   const offer = input.offer_price !== undefined ? input.offer_price : num(existing.offer_price);
   const existingEnds = existing.offer_ends_at ? new Date(existing.offer_ends_at).toISOString() : null;
