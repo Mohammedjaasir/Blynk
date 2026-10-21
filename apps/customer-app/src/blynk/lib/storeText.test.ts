@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { deliveryFeeText, flatFee, formatClock, formatHours, freeDeliveryCount, radiusText, reopensText } from './storeText';
+import { deliveryFeeText, flatFee, formatClock, formatHours, freeDeliveryCount, hoursSummary, radiusText, reopensText } from './storeText';
 import { formatLkr } from './money';
 import { store } from '../test/fixtures';
 
@@ -37,4 +37,17 @@ test('reopens text uses Sri Lanka time and hides when unknown', () => {
   expect(reopensText({ ...store, next_open_at: '2026-10-14T02:30:00Z' }, now)).toBe('Reopens Wed, 8 AM');
   expect(reopensText({ ...store, next_open_at: '2026-10-13T16:30:00Z' }, now)).toBe('Reopens today, 10 PM');
   expect(reopensText({ ...store, next_open_at: 'garbage' }, now)).toBeNull();
+});
+
+test('hours summary follows the weekly hours Admin / Ops set (owner, 2026-10-21)', () => {
+  const day = (open: string, close: string, closed = false) => ({ closed, open, close });
+  const week = (f: (k: string) => { closed: boolean; open: string; close: string }) =>
+    Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((k) => [k, f(k)]));
+  expect(hoursSummary(null)).toBeNull();
+  expect(hoursSummary({ ...store, hours: { same_every_day: true, days: week(() => day('08:00', '21:00')) } })).toBe('8 AM – 9 PM, every day');
+  expect(hoursSummary({ ...store, hours: { same_every_day: false, days: week((k) => day('07:00', '22:00', k === 'sun')) } })).toBe('7 AM – 10 PM, Mon–Sat');
+  expect(hoursSummary({ ...store, hours: { same_every_day: false, days: week((k) => day('08:00', '21:00', k !== 'fri' && k !== 'sat')) } })).toBe('8 AM – 9 PM, Fri, Sat');
+  expect(hoursSummary({ ...store, hours: { same_every_day: false, days: week((k) => (k === 'fri' ? day('09:30', '13:00') : day('08:00', '21:00'))) } })).toBe('8 AM – 9 PM today (hours vary by day)');
+  // an older API without the weekly hours: today's hours only, no claim about the days
+  expect(hoursSummary(store)).toBe('8 AM – 9 PM');
 });

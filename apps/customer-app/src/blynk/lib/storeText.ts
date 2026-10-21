@@ -16,6 +16,31 @@ export function formatHours(store: StoreInfo | null): string | null {
   return a && b ? `${a} – ${b}` : null;
 }
 
+const WEEK = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/**
+ * The opening hours with their days, from the weekly schedule Admin / Ops set (owner,
+ * 2026-10-21: a change there must show everywhere): "8 AM – 9 PM, every day", "8 AM – 9 PM,
+ * Mon–Sat", or "8 AM – 9 PM today (hours vary by day)". Null while the store has not loaded.
+ */
+export function hoursSummary(store: StoreInfo | null): string | null {
+  const today = formatHours(store);
+  const days = store?.hours?.days;
+  if (!days) return today;
+  const open = WEEK.map((k, i) => ({ i, d: days[k] })).filter((x) => x.d && !x.d.closed);
+  if (!open.length) return today;
+  const first = open[0]!.d!;
+  const uniform = open.every((x) => x.d!.open === first.open && x.d!.close === first.close);
+  if (!uniform) return today ? `${today} today (hours vary by day)` : null;
+  const range = `${formatClock(first.open) ?? first.open} – ${formatClock(first.close) ?? first.close}`;
+  if (open.length === 7) return `${range}, every day`;
+  const idx = open.map((x) => x.i);
+  const run = idx.every((v, n) => n === 0 || v === idx[n - 1]! + 1);
+  const dayText = run && idx.length > 2 ? `${DAY_SHORT[idx[0]!]}–${DAY_SHORT[idx[idx.length - 1]!]}` : idx.map((v) => DAY_SHORT[v]).join(', ');
+  return `${range}, ${dayText}`;
+}
+
 /** "Groceries delivered within 4 km", or null when the radius is not known. */
 export function radiusText(store: StoreInfo | null): string | null {
   const r = store?.radius_km;

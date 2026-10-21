@@ -174,7 +174,8 @@ export class NotificationTemplates {
         const total = Number(data.total_amount || 0).toFixed(2);
         if (data.scheduled_for) {
           const scheduledTime = formatColomboTime(data.scheduled_for as string);
-          return `Blynk: Order #${orderNumber} placed for LKR ${total}. Delivery is scheduled for 8:00 AM - 9:00 PM operating hours (${scheduledTime}).`;
+          // No fixed opening hours here: Admin / Ops set them (owner, 2026-10-21).
+          return `Blynk: Order #${orderNumber} placed for LKR ${total}. Delivery is scheduled for ${scheduledTime}.`;
         }
         return `Blynk: Order #${orderNumber} has been placed successfully! Total: LKR ${total}. Sourcing and packing are in progress.`;
       }

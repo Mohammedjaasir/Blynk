@@ -111,7 +111,7 @@ const T = {
     home: 'Home', order: 'Order now', orderShort: 'Order now', orderSmall: 'Opens the Blynk shop',
     kicker: 'Grocery delivery',
     areaTitle: 'Grocery delivery in {area} | Blynk',
-    areaDesc: 'Order groceries and daily essentials from Blynk in {area}. Delivered from near the Dharga Town Clock Tower, 8 AM to 9 PM every day. Pay cash on delivery.',
+    areaDesc: 'Order groceries and daily essentials from Blynk in {area}. Delivered from near the Dharga Town Clock Tower. Pay cash on delivery.',
     areaH1: 'Grocery delivery in {area}',
     factHours: 'Every day 8 AM – 9 PM', factCash: 'Cash on delivery', factRange: 'Within 4 km of the Dharga Town Clock Tower',
     catsKicker: 'What you can order', catsH2: 'Everything for the home, in one order.',
@@ -137,7 +137,7 @@ const T = {
     home: 'මුල් පිටුව', order: 'දැන් ඇණවුම් කරන්න', orderShort: 'ඇණවුම් කරන්න', orderSmall: 'Blynk සාප්පුව විවෘත වේ',
     kicker: 'සිල්ලර බඩු බෙදාහැරීම',
     areaTitle: '{areaTo} සිල්ලර බඩු බෙදාහැරීම | Blynk',
-    areaDesc: 'Blynk වෙතින් {areaTo} සිල්ලර බඩු සහ දෛනික අත්‍යවශ්‍ය දෑ ඇණවුම් කරන්න. සෑම දිනකම පෙ.ව. 8 සිට ප.ව. 9 දක්වා. භාණ්ඩ ලැබුණු විට මුදලින් ගෙවන්න.',
+    areaDesc: 'Blynk වෙතින් {areaTo} සිල්ලර බඩු සහ දෛනික අත්‍යවශ්‍ය දෑ ඇණවුම් කරන්න. භාණ්ඩ ලැබුණු විට මුදලින් ගෙවන්න.',
     areaH1: '{areaTo} සිල්ලර බඩු බෙදාහැරීම',
     factHours: 'සෑම දිනකම පෙ.ව. 8 – ප.ව. 9', factCash: 'භාණ්ඩ ලැබුණු විට මුදලින් ගෙවන්න', factRange: 'දර්ගා නගරයේ ඔරලෝසු කණුවේ සිට කි.මී. 4ක් ඇතුළත',
     catsKicker: 'ඔබට ඇණවුම් කළ හැකි දේ', catsH2: 'නිවසට අවශ්‍ය සියල්ල, එකම ඇණවුමකින්.',
@@ -163,7 +163,7 @@ const T = {
     home: 'முகப்பு', order: 'இப்போதே ஆர்டர் செய்யுங்கள்', orderShort: 'ஆர்டர் செய்ய', orderSmall: 'Blynk கடை திறக்கும்',
     kicker: 'மளிகைப் பொருள் டெலிவரி',
     areaTitle: '{area} பகுதியில் மளிகைப் பொருள் டெலிவரி | Blynk',
-    areaDesc: 'Blynk மூலம் {area} பகுதிக்கு மளிகைப் பொருட்களையும் அன்றாடத் தேவைகளையும் ஆர்டர் செய்யுங்கள். தினமும் காலை 8 முதல் இரவு 9 வரை. பொருள் கிடைத்ததும் பணமாகச் செலுத்துங்கள்.',
+    areaDesc: 'Blynk மூலம் {area} பகுதிக்கு மளிகைப் பொருட்களையும் அன்றாடத் தேவைகளையும் ஆர்டர் செய்யுங்கள். பொருள் கிடைத்ததும் பணமாகச் செலுத்துங்கள்.',
     areaH1: '{area} பகுதியில் மளிகைப் பொருள் டெலிவரி',
     factHours: 'தினமும் காலை 8 – இரவு 9', factCash: 'பொருள் கிடைத்ததும் பணம் செலுத்தலாம்', factRange: 'தர்கா நகர் மணிக்கூட்டுக் கோபுரத்திலிருந்து 4 கி.மீ.க்குள்',
     catsKicker: 'நீங்கள் ஆர்டர் செய்யக்கூடியவை', catsH2: 'வீட்டுக்குத் தேவையான அனைத்தும், ஒரே ஆர்டரில்.',
@@ -297,7 +297,7 @@ export const CATEGORY_PAGES = [
     slug: 'sanitary-pads-home-delivery',
     crumb: 'Sanitary pads',
     title: 'Sanitary pads home delivery in Dharga Town & Aluthgama | Blynk',
-    description: 'Get sanitary pads and ladies’ items delivered to your home in Dharga Town, Aluthgama and nearby areas within 4 km. Order 8 AM to 9 PM, pay cash on delivery.',
+    description: 'Get sanitary pads and ladies’ items delivered to your home in Dharga Town, Aluthgama and nearby areas within 4 km. Pay cash on delivery.',
     h1: 'Sanitary pads, delivered to your home',
     lead: 'Order sanitary pads and other ladies’ items from your phone, without a trip to the shop. Blynk delivers to homes within 4 km of the Dharga Town Clock Tower, including Aluthgama, Bentota, Kaluwamodara and Moragalla.',
     groups: [
@@ -310,7 +310,7 @@ export const CATEGORY_PAGES = [
     slug: 'rice-and-dhal-delivery-dharga-town',
     crumb: 'Rice & dhal',
     title: 'Rice & dhal delivery in Dharga Town | Blynk',
-    description: 'Order rice, flour, dhal and grams, oil, sugar and spices from Blynk and have them brought to your door in Dharga Town. Order 8 AM to 9 PM, pay cash on delivery.',
+    description: 'Order rice, flour, dhal and grams, oil, sugar and spices from Blynk and have them brought to your door in Dharga Town. Pay cash on delivery.',
     h1: 'Rice and dhal, delivered in Dharga Town',
     lead: 'Rice and dhal are heavy to carry home. Add them to your Blynk basket with the rest of your groceries and the rider brings everything to your door in Dharga Town.',
     groups: [
@@ -339,7 +339,7 @@ export const CATEGORY_PAGES = [
 const HOME = {
   si: {
     title: 'Blynk — දර්ගා නගරයට සහ අළුත්ගමට සිල්ලර බඩු නිවසටම',
-    description: 'නැවුම් සිල්ලර බඩු සහ ගුණාත්මක අත්‍යවශ්‍ය දෑ දර්ගා නගරයේ සහ අළුත්ගම ඇතුළු අවට කි.මී. 4ක ප්‍රදේශයේ ඔබේ දොරකඩටම. සෑම දිනකම පෙ.ව. 8 – ප.ව. 9. භාණ්ඩ ලැබුණු විට ගෙවන්න.',
+    description: 'නැවුම් සිල්ලර බඩු සහ ගුණාත්මක අත්‍යවශ්‍ය දෑ දර්ගා නගරයේ සහ අළුත්ගම ඇතුළු අවට කි.මී. 4ක ප්‍රදේශයේ ඔබේ දොරකඩටම. භාණ්ඩ ලැබුණු විට ගෙවන්න.',
     chip: 'දර්ගා නගරය සහ අළුත්ගම', chip2: 'නැවුම් • ප්‍රාදේශීය',
     h1a: 'ඔබට අවශ්‍ය සියල්ල,', h1b: 'ඔබ ළඟටම.',
     lead: 'නැවුම්ව තෝරාගත් සිල්ලර බඩු සහ ගුණාත්මක අත්‍යවශ්‍ය දෑ — දර්ගා නගරයේ සහ අළුත්ගම ඇතුළු අවට කි.මී. 4ක ප්‍රදේශයේ ඔබේ දොරකඩටම.',
@@ -358,7 +358,7 @@ const HOME = {
   },
   ta: {
     title: 'Blynk — தர்கா நகர், அளுத்கம பகுதிகளுக்கு மளிகைப் பொருள் டெலிவரி',
-    description: 'புதிதாகத் தேர்ந்தெடுத்த மளிகைப் பொருட்களும் தரமான அன்றாடத் தேவைகளும் தர்கா நகர், அளுத்கம உட்பட சுற்றியுள்ள 4 கி.மீ. பகுதிகளில் உங்கள் வாசலுக்கே. தினமும் காலை 8 – இரவு 9. பொருள் கிடைத்ததும் பணம் செலுத்துங்கள்.',
+    description: 'புதிதாகத் தேர்ந்தெடுத்த மளிகைப் பொருட்களும் தரமான அன்றாடத் தேவைகளும் தர்கா நகர், அளுத்கம உட்பட சுற்றியுள்ள 4 கி.மீ. பகுதிகளில் உங்கள் வாசலுக்கே. பொருள் கிடைத்ததும் பணம் செலுத்துங்கள்.',
     chip: 'தர்கா நகர் & அளுத்கம', chip2: 'புதியது • உள்ளூர்',
     h1a: 'உங்களுக்குத் தேவையான அனைத்தும்,', h1b: 'உங்கள் அருகிலேயே.',
     lead: 'புதிதாகத் தேர்ந்தெடுத்த மளிகைப் பொருட்களும் தரமான அன்றாடத் தேவைகளும் — தர்கா நகர், அளுத்கம உட்பட சுற்றியுள்ள 4 கி.மீ. பகுதிகளில் உங்கள் வாசலுக்கே.',

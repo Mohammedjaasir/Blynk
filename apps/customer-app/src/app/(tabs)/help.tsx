@@ -8,7 +8,7 @@ import { faqsWithHours, SUPPORT } from '@/blynk/account/support';
 import { openStatus } from '@/blynk/account/tabHeroes';
 import { accountStyles as A, Card, Enter, Row, SectionLabel } from '@/blynk/account/ui';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
-import { formatHours, radiusText } from '@/blynk/lib/storeText';
+import { hoursSummary, radiusText } from '@/blynk/lib/storeText';
 import { useStore } from '@/blynk/store/StoreContext';
 import { HELP_HERO } from '@/blynk/ui/strings';
 import { HelpHero } from '@/components/TabHero';
@@ -30,8 +30,9 @@ export default function Help() {
   const store = useStore();
   const session = useSession();
   const signedIn = !!session && !needsRegistration(session);
-  const hoursLabel = formatHours(store) ?? '8 AM – 9 PM';
-  const faqs = faqsWithHours(`${hoursLabel}, every day`);
+  // The hours and days Admin / Ops set; nothing typed in here (owner, 2026-10-21).
+  const hoursLabel = hoursSummary(store) ?? 'during our opening hours';
+  const faqs = faqsWithHours(hoursLabel);
   const [open, setOpen] = useState<number | null>(null);
   const status = openStatus(store);
   const live = status?.open === true;

@@ -101,6 +101,8 @@ export interface StoreInfo {
   online_payment?: OnlinePaymentInfo;
   new_customer_free_deliveries: { enabled: boolean; count: number; since: string };
   delivery_hours: { start: string; end: string; timezone: string };
+  /** The weekly hours as set in Admin / Ops (each day open/close or closed); absent on an older API. */
+  hours?: { same_every_day: boolean; days: Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', { closed: boolean; open: string; close: string }>> };
   is_open_now: boolean; closed_kind: 'OPEN' | 'OUTSIDE_HOURS' | 'CLOSED_DAY' | 'HOLIDAY' | 'CLOSED_NOW';
   closed_reason: string | null; next_open_at: string | null; reopens_at?: string | null; delivery_slots_enabled: boolean;
   doctors_require_sign_in: boolean;
