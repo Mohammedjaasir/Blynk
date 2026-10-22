@@ -52,7 +52,7 @@ export const APP_TEXT_SECTIONS: { title: string; note: string; fields: AppTextDe
       { key: 'home_band_title_offers', label: 'Offers band title (offers running)', builtIn: 'OFFER PRICES TODAY', max: 24 },
       { key: 'home_band_title_aisles', label: 'Offers band title (no offers)', builtIn: 'SHOP BY AISLE', max: 24 },
       { key: 'home_footer_title', label: 'Footer small line', builtIn: 'Fresh groceries delivered', max: 36 },
-      { key: 'home_footer_sub', label: 'Footer big line', builtIn: 'to your door in Dharga Town', max: 48 },
+      { key: 'home_footer_sub', label: 'Footer big line', builtIn: 'to your door', max: 48 },
     ],
   },
   {
@@ -102,7 +102,7 @@ export const APP_TEXT_LISTS = {
     max: 5,
     chars: 28,
     note: 'They take turns on the sign-in screen, about 3 s each. Leave empty for the app\'s own.',
-    builtIn: ['Fresh to your door', 'Dharga Town in minutes', 'Groceries, delivered fast'],
+    builtIn: ['Fresh to your door', 'Delivered in minutes', 'Groceries, delivered fast'],
   },
 } as const;
 

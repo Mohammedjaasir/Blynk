@@ -84,7 +84,7 @@ export const LOGIN_GATE = {
 
 /** The phone login's yellow hero (rider mascot). The headlines take turns, about 3 s each. */
 export const LOGIN = {
-  headlines: ['Fresh to your door', 'Dharga Town in minutes', 'Groceries, delivered fast'],
+  headlines: ['Fresh to your door', 'Delivered in minutes', 'Groceries, delivered fast'],
   /** Read by a screen reader for the (decorative) rider picture. */
   heroLabel: 'The Blynk rider bringing groceries',
 } as const;
@@ -124,9 +124,9 @@ export const PRICE_ROLL = {
 /** The end of Home's list: two quiet lines over the rider bouncing on a trampoline (src/components/HomeFooter.tsx). */
 export const HOME_FOOTER = {
   small: 'Fresh groceries delivered',
-  large: 'to your door in Dharga Town',
+  large: 'to your door',
   /** Read by a screen reader for the (decorative) picture. */
-  label: 'Fresh groceries delivered to your door in Dharga Town',
+  label: 'Fresh groceries delivered to your door',
 } as const;
 
 /** Profile's hero (src/components/TabHero.tsx ProfileHero): a guest's invitation, or the greeting. */
