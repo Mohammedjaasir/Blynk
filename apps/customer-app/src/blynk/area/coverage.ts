@@ -106,6 +106,34 @@ export function deliveryAreas(c: Coverage, places: readonly Place[] = PLACES): {
 /** Where the pin starts for a picked area: its centre (the customer fine-tunes it on the map). */
 export const pinForArea = (area: Pick<Place, 'lat' | 'lng'>): LatLng => ({ lat: area.lat, lng: area.lng });
 
+/** What an address calls a place: the store's own town by its name, "Beruwala town" as "Beruwala". */
+const areaName = (c: Coverage, p: Place) => (p.id === CENTRE_PLACE_ID ? c.town : p.id === 'beruwala' ? 'Beruwala' : p.name);
+
+/**
+ * The area an address is in, from its pin (owner, 2026-10-22: a Beruwala address was saved as
+ * "Dharga Town"): the nearest known place within 3 km, else the store's town.
+ */
+export function areaOfPin(c: Coverage, p: LatLng, places: readonly Place[] = PLACES): string {
+  if (!validLatLng(p)) return c.town;
+  let best: Place | null = null;
+  let bestKm = AREA_MAX_KM;
+  for (const q of places) {
+    const d = kmBetween(p, q);
+    if (d <= bestKm) { best = q; bestKm = d; }
+  }
+  return best ? areaName(c, best) : c.town;
+}
+const AREA_MAX_KM = 3;
+
+/** The areas offered on the address form: the store's town, the listed places inside the radius, then Beruwala. */
+export function areaChoices(c: Coverage, places: readonly Place[] = PLACES): string[] {
+  const names = placesAround(c, places)
+    .filter((q) => q.id === CENTRE_PLACE_ID || q.id === 'beruwala' || (q.listed && q.inside))
+    .map((q) => areaName(c, q));
+  const centre = names.filter((n) => n === c.town);
+  return [...new Set([...centre, ...names.filter((n) => n !== c.town && n !== 'Beruwala'), ...names.filter((n) => n === 'Beruwala')])];
+}
+
 /**
  * A spot we made up rather than one the customer chose: the store itself or the middle of a listed
  * area (where the map opens without a GPS fix). An address must never be saved there untouched

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { AREA, noteText } from './copy';
 import {
   centreName, circleRing, coverageOf, deliveryAreas, edgePoint, frameFor, inFrame, insideCoverage, kmBetween, kmText,
-  isDefaultPin, nearestPlace, pinForArea, placesAround, project, radiusText,
+  areaChoices, areaOfPin, isDefaultPin, nearestPlace, pinForArea, placesAround, project, radiusText,
 } from './coverage';
 import { cityFor, flowReducer, gpsFailureOf, initialFlow, leavesScreen, type FlowState } from './flow';
 import { CLOCK_TOWER } from './places';
@@ -203,5 +203,24 @@ describe('the pin is never left on a spot we made up (owner, 2026-10-22)', () =>
     const area = flowReducer(start(), { type: 'dragPin', coverage: cov });
     expect(area.fresh).toBe(true);
     expect(flowReducer(area, { type: 'gpsOk', fix: { lat: 6.4372, lng: 80.0378 }, coverage: cov }).fresh).toBe(false);
+  });
+});
+
+describe('the address area comes from the pin (owner, 2026-10-22)', () => {
+  test('a pin takes the nearest known place, the store town in the middle', () => {
+    expect(areaOfPin(cov, cov.center)).toBe('Dharga Town');
+    expect(areaOfPin(cov, { lat: 6.4700, lng: 79.9850 })).toBe('Beruwala');
+    expect(areaOfPin(cov, { lat: 6.4350, lng: 80.0010 })).toBe('Aluthgama');
+    expect(areaOfPin(cov, { lat: 6.4405, lng: 79.9950 })).toBe('Kaluwamodara');
+    expect(areaOfPin(cov, { lat: 6.60, lng: 80.30 })).toBe('Dharga Town'); // nowhere near a known place
+    expect(areaOfPin(cov, { lat: NaN, lng: NaN })).toBe('Dharga Town');
+  });
+
+  test('the form offers the town first, the areas inside the radius, then Beruwala', () => {
+    const names = areaChoices(cov);
+    expect(names[0]).toBe('Dharga Town');
+    expect(names).toEqual(expect.arrayContaining(['Aluthgama', 'Kaluwamodara', 'Bentota', 'Moragalla', 'Beruwala']));
+    expect(names[names.length - 1]).toBe('Beruwala');
+    expect(new Set(names).size).toBe(names.length);
   });
 });

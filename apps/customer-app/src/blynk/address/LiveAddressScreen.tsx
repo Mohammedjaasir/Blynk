@@ -14,7 +14,7 @@ import { useTrackOnce } from '@/blynk/analytics/AnalyticsHost';
 import { trackOutOfZone } from '@/blynk/analytics/track';
 import { AreaIntro } from '@/blynk/area/AreaSteps';
 import { AREA, noteText } from '@/blynk/area/copy';
-import { circleRing, coverageOf, insideCoverage, isDefaultPin, kmText, nearestPlace, type Coverage } from '@/blynk/area/coverage';
+import { areaChoices, areaOfPin, circleRing, coverageOf, insideCoverage, isDefaultPin, kmText, nearestPlace, type Coverage } from '@/blynk/area/coverage';
 import { cityFor, flowReducer, gpsFailureOf, initialFlow, leavesScreen } from '@/blynk/area/flow';
 import { formatPhone } from '@/blynk/auth/phone';
 import { useSession } from '@/blynk/auth/session';
@@ -52,6 +52,7 @@ const T = {
   moving: VIDEO.loadingHint, // "Order will be delivered here"
   placed: VIDEO.placedHint, // "Place the pin at exact delivery location"
   mustMove: 'Move the map so the pin sits on your house',
+  area: 'Area',
   spot: 'Your delivery spot',
   spotLine: "You'll add the house number and street next.",
   cta: VIDEO.cta, // "Confirm & proceed"
@@ -242,7 +243,7 @@ export function LiveAddressScreen() {
   const near = pin ? nearestPlace(coverage, pin) : null;
   // still on a spot we made up: no "Confirm & proceed" until the pin is placed by the customer or the phone
   const mustMove = placed && !chosen && !!pin && isDefaultPin(coverage, pin);
-  const city = cityFor(flow, town);
+  const city = pin ? areaOfPin(coverage, pin) : cityFor(flow, town);
   useTrackOnce(placed && outside, 'out_of_zone', () => trackOutOfZone(near?.name ?? city)); // GTM: the pin settled outside the circle
   const title = editing ? editing.address_line1 : flow.area ? flow.area.name : T.spot;
   const line = editing ? editing.city
@@ -362,7 +363,8 @@ export function LiveAddressScreen() {
       {step === 'form' && pin && (
         <AddressForm
           pin={pin}
-          town={city}
+          area={city}
+          choices={areaChoices(coverage)}
           editing={editing}
           signedIn={!!session}
           prefill={{
@@ -393,8 +395,8 @@ export function LiveAddressScreen() {
 
 /* ------------------------------------------------------------------ form step */
 
-function AddressForm({ pin, town, editing, signedIn, prefill, onBack, onOutOfArea, onDone }: {
-  pin: LatLng; town: string; editing: SavedAddress | null; signedIn: boolean;
+function AddressForm({ pin, area: autoArea, choices, editing, signedIn, prefill, onBack, onOutOfArea, onDone }: {
+  pin: LatLng; area: string; choices: string[]; editing: SavedAddress | null; signedIn: boolean;
   prefill: { name: string; phone: string };
   onBack: () => void; onOutOfArea: () => void; onDone: () => void;
 }) {
@@ -413,6 +415,8 @@ function AddressForm({ pin, town, editing, signedIn, prefill, onBack, onOutOfAre
     line: !signedIn ? guest?.details?.address_line1 ?? '' : '',
     notes: !signedIn ? guest?.details?.delivery_instructions ?? '' : '',
   }));
+  // the area comes from the pin; the customer can change it (owner, 2026-10-22: a Beruwala address was saved as Dharga Town)
+  const [town, setTown] = useState(autoArea);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [out, setOut] = useState(false);
@@ -441,7 +445,7 @@ function AddressForm({ pin, town, editing, signedIn, prefill, onBack, onOutOfAre
     setBusy(true);
     try {
       if (editing) {
-        const patch: UpdateAddressBody = { ...details };
+        const patch: UpdateAddressBody = { ...details, city: town };
         if (metresBetween(pin, { lat: editing.latitude, lng: editing.longitude }) > 0.5) {
           patch.latitude = pin.lat;
           patch.longitude = pin.lng;
@@ -488,6 +492,16 @@ function AddressForm({ pin, town, editing, signedIn, prefill, onBack, onOutOfAre
         <Field label={COPY.name} value={f.name} placeholder={COPY.nameHint} onChange={put('name')} error={errors.name} autoComplete="name" maxLength={80} />
         <Field label={COPY.phone} value={f.phone} placeholder={COPY.phoneHint} onChange={put('phone')} error={errors.phone} keyboardType="phone-pad" autoComplete="tel" maxLength={20} />
         <Field label={COPY.other} value={f.other} placeholder={COPY.otherHint} onChange={put('other')} error={errors.other} keyboardType="phone-pad" maxLength={20} />
+        <View style={{ marginTop: 22 }}>
+          <Text style={styles.label}>{T.area}</Text>
+          <View style={styles.chips}>
+            {(choices.includes(town) ? choices : [...choices, town]).map((a) => (
+              <Pressable key={a} onPress={() => setTown(a)} accessibilityRole="button" accessibilityState={{ selected: a === town }} style={[styles.chip, a === town && styles.chipOn]}>
+                <Text style={[styles.chipTxt, a === town && styles.chipTxtOn]}>{a}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
         <Field label={COPY.line} value={f.line} placeholder={COPY.lineHint} onChange={put('line')} error={errors.line} autoComplete="street-address" maxLength={150} />
         <Field label={COPY.notes} value={f.notes} placeholder={COPY.notesHint} onChange={put('notes')} error={errors.notes} maxLength={300} />
         {!!errors.pin && <Text style={styles.fieldError}>{errors.pin}</Text>}
@@ -541,6 +555,11 @@ function Field({ label, value, onChange, placeholder, error, keyboardType, autoC
 }
 
 const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  chip: { paddingHorizontal: 13, height: 34, borderRadius: 17, borderWidth: 1, borderColor: '#DCDCE0', backgroundColor: '#fff', justifyContent: 'center' },
+  chipOn: { backgroundColor: C.brand, borderColor: C.brand },
+  chipTxt: { fontFamily: F.medium, fontSize: 13.5, color: '#55555C' },
+  chipTxtOn: { fontFamily: F.semi, color: C.brandInk },
   mapLoading: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFEBE3', paddingHorizontal: 40 },
   failTxt: { fontFamily: F.medium, fontSize: 14, color: '#55555C', textAlign: 'center', lineHeight: 19 },
   retry: { marginTop: 14, height: 38, borderRadius: 19, paddingHorizontal: 18, backgroundColor: C.brand, justifyContent: 'center' },
