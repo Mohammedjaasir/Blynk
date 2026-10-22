@@ -155,13 +155,67 @@ export function qrLinksPayload(links: readonly QrLink[]): { links: QrLink[] } {
 const QR_STYLE = { errorCorrectionLevel: 'H' as const, margin: 4, color: { dark: '#12151F', light: '#FFFFFF' } };
 export const QR_PNG_SIZE = 1600;
 
-/** The QR of a code's short address as an SVG string (shown on the page and downloaded for print). */
-export function qrSvg(code: string): Promise<string> {
-  return QRCode.toString(qrShortAddress(code), { ...QR_STYLE, type: 'svg' });
+// The Blynk icon in the middle (owner, 2026-10-22: "in the qr code put blynk icon"). Level H
+// recovers up to 30% of a code; the icon and its white margin cover about 15%.
+const LOGO_WIDTH_SQUARES = 8.4;
+const LOGO_PAD_SQUARES = 1.1;
+
+/** The code's SVG with the Blynk icon in the middle: a vector code with the icon embedded. */
+export async function qrSvgWithLogo(text: string): Promise<string> {
+  const { QR_LOGO_DATA_URI, QR_LOGO_RATIO } = await import('./qrLogo');
+  const model = QRCode.create(text, { errorCorrectionLevel: QR_STYLE.errorCorrectionLevel });
+  const n = model.modules.size;
+  const cell = 10;
+  const margin = QR_STYLE.margin;
+  const size = (n + margin * 2) * cell;
+  let squares = '';
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      if (model.modules.get(x, y)) squares += `M${(x + margin) * cell} ${(y + margin) * cell}h${cell}v${cell}h-${cell}z`;
+    }
+  }
+  const mid = size / 2;
+  const w = LOGO_WIDTH_SQUARES * cell;
+  const h = w * QR_LOGO_RATIO;
+  const pad = LOGO_PAD_SQUARES * cell;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">` +
+    `<rect width="${size}" height="${size}" fill="${QR_STYLE.color.light}"/>` +
+    `<path d="${squares}" fill="${QR_STYLE.color.dark}" shape-rendering="crispEdges"/>` +
+    `<rect x="${mid - w / 2 - pad}" y="${mid - h / 2 - pad}" width="${w + pad * 2}" height="${h + pad * 2}" rx="${cell * 1.2}" fill="${QR_STYLE.color.light}"/>` +
+    `<image x="${mid - w / 2}" y="${mid - h / 2}" width="${w}" height="${h}" xlink:href="${QR_LOGO_DATA_URI}"/>` +
+    `</svg>`
+  );
 }
-/** The same QR as a 1600px PNG data URL. */
-export function qrPngDataUrl(code: string): Promise<string> {
-  return QRCode.toDataURL(qrShortAddress(code), { ...QR_STYLE, width: QR_PNG_SIZE });
+
+/** The QR of a code's short address as an SVG string (shown on the page and downloaded for print). */
+export async function qrSvg(code: string): Promise<string> {
+  const text = qrShortAddress(code);
+  try {
+    return await qrSvgWithLogo(text);
+  } catch {
+    return QRCode.toString(text, { ...QR_STYLE, type: 'svg' }); // no icon rather than no code
+  }
+}
+/** The same QR (with the icon) as a 1600px PNG data URL; the plain code where the browser cannot draw it. */
+export async function qrPngDataUrl(code: string): Promise<string> {
+  const text = qrShortAddress(code);
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('no canvas');
+    const svg = await qrSvgWithLogo(text);
+    const img = new Image();
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await img.decode();
+    canvas.width = canvas.height = QR_PNG_SIZE;
+    ctx.fillStyle = QR_STYLE.color.light;
+    ctx.fillRect(0, 0, QR_PNG_SIZE, QR_PNG_SIZE);
+    ctx.drawImage(img, 0, 0, QR_PNG_SIZE, QR_PNG_SIZE);
+    return canvas.toDataURL('image/png');
+  } catch {
+    return QRCode.toDataURL(text, { ...QR_STYLE, width: QR_PNG_SIZE });
+  }
 }
 
 export const qrFileName = (code: string, ext: 'svg' | 'png') => `blynk-qr-${code}.${ext}`;
