@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeOut, interpolate, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue,
-  withTiming, ZoomIn,
+  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
@@ -35,6 +35,7 @@ import { detailsBody, detailsProblem, EMPTY_DETAILS, type CheckoutDetails } from
 import { birthdayOf, canRedeem, pointsOf, referralOf } from '@/blynk/checkout/rewards';
 import { savingsHeader } from '@/blynk/checkout/savings';
 import { CLEAR_CART } from '@/blynk/ui/strings';
+import { EmptyCartArt } from '@/components/EmptyCartArt';
 import { accountStyles as A, Button as SheetButton, Sheet } from '@/blynk/account/ui';
 import { useTrackOnce } from '@/blynk/analytics/AnalyticsHost';
 import { trackBeginCheckout, trackOutOfZoneError, trackPurchase, trackShippingInfo, trackViewCart } from '@/blynk/analytics/track';
@@ -396,7 +397,7 @@ export default function Cart() {
   if (lines.length === 0 && cart.combos.length === 0 && !loading) {
     return (
       <View style={[styles.empty, { paddingTop: insets.top }]}>
-        <Animated.Text entering={ZoomIn.springify().mass(1).energyThreshold(1e-4)} style={{ fontSize: 80 }}>🧺</Animated.Text>
+        <EmptyCartArt />
         <Text style={styles.emptyTitle}>Your cart is empty</Text>
         <PressScale onPress={() => router.replace('/home')} style={[styles.cta, { paddingHorizontal: 30, marginTop: 20 }]}>
           <Text style={styles.ctaTxt}>Browse</Text>
