@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { AREA, noteText } from './copy';
 import {
   centreName, circleRing, coverageOf, deliveryAreas, edgePoint, frameFor, inFrame, insideCoverage, kmBetween, kmText,
-  nearestPlace, pinForArea, placesAround, project, radiusText,
+  isDefaultPin, nearestPlace, pinForArea, placesAround, project, radiusText,
 } from './coverage';
 import { cityFor, flowReducer, gpsFailureOf, initialFlow, leavesScreen, type FlowState } from './flow';
 import { CLOCK_TOWER } from './places';
@@ -113,7 +113,7 @@ describe('address flow when location access is denied', () => {
   test('opens on the delivery-area map first; gps=off adds the "location is off" note', () => {
     expect(start()).toMatchObject({ step: 'area', note: null, start: cov.center });
     expect(start({ gpsOff: true })).toMatchObject({ step: 'area', note: 'denied' });
-    expect(noteText('denied')).toMatch(/drag the pin to your house, or choose your area/);
+    expect(noteText('denied')).toMatch(/choose your house on the map/);
   });
 
   test('a GPS fix inside goes straight to the map; outside shows the area map first', () => {
@@ -184,5 +184,24 @@ describe('address flow when location access is denied', () => {
     expect(s).toMatchObject({ step: 'map', start: far, asking: false });
     expect(insideCoverage(cov, far).inside).toBe(false);
     expect(AREA.farLine(insideCoverage(cov, far).km, cov)).toMatch(/We deliver within 4 km\. Move the pin closer to continue\./);
+  });
+});
+
+describe('the pin is never left on a spot we made up (owner, 2026-10-22)', () => {
+  test('the store and the middle of a listed area are default spots; a real house is not', () => {
+    expect(isDefaultPin(cov, cov.center)).toBe(true);
+    expect(isDefaultPin(cov, { lat: cov.center.lat + 0.0001, lng: cov.center.lng })).toBe(true); // about 11 m
+    expect(isDefaultPin(cov, pinForArea(byName('Aluthgama')))).toBe(true);
+    expect(isDefaultPin(cov, { lat: cov.center.lat + 0.002, lng: cov.center.lng })).toBe(false); // about 220 m
+    expect(isDefaultPin(cov, { lat: NaN, lng: NaN })).toBe(true);
+  });
+
+  test('the map opens "fresh" without a GPS fix and not with one', () => {
+    const start = (over: Partial<Parameters<typeof initialFlow>[0]> = {}) => initialFlow({ coverage: cov, ...over });
+    expect(start().fresh).toBe(true);
+    expect(start({ fix: { lat: 6.4372, lng: 80.0378 } }).fresh).toBe(false);
+    const area = flowReducer(start(), { type: 'dragPin', coverage: cov });
+    expect(area.fresh).toBe(true);
+    expect(flowReducer(area, { type: 'gpsOk', fix: { lat: 6.4372, lng: 80.0378 }, coverage: cov }).fresh).toBe(false);
   });
 });

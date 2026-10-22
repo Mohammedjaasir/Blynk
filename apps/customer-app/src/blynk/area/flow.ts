@@ -28,6 +28,8 @@ export type FlowState = {
   area: PlaceAt | null;
   /** Editing a saved address: the area step and list are skipped. */
   editing: boolean;
+  /** The map opens at a spot we made up (the store, an area's middle), not at a GPS fix: the customer must move it. */
+  fresh: boolean;
 };
 
 export type FlowEvent =
@@ -62,14 +64,14 @@ export function initialFlow(args: {
   /** Editing a saved address (its pin may still be loading: then the store centre until it arrives). */
   edit?: boolean; editing?: LatLng | null;
 }): FlowState {
-  const base = { asking: false, startKey: 0, area: null, editing: false };
+  const base = { asking: false, startKey: 0, area: null, editing: false, fresh: true };
   if (args.edit) {
     return { ...base, step: 'map', note: null, start: args.editing && validLatLng(args.editing) ? args.editing : args.coverage.center, editing: true };
   }
   if (args.fix && validLatLng(args.fix)) {
     const inside = insideCoverage(args.coverage, args.fix).inside;
     return inside
-      ? { ...base, step: 'map', note: null, start: args.fix }
+      ? { ...base, step: 'map', note: null, start: args.fix, fresh: false }
       : { ...base, step: 'area', note: 'outsideFix', start: args.fix };
   }
   return { ...base, step: 'area', note: args.gpsOff ? 'denied' : null, start: args.coverage.center };
@@ -81,17 +83,17 @@ export function flowReducer(s: FlowState, e: FlowEvent): FlowState {
       return s.asking ? s : { ...s, asking: true, note: null };
     case 'gpsOk':
       // a fix outside the circle still opens the map there: the card says it is outside
-      return { ...s, asking: false, step: 'map', note: null, start: e.fix, startKey: s.startKey + 1, area: null };
+      return { ...s, asking: false, step: 'map', note: null, start: e.fix, startKey: s.startKey + 1, area: null, fresh: false };
     case 'gpsFail':
       // denied / unavailable: stay (or go back) to the area map with the two GPS-free ways
       return { ...s, asking: false, step: s.step === 'map' ? 'map' : 'area', note: e.reason };
     case 'dragPin':
-      return { ...s, step: 'map', note: 'drag', start: e.coverage.center, startKey: s.startKey + 1, area: null };
+      return { ...s, step: 'map', note: 'drag', start: e.coverage.center, startKey: s.startKey + 1, area: null, fresh: true };
     case 'openList':
       return { ...s, step: 'list', note: s.note === 'outsideFix' ? null : s.note };
     case 'pickArea':
       if (!e.area.inside) return s;
-      return { ...s, step: 'map', note: 'areaPicked', start: pinForArea(e.area), startKey: s.startKey + 1, area: e.area };
+      return { ...s, step: 'map', note: 'areaPicked', start: pinForArea(e.area), startKey: s.startKey + 1, area: e.area, fresh: true };
     case 'confirmPin':
       return s.step === 'map' ? { ...s, step: 'form' } : s;
     case 'back':

@@ -12,9 +12,9 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrackOnce } from '@/blynk/analytics/AnalyticsHost';
 import { trackOutOfZone } from '@/blynk/analytics/track';
-import { AreaIntro, AreaList } from '@/blynk/area/AreaSteps';
+import { AreaIntro } from '@/blynk/area/AreaSteps';
 import { AREA, noteText } from '@/blynk/area/copy';
-import { circleRing, coverageOf, insideCoverage, kmText, nearestPlace, type Coverage } from '@/blynk/area/coverage';
+import { circleRing, coverageOf, insideCoverage, isDefaultPin, kmText, nearestPlace, type Coverage } from '@/blynk/area/coverage';
 import { cityFor, flowReducer, gpsFailureOf, initialFlow, leavesScreen } from '@/blynk/area/flow';
 import { formatPhone } from '@/blynk/auth/phone';
 import { useSession } from '@/blynk/auth/session';
@@ -51,6 +51,7 @@ const T = {
   search: 'Move the map to your delivery spot',
   moving: VIDEO.loadingHint, // "Order will be delivered here"
   placed: VIDEO.placedHint, // "Place the pin at exact delivery location"
+  mustMove: 'Move the map so the pin sits on your house',
   spot: 'Your delivery spot',
   spotLine: "You'll add the house number and street next.",
   cta: VIDEO.cta, // "Confirm & proceed"
@@ -122,6 +123,9 @@ export function LiveAddressScreen() {
   const [note, setNote] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [outOfArea, setOutOfArea] = useState(false);
+  // the pin came from the phone's location (or the customer moved it): then it may rest anywhere. Otherwise
+  // it must not stay on a spot we made up (the store, an area's middle) - owner, 2026-10-22.
+  const [chosen, setChosen] = useState(!flow.fresh && !editId);
 
   const hostRef = useRef<View>(null);
   const mapRef = useRef<MlMap | null>(null);
@@ -132,6 +136,7 @@ export function LiveAddressScreen() {
   if (seenKey !== flow.startKey) {
     setSeenKey(flow.startKey);
     setOutOfArea(false);
+    setChosen(!flow.fresh);
     setNote(flow.area ? AREA.areaLine(flow.area.name) : noteText(flow.note === 'areaPicked' ? null : flow.note));
   }
 
@@ -214,7 +219,7 @@ export function LiveAddressScreen() {
     setLocating(true);
     setNote(null);
     locateOnce()
-      .then((p) => { mapRef.current?.easeTo({ center: [p.lng, p.lat], zoom: Math.max(MAP_ZOOM.start, ZOOM.gps), duration: 600 }); })
+      .then((p) => { setChosen(true); mapRef.current?.easeTo({ center: [p.lng, p.lat], zoom: Math.max(MAP_ZOOM.start, ZOOM.gps), duration: 600 }); })
       .catch((e) => setNote(noteText(gpsFailureOf(e)) ?? T.gpsOff))
       .finally(() => setLocating(false));
   };
@@ -235,6 +240,8 @@ export function LiveAddressScreen() {
   const far = pin ? insideCoverage(coverage, pin) : null;
   const outside = !!far && !far.inside;
   const near = pin ? nearestPlace(coverage, pin) : null;
+  // still on a spot we made up: no "Confirm & proceed" until the pin is placed by the customer or the phone
+  const mustMove = placed && !chosen && !!pin && isDefaultPin(coverage, pin);
   const city = cityFor(flow, town);
   useTrackOnce(placed && outside, 'out_of_zone', () => trackOutOfZone(near?.name ?? city)); // GTM: the pin settled outside the circle
   const title = editing ? editing.address_line1 : flow.area ? flow.area.name : T.spot;
@@ -322,7 +329,7 @@ export function LiveAddressScreen() {
               </View>
             ) : (
               <View style={styles.cardHead}>
-                <Text style={styles.cardHint}>{placed ? T.placed : T.moving}</Text>
+                <Text style={styles.cardHint}>{mustMove ? T.mustMove : placed ? T.placed : T.moving}</Text>
               </View>
             )}
             {placed ? (
@@ -333,7 +340,7 @@ export function LiveAddressScreen() {
                 </View>
                 <Text style={styles.placeLine}>{outOfArea ? COPY.outBody : outside && far ? AREA.farLine(far.km, coverage) : line}</Text>
                 {/* outside the area: move the pin to continue, no "Confirm & proceed" (owner, 2026-10-16) */}
-                {outOfArea || outside ? null : (
+                {outOfArea || outside || mustMove ? null : (
                   <PressScale onPress={() => dispatch({ type: 'confirmPin' })} style={styles.cta} haptic scaleTo={0.96}>
                     <Text style={styles.ctaTxt}>{T.cta}</Text>
                   </PressScale>
@@ -377,15 +384,6 @@ export function LiveAddressScreen() {
           asking={flow.asking}
           onBack={leave}
           onGps={askGps}
-          onDrag={() => dispatch({ type: 'dragPin', coverage })}
-          onList={() => dispatch({ type: 'openList' })}
-        />
-      )}
-      {step === 'list' && (
-        <AreaList
-          coverage={coverage}
-          onBack={() => dispatch({ type: 'back' })}
-          onPick={(area) => dispatch({ type: 'pickArea', area })}
           onDrag={() => dispatch({ type: 'dragPin', coverage })}
         />
       )}

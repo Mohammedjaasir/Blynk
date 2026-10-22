@@ -3,7 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, V
 import Animated, { FadeIn, FadeInDown, SlideInRight } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SmallPin, TargetIcon } from '@/blynk/address/pins';
-import { BackIcon, ChevronIcon, NavIcon } from '@/components/icons';
+import { BackIcon, ChevronIcon } from '@/components/icons';
 import { PressScale } from '@/components/ui';
 import { C, F } from '@/lib/theme';
 import { AREA, noteText } from './copy';
@@ -19,9 +19,9 @@ import type { Note } from './flow';
 const MAP_MAX = 420;
 
 /** Step 1: where we deliver, then GPS / drag the pin / choose the area. */
-export function AreaIntro({ coverage, note, asking, onBack, onGps, onDrag, onList }: {
+export function AreaIntro({ coverage, note, asking, onBack, onGps, onDrag }: {
   coverage: Coverage; note: Note; asking: boolean;
-  onBack: () => void; onGps: () => void; onDrag: () => void; onList: () => void;
+  onBack: () => void; onGps: () => void; onDrag: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -54,7 +54,6 @@ export function AreaIntro({ coverage, note, asking, onBack, onGps, onDrag, onLis
               <Option primary icon={asking ? <ActivityIndicator size="small" color={C.brandInk} /> : <TargetIcon />} title={asking ? AREA.asking : AREA.useGps} onPress={onGps} disabled={asking} />
             )}
             <Option icon={<SmallPin />} title={AREA.drag} sub={AREA.dragSub} onPress={onDrag} primary={gpsOff} />
-            <Option icon={<NavIcon size={16} color={C.brandInk} />} title={AREA.list} sub={AREA.listSub} onPress={onList} />
             {gpsOff && (
               <Option icon={asking ? <ActivityIndicator size="small" color={C.brandInk} /> : <TargetIcon />} title={asking ? AREA.asking : AREA.useGps} onPress={onGps} disabled={asking} quiet />
             )}

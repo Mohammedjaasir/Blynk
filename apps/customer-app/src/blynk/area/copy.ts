@@ -8,8 +8,8 @@ export const AREA = {
   listTitle: 'Choose your area',
   useGps: 'Use my current location',
   asking: 'Finding you…',
-  drag: 'Drag the pin to my house',
-  dragSub: 'No location access needed',
+  drag: 'Choose on the map',
+  dragSub: 'Move the map so the pin sits on your house',
   list: 'Choose my area from a list',
   listSub: 'Then type your house, street or landmark',
   inside: 'We deliver here',
@@ -37,10 +37,10 @@ export const AREA = {
 /** The note above the area map / on the map picker for each situation. */
 export function noteText(n: Note): string | null {
   switch (n) {
-    case 'denied': return "Location access is off. That's fine: drag the pin to your house, or choose your area.";
-    case 'unavailable': return "We couldn't get your location. Drag the pin to your house, or choose your area.";
-    case 'timeout': return 'Finding your location took too long. Drag the pin to your house, or choose your area.';
-    case 'unsupported': return "This phone can't share its location here. Drag the pin to your house, or choose your area.";
+    case 'denied': return "Location access is off. That's fine: choose your house on the map.";
+    case 'unavailable': return "We couldn't get your location. Choose your house on the map.";
+    case 'timeout': return 'Finding your location took too long. Choose your house on the map.';
+    case 'unsupported': return "This phone can't share its location here. Choose your house on the map.";
     case 'outsideFix': return "You're outside our delivery area right now. If the order is for somewhere inside the circle, set that spot.";
     case 'drag': return 'The map starts at the store. Drag it so the pin sits on your house.';
     case 'areaPicked': return null;

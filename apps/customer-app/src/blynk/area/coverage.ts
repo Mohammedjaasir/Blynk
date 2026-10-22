@@ -106,6 +106,17 @@ export function deliveryAreas(c: Coverage, places: readonly Place[] = PLACES): {
 /** Where the pin starts for a picked area: its centre (the customer fine-tunes it on the map). */
 export const pinForArea = (area: Pick<Place, 'lat' | 'lng'>): LatLng => ({ lat: area.lat, lng: area.lng });
 
+/**
+ * A spot we made up rather than one the customer chose: the store itself or the middle of a listed
+ * area (where the map opens without a GPS fix). An address must never be saved there untouched
+ * (owner, 2026-10-22: "they must add the address only ... take their device location or choose from the map").
+ */
+export function isDefaultPin(c: Coverage, p: LatLng, places: readonly Place[] = PLACES): boolean {
+  if (!validLatLng(p)) return true;
+  return kmBetween(c.center, p) <= DEFAULT_PIN_KM || places.some((q) => kmBetween(q, p) <= DEFAULT_PIN_KM);
+}
+const DEFAULT_PIN_KM = 0.03;
+
 /** Is this spot inside the drawn circle? Advisory only (the server decides). */
 export function insideCoverage(c: Coverage, p: LatLng): { inside: boolean; km: number } {
   const km = kmBetween(c.center, p);
