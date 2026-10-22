@@ -12,7 +12,7 @@ export type AppTextKey =
   | 'cart_bar_line' | 'cart_basket_title' | 'cart_bill_note' | 'pay_online_coming_soon' | 'placed_title' | 'placed_sub';
 
 /** Surface colours (owner, 2026-10-18: "even colors also editable"); '' = the app's own. */
-export type AppColorKey = 'hero_bg_top' | 'hero_bg_bottom' | 'home_band_bg' | 'cart_header_bg' | 'cart_bar_bg' | 'cart_bar_strip_bg';
+export type AppColorKey = 'hero_bg_top' | 'hero_bg_bottom' | 'home_band_bg' | 'cart_header_bg' | 'cart_bar_bg' | 'cart_bar_strip_bg' | 'vs_text' | 'vs_shade';
 export const APP_COLORS: { key: AppColorKey; label: string; builtIn: string }[] = [
   { key: 'hero_bg_top', label: 'Home banner, top (also the Home header)', builtIn: '#2E0C66' },
   { key: 'hero_bg_bottom', label: 'Home banner, bottom', builtIn: '#3A1380' },
@@ -20,6 +20,8 @@ export const APP_COLORS: { key: AppColorKey; label: string; builtIn: string }[] 
   { key: 'cart_header_bg', label: 'Cart header', builtIn: '#FFE141' },
   { key: 'cart_bar_bg', label: 'Cart bar', builtIn: '#FFE141' },
   { key: 'cart_bar_strip_bg', label: 'Cart bar strip', builtIn: '#F2C600' },
+  { key: 'vs_text', label: 'Offer tile price text (Home, "NOW LKR ...")', builtIn: '#FFFFFF' },
+  { key: 'vs_shade', label: 'Offer tile fade behind that text', builtIn: '#000000' },
 ];
 
 export type AppTextsFields = Record<AppTextKey, string> & Record<AppColorKey, string> & {

@@ -51,7 +51,12 @@ export type AppTextField = keyof typeof APP_TEXT_FIELDS;
  * editable through admin for each and everything"); '' = the app's own. The promo band has
  * its own colours (promo-band.ts) and each aisle card its own (aisle_colors).
  */
-export const APP_COLOR_FIELDS = ['hero_bg_top', 'hero_bg_bottom', 'home_band_bg', 'cart_header_bg', 'cart_bar_bg', 'cart_bar_strip_bg'] as const;
+export const APP_COLOR_FIELDS = [
+  'hero_bg_top', 'hero_bg_bottom', 'home_band_bg', 'cart_header_bg', 'cart_bar_bg', 'cart_bar_strip_bg',
+  // The price text on Home's offer tiles and the fade behind it (owner, 2026-10-22: "it's not
+  // clear, white colour ... give the colour option in admin").
+  'vs_text', 'vs_shade',
+] as const;
 export type AppColorField = (typeof APP_COLOR_FIELDS)[number];
 
 export const APP_TEXT_LISTS = { home_aisle_lines: { max: 8, chars: 36 }, login_headlines: { max: 5, chars: 28 } } as const;

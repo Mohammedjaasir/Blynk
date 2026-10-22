@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StoreInfo } from '../api/types';
 import { store } from '../test/fixtures';
-import { aisleColor, appColor, appLines, appText, inkOn, underAmount } from './appTexts';
+import { aisleColor, appColor, appLines, appText, inkOn, underAmount, withAlpha } from './appTexts';
 import { filterChips } from './filters';
 import { payOptions } from '../payments/method';
 
@@ -37,4 +37,12 @@ describe('app texts (Admin / Ops overrides, owner 2026-10-18)', () => {
   it('the "coming soon" payment line can be reworded', () => {
     expect(payOptions(null, 100, undefined, 'Card payments soon')[1]!.sub).toBe('Card payments soon');
   });
+});
+
+it('offer tile colours: the fade takes Admin / Ops\' colour at any opacity, black when none is set (owner, 2026-10-22)', () => {
+  expect(withAlpha('#FFFFFF', 0.78)).toBe('rgba(255,255,255,0.78)');
+  expect(withAlpha('#12151f', 0)).toBe('rgba(18,21,31,0)');
+  expect(withAlpha('not a colour', 0.5)).toBe('rgba(0,0,0,0.5)');
+  expect(appColor(withTexts({ vs_text: '#12151F', vs_shade: '#FFFFFF' }), 'vs_text', '#FFFFFF')).toBe('#12151F');
+  expect(appColor(null, 'vs_shade', '#000000')).toBe('#000000');
 });

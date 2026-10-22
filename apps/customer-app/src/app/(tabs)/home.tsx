@@ -17,7 +17,7 @@ import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import type { Product } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { filterChips, toggle, type FilterId } from '@/blynk/lib/filters';
-import { aisleColor, appColor, appText, underAmount } from '@/blynk/lib/appTexts';
+import { aisleColor, appColor, appText, underAmount, withAlpha } from '@/blynk/lib/appTexts';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice } from '@/blynk/lib/pricing';
 import { aisleArt, aislePhase, aisleTint } from '@/blynk/lib/aisleArt';
@@ -710,6 +710,11 @@ function VsSection({ live }: { live: LiveVs | null }) {
   // the band's colour: Admin / Ops' when set (app_texts.home_band_bg; owner, 2026-10-18)
   const store = useStore();
   const tint = live ? appColor(store, 'home_band_bg', C.brandTint) : C.brandTint;
+  // The price text on a tile and the fade behind it: Admin / Ops' colours when set (owner,
+  // 2026-10-22: white text was not clear on a light picture); the fade is stronger and taller than
+  // before so it reads without any setting.
+  const tileText = appColor(store, 'vs_text', '#FFFFFF');
+  const tileShade = appColor(store, 'vs_shade', '#000000');
   return (
     <View style={{ marginTop: 34 }}>
       <Wave color={tint} />
@@ -726,8 +731,8 @@ function VsSection({ live }: { live: LiveVs | null }) {
             <PressScale key={t.id} scaleTo={0.97} onPress={() => t.aisle && openAisle(t.aisle)} style={{ width: MEAL_W }}>
               <View style={styles.vsTile}>
                 <Photo uri={t.image} name={t.name} size={MEAL_W * 0.86} />
-                <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.vsShade} />
-                <Text style={styles.vsItems}>{t.overlay[0]}{'\n'}{t.overlay[1]}</Text>
+                <LinearGradient colors={[withAlpha(tileShade, 0), withAlpha(tileShade, 0.78)]} style={[styles.vsShade, { height: 92 }]} />
+                <Text style={[styles.vsItems, { color: tileText }]}>{t.overlay[0]}{'\n'}{t.overlay[1]}</Text>
               </View>
               <Text style={styles.vsName} numberOfLines={1}>{t.name}</Text>
               {!!t.line && (

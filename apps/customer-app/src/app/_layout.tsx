@@ -19,6 +19,7 @@ import { installConnectivity } from '@/blynk/lib/connectivity';
 import { ShareStartup } from '@/blynk/share/ShareStartup';
 import { StoreProvider } from '@/blynk/store/StoreContext';
 import { SizePickerHost } from '@/components/SizePicker';
+import { ThemeColor } from '@/components/ThemeColor';
 import { SplashHandoverHost } from '@/components/SplashHandover';
 import { ConfigProblemScreen } from '@/components/ConfigProblem';
 import { DEMO } from '@/demo/mode';
@@ -64,6 +65,7 @@ function AppShell() {
           <StoreProvider>
             <CatalogProvider>
               <StatusBar style="auto" />
+              <ThemeColor />
               {/* before the screens: its page_view goes out ahead of the screen's own events */}
               <AnalyticsHost />
               <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#fff' } }}>

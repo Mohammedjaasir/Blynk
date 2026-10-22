@@ -143,6 +143,8 @@ export interface PublicAppTexts {
   /** Surface colours (#RRGGBB): the Home banner's top/bottom, the offers band, the cart header, the cart bar and its strip. */
   hero_bg_top?: string; hero_bg_bottom?: string; home_band_bg?: string;
   cart_header_bg?: string; cart_bar_bg?: string; cart_bar_strip_bg?: string;
+  /** Home's offer tiles: the price text colour and the fade behind it (#RRGGBB). */
+  vs_text?: string; vs_shade?: string;
   /** Category id -> #RRGGBB card colour. */
   aisle_colors?: Record<string, string>;
 }

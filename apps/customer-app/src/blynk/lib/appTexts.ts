@@ -30,7 +30,14 @@ export function underAmount(store: StoreInfo | null | undefined): number {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-type ColorKey = 'hero_bg_top' | 'hero_bg_bottom' | 'home_band_bg' | 'cart_header_bg' | 'cart_bar_bg' | 'cart_bar_strip_bg';
+type ColorKey = 'hero_bg_top' | 'hero_bg_bottom' | 'home_band_bg' | 'cart_header_bg' | 'cart_bar_bg' | 'cart_bar_strip_bg' | 'vs_text' | 'vs_shade';
+
+/** `#RRGGBB` as rgba(...) with the given opacity (for fades); black for anything that is not a colour. */
+export function withAlpha(hex: string, alpha: number): string {
+  if (!HEX.test(hex)) return `rgba(0,0,0,${alpha})`;
+  const n = (i: number) => parseInt(hex.slice(i, i + 2), 16);
+  return `rgba(${n(1)},${n(3)},${n(5)},${alpha})`;
+}
 
 /** Staff's colour for a surface (owner, 2026-10-18: "even colors also editable"), else `fallback`. */
 export function appColor(store: StoreInfo | null | undefined, key: ColorKey, fallback: string): string {

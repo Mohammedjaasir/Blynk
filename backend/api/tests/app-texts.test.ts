@@ -111,3 +111,14 @@ describe('app texts', () => {
     expect(s.aisle_colors).toEqual({});
   });
 });
+
+describe('offer tile colours (owner, 2026-10-22: "it\'s not clear, white colour ... give the colour option in admin")', () => {
+  it('Admin / Ops set the price text colour and the fade behind it; customers get them upper-cased, and blank puts the app\'s own back', async () => {
+    const res = await patchTexts({ vs_text: '#12151f', vs_shade: '#ffffff' }, opsToken);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(await publicTexts()).toEqual({ vs_text: '#12151F', vs_shade: '#FFFFFF' });
+    expect((await patchTexts({ vs_text: 'white' })).status).toBe(400);
+    await patchTexts({ vs_text: '', vs_shade: '' });
+    expect(await publicTexts()).toEqual({});
+  });
+});
