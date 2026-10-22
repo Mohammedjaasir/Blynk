@@ -129,6 +129,13 @@ export function Catalog() {
             <span className="cat-hub__count">Edit</span>
           </Link>
         </li>
+        {/* QR links (owner, 2026-10-22): the dynamic QR on a jersey or poster. */}
+        <li>
+          <Link className="cat-hub__card" to="/catalog/qr-links">
+            <span className="cat-hub__title">QR links</span>
+            <span className="cat-hub__count">Edit</span>
+          </Link>
+        </li>
         <li>
           <Link className="cat-hub__card" to="/catalog/combos">
             <span className="cat-hub__title">Combo packs</span>

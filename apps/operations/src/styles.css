@@ -4214,3 +4214,29 @@ a.button {
   .ad-links__row { grid-template-columns: minmax(0, 1fr) auto; }
   .ad-links__row .field__label { grid-column: 1 / -1; }
 }
+
+/* QR links (owner, 2026-10-22): one card per printed code - details on the left, the QR on the right. */
+.qr-list { display: grid; gap: 14px; margin: 8px 0 16px; }
+.qr-card { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 20px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.qr-card__main { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.qr-card__head { display: flex; gap: 10px; align-items: center; }
+.qr-card__name { flex: 1; font-weight: 700; }
+.qr-card__row { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.qr-card__warn { margin: 0; padding: 6px 10px; border-left: 3px solid #b26a00; background: #fff4d6; color: #7a4a00; font-size: var(--text-meta); font-weight: 600; }
+.qr-card__tags { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: var(--text-meta); }
+.qr-card__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin: 4px 0 0; }
+.qr-card__stats div { padding: 8px 10px; background: var(--canvas); border-radius: var(--radius); }
+.qr-card__stats dt { color: var(--ink-3); font-size: var(--text-label); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.qr-card__stats dd { margin: 2px 0 0; font-weight: 700; }
+.qr-card__side { display: grid; gap: 8px; align-content: start; justify-items: stretch; }
+.qr-card__image { width: 100%; aspect-ratio: 1; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); display: grid; place-items: center; }
+.qr-card__image svg { display: block; width: 100%; height: auto; }
+.qr-card__downloads { display: flex; flex-wrap: wrap; gap: 8px; }
+.qr-add { display: grid; grid-template-columns: 140px minmax(0, 1fr) minmax(0, 2fr) auto; gap: 10px; align-items: start; }
+@media (max-width: 760px) {
+  .qr-card { grid-template-columns: minmax(0, 1fr); }
+  .qr-card__side { justify-items: start; max-width: 240px; }
+  .qr-card__row { grid-template-columns: minmax(0, 1fr) auto; }
+  .qr-card__row .field__label { grid-column: 1 / -1; }
+  .qr-add { grid-template-columns: minmax(0, 1fr); }
+}

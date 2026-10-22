@@ -1,6 +1,7 @@
 import { UPLOAD_TIMEOUT_MS, apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
+import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
 import type {
   AppShareLinks,
   AppUpdatePolicySetting,
@@ -1242,6 +1243,12 @@ export const settings = {
     get: () => apiRequest<AppTextsSetting>('/admin/settings/app-texts'),
     update: (body: Partial<AppTextsFields>) =>
       apiRequest<AppTextsSetting>('/admin/settings/app-texts', { method: 'PATCH', body: { ...body } }),
+  },
+  /** QR links (owner, 2026-10-22): the printed code's short address and where it leads; PUT replaces the whole list. Audited. */
+  qrLinks: {
+    get: () => apiRequest<QrLinksSetting>('/admin/settings/qr-links'),
+    update: (body: { links: QrLink[] }) =>
+      apiRequest<QrLinksSetting>('/admin/settings/qr-links', { method: 'PUT', body: { ...body } }),
   },
   heroBanner: {
     get: () => apiRequest<HeroBannerSetting>('/admin/settings/hero-banner'),

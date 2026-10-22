@@ -118,6 +118,10 @@ export function Layout() {
               <NavLink to="/app-texts" className="nav__item">
                 App texts
               </NavLink>
+              {/* QR links (owner, 2026-10-22): the dynamic QR on a jersey or poster. */}
+              <NavLink to="/qr-links" className="nav__item">
+                QR links
+              </NavLink>
               <NavLink to="/coupons" className="nav__item">
                 Coupons
               </NavLink>
