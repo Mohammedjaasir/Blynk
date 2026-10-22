@@ -25,11 +25,12 @@ import { useFreeClaim } from '@/blynk/store/useFreeClaim';
 import { AisleStamp } from '@/components/AisleStamp';
 import { runAisleBeat } from '@/lib/clock';
 import { useStore } from '@/blynk/store/StoreContext';
+import { storage } from '@/blynk/lib/storage';
 import { Banner, useBannerTop } from '@/components/Banner';
 import { CART_BAR, CartBar } from '@/components/CartBar';
 import { ClosedBanner } from '@/components/ClosedBanner';
 import {
-  BagBadge, ChevronIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
+  BagBadge, ChevronIcon, CloseIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
 import { HomeFooter } from '@/components/HomeFooter';
 import { ProductCard } from '@/components/ProductCard';
@@ -99,6 +100,9 @@ const HOME_PAD_BOTTOM = 160;
  */
 const HOME_PAD_BOTTOM_NO_LOCATION = 300;
 
+/** Set once the first-launch location sheet was closed with its X. */
+const SHEET_CLOSED_KEY = 'blynk.home.locSheetClosed';
+
 type Phase = 'locating' | 'skeleton' | 'content' | 'banner';
 
 export default function Home() {
@@ -109,7 +113,8 @@ export default function Home() {
   const [timedPhase, setPhase] = useState<Phase>('locating');
   // live: where to deliver (header row, first-launch sheet); a spot chosen earlier keeps the sheet closed
   const here = useHomeLocation(useStore());
-  const [granted, setGranted] = useState(!DEMO && here.chosen);
+  // live: closing the sheet (X) browses without a spot, and the app remembers it (owner, 2026-10-22)
+  const [granted, setGranted] = useState(!DEMO && (here.chosen || storage.get(SHEET_CLOSED_KEY) === '1'));
   const [cat, setCat] = useState('all');
   const [filters, setFilters] = useState<string[]>([]);
   const [past, setPast] = useState(false);
@@ -294,6 +299,10 @@ export default function Home() {
 
   // Design mock: GRANT only asks the browser (the position is not used) and reveals the page.
   // Live: GRANT and "Enter Location Manually" open the map; the sheet closes once a spot is chosen.
+  const closeSheet = () => {
+    storage.set(SHEET_CLOSED_KEY, '1');
+    reveal();
+  };
   const grant = () => {
     if (!DEMO) { here.grant(); return; }
     try {
@@ -493,6 +502,11 @@ export default function Home() {
             <PressScale onPress={grant} style={styles.grant} haptic>
               <Text style={styles.grantTxt}>{!DEMO && here.asking ? here.sheet.asking : sheet.cta}</Text>
             </PressScale>
+            {!DEMO && (
+              <Pressable onPress={closeSheet} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close" style={styles.locClose}>
+                <CloseIcon size={14} color="#fff" />
+              </Pressable>
+            )}
           </View>
           <Pressable onPress={DEMO ? () => router.push('/address') : here.manual} style={styles.locManual}>
             <SearchIcon size={17} color={C.brandInk} />
@@ -1001,6 +1015,7 @@ const styles = StyleSheet.create({
   locTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   locTitle: { color: '#fff', fontFamily: F.bold, fontSize: 15.5 },
   locSub: { color: '#D6D6D6', fontFamily: F.regular, fontSize: 13, lineHeight: 14.5, marginTop: 5, marginRight: 30 },
+  locClose: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', marginTop: -2 },
   grant: { backgroundColor: '#fff', borderRadius: 13, paddingHorizontal: 11, height: 25, justifyContent: 'center', marginTop: -3 },
   grantTxt: { fontFamily: F.bold, fontSize: 12, color: '#000', letterSpacing: 0.2 },
   locManual: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingHorizontal: 30, height: 58 },
