@@ -17,6 +17,9 @@ import {
  * - 'required' (Admin/Operations set a minimum version): a full-screen
  *   "Update required" with only the Update button.
  * - 'available': a card at the bottom - Update, or Later (hidden for a day).
+ * - 'available' in automatic mode (owner, 2026-10-22): the store starts the
+ *   download by itself (lib maybeAutoInstall); the card says "Updating to
+ *   v...", has no Later, and keeps the Update button for a retry.
  */
 export function AppUpdatePrompt({ signedIn }: { signedIn: boolean }) {
   const s = useUpdateState();
@@ -55,13 +58,24 @@ export function AppUpdatePrompt({ signedIn }: { signedIn: boolean }) {
   }
 
   if (decision.kind === 'available') {
+    // Automatic: "Updating" while the app is on it; after a failed or cancelled
+    // attempt (idle again / error) it is the plain card with the Update button.
+    const updating =
+      decision.auto &&
+      s.phase !== 'error' &&
+      (s.phase !== 'idle' || !updateStore.hasAutoAttempted(decision.manifest.version_code));
     return (
       <aside className="app-update app-update--banner" aria-labelledby="app-update-title">
         <p id="app-update-title" className="app-update__title">
-          Update available — v{decision.manifest.version_name}
+          {updating ? `Updating to v${decision.manifest.version_name}…` : `Update available — v${decision.manifest.version_name}`}
         </p>
         {decision.notes ? <p className="app-update__notes">{decision.notes}</p> : null}
-        <InstallControls state={s} manifest={decision.manifest} onLater={() => updateStore.dismiss()} />
+        <InstallControls
+          state={s}
+          manifest={decision.manifest}
+          onLater={decision.auto ? undefined : () => updateStore.dismiss()}
+        />
+        {decision.auto ? <p className="app-update__fine">Android will ask you to tap Install.</p> : null}
       </aside>
     );
   }

@@ -2262,7 +2262,7 @@ export interface DoctorsAccessSetting {
 }
 
 /** In-app updates (owner, 2026-10-12): GET|PATCH /admin/settings/app-updates. */
-export type AppUpdateMode = 'optional' | 'required';
+export type AppUpdateMode = 'optional' | 'required' | 'automatic';
 export interface AppUpdatePolicySetting {
   min_version_code: number;
   mode: AppUpdateMode;

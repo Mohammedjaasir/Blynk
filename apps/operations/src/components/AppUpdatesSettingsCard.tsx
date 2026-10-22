@@ -18,6 +18,7 @@ import {
 
 const MODES: ReadonlyArray<{ id: AppUpdateMode; text: string }> = [
   { id: 'optional', text: 'Optional' },
+  { id: 'automatic', text: 'Automatic' },
   { id: 'required', text: 'Required' },
 ];
 
@@ -149,6 +150,7 @@ export function AppUpdatesSettingsCard() {
                   value={d.mode}
                   onPick={(mode) => edit(id, { mode })}
                 />
+                {d.mode === 'required' ? <p className="quiet">Phones still on Ops/Rider 1.2 (build 148) cannot update themselves: install them once by hand from a share link first.</p> : null}
                 <label className="field">
                   <span className="field__label">Release notes (optional)</span>
                   <textarea
@@ -170,8 +172,9 @@ export function AppUpdatesSettingsCard() {
             );
           })}
           <p className="quiet">
-            Optional shows &quot;Update available&quot; when a newer APK is published; staff can put it off for a day. Required
-            blocks apps below the minimum version code until they update. 0 = no minimum.
+            Optional shows &quot;Update available&quot;; staff can put it off for a day. Automatic downloads the new version by
+            itself when staff open the app and opens Android&apos;s install screen. Required blocks apps below the minimum
+            version code until they update. 0 = no minimum.
           </p>
           <button type="submit" className="button" disabled={saving}>
             {saving ? <Spinner label="Saving" /> : 'Save'}

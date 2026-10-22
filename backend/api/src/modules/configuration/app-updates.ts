@@ -18,6 +18,10 @@ import { downloadHandler, manifestHandler, shareDownloadHandler } from './app-do
  * than what is installed.
  *
  * - mode 'optional': a dismissible "Update available" reminder.
+ * - mode 'automatic' (owner, 2026-10-22: "automatic update option when they open the apk"):
+ *   the app starts downloading a newer APK as soon as it is opened (signed in) and opens
+ *   Android's install screen; staff tap Install. Never blocks the app. Apps older than this
+ *   mode read it as 'optional'.
  * - mode 'required': an installed versionCode below min_version_code blocks
  *   the app with only an Update button until it is updated.
  *
@@ -29,7 +33,7 @@ import { downloadHandler, manifestHandler, shareDownloadHandler } from './app-do
 export const APP_UPDATES_KEY = 'app_updates';
 export const STAFF_APPS = ['ops', 'rider'] as const;
 export type StaffApp = (typeof STAFF_APPS)[number];
-export const UPDATE_MODES = ['optional', 'required'] as const;
+export const UPDATE_MODES = ['optional', 'required', 'automatic'] as const;
 export type UpdateMode = (typeof UPDATE_MODES)[number];
 /** Android's own ceiling for versionCode. */
 export const MAX_VERSION_CODE = 2_100_000_000;
@@ -52,7 +56,7 @@ const policyInputSchema = z
       .min(0, 'min_version_code cannot be negative')
       .max(MAX_VERSION_CODE, `min_version_code cannot be above ${MAX_VERSION_CODE}`)
       .optional(),
-    mode: z.enum(UPDATE_MODES, { errorMap: () => ({ message: "mode must be 'optional' or 'required'" }) }).optional(),
+    mode: z.enum(UPDATE_MODES, { errorMap: () => ({ message: "mode must be 'optional', 'required' or 'automatic'" }) }).optional(),
     notes: z
       .string({ invalid_type_error: 'notes must be text' })
       .trim()
@@ -77,7 +81,7 @@ function policyFrom(value: unknown): AppUpdatePolicy {
   return {
     min_version_code:
       typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= MAX_VERSION_CODE ? code : 0,
-    mode: v.mode === 'required' ? 'required' : 'optional',
+    mode: v.mode === 'required' || v.mode === 'automatic' ? v.mode : 'optional',
     notes: typeof v.notes === 'string' ? v.notes.slice(0, MAX_NOTES_LENGTH) : '',
   };
 }

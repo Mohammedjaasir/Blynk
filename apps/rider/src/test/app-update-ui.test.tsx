@@ -82,6 +82,57 @@ describe('Update prompt', () => {
     expect(screen.queryByText('Update available — v1.11')).not.toBeInTheDocument();
   });
 
+  it('automatic: starts the update by itself - "Updating to", no Later, a note, then the install screen', async () => {
+    const deps = fakeDevice({ policy: { min_version_code: 0, mode: 'automatic', notes: '' } });
+    let finish: () => void = () => undefined;
+    deps.downloadAndInstall.mockImplementation(
+      (_m, _token, onProgress) =>
+        new Promise<void>((resolve) => {
+          onProgress(0.4);
+          finish = resolve;
+        })
+    );
+    render(<AppUpdatePrompt signedIn />);
+    expect(await screen.findByText(/Downloading the update… 40% of 6.0 MB/)).toBeInTheDocument();
+    expect(screen.getByText('Updating to v1.11…')).toBeInTheDocument();
+    expect(screen.queryByText(/Update available/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Later' })).not.toBeInTheDocument();
+    expect(screen.getByText('Android will ask you to tap Install.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => finish());
+    expect(await screen.findByText(/install screen is open/)).toBeInTheDocument();
+    expect(deps.downloadAndInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it('automatic: after a failed attempt the plain card with Try again stays, no second automatic try', async () => {
+    const user = userEvent.setup();
+    const deps = fakeDevice({ policy: { min_version_code: 0, mode: 'automatic', notes: '' } });
+    deps.downloadAndInstall.mockRejectedValue(Object.assign(new Error('x'), { code: 'NETWORK' }));
+    render(<AppUpdatePrompt signedIn />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Could not download the update/);
+    expect(screen.getByText('Update available — v1.11')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Later' })).not.toBeInTheDocument();
+    expect(deps.downloadAndInstall).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(deps.downloadAndInstall).toHaveBeenCalledTimes(2));
+  });
+
+  it('automatic: signed out shows nothing and starts nothing', async () => {
+    const deps = fakeDevice({ policy: { min_version_code: 50, mode: 'automatic', notes: '' } });
+    const { container } = render(<AppUpdatePrompt signedIn={false} />);
+    await act(async () => undefined);
+    expect(container).toBeEmptyDOMElement();
+    expect(deps.downloadAndInstall).not.toHaveBeenCalled();
+  });
+
+  it('optional: no automatic start, no automatic note', async () => {
+    const deps = fakeDevice();
+    render(<AppUpdatePrompt signedIn />);
+    expect(await screen.findByText('Update available — v1.11')).toBeInTheDocument();
+    expect(screen.queryByText('Android will ask you to tap Install.')).not.toBeInTheDocument();
+    expect(deps.downloadAndInstall).not.toHaveBeenCalled();
+  });
+
   it('Update downloads with progress, then Android\'s install screen', async () => {
     const user = userEvent.setup();
     const deps = fakeDevice();

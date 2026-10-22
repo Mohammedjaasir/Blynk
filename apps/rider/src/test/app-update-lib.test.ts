@@ -46,6 +46,7 @@ describe('decideUpdate', () => {
       kind: 'available',
       manifest: manifest(11),
       notes: 'Faster',
+      auto: false,
     });
   });
 
@@ -55,6 +56,21 @@ describe('decideUpdate', () => {
     expect(decideUpdate({ ...base, manifest: manifest(11), dismissed: { ...dismissed, until: NOW - 1 } }).kind).toBe('available');
     // A newer version than the one put off shows again.
     expect(decideUpdate({ ...base, manifest: manifest(12), dismissed }).kind).toBe('available');
+  });
+
+  it('automatic: available with auto, never blocks (even below a minimum), ignores an earlier Later', () => {
+    const automatic = policy({ mode: 'automatic', min_version_code: 50, notes: 'Auto' });
+    expect(decideUpdate({ ...base, manifest: manifest(11), policy: automatic })).toEqual({
+      kind: 'available',
+      manifest: manifest(11),
+      notes: 'Auto',
+      auto: true,
+    });
+    const dismissed = { versionCode: 11, until: NOW + DISMISS_MS };
+    expect(decideUpdate({ ...base, manifest: manifest(11), policy: automatic, dismissed }).kind).toBe('available');
+    // Offline (no manifest) or up to date: nothing, never the blocking screen.
+    expect(decideUpdate({ ...base, manifest: null, policy: automatic })).toEqual({ kind: 'none' });
+    expect(decideUpdate({ ...base, manifest: manifest(10), policy: automatic })).toEqual({ kind: 'none' });
   });
 
   it('required below the minimum: blocks, and cannot be dismissed', () => {
@@ -99,6 +115,9 @@ describe('parsing and messages', () => {
     expect(parseManifest(null)).toBeNull();
     expect(parsePolicy({ min_version_code: 4, mode: 'required', notes: 'x' })).toEqual(policy({ min_version_code: 4, mode: 'required', notes: 'x' }));
     expect(parsePolicy({ min_version_code: -1 })).toBeNull();
+    expect(parsePolicy({ min_version_code: 0, mode: 'automatic' })).toEqual(policy({ mode: 'automatic' }));
+    expect(parsePolicy({ min_version_code: 0, mode: 'sometimes' })?.mode).toBe('optional');
+    expect(parsePolicy({ min_version_code: 0 })?.mode).toBe('optional');
   });
 
   it('sign-in problems in plain words', () => {
@@ -261,5 +280,123 @@ describe('update store', () => {
     };
     await updateStore.install();
     expect(updateStore.getState().installError).toBe('Please sign in again.');
+  });
+
+  describe('automatic mode (owner, 2026-10-22)', () => {
+    const installCalls = () => (appUpdateDeps.downloadAndInstall as unknown as ReturnType<typeof vi.fn>).mock.calls.length;
+    const automatic = () => policy({ mode: 'automatic' });
+
+    it('a newer version, signed in, idle: starts exactly one install by itself', async () => {
+      fetchPolicy.mockResolvedValue(automatic());
+      await updateStore.start();
+      await vi.waitFor(() => expect(installCalls()).toBe(1));
+      expect(appUpdateDeps.downloadAndInstall).toHaveBeenCalledWith(manifest(11), 'fresh-access-token', expect.any(Function));
+      await vi.waitFor(() => expect(updateStore.getState().phase).toBe('installing'));
+      // Back from the install screen without installing, and later foreground checks: no second attempt.
+      updateStore.resetPhase();
+      await updateStore.check({ force: true });
+      expect(updateStore.maybeAutoInstall()).toBe(false);
+      expect(installCalls()).toBe(1);
+      expect(updateStore.getState().phase).toBe('idle');
+      expect(currentDecision()).toMatchObject({ kind: 'available', auto: true });
+    });
+
+    it('signed out: nothing starts; signing in starts it', async () => {
+      fetchPolicy.mockResolvedValue(automatic());
+      updateStore.setSignedIn(false);
+      await updateStore.start();
+      await updateStore.check({ force: true });
+      expect(updateStore.maybeAutoInstall()).toBe(false);
+      expect(installCalls()).toBe(0);
+      updateStore.setSignedIn(true);
+      await vi.waitFor(() => expect(installCalls()).toBe(1));
+    });
+
+    it('a failed attempt is not repeated for the same version (the Update button stays), a newer version tries again', async () => {
+      fetchPolicy.mockResolvedValue(automatic());
+      appUpdateDeps.downloadAndInstall = vi.fn(async () => {
+        throw Object.assign(new Error('x'), { code: 'NETWORK' });
+      });
+      await updateStore.start();
+      await vi.waitFor(() => expect(updateStore.getState().phase).toBe('error'));
+      expect(appUpdateDeps.downloadAndInstall).toHaveBeenCalledTimes(1);
+      updateStore.resetPhase();
+      await updateStore.check({ force: true });
+      expect(updateStore.maybeAutoInstall()).toBe(false);
+      expect(appUpdateDeps.downloadAndInstall).toHaveBeenCalledTimes(1);
+      expect(currentDecision()).toMatchObject({ kind: 'available', auto: true });
+      // The manual button still works.
+      await updateStore.install();
+      expect(appUpdateDeps.downloadAndInstall).toHaveBeenCalledTimes(2);
+      // A newer published version is a new attempt.
+      fetchManifest.mockResolvedValue(manifest(12));
+      updateStore.resetPhase();
+      await updateStore.check({ force: true });
+      await vi.waitFor(() => expect(appUpdateDeps.downloadAndInstall).toHaveBeenCalledTimes(3));
+    });
+
+    it('an earlier Later does not stop it; a download already in progress is never doubled', async () => {
+      fetchPolicy.mockResolvedValue(automatic());
+      await updateStore.start();
+      await vi.waitFor(() => expect(installCalls()).toBe(1));
+      let finish: () => void = () => undefined;
+      appUpdateDeps.downloadAndInstall = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+      updateStore.resetPhase();
+      fetchManifest.mockResolvedValue(manifest(12));
+      updateStore.dismiss();
+      await updateStore.check({ force: true });
+      await vi.waitFor(() => expect(updateStore.getState().phase).toBe('downloading'));
+      expect(updateStore.maybeAutoInstall()).toBe(false);
+      await updateStore.check({ force: true });
+      expect(appUpdateDeps.downloadAndInstall).toHaveBeenCalledTimes(1);
+      finish();
+    });
+
+    it('install permission missing: shows the permission step, then continues by itself once allowed', async () => {
+      fetchPolicy.mockResolvedValue(automatic());
+      appUpdateDeps.canRequestInstall = async () => false;
+      await updateStore.start();
+      await vi.waitFor(() => expect(updateStore.getState().phase).toBe('permission'));
+      expect(installCalls()).toBe(0);
+      // Still waiting for the permission: later checks do not start anything.
+      await updateStore.check({ force: true });
+      expect(updateStore.maybeAutoInstall()).toBe(false);
+      expect(updateStore.getState().phase).toBe('permission');
+      appUpdateDeps.canRequestInstall = async () => true;
+      updateStore.resetPhase(); // "I have allowed it"
+      await vi.waitFor(() => expect(installCalls()).toBe(1));
+    });
+
+    it('last check offline: does not start', async () => {
+      fetchPolicy.mockResolvedValue(automatic());
+      await updateStore.start();
+      await vi.waitFor(() => expect(installCalls()).toBe(1));
+      updateStore.resetPhase();
+      __resetAppUpdateForTests(false);
+      updateStore.setSignedIn(true);
+      fetchManifest.mockRejectedValue(new TypeError('Failed to fetch'));
+      fetchPolicy.mockRejectedValue(new TypeError('Failed to fetch'));
+      await updateStore.start();
+      expect(updateStore.getState().offline).toBe(true);
+      expect(updateStore.maybeAutoInstall()).toBe(false);
+      expect(installCalls()).toBe(1);
+    });
+
+    it('optional mode never starts by itself', async () => {
+      await updateStore.start();
+      await updateStore.check({ force: true });
+      expect(updateStore.maybeAutoInstall()).toBe(false);
+      expect(installCalls()).toBe(0);
+      expect(currentDecision()).toMatchObject({ kind: 'available', auto: false });
+    });
+
+    it('required mode is unchanged: blocks, never starts by itself', async () => {
+      fetchPolicy.mockResolvedValue(policy({ mode: 'required', min_version_code: 11 }));
+      await updateStore.start();
+      await updateStore.check({ force: true });
+      expect(currentDecision().kind).toBe('required');
+      expect(updateStore.maybeAutoInstall()).toBe(false);
+      expect(installCalls()).toBe(0);
+    });
   });
 });

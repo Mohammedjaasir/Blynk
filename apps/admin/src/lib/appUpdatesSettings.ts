@@ -70,7 +70,7 @@ export function parseMinVersionCode(raw: string): { value: number } | { error: s
 }
 
 /** A note for staff when the settings cannot do what they probably expect. */
-export function minimumWarning(min: number, mode: 'optional' | 'required', published: PublishedVersion | null): string | null {
+export function minimumWarning(min: number, mode: 'optional' | 'required' | 'automatic', published: PublishedVersion | null): string | null {
   if (mode !== 'required' || min === 0) return null;
   if (published && min > published.version_code) {
     return `The minimum is above the published version (${published.version_code}). Phones that update to it can keep working; publish the newer APK first.`;

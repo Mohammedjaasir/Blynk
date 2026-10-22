@@ -158,3 +158,17 @@ describe('Admin app updates setting', () => {
     expect((await request(app).patch('/api/v1/admin/settings/app-updates').send({ ops: { mode: 'required' } })).status).toBe(401);
   });
 });
+
+describe('automatic update mode (owner, 2026-10-22: update by itself when the app is opened)', () => {
+  it('can be saved per app, is returned by the public policy, and an unknown mode still reads as optional', async () => {
+    const res = await patchSetting({ ops: { mode: 'automatic' }, rider: { mode: 'automatic', notes: 'New deliveries alerts' } });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.ops.mode).toBe('automatic');
+    expect((await policy('rider')).body.data).toMatchObject({ app: 'rider', mode: 'automatic', notes: 'New deliveries alerts' });
+    // a mode the server does not know is refused...
+    expect((await patchSetting({ ops: { mode: 'sometimes' } })).status).toBe(400);
+    // ...and one that somehow got stored reads as optional
+    await pool.query(`UPDATE system_configurations SET value = jsonb_set(value, '{ops,mode}', '"sometimes"') WHERE key = $1`, [APP_UPDATES_KEY]);
+    expect((await policy('ops')).body.data.mode).toBe('optional');
+  });
+});

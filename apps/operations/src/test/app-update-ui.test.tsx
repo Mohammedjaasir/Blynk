@@ -85,6 +85,57 @@ describe('Update prompt', () => {
     expect(screen.queryByText('Update available — v1.11')).not.toBeInTheDocument();
   });
 
+  it('automatic: starts the update by itself - "Updating to", no Later, a note, then the install screen', async () => {
+    const deps = fakeDevice({ policy: { min_version_code: 0, mode: 'automatic', notes: '' } });
+    let finish: () => void = () => undefined;
+    deps.downloadAndInstall.mockImplementation(
+      (_m, _token, onProgress) =>
+        new Promise<void>((resolve) => {
+          onProgress(0.4);
+          finish = resolve;
+        })
+    );
+    render(<AppUpdatePrompt signedIn />);
+    expect(await screen.findByText(/Downloading the update… 40% of 6.0 MB/)).toBeInTheDocument();
+    expect(screen.getByText('Updating to v1.11…')).toBeInTheDocument();
+    expect(screen.queryByText(/Update available/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Later' })).not.toBeInTheDocument();
+    expect(screen.getByText('Android will ask you to tap Install.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => finish());
+    expect(await screen.findByText(/install screen is open/)).toBeInTheDocument();
+    expect(deps.downloadAndInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it('automatic: after a failed attempt the plain card with Try again stays, no second automatic try', async () => {
+    const user = userEvent.setup();
+    const deps = fakeDevice({ policy: { min_version_code: 0, mode: 'automatic', notes: '' } });
+    deps.downloadAndInstall.mockRejectedValue(Object.assign(new Error('x'), { code: 'NETWORK' }));
+    render(<AppUpdatePrompt signedIn />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Could not download the update/);
+    expect(screen.getByText('Update available — v1.11')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Later' })).not.toBeInTheDocument();
+    expect(deps.downloadAndInstall).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(deps.downloadAndInstall).toHaveBeenCalledTimes(2));
+  });
+
+  it('automatic: signed out shows nothing and starts nothing', async () => {
+    const deps = fakeDevice({ policy: { min_version_code: 50, mode: 'automatic', notes: '' } });
+    const { container } = render(<AppUpdatePrompt signedIn={false} />);
+    await act(async () => undefined);
+    expect(container).toBeEmptyDOMElement();
+    expect(deps.downloadAndInstall).not.toHaveBeenCalled();
+  });
+
+  it('optional: no automatic start, no automatic note', async () => {
+    const deps = fakeDevice();
+    render(<AppUpdatePrompt signedIn />);
+    expect(await screen.findByText('Update available — v1.11')).toBeInTheDocument();
+    expect(screen.queryByText('Android will ask you to tap Install.')).not.toBeInTheDocument();
+    expect(deps.downloadAndInstall).not.toHaveBeenCalled();
+  });
+
   it('Update downloads with progress, then Android\'s install screen', async () => {
     const user = userEvent.setup();
     const deps = fakeDevice();
@@ -274,6 +325,41 @@ describe('More > App updates (setting)', () => {
     );
     expect(await screen.findByText('App update settings saved.')).toBeInTheDocument();
     expect(api.find('GET', '/app-updates/manifest').map((c) => c.query.app).sort()).toEqual(['ops', 'rider']);
+  });
+
+  it('Optional | Automatic | Required: choosing Automatic saves mode automatic; the Required note shows only under Required', async () => {
+    const user = userEvent.setup();
+    tokenStore.save('test-access', 'test-refresh');
+    const api = mockApi({
+      'GET /admin/settings/app-updates': () => ok(SETTING),
+      'PATCH /admin/settings/app-updates': (call) => ok({ ...SETTING, ...(call.body as object), updated_at: '2026-10-22T06:00:00Z' }),
+      'GET /app-updates/manifest': () => fail(404, 'NOT_FOUND'),
+      'GET /admin/settings/app-share-links': () => ok(LINKS_OFF),
+    });
+    render(<AppUpdatesSettingsCard />);
+    const opsMode = await screen.findByRole('group', { name: 'Blynk Ops update mode' });
+    expect(within(opsMode).getAllByRole('button').map((b) => b.textContent)).toEqual(['Optional', 'Automatic', 'Required']);
+    // Rider is Required in the fixture, so its note shows; Ops (Optional) has none.
+    const opsApp = screen.getByRole('group', { name: 'Blynk Ops' });
+    const riderApp = screen.getByRole('group', { name: 'Blynk Rider' });
+    expect(within(riderApp).getByText(/Phones still on Ops\/Rider 1.2 \(build 148\) cannot update themselves: install them once by hand from a share link first\./)).toBeInTheDocument();
+    expect(within(opsApp).queryByText(/cannot update themselves/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Optional shows "Update available"; staff can put it off for a day\. Automatic downloads the new version by itself when staff open the app and opens Android's install screen\. Required blocks apps below the minimum version code until they update\. 0 = no minimum\./)
+    ).toBeInTheDocument();
+
+    await user.click(within(opsMode).getByRole('button', { name: 'Automatic' }));
+    expect(within(opsMode).getByRole('button', { name: 'Automatic' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(opsApp).queryByText(/cannot update themselves/)).not.toBeInTheDocument();
+    await user.click(within(opsMode).getByRole('button', { name: 'Required' }));
+    expect(within(opsApp).getByText(/cannot update themselves/)).toBeInTheDocument();
+    await user.click(within(opsMode).getByRole('button', { name: 'Automatic' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/app-updates')).toHaveLength(1));
+    expect(api.find('PATCH', '/admin/settings/app-updates')[0].body).toEqual({
+      ops: { min_version_code: 0, mode: 'automatic', notes: '' },
+      rider: { min_version_code: 3, mode: 'required', notes: 'Rider fix' },
+    });
   });
 
   it('refuses a bad minimum without saving', async () => {

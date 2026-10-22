@@ -18,6 +18,7 @@ import { Field, Spinner, useToast } from './ui';
 
 const MODES: { value: AppUpdateMode; label: string }[] = [
   { value: 'optional', label: 'Optional' },
+  { value: 'automatic', label: 'Automatic' },
   { value: 'required', label: 'Required' },
 ];
 
@@ -37,8 +38,10 @@ const draftsFrom = (s: AppUpdatesSetting): Drafts => ({
  * Settings > "App updates" (owner, 2026-10-12; GET|PATCH
  * /admin/settings/app-updates, audited): for Blynk Ops and Blynk Rider, the
  * latest published APK (from the signed-in GET /app-updates/manifest), a
- * minimum version code, Optional (a reminder staff can put off for a day) or
- * Required (older apps are blocked until updated), short release notes, and
+ * minimum version code, Optional (a reminder staff can put off for a day),
+ * Automatic (the app downloads the new version by itself when opened and
+ * opens Android's install screen; owner, 2026-10-22) or Required (older apps
+ * are blocked until updated), short release notes, and
  * a temporary public share link (AppShareLinkControls; PATCH
  * /admin/settings/app-share-links, audited). Operations has the same panel
  * under More.
@@ -152,6 +155,7 @@ export function AppUpdatesPanel() {
                   options={MODES}
                   onChange={(mode) => edit(id, { mode })}
                 />
+                {d.mode === 'required' ? <p className="form__note">Phones still on Ops/Rider 1.2 (build 148) cannot update themselves: install them once by hand from a share link first.</p> : null}
                 <Field label={`${label} release notes`} hint="Optional. Shown with the update.">
                   <textarea
                     className="input"
@@ -172,8 +176,9 @@ export function AppUpdatesPanel() {
             );
           })}
           <p className="form__note">
-            Optional shows &quot;Update available&quot; when a newer APK is published; staff can put it off for a day.
-            Required blocks apps below the minimum version code until they update.
+            Optional shows &quot;Update available&quot;; staff can put it off for a day. Automatic downloads the new version by
+            itself when staff open the app and opens Android&apos;s install screen. Required blocks apps below the minimum
+            version code until they update. 0 = no minimum.
           </p>
           {current?.updated_at ? <p className="form__note">Changed {new Date(current.updated_at).toLocaleString()}.</p> : null}
           {error ? (

@@ -15,7 +15,10 @@ import { ApiError, apiRequest, freshAccessToken } from '../api/client';
  * - GET /app-updates/policy?app=<app> (public, set by Admin and Operations)
  *   says whether an older install must update: mode 'required' with
  *   min_version_code blocks the app until it is updated; 'optional' only
- *   shows a reminder that can be put off for a day.
+ *   shows a reminder that can be put off for a day; 'automatic' (owner,
+ *   2026-10-22) never blocks either, but starts the install flow by itself
+ *   (see maybeAutoInstall: signed in, newer APK, idle, once per version
+ *   code per app run) so staff only tap Android's Install.
  * - The native AppUpdatePlugin (android/.../AppUpdatePlugin.java) downloads
  *   only this app's own APK from a URL fixed in the app,
  *   https://blynk-api.valgrowlabs.com/api/v1/app-updates/download?app=<app>
@@ -49,7 +52,7 @@ export interface UpdateManifest {
   size: number;
   released_at: string;
 }
-export type UpdateMode = 'optional' | 'required';
+export type UpdateMode = 'optional' | 'required' | 'automatic';
 export interface UpdatePolicy {
   min_version_code: number;
   mode: UpdateMode;
@@ -66,7 +69,8 @@ export interface Dismissal {
 
 export type UpdateDecision =
   | { kind: 'none' }
-  | { kind: 'available'; manifest: UpdateManifest; notes: string }
+  /** auto: the policy is 'automatic' (the install starts by itself; "Later" does not apply). */
+  | { kind: 'available'; manifest: UpdateManifest; notes: string; auto: boolean }
   | { kind: 'required'; manifest: UpdateManifest | null; notes: string; minVersionCode: number };
 
 /**
@@ -74,7 +78,9 @@ export type UpdateDecision =
  * below its minimum - unless the published APK is not newer than what is
  * installed (nothing to install; never lock staff out). With no manifest
  * known yet (offline) a required update still blocks, with a Try again.
- * Available: a newer published APK that was not put off for later.
+ * Available: a newer published APK that was not put off for later (in
+ * 'automatic' mode an earlier "Later" is ignored: the update is not optional
+ * to postpone, it starts by itself).
  */
 export function decideUpdate(input: {
   installed: InstalledVersion | null;
@@ -91,8 +97,9 @@ export function decideUpdate(input: {
     return { kind: 'required', manifest: newer, notes, minVersionCode: policy.min_version_code };
   }
   if (!newer) return { kind: 'none' };
-  if (dismissed && dismissed.versionCode === newer.version_code && dismissed.until > now) return { kind: 'none' };
-  return { kind: 'available', manifest: newer, notes };
+  const auto = policy?.mode === 'automatic';
+  if (!auto && dismissed && dismissed.versionCode === newer.version_code && dismissed.until > now) return { kind: 'none' };
+  return { kind: 'available', manifest: newer, notes, auto };
 }
 
 /** Accepts only a well-formed manifest for this app. */
@@ -120,7 +127,7 @@ export function parsePolicy(value: unknown): UpdatePolicy | null {
   if (typeof code !== 'number' || !Number.isInteger(code) || code < 0) return null;
   return {
     min_version_code: code,
-    mode: v.mode === 'required' ? 'required' : 'optional',
+    mode: v.mode === 'required' || v.mode === 'automatic' ? v.mode : 'optional',
     notes: typeof v.notes === 'string' ? v.notes : '',
   };
 }
@@ -279,6 +286,10 @@ let state: UpdateState = initialState();
 const listeners = new Set<() => void>();
 let started: Promise<void> | null = null;
 let stopVisibility: (() => void) | null = null;
+/** Version codes the app already tried to install by itself this run (never retried: no loops). */
+const autoAttempted = new Set<number>();
+/** Version code whose automatic install is waiting for "Allow from this source". */
+let autoAwaitingPermission: number | null = null;
 
 function set(patch: Partial<UpdateState>) {
   state = { ...state, ...patch };
@@ -344,7 +355,7 @@ export const updateStore = {
               .then((allowed) => allowed && state.phase === 'permission' && updateStore.resetPhase())
               .catch(() => undefined);
           }
-          void updateStore.check();
+          void updateStore.check().then(() => updateStore.maybeAutoInstall());
         };
         document.addEventListener('visibilitychange', onVisible);
         stopVisibility = () => document.removeEventListener('visibilitychange', onVisible);
@@ -378,6 +389,31 @@ export const updateStore = {
     if (policy.status === 'fulfilled') patch.policy = policy.value;
     set(patch);
     writeJson('cache', { manifest: state.manifest, policy: state.policy, checkedAt: now });
+    updateStore.maybeAutoInstall();
+  },
+
+  /** Whether the app already tried to install this version code by itself in this run. */
+  hasAutoAttempted: (versionCode: number) => autoAttempted.has(versionCode),
+
+  /**
+   * 'automatic' mode (owner, 2026-10-22): start the install flow without a tap.
+   * Only when signed in, the last check reached the server, a newer APK is
+   * published, nothing is downloading/installing or waiting for the install
+   * permission, and this version code was not already tried in this run (a
+   * cancelled or failed attempt leaves the normal Update button, no loop).
+   * Returns whether an install was started.
+   */
+  maybeAutoInstall(): boolean {
+    const s = state;
+    if (!s.supported || !s.signedIn || s.checking || s.offline || s.lastChecked === null) return false;
+    if (s.phase !== 'idle') return false;
+    const decision = currentDecision(s);
+    if (decision.kind !== 'available' || !decision.auto) return false;
+    const code = decision.manifest.version_code;
+    if (autoAttempted.has(code)) return false;
+    autoAttempted.add(code);
+    void updateStore.install();
+    return true;
   },
 
   /** "Later": hide this version's reminder for a day (never a required update). */
@@ -402,6 +438,7 @@ export const updateStore = {
       allowed = true; // let the plugin decide
     }
     if (!allowed) {
+      if (decision.kind === 'available' && decision.auto) autoAwaitingPermission = manifest.version_code;
       set({ phase: 'permission' });
       return;
     }
@@ -414,6 +451,7 @@ export const updateStore = {
       set({ phase: 'installing', progress: 1 });
     } catch (err) {
       if ((err as { code?: string } | null)?.code === 'INSTALL_PERMISSION') {
+        if (decision.kind === 'available' && decision.auto) autoAwaitingPermission = manifest.version_code;
         set({ phase: 'permission', progress: null });
         return;
       }
@@ -431,7 +469,15 @@ export const updateStore = {
 
   /** Back from the install screen without installing: offer the button again. */
   resetPhase() {
+    const wasPermission = state.phase === 'permission';
     set({ phase: 'idle', progress: null, installError: null });
+    // Automatic mode: once the install permission is given, the update continues by itself.
+    const code = autoAwaitingPermission;
+    autoAwaitingPermission = null;
+    if (wasPermission && code !== null && state.signedIn) {
+      const decision = currentDecision(state);
+      if (decision.kind === 'available' && decision.auto && decision.manifest.version_code === code) void updateStore.install();
+    }
   },
 };
 
@@ -456,6 +502,8 @@ export function __resetAppUpdateForTests(clearStorage = true): void {
   stopVisibility?.();
   stopVisibility = null;
   started = null;
+  autoAttempted.clear();
+  autoAwaitingPermission = null;
   state = initialState();
   if (clearStorage) {
     try {

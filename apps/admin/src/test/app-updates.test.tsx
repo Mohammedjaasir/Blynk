@@ -114,6 +114,41 @@ describe('Settings > App updates', () => {
     expect(api.calls.some((c) => c.path.includes('download'))).toBe(false);
   });
 
+  it('Optional | Automatic | Required: choosing Automatic saves mode automatic; the Required note shows only under Required', async () => {
+    const user = userEvent.setup();
+    const api = mockApi((c) => {
+      if (c.path === '/admin/settings/app-share-links') return ok(LINKS_OFF);
+      if (c.path === '/app-updates/manifest') return fail(404, 'NOT_FOUND', 'none');
+      if (c.path !== '/admin/settings/app-updates') return undefined;
+      if (c.method === 'GET') return ok(SETTING);
+      return ok({ ...SETTING, ...c.body, updated_at: '2026-10-22T06:00:00.000Z' });
+    });
+    renderPanel();
+    const opsMode = await screen.findByRole('group', { name: 'Blynk Ops update mode' });
+    expect(within(opsMode).getAllByRole('button').map((b) => b.textContent)).toEqual(['Optional', 'Automatic', 'Required']);
+    // Rider is Required in the fixture, so its note shows; Ops (Optional) has none.
+    const opsApp = screen.getByRole('group', { name: 'Blynk Ops' });
+    const riderApp = screen.getByRole('group', { name: 'Blynk Rider' });
+    expect(within(riderApp).getByText(/Phones still on Ops\/Rider 1.2 \(build 148\) cannot update themselves: install them once by hand from a share link first\./)).toBeInTheDocument();
+    expect(within(opsApp).queryByText(/cannot update themselves/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Optional shows "Update available"; staff can put it off for a day\. Automatic downloads the new version by itself when staff open the app and opens Android's install screen\. Required blocks apps below the minimum version code until they update\. 0 = no minimum\./)
+    ).toBeInTheDocument();
+
+    await user.click(within(opsMode).getByRole('button', { name: 'Automatic' }));
+    expect(within(opsMode).getByRole('button', { name: 'Automatic' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(opsApp).queryByText(/cannot update themselves/)).not.toBeInTheDocument();
+    await user.click(within(opsMode).getByRole('button', { name: 'Required' }));
+    expect(within(opsApp).getByText(/cannot update themselves/)).toBeInTheDocument();
+    await user.click(within(opsMode).getByRole('button', { name: 'Automatic' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/app-updates')).toHaveLength(1));
+    expect(api.find('PATCH', '/admin/settings/app-updates')[0].body).toEqual({
+      ops: { min_version_code: 0, mode: 'automatic', notes: '' },
+      rider: { min_version_code: 3, mode: 'required', notes: 'Rider fix' },
+    });
+  });
+
   it('a bad minimum is shown on its field and nothing is sent', async () => {
     const user = userEvent.setup();
     const api = mockApi((c) => (c.path === '/admin/settings/app-updates' && c.method === 'GET' ? ok(SETTING) : undefined));
