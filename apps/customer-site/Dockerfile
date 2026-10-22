@@ -38,7 +38,7 @@ RUN EXPO_PUBLIC_DEMO=0 EXPO_PUBLIC_API_BASE_URL="$API_BASE_URL" \
 FROM nginx:1.27-alpine
 COPY apps/customer-site/nginx.conf /etc/nginx/conf.d/default.conf
 COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-site/landing.css apps/customer-site/app.js \
-     apps/customer-site/store-hours.js \
+     apps/customer-site/store-hours.js apps/customer-site/q.html apps/customer-site/q.js \
      apps/customer-site/manifest.webmanifest apps/customer-site/firebase-messaging-sw.js \
      apps/customer-site/walkthrough.js apps/customer-site/analytics.js \
      apps/customer-site/privacy.html apps/customer-site/terms.html apps/customer-site/refunds.html /usr/share/nginx/html/
@@ -57,8 +57,9 @@ COPY --from=app /src/build/web /usr/share/nginx/html/app
 # Store hours (owner, 2026-10-20): store-hours.js reads the opening and closing times Admin and
 # Ops set from this API and writes them into every page.
 ARG API_BASE_URL
-RUN sed -i "s#__BLYNK_API__#${API_BASE_URL%/}#g" /usr/share/nginx/html/store-hours.js \
- && ! grep -q "__BLYNK_API__" /usr/share/nginx/html/store-hours.js
+# q.js (QR links, owner 2026-10-22) asks the same API where a printed QR code leads.
+RUN sed -i "s#__BLYNK_API__#${API_BASE_URL%/}#g" /usr/share/nginx/html/store-hours.js /usr/share/nginx/html/q.js \
+ && ! grep -q "__BLYNK_API__" /usr/share/nginx/html/store-hours.js /usr/share/nginx/html/q.js
 # Google Tag Manager (owner, 2026-10-10): fill in the container ID and the
 # consent default in both pages, or remove the snippet when GTM_ID is empty.
 # The SEO pages (every <folder>/index.html outside /app/) carry the same

@@ -21,6 +21,7 @@ import { doctorsAccessService, updateDoctorsAccessSchema } from './doctors-acces
 import { promoBandService, updatePromoBandSchema } from './promo-band.js';
 import { heroBannerService, updateHeroBannerSchema } from './hero-banner.js';
 import { appTextsService, updateAppTextsSchema } from './app-texts.js';
+import { qrLinksService, updateQrLinksSchema } from './qr-links.js';
 import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
@@ -510,3 +511,41 @@ adminSettingsRouter.patch(
     }
   }
 );
+
+// QR links (owner, 2026-10-22: "the qr should be dynamic so give that option in admin"): the
+// short codes printed on jerseys and posters (blynk.lk/q/<code>) and where each one leads,
+// with scan counts. Replaces the whole list. Audited (QR_LINKS_UPDATED). The landing site's
+// /q page reads the public GET /go/:code. See modules/configuration/qr-links.ts.
+adminSettingsRouter.get('/settings/qr-links', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await qrLinksService.get() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminSettingsRouter.put('/settings/qr-links', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (req, res, next) => {
+  try {
+    const input = updateQrLinksSchema.parse(req.body);
+    res.json({ success: true, data: await qrLinksService.set(input, actorOf(req)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Public: where a printed QR code leads (GET /go/:code). Never cached, so a changed destination
+// applies to the very next scan; every call counts as a scan.
+export const goRouter = Router();
+goRouter.get('/:code', async (req, res, next) => {
+  try {
+    const url = await qrLinksService.resolve(String(req.params.code ?? ''));
+    res.set('Cache-Control', 'no-store');
+    if (!url) {
+      res.status(404).json({ success: false, error: { code: 'QR_LINK_NOT_FOUND', message: 'This QR code is not active.' } });
+      return;
+    }
+    res.json({ success: true, data: { url } });
+  } catch (err) {
+    next(err);
+  }
+});
