@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { useSession } from '@/blynk/auth/session';
 import type { StoreInfo } from '@/blynk/api/types';
-import { LIVE_LOCATION_NAME, LIVE_LOCATION_SHEET, liveAddress } from '@/demo/homeLive';
+import { LIVE_LOCATION_SHEET } from '@/demo/homeLive';
 import { addressSummary } from './api';
 import { locateOnce } from './maplibre';
 import { useDeliveryLocation } from './store';
@@ -17,6 +17,9 @@ export const HOME_SHEET = {
   asking: 'WAIT…',
 };
 
+/** The header row until the customer sets a delivery spot. */
+export const NOT_SET = { name: 'Location not set', line: 'Tap to set your delivery location' } as const;
+
 const RETURN = '/home';
 
 export function useHomeLocation(store: StoreInfo | null) {
@@ -24,8 +27,9 @@ export function useHomeLocation(store: StoreInfo | null) {
   const loc = useDeliveryLocation();
   const [asking, setAsking] = useState(false);
 
-  let name = LIVE_LOCATION_NAME;
-  let address: string | null = liveAddress(store);
+  // before a spot is chosen the header says so, not the store's own name (owner, 2026-10-22: "location is not set yet")
+  let name: string = NOT_SET.name;
+  let address: string | null = NOT_SET.line;
   if (session && loc.address) {
     name = loc.address.label;
     address = addressSummary(loc.address);
