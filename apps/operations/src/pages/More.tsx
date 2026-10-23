@@ -514,7 +514,9 @@ function CheckoutSettingsCard() {
     setError(null);
     setSaving(true);
     try {
-      show(
+      // only the saved baseline moves: the switches and numbers being edited above stay as they are
+      // (owner, 2026-10-23: "why its not saving" - the restart reloaded the card and dropped the edits)
+      setCurrent(
         await settings.checkout.update({
           new_customer_free_deliveries: {
             enabled: current.new_customer_free_deliveries.enabled,
@@ -523,7 +525,7 @@ function CheckoutSettingsCard() {
           },
         })
       );
-      setNotice('Free deliveries now count from today.');
+      setNotice('Free deliveries now count from today. Your other changes above are not saved yet: press Save.');
     } catch (err) {
       setError(catalogErrorMessage(err));
     } finally {

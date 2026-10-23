@@ -22,6 +22,7 @@ import { promoBandService, updatePromoBandSchema } from './promo-band.js';
 import { heroBannerService, updateHeroBannerSchema } from './hero-banner.js';
 import { appTextsService, updateAppTextsSchema } from './app-texts.js';
 import { qrLinksService, updateQrLinksSchema } from './qr-links.js';
+import { availabilityService, updateAvailabilitySchema } from './availability-windows.js';
 import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
@@ -528,6 +529,27 @@ adminSettingsRouter.put('/settings/qr-links', requireAuth, requireRoles(['ADMIN'
   try {
     const input = updateQrLinksSchema.parse(req.body);
     res.json({ success: true, data: await qrLinksService.set(input, actorOf(req)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Time-limited products (owner, 2026-10-23): products and categories orderable only between
+// two times of day. Replaces the whole list. Audited (AVAILABILITY_WINDOWS_UPDATED). Customers
+// see it on every product (`available_window`, `window_closed`). See
+// modules/configuration/availability-windows.ts.
+adminSettingsRouter.get('/settings/availability-windows', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await availabilityService.get() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminSettingsRouter.put('/settings/availability-windows', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (req, res, next) => {
+  try {
+    const input = updateAvailabilitySchema.parse(req.body);
+    res.json({ success: true, data: await availabilityService.set(input, actorOf(req)) });
   } catch (err) {
     next(err);
   }

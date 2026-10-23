@@ -1,3 +1,4 @@
+import { unavailableText } from '@/blynk/catalog/hours';
 import { memo, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
@@ -116,7 +117,7 @@ export const ProductCard = memo(function ProductCard({
           {p.is_available ? (
             <AddButton product={p} big />
           ) : (
-            <View style={styles.soldOut}><Text style={styles.soldOutTxt}>{VARIANT_COPY.soldOut}</Text></View>
+            <View style={styles.soldOut}><Text style={styles.soldOutTxt}>{unavailableText(p)}</Text></View>
           )}
         </View>
       </View>

@@ -1,6 +1,7 @@
 import { UPLOAD_TIMEOUT_MS, apiRequest, tokenStore, type Query } from './client';
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
+import type { AvailabilityWindow, AvailabilitySetting } from '../lib/availability';
 import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
 import type {
   AppShareLinks,
@@ -1249,6 +1250,12 @@ export const settings = {
     get: () => apiRequest<QrLinksSetting>('/admin/settings/qr-links'),
     update: (body: { links: QrLink[] }) =>
       apiRequest<QrLinksSetting>('/admin/settings/qr-links', { method: 'PUT', body: { ...body } }),
+  },
+  /** Time-limited products (owner, 2026-10-23): products / categories orderable only between two times; PUT replaces the whole list. Audited. */
+  availabilityWindows: {
+    get: () => apiRequest<AvailabilitySetting>('/admin/settings/availability-windows'),
+    update: (body: { windows: AvailabilityWindow[] }) =>
+      apiRequest<AvailabilitySetting>('/admin/settings/availability-windows', { method: 'PUT', body: { ...body } }),
   },
   heroBanner: {
     get: () => apiRequest<HeroBannerSetting>('/admin/settings/hero-banner'),

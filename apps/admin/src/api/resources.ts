@@ -1,5 +1,6 @@
 import { apiRequest, tokenStore } from './client';
 import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
+import type { AvailabilityWindow, AvailabilitySetting } from '../lib/availability';
 import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
 import type {
   AppShareLinks,
@@ -273,6 +274,9 @@ export const PRODUCT_PAGE_SIZE = 200;
 export const MAX_PRODUCT_PAGES = 50;
 
 export const products = {
+  /** Switch the ticked products hidden / shown (is_active) and greyed out / orderable (is_available) in one call (owner, 2026-10-23). */
+  bulkStatus: (ids: string[], change: { is_active?: boolean; is_available?: boolean }) =>
+    apiRequest<{ matched: number; changed: number; switched_on: number }>('/admin/products/bulk-status', { method: 'PATCH', body: { ids, ...change } }),
   /**
    * The admin product table reads the customer catalog endpoint for the
    * list (it is the only paginated product listing the backend exposes) and
@@ -601,6 +605,14 @@ export const appTexts = {
   get: () => apiRequest<AppTextsSetting>('/admin/settings/app-texts'),
   update: (body: Partial<AppTextsFields>) =>
     apiRequest<AppTextsSetting>('/admin/settings/app-texts', { method: 'PATCH', body: { ...body } }),
+};
+
+// ------------------------------------------------------------ available hours
+/** Time-limited products (owner, 2026-10-23): products / categories orderable only between two times; PUT replaces the whole list. */
+export const availabilityWindows = {
+  get: () => apiRequest<AvailabilitySetting>('/admin/settings/availability-windows'),
+  update: (body: { windows: AvailabilityWindow[] }) =>
+    apiRequest<AvailabilitySetting>('/admin/settings/availability-windows', { method: 'PUT', body: { ...body } }),
 };
 
 // ------------------------------------------------------------ QR links

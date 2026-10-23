@@ -31,6 +31,12 @@ export interface Product {
    * hides the struck "was" price and the saving for this product. Absent (older server) = on.
    */
   show_offer_cut?: boolean;
+  /**
+   * Time-limited products (owner, 2026-10-23): the hours it can be ordered (Colombo 'HH:MM') or null;
+   * window_closed while they are shut (is_available is false then). Absent on an older server.
+   */
+  available_window?: { from: string; until: string } | null;
+  window_closed?: boolean;
 }
 /** One size/pack of a product ("50 g", "3 pack"), as GET /catalog/products/:id lists it. */
 export interface ProductVariant {

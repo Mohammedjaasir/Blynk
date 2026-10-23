@@ -1,3 +1,4 @@
+import { assertWithinHours, loadAvailability } from '../configuration/availability-windows.js';
 import { orderRepository, CreateOrderData } from './order.repository.js';
 import { deliveryFeeWaiver, waiveDeliveryFee } from './waive-delivery-fee.js';
 import type { AuditActor } from '../audit/audit.writer.js';
@@ -177,6 +178,8 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
   const variantIds = items.map((it) => it.variant_id).filter((v): v is string => !!v);
   const variantMap = new Map((await orderRepository.findVariantsByIds(variantIds)).map((v) => [v.id, v]));
 
+  const availability = await loadAvailability();
+
   let subtotalAmount = 0;
   const orderItemsData = items.map((item) => {
     const prod = productMap.get(item.product_id);
@@ -192,6 +195,9 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
         { product_id: prod.id, name: prod.name }
       );
     }
+
+    // Time-limited products (owner, 2026-10-23): refused outside their hours
+    assertWithinHours(availability, { id: prod.id, name: prod.name, category_id: prod.category_id });
 
     const catalogRow = categoryOffers.get(prod.id);
 

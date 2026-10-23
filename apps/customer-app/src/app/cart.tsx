@@ -1,3 +1,4 @@
+import { unavailableText } from '@/blynk/catalog/hours';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -883,7 +884,7 @@ function LiveLine({ line, showSavings }: { line: CartLine; showSavings: boolean 
   // the struck reference (the regular price on an offer, or "MRP LKR 300" when the price is under
   // the MRP - migration 048), always on (owner, 2026-10-18)
   const struck = priceDisplay(priced, { showStruck: showSavings && ok }).struck;
-  const why = needsVariant(line) ? VARIANT_COPY.pickSizeAgain : variant || p.is_available === false ? VARIANT_COPY.soldOut : LIVE.unavailable;
+  const why = needsVariant(line) ? VARIANT_COPY.pickSizeAgain : variant || p.is_available === false ? unavailableText(p) : LIVE.unavailable;
   return (
     <Animated.View exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={[styles.itemRow, variant && { height: undefined, minHeight: 50, paddingVertical: 6 }]}>
       <ProductImage product={p} size={30} radius={6} style={!ok && { opacity: 0.45 }} />

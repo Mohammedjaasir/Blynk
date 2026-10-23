@@ -11,6 +11,7 @@ import { idParamSchema } from './catalog.schema.js';
 import { arrangeController } from './catalog.arrange.js';
 import { removeImagesController } from './catalog.remove-images.js';
 import { removeAllProductsController } from './catalog.remove-products.js';
+import { bulkStatusController } from './catalog.bulk-status.js';
 import { categoryImportController } from './catalog.category-import.js';
 import { variantsController } from './catalog.variants.js';
 
@@ -93,6 +94,8 @@ adminCatalogRouter.put('/products/:id/variants/order', requireAuth, requireRoles
 adminCatalogRouter.patch('/products/:id/variants/:variantId', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), variantsController.update);
 adminCatalogRouter.delete('/products/:id/variants/:variantId', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), variantsController.remove);
 adminCatalogRouter.post('/products', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), catalogController.createProductAdmin.bind(catalogController));
+// Bulk on / off for the products ticked in the list (catalog.bulk-status.ts); before /products/:id.
+adminCatalogRouter.patch('/products/bulk-status', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), bulkStatusController.update);
 adminCatalogRouter.patch('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.updateProductAdmin.bind(catalogController));
 adminCatalogRouter.delete('/products/:id', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), validId, catalogController.deleteProductAdmin.bind(catalogController));
 
@@ -122,5 +125,6 @@ export * from './catalog.combos.js';
 export * from './catalog.arrange.js';
 export * from './catalog.remove-images.js';
 export * from './catalog.remove-products.js';
+export * from './catalog.bulk-status.js';
 export * from './catalog.category-import.js';
 export * from './catalog.variants.js';

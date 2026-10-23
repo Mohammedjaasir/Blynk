@@ -1,3 +1,4 @@
+import { hoursBadge, hoursButton } from '@/blynk/catalog/hours';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -189,7 +190,7 @@ export default function ProductPage() {
                 </Text>
                 {shown?.struck && <StruckPrice struck={shown.struck} money={formatLkr} style={styles.mrp} />}
                 {saved > 0 && <Text style={styles.save}>Save {formatLkr(saved)}</Text>}
-                <Badge tone={orderable ? 'positive' : 'neutral'} label={orderable ? 'Available' : VARIANT_COPY.soldOut} />
+                <Badge tone={orderable ? 'positive' : 'neutral'} label={hoursBadge(product) ?? (orderable ? 'Available' : VARIANT_COPY.soldOut)} />
               </View>
               {onOffer && !!priced?.offer_ends_at && (
                 <Text style={styles.ends}>Offer ends {orderTime(priced.offer_ends_at)}</Text>
@@ -364,7 +365,7 @@ function CtaBar({ product, sized, variant, bottom }: { product: Product; sized: 
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1 }}>
           {soldOut ? (
-            <Button label={VARIANT_COPY.soldOut} disabled kind="secondary" />
+            <Button label={hoursButton(product) ?? VARIANT_COPY.soldOut} disabled kind="secondary" />
           ) : sized && !variant ? (
             <Button label={VARIANT_COPY.chooseSize} disabled kind="secondary" />
           ) : q === 0 ? (

@@ -87,6 +87,10 @@ export function Layout() {
               <NavLink to="/products/import" className="nav__item">
                 Bulk upload (Excel)
               </NavLink>
+              {/* Time-limited products (owner, 2026-10-23): juices only 6 am to 6 pm, etc. */}
+              <NavLink to="/available-hours" className="nav__item">
+                Available hours
+              </NavLink>
               <NavLink to="/categories" className="nav__item">
                 Categories
               </NavLink>

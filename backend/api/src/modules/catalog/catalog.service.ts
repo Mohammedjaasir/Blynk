@@ -1,3 +1,4 @@
+import { loadAvailability, windowFor, windowOpenAt, type AvailabilitySnapshot } from '../configuration/availability-windows.js';
 import { catalogRepository, ProductQueryParams } from './catalog.repository.js';
 import { generateUniqueSlug } from './catalog.slugs.js';
 import {
@@ -90,6 +91,13 @@ export interface CustomerProductDto {
    */
   is_available: boolean;
   /**
+   * Time-limited products (owner, 2026-10-23): the hours this product (or its category) can be
+   * ordered, Colombo 'HH:MM'; null = any time. While they are shut window_closed is true and
+   * is_available false (the app greys it with the hours).
+   */
+  available_window: { from: string; until: string } | null;
+  window_closed: boolean;
+  /**
    * Migration 045 (owner, 2026-10-14). has_variants: the customer must pick a
    * variant (size/pack); the order line then names variant_id. price_min /
    * price_max: what one unit costs right now (offers included) - equal for a
@@ -120,7 +128,14 @@ type CustomerCatalogRow = Awaited<ReturnType<typeof catalogRepository.findActive
  * The customer-safe product (no cost, markup, pricing source or stock
  * figure). `variants` are this product's active variants when it has any.
  */
-function toCustomerProduct(p: CustomerCatalogRow, variants: CustomerVariantDto[] | undefined, withVariants: boolean): CustomerProductDto {
+function toCustomerProduct(
+  p: CustomerCatalogRow,
+  variants: CustomerVariantDto[] | undefined,
+  withVariants: boolean,
+  avail: AvailabilitySnapshot
+): CustomerProductDto {
+  const win = windowFor(avail, { id: p.id, category_id: p.category_id });
+  const closed = !!win && !windowOpenAt(win);
   const selling = Number(Number(p.calculated_selling_price).toFixed(2));
   const own = publicOffer(p, selling);
   const range = p.has_variants ? variantPriceRange(variants ?? []) : null;
@@ -144,7 +159,9 @@ function toCustomerProduct(p: CustomerCatalogRow, variants: CustomerVariantDto[]
     selling_price: headline ? headline.selling_price : selling,
     ...(headline ? { offer_price: headline.offer_price, offer_ends_at: headline.offer_ends_at, offer_kind: headline.offer_kind } : own),
     mrp: headline ? headline.mrp : publicMrp(p.mrp, ownPrice),
-    is_available: p.is_orderable === true,
+    is_available: p.is_orderable === true && !closed,
+    available_window: win ? { from: win.from, until: win.until } : null,
+    window_closed: closed,
     has_variants: p.has_variants === true,
     variant_count: variants?.length ?? 0,
     price_min: range ? range.price_min : ownPrice,
@@ -536,7 +553,8 @@ export class CatalogService {
       db,
       rawProducts.filter((p) => p.has_variants).map((p) => p.id)
     );
-    const products: CustomerProductDto[] = rawProducts.map((p) => toCustomerProduct(p, variants.get(p.id), false));
+    const avail = await loadAvailability();
+    const products: CustomerProductDto[] = rawProducts.map((p) => toCustomerProduct(p, variants.get(p.id), false, avail));
 
     return {
       products,
@@ -559,7 +577,7 @@ export class CatalogService {
     // Format customer-safe payload: strictly omit purchase_cost & markup
     // figures and stock counts. Migration 045: the variants to pick from.
     const variants = rawProduct.has_variants ? (await customerVariantsFor(db, [rawProduct.id])).get(rawProduct.id) ?? [] : [];
-    return toCustomerProduct(rawProduct, variants, true);
+    return toCustomerProduct(rawProduct, variants, true, await loadAvailability());
   }
 
   // --------------------------------------------------------------------------

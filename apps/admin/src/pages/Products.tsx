@@ -15,6 +15,19 @@ import { leadTimeText } from '../lib/stock';
 import { StockChip } from '../components/ProductVariants';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
+/** "LKR 1 or less": the placeholder-priced products waiting for their photos (owner, 2026-10-23). */
+type PriceFilter = 'all' | 'placeholder';
+
+/** What the customer pays for it before offers: the row's price, or the cheapest size. */
+const priceOf = (p: AdminProduct) => Number(p.has_variants && p.price_min != null ? p.price_min : p.calculated_selling_price ?? p.selling_price ?? 0);
+
+type BulkAction = { label: string; change: { is_active?: boolean; is_available?: boolean }; destructive: boolean; note: string };
+const BULK_ACTIONS: BulkAction[] = [
+  { label: 'Disable', change: { is_active: false }, destructive: true, note: 'will be hidden from the customer app' },
+  { label: 'Enable', change: { is_active: true }, destructive: false, note: 'will appear in the customer app again' },
+  { label: 'Make unavailable', change: { is_available: false }, destructive: true, note: 'will show greyed out and cannot be ordered' },
+  { label: 'Make available', change: { is_available: true }, destructive: false, note: 'can be ordered again' },
+];
 
 /**
  * Operational product table: dense, searchable, and able to show inactive
@@ -29,6 +42,11 @@ export function Products() {
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
+  const [priceFilter, setPriceFilter] = useState<PriceFilter>('all');
+  // Bulk select (owner, 2026-10-23): tick products, then switch them all at once.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pendingBulk, setPendingBulk] = useState<BulkAction | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [complete, setComplete] = useState(true);
   const [pendingToggle, setPendingToggle] = useState<AdminProduct | null>(null);
@@ -68,6 +86,34 @@ export function Products() {
     const map = new Map(categories.map((category) => [category.id, category.name]));
     return (id: string) => map.get(id) ?? '-';
   }, [categories]);
+
+  const shown = useMemo(() => (rows ?? []).filter((p) => priceFilter === 'all' || priceOf(p) <= 1), [rows, priceFilter]);
+  const shownIds = shown.map((p) => p.id);
+  const chosen = shownIds.filter((id) => selected.has(id));
+  const allChosen = shownIds.length > 0 && chosen.length === shownIds.length;
+  const toggleOne = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const toggleAll = () => setSelected(allChosen ? new Set() : new Set(shownIds));
+
+  async function runBulk(action: BulkAction) {
+    setPendingBulk(null);
+    setBulkBusy(true);
+    try {
+      const r = await productsApi.bulkStatus(chosen, action.change);
+      toast.success(r.changed === 0 ? 'Nothing changed: they were already like that.' : `${action.label}: ${r.changed} ${r.changed === 1 ? 'product' : 'products'} updated.`);
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not update the selected products.'));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   async function toggleActive(product: AdminProduct) {
     try {
@@ -156,7 +202,30 @@ export function Products() {
           <option value="active">Active only</option>
           <option value="inactive">Inactive only</option>
         </select>
+        <select
+          className="input"
+          value={priceFilter}
+          onChange={(event) => setPriceFilter(event.target.value as PriceFilter)}
+          aria-label="Filter by price"
+        >
+          <option value="all">Any price</option>
+          <option value="placeholder">LKR 1 or less (placeholder)</option>
+        </select>
       </div>
+
+      {chosen.length > 0 ? (
+        <div className="bulk-bar" role="region" aria-label="Bulk actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+          <strong>{chosen.length} selected</strong>
+          {BULK_ACTIONS.map((a) => (
+            <button key={a.label} type="button" className="button button--ghost button--sm" disabled={bulkBusy} onClick={() => setPendingBulk(a)}>
+              {a.label}
+            </button>
+          ))}
+          <button type="button" className="button button--ghost button--sm" onClick={() => setSelected(new Set())}>
+            Clear
+          </button>
+        </div>
+      ) : null}
 
       {error ? <p className="field__error">{error}</p> : null}
       {rows && !complete ? (
@@ -167,7 +236,7 @@ export function Products() {
 
       {rows === null ? (
         <Spinner label="Loading products" />
-      ) : rows.length === 0 ? (
+      ) : shown.length === 0 ? (
         <EmptyState
           title="No products match"
           message="Try a different search or filter."
@@ -177,6 +246,9 @@ export function Products() {
         <table className="table">
           <thead>
             <tr>
+              <th scope="col">
+                <input type="checkbox" aria-label="Select all shown products" checked={allChosen} onChange={toggleAll} />
+              </th>
               <th scope="col">Image</th>
               <th scope="col">Product</th>
               <th scope="col">Category</th>
@@ -188,8 +260,11 @@ export function Products() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((product) => (
+            {shown.map((product) => (
               <tr key={product.id}>
+                <td>
+                  <input type="checkbox" aria-label={`Select ${product.name}`} checked={selected.has(product.id)} onChange={() => toggleOne(product.id)} />
+                </td>
                 <td>
                   <div className="thumb">
                     {product.image_url ? (
@@ -305,6 +380,17 @@ export function Products() {
         </table>
         </div>
       )}
+
+      {pendingBulk ? (
+        <ConfirmDialog
+          title={`${pendingBulk.label}: ${chosen.length} ${chosen.length === 1 ? 'product' : 'products'}`}
+          message={`The ${chosen.length} selected ${chosen.length === 1 ? 'product' : 'products'} ${pendingBulk.note}.`}
+          confirmLabel={pendingBulk.label}
+          destructive={pendingBulk.destructive}
+          onConfirm={() => void runBulk(pendingBulk)}
+          onCancel={() => setPendingBulk(null)}
+        />
+      ) : null}
 
       {pendingToggle ? (
         <ConfirmDialog

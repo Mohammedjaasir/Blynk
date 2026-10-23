@@ -535,4 +535,33 @@ describe('checkout settings (owner, 2026-10-08)', () => {
     expect(since).toBeGreaterThanOrEqual(before);
     expect(since).toBeLessThanOrEqual(Date.now());
   });
+
+  it('"Start again from today" keeps the edits that are not saved yet (owner, 2026-10-23: "why its not saving")', async () => {
+    const user = userEvent.setup();
+    const api = mockApi((c) => {
+      if (c.method === 'GET' && c.path === '/admin/settings/checkout') {
+        return { data: { coupons_enabled: true, new_customer_free_deliveries: { enabled: false, count: 2, since: SINCE }, updated_at: null } };
+      }
+      if (c.method === 'PATCH' && c.path === '/admin/settings/checkout') {
+        return { data: { coupons_enabled: true, new_customer_free_deliveries: { enabled: false, count: 2, since: '2026-10-23T05:00:00.000Z' }, ...c.body, updated_at: null } };
+      }
+    });
+    renderPage(<Settings />);
+    const panel = await screen.findByRole('region', { name: 'Checkout' });
+    const count = await within(panel).findByLabelText(/Free deliveries per customer/);
+    // tick the switch and change the count, then press "Start again from today" before saving
+    await user.click(within(panel).getByRole('checkbox', { name: /Free deliveries for every customer/ }));
+    await user.clear(count);
+    await user.type(count, '1');
+    await user.click(within(panel).getByRole('button', { name: 'Start again from today' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Start free deliveries again' })).getByRole('button', { name: 'Start again' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(1));
+    // the restart sent the saved values, and the unsaved edits are still in the form
+    expect(api.find('PATCH', '/admin/settings/checkout')[0]!.body.new_customer_free_deliveries).toMatchObject({ enabled: false, count: 2 });
+    expect(within(panel).getByRole('checkbox', { name: /Free deliveries for every customer/ })).toBeChecked();
+    expect(within(panel).getByLabelText(/Free deliveries per customer/)).toHaveValue('1');
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/settings/checkout')).toHaveLength(2));
+    expect(api.find('PATCH', '/admin/settings/checkout')[1]!.body.new_customer_free_deliveries).toEqual({ enabled: true, count: 1 });
+  });
 });

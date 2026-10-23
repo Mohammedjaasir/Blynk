@@ -567,8 +567,9 @@ function CheckoutSettingsPanel() {
           since: new Date().toISOString(),
         },
       });
-      show(updated);
-      toast.success('Free deliveries now count orders from today.');
+      // only the saved baseline moves: edits not saved yet stay in the fields (owner, 2026-10-23: "why its not saving")
+      setCurrent(updated);
+      toast.success('Free deliveries now count orders from today. Unsaved changes above still need Save.');
     } catch (err) {
       setError(errorMessage(err, 'Could not restart the free deliveries.'));
     } finally {

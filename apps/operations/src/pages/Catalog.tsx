@@ -129,6 +129,13 @@ export function Catalog() {
             <span className="cat-hub__count">Edit</span>
           </Link>
         </li>
+        {/* Time-limited products (owner, 2026-10-23): juices only 6 am to 6 pm, etc. */}
+        <li>
+          <Link className="cat-hub__card" to="/catalog/available-hours">
+            <span className="cat-hub__title">Available hours</span>
+            <span className="cat-hub__count">Edit</span>
+          </Link>
+        </li>
         {/* QR links (owner, 2026-10-22): the dynamic QR on a jersey or poster. */}
         <li>
           <Link className="cat-hub__card" to="/catalog/qr-links">
