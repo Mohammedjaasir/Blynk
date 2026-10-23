@@ -21,6 +21,7 @@ describe('hero banner render model', () => {
         items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]),
         cta: 'ORDER NOW',
         link: null,
+        slides: [],
         custom: false,
         fit: false,
       });
@@ -123,5 +124,29 @@ describe('hero banner fit', () => {
     expect(size).toBeLessThan(15);
     expect(size).toBeGreaterThanOrEqual(10.5);
     expect(40 * 0.519 * size).toBeLessThanOrEqual(220);
+  });
+});
+
+describe('more slides (owner, 2026-10-23)', () => {
+  it('CUSTOM carries the extra slides: words, an optional line with tokens filled, an optional item', () => {
+    const m = resolveHero(custom({
+      slides: [
+        { title: ['fresh', 'juices'], line: 'Cold from {min_price}', item: 'bottle' },
+        { title: ['SNACKS', 'TIME'], line: null, item: null },
+        { title: ['', 'BROKEN'], line: null, item: null }, // no first word: dropped
+        { title: ['PLAIN', 'ITEM'], line: 'Sale {free_count}', item: 'car' }, // token with no value, unknown item
+      ],
+    }), facts, now);
+    expect(m.slides).toEqual([
+      { title: ['FRESH', 'JUICES'], line: 'Cold from LKR 253', item: HERO_ITEMS.bottle },
+      { title: ['SNACKS', 'TIME'], line: null, item: null },
+      { title: ['PLAIN', 'ITEM'], line: null, item: null },
+    ]);
+  });
+
+  it('AUTO, an older API without slides and a custom banner without any: just the main banner', () => {
+    expect(resolveHero(null, facts, now).slides).toEqual([]);
+    expect(resolveHero(custom(), facts, now).slides).toEqual([]);
+    expect(resolveHero(custom({ slides: [] }), facts, now).slides).toEqual([]);
   });
 });

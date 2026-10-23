@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { categories as categoriesApi, categoryGroups as groupsApi, heroBanner as heroBannerApi, settings as settingsApi } from '../api/resources';
 import { referralPoints } from '../api/referralPoints';
-import type { Category, CategoryGroup, HeroBannerFields, HeroBannerSetting } from '../api/types';
+import type { Category, CategoryGroup, HeroBannerFields, HeroBannerSetting, HeroBannerSlide } from '../api/types';
 import { HeroBannerPreview } from '../components/HeroBannerPreview';
 import { PageHeader } from '../components/Layout';
 import { Field, Spinner, useToast } from '../components/ui';
@@ -9,7 +9,9 @@ import { errorMessage } from '../lib/apiErrors';
 import {
   DEFAULT_HERO,
   HERO_ITEMS,
+  EMPTY_SLIDE,
   HERO_LIMITS,
+  HERO_TIMING,
   HERO_STATUS_TEXT,
   HERO_TOKENS,
   heroPayload,
@@ -191,6 +193,7 @@ export const heroFieldsOf = (s: HeroBannerSetting): HeroBannerFields => ({
   cta_destination_type: s.cta_destination_type,
   cta_destination_value: s.cta_destination_value,
   items: s.items,
+  slides: s.slides ?? [],
   starts_at: s.starts_at,
   ends_at: s.ends_at,
 });
@@ -313,6 +316,42 @@ function HeroBannerForm({
                 </button>
               ) : (
                 <span className="field__hint">That is the most ({HERO_LIMITS.lines}).</span>
+              )}
+            </div>
+          </section>
+
+          <section className="editor__section">
+            <h3 className="editor__legend">More slides</h3>
+            <p className="field__hint">
+              Optional. After the banner above the app moves on to each slide below (about {HERO_TIMING.cycle / 1000} s each), then starts again - e.g. FRESH GROCERIES, then FRESH JUICES, then SNACKS.
+              Every slide has its own two words; its sub-line and item are optional (empty = the sub-lines and items above take turns). Up to {HERO_LIMITS.slides} more slides.
+            </p>
+            <div className="band-list" style={{ marginTop: 8 }}>
+              {draft.slides.map((sl, i) => {
+                const put = (patch: Partial<HeroBannerSlide>) => set('slides', draft.slides.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+                return (
+                  <div className="band-list__row" key={i} style={{ flexWrap: 'wrap', gap: 8 }} data-testid="hero-slide">
+                    <input className="input" style={{ flex: '1 1 110px' }} aria-label={`Slide ${i + 2} first word`} value={sl.title_1} maxLength={HERO_LIMITS.titleChars} placeholder="FRESH" onChange={(e) => put({ title_1: e.target.value })} />
+                    <input className="input" style={{ flex: '1 1 110px' }} aria-label={`Slide ${i + 2} second word`} value={sl.title_2} maxLength={HERO_LIMITS.titleChars} placeholder="JUICES" onChange={(e) => put({ title_2: e.target.value })} />
+                    <input className="input" style={{ flex: '2 1 200px' }} aria-label={`Slide ${i + 2} sub-line`} value={sl.line} maxLength={HERO_LIMITS.lineChars} placeholder="Sub-line (optional)" onChange={(e) => put({ line: e.target.value })} />
+                    <select className="input" style={{ flex: '1 1 130px' }} aria-label={`Slide ${i + 2} item`} value={sl.item ?? ''} onChange={(e) => put({ item: (e.target.value || null) as HeroBannerSlide['item'] })}>
+                      <option value="">Item: as above</option>
+                      {HERO_ITEMS.map((it) => (
+                        <option key={it.key} value={it.key}>{`${it.emoji} ${it.label}`}</option>
+                      ))}
+                    </select>
+                    <button type="button" className="button button--ghost button--sm" aria-label={`Remove slide ${i + 2}`} onClick={() => set('slides', draft.slides.filter((_, j) => j !== i))}>
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+              {draft.slides.length < HERO_LIMITS.slides ? (
+                <button type="button" className="button button--ghost button--sm" style={{ alignSelf: 'flex-start' }} onClick={() => set('slides', [...draft.slides, { ...EMPTY_SLIDE }])}>
+                  Add slide
+                </button>
+              ) : (
+                <span className="field__hint">That is the most ({HERO_LIMITS.slides}).</span>
               )}
             </div>
           </section>

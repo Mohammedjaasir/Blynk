@@ -1,5 +1,5 @@
 /* Blynk Ops copy of apps/admin/src/lib/heroBanner.ts (common.md rule 2: no cross-app imports) - keep the two in step. */
-import type { HeroBannerFields, HeroBannerItem } from '../api/types';
+import type { HeroBannerFields, HeroBannerItem, HeroBannerSlide } from '../api/types';
 
 /*
  * Home hero banner: the purple banner at the top of the customer app's Home
@@ -10,7 +10,10 @@ import type { HeroBannerFields, HeroBannerItem } from '../api/types';
  * follow - keep the four in step.
  */
 
-export const HERO_LIMITS = { titleChars: 12, lines: 4, lineChars: 40, ctaChars: 16 } as const;
+export const HERO_LIMITS = { titleChars: 12, lines: 4, lineChars: 40, ctaChars: 16, slides: 4 } as const;
+
+/** A new, empty extra slide. */
+export const EMPTY_SLIDE: HeroBannerSlide = { title_1: '', title_2: '', line: '', item: null };
 
 /**
  * The illustrated items the beam can lift (the app draws the same emoji art). Owner, 2026-10-17:
@@ -59,6 +62,7 @@ export const DEFAULT_HERO: HeroBannerFields = {
   cta_destination_type: null,
   cta_destination_value: null,
   items: [...HERO_AUTO_ITEMS],
+  slides: [],
   starts_at: null,
   ends_at: null,
 };
@@ -206,6 +210,19 @@ export function heroProblem(h: HeroBannerFields): string | null {
   if (!h.cta_label.trim()) return 'Write the button text.';
   if (h.cta_label.trim().length > HERO_LIMITS.ctaChars) return `Keep the button text to ${HERO_LIMITS.ctaChars} characters.`;
   if (h.items.length < 1) return 'Choose at least 1 item for the beam.';
+  if (h.slides.length > HERO_LIMITS.slides) return `At most ${HERO_LIMITS.slides} more slides.`;
+  for (const [i, sl] of h.slides.entries()) {
+    const n = i + 2;
+    if (!sl.title_1.trim() || !sl.title_2.trim()) return `Slide ${n}: write both title words (or remove the slide).`;
+    if (sl.title_1.trim().length > HERO_LIMITS.titleChars || sl.title_2.trim().length > HERO_LIMITS.titleChars) {
+      return `Slide ${n}: keep each title word to ${HERO_LIMITS.titleChars} characters so it fits.`;
+    }
+    const line = sl.line.trim();
+    if (line && (line.length < 2 || line.length > HERO_LIMITS.lineChars)) return `Slide ${n}: the sub-line needs 2 to ${HERO_LIMITS.lineChars} characters (or leave it empty).`;
+    for (const m of line.matchAll(TOKEN_RE)) {
+      if (m[1] !== 'min_price' && m[1] !== 'free_count' && m[1] !== 'points_rule') return `Slide ${n}: unknown token {${m[1]}}. Use {min_price}, {free_count} or {points_rule}.`;
+    }
+  }
   if ((h.cta_destination_type === 'CATEGORY' || h.cta_destination_type === 'PRODUCT') && !h.cta_destination_value) {
     return h.cta_destination_type === 'CATEGORY' ? 'Choose the category the button opens.' : 'Choose the product the button opens.';
   }
@@ -220,5 +237,6 @@ export function heroPayload(h: HeroBannerFields): HeroBannerFields {
     title_2: h.title_2.trim().toUpperCase(),
     lines: clean(h.lines),
     cta_label: h.cta_label.trim().toUpperCase(),
+    slides: h.slides.map((x) => ({ title_1: x.title_1.trim().toUpperCase(), title_2: x.title_2.trim().toUpperCase(), line: x.line.trim(), item: x.item })),
   };
 }

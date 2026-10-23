@@ -128,6 +128,7 @@ describe('Hero banner setting', () => {
       cta_label: 'SHOP RICE',
       cta_target: expect.objectContaining({ level: 'CATEGORY', slug: categorySlug, is_active: true }),
       items: ['milk', 'bread'],
+      slides: [],
       ends_at: null,
     });
 
@@ -141,6 +142,31 @@ describe('Hero banner setting', () => {
     expect(audit.actor_user_id).toBe(users.admin.id);
     expect(audit.old_values).toEqual({ key: HERO_BANNER_KEY });
     expect(audit.new_values).toMatchObject({ key: HERO_BANNER_KEY, mode: 'CUSTOM', title_1: 'WEEKEND' });
+  });
+
+  it('more slides: each with its own words, sub-line and item; GET /store carries them (owner, 2026-10-23)', async () => {
+    const res = await patchHero({
+      mode: 'CUSTOM',
+      slides: [
+        { title_1: ' fresh ', title_2: 'Juices', line: 'Cold and ready', item: 'bottle' },
+        { title_1: 'Snacks', title_2: 'Time', line: '', item: null },
+      ],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.slides).toEqual([
+      { title_1: 'FRESH', title_2: 'JUICES', line: 'Cold and ready', item: 'bottle' },
+      { title_1: 'SNACKS', title_2: 'TIME', line: '', item: null },
+    ]);
+    expect((await publicHero()).slides).toEqual([
+      { title: ['FRESH', 'JUICES'], line: 'Cold and ready', item: 'bottle' },
+      { title: ['SNACKS', 'TIME'], line: null, item: null },
+    ]);
+    const tooMany = Array.from({ length: 5 }, () => ({ title_1: 'A', title_2: 'B', line: '', item: null }));
+    expect((await patchHero({ slides: tooMany })).status).toBe(400);
+    expect((await patchHero({ slides: [{ title_1: 'A'.repeat(13), title_2: 'B', line: '', item: null }] })).status).toBe(400);
+    expect((await patchHero({ slides: [{ title_1: 'A', title_2: 'B', line: 'Hi {nope}', item: null }] })).status).toBe(400);
+    expect((await patchHero({ slides: [{ title_1: 'A', title_2: 'B', line: '', item: 'car' }] })).status).toBe(400);
+    expect((await patchHero({ slides: [] })).body.data.slides).toEqual([]);
   });
 
   it('a PATCH changes only what it sends; back to AUTO keeps the custom words for later', async () => {

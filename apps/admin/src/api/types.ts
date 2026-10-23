@@ -795,6 +795,13 @@ export interface PromoBandSetting extends PromoBandFields {
  */
 export type HeroBannerMode = 'AUTO' | 'CUSTOM';
 export type HeroBannerItem = 'milk' | 'bread' | 'apple' | 'carrot' | 'egg' | 'broccoli' | 'banana' | 'diaper' | 'soap' | 'biscuit' | 'bottle';
+/** One more slide after the main banner (owner, 2026-10-23): its own words; line '' / item null = the main ones. */
+export interface HeroBannerSlide {
+  title_1: string;
+  title_2: string;
+  line: string;
+  item: HeroBannerItem | null;
+}
 export interface HeroBannerFields {
   mode: HeroBannerMode;
   title_1: string;
@@ -806,6 +813,8 @@ export interface HeroBannerFields {
   cta_destination_type: 'CATEGORY' | 'PRODUCT' | 'CATALOG' | null;
   cta_destination_value: string | null;
   items: HeroBannerItem[];
+  /** Up to 4 more slides, shown one after another. */
+  slides: HeroBannerSlide[];
   starts_at: string | null;
   ends_at: string | null;
 }

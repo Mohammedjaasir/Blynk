@@ -66,9 +66,18 @@ export interface HeroModel {
   cta: string;
   /** Where ORDER NOW goes; null = the app's own (scroll down to the aisles). */
   link: PromoDestination | null;
+  /** The slides after the main one: their own words, a line (null = the main lines roll) and an item (null = the beam's items take turns). */
+  slides: HeroSlideModel[];
   custom: boolean;
   /** Sub-lines may shrink to fit and run past the title column (CUSTOM, or AUTO's longer guest line). */
   fit: boolean;
+}
+
+export interface HeroSlideModel {
+  title: [string, string];
+  line: string | null;
+  /** Emoji art, or null. */
+  item: string | null;
 }
 
 export interface HeroFacts {
@@ -119,6 +128,7 @@ function autoHero(facts: HeroFacts): HeroModel {
     items: HERO_AUTO_ITEMS.map((k) => HERO_ITEMS[k]!),
     cta: HERO_COPY.cta,
     link: null,
+    slides: [],
     custom: false,
     fit: false,
   };
@@ -146,6 +156,16 @@ export function resolveHero(config: PublicHeroBanner | null | undefined, facts: 
   // CUSTOM lines may still name the price themselves ({min_price}); the firework highlights it
   // there even though AUTO no longer shows a price line (owner, 2026-10-16).
   const accent = facts.minPrice != null ? formatLkr(facts.minPrice) : null;
+  // the extra slides (owner, 2026-10-23): a slide with a broken title is dropped
+  const slides: HeroSlideModel[] = [];
+  for (const x of Array.isArray(config.slides) ? config.slides : []) {
+    const [sa, sb] = Array.isArray(x?.title) ? x.title : [];
+    const t1 = word(sa);
+    const t2 = word(sb);
+    if (!t1 || !t2) continue;
+    const line = typeof x.line === 'string' && x.line.trim() ? fillHeroTokens(x.line.trim(), facts) : null;
+    slides.push({ title: [t1, t2], line, item: (typeof x.item === 'string' && HERO_ITEMS[x.item]) || null });
+  }
   return {
     title: [w1, w2],
     lines,
@@ -153,6 +173,7 @@ export function resolveHero(config: PublicHeroBanner | null | undefined, facts: 
     items: items.length ? items : auto.items,
     cta,
     link,
+    slides,
     custom: true,
     fit: true,
   };

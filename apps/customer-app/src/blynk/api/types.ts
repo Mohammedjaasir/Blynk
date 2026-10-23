@@ -182,5 +182,7 @@ export interface PublicHeroBanner {
   /** Where the button goes; null = the app's own (scroll to the aisles). */
   cta_target: PromoTarget | null;
   items: string[];
+  /** More slides after the main one, each with its own words (owner, 2026-10-23); missing = an older API. */
+  slides?: { title: [string, string]; line: string | null; item: string | null }[];
   ends_at: string | null;
 }

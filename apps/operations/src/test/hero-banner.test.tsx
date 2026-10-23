@@ -110,3 +110,18 @@ describe('hero banner preview (Blynk Ops)', () => {
     expect(screen.getByTestId('hero-item')).toHaveTextContent('🥚');
   });
 });
+
+describe('more slides in the editor (owner, 2026-10-23)', () => {
+  it('checks each extra slide and sends them trimmed, in capitals', async () => {
+    const { DEFAULT_HERO, heroPayload, heroProblem } = await import('../lib/heroBanner');
+    const base = { ...DEFAULT_HERO, mode: 'CUSTOM' as const };
+    expect(heroProblem(base)).toBeNull();
+    expect(heroProblem({ ...base, slides: [{ title_1: 'Fresh', title_2: '', line: '', item: null }] })).toMatch(/Slide 2: write both title words/);
+    expect(heroProblem({ ...base, slides: [{ title_1: 'A'.repeat(13), title_2: 'B', line: '', item: null }] })).toMatch(/Slide 2: keep each title word/);
+    expect(heroProblem({ ...base, slides: [{ title_1: 'A', title_2: 'B', line: 'Hi {nope}', item: null }] })).toMatch(/unknown token/);
+    expect(heroProblem({ ...base, slides: Array.from({ length: 5 }, () => ({ title_1: 'A', title_2: 'B', line: '', item: null })) })).toMatch(/At most 4 more slides/);
+    const ok = { ...base, slides: [{ title_1: ' fresh ', title_2: 'juices', line: ' Cold ', item: 'bottle' as const }] };
+    expect(heroProblem(ok)).toBeNull();
+    expect(heroPayload(ok).slides).toEqual([{ title_1: 'FRESH', title_2: 'JUICES', line: 'Cold', item: 'bottle' }]);
+  });
+});

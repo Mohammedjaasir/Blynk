@@ -63,7 +63,7 @@ export const HERO_BANNER_TOKENS = ['min_price', 'free_count', 'points_rule'] as 
  * 360 pt phone, where the column keeps its width. Sub-lines shrink to fit in
  * CUSTOM mode (docs/promo-surfaces.md §3).
  */
-export const HERO_BANNER_LIMITS = { titleChars: 12, lines: 4, lineChars: 40, ctaChars: 16 } as const;
+export const HERO_BANNER_LIMITS = { titleChars: 12, lines: 4, lineChars: 40, ctaChars: 16, slides: 4 } as const;
 
 const isoDate = z
   .string()
@@ -99,6 +99,20 @@ const subLine = z
     }
   });
 
+/**
+ * More slides after the main one (owner, 2026-10-23: "multiple text here like slides ... Fresh
+ * Groceries, then Fresh Juices, Snacks"): each has its own two title words and, optionally, its
+ * own sub-line (tokens allowed; '' = the main sub-lines roll) and its own item (null = the beam's
+ * items take turns). The banner moves to the next slide every cycle, about 2.6 s.
+ */
+const slide = z.object({
+  title_1: title('The first title word'),
+  title_2: title('The second title word'),
+  line: z.union([z.literal(''), subLine]),
+  item: z.enum(HERO_BANNER_ITEMS).nullable(),
+});
+export type HeroBannerSlide = z.infer<typeof slide>;
+
 const fields = {
   mode: z.enum(HERO_BANNER_MODES),
   title_1: title('The first title word'),
@@ -121,6 +135,7 @@ const fields = {
     .min(1, 'Choose at least 1 item for the beam')
     .max(HERO_BANNER_ITEMS.length)
     .refine((xs) => new Set(xs).size === xs.length, 'Each item can be chosen once'),
+  slides: z.array(slide).max(HERO_BANNER_LIMITS.slides, `At most ${HERO_BANNER_LIMITS.slides} more slides`),
   starts_at: isoDate.nullable(),
   ends_at: isoDate.nullable(),
 };
@@ -138,6 +153,7 @@ export const DEFAULT_HERO_BANNER: HeroBannerSetting = {
   cta_destination_type: null,
   cta_destination_value: null,
   items: ['bread', 'apple', 'carrot', 'egg', 'broccoli', 'banana'],
+  slides: [],
   starts_at: null,
   ends_at: null,
 };
@@ -187,6 +203,8 @@ export interface PublicHeroBanner {
   /** Where ORDER NOW goes; null = the app's own (scroll to the aisles), also for a target that is gone or off. */
   cta_target: PromotionTarget | null;
   items: HeroBannerItem[];
+  /** The slides after the main one (empty = just the main banner). */
+  slides: { title: [string, string]; line: string | null; item: HeroBannerItem | null }[];
   ends_at: string | null;
 }
 
@@ -256,6 +274,7 @@ export class HeroBannerService {
       // A switched-off or deleted target: the button keeps the app's own behaviour.
       cta_target: target && target.is_active !== false ? target : null,
       items: s.items,
+      slides: s.slides.map((x) => ({ title: [x.title_1, x.title_2] as [string, string], line: x.line || null, item: x.item })),
       ends_at: s.ends_at,
     };
   }

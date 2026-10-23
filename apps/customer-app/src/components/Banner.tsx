@@ -227,8 +227,14 @@ export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, 
   const nudge = useSharedValue(0);
 
   const lines = useMemo(() => (demo ? [demo.line] : model!.lines), [demo, model]);
-  const line = useRoll(lines);
-  const [w1, w2] = demo ? demo.title : model!.title;
+  const rolled = useRoll(lines);
+  // more slides (owner, 2026-10-23: "Fresh Groceries, then Fresh Juices, Snacks"): the main banner, then each
+  // extra slide, one per cycle; a slide's own line replaces the rolling lines while it shows
+  const extra = demo ? [] : model!.slides;
+  const slideCount = 1 + extra.length;
+  const slide = slideCount > 1 && idx % slideCount > 0 ? extra[(idx % slideCount) - 1]! : null;
+  const line = slide?.line ?? rolled;
+  const [w1, w2] = slide ? slide.title : demo ? demo.title : model!.title;
   const span = demo ? 1 : heroWaveSpan([w1, w2]);
 
   useEffect(() => {
@@ -252,7 +258,7 @@ export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, 
     if (idx % 2 === 1) moon.value = withDelay(1100, withSequence(withSpring(1, { damping: 9, stiffness: 220 }), withDelay(420, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }))));
     wave.value = 0;
     wave.value = withDelay(1100, withTiming(span, { duration: 1000 * span, easing: Easing.linear }));
-    if (items.length < 2) {
+    if (items.length < 2 && slideCount < 2) {
       const t = setTimeout(() => setIdx((i) => i + 1), P);
       return () => clearTimeout(t);
     }
@@ -263,7 +269,7 @@ export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, 
     }, P - 380);
     const nextT = setTimeout(() => setIdx((i) => i + 1), P - 120);
     return () => { clearTimeout(exit); clearTimeout(nextT); };
-  }, [idx, items.length, span]);
+  }, [idx, items.length, slideCount, span]);
 
   const ufoA = useAnimatedStyle(() => ({
     transform: [
@@ -293,7 +299,7 @@ export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, 
   const link = model?.link ?? null;
   const ctaText = demo ? HERO_COPY.cta : model!.cta;
   const subSize = line ? heroSubSize(line, !!model?.fit) : 15;
-  const cur = items.length ? items[idx % items.length] : null;
+  const cur = slide?.item ?? (items.length ? items[idx % items.length] : null);
   const parts = line && accent && line.includes(accent) ? line.split(accent) : null;
 
   return (
