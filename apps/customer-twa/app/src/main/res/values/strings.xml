@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!--
+    The app's half of Digital Asset Links: this app trusts https://blynk.lk. The site's half is
+    https://blynk.lk/.well-known/assetlinks.json (apps/customer-site/.well-known/assetlinks.json),
+    which must list lk.blynk.customer with the SHA-256 of the key that signs the installed app
+    (the upload key for local/sideloaded builds, the Play app signing key for Play installs).
+  -->
+  <string name="assetStatements" translatable="false">
+    [{
+        \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+        \"target\": {
+            \"namespace\": \"web\",
+            \"site\": \"https://blynk.lk\"
+        }
+    }]
+  </string>
+</resources>

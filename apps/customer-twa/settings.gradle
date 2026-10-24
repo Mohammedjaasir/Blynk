@@ -1,0 +1,2 @@
+rootProject.name = 'blynk-customer-twa'
+include ':app'

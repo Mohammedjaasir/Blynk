@@ -1,0 +1,121 @@
+// Blynk customer app (Trusted Web Activity) - see ../build.gradle and
+// docs/06-deployment/play-store-listing.md.
+
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing: the same key and properties file as Blynk Ops / Blynk Rider
+// (apps/operations/android/app/build.gradle). The key and its passwords live
+// outside the repo in ~/.blynk-release/keystore.properties (or the file named by
+// BLYNK_KEYSTORE_PROPERTIES). Without that file, release builds stay unsigned.
+def releaseKeystorePropsFile = file(System.getenv('BLYNK_KEYSTORE_PROPERTIES') ?: "${System.getProperty('user.home')}/.blynk-release/keystore.properties")
+def releaseKeystoreProps = new Properties()
+if (releaseKeystorePropsFile.exists()) {
+    releaseKeystorePropsFile.withInputStream { releaseKeystoreProps.load(it) }
+}
+
+// Google Play refuses an upload whose versionCode is not higher than every
+// earlier upload. BLYNK_VERSION_CODE wins (use it for every Play upload);
+// otherwise the number of commits on HEAD; else 1.
+def blynkVersionCode = { ->
+    def fromEnv = System.getenv('BLYNK_VERSION_CODE')?.trim()
+    if (fromEnv) return fromEnv.toInteger()
+    try {
+        def count = providers.exec {
+            commandLine 'git', 'rev-list', '--count', 'HEAD'
+            ignoreExitValue = true
+        }.standardOutput.asText.get().trim()
+        if (count.isInteger() && count.toInteger() > 0) return count.toInteger()
+    } catch (Exception ignored) {
+        // No git here (e.g. a source zip): fall back below.
+    }
+    return 1
+}()
+def blynkVersionName = System.getenv('BLYNK_VERSION_NAME')?.trim() ?: "1.0.0"
+
+def twaManifest = [
+    applicationId: 'lk.blynk.customer',   // same id as the earlier Flutter app and assetlinks.json
+    hostName: 'blynk.lk',                 // the domain opened in the TWA
+    launchUrl: '/app/',                   // start path, relative to the domain
+    name: 'Blynk',
+    launcherName: 'Blynk',
+    // White, like the shop's web manifest (theme_color / background_color #FFFFFF).
+    themeColor: '#FFFFFF',
+    themeColorDark: '#000000',
+    navigationColor: '#FFFFFF',
+    navigationColorDark: '#000000',
+    navigationDividerColor: '#00000000',
+    navigationDividerColorDark: '#00000000',
+    backgroundColor: '#FFFFFF',           // splash screen background
+    enableNotifications: true,            // notification delegation (web push shows as the app's)
+    splashScreenFadeOutDuration: 300,
+    generatorApp: 'blynk-hand-written (bubblewrap 1.27.0 template)',
+    fallbackType: 'customtabs',           // no TWA-capable browser: open in a Custom Tab
+    enableSiteSettingsShortcut: 'true',
+    orientation: 'portrait',
+]
+
+android {
+    namespace 'lk.blynk.customer'
+    // Google Play: new apps from 31 Aug 2026 must target Android 16 (API 36).
+    compileSdk 36
+    defaultConfig {
+        applicationId twaManifest.applicationId
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode blynkVersionCode
+        versionName blynkVersionName
+
+        resValue "string", "appName", twaManifest.name
+        resValue "string", "launcherName", twaManifest.launcherName
+        resValue "string", "launchUrl", "https://" + twaManifest.hostName + twaManifest.launchUrl
+        // Chrome OS uses this to open the PWA itself instead of the TWA.
+        resValue "string", "webManifestUrl", "https://" + twaManifest.hostName + "/app/manifest.json"
+        resValue "string", "fullScopeUrl", "https://" + twaManifest.hostName + "/app/"
+        resValue "string", "hostName", twaManifest.hostName
+        resValue "color", "colorPrimary", twaManifest.themeColor
+        resValue "color", "colorPrimaryDark", twaManifest.themeColorDark
+        resValue "color", "navigationColor", twaManifest.navigationColor
+        resValue "color", "navigationColorDark", twaManifest.navigationColorDark
+        resValue "color", "navigationDividerColor", twaManifest.navigationDividerColor
+        resValue "color", "navigationDividerColorDark", twaManifest.navigationDividerColorDark
+        resValue "color", "backgroundColor", twaManifest.backgroundColor
+        resValue "string", "providerAuthority", twaManifest.applicationId + '.fileprovider'
+        resValue "bool", "enableNotification", twaManifest.enableNotifications.toString()
+        resValue "integer", "splashScreenFadeOutDuration", twaManifest.splashScreenFadeOutDuration.toString()
+        resValue "string", "generatorApp", twaManifest.generatorApp
+        resValue "string", "fallbackType", twaManifest.fallbackType
+        resValue "bool", "enableSiteSettingsShortcut", twaManifest.enableSiteSettingsShortcut
+        resValue "string", "orientation", twaManifest.orientation
+    }
+    signingConfigs {
+        if (releaseKeystorePropsFile.exists()) {
+            release {
+                storeFile file(releaseKeystoreProps['storeFile'])
+                storePassword releaseKeystoreProps['storePassword']
+                keyAlias releaseKeystoreProps['keyAlias']
+                keyPassword releaseKeystoreProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (releaseKeystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled true
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint {
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+}

@@ -1,0 +1,25 @@
+// Blynk customer app for Google Play (owner, 2026-10-24): a Trusted Web Activity
+// that opens the live shop at https://blynk.lk/app/ full screen in Chrome.
+// Hand-written from Bubblewrap 1.27.0's template_project (android-browser-helper).
+// Build and release steps: docs/06-deployment/play-store-listing.md
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.9.1'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+tasks.register('clean', Delete) {
+    delete rootProject.layout.buildDirectory
+}
