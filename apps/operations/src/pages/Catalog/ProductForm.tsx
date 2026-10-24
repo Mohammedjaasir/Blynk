@@ -3,10 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { deleteImagesQuietly } from '../../api/client';
 import { catalog, inventory as inventoryApi, settings } from '../../api/resources';
 import type { AdminProduct, Category, PricingMode, SetStockInput, StaffStock, StaffVariant } from '../../api/types';
+import { FlashDealDialog } from '../../components/FlashDealDialog';
+import { ExtraCategories } from '../../components/ExtraCategories';
+import { extraCategoriesReady, sameSet, withoutPrimary } from '../../lib/extraCategories';
+import { canStartFlash, flashRowText } from '../../lib/flashDeal';
 import { CENTRE_FOCAL, ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { ProductAdLinks } from '../../components/ProductAdLinks';
 import { ProductHoursSection, useProductHours } from '../../components/ProductHours';
+import { ProductExpirySection } from '../../components/ProductExpiry';
 import { Field, Spinner } from '../../components/ui';
 import {
   catalogErrorMessage,
@@ -47,6 +52,8 @@ import {
 
 interface FormState {
   category_id: string;
+  /** "Also show in" (migration 060): extra categories the product is listed in; never the main one. */
+  extra_category_ids: string[];
   name: string;
   sku: string;
   unit: string;
@@ -131,6 +138,7 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 const EMPTY: FormState = {
   category_id: '',
+  extra_category_ids: [],
   name: '',
   sku: '',
   unit: '',
@@ -203,6 +211,11 @@ export function ProductForm() {
   /** The saved MRP as text ('' = none) - the MRP is sent only when it changed. */
   const [savedMrp, setSavedMrp] = useState('');
   const [savedOffer, setSavedOffer] = useState<SavedOffer>(NO_OFFER);
+  // The saved "Also show in" set, so only a changed set is sent (migration 060)
+  const [savedExtra, setSavedExtra] = useState<string[]>([]);
+  // Flash deals (wave 2, 2026-10-25): the quick "Start flash deal" dialog and what it last did
+  const [flashOpen, setFlashOpen] = useState(false);
+  const [flashNote, setFlashNote] = useState<string | null>(null);
   /** The saved product (edit only) - its markups price the variants. */
   const [savedProduct, setSavedProduct] = useState<AdminProduct | null>(null);
   const [savedStock, setSavedStock] = useState<StaffStock>(NO_STOCK);
@@ -249,8 +262,10 @@ export function ProductForm() {
         setSavedSellingPrice(storedPrice === undefined || storedPrice === null ? null : Number(storedPrice));
         const mrpText = product.mrp === null || product.mrp === undefined ? '' : String(product.mrp);
         setSavedMrp(mrpText);
+        setSavedExtra(product.extra_category_ids ?? []);
         setForm({
           category_id: product.category_id,
+          extra_category_ids: product.extra_category_ids ?? [],
           name: product.name,
           sku: product.sku,
           unit: product.unit,
@@ -502,6 +517,10 @@ export function ProductForm() {
       const markup = parseMarkupPercent(form.custom_markup_percent);
       payload.custom_markup_percent = 'value' in markup ? markup.value : null;
     }
+    // Also show in (migration 060): a new product sends its set when it has one, an edit only a changed set.
+    if (isEditing ? !sameSet(form.extra_category_ids, savedExtra) : form.extra_category_ids.length > 0) {
+      payload.extra_category_ids = form.extra_category_ids;
+    }
     // MRP (migration 048): sent only when it changed (blank clears it), so an
     // unrelated edit never re-checks the running offer against it.
     const mrpText = form.mrp.trim();
@@ -563,7 +582,34 @@ export function ProductForm() {
     }
   }
 
+  /** A flash deal was started or ended from the dialog: read the offer back so the form shows what is saved. */
+  async function flashDone(message: string) {
+    setFlashOpen(false);
+    setFlashNote(message);
+    if (!id) return;
+    try {
+      const product = await catalog.products.getAdmin(id);
+      setSavedProduct(product);
+      setSavedOffer({
+        price: product.offer_price === null || product.offer_price === undefined ? '' : String(product.offer_price),
+        endDay: product.offer_ends_at ? colomboDay(product.offer_ends_at) : '',
+        endsAt: product.offer_ends_at ?? null,
+        active: product.offer_active === true,
+      });
+      setForm((f) => ({
+        ...f,
+        offer_mode: 'price',
+        offer_off: '',
+        offer_price: product.offer_price === null || product.offer_price === undefined ? '' : String(product.offer_price),
+        offer_end_day: product.offer_ends_at ? colomboDay(product.offer_ends_at) : '',
+      }));
+    } catch {
+      /* the deal itself went through; the next load shows it */
+    }
+  }
+
   if (loading) return <Spinner label="Loading product" />;
+
 
   return (
     <div className="page">
@@ -579,7 +625,13 @@ export function ProductForm() {
             <input className="input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           </Field>
           <Field label="Category" error={errors.category_id}>
-            <select className="input" value={form.category_id} onChange={(event) => setForm({ ...form, category_id: event.target.value })}>
+            <select
+              className="input"
+              value={form.category_id}
+              onChange={(event) =>
+                setForm({ ...form, category_id: event.target.value, extra_category_ids: withoutPrimary(form.extra_category_ids, event.target.value) })
+              }
+            >
               <option value="">Select a category</option>
               {pickerOptions.map((option) => (
                 <option key={option.id} value={option.id}>
@@ -589,6 +641,16 @@ export function ProductForm() {
               ))}
             </select>
           </Field>
+          {/* Migration 060: hidden until the API says the table exists */}
+          {extraCategoriesReady(categories) ? (
+            <ExtraCategories
+              categories={categories}
+              primaryId={form.category_id}
+              value={form.extra_category_ids}
+              onChange={(ids) => setForm({ ...form, extra_category_ids: ids })}
+              error={errors.extra_category_ids}
+            />
+          ) : null}
           <div className="form__row">
             <Field label="SKU" error={errors.sku}>
               <input className="input" value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} />
@@ -799,6 +861,20 @@ export function ProductForm() {
               </button>
             </div>
           ) : null}
+          {isEditing && savedProduct && canStartFlash(savedProduct) ? (
+            <div className="offer-actions">
+              <button type="button" className="button button--ghost button--sm" onClick={() => setFlashOpen(true)}>
+                Start flash deal
+              </button>
+              {flashRowText(savedProduct) ? <span className="flash-tag">{flashRowText(savedProduct)}</span> : null}
+              <p className="field__hint">A short offer with a live countdown in the customer app (1 hour to 24 hours).</p>
+              {flashNote ? (
+                <p className="form__note" role="status">
+                  {flashNote}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <label className="toggle">
             <input type="checkbox" checked={form.show_offer_cut} onChange={(event) => setForm({ ...form, show_offer_cut: event.target.checked })} />
             <span>
@@ -820,6 +896,7 @@ export function ProductForm() {
         </section>
 
         {isEditing && id ? <ProductHoursSection hours={hours} /> : null}
+        {isEditing && id ? <ProductExpirySection productId={id} /> : null}
 
         {isEditing && id ? <ProductAdLinks productId={id} productName={form.name} /> : null}
 
@@ -865,6 +942,10 @@ export function ProductForm() {
           </button>
         </div>
       </form>
+
+      {flashOpen && savedProduct ? (
+        <FlashDealDialog product={savedProduct} onClose={() => setFlashOpen(false)} onDone={(m) => void flashDone(m)} />
+      ) : null}
 
       {isEditing && savedProduct ? (
         <ProductVariants product={savedProduct} variants={variants} globalMarkup={globalMarkup} onChange={setVariants} />

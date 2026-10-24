@@ -23,7 +23,9 @@ import { CustomerSmsLanguageCard } from '../components/CustomerSmsLanguageCard';
 import { AppVersionCard } from '../components/AppUpdate';
 import { AppUpdatesSettingsCard } from '../components/AppUpdatesSettingsCard';
 import { DefaultMarkupCard } from '../components/DefaultMarkupCard';
+import { RiderAutoAssignCard } from '../components/RiderAutoAssignCard';
 import { PaymentGatewayCard } from '../components/PaymentGatewayCard';
+import { SellerHubCards } from './Sellers/HubCards';
 
 /**
  * The More tab (plan §8: rider list, settings, sign-out). Sign-out is real,
@@ -107,6 +109,12 @@ export function More() {
         <li>
           <Link className="cat-hub__card" to="/more/riders">
             <span className="cat-hub__title">Riders</span>
+          </Link>
+        </li>
+        <li>
+          {/* Where riders are and which orders wait for one (owner, 2026-10-25). */}
+          <Link className="cat-hub__card" to="/more/rider-map">
+            <span className="cat-hub__title">Rider map</span>
           </Link>
         </li>
         <li>
@@ -210,6 +218,25 @@ export function More() {
             <span className="cat-hub__title">Ratings</span>
           </Link>
         </li>
+        <li>
+          {/* Expiry dates (owner, 2026-10-25; migration 059): what is expired or expiring. */}
+          <Link className="cat-hub__card" to="/more/expiry">
+            <span className="cat-hub__title">Expiry</span>
+          </Link>
+        </li>
+        <li>
+          {/* Reorder suggestions and supplier purchase orders (owner, 2026-10-25). */}
+          <Link className="cat-hub__card" to="/more/purchasing">
+            <span className="cat-hub__title">Purchasing</span>
+          </Link>
+        </li>
+        <li>
+          {/* The evening report SMS with the day's numbers (owner, 2026-10-25). */}
+          <Link className="cat-hub__card" to="/more/daily-report">
+            <span className="cat-hub__title">Daily report</span>
+          </Link>
+        </li>
+        <SellerHubCards />
       </ul>
 
       <DeliveryFeeCard />
@@ -222,6 +249,8 @@ export function More() {
       <CustomerSmsLanguageCard />
       <RiderCommissionCard />
       <RiderTripsCard />
+      {/* Automatic rider assignment (owner, 2026-10-25): off by default. */}
+      <RiderAutoAssignCard />
       {/* In-app updates (owner, 2026-10-12): force or offer the new Ops / Rider APK. */}
       <AppUpdatesSettingsCard />
       {/* This phone's Blynk Ops version and "Check for updates". */}

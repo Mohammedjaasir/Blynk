@@ -41,17 +41,23 @@ export const LEGACY_COST_COLUMN = 'cost_price';
  * these spellings.
  */
 export const SUB_CATEGORY_COLUMN = 'sub_category';
-const SUB_CATEGORY_ALIASES: Record<string, typeof SUB_CATEGORY_COLUMN> = {
+/** Optional column, not in the template (migration 060, owner 2026-10-25): extra categories, names or slugs separated by ';'. */
+export const EXTRA_CATEGORIES_COLUMN = 'extra_categories';
+const SUB_CATEGORY_ALIASES: Record<string, typeof SUB_CATEGORY_COLUMN | typeof EXTRA_CATEGORIES_COLUMN> = {
   sub_category: SUB_CATEGORY_COLUMN,
   subcategory: SUB_CATEGORY_COLUMN,
   'sub-category': SUB_CATEGORY_COLUMN,
   'sub category': SUB_CATEGORY_COLUMN,
+  'extra categories': EXTRA_CATEGORIES_COLUMN,
+  'extra-categories': EXTRA_CATEGORIES_COLUMN,
+  extra_category: EXTRA_CATEGORIES_COLUMN,
+  'extra category': EXTRA_CATEGORIES_COLUMN,
 };
 /** Shown on the import screen next to the template columns. */
 export const CATEGORY_HELP =
-  'category can be a category name, its slug, or "Category > Sub-category" (e.g. Rice & Flour > Rice). Or add an optional sub_category column next to category. A name used by more than one category needs its parent or the slug.';
-export type ImportColumn = TemplateColumn | typeof LEGACY_COST_COLUMN;
-const KNOWN_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, LEGACY_COST_COLUMN];
+  'category can be a category name, its slug, or "Category > Sub-category" (e.g. Rice & Flour > Rice). Or add an optional sub_category column next to category. A name used by more than one category needs its parent or the slug. Optional extra column "Extra categories" (up to 5 names or slugs separated by ;) also lists the product in those categories; leave it empty to change nothing.';
+export type ImportColumn = TemplateColumn | typeof LEGACY_COST_COLUMN | typeof EXTRA_CATEGORIES_COLUMN;
+const KNOWN_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, LEGACY_COST_COLUMN, EXTRA_CATEGORIES_COLUMN];
 
 /** Required; purchase_cost may come as the older cost_price instead. */
 const REQUIRED_COLUMNS: TemplateColumn[] = ['name', 'category', 'unit', 'purchase_cost', 'sku'];
@@ -257,6 +263,8 @@ export function parseImportRow(cells: Partial<Record<ImportColumn, Cell>>, row: 
   } else {
     const subCategory = text(cells[SUB_CATEGORY_COLUMN]);
     if (subCategory !== null) data.sub_category = subCategory;
+    const extraCategories = text(cells[EXTRA_CATEGORIES_COLUMN]);
+    if (extraCategories !== null) data.extra_categories = extraCategories;
     if (leadDays !== null && !Number.isNaN(leadDays)) data.delivery_lead_days = leadDays;
   }
   return { row, data, errors };

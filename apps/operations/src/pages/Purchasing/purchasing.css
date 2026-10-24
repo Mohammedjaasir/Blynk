@@ -1,0 +1,169 @@
+/* More -> Purchasing (reorder suggestions, purchase orders; 2026-10-25). Phone first: big touch targets, cards. */
+
+.po-pills {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.po-pills .segmented__item {
+  min-height: 44px;
+  white-space: nowrap;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+}
+.po-pills .segmented__item.is-selected {
+  border-color: var(--ink);
+}
+
+.po-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.po-bar .button,
+.po-bar .input,
+.po-actions .button {
+  min-height: 44px;
+}
+.po-bar .input {
+  flex: 1 1 140px;
+}
+.po-bar .button {
+  flex: 1 1 auto;
+  text-align: center;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.po-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface, #fff);
+  color: inherit;
+  text-decoration: none;
+}
+.po-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.po-card__title {
+  margin: 0;
+  font-weight: 800;
+}
+.po-meta {
+  margin: 0;
+  font-size: var(--text-meta, 13px);
+  color: var(--ink-3, #667);
+}
+.po-meta--warn {
+  color: #a35f00;
+}
+
+.po-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.po-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  background: #eef0f6;
+  color: var(--ink-2, #445);
+}
+.po-chip--out {
+  background: #fbeceb;
+  color: var(--danger, #c0392b);
+}
+.po-chip--low,
+.po-chip--wont_last {
+  background: #fff4db;
+  color: #a35f00;
+}
+.po-chip--fast {
+  background: #e7f5ea;
+  color: var(--green, #1e7b3a);
+}
+
+.po-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.po-row:first-of-type {
+  border-top: 0;
+}
+.po-row.is-muted {
+  opacity: 0.6;
+}
+.po-row__check {
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+}
+.po-row__body {
+  display: grid;
+  gap: 6px;
+}
+.po-row__line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.po-input {
+  min-height: 44px;
+  width: 96px;
+  text-align: right;
+}
+
+.po-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.po-actions .button {
+  flex: 1 1 auto;
+  text-align: center;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.po-whatsapp {
+  background: #25d366;
+  border-color: #1fb457;
+  color: #fff;
+}
+
+.po-share {
+  white-space: pre-wrap;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--canvas, #f6f6f8);
+  border: 1px solid var(--line);
+  font-family: inherit;
+}
+.po-created {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #e7f5ea;
+  color: var(--green, #1e7b3a);
+  font-weight: 700;
+}

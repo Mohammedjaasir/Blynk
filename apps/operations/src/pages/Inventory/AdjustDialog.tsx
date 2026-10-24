@@ -3,6 +3,7 @@ import { inventory as inventoryApi } from '../../api/resources';
 import type { ManualAdjustmentType, StockDetail } from '../../api/types';
 import { Field, Spinner } from '../../components/ui';
 import { ADJUSTMENT_LABEL, formatDelta, inventoryErrorMessage } from '../../lib/inventory';
+import { parseBatchForm } from '../../lib/expiry';
 
 /**
  * Manual stock adjustment (task F6, ADMIN, tracked products only). Ported
@@ -44,6 +45,8 @@ export function AdjustDialog({
   const [type, setType] = useState<ManualAdjustmentType>('PURCHASE_RESTOCK');
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
+  // Optional expiry date of a restock (migration 059): the received units are also noted as a batch.
+  const [expiresOn, setExpiresOn] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitting = useRef(false);
@@ -73,6 +76,10 @@ export function AdjustDialog({
     }
     if (reason.trim().length === 0) return 'Give a reason - it is kept in the ledger.';
     if (reason.length > 500) return 'Keep the reason under 500 characters.';
+    if (type === 'PURCHASE_RESTOCK' && expiresOn) {
+      const date = parseBatchForm({ quantity: '1', expires_on: expiresOn, batch_code: '', note: '' });
+      if ('error' in date) return date.error;
+    }
     return null;
   }
 
@@ -93,6 +100,7 @@ export function AdjustDialog({
         quantity_delta: delta!,
         notes: reason.trim(),
         ...(variantId ? { variant_id: variantId } : {}),
+        ...(type === 'PURCHASE_RESTOCK' && expiresOn ? { expires_on: expiresOn } : {}),
       });
       await onDone(result.inventory.quantity_on_hand);
     } catch (err) {
@@ -142,6 +150,20 @@ export function AdjustDialog({
             }}
           />
         </Field>
+
+        {type === 'PURCHASE_RESTOCK' ? (
+          <Field label="Expiry date" hint="Optional - the date printed on the pack. Shows in More, Expiry.">
+            <input
+              className="input"
+              type="date"
+              value={expiresOn}
+              onChange={(event) => {
+                setExpiresOn(event.target.value);
+                setError(null);
+              }}
+            />
+          </Field>
+        ) : null}
 
         <Field label="Reason" hint="Kept in the ledger, e.g. 'Received from Dharga Town Central Grocery'.">
           <textarea

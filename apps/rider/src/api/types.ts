@@ -69,6 +69,12 @@ export interface DeliverySummary {
   total_amount: number;
   /** Blynk Wallet (docs/api/wallet.md): what the customer's wallet paid. 0 / absent when none. */
   wallet_amount_used?: number;
+  /**
+   * Rider tips (migration 055; owner, 2026-10-24): the cash tip the customer
+   * added at checkout. It is already inside total_amount and the rider keeps
+   * it 100%. 0 / absent when none (an older API leaves it out).
+   */
+  rider_tip?: number;
   payment_method: 'COD' | 'ONLINE';
   payment_status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
   delivery_recipient_name: string;
@@ -212,6 +218,18 @@ export interface EarningsTotals {
   adjustments?: number;
   /** What Blynk still owes the rider (extras the day's cash could not cover). */
   payable_to_rider?: number;
+  /*
+   * Tips (migration 055; owner, 2026-10-24), never part of `earnings` (the
+   * delivery pay). Optional - an older API leaves them out.
+   */
+  /** tips_cash + tips_wallet. */
+  tips?: number;
+  /** Checkout tips collected in cash with the order (already in the cash the rider keeps). */
+  tips_cash?: number;
+  /** Tips paid from the customer's Blynk Wallet after delivery (Blynk pays the rider). */
+  tips_wallet?: number;
+  /** earnings + tips; the app derives it when an older API leaves it out. */
+  total_with_tips?: number;
 }
 
 /** Rider pay models and bonuses (owner, 2026-10-10). */

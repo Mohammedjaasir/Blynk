@@ -437,7 +437,7 @@ describe('Checkout settings (owner, 2026-10-08)', () => {
     expect(Object.keys(body)).toEqual(['new_customer_free_deliveries']);
     expect(body.new_customer_free_deliveries).toMatchObject({ enabled: true, count: 2 });
     expect(new Date(body.new_customer_free_deliveries.since).getTime()).toBeGreaterThanOrEqual(before - 1000);
-    expect(await within(card).findByText('Free deliveries now count from today.')).toBeInTheDocument();
+    expect(await within(card).findByText(/^Free deliveries now count from today\./)).toBeInTheDocument();
   });
 
   it('refuses a count above 10 before sending anything', async () => {

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { catalog } from '../../api/resources';
 import type { AdminProduct, Category } from '../../api/types';
+import { FlashDealDialog } from '../../components/FlashDealDialog';
 import { PageHeader } from '../../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Spinner } from '../../components/ui';
 import { catalogErrorMessage, leadTimeLabel, productPriceText } from '../../lib/catalog';
+import { canStartFlash, flashRowText, isFlashRunning } from '../../lib/flashDeal';
 import { staffStockBadge } from '../../lib/inventory';
 import { mrpCappedNote, percentText, pricingSourceLabel } from '../../lib/pricing';
 
@@ -38,6 +40,8 @@ export function Products() {
   const [notice, setNotice] = useState<string | null>(handedNotice);
   const [pendingToggle, setPendingToggle] = useState<AdminProduct | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AdminProduct | null>(null);
+  // Flash deals (wave 2, 2026-10-25): the quick "Start flash deal" dialog
+  const [flashFor, setFlashFor] = useState<AdminProduct | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -210,6 +214,7 @@ export function Products() {
                   {product.offer_active && product.offer_price != null ? (
                     <span className="offer-tag">Offer LKR {Number(product.offer_price).toFixed(2)}</span>
                   ) : null}
+                  {isFlashRunning(product) ? <span className="flash-tag">{flashRowText(product)}</span> : null}
                 </div>
                 <ProductChips product={product} />
               </div>
@@ -217,6 +222,16 @@ export function Products() {
                 <Link className="button button--ghost button--sm" to={`/catalog/products/${product.id}`}>
                   Edit
                 </Link>
+                {canStartFlash(product) ? (
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    onClick={() => setFlashFor(product)}
+                    aria-label={`Flash deal for ${product.name}`}
+                  >
+                    {isFlashRunning(product) ? 'Flash deal' : 'Start flash deal'}
+                  </button>
+                ) : null}
                 <button type="button" className="button button--ghost button--sm" onClick={() => setPendingToggle(product)}>
                   {product.is_active ? 'Disable' : 'Enable'}
                 </button>
@@ -233,6 +248,18 @@ export function Products() {
           ))}
         </ul>
       )}
+
+      {flashFor ? (
+        <FlashDealDialog
+          product={flashFor}
+          onClose={() => setFlashFor(null)}
+          onDone={(message) => {
+            setFlashFor(null);
+            setNotice(message);
+            void load();
+          }}
+        />
+      ) : null}
 
       {pendingToggle ? (
         <ConfirmDialog

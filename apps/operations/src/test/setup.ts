@@ -79,11 +79,20 @@ vi.mock('maplibre-gl', () => {
       return { lng: this.lngLat![0], lat: this.lngLat![1] };
     }
     addTo(map?: FakeMap) {
+      this.map = map;
       map?.markers.push(this);
       return this;
     }
     on(event: string, handler: () => void) {
       this.markerHandlers[event] = handler;
+      return this;
+    }
+    removed = false;
+    map?: FakeMap;
+    /** The Rider map moves and removes its markers (2026-10-25). */
+    remove() {
+      this.removed = true;
+      if (this.map) this.map.markers = this.map.markers.filter((m) => m !== this);
       return this;
     }
   }

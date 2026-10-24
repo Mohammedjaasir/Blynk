@@ -2503,3 +2503,73 @@ a {
 .rider-push__body strong { font-size: 17px; color: var(--yellow); }
 .rider-push__body span { font-size: 15px; color: #e3e5ea; }
 .rider-push__close { width: 52px; border: 0; background: none; color: #c9ccd4; font-size: 26px; cursor: pointer; }
+
+/* ------------------------------------------------------------- Tips */
+/* Rider tips (owner, 2026-10-24): the cash tip inside the amount to collect,
+   the "Tips" card on My day and the one-time "You received a tip" notice. */
+.cash-tip {
+  margin: 6px 0 0;
+  color: var(--green);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.cash-tip strong {
+  font-weight: 900;
+}
+
+.sheet__tip {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--green-wash);
+  color: var(--green);
+  font-weight: 800;
+}
+
+.settled__tip {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.handin__tips {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.tips__split {
+  display: block;
+}
+
+.tips__note {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(251, 250, 245, 0.7);
+}
+
+.tip-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--yellow);
+  color: var(--ink);
+  font-weight: 800;
+  animation: rise 180ms var(--ease);
+}
+
+.tip-notice__close {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}

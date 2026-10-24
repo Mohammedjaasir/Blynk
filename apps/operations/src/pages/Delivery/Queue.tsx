@@ -95,7 +95,15 @@ export function Queue() {
   if (riderCapability === 'ADMIN_ONLY') {
     return (
       <div className="page">
-        <PageHeader title="Delivery" description="Deliver orders yourself, like a rider." />
+        <PageHeader
+          title="Delivery"
+          description="Deliver orders yourself, like a rider."
+          actions={
+            <Link to="/more/rider-map" className="button button--ghost">
+              Rider map
+            </Link>
+          }
+        />
         <RiderSetup onReady={() => void refreshRiderCapability()} />
       </div>
     );
@@ -128,6 +136,10 @@ export function Queue() {
           <>
             <Link to="/delivery/day" className="button button--ghost">
               My day
+            </Link>
+            {/* Where the riders are (owner, 2026-10-25). */}
+            <Link to="/more/rider-map" className="button button--ghost">
+              Rider map
             </Link>
             <button type="button" className="button button--ghost" onClick={() => void load(true)} disabled={refreshing}>
               {refreshing ? 'Refreshing…' : 'Refresh'}

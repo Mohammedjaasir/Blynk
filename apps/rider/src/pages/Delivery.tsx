@@ -27,6 +27,7 @@ import {
 } from '../lib/delivery';
 import { MESSAGES, deliveryCodeLockedUntil, errorCode, errorMessage } from '../lib/errors';
 import { formatMoney, formatPhone, formatScheduledSlot, formatTime, shortOrderNumber } from '../lib/format';
+import { cashTipOf, tipIncludedText, TIP_KEPT_NOTE } from '../lib/tips';
 import { getTracker, stopTrackingFor, syncTracking } from '../lib/tracker-session';
 import type { TrackingState } from '../lib/tracking';
 import { useLoad } from '../lib/useLoad';
@@ -277,6 +278,11 @@ function Slip({
                 ? 'Paid by wallet — no cash collected'
                 : `${formatMoney(d.cod_collected_amount)} collected`}
           </p>
+          {!isPaidOnline(d) && !isPaidByWallet(d) && cashTipOf({ rider_tip: d.rider_tip, total_amount: d.cod_collected_amount }) > 0 ? (
+            <p className="settled__tip" data-testid="settled-tip">
+              {tipIncludedText(cashTipOf({ rider_tip: d.rider_tip, total_amount: d.cod_collected_amount }))}
+            </p>
+          ) : null}
           {d.delivered_at ? <p className="settled__time">at {formatTime(d.delivered_at)}</p> : null}
         </section>
       ) : null}
@@ -408,6 +414,12 @@ function Slip({
           </section>
           {/* The wallet paid part: the amount above is already the rest. */}
           {walletPaid(d) > 0 ? <p className="cash-wallet">Wallet paid {formatMoney(walletPaid(d))}</p> : null}
+          {/* Rider tips (owner, 2026-10-24): the cash tip is inside the amount and is the rider's. */}
+          {cashTipOf(d) > 0 ? (
+            <p className="cash-tip" data-testid="cash-tip">
+              <strong>{tipIncludedText(cashTipOf(d))}</strong> {TIP_KEPT_NOTE}
+            </p>
+          ) : null}
         </>
       ) : isPaidOnline(d) && !closed && !done ? (
         <section className={`cash cash--paid${stage(d) === 2 ? ' cash--now' : ''}`} aria-label="Payment">
@@ -526,6 +538,11 @@ function CollectSheet({
             from {delivery.delivery_recipient_name}. Count it before you confirm — this completes the delivery.
           </p>
         )}
+        {!prepaid && !byWallet && cashTipOf(delivery) > 0 ? (
+          <p className="sheet__tip" data-testid="sheet-tip">
+            {tipIncludedText(cashTipOf(delivery))}. {TIP_KEPT_NOTE}
+          </p>
+        ) : null}
         <label className="field" htmlFor={fieldId}>
           <span className="field__label">Customer's delivery code</span>
           <input

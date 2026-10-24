@@ -741,6 +741,9 @@ export interface Category {
   /** Live, non-deleted products in this category (added with category
    * delete). Absent on an older API - treat as unknown, not zero. */
   product_count?: number;
+  /** Products listed here only through an extra category (migration 060); null = the migration has
+   * not run yet (the product form hides "Also show in"); absent on an older API. */
+  extra_product_count?: number | null;
   /** The Home tile group this category sits in (null = unassigned).
    * Absent on an API from before category groups. */
   group_id?: string | null;
@@ -844,6 +847,10 @@ export interface AdminProduct {
   id: string;
   category_id: string;
   category_name?: string;
+  /** Migration 060: the other categories it is also listed in (ids, then names with paths). */
+  extra_category_ids?: string[];
+  extra_categories?: Array<{ id: string; name: string; path: string }>;
+  extra_categories_ready?: boolean;
   name: string;
   slug: string;
   sku: string;
@@ -1528,6 +1535,8 @@ export interface ImportRow {
   category: string;
   /** Optional sidebar item inside `category` (2026-10-14). */
   sub_category?: string | null;
+  /** Migration 060: extra categories (names or slugs separated by ';'); blank = unchanged. */
+  extra_categories?: string | null;
   unit: string;
   pack_size?: string | null;
   /** null = blank: allowed with a selling_price (owner, 2026-10-21) - 0 for a new product, unchanged for an existing one. */
@@ -2485,4 +2494,52 @@ export interface CategoryImportResult {
   warnings: string[];
   errors: CategoryImportIssue[];
   ignored_lines: CategoryImportIssue[];
+}
+
+/**
+ * The Rider map (owner, 2026-10-25): `GET /admin/riders/live` (ADMIN, OPERATIONS). Riders are the
+ * active ones (the assign list); `position` is the last point the Rider app reported, which exists
+ * only while a delivery has been on the road, so a rider with no recent delivery has none.
+ */
+export interface LiveRiderDelivery {
+  order_id: string;
+  order_number: string;
+  assignment_status: string;
+  dropoff: { lat: number; lng: number } | null;
+}
+export interface LiveRider {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  vehicle_type: string;
+  status: 'FREE' | 'ON_TRIP';
+  open_deliveries: number;
+  /** How many more orders this rider may take before the trip cap. */
+  capacity_left: number;
+  position: { lat: number; lng: number; accuracy_m: number | null; captured_at: string; age_seconds: number } | null;
+  deliveries: LiveRiderDelivery[];
+}
+export interface LiveWaitingOrder {
+  order_id: string;
+  order_number: string;
+  order_status: string;
+  waiting_seconds: number;
+  address: string;
+  dropoff: { lat: number; lng: number } | null;
+}
+export interface LiveRiderMap {
+  server_time: string;
+  store: { lat: number; lng: number; radius_km: number } | null;
+  rules: { max_active_deliveries: number; max_dropoff_distance_km: number };
+  auto_assign: { enabled: boolean; wait_seconds: number; max_distance_km: number };
+  riders: LiveRider[];
+  unassigned_orders: LiveWaitingOrder[];
+}
+
+/** Automatic rider assignment (owner, 2026-10-25): GET|PUT /admin/settings/rider-auto-assign. Off by default. */
+export interface RiderAutoAssignSetting {
+  enabled: boolean;
+  wait_seconds: number;
+  max_distance_km: number;
+  updated_at: string | null;
 }

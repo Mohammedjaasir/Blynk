@@ -19,6 +19,8 @@ import { formatMoney, formatTime, formatUntil, shortOrderNumber } from '../lib/f
 import { useLoad } from '../lib/useLoad';
 import { useRevalidate } from '../lib/useRevalidate';
 import { AppVersionCard } from '../components/AppUpdate';
+import { TipNotice } from '../components/TipNotice';
+import { tipsOf, tipSplitText, totalWithTips, type TipSplit } from '../lib/tips';
 
 const OUTCOME: Record<RiderDayDelivery['outcome'], { label: string; tone: string }> = {
   DELIVERED: { label: 'Delivered', tone: 'done' },
@@ -64,7 +66,13 @@ export function MyDay() {
   // A COMPANY rider sees bonuses and adjustments only when there are some,
   // and today's hand-in only when today's extras change it (owner, 2026-10-10).
   const companyExtras = earnings && !commission && hasExtras(earnings) ? earnings : null;
-  const companyHandIn = companyExtras && hasExtrasToday(companyExtras.today) ? companyExtras : null;
+  // Today's tips change what a company rider hands in too (owner, 2026-10-24).
+  const companyHandIn =
+    companyExtras && hasExtrasToday(companyExtras.today)
+      ? companyExtras
+      : earnings && !commission && tipsOf(earnings.today)
+        ? earnings
+        : null;
 
   const back = (
     <Link to="/" className="bar__back" aria-label="Back to deliveries">
@@ -89,9 +97,13 @@ export function MyDay() {
 
         {data ? (
           <>
+            {/* "You received a LKR X tip" (owner, 2026-10-24): once per new wallet tip. */}
+            <TipNotice earnings={earnings} />
             {earnings?.boosts ? <Boosts boosts={earnings.boosts} /> : null}
             {commission ? <EarningsCard earnings={commission} /> : null}
             {companyExtras ? <ExtrasCard earnings={companyExtras} /> : null}
+            {/* Tips (owner, 2026-10-24): every rider keeps 100%, whatever their pay type. */}
+            {earnings && hasTips(earnings) ? <TipsCard earnings={earnings} commission={commission !== null} /> : null}
             <Totals heading="Today" totals={data.today} handIn={commission ?? companyHandIn} />
             <Totals heading="This week" note="Monday to Sunday" totals={data.week} />
 
@@ -122,6 +134,52 @@ export function MyDay() {
         <AppVersionCard />
       </main>
     </>
+  );
+}
+
+const hasTips = (e: RiderEarnings) => tipsOf(e.today) !== null || tipsOf(e.week) !== null;
+
+/**
+ * Tips (owner, 2026-10-24), today and this week, with the cash / wallet split
+ * and a friendly total with tips. The delivery pay above never includes them.
+ * Hidden when there are none or the API predates tips.
+ */
+function TipsCard({ earnings, commission }: { earnings: RiderEarnings; commission: boolean }) {
+  return (
+    <section className="earn tips" aria-labelledby="tips-heading">
+      <h2 id="tips-heading" className="earn__eyebrow">
+        Tips
+      </h2>
+      <TipsLine label="Today" totals={earnings.today} tips={tipsOf(earnings.today)} commission={commission} />
+      <TipsLine label="This week" totals={earnings.week} tips={tipsOf(earnings.week)} commission={commission} />
+      <p className="tips__note">Tips are 100% yours. They are never part of your delivery pay.</p>
+    </section>
+  );
+}
+
+function TipsLine({
+  label,
+  totals,
+  tips,
+  commission,
+}: {
+  label: string;
+  totals: EarningsTotals;
+  tips: TipSplit | null;
+  commission: boolean;
+}) {
+  if (!tips) return null;
+  const withTips = commission ? totalWithTips(totals) : null;
+  return (
+    <p className="earn__today">
+      <span className="earn__label">{label}</span>
+      <span className="earn__line">
+        <strong className="earn__week-amount">{formatMoney(tips.total)}</strong>
+        <span className="earn__count"> in tips</span>
+        <span className="earn__extras tips__split"> {tipSplitText(tips)}</span>
+        {withTips !== null ? <span className="earn__extras tips__split">With your delivery pay: {formatMoney(withTips)}</span> : null}
+      </span>
+    </p>
   );
 }
 
@@ -411,6 +469,11 @@ function Totals({
           {handIn.pay_type === 'COMMISSION' || nonZero(handIn.today.cash_to_keep) ? (
             <span className="handin__keep">
               , keep <strong>{formatMoney(handIn.today.cash_to_keep)}</strong>
+            </span>
+          ) : null}
+          {tipsOf(handIn.today) ? (
+            <span className="handin__tips" data-testid="handin-tips">
+              Your tips today ({tipSplitText(tipsOf(handIn.today)!)}) are already counted here.
             </span>
           ) : null}
           {(handIn.today.payable_to_rider ?? 0) > 0 ? (

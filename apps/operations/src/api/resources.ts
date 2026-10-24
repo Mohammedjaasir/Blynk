@@ -3,7 +3,9 @@ import { isNativeApp, nativeApiRequest } from './native-client';
 import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
 import type { AvailabilityWindow, AvailabilitySetting } from '../lib/availability';
 import type { HomeSection, HomeSectionsSetting } from '../lib/homeSections';
+import type { BundleOffer, BundleOffersSetting } from '../lib/bundleOffers';
 import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
+import type { DailyReportDraft, DailyReportPreview, DailyReportSendResult, DailyReportSetting } from '../lib/dailyReport';
 import type {
   AppShareLinks,
   AppUpdatePolicySetting,
@@ -130,6 +132,7 @@ import type {
 } from './types';
 // Category import (2026-10-14).
 import type { CategoryImportResult, CategoryImportSheetRow, CategoryImportTemplate } from './types';
+import type { LiveRiderMap, RiderAutoAssignSetting } from './types';
 
 /**
  * Typed wrappers over the existing Blynk endpoints, grouped by domain.
@@ -395,6 +398,9 @@ export const riders = {
    * for this order (load, distance to the store, the trip they are on). */
   suggestions: (orderId: string) =>
     apiRequest<RiderSuggestions>(`/admin/riders/suggestions?order_id=${encodeURIComponent(orderId)}`),
+
+  /** `GET /admin/riders/live` - the Rider map: riders' last positions and load, and the orders waiting for a rider. */
+  live: () => apiRequest<LiveRiderMap>('/admin/riders/live'),
 
   /**
    * `GET /riders/deliveries` - the signed-in operator's own linked rider
@@ -1093,7 +1099,7 @@ export const inventory = {
     /** `variant_id` (migration 045) adjusts that variant's own stock row. */
     adjust: (
       productId: string,
-      body: { adjustment_type: ManualAdjustmentType; quantity_delta: number; notes: string; variant_id?: string }
+      body: { adjustment_type: ManualAdjustmentType; quantity_delta: number; notes: string; variant_id?: string; expires_on?: string }
     ) =>
       apiRequest<{ inventory: { quantity_on_hand: number; quantity_available: number } }>(
         `/admin/inventory/${productId}/adjust`,
@@ -1211,6 +1217,12 @@ export const settings = {
     updateRainBoost: (body: RainBoostInput) =>
       apiRequest<RiderPaySettings>('/admin/settings/rider-pay/rain-boost', { method: 'PATCH', body: { ...body } }),
   },
+  /** Automatic rider assignment (owner, 2026-10-25), off by default. PUT sends only what changed. */
+  riderAutoAssign: {
+    get: () => apiRequest<RiderAutoAssignSetting>('/admin/settings/rider-auto-assign'),
+    update: (body: { enabled?: boolean; wait_seconds?: number; max_distance_km?: number }) =>
+      apiRequest<RiderAutoAssignSetting>('/admin/settings/rider-auto-assign', { method: 'PUT', body: { ...body } }),
+  },
   /** Rider trips (owner, 2026-10-10): orders one rider may carry at once
    * (1 = no trips) and the max km between drop-offs before staff confirm.
    * PATCH sends only what changed. */
@@ -1263,6 +1275,12 @@ export const settings = {
     get: () => apiRequest<HomeSectionsSetting>('/admin/settings/home-sections'),
     update: (body: { sections: HomeSection[] }) =>
       apiRequest<HomeSectionsSetting>('/admin/settings/home-sections', { method: 'PUT', body: { ...body } }),
+  },
+  /** Bundle offers (owner, 2026-10-25): "buy 2 get 1" / "spend X, get a gift", worked out in the order total; PUT replaces the whole list. Audited. */
+  bundleOffers: {
+    get: () => apiRequest<BundleOffersSetting>('/admin/settings/bundle-offers'),
+    update: (body: { offers: BundleOffer[] }) =>
+      apiRequest<BundleOffersSetting>('/admin/settings/bundle-offers', { method: 'PUT', body: { ...body } }),
   },
   heroBanner: {
     get: () => apiRequest<HeroBannerSetting>('/admin/settings/hero-banner'),
@@ -1473,4 +1491,12 @@ export const coupons = {
     apiRequest<{ coupon: Coupon }>(`/admin/coupons/${id}`, { method: 'PATCH', body: { ...input } }).then((d) => d.coupon),
   /** Only a coupon nobody has used (409 COUPON_IN_USE otherwise). */
   remove: (id: string) => apiRequest(`/admin/coupons/${id}`, { method: 'DELETE' }),
+};
+
+/** The evening report SMS (owner, 2026-10-25): setting, today-so-far preview and Send now (2-minute cooldown). */
+export const dailyReport = {
+  get: () => apiRequest<DailyReportSetting>('/admin/settings/daily-report'),
+  update: (body: Partial<DailyReportDraft>) => apiRequest<DailyReportSetting>('/admin/settings/daily-report', { method: 'PUT', body: { ...body } }),
+  preview: () => apiRequest<DailyReportPreview>('/admin/daily-report/preview', { method: 'POST', body: {} }),
+  sendNow: () => apiRequest<DailyReportSendResult>('/admin/daily-report/send-now', { method: 'POST', body: {} }),
 };

@@ -4,6 +4,7 @@ import { deliveriesApi } from '../api/resources';
 import type { DeliverySummary } from '../api/types';
 import { Banner } from '../components/Banner';
 import { Header } from '../components/Header';
+import { HomeTipNotice } from '../components/TipNotice';
 import { isPaidByWallet, isPaidOnline, nextAction, PAID_BY_WALLET_NOTE, PAID_ONLINE_NOTE, splitQueue, statusLabel, statusTone } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
 import { formatMoney, formatScheduledSlot, shortOrderNumber } from '../lib/format';
@@ -50,6 +51,8 @@ export function Queue() {
       <Header onRefresh={refresh} refreshing={loading} refreshLabel="Refresh deliveries" />
       <main className="page">
         {notice ? <Banner message={notice} /> : null}
+        {/* "You received a tip" (owner, 2026-10-24): best effort, never blocks the list. */}
+        <HomeTipNotice />
         {error ? <Banner message={errorMessage(error)} stamp={data ? loadedAt : null} onRetry={refresh} /> : null}
 
         {!queue && !error ? (

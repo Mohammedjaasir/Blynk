@@ -16,9 +16,11 @@ import { Promotions } from './pages/Catalog/Promotions';
 import { PromoBand } from './pages/Catalog/PromoBand';
 import { AvailableHours } from './pages/Catalog/AvailableHours';
 import { HomeSections } from './pages/Catalog/HomeSections';
+import { BundleOffers } from './pages/Catalog/BundleOffers';
 import { HeroBanner } from './pages/Catalog/HeroBanner';
 import { AppTexts } from './pages/Catalog/AppTexts';
 import { QrLinks } from './pages/Catalog/QrLinks';
+import { DailyReport } from './pages/DailyReport';
 import { DeliverMyself } from './pages/DeliverMyself';
 import { Detail as DeliveryDetail } from './pages/Delivery/Detail';
 import { MyDay as DeliveryMyDay } from './pages/Delivery/MyDay';
@@ -47,6 +49,7 @@ import { OrderDetail } from './pages/OrderDetail';
 import { PackingSlip } from './pages/PackingSlip';
 import { Orders } from './pages/Orders';
 import { Riders } from './pages/Riders';
+import { RiderMap } from './pages/RiderMap';
 import { RiderEarnings } from './pages/RiderEarnings';
 import { RiderPay } from './pages/RiderPay';
 import { SmsOffers } from './pages/SmsOffers';
@@ -63,7 +66,15 @@ import { RiderDocumentSettings } from './pages/RiderDocumentSettings';
 import { StaffAccounts } from './pages/StaffAccounts';
 import { RepeatBaskets } from './pages/RepeatBaskets';
 import { Ratings } from './pages/Ratings';
+import { Expiry } from './pages/Expiry';
+import { Sellers } from './pages/Sellers/Sellers';
+import { SellerDetail } from './pages/Sellers/SellerDetail';
+import { SellerProducts } from './pages/Sellers/SellerProducts';
+import { SellerCommission } from './pages/Sellers/SellerCommission';
 import { ProductRequests } from './pages/Catalog/ProductRequests';
+import { Orders as PurchasingOrders } from './pages/Purchasing/Orders';
+import { Order as PurchasingOrder } from './pages/Purchasing/Order';
+import { Suggestions as PurchasingSuggestions } from './pages/Purchasing/Suggestions';
 import { LaunchScreen } from './components/LaunchScreen';
 import { AndroidBackButton } from './components/AndroidBackButton';
 
@@ -173,6 +184,8 @@ export function AppRoutes() {
         <Route path="catalog/product-requests" element={<ProductRequests />} />
         <Route path="catalog/available-hours" element={<AvailableHours />} />
         <Route path="catalog/home-sections" element={<HomeSections />} />
+        {/* Bundle offers (2026-10-25): "buy 2 get 1" and "spend X, get a gift". */}
+        <Route path="catalog/bundle-offers" element={<BundleOffers />} />
         <Route path="catalog/combos" element={<Combos />} />
         <Route path="catalog/inventory" element={<InventoryOverview />} />
         <Route path="catalog/inventory/stock" element={<InventoryStock />} />
@@ -191,6 +204,8 @@ export function AppRoutes() {
         <Route path="catalog/dental/doctors/:doctorId/ratings" element={<DentalDoctorRatings />} />
         <Route path="more" element={<More />} />
         <Route path="more/riders" element={<Riders />} />
+        {/* Rider map and automatic assignment (owner, 2026-10-25). */}
+        <Route path="more/rider-map" element={<RiderMap />} />
         <Route path="more/earnings" element={<RiderEarnings />} />
         {/* Rider pay model, boosts and bonuses (owner, 2026-10-10). */}
         <Route path="more/rider-pay" element={<RiderPay />} />
@@ -219,6 +234,19 @@ export function AppRoutes() {
         {/* Repeat baskets and order ratings (2026-10-24). */}
         <Route path="more/repeat-baskets" element={<RepeatBaskets />} />
         <Route path="more/ratings" element={<Ratings />} />
+        {/* Expiry dates (owner, 2026-10-25; migration 059): expired / this week / this month, add, sold out, discard. */}
+        <Route path="more/expiry" element={<Expiry />} />
+        {/* Reorder suggestions and supplier purchase orders (owner, 2026-10-25; migration 058). */}
+        <Route path="more/purchasing" element={<PurchasingOrders />} />
+        <Route path="more/purchasing/suggest" element={<PurchasingSuggestions />} />
+        <Route path="more/purchasing/:id" element={<PurchasingOrder />} />
+        {/* Daily report (owner, 2026-10-25): the evening SMS - switch, time, numbers, preview, Send now. */}
+        <Route path="more/daily-report" element={<DailyReport />} />
+        {/* Seller admin (owner, 2026-10-25). */}
+        <Route path="more/sellers" element={<Sellers />} />
+        <Route path="more/sellers/:id" element={<SellerDetail />} />
+        <Route path="more/seller-products" element={<SellerProducts />} />
+        <Route path="more/seller-commission" element={<SellerCommission />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
