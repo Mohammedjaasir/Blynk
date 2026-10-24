@@ -37,9 +37,10 @@ export function itemsFromCart(lines: CartLineLike[]): BasketItem[] {
 }
 
 /** A delivered order's loose lines, without the ones the store could not supply or replaced. */
-export function itemsFromOrder(items: Pick<OrderItem, 'product_id' | 'variant_id' | 'quantity' | 'item_status' | 'order_combo_id'>[]): BasketItem[] {
+export function itemsFromOrder(items: Pick<OrderItem, 'product_id' | 'variant_id' | 'quantity' | 'item_status' | 'order_combo_id' | 'is_bundle_free'>[]): BasketItem[] {
   return normaliseItems(items
-    .filter((it) => !it.order_combo_id && it.item_status !== 'UNAVAILABLE' && it.item_status !== 'SUBSTITUTED')
+    // free units and gifts (bundle offers) come back from the offer, never as paid lines
+    .filter((it) => !it.order_combo_id && !it.is_bundle_free && it.item_status !== 'UNAVAILABLE' && it.item_status !== 'SUBSTITUTED')
     .map((it) => ({ product_id: it.product_id, variant_id: it.variant_id ?? null, quantity: it.quantity })));
 }
 

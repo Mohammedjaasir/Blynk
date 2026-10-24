@@ -57,6 +57,8 @@ export async function reorderInto(order: Pick<Order, 'items' | 'combos'>, deps: 
   const sizeOf = new Map<string, string | null>();
   const productOf = new Map<string, string>();
   for (const it of order.items) {
+    // a free unit or a gift (bundle offers) is not bought again: the offer gives it back by itself
+    if (it.is_bundle_free) continue;
     if (it.order_combo_id && comboLinesAdded.has(it.order_combo_id)) continue;
     if (!it.product_id) { unavailable.push(it.product_name_snapshot); continue; }
     const vid = it.variant_id ?? null;

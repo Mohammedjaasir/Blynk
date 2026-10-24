@@ -5,6 +5,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
+import { useSecondClock } from '@/blynk/promo/clock';
 import {
   countdownUrgent, endsInText, homeSectionViews, nextEndDelay, type HomeSectionView,
 } from '@/blynk/promo/homeSections';
@@ -24,31 +25,7 @@ import { ProductCard } from './ProductCard';
 
 const CARD_W = 155; // the same card width as the "Under LKR 300" rail
 
-/* ---------- One shared clock for every countdown on screen ---------- */
-const listeners = new Set<(now: number) => void>();
-let timer: ReturnType<typeof setInterval> | null = null;
-
-/**
- * The time, once a second. One interval serves every countdown; it starts with the first one on
- * screen and stops when the last one goes (nothing counting down: no timer).
- */
-function useSecondClock(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    listeners.add(setNow);
-    if (!timer) {
-      timer = setInterval(() => {
-        const t = Date.now();
-        listeners.forEach((l) => l(t));
-      }, 1000);
-    }
-    return () => {
-      listeners.delete(setNow);
-      if (listeners.size === 0 && timer) { clearInterval(timer); timer = null; }
-    };
-  }, []);
-  return now;
-}
+/* The one shared 1-second clock for every countdown on screen: src/blynk/promo/clock.ts (flash deals use it too). */
 
 /** "Ends in 02:14:09" on the header; red under an hour. Draws nothing once the time is up. */
 function EndsInPill({ endsAtMs }: { endsAtMs: number }) {

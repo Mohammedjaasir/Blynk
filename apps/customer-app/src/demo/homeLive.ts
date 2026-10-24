@@ -8,6 +8,7 @@
  */
 import type { Category, Product, StoreInfo } from '../blynk/api/types';
 import type { CatalogData } from '../blynk/catalog/CatalogContext';
+import { productsInCategory } from '../blynk/catalog/membership';
 import { categoryOfferActive } from '../blynk/lib/categories';
 import { applyFilters, type FilterId } from '../blynk/lib/filters';
 import { formatLkr } from '../blynk/lib/money';
@@ -92,7 +93,8 @@ export function lowestPrice(products: Product[], now: Date = new Date()): number
   return prices.length ? Math.min(...prices) : null;
 }
 
-const inAisle = (data: CatalogData, catId: string) => data.products.filter((p) => data.chainOf(p.category_id).includes(catId));
+// Migration 060: a product listed in this aisle through an extra category counts too (membership.ts).
+const inAisle = (data: CatalogData, catId: string) => productsInCategory(data.products, data.chainOf, catId);
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 /**

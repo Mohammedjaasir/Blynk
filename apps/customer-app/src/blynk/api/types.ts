@@ -42,6 +42,12 @@ export interface Product {
    * null / absent for Blynk's own products (and on an older server). Shown as "Sold by <shop>".
    */
   sold_by?: string | null;
+  /**
+   * Multi-category products (migration 060, 2026-10-25): the other categories this product is also
+   * listed in; category_id stays the main one. Absent / [] on an older server. Use
+   * catalog/membership.ts, never compare category_id alone.
+   */
+  extra_category_ids?: string[];
 }
 /** One size/pack of a product ("50 g", "3 pack"), as GET /catalog/products/:id lists it. */
 export interface ProductVariant {
@@ -147,6 +153,30 @@ export interface StoreInfo {
   home_sections?: PublicHomeSection[];
   /** Repeat baskets (migration 054; docs/superpowers/plans/2026-10-24-buy-again-repeat.md): false / absent = hidden. */
   repeat_baskets_enabled?: boolean;
+  /**
+   * Bundle offers (owner, 2026-10-25; migration 062): only the LIVE ones, in rule order. Missing (an older API) or [] = none.
+   * The badge, progress card and free lines read these (src/blynk/bundles/model.ts).
+   */
+  bundle_offers?: PublicBundleOffer[];
+}
+
+/** One live bundle offer in GET /store `bundle_offers`. */
+export interface PublicBundleOffer {
+  id: string;
+  type: 'BUY_X_GET_Y' | 'SPEND_GET_GIFT';
+  title: string;
+  ends_at: string | null;
+  /** BUY_X_GET_Y: buy this many, the cheapest get_qty of every buy_qty + get_qty matching units are free. */
+  buy_qty: number | null;
+  get_qty: number | null;
+  /** BUY_X_GET_Y: the products it covers, or a category (with its sub-categories). */
+  product_ids: string[] | null;
+  category: { id: string; slug: string } | null;
+  /** SPEND_GET_GIFT: the spend (after discounts) that adds the gift. */
+  min_subtotal: number | null;
+  gift_product_id: string | null;
+  gift_product_name: string | null;
+  gift_qty: number | null;
 }
 
 /** One live Home section in GET /store `home_sections`: a category's products, or hand-picked ones. */

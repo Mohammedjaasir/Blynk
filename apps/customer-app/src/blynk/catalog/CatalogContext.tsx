@@ -8,6 +8,7 @@ import { startCatalogLive } from '../lib/catalogLive';
 import { loadAllProducts } from '../lib/loadAllProducts';
 import { effectivePrice } from '../lib/pricing';
 import { buildCategoryTree, type MainNode } from './tree';
+import { productsInCategory } from './membership';
 import { appHidden } from '../lib/visibility';
 import { DEMO } from '@/demo/mode';
 
@@ -86,7 +87,7 @@ export const useCatalog = () => useContext(Ctx);
 
 /** Products in an aisle or any of its sub-categories. */
 export function productsIn(data: CatalogData, categoryId: string): Product[] {
-  return data.products.filter((p) => data.chainOf(p.category_id).includes(categoryId));
+  return productsInCategory(data.products, data.chainOf, categoryId);
 }
 
 /** Lowest effective price among available products, or null when there are none. */

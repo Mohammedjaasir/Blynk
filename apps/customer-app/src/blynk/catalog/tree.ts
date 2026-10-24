@@ -1,5 +1,6 @@
 import type { Category, HomeGroup, Product } from '../api/types';
 import { CATEGORIES } from '../ui/strings';
+import { productsInCategory } from './membership';
 
 /*
  * The owner's catalogue model (docs/api/catalog-tools.md, 2026-10-14):
@@ -159,7 +160,7 @@ export function categoryRail(tree: MainNode[], categories: Category[], view: Cat
  */
 export function productsInView(products: Product[], chainOf: (id: string) => string[], view: CategoryView): Product[] {
   const target = view.selected?.id ?? view.root.id;
-  const list = products.filter((p) => chainOf(p.category_id).includes(target));
+  const list = productsInCategory(products, chainOf, target);
   return [...list.filter((p) => p.is_available), ...list.filter((p) => !p.is_available)];
 }
 

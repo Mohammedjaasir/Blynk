@@ -94,6 +94,13 @@ export interface OrderItem {
   /** Migration 045: the size ordered and its label ("100 g"); null for a product without sizes. */
   variant_id?: string | null;
   variant_label_snapshot?: string | null;
+  /** Bundle offers (migration 062): a free unit or a gift is its own line at price 0. Absent on an older server. */
+  is_bundle_free?: boolean;
+  bundle_kind?: 'FREE_UNITS' | 'GIFT' | null;
+  bundle_offer_id?: string | null;
+  bundle_title?: string | null;
+  /** What the line would have cost (LKR); null when it is not a bundle line. */
+  bundle_value?: number | null;
 }
 
 /** One combo pack line of an order (order_combos; its items carry order_combo_id). */
@@ -129,6 +136,9 @@ export interface Order {
   birthday_discount_amount: number;
   referral_discount_amount: number;
   points_discount_amount: number;
+  /** Bundle offers (migration 062): what free units and gifts saved on this order (absent / 0 = none). */
+  bundle_savings?: number;
+  bundle_applied?: { offer_id: string; title: string; type: string; savings_lkr: number; free_units?: number }[];
   coupon_code: string | null;
   /**
    * What is still to pay (cash to the rider, or the amount sent to PayHere). The order's full

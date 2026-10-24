@@ -6,6 +6,7 @@
  */
 import type { Category, Product, StoreInfo } from '@/blynk/api/types';
 import type { CatalogData } from '@/blynk/catalog/CatalogContext';
+import { inCategory, productsInCategory } from '@/blynk/catalog/membership';
 import { categoryOfferActive } from '@/blynk/lib/categories';
 import { formatHours, formatOfferEnd } from '@/blynk/lib/storeText';
 import { appText } from '@/blynk/lib/appTexts';
@@ -28,7 +29,7 @@ export type LiveAisle = {
 };
 
 /** Products in a category or any of its sub-categories (CatalogContext.productsIn without its React import). */
-const inAisle = (data: CatalogData, catId: string) => data.products.filter((p) => data.chainOf(p.category_id).includes(catId));
+const inAisle = (data: CatalogData, catId: string) => productsInCategory(data.products, data.chainOf, catId);
 
 export function findAisle(data: CatalogData | null, id: string | undefined): Category | null {
   if (!data || !id) return null;
@@ -41,7 +42,7 @@ export function aisleSections(data: CatalogData, cat: Category): LiveSection[] {
   if (!kids.length) return all.length ? [{ id: cat.id, title: cat.name, items: all }] : [];
   const used = new Set<string>();
   const out: LiveSection[] = kids.map((k) => {
-    const items = all.filter((p) => !used.has(p.id) && data.chainOf(p.category_id).includes(k.id));
+    const items = all.filter((p) => !used.has(p.id) && inCategory(p, data.chainOf, k.id));
     items.forEach((p) => used.add(p.id));
     return { id: k.id, title: k.name, items };
   });

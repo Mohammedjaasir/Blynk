@@ -24,6 +24,7 @@ export function parseOrder(raw: Order): Order {
     birthday_discount_amount: n(raw.birthday_discount_amount),
     referral_discount_amount: n(raw.referral_discount_amount),
     points_discount_amount: n(raw.points_discount_amount),
+    ...(raw.bundle_savings !== undefined ? { bundle_savings: Math.max(0, n(raw.bundle_savings)) } : {}),
     total_amount: n(raw.total_amount),
     wallet_amount_used: Math.max(0, n(raw.wallet_amount_used)),
     ...(raw.wallet !== undefined ? { wallet: parseOrderWallet(raw.wallet) } : {}),
@@ -38,6 +39,7 @@ export function parseOrder(raw: Order): Order {
       unit_selling_price: n(it.unit_selling_price),
       subtotal: n(it.subtotal),
       quantity: n(it.quantity, 1),
+      ...(it.bundle_value !== undefined && it.bundle_value !== null ? { bundle_value: n(it.bundle_value) } : {}),
     })),
   };
 }

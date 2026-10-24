@@ -2,7 +2,7 @@ import { unavailableText } from '@/blynk/catalog/hours';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeOut, interpolate, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue,
@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 import { getCombos } from '@/blynk/api/catalog';
+import { BundleProgressCard, FreeUnitsRow, GiftRows, useBundleQuote } from '@/blynk/bundles/BundleViews';
+import { bundleSavingsOf, chargedSubtotal, freeUnitsByLine, liveBundleOffers } from '@/blynk/bundles/model';
 import type { Product } from '@/blynk/api/types';
 import { keyOf, lineAvailable, lineKey, linePriced, lineUnitPrice, needsVariant, type CartLine, type ComboLine } from '@/blynk/cart/cartStore';
 import { fetchProductDetail } from '@/blynk/catalog/product';
@@ -148,6 +150,13 @@ export default function Cart() {
   const combos = orderCombos(cart.combos);
   const hasLines = items.length + combos.length > 0;
   const itemsSig = checkoutSignature({ items, combos, addressId: '' });
+  // bundle offers (owner, 2026-10-25): the server's quote for this basket (free units, the gift, the nearest offer
+  // still to unlock). What the items are charged after bundles drives the bill, the fee quote and the points.
+  const bundleOffers = liveBundleOffers(store);
+  const bundle = useBundleQuote({ enabled: !DEMO && !!phone && hasLines && bundleOffers.length > 0, items, combos, sig: itemsSig });
+  const chargedTotal = chargedSubtotal(total, bundle);
+  const bundleSaved = bundleSavingsOf(bundle);
+  const freeByLine = freeUnitsByLine(bundle);
   // receiver, needs help, quick notes and the rider note (the quick picks also show signed out)
   const [details, setDetails] = useState<CheckoutDetails>(EMPTY_DETAILS);
   const notes = details.noteChips;
@@ -179,12 +188,12 @@ export default function Cart() {
   const addrId = addr?.id ?? null;
   const quoteFor = quote && addrId && quote.delivery_fee_address_id === addrId ? quote : null;
   const walletInfo = checkoutWalletOf(quoteFor?.wallet);
-  const checkout: CheckoutBill | null = addrId ? checkoutBill(total, quoteFor, coupon, usePoints, useWallet) : null;
+  const checkout: CheckoutBill | null = addrId ? checkoutBill(chargedTotal, quoteFor, coupon, usePoints, useWallet) : null;
   // Blynk Points instead of free delivery (owner, 2026-10-14): "You'll earn N Blynk Points on this
   // order" (a guest: "Sign in to earn N ..."); hidden while points are off or N = 0
   const pointsLine = cartPointsLine({
     signedIn: !!phone,
-    earn: cartEarn({ rule: pointsRuleOf(store), itemTotal: total, quoted: quoteFor && checkout ? { earn: checkout.earn } : null }),
+    earn: cartEarn({ rule: pointsRuleOf(store), itemTotal: chargedTotal, quoted: quoteFor && checkout ? { earn: checkout.earn } : null }),
   });
   const payInfo = onlineInfo(store?.online_payment, quoteFor?.online_payment);
   const payMethod = effectiveMethod(payChoice, payInfo, checkout?.toPay ?? null);
@@ -226,7 +235,7 @@ export default function Cart() {
     const ctrl = new AbortController();
     const t = setTimeout(() => {
       setQuoteFailed(false);
-      getCheckoutInfo(addrId, total, ctrl.signal, productIds)
+      getCheckoutInfo(addrId, chargedTotal, ctrl.signal, productIds)
         .then((q) => setQuote(q))
         .catch((e) => {
           if (ctrl.signal.aborted) return;
@@ -236,7 +245,7 @@ export default function Cart() {
         });
     }, 250);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [addrId, itemsSig, quoteTick]);
+  }, [addrId, itemsSig, quoteTick, chargedTotal]);
 
   // an applied coupon is re-checked whenever the basket or the address changes
   useEffect(() => {
@@ -447,8 +456,16 @@ export default function Cart() {
                 </View>
               </Animated.View>
             ) : (
-              <LiveLine key={lineKey(p.id, variant?.id)} line={{ product: p, quantity, variant }} showSavings={offerSavingsOn(store, p)} />
+              <Fragment key={lineKey(p.id, variant?.id)}>
+                <LiveLine line={{ product: p, quantity, variant }} showSavings={offerSavingsOn(store, p)} />
+                {/* bundle offers: the free units of this line, with what they save */}
+                {freeByLine.has(lineKey(p.id, variant?.id)) && (
+                  <FreeUnitsRow name={p.name} sizeLabel={variant?.label} free={freeByLine.get(lineKey(p.id, variant?.id))!.free} value={freeByLine.get(lineKey(p.id, variant?.id))!.value} />
+                )}
+              </Fragment>
             )))}
+            {/* bundle offers: "Free gift: <name>" once a spend offer unlocks (the present hops, a few dots) */}
+            {!DEMO && <GiftRows quote={bundle} />}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={{ marginTop: 9 }}>
               <PressScale onPress={goBack} style={styles.chip}>
                 <PlusGlyph />
@@ -474,6 +491,9 @@ export default function Cart() {
             </Animated.View>
           )}
         </View>
+
+        {/* bundle offers: "Add LKR 450 more for a free <gift>" / "Add 1 more to get 1 free" */}
+        {!DEMO && !!bundle && <BundleProgressCard progress={bundle.bundle_progress} offers={bundleOffers} />}
 
         {/* signed in: "Repeat this basket" (migration 054; hidden while off) */}
         {!DEMO && <RepeatFromCart style={{ marginHorizontal: 15, marginBottom: 15 }} />}
@@ -569,7 +589,7 @@ export default function Cart() {
         {/* tip your rider (optional, cash with the order; hidden while tips are off or paying online) */}
         {!DEMO && checkout && <CheckoutTipRow ctl={riderTip} />}
 
-        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} payMethod={payMethod} pointsLine={pointsLine} tip={riderTip.tip} /> : (
+        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} payMethod={payMethod} pointsLine={pointsLine} tip={riderTip.tip} bundleSaved={bundleSaved} /> : (
         <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
           <StampBadge size={78} style={{ position: 'absolute', right: -6, top: -4 }} />
           <View style={styles.billHead}>
@@ -1003,21 +1023,24 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
  * address (GET /orders/checkout-info: free deliveries, the basket amount, per-km distance);
  * otherwise it is what /store says. No taxes or invented savings.
  */
-function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, pointsLine, tip = 0 }: {
+function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, pointsLine, tip = 0, bundleSaved = 0 }: {
   bill: LiveBill; itemTotal: number; mrpTotal: number; checkout: CheckoutBill | null; coupon: CouponPreview | null;
   payMethod: PayMethod;
   /** "You'll earn N Blynk Points on this order" (a guest: "Sign in to earn ..."), or null. */
   pointsLine: string | null;
   /** The rider tip picked at checkout (cash with the order, migration 055): its own line and on top of To Pay. */
   tip?: number;
+  /** Bundle offers: what free units and gifts save on this basket (the server's quote; 0 = none). */
+  bundleSaved?: number;
 }) {
   const store = useStore();
   const quoted = !!checkout && checkout.deliveryFee !== null;
-  const toPay = (quoted ? (checkout!.toPay as number) : bill.toPay) + tip;
+  // a quoted bill already starts from the charged subtotal (after bundles); before the quote the bundle saving comes off here
+  const toPay = (quoted ? (checkout!.toPay as number) : Math.max(0, Math.round((bill.toPay - bundleSaved) * 100) / 100)) + tip;
   const feeKnown = quoted || bill.feeKnown;
   // the header counts every saving: offer prices (while shown), the coupon / birthday / referral discount and points
   const head = savingsHeader({
-    offerSaved: bill.saved, showOfferSavings: bill.showSaved, discount: checkout?.discount ?? 0, pointsValue: checkout?.points.value ?? 0, toPay,
+    offerSaved: bill.saved, showOfferSavings: bill.showSaved, discount: checkout?.discount ?? 0, pointsValue: checkout?.points.value ?? 0, bundleSaved, toPay,
     walletUsed: quoted ? checkout!.wallet : 0,
   });
   // the Blynk Wallet pays (a payment, not a saving): its own line; covering it all reads "Paid by wallet"
@@ -1062,6 +1085,12 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
             <Text style={bill.showSaved ? { color: C.brandText } : undefined}>{formatLkr(itemTotal)}</Text>
           </Text>
         )} />
+        {bundleSaved > 0 && (
+          <>
+            <Dashed style={{ marginVertical: 11 }} />
+            <BillRow l="Bundle savings" r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(bundleSaved)}</Text>} />
+          </>
+        )}
         <Dashed style={{ marginVertical: 11 }} />
         <BillRow dashed l={`Delivery Fee${distance}`} r={feeRight} />
         {!!freeNote && <Text style={styles.freeNote}>{freeNote}</Text>}

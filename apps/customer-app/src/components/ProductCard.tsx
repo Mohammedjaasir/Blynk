@@ -23,6 +23,8 @@ import { NonVegMark, StarIcon, VegMark } from './icons';
 import { PriceRoll } from './PriceRoll';
 import { ProductImage } from './ProductImage';
 import { StruckPrice as StruckPriceText } from './StruckPrice';
+import { FlashPill, useFlashEnd } from './FlashPill';
+import { BundleBadge, useBundleOffer } from '@/blynk/bundles/BundleViews';
 import { AddButton, DemoTicker } from './ui';
 
 export const unitText = (p: Pick<Product, 'unit' | 'pack_size'>) => [p.unit, p.pack_size].filter(Boolean).join(' · ');
@@ -52,6 +54,10 @@ export const ProductCard = memo(function ProductCard({
   const inCart = useCartSelect((c) => (c.qty[p.id] ?? 0) > 0);
   const store = useStore();
   const showSavings = offerSavingsOn(store, p);
+  // an offer ending within 24 h counts down on the photo, and this tile re-renders itself when it ends (wave 2, flash deals)
+  const flashEnd = useFlashEnd(DEMO ? null : p);
+  // a live "Buy 2 get 1" offer covers it: a small badge bottom-left on the photo (an overlay, the tile keeps its size); gone once it is in the cart, the stepper opens over that corner
+  const bundle = useBundleOffer(p);
   // the one price rule (offer, MRP; src/blynk/lib/pricing.ts priceDisplay): struck while an
   // offer is active (owner, 2026-10-18: "it should enable always")
   const shown = priceDisplay(p, { showStruck: DEMO || showSavings });
@@ -113,6 +119,11 @@ export const ProductCard = memo(function ProductCard({
         {!!untilTag && (
           <View style={styles.untilTag} pointerEvents="none"><Text style={styles.untilTagTxt} numberOfLines={1}>{untilTag}</Text></View>
         )}
+        {flashEnd !== null && p.is_available && (
+          // top-right; under the "Until 6 pm" tag (top-left) when there is one, so the two never touch
+          <FlashPill endsAtMs={flashEnd} size="tile" style={untilTag ? { top: 29 } : undefined} />
+        )}
+        {!DEMO && !!bundle && p.is_available && !inCart && <BundleBadge offer={bundle} width={width} />}
         {showRating && x?.rating != null && (
           <View style={styles.rating}>
             <StarIcon size={10} color={C.brandInk} />

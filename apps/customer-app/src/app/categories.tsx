@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
+import { categoryCounts } from '@/blynk/catalog/membership';
 import { categoryHref, type MainNode } from '@/blynk/catalog/tree';
 import { CATEGORIES } from '@/blynk/ui/strings';
 import { ListSkeleton, Page, StateView } from '@/blynk/ui/kit';
@@ -30,11 +31,7 @@ export default function CategoriesScreen() {
   const jumped = useRef(false);
   const tree = data?.tree ?? [];
   // products per category id (a Category counts its sub-categories' products)
-  const counts = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const p of data?.products ?? []) for (const id of data!.chainOf(p.category_id)) m.set(id, (m.get(id) ?? 0) + 1);
-    return m;
-  }, [data]);
+  const counts = useMemo(() => (data ? categoryCounts(data.products, data.chainOf) : new Map<string, number>()), [data]);
 
   const onMainLayout = (main: MainNode, y: number) => {
     if (jumped.current || !group || main.id !== group) return;

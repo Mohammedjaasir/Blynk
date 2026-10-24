@@ -35,6 +35,8 @@ import { useStore } from '@/blynk/store/StoreContext';
 import { Badge, Button, StateView, useToast } from '@/blynk/ui/kit';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { BackIcon, ShareIcon } from '@/components/icons';
+import { FlashPill, useFlashEnd } from '@/components/FlashPill';
+import { BundleBadgeLine, useBundleOffer } from '@/blynk/bundles/BundleViews';
 import { StruckPrice } from '@/components/StruckPrice';
 import { Chevron as Caret, Collapsible, PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
@@ -106,6 +108,10 @@ export default function ProductPage() {
   const variant = sized ? selectVariant(variants, pickedId) : null;
   const priced = variant ? variantPriced(variant) : product;
   const onOffer = variant ? variantOnOffer(variant) : !!product && isOfferActive(product);
+  // an offer ending within 24 h counts down beside the price; the page re-renders itself when it ends (flash deals)
+  const flashEnd = useFlashEnd(DEMO ? null : priced);
+  // a live "Buy 2 get 1 free" offer covers this product (bundle offers, wave 2)
+  const bundle = useBundleOffer(DEMO ? null : product);
   // the one price rule (offer, MRP - migration 048): struck, always on (owner, 2026-10-18)
   const shown = priced ? priceDisplay(priced, { showStruck: showSavings }) : null;
   // "Save" on an offer counts from the struck reference (the MRP when that is what is struck)
@@ -192,12 +198,14 @@ export default function ProductPage() {
                 </Text>
                 {shown?.struck && <StruckPrice struck={shown.struck} money={formatLkr} style={styles.mrp} />}
                 {saved > 0 && <Text style={styles.save}>Save {formatLkr(saved)}</Text>}
+                {flashEnd !== null && orderable && <FlashPill endsAtMs={flashEnd} size="page" />}
                 <Badge tone={orderable ? 'positive' : 'neutral'} label={hoursBadge(product) ?? (orderable ? 'Available' : VARIANT_COPY.soldOut)} />
               </View>
               {onOffer && !!priced?.offer_ends_at && (
                 <Text style={styles.ends}>Offer ends {orderTime(priced.offer_ends_at)}</Text>
               )}
               {!!lead && <Text style={styles.lead}>{lead}</Text>}
+              {!!bundle && product.is_available && <BundleBadgeLine offer={bundle} />}
 
               {!product.is_available && !DEMO && (
                 <View style={{ marginTop: 16 }}>

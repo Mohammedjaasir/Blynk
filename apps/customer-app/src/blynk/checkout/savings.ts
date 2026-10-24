@@ -15,6 +15,8 @@ export interface SavingsInput {
   showOfferSavings: boolean;
   /** The coupon / birthday / referral discount on this bill (0 when none). */
   discount: number;
+  /** Bundle offers: what free units and gifts save (0 when none). */
+  bundleSaved?: number;
   /** The value of the Blynk Points used (0 when none). */
   pointsValue: number;
   /** The amount to pay (already net of every saving, and of the wallet). */
@@ -36,6 +38,6 @@ export interface SavingsHeader {
 
 export function savingsHeader(i: SavingsInput): SavingsHeader {
   const offer = i.showOfferSavings ? money(i.offerSaved) : 0;
-  const saved = round2(offer + money(i.discount) + money(i.pointsValue));
+  const saved = round2(offer + money(i.discount) + money(i.pointsValue) + money(i.bundleSaved));
   return { saved, before: round2(i.toPay + money(i.walletUsed) + saved), show: saved > 0 };
 }

@@ -33,6 +33,7 @@ import {
   BagBadge, ChevronIcon, CloseIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
 import { HomeFooter } from '@/components/HomeFooter';
+import { FlashDealsRail } from '@/components/FlashDealsRail';
 import { HomeSections } from '@/components/HomeSections';
 import { ProductCard } from '@/components/ProductCard';
 import { PromoBand } from '@/components/PromoBand';
@@ -388,6 +389,7 @@ export default function Home() {
                 {!DEMO && <BirthdayOfferBanner style={{ marginHorizontal: 15, marginTop: 12 }} />}
                 {!DEMO && !!data && <PromoCarousel promotions={data.promotions} style={{ marginTop: 16 }} />}
                 {!DEMO && <BuyAgainRail />}
+                {!DEMO && <FlashDealsRail />}
                 {!DEMO && <UsualsRow />}
                 {!DEMO && <DoctorsHomeEntry style={{ marginHorizontal: SPACE.gutter, marginTop: SPACE.section }} />}
                 {!DEMO && !!data && <HomeCategoryGroups tree={data.tree} width={screenW} />}

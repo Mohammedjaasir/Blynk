@@ -9,6 +9,7 @@ import { getCombos } from '@/blynk/api/catalog';
 import { ApiError } from '@/blynk/api/client';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { fetchProductDetail } from '@/blynk/catalog/product';
+import { orderBundleSavings, orderLineTag } from '@/blynk/bundles/model';
 import { formatLkr } from '@/blynk/lib/money';
 import { appHidden, onVisible } from '@/blynk/lib/visibility';
 import { cancelOrder, getOrder } from '@/blynk/orders/api';
@@ -246,6 +247,8 @@ export default function OrderStatus() {
               {order.items.filter((it) => !it.order_combo_id).map((it) => {
                 // an UNAVAILABLE line is out of the totals (struck, shown for the record); a SUBSTITUTED one was replaced
                 const cap = itemCaption(it.item_status);
+                // bundle offers: a free unit or a gift is its own line at price 0
+                const bundleTag = orderLineTag(it);
                 return (
                   <View key={it.id} style={styles.itemRow}>
                     <View style={{ flex: 1 }}>
@@ -253,9 +256,14 @@ export default function OrderStatus() {
                         {itemTitle(it.product_name_snapshot, it.unit_snapshot)}
                       </Text>
                       {!!cap && <Text style={[styles.small, { fontSize: 11.5 }, cap.problem && { color: C.problem }]}>{cap.text}</Text>}
+                      {!!bundleTag && !cap && <Text style={[styles.small, { fontSize: 11.5, color: C.green }]}>{bundleTag}{it.bundle_title ? ` · ${it.bundle_title}` : ''}</Text>}
                     </View>
                     <Text style={styles.qty}>× {it.quantity}</Text>
-                    <Text style={[styles.price, cap?.struck && styles.struck]}>{formatLkr(it.subtotal)}</Text>
+                    {bundleTag ? (
+                      <Text style={[styles.price, { color: C.green }]}>{it.bundle_kind === 'GIFT' ? 'Gift' : 'Free'}</Text>
+                    ) : (
+                      <Text style={[styles.price, cap?.struck && styles.struck]}>{formatLkr(it.subtotal)}</Text>
+                    )}
                   </View>
                 );
               })}
@@ -264,6 +272,7 @@ export default function OrderStatus() {
             <View style={styles.card}>
               <Text style={styles.section}>Bill</Text>
               <BillLine l="Item total" r={formatLkr(order.subtotal_amount)} />
+              {orderBundleSavings(order) > 0 && <BillLine l="Saved with bundle offers" r={formatLkr(orderBundleSavings(order))} accent />}
               <BillLine l="Delivery fee" r={order.delivery_fee === 0 ? 'FREE' : formatLkr(order.delivery_fee)} accent={order.delivery_fee === 0} />
               {discountRows(order).map((d) => <BillLine key={d.label} l={d.label} r={`−${formatLkr(d.amount)}`} accent />)}
               {order.wallet_amount_used > 0 && <BillLine l={WALLET_COPY.orderBillLine} r={`−${formatLkr(order.wallet_amount_used)}`} accent />}

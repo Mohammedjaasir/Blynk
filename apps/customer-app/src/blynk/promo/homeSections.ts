@@ -1,4 +1,5 @@
 import type { Category, Product, PublicHomeSection } from '../api/types';
+import { inCategory } from '../catalog/membership';
 
 /*
  * Staff-made Home rails (Admin / Ops "Home sections", 2026-10-24; docs/superpowers/plans/
@@ -76,7 +77,7 @@ export function homeSectionViews(
     let seeAll: HomeSectionView['seeAll'] = null;
     if (s.category && typeof s.category.id === 'string') {
       const catId = s.category.id;
-      products = catalog.products.filter((p) => orderable(p) && catalog.chainOf(p.category_id).includes(catId)).slice(0, railLimit(s.max_items));
+      products = catalog.products.filter((p) => orderable(p) && inCategory(p, catalog.chainOf, catId)).slice(0, railLimit(s.max_items));
       const name = catalog.categories.find((c) => c.id === catId)?.name ?? title;
       if (s.category.slug) seeAll = { slug: s.category.slug, name };
     } else if (Array.isArray(s.product_ids)) {
