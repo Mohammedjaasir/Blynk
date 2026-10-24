@@ -14,11 +14,11 @@ import type { AuthUser } from '../api/types';
 
 /**
  * Seller session, built on the existing Blynk phone + SMS code sign-in with
- * `app: 'seller'`, or on the seller email + password routes
- * (/auth/seller/login-email, /auth/seller/register-email), which return the
- * same tokens. Only SELLER users hold a session here; anyone else is
- * signed straight back out. A courtesy check: the API guards every /seller
- * route by role whatever this app renders.
+ * `app: 'seller'`. Sellers are invite-only: Blynk staff register the shop's
+ * number, and the server refuses any other number (403 SELLER_NOT_REGISTERED).
+ * Only SELLER users hold a session here; anyone else is signed straight back
+ * out. A courtesy check: the API guards every /seller route by role whatever
+ * this app renders.
  */
 interface AuthState {
   user: AuthUser | null;
@@ -30,12 +30,8 @@ interface AuthState {
   /** The server ended the session (refresh refused); sign-in says so. */
   sessionEnded: boolean;
   retry(): void;
-  /** Check the SMS code. `shopName` is only used the first time a number signs in. */
-  signIn(phone: string, otp: string, shopName?: string): Promise<void>;
-  /** Sign in with an email and password. */
-  signInWithEmail(email: string, password: string): Promise<void>;
-  /** Create a seller account with an email, password and shop name, and sign in. */
-  registerWithEmail(email: string, password: string, shopName: string): Promise<void>;
+  /** Check the SMS code sent to the shop's registered number. */
+  signIn(phone: string, otp: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -43,7 +39,6 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export const SESSION_ENDED_MESSAGE = 'Your session has ended. Please sign in again.';
 export const NOT_SELLER_MESSAGE = 'This number is not a Blynk seller account.';
-export const NOT_SELLER_EMAIL_MESSAGE = 'This email is not a Blynk seller account.';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -105,11 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  // Every sign-in route returns the same payload; only a SELLER keeps it.
-  const adopt = useCallback((data: SessionPayload, notSellerMessage: string) => {
+  // Only a SELLER keeps the session the sign-in returns.
+  const adopt = useCallback((data: SessionPayload) => {
     if (data.user.role !== 'SELLER') {
       tokenStore.clear();
-      throw new ApiError(notSellerMessage, 403, 'FORBIDDEN');
+      throw new ApiError(NOT_SELLER_MESSAGE, 403, 'FORBIDDEN');
     }
     tokenStore.save(data.access_token, data.refresh_token);
     setSessionEnded(false);
@@ -118,22 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(
-    async (phone: string, otp: string, shopName?: string) => {
-      adopt(await authApi.verifyOtp(phone, otp, shopName), NOT_SELLER_MESSAGE);
-    },
-    [adopt]
-  );
-
-  const signInWithEmail = useCallback(
-    async (email: string, password: string) => {
-      adopt(await authApi.loginEmail(email, password), NOT_SELLER_EMAIL_MESSAGE);
-    },
-    [adopt]
-  );
-
-  const registerWithEmail = useCallback(
-    async (email: string, password: string, shopName: string) => {
-      adopt(await authApi.registerEmail(email, password, shopName), NOT_SELLER_EMAIL_MESSAGE);
+    async (phone: string, otp: string) => {
+      adopt(await authApi.verifyOtp(phone, otp));
     },
     [adopt]
   );
@@ -154,8 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, status, sessionEnded, retry, signIn, signInWithEmail, registerWithEmail, signOut }),
-    [user, status, sessionEnded, retry, signIn, signInWithEmail, registerWithEmail, signOut]
+    () => ({ user, status, sessionEnded, retry, signIn, signOut }),
+    [user, status, sessionEnded, retry, signIn, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,35 +1,15 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { auth as authApi } from '../api/resources';
 import { useAuth, SESSION_ENDED_MESSAGE } from '../auth/AuthContext';
 import markUrl from '../assets/blynk-mark.png';
-import {
-  IconCheckCircle,
-  IconEye,
-  IconEyeOff,
-  IconInfo,
-  IconLock,
-  IconMail,
-  IconPhone,
-  IconPin,
-  IconScooter,
-  IconWallet,
-} from '../components/icons';
+import { IconInfo, IconLock, IconPhone, IconPin, IconScooter, IconWallet } from '../components/icons';
 import { ButtonArrow, Field, describedBy, Spinner } from '../components/ui';
-import {
-  emailAuthMessage,
-  fieldErrors,
-  isEmailInUse,
-  retryAfterSeconds,
-  signInMessage,
-} from '../lib/apiErrors';
+import { isSellerNotRegistered, retryAfterSeconds, signInMessage } from '../lib/apiErrors';
 
 /** Seconds before "send a new code" is allowed again. */
 export const RESEND_SECONDS = 30;
 
-export const PASSWORD_MIN = 8;
-export const PASSWORD_MAX = 128;
-
-export const FORGOT_PASSWORD_NOTE = 'Sign in with your phone number instead, or ask Blynk to reset it.';
+export const NOT_REGISTERED_HINT = 'Not registered yet? Contact Blynk to add your shop.';
 
 /** A Sri Lankan mobile or landline typed the usual ways: 0771234567, +94 77 123 4567, 94771234567. */
 export function looksLikePhone(raw: string): boolean {
@@ -38,31 +18,6 @@ export function looksLikePhone(raw: string): boolean {
   const digits = cleaned.replace(/^\+/, '');
   return digits.length >= 9 && digits.length <= 12;
 }
-
-/** Good enough to catch a typo; the server has the final say. */
-export function looksLikeEmail(raw: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim());
-}
-
-export interface PasswordStrength {
-  /** 0 too short or too long, 1 weak, 2 good, 3 strong. */
-  level: 0 | 1 | 2 | 3;
-  label: string;
-}
-
-/** A plain-words hint while a new password is typed. */
-export function passwordStrength(password: string): PasswordStrength | null {
-  if (!password) return null;
-  if (password.length < PASSWORD_MIN) return { level: 0, label: `Too short - use at least ${PASSWORD_MIN} characters.` };
-  if (password.length > PASSWORD_MAX) return { level: 0, label: `Too long - ${PASSWORD_MAX} characters at most.` };
-  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((re) => re.test(password)).length;
-  if (password.length >= 12 && kinds >= 3) return { level: 3, label: 'Strong password.' };
-  if (password.length >= 10 || kinds >= 3) return { level: 2, label: 'Good password.' };
-  return { level: 1, label: 'Weak - add numbers or symbols, or make it longer.' };
-}
-
-type Tab = 'phone' | 'email';
-type EmailMode = 'signin' | 'create';
 
 const BENEFITS = [
   {
@@ -83,45 +38,13 @@ const BENEFITS = [
 ];
 
 /**
- * Sign in to the seller portal, two ways:
- *  - Phone: the SMS code (no password). First time here, the same screen asks
- *    for the shop name, which creates the shop.
- *  - Email: sign in with an email and password, or create an account with an
- *    email, password and shop name.
- * Blynk approves every new shop before it can sell.
+ * Sign in to the seller portal. Sellers are invite-only: Blynk staff add the
+ * shop with its phone number in Admin / Ops, and the seller signs in with that
+ * number and the SMS code. Nothing is created from this screen; a number Blynk
+ * has not registered is refused by the server (403 SELLER_NOT_REGISTERED).
  */
 export function SignIn() {
   const { sessionEnded } = useAuth();
-  const [tab, setTab] = useState<Tab>('phone');
-  const [emailMode, setEmailMode] = useState<EmailMode>('signin');
-  const phoneTabRef = useRef<HTMLButtonElement>(null);
-  const emailTabRef = useRef<HTMLButtonElement>(null);
-  const ids = useId();
-  const tabId = (t: Tab) => `${ids}-tab-${t}`;
-  const panelId = (t: Tab) => `${ids}-panel-${t}`;
-
-  function choose(next: Tab, focus = false) {
-    setTab(next);
-    if (focus) (next === 'phone' ? phoneTabRef : emailTabRef).current?.focus();
-  }
-
-  // Arrow keys move between the two tabs (the usual tablist keyboard pattern).
-  function onTabKey(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'Home' || event.key === 'End') {
-      event.preventDefault();
-      const next: Tab =
-        event.key === 'Home' ? 'phone' : event.key === 'End' ? 'email' : tab === 'phone' ? 'email' : 'phone';
-      choose(next, true);
-    }
-  }
-
-  const creating = tab === 'email' && emailMode === 'create';
-  const lede =
-    tab === 'phone'
-      ? 'Use your mobile number. We send you a code by SMS - no password needed.'
-      : creating
-        ? 'New to Blynk? Set up your shop in a minute. Blynk checks and approves every new shop.'
-        : 'Use the email and password you signed up with.';
 
   return (
     <div className="signin">
@@ -155,10 +78,10 @@ export function SignIn() {
         <div className="signin__stack">
           <div className="shell">
             <div className="shell__core signin__card">
-              <h1 className="signin__title">
-                {creating ? 'Create your Blynk Sellers account' : 'Sign in to Blynk Sellers'}
-              </h1>
-              <p className="muted signin__lede">{lede}</p>
+              <h1 className="signin__title">Sign in to Blynk Sellers</h1>
+              <p className="muted signin__lede">
+                Enter the mobile number Blynk registered for your shop. We&apos;ll text you a code.
+              </p>
 
               {sessionEnded ? (
                 <p className="notice notice--wait" role="status">
@@ -166,54 +89,16 @@ export function SignIn() {
                 </p>
               ) : null}
 
-              <div
-                className="segmented"
-                role="tablist"
-                aria-label="How to sign in"
-                style={{ ['--index' as string]: tab === 'phone' ? 0 : 1 }}
-                onKeyDown={onTabKey}
-              >
-                <span className="segmented__thumb" aria-hidden="true" />
-                <button
-                  ref={phoneTabRef}
-                  type="button"
-                  role="tab"
-                  id={tabId('phone')}
-                  aria-selected={tab === 'phone'}
-                  aria-controls={panelId('phone')}
-                  tabIndex={tab === 'phone' ? 0 : -1}
-                  className="segmented__option"
-                  onClick={() => choose('phone')}
-                >
-                  <IconPhone size={18} /> Phone
-                </button>
-                <button
-                  ref={emailTabRef}
-                  type="button"
-                  role="tab"
-                  id={tabId('email')}
-                  aria-selected={tab === 'email'}
-                  aria-controls={panelId('email')}
-                  tabIndex={tab === 'email' ? 0 : -1}
-                  className="segmented__option"
-                  onClick={() => choose('email')}
-                >
-                  <IconMail size={18} /> Email
-                </button>
-              </div>
+              <PhoneSignIn />
 
-              {/* Both stay mounted, so switching tabs never loses a code that was just sent. */}
-              <div role="tabpanel" id={panelId('phone')} aria-labelledby={tabId('phone')} hidden={tab !== 'phone'}>
-                <PhoneSignIn />
-              </div>
-              <div role="tabpanel" id={panelId('email')} aria-labelledby={tabId('email')} hidden={tab !== 'email'}>
-                <EmailSignIn mode={emailMode} onMode={setEmailMode} onUsePhone={() => choose('phone', true)} />
-              </div>
+              <p className="fine-print signin__invite">
+                <IconInfo size={16} /> {NOT_REGISTERED_HINT}
+              </p>
             </div>
           </div>
 
           <p className="signin__trust">
-            <IconLock size={16} /> Blynk checks every shop before it can sell.
+            <IconLock size={16} /> Only shops Blynk has registered can sign in.
           </p>
 
           <section className="signin__why" aria-label="Why sell on Blynk">
@@ -269,29 +154,18 @@ function Preview() {
   );
 }
 
-function Notice({ tone, children, role = 'status' }: { tone: 'bad' | 'wait' | 'info'; children: ReactNode; role?: string }) {
-  return (
-    <div className={`notice notice--${tone} notice--row`} role={role}>
-      <span className="notice__icon" aria-hidden="true">
-        <IconInfo size={20} />
-      </span>
-      <div className="notice__body">{children}</div>
-    </div>
-  );
-}
-
 // -------------------------------------------------------------------- phone
 function PhoneSignIn() {
   const { signIn } = useAuth();
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [shopName, setShopName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The number is not a registered seller: say so, and offer a different number. */
+  const [notRegistered, setNotRegistered] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
-  const [shopError, setShopError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [devOtp, setDevOtp] = useState<string | null>(null);
 
@@ -301,8 +175,18 @@ function PhoneSignIn() {
     return () => clearTimeout(timer);
   }, [cooldown]);
 
-  async function requestCode(): Promise<boolean> {
+  function showError(err: unknown) {
+    setNotRegistered(isSellerNotRegistered(err));
+    setError(signInMessage(err));
+  }
+
+  function clearError() {
     setError(null);
+    setNotRegistered(false);
+  }
+
+  async function requestCode(): Promise<boolean> {
+    clearError();
     setBusy(true);
     try {
       const result = await authApi.requestOtp(phone.trim());
@@ -312,7 +196,7 @@ function PhoneSignIn() {
     } catch (err) {
       const wait = retryAfterSeconds(err);
       if (wait) setCooldown(wait);
-      setError(signInMessage(err));
+      showError(err);
       return false;
     } finally {
       setBusy(false);
@@ -334,28 +218,17 @@ function PhoneSignIn() {
 
   async function verify(event: FormEvent) {
     event.preventDefault();
-    let bad = false;
     if (!/^\d{6}$/.test(code.trim())) {
       setCodeError('Enter the 6 numbers from the SMS.');
-      bad = true;
-    } else {
-      setCodeError(null);
+      return;
     }
-    const name = shopName.trim();
-    if (name && (name.length < 2 || name.length > 80)) {
-      setShopError('The shop name must be 2 to 80 letters.');
-      bad = true;
-    } else {
-      setShopError(null);
-    }
-    if (bad) return;
-
-    setError(null);
+    setCodeError(null);
+    clearError();
     setBusy(true);
     try {
-      await signIn(phone.trim(), code.trim(), name || undefined);
+      await signIn(phone.trim(), code.trim());
     } catch (err) {
-      setError(signInMessage(err));
+      showError(err);
       setBusy(false);
     }
   }
@@ -366,17 +239,45 @@ function PhoneSignIn() {
     await requestCode();
   }
 
+  function changeNumber() {
+    setStep('phone');
+    setCode('');
+    clearError();
+  }
+
   return (
     <div className="panel-body">
       {error ? (
-        <p className="notice notice--bad" role="alert">
-          {error}
-        </p>
+        <div className={`notice notice--bad${notRegistered ? ' notice--row signin__refused' : ''}`} role="alert">
+          {notRegistered ? (
+            <>
+              <span className="notice__icon" aria-hidden="true">
+                <IconInfo size={20} />
+              </span>
+              <div className="notice__body">
+                <p>{error}</p>
+                {step === 'code' ? (
+                  <button type="button" className="button button--ghost button--small" onClick={changeNumber}>
+                    <IconPhone size={16} /> Use a different number
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            error
+          )}
+        </div>
       ) : null}
 
       {step === 'phone' ? (
         <form onSubmit={sendCode} noValidate>
-          <Field id="phone" label="Your mobile number" required error={phoneError} hint="We will send you a code by SMS.">
+          <Field
+            id="phone"
+            label="Your mobile number"
+            required
+            error={phoneError}
+            hint="The number Blynk registered for your shop."
+          >
             <div className="input-affix">
               <span className="input-affix__icon" aria-hidden="true">
                 <IconPhone size={20} />
@@ -389,8 +290,11 @@ function PhoneSignIn() {
                 autoComplete="tel"
                 placeholder="0771234567"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                aria-invalid={Boolean(phoneError)}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (notRegistered) clearError();
+                }}
+                aria-invalid={Boolean(phoneError) || notRegistered}
                 aria-describedby={describedBy('phone', true, phoneError)}
               />
             </div>
@@ -404,14 +308,7 @@ function PhoneSignIn() {
         <form onSubmit={verify} noValidate>
           <p className="sent-to">
             We sent a 6-number code to <strong>{phone.trim()}</strong>.{' '}
-            <button
-              type="button"
-              className="button button--link"
-              onClick={() => {
-                setStep('phone');
-                setError(null);
-              }}
-            >
+            <button type="button" className="button button--link" onClick={changeNumber}>
               Wrong number?
             </button>
           </p>
@@ -436,24 +333,6 @@ function PhoneSignIn() {
               aria-describedby={describedBy('code', false, codeError)}
             />
           </Field>
-          <Field
-            id="shop-name"
-            label="Your shop name"
-            error={shopError}
-            hint="First time here? Tell us your shop name. If you already have a shop, leave this empty."
-          >
-            <input
-              id="shop-name"
-              name="shop_name"
-              type="text"
-              autoComplete="organization"
-              maxLength={80}
-              value={shopName}
-              onChange={(e) => setShopName(e.target.value)}
-              aria-invalid={Boolean(shopError)}
-              aria-describedby={describedBy('shop-name', true, shopError)}
-            />
-          </Field>
           <button type="submit" className="button button--primary button--block button--cta" disabled={busy}>
             {busy ? <Spinner label="Signing in" /> : null} Sign in
             <ButtonArrow />
@@ -468,253 +347,6 @@ function PhoneSignIn() {
           </button>
         </form>
       )}
-    </div>
-  );
-}
-
-// -------------------------------------------------------------------- email
-type EmailErrors = Partial<Record<'email' | 'password' | 'shop_name', string>>;
-
-function EmailSignIn({
-  mode,
-  onMode,
-  onUsePhone,
-}: {
-  mode: EmailMode;
-  onMode(mode: EmailMode): void;
-  onUsePhone(): void;
-}) {
-  const { signInWithEmail, registerWithEmail } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [shopName, setShopName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [emailInUse, setEmailInUse] = useState(false);
-  const [errors, setErrors] = useState<EmailErrors>({});
-  const [forgotOpen, setForgotOpen] = useState(false);
-  const creating = mode === 'create';
-  const strength = creating ? passwordStrength(password) : null;
-
-  function switchMode(next: EmailMode) {
-    if (next === mode) return;
-    onMode(next);
-    setError(null);
-    setEmailInUse(false);
-    setErrors({});
-    setForgotOpen(false);
-  }
-
-  function check(): EmailErrors {
-    const found: EmailErrors = {};
-    if (!looksLikeEmail(email)) found.email = 'Enter your email address, like name@example.com.';
-    if (creating) {
-      if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
-        found.password = `Use ${PASSWORD_MIN} to ${PASSWORD_MAX} characters for your password.`;
-      }
-      const name = shopName.trim();
-      if (name.length < 2 || name.length > 80) found.shop_name = 'Enter your shop name (2 to 80 letters).';
-    } else if (!password) {
-      found.password = 'Enter your password.';
-    }
-    return found;
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const found = check();
-    setErrors(found);
-    setError(null);
-    setEmailInUse(false);
-    if (Object.keys(found).length > 0) return;
-
-    setBusy(true);
-    try {
-      if (creating) await registerWithEmail(email.trim(), password, shopName.trim());
-      else await signInWithEmail(email.trim(), password);
-      // Signed in: the router moves on to the products screen.
-    } catch (err) {
-      const server = fieldErrors(err);
-      const mapped: EmailErrors = {};
-      for (const key of ['email', 'password', 'shop_name'] as const) {
-        if (server[key]) mapped[key] = server[key];
-      }
-      if (Object.keys(mapped).length > 0) {
-        setErrors(mapped);
-        setError('Please fix the highlighted boxes.');
-      } else {
-        setEmailInUse(creating && isEmailInUse(err));
-        setError(emailAuthMessage(err));
-      }
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="panel-body">
-      <div className="mode-switch" role="tablist" aria-label="Email options">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={!creating}
-          className="mode-switch__option"
-          onClick={() => switchMode('signin')}
-        >
-          Sign in
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={creating}
-          className="mode-switch__option"
-          onClick={() => switchMode('create')}
-        >
-          Create account
-        </button>
-      </div>
-
-      {error ? (
-        <div className="notice notice--bad" role="alert">
-          <p>{error}</p>
-          {emailInUse ? (
-            <button type="button" className="button button--ghost button--small" onClick={() => switchMode('signin')}>
-              Sign in instead
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      <form onSubmit={submit} noValidate>
-        <Field id="email" label="Email address" required error={errors.email}>
-          <div className="input-affix">
-            <span className="input-affix__icon" aria-hidden="true">
-              <IconMail size={20} />
-            </span>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              inputMode="email"
-              autoComplete={creating ? 'email' : 'username'}
-              autoCapitalize="none"
-              spellCheck={false}
-              placeholder="name@example.com"
-              maxLength={254}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              aria-invalid={Boolean(errors.email)}
-              aria-describedby={describedBy('email', false, errors.email)}
-            />
-          </div>
-        </Field>
-
-        <Field
-          id="password"
-          label="Password"
-          required
-          error={errors.password}
-          hint={creating ? `${PASSWORD_MIN} to ${PASSWORD_MAX} characters. A longer password is safer.` : undefined}
-        >
-          <div className="input-affix input-affix--end">
-            <span className="input-affix__icon" aria-hidden="true">
-              <IconLock size={20} />
-            </span>
-            <input
-              id="password"
-              name="password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete={creating ? 'new-password' : 'current-password'}
-              autoCapitalize="none"
-              spellCheck={false}
-              maxLength={PASSWORD_MAX}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              aria-invalid={Boolean(errors.password)}
-              aria-describedby={
-                [describedBy('password', creating, errors.password), strength ? 'password-strength' : '']
-                  .filter(Boolean)
-                  .join(' ') || undefined
-              }
-            />
-            <button
-              type="button"
-              className="input-affix__toggle"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              aria-pressed={showPassword}
-              aria-controls="password"
-              onClick={() => setShowPassword((v) => !v)}
-            >
-              {showPassword ? <IconEyeOff size={20} /> : <IconEye size={20} />}
-            </button>
-          </div>
-          {strength ? (
-            <div className={`strength strength--${strength.level}`} id="password-strength" aria-live="polite">
-              <span className="strength__bars" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </span>
-              <span className="strength__label">{strength.label}</span>
-            </div>
-          ) : null}
-        </Field>
-
-        {!creating ? (
-          <div className="forgot">
-            <button
-              type="button"
-              className="button button--link forgot__link"
-              aria-expanded={forgotOpen}
-              onClick={() => setForgotOpen((v) => !v)}
-            >
-              Forgot password?
-            </button>
-            {forgotOpen ? (
-              <Notice tone="info">
-                <p>{FORGOT_PASSWORD_NOTE}</p>
-                <button type="button" className="button button--ghost button--small" onClick={onUsePhone}>
-                  <IconPhone size={16} /> Use my phone number
-                </button>
-              </Notice>
-            ) : null}
-          </div>
-        ) : null}
-
-        {creating ? (
-          <Field
-            id="email-shop-name"
-            label="Shop name"
-            required
-            error={errors.shop_name}
-            hint="The name customers will know you by. You can change it later."
-          >
-            <input
-              id="email-shop-name"
-              name="shop_name"
-              type="text"
-              autoComplete="organization"
-              maxLength={80}
-              value={shopName}
-              onChange={(e) => setShopName(e.target.value)}
-              aria-invalid={Boolean(errors.shop_name)}
-              aria-describedby={describedBy('email-shop-name', true, errors.shop_name)}
-            />
-          </Field>
-        ) : null}
-
-        <button type="submit" className="button button--primary button--block button--cta" disabled={busy}>
-          {busy ? <Spinner label={creating ? 'Creating your account' : 'Signing in'} /> : null}{' '}
-          {creating ? 'Create my account' : 'Sign in'}
-          <ButtonArrow />
-        </button>
-
-        {creating ? (
-          <p className="fine-print">
-            <IconCheckCircle size={16} /> Blynk will check your shop and approve it before you can add products.
-          </p>
-        ) : null}
-      </form>
     </div>
   );
 }

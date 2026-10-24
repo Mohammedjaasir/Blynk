@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { tokenStore } from '../api/client';
 import { fail, mockApi, ok, type Call } from './mockApi';
@@ -29,33 +29,17 @@ describe('seller sign-in', () => {
     expect(api.find('POST', '/auth/otp/request')[0]!.body).toEqual({ phone: '0771234567' });
 
     await userEvent.type(await screen.findByLabelText(/6-number code/i), '123456');
-    await userEvent.type(screen.getByLabelText(/your shop name/i), 'Nimal Farm');
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
 
     expect(await screen.findByRole('heading', { name: /my products/i })).toBeInTheDocument();
+    // Invite-only: just the number and the code, never a shop name.
     expect(api.find('POST', '/auth/otp/verify')[0]!.body).toEqual({
       phone: '0771234567',
       otp: '123456',
       app: 'seller',
-      shop_name: 'Nimal Farm',
     });
     expect(tokenStore.access).toBe('new-access');
     expect(tokenStore.refresh).toBe('new-refresh');
-  });
-
-  it('leaves the shop name out of the request when it is empty (a returning seller)', async () => {
-    const world = worldHandler();
-    const api = mockApi((call) => {
-      if (call.path === '/auth/otp/request') return ok({});
-      if (call.path === '/auth/otp/verify') return ok(TOKENS);
-      return world(call);
-    });
-    renderApp('/products');
-    await typePhoneAndSend();
-    await userEvent.type(await screen.findByLabelText(/6-number code/i), '654321');
-    await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-    await screen.findByRole('heading', { name: /my products/i });
-    expect(api.find('POST', '/auth/otp/verify')[0]!.body).toEqual({ phone: '0771234567', otp: '654321', app: 'seller' });
   });
 
   it('asks for a real phone number before sending anything', async () => {
@@ -76,7 +60,7 @@ describe('seller sign-in', () => {
     expect(api.find('POST', '/auth/otp/verify')).toHaveLength(0);
   });
 
-  it('says plainly when the number is already a customer, rider or staff account (PHONE_IN_USE)', async () => {
+  it('says plainly when the number belongs to another Blynk account (PHONE_IN_USE)', async () => {
     mockApi((call) => {
       if (call.path === '/auth/otp/request') return ok({});
       if (call.path === '/auth/otp/verify') return fail(403, 'PHONE_IN_USE', 'This number is already used for a Blynk account.');
@@ -86,7 +70,9 @@ describe('seller sign-in', () => {
     await typePhoneAndSend();
     await userEvent.type(await screen.findByLabelText(/6-number code/i), '123456');
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/already used for a blynk account/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This number is used for another Blynk account - ask Blynk to register a different number for your shop.'
+    );
     expect(tokenStore.access).toBeNull();
   });
 
@@ -152,6 +138,58 @@ describe('seller sign-in', () => {
     renderApp('/products');
     expect(await screen.findByLabelText(/your mobile number/i)).toBeInTheDocument();
     expect(tokenStore.access).toBeNull();
+  });
+});
+
+describe('invite-only sign-in', () => {
+  it('is phone and code only: no Email tab, no create account, no shop name box', async () => {
+    mockApi((call) => (call.path === '/auth/otp/request' ? ok({}) : undefined));
+    renderApp('/products');
+    expect(
+      await screen.findByText(/enter the mobile number blynk registered for your shop\. we'll text you a code\./i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/not registered yet\? contact blynk to add your shop\./i)).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByText(/create account/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
+
+    await typePhoneAndSend();
+    expect(await screen.findByLabelText(/6-number code/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/shop name/i)).not.toBeInTheDocument();
+  });
+
+  it('says clearly when Blynk has not registered the number (SELLER_NOT_REGISTERED) and offers another number', async () => {
+    const api = mockApi((call) => {
+      if (call.path === '/auth/otp/request') return ok({});
+      if (call.path === '/auth/otp/verify') return fail(403, 'SELLER_NOT_REGISTERED', 'Not a registered seller.');
+      return undefined;
+    });
+    renderApp('/products');
+    await typePhoneAndSend('0779999999');
+    await userEvent.type(await screen.findByLabelText(/6-number code/i), '123456');
+    await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This number is not registered as a Blynk seller. Ask Blynk to add your shop.');
+    expect(tokenStore.access).toBeNull();
+    expect(api.find('POST', '/auth/otp/verify')[0]!.body).toEqual({ phone: '0779999999', otp: '123456', app: 'seller' });
+
+    // Back to the phone step with the number kept, ready to correct it.
+    await userEvent.click(within(alert).getByRole('button', { name: /use a different number/i }));
+    expect(screen.getByLabelText(/your mobile number/i)).toHaveValue('0779999999');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows SELLER_NOT_REGISTERED on the phone step when the server refuses to send a code', async () => {
+    mockApi((call) =>
+      call.path === '/auth/otp/request' ? fail(403, 'SELLER_NOT_REGISTERED', 'Not a registered seller.') : undefined
+    );
+    renderApp('/products');
+    await typePhoneAndSend();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not registered as a blynk seller\. ask blynk to add your shop/i);
+    expect(screen.getByLabelText(/your mobile number/i)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByLabelText(/6-number code/i)).not.toBeInTheDocument();
   });
 });
 

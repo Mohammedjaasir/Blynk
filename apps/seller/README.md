@@ -26,10 +26,12 @@ sign-in screen shows it, labelled as a test code.
 
 ## Screens
 
-- **Sign in** - phone number, then the SMS code (`/auth/otp/request`,
-  `/auth/otp/verify` with `app: 'seller'`). First time: the shop name on the code
-  step creates the shop. Resend timer, plain-word errors (number already used,
-  wrong code, too many tries).
+- **Sign in** - invite-only: Blynk staff add the shop with its phone number in
+  Admin / Ops, and the seller signs in with that number and the SMS code
+  (`/auth/otp/request`, `/auth/otp/verify` with `app: 'seller'`). Nothing is
+  created here. Resend timer, plain-word errors (number not registered as a
+  seller `SELLER_NOT_REGISTERED`, number used for another account, wrong code,
+  too many tries).
 - **Status banner** on every screen: waiting, rejected (with the reason),
   suspended, approved. Only an APPROVED shop can add or edit products.
 - **My products** - status chips (Live, Waiting for approval, Not approved with the
@@ -39,8 +41,18 @@ sign-in screen shows it, labelled as a test code.
 - **Add / edit product** - category (sub-categories under their main), unit,
   pack size, description, barcode, your price, photo (camera or gallery).
 - **Statement** - sold, commission, earned, paid, still due; date range; per
-  product lines; payments from Blynk.
-- **My shop** - shop profile.
+  product lines; payments from Blynk. "Ask for payment" (bank or cash at the
+  store; one open request at a time, withdraw while it waits) and its history.
+- **Stock** - stock at Blynk per product and "Send stock to Blynk" notes
+  (quantity, the day it arrives, a note) shown as On its way / Received / Cancelled.
+  "Bring more" on a product card opens the same note.
+- **Best sellers** on the home screen (approved shops): this week or 30 days,
+  trend against the period before, stock left and "Restock soon".
+- **My shop** - shop profile; the sign-in number is shown read-only.
+
+Stock notes, payment requests and best sellers need the seller-requests database
+change. Until it is live the API answers 503 SELLER_REQUESTS_NOT_READY and the
+portal quietly leaves those parts out.
 
 ## Deployment
 

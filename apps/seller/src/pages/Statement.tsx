@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { sellerApi } from '../api/resources';
 import type { Statement as StatementData } from '../api/types';
-import { IconBox, IconCalendar, IconWallet } from '../components/icons';
+import { useSeller } from '../auth/SellerContext';
+import { IconBox, IconCalendar, IconCheckCircle, IconClock, IconWallet } from '../components/icons';
 import { Illustration } from '../components/Illustration';
-import { EmptyState, ErrorState, Eyebrow, PageLoading } from '../components/ui';
+import { AskPaymentSheet, PayoutRequestsPanel } from '../components/PayoutRequests';
+import { ButtonArrow, EmptyState, ErrorState, Eyebrow, PageLoading } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
+import { useSellerRequest } from '../lib/requests';
 import { formatDate, formatNumber, lkr, todayColombo } from '../lib/format';
 
 interface Range {
@@ -39,6 +42,14 @@ export function Statement() {
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [data, setData] = useState<StatementData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { canSell } = useSeller();
+  // Payment requests: hidden until the server has them (503 SELLER_REQUESTS_NOT_READY / 404).
+  const requests = useSellerRequest(sellerApi.payoutRequests, 'Could not load your payment requests.');
+  const [requestsOff, setRequestsOff] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   const load = useCallback(async (r: Range) => {
     setError(null);
@@ -72,6 +83,43 @@ export function Statement() {
   }
 
   const filtered = Boolean(applied.from || applied.to);
+  const requestsOn = requests.state === 'ready' && !requestsOff;
+  const openRequest = requestsOn ? requests.data.find((r) => r.status === 'REQUESTED') ?? null : null;
+  const lastBank = requestsOn ? requests.data.find((r) => r.method === 'BANK' && r.bank_details)?.bank_details ?? null : null;
+
+  async function afterRequest(message: string) {
+    setAsking(false);
+    setRequestError(null);
+    setNotice(message);
+    await requests.reload();
+  }
+
+  // Next to "Blynk still owes you": ask, or say why not right now.
+  function askSlot(due: number) {
+    if (!requestsOn) return null;
+    if (openRequest) {
+      return (
+        <p className="due__state">
+          <IconClock size={16} /> You asked for {lkr(openRequest.amount)} - Blynk is on it
+        </p>
+      );
+    }
+    if (!canSell) return null;
+    if (filtered) {
+      return (
+        <button type="button" className="due__switch" onClick={() => preset('all')}>
+          Show all time to ask for payment
+        </button>
+      );
+    }
+    if (due <= 0) return <p className="due__state">Nothing to ask for right now</p>;
+    return (
+      <button type="button" className="button button--primary button--cta due__ask" onClick={() => setAsking(true)}>
+        Ask for payment
+        <ButtonArrow />
+      </button>
+    );
+  }
 
   return (
     <section aria-labelledby="statement-title">
@@ -147,6 +195,7 @@ export function Statement() {
               <dd className="due__caption">
                 {data.earned > 0 ? `Blynk has paid ${paidShare(data)}% of what you earned` : 'Your earnings show here once orders are delivered'}
               </dd>
+              {requestsOn ? <dd className="due__slot">{askSlot(data.due)}</dd> : null}
             </div>
             <div className="total">
               <dt>Sold</dt>
@@ -165,6 +214,43 @@ export function Statement() {
               <dd>{lkr(data.paid)}</dd>
             </div>
           </dl>
+
+          {notice ? (
+            <p className="notice notice--ok notice--row" role="status">
+              <span className="notice__icon" aria-hidden="true">
+                <IconCheckCircle size={20} />
+              </span>
+              <span className="notice__body">{notice}</span>
+            </p>
+          ) : null}
+          {info ? (
+            <p className="notice notice--info" role="status">
+              {info}
+            </p>
+          ) : null}
+          {requestError ? <ErrorState message={requestError} /> : null}
+          {requestsOn ? (
+            <PayoutRequestsPanel
+              requests={requests.data}
+              onWithdrawn={afterRequest}
+              onError={setRequestError}
+            />
+          ) : null}
+
+          {asking && !filtered ? (
+            <AskPaymentSheet
+              due={data.due}
+              lastBankDetails={lastBank}
+              onClose={() => setAsking(false)}
+              onSent={(message) => void afterRequest(message)}
+              onAlreadyOpen={() => void requests.reload()}
+              onNotReady={() => {
+                setAsking(false);
+                setRequestsOff(true);
+                setInfo('Asking for payment is not switched on yet. Please try again in a little while.');
+              }}
+            />
+          ) : null}
 
           <div className="ledger-grid">
             <div className="ledger">

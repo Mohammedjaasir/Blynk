@@ -79,12 +79,24 @@ function tooManyMessage(err: ApiError): string {
     : 'Too many tries. Please wait a little and try again.';
 }
 
+export const SELLER_NOT_REGISTERED_MESSAGE =
+  'This number is not registered as a Blynk seller. Ask Blynk to add your shop.';
+export const PHONE_IN_USE_MESSAGE =
+  'This number is used for another Blynk account - ask Blynk to register a different number for your shop.';
+
+/** Sellers are invite-only: is this the "Blynk has not added this number" refusal? */
+export function isSellerNotRegistered(err: unknown): boolean {
+  return err instanceof ApiError && err.code === 'SELLER_NOT_REGISTERED';
+}
+
 /** Sign-in refusals in a seller's words. */
 export function signInMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
+      case 'SELLER_NOT_REGISTERED':
+        return SELLER_NOT_REGISTERED_MESSAGE;
       case 'PHONE_IN_USE':
-        return 'This number is already used for a Blynk account (as a customer, rider or staff member). Please use a different number for your shop.';
+        return PHONE_IN_USE_MESSAGE;
       case 'INVALID_OTP': {
         const left = (err.details as { remaining_attempts?: number } | undefined)?.remaining_attempts;
         return left
@@ -99,44 +111,6 @@ export function signInMessage(err: unknown): string {
         return tooManyMessage(err);
       case 'ACCOUNT_DEACTIVATED':
         return 'This account has been switched off. Please contact Blynk.';
-    }
-  }
-  return errorMessage(err, 'Something went wrong. Please try again.');
-}
-
-export const EMAIL_IN_USE_MESSAGE = 'This email already has an account - sign in instead.';
-export const WRONG_EMAIL_PASSWORD_MESSAGE = 'Wrong email or password.';
-export const EMAIL_WAIT_MESSAGE = 'Too many tries - wait a few minutes and try again.';
-export const EMAIL_DEACTIVATED_MESSAGE = 'This account is switched off - contact Blynk.';
-
-/** Is this the "email already has an account" refusal (the screen then offers to sign in)? */
-export function isEmailInUse(err: unknown): boolean {
-  return err instanceof ApiError && (err.code === 'EMAIL_IN_USE' || err.status === 409);
-}
-
-/** "Too many wrong tries - try again in 15 minutes." (5 wrong passwords lock the account for a while). */
-function lockedMessage(err: ApiError): string {
-  const minutes = Number((err.details as { retry_after_minutes?: unknown } | undefined)?.retry_after_minutes);
-  if (!Number.isFinite(minutes) || minutes <= 0) return 'Too many wrong tries - try again in a few minutes.';
-  const n = Math.ceil(minutes);
-  return `Too many wrong tries - try again in ${n} minute${n === 1 ? '' : 's'}.`;
-}
-
-/**
- * Email sign-in and sign-up refusals in a seller's words. The server answers:
- * 409 EMAIL_IN_USE, 401 INVALID_CREDENTIALS, 429 LOGIN_LOCKED (with
- * retry_after_minutes) after 5 wrong passwords, 429 TOO_MANY_REQUESTS for the
- * per-address limit, 403 ACCOUNT_DEACTIVATED and 400 VALIDATION_ERROR.
- */
-export function emailAuthMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (err.code === 'NETWORK') return NETWORK_MESSAGE;
-    if (isEmailInUse(err)) return EMAIL_IN_USE_MESSAGE;
-    if (err.code === 'ACCOUNT_DEACTIVATED') return EMAIL_DEACTIVATED_MESSAGE;
-    if (err.code === 'LOGIN_LOCKED' || err.code === 'ACCOUNT_LOCKED' || err.status === 423) return lockedMessage(err);
-    if (err.code === 'INVALID_CREDENTIALS' || err.status === 401) return WRONG_EMAIL_PASSWORD_MESSAGE;
-    if (err.code === 'TOO_MANY_REQUESTS' || err.status === 429) {
-      return retryAfterSeconds(err) ? tooManyMessage(err) : EMAIL_WAIT_MESSAGE;
     }
   }
   return errorMessage(err, 'Something went wrong. Please try again.');

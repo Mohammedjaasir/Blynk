@@ -2,19 +2,25 @@ import { apiRequest, tokenStore } from './client';
 import type {
   AuthUser,
   Category,
+  InsightDays,
+  Insights,
   LocationInput,
+  PayoutRequest,
+  PayoutRequestInput,
   ProductInput,
   ProfileInput,
   Seller,
   SellerMe,
   SellerProduct,
   Statement,
+  StockNote,
+  StockNoteInput,
   StoreInfo,
   Submission,
 } from './types';
 
 // ---------------------------------------------------------------- auth
-/** What every sign-in route returns (phone code, email sign-in and email sign-up alike). */
+/** What the sign-in route returns. */
 export interface SessionPayload {
   access_token: string;
   refresh_token: string;
@@ -29,27 +35,14 @@ export const auth = {
       auth: false,
     }),
 
-  /** `shop_name` is only used the first time a number signs in (it creates the shop). */
-  verifyOtp: (phone: string, otp: string, shopName?: string) =>
+  /**
+   * Sellers are invite-only: only a number Blynk registered for a shop signs in
+   * (403 SELLER_NOT_REGISTERED otherwise). Nothing is created here.
+   */
+  verifyOtp: (phone: string, otp: string) =>
     apiRequest<SessionPayload>('/auth/otp/verify', {
       method: 'POST',
-      body: { phone, otp, app: 'seller', ...(shopName ? { shop_name: shopName } : {}) },
-      auth: false,
-    }),
-
-  /** A new seller account with an email and password (creates the shop, which Blynk then approves). */
-  registerEmail: (email: string, password: string, shopName: string) =>
-    apiRequest<SessionPayload>('/auth/seller/register-email', {
-      method: 'POST',
-      body: { email, password, shop_name: shopName },
-      auth: false,
-    }),
-
-  /** Sign in to an existing seller account with its email and password. */
-  loginEmail: (email: string, password: string) =>
-    apiRequest<SessionPayload>('/auth/seller/login-email', {
-      method: 'POST',
-      body: { email, password },
+      body: { phone, otp, app: 'seller' },
       auth: false,
     }),
 
@@ -109,4 +102,28 @@ export const sellerApi = {
     const qs = query.toString();
     return apiRequest<Statement>(`/seller/statement${qs ? `?${qs}` : ''}`);
   },
+
+  // ------------------------------------------------- stock notes (SENT -> RECEIVED / CANCELLED)
+  stockNotes: () => apiRequest<{ notes: StockNote[] }>('/seller/stock-notes').then((r) => r.notes ?? []),
+
+  sendStockNote: (input: StockNoteInput) =>
+    apiRequest<{ note: StockNote }>('/seller/stock-notes', { method: 'POST', body: { ...input } }),
+
+  /** Cancel a note Blynk has not received yet. */
+  cancelStockNote: (id: string) =>
+    apiRequest<unknown>(`/seller/stock-notes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // ------------------------------------------------- payout requests (one open at a time)
+  payoutRequests: () =>
+    apiRequest<{ requests: PayoutRequest[] }>('/seller/payout-requests').then((r) => r.requests ?? []),
+
+  askForPayment: (input: PayoutRequestInput) =>
+    apiRequest<unknown>('/seller/payout-requests', { method: 'POST', body: { ...input } }),
+
+  /** Withdraw a request Blynk has not handled yet. */
+  withdrawPayoutRequest: (id: string) =>
+    apiRequest<unknown>(`/seller/payout-requests/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // ------------------------------------------------- insights
+  insights: (days: InsightDays) => apiRequest<Insights>(`/seller/insights?days=${days}`),
 };

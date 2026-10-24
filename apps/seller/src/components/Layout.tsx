@@ -2,12 +2,13 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useSeller } from '../auth/SellerContext';
 import markUrl from '../assets/blynk-mark.png';
-import { IconBox, IconReceipt, IconSignOut, IconStore } from './icons';
+import { IconBox, IconReceipt, IconSignOut, IconStore, IconTruck } from './icons';
 import { ErrorState, PageLoading } from './ui';
 import { StatusBanner } from './StatusBanner';
 
 const NAV = [
   { to: '/products', label: 'My products', icon: IconBox },
+  { to: '/stock', label: 'Stock', icon: IconTruck },
   { to: '/statement', label: 'Statement', icon: IconReceipt },
   { to: '/shop', label: 'My shop', icon: IconStore },
 ];

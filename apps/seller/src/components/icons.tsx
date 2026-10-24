@@ -212,3 +212,61 @@ export const IconRefresh = (p: IconProps) => (
     <path d="M20 4v4.5h-4.5" />
   </Svg>
 );
+
+export const IconTruck = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 6.5h11v9.5h-11z" />
+    <path d="M13.5 9.5h4l3 3.4V16h-7" />
+    <circle cx="7" cy="17.5" r="1.9" />
+    <circle cx="17" cy="17.5" r="1.9" />
+  </Svg>
+);
+
+export const IconTrendUp = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m4 16 5.5-5.5 3.5 3.5L20 7" />
+    <path d="M14.5 7H20v5.5" />
+  </Svg>
+);
+
+export const IconTrendDown = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m4 8 5.5 5.5 3.5-3.5L20 17" />
+    <path d="M14.5 17H20v-5.5" />
+  </Svg>
+);
+
+export const IconMinus = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 12h14" />
+  </Svg>
+);
+
+export const IconClose = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m6 6 12 12M18 6 6 18" />
+  </Svg>
+);
+
+export const IconBank = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 9.5 12 4.5l8.5 5" />
+    <path d="M5.5 10v7.5M10 10v7.5M14 10v7.5M18.5 10v7.5" />
+    <path d="M3.5 20h17" />
+  </Svg>
+);
+
+export const IconCash = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2.5" y="6.5" width="19" height="11" rx="2.4" />
+    <circle cx="12" cy="12" r="2.6" />
+    <path d="M6 9.5v5M18 9.5v5" />
+  </Svg>
+);
+
+export const IconSpark = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5Z" />
+    <path d="M18.5 16.5v4M16.5 18.5h4" />
+  </Svg>
+);

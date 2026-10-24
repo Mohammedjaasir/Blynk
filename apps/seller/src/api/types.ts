@@ -144,6 +144,81 @@ export interface Statement {
   payouts: StatementPayout[];
 }
 
+/*
+ * Seller requests (stock notes, payout requests) and insights. Create actions are
+ * for APPROVED shops only; until the database change is live every route answers
+ * 503 SELLER_REQUESTS_NOT_READY and the portal leaves these parts out.
+ */
+
+export type StockNoteStatus = 'SENT' | 'RECEIVED' | 'CANCELLED';
+
+/** "I am bringing N of this product to the Blynk store on this day." */
+export interface StockNote {
+  id: string;
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  /** YYYY-MM-DD */
+  expected_on: string;
+  note: string | null;
+  status: StockNoteStatus;
+  /** What Blynk counted when it arrived (may differ from quantity). */
+  received_quantity: number | null;
+  received_at: string | null;
+  created_at: string;
+}
+
+export interface StockNoteInput {
+  product_id: string;
+  /** 1 - 10000 */
+  quantity: number;
+  /** YYYY-MM-DD */
+  expected_on: string;
+  note?: string;
+}
+
+export type PayoutMethod = 'BANK' | 'CASH';
+export type PayoutRequestStatus = 'REQUESTED' | 'PAID' | 'DECLINED';
+
+export interface PayoutRequest {
+  id: string;
+  amount: number;
+  method: PayoutMethod;
+  bank_details: string | null;
+  note: string | null;
+  status: PayoutRequestStatus;
+  decline_reason: string | null;
+  created_at: string;
+  handled_at: string | null;
+}
+
+export interface PayoutRequestInput {
+  amount: number;
+  method: PayoutMethod;
+  bank_details?: string;
+  note?: string;
+}
+
+export type InsightDays = 7 | 30;
+
+export interface InsightProduct {
+  product_id: string;
+  name: string;
+  image_url: string | null;
+  units: number;
+  units_prev_period: number;
+  gross: number;
+  stock_on_hand: number | null;
+  days_of_stock_left: number | null;
+  restock_suggested: boolean;
+}
+
+export interface Insights {
+  period: { from: string; to: string };
+  top: InsightProduct[];
+  totals: { units: number; gross: number; units_prev: number };
+}
+
 export interface ProfileInput {
   shop_name: string;
   contact_name?: string;

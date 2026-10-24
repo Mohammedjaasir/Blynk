@@ -8,6 +8,7 @@ import { Products } from './pages/Products';
 import { Shop } from './pages/Shop';
 import { SignIn } from './pages/SignIn';
 import { Statement } from './pages/Statement';
+import { Stock } from './pages/Stock';
 
 /**
  * Route protection here is for the seller's benefit only. Every /seller
@@ -71,6 +72,7 @@ export function AppRoutes() {
           <Route path="/products" element={<Products />} />
           <Route path="/products/new" element={<ProductForm mode="new" />} />
           <Route path="/products/:id/edit" element={<ProductForm mode="edit" />} />
+          <Route path="/stock" element={<Stock />} />
           <Route path="/statement" element={<Statement />} />
           <Route path="/shop" element={<Shop />} />
         </Route>

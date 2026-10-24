@@ -2,7 +2,16 @@ import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AppRoutes } from '../App';
 import { tokenStore } from '../api/client';
-import type { Category, Seller, SellerProduct, Statement, Submission } from '../api/types';
+import type {
+  Category,
+  Insights,
+  PayoutRequest,
+  Seller,
+  SellerProduct,
+  Statement,
+  StockNote,
+  Submission,
+} from '../api/types';
 import { fail, ok, type Call, type Reply } from './mockApi';
 
 export const SELLER_USER = { id: 'u1', phone: '+94771234567', full_name: null, email: null, role: 'SELLER' };
@@ -82,6 +91,80 @@ export function statement(overrides: Partial<Statement> = {}): Statement {
       { product_id: 'p2', name: 'Mango Jam', units: 5, gross: 1000 },
     ],
     payouts: [{ id: 'po1', amount: 6000, note: 'Bank transfer', paid_on: '2026-10-15' }],
+    ...overrides,
+  };
+}
+
+export function stockNote(overrides: Partial<StockNote> = {}): StockNote {
+  return {
+    id: 'n1',
+    product_id: 'p1',
+    product_name: 'Kithul Treacle',
+    quantity: 24,
+    expected_on: '2026-10-27',
+    note: null,
+    status: 'SENT',
+    received_quantity: null,
+    received_at: null,
+    created_at: '2026-10-24T04:30:00.000Z',
+    ...overrides,
+  };
+}
+
+export function payoutRequest(overrides: Partial<PayoutRequest> = {}): PayoutRequest {
+  return {
+    id: 'pr1',
+    amount: 3000,
+    method: 'BANK',
+    bank_details: 'BOC Aluthgama, M. Nimal, 0012345678',
+    note: null,
+    status: 'REQUESTED',
+    decline_reason: null,
+    created_at: '2026-10-22T04:30:00.000Z',
+    handled_at: null,
+    ...overrides,
+  };
+}
+
+export function insights(overrides: Partial<Insights> = {}): Insights {
+  return {
+    period: { from: '2026-10-18', to: '2026-10-24' },
+    top: [
+      {
+        product_id: 'p1',
+        name: 'Kithul Treacle',
+        image_url: null,
+        units: 18,
+        units_prev_period: 12,
+        gross: 8100,
+        stock_on_hand: 6,
+        days_of_stock_left: 2.4,
+        restock_suggested: true,
+      },
+      {
+        product_id: 'p2',
+        name: 'Mango Jam',
+        image_url: null,
+        units: 9,
+        units_prev_period: 12,
+        gross: 2700,
+        stock_on_hand: 40,
+        days_of_stock_left: 31,
+        restock_suggested: false,
+      },
+      {
+        product_id: 'p3',
+        name: 'Jaggery',
+        image_url: null,
+        units: 4,
+        units_prev_period: 0,
+        gross: 1000,
+        stock_on_hand: null,
+        days_of_stock_left: null,
+        restock_suggested: false,
+      },
+    ],
+    totals: { units: 31, gross: 11800, units_prev: 24 },
     ...overrides,
   };
 }

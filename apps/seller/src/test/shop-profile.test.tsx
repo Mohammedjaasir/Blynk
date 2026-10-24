@@ -58,6 +58,15 @@ describe('shop profile', () => {
     expect(api.find('PUT', '/seller/profile')).toHaveLength(1);
   });
 
+  it('shows the number the shop signs in with, read-only (only Blynk changes it)', async () => {
+    mockApi(worldHandler());
+    renderApp('/shop');
+    const line = await screen.findByTestId('signs-in-with');
+    expect(line).toHaveTextContent(/signs in with \+94771234567/i);
+    expect(line).toHaveTextContent(/only blynk can change this number/i);
+    expect(screen.queryByRole('textbox', { name: /phone|mobile/i })).not.toBeInTheDocument();
+  });
+
   it('is read-only while suspended', async () => {
     mockApi(worldHandler({ seller: seller({ status: 'SUSPENDED' }) }));
     renderApp('/shop');

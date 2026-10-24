@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { sellerApi } from '../api/resources';
 import { useAuth } from '../auth/AuthContext';
 import { useSeller } from '../auth/SellerContext';
-import { IconCalendar, IconMail, IconPhone, IconStore } from '../components/icons';
+import { IconCalendar, IconLock, IconPhone, IconStore } from '../components/icons';
 import { LocationCard } from '../components/LocationCard';
 import { Eyebrow, Field, describedBy } from '../components/ui';
 import { errorMessage, fieldErrors } from '../lib/apiErrors';
@@ -45,7 +45,8 @@ export function Shop() {
 
   if (!seller) return null;
   const locked = seller.status === 'SUSPENDED';
-  const signedInWith = user?.phone ?? user?.email ?? null;
+  // Invite-only: the sign-in number is the one Blynk registered; only Blynk changes it.
+  const signsInWith = user?.phone ?? null;
   const chip = STATUS_CHIP[seller.status];
 
   async function save(event: FormEvent) {
@@ -110,9 +111,12 @@ export function Shop() {
           <div className="profile__main">
             <p className="profile__name">{seller.shop_name}</p>
             <p className="profile__meta">
-              {signedInWith ? (
-                <span className="profile__line">
-                  {user?.phone ? <IconPhone size={16} /> : <IconMail size={16} />} Signed in with {signedInWith}.
+              {signsInWith ? (
+                <span className="profile__line profile__line--phone" data-testid="signs-in-with">
+                  <IconPhone size={16} /> Signs in with <strong className="nowrap">{signsInWith}</strong>
+                  <span className="profile__lock">
+                    <IconLock size={13} /> Only Blynk can change this number
+                  </span>
                 </span>
               ) : null}
               <span className="profile__line">
