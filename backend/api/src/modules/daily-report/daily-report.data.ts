@@ -2,6 +2,7 @@ import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { logger } from '../../utils/logger.js';
 import { inventoryService } from '../inventory/inventory.service.js';
+import { expiryDigest } from '../expiry/index.js';
 import { ratingsReady } from '../ratings/ratings.ready.js';
 import { rangeBounds, salesReport } from '../reports/sales.service.js';
 import type { DailyReportSnapshot } from './daily-report.builder.js';
@@ -18,6 +19,7 @@ const money = (v: unknown) => Number(Number(v ?? 0).toFixed(2));
  *    the day's delivered orders (a cash tip is inside it);
  *  - new customers: CUSTOMER accounts created that day;
  *  - low stock: the "Running low" list as it is right now (not historical);
+ *  - expiring: batches already out of date or due within 7 days, right now (0 before migration 059);
  *  - rating: stars given that day (null before migration 055 or with none);
  *  - repeat orders: the day's orders placed by a repeat basket (0 before migration 054);
  *  - tips: rider tips (cash + wallet) on the day's delivered orders (null before 055).
@@ -79,7 +81,7 @@ export async function gatherDailyReportData(date: string): Promise<DailyReportSn
     }
   };
 
-  const [sales, cash, customers, extras, rating, low] = await Promise.all([salesReport(range), cashQ, customersQ, extrasQ, ratingQ(), lowQ()]);
+  const [sales, cash, customers, extras, rating, low, expiry] = await Promise.all([salesReport(range), cashQ, customersQ, extrasQ, ratingQ(), lowQ(), expiryDigest()]);
 
   return {
     date,
@@ -93,6 +95,8 @@ export async function gatherDailyReportData(date: string): Promise<DailyReportSn
     top_products: sales.top_by_quantity.slice(0, 3).map((p) => ({ name: p.name, quantity: p.quantity })),
     low_stock_count: low.count,
     low_stock_names: low.names,
+    expiring_count: expiry.expired + expiry.within7,
+    expiring_names: expiry.names,
     avg_rating: rating.avg,
     ratings_count: rating.count,
     repeat_orders: extras.repeat_orders,

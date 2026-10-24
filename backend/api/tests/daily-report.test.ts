@@ -4,6 +4,7 @@ import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { DAILY_REPORT_KEY } from '../src/modules/configuration/daily-report.js';
+import { expiryDigest } from '../src/modules/expiry/index.js';
 import { inventoryService } from '../src/modules/inventory/inventory.service.js';
 import { NotificationTemplates } from '../src/modules/notifications/notification.templates.js';
 import { buildDailyReport } from '../src/modules/daily-report/daily-report.builder.js';
@@ -184,6 +185,13 @@ describe('data gatherer (one Colombo day)', () => {
     expect(d.low_stock_count).toBe(low.counts.total);
     expect(d.low_stock_count).toBeGreaterThanOrEqual(1);
     expect(d.low_stock_names).toEqual(low.items.slice(0, 3).map((i) => i.display_name));
+  });
+
+  it('expiring is the live expiry digest: batches out of date or due within 7 days', async () => {
+    const d = await gatherDailyReportData(DAY);
+    const digest = await expiryDigest();
+    expect(d.expiring_count).toBe(digest.expired + digest.within7);
+    expect(d.expiring_names).toEqual(digest.names);
   });
 
   it('an empty day is all zeros', async () => {

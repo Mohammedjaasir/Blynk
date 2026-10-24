@@ -121,6 +121,41 @@ function presentItem(i: ItemRow) {
   };
 }
 
+/**
+ * How much of an order a caller may see. `redact` is the packing-staff view (owner, 2026-10-25): the
+ * goods and quantities only - no costs, no money totals, no supplier phone and no share text.
+ */
+export interface PoView {
+  redact?: boolean;
+}
+
+function redactItem(l: ReturnType<typeof presentItem>) {
+  const { unit_cost: _unitCost, line_total: _lineTotal, ...rest } = l;
+  return rest;
+}
+
+/** The packing-staff shape of an order: the goods and quantities, no money, no phone, no share text. */
+function presentRedactedOrder(o: OrderRow, items: ItemRow[]) {
+  const lines = items.map(presentItem);
+  const { cost_ordered: _ordered, cost_received: _received, ...units } = totalsOf(lines);
+  return {
+    id: o.id,
+    po_number: o.po_number,
+    supplier_id: o.supplier_id,
+    supplier_name: o.supplier_name,
+    status: o.status,
+    notes: o.notes,
+    expected_on: o.expected_on,
+    sent_at: o.sent_at,
+    received_at: o.received_at,
+    cancelled_at: o.cancelled_at,
+    created_at: o.created_at,
+    updated_at: o.updated_at,
+    lines: lines.map(redactItem),
+    totals: units,
+  };
+}
+
 function presentOrder(o: OrderRow, items: ItemRow[]) {
   const lines = items.map(presentItem);
   const phone = publicPhone(o.supplier_phone);
@@ -171,6 +206,14 @@ async function detail(ex: Exec, id: string) {
   const order = await orderRow(ex, id);
   if (!order) throw new AppError('Purchase order not found.', 404, 'PURCHASE_ORDER_NOT_FOUND');
   return presentOrder(order, await itemRows(ex, id));
+}
+
+/** detail(), or its packing-staff shape when the view asks for it. */
+async function detailFor(ex: Exec, id: string, view: PoView) {
+  if (!view.redact) return detail(ex, id);
+  const order = await orderRow(ex, id);
+  if (!order) throw new AppError('Purchase order not found.', 404, 'PURCHASE_ORDER_NOT_FOUND');
+  return presentRedactedOrder(order, await itemRows(ex, id));
 }
 
 async function lockedOrder(trx: Trx, id: string): Promise<OrderRow> {
@@ -341,10 +384,16 @@ export async function patchPurchaseOrder(id: string, input: PatchPurchaseOrderIn
 // Read
 // ----------------------------------------------------------------------------
 
-export async function listPurchaseOrders(q: ListPurchaseOrdersQuery) {
+/**
+ * Without a status filter the admin list shows everything; the packing-staff view (`redact`) shows
+ * only what can be received (SENT and PARTIAL) and no money.
+ */
+export async function listPurchaseOrders(q: ListPurchaseOrdersQuery, view: PoView = {}) {
+  const status = q.status ?? (view.redact ? 'RECEIVABLE' : 'ALL');
   const where = [sql`TRUE`];
-  if (q.status === 'OPEN') where.push(sql`po.status IN ('DRAFT', 'SENT', 'PARTIAL')`);
-  else if (q.status !== 'ALL') where.push(sql`po.status = ${q.status}`);
+  if (status === 'OPEN') where.push(sql`po.status IN ('DRAFT', 'SENT', 'PARTIAL')`);
+  else if (status === 'RECEIVABLE') where.push(sql`po.status IN ('SENT', 'PARTIAL')`);
+  else if (status !== 'ALL') where.push(sql`po.status = ${status}`);
   if (q.supplier_id) where.push(sql`po.supplier_id = ${q.supplier_id}`);
   if (q.search) {
     const like = `%${q.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -390,7 +439,7 @@ export async function listPurchaseOrders(q: ListPurchaseOrdersQuery) {
       line_count: r.line_count,
       units_ordered: Number(r.units_ordered),
       units_received: Number(r.units_received),
-      cost_ordered: money(r.cost_ordered),
+      ...(view.redact ? {} : { cost_ordered: money(r.cost_ordered) }),
     })),
     page: q.page,
     limit: q.limit,
@@ -398,8 +447,8 @@ export async function listPurchaseOrders(q: ListPurchaseOrdersQuery) {
   };
 }
 
-export async function getPurchaseOrder(id: string) {
-  return { purchase_order: await detail(db, id) };
+export async function getPurchaseOrder(id: string, view: PoView = {}) {
+  return { purchase_order: await detailFor(db, id, view) };
 }
 
 // ----------------------------------------------------------------------------
@@ -449,7 +498,17 @@ export interface ReceivedLine {
  * arrived in full (or `close_short`), else PARTIAL. One transaction: any failure leaves the order
  * and the stock exactly as they were.
  */
-export async function receivePurchaseOrder(id: string, input: ReceivePurchaseOrderInput, actor: AuditActor) {
+export async function receivePurchaseOrder(
+  id: string,
+  rawInput: ReceivePurchaseOrderInput,
+  actor: AuditActor,
+  view: PoView = {}
+) {
+  // The packing-staff view cannot touch costs: whatever they send, the line cost stays as ordered and
+  // the product's purchase cost is never updated. Stock still moves through the ledger path below.
+  const input: ReceivePurchaseOrderInput = view.redact
+    ? { ...rawInput, lines: rawInput.lines.map((l) => ({ item_id: l.item_id, received_qty: l.received_qty })) }
+    : rawInput;
   const received = await db.transaction().execute(async (trx) => {
     const order = await lockedOrder(trx, id);
     if (order.status !== 'SENT' && order.status !== 'PARTIAL') {
@@ -588,7 +647,7 @@ export async function receivePurchaseOrder(id: string, input: ReceivePurchaseOrd
 
   logger.info({ purchaseOrderId: id, lines: received.length, by: actor.actorId }, 'Purchase order received');
   return {
-    purchase_order: await detail(db, id),
+    purchase_order: await detailFor(db, id, view),
     received: received.filter((r) => r.received_qty > 0),
     skipped: received.filter((r) => r.received_qty > 0 && !r.stock_added),
   };

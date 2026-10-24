@@ -18,6 +18,8 @@ const full: DailyReportSnapshot = {
   ],
   low_stock_count: 6,
   low_stock_names: ['Milk 1L', 'Eggs', 'Rice'],
+  expiring_count: 0,
+  expiring_names: [],
   avg_rating: 4.64,
   ratings_count: 12,
   repeat_orders: 3,
@@ -38,6 +40,13 @@ describe('buildDailyReport', () => {
     expect(smsParts(t)).toBeLessThanOrEqual(3);
   });
 
+  it('adds an Expiring line (expired + due within 7 days) with the most urgent names', () => {
+    const t = buildDailyReport({ ...full, expiring_count: 4, expiring_names: ['Curd', 'Yoghurt', 'Bread'] });
+    expect(t).toMatch(/Low stock 6 \(Milk 1L, Eggs, Rice\)\. Expiring 4 \(Curd, Yoghurt\)\./);
+    expect(buildDailyReport({ ...full, expiring_count: 2, expiring_names: [] })).toMatch(/Expiring 2\./);
+    expect(buildDailyReport(full)).not.toMatch(/Expiring/);
+  });
+
   it('an empty day is short and still sensible', () => {
     const t = buildDailyReport({
       ...full,
@@ -51,6 +60,8 @@ describe('buildDailyReport', () => {
       top_products: [],
       low_stock_count: 0,
       low_stock_names: [],
+      expiring_count: 0,
+      expiring_names: [],
       avg_rating: null,
       ratings_count: 0,
       repeat_orders: 0,

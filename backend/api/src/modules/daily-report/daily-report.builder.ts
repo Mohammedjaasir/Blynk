@@ -28,6 +28,10 @@ export interface DailyReportSnapshot {
   top_products: { name: string; quantity: number }[];
   low_stock_count: number;
   low_stock_names: string[];
+  /** Stock batches already out of date or expiring within 7 days (0 before migration 059). */
+  expiring_count: number;
+  /** The most urgent few of those, by product name. */
+  expiring_names: string[];
   /** Average of the stars given that day; null when nobody rated (or ratings are not set up yet). */
   avg_rating: number | null;
   ratings_count: number;
@@ -90,6 +94,7 @@ export function smsParts(text: string): number {
 interface Shape {
   topN: number;
   lowN: number;
+  expiryN: number;
   rating: boolean;
   repeat: boolean;
   tips: boolean;
@@ -110,6 +115,10 @@ function compose(s: DailyReportSnapshot, shape: Shape): string {
     const names = s.low_stock_names.slice(0, shape.lowN).map((n) => shortName(n, shape.nameMax));
     parts.push(`Low stock ${s.low_stock_count}${names.length ? ` (${names.join(', ')})` : ''}.`);
   }
+  if (s.expiring_count > 0) {
+    const names = s.expiring_names.slice(0, shape.expiryN).map((n) => shortName(n, shape.nameMax));
+    parts.push(`Expiring ${s.expiring_count}${names.length ? ` (${names.join(', ')})` : ''}.`);
+  }
   if (shape.rating && s.avg_rating !== null && s.ratings_count > 0) parts.push(`Rating ${s.avg_rating.toFixed(1)} (${s.ratings_count}).`);
   if (shape.repeat && s.repeat_orders > 0) parts.push(`Repeat orders ${s.repeat_orders}.`);
   if (shape.tips && s.tips_lkr !== null && s.tips_lkr > 0) parts.push(`Tips LKR ${lkr(s.tips_lkr)}.`);
@@ -118,14 +127,14 @@ function compose(s: DailyReportSnapshot, shape: Shape): string {
 
 /** From the fullest text to the barest: the first that fits wins. */
 const SHAPES: Shape[] = [
-  { topN: 3, lowN: 3, rating: true, repeat: true, tips: true, nameMax: 18 },
-  { topN: 3, lowN: 3, rating: true, repeat: true, tips: false, nameMax: 18 },
-  { topN: 3, lowN: 3, rating: true, repeat: false, tips: false, nameMax: 18 },
-  { topN: 3, lowN: 3, rating: false, repeat: false, tips: false, nameMax: 14 },
-  { topN: 3, lowN: 2, rating: false, repeat: false, tips: false, nameMax: 12 },
-  { topN: 2, lowN: 1, rating: false, repeat: false, tips: false, nameMax: 10 },
-  { topN: 1, lowN: 0, rating: false, repeat: false, tips: false, nameMax: 10 },
-  { topN: 0, lowN: 0, rating: false, repeat: false, tips: false, nameMax: 10 },
+  { topN: 3, lowN: 3, expiryN: 2, rating: true, repeat: true, tips: true, nameMax: 18 },
+  { topN: 3, lowN: 3, expiryN: 2, rating: true, repeat: true, tips: false, nameMax: 18 },
+  { topN: 3, lowN: 3, expiryN: 2, rating: true, repeat: false, tips: false, nameMax: 18 },
+  { topN: 3, lowN: 3, expiryN: 2, rating: false, repeat: false, tips: false, nameMax: 14 },
+  { topN: 3, lowN: 2, expiryN: 1, rating: false, repeat: false, tips: false, nameMax: 12 },
+  { topN: 2, lowN: 1, expiryN: 1, rating: false, repeat: false, tips: false, nameMax: 10 },
+  { topN: 1, lowN: 0, expiryN: 0, rating: false, repeat: false, tips: false, nameMax: 10 },
+  { topN: 0, lowN: 0, expiryN: 0, rating: false, repeat: false, tips: false, nameMax: 10 },
 ];
 
 /** The SMS text for a day. Never longer than REPORT_MAX_CHARS. */

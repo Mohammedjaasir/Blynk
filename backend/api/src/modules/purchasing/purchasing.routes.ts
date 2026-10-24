@@ -27,7 +27,9 @@ import { reorderSuggestions } from './reorder.service.js';
 /**
  * Reorder suggestions and supplier purchase orders (owner, 2026-10-25; migration 058), mounted at
  * /api/v1/admin next to the other admin routes. ADMIN and OPERATIONS (checked per route: this
- * router sits in front of the rest of /admin). Every route answers 503 PURCHASING_NOT_READY until
+ * router sits in front of the rest of /admin). PACKING_STAFF (the Inventory app's Deliveries page) may
+ * use only the order list (SENT / PARTIAL unless a status is given), one order and the receive, and
+ * sees no money. Every route answers 503 PURCHASING_NOT_READY until
  * the migration has run.
  *
  *   GET   /admin/reorder-suggestions?days=14|28&cover_days=7&lead_days=1   what to buy, grouped by supplier
@@ -42,6 +44,11 @@ import { reorderSuggestions } from './reorder.service.js';
 export const adminPurchasingRouter = Router();
 
 const staff = [requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), requirePurchasingReady];
+// Packing staff (the Inventory app's Deliveries page) may only list, open and receive orders.
+const receivers = [requireAuth, requireRoles(['ADMIN', 'OPERATIONS', 'PACKING_STAFF']), requirePurchasingReady];
+
+/** Packing staff get the goods without the money (no costs, money totals, supplier phone or share text). */
+const viewOf = (req: Request) => ({ redact: req.user!.role === 'PACKING_STAFF' });
 
 const actorOf = (req: Request): AuditActor => ({
   actorId: req.user!.id,
@@ -70,10 +77,10 @@ adminPurchasingRouter.get(
 
 adminPurchasingRouter.get(
   '/purchase-orders',
-  ...staff,
+  ...receivers,
   validate({ query: listPurchaseOrdersQuerySchema }),
   handle(async (req, res) => {
-    res.status(200).json({ success: true, data: await listPurchaseOrders(req.query as never) });
+    res.status(200).json({ success: true, data: await listPurchaseOrders(req.query as never, viewOf(req)) });
   })
 );
 
@@ -88,10 +95,10 @@ adminPurchasingRouter.post(
 
 adminPurchasingRouter.get(
   '/purchase-orders/:id',
-  ...staff,
+  ...receivers,
   validate({ params: idParamSchema }),
   handle(async (req, res) => {
-    res.status(200).json({ success: true, data: await getPurchaseOrder(req.params.id as string) });
+    res.status(200).json({ success: true, data: await getPurchaseOrder(req.params.id as string, viewOf(req)) });
   })
 );
 
@@ -115,10 +122,13 @@ adminPurchasingRouter.post(
 
 adminPurchasingRouter.post(
   '/purchase-orders/:id/receive',
-  ...staff,
+  ...receivers,
   validate({ params: idParamSchema, body: receivePurchaseOrderSchema }),
   handle(async (req, res) => {
-    res.status(200).json({ success: true, data: await receivePurchaseOrder(req.params.id as string, req.body, actorOf(req)) });
+    res.status(200).json({
+      success: true,
+      data: await receivePurchaseOrder(req.params.id as string, req.body, actorOf(req), viewOf(req)),
+    });
   })
 );
 

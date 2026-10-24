@@ -448,19 +448,225 @@ describe('guard and roles', () => {
     }
   });
 
-  it('Admin and Operations may use it; customers, Inventory staff and guests may not', async () => {
+  it('Admin and Operations may use all of it; customers, riders and guests may not use any of it', async () => {
     expect((await get('/reorder-suggestions', opsToken)).status).toBe(200);
     expect((await get('/purchase-orders', opsToken)).status).toBe(200);
     const made = await createPo({ lines: [{ product_id: empty.productId, ordered_qty: 1 }] }, opsToken);
     expect(made.status).toBe(201);
-    await post(`/purchase-orders/${made.body.data.purchase_order.id}/cancel`, { reason: 'test' }, opsToken);
+    const madeId = made.body.data.purchase_order.id as string;
+    await post(`/purchase-orders/${madeId}/cancel`, { reason: 'test' }, opsToken);
 
-    for (const token of [tokens.customer, tokens.staff, tokens.rider]) {
+    for (const token of [tokens.customer, tokens.rider]) {
       expect((await get('/reorder-suggestions', token)).status).toBe(403);
       expect((await get('/purchase-orders', token)).status).toBe(403);
+      expect((await get(`/purchase-orders/${madeId}`, token)).status).toBe(403);
+      expect((await post(`/purchase-orders/${madeId}/receive`, { lines: [{ item_id: madeId, received_qty: 1 }] }, token)).status).toBe(403);
       expect((await post('/purchase-orders', { lines: [{ product_id: empty.productId, ordered_qty: 1 }] }, token)).status).toBe(403);
     }
     expect((await request(app).get(`${A}/purchase-orders`)).status).toBe(401);
     expect((await request(app).get(`${A}/reorder-suggestions`)).status).toBe(401);
+  });
+});
+
+describe('packing staff (Deliveries in the Inventory app)', () => {
+  const staffGet = (path: string) => get(path, tokens.staff);
+  const staffReceive = (id: string, body: object) => post(`/purchase-orders/${id}/receive`, body, tokens.staff);
+  const MONEY_KEYS = ['unit_cost', 'line_total', 'cost_ordered', 'cost_received', 'supplier_phone', 'share', 'whatsapp_url'];
+
+  /** A sent order of two lines (costs 100 / 40) from a supplier with a phone. */
+  async function sentOrder(qtyA = 10, qtyB = 4) {
+    const a = await orders.product({ onHand: 0 });
+    const b = await orders.product({ onHand: 0 });
+    const created = await createPo({
+      supplier_id: supPhone,
+      notes: 'Dry goods',
+      lines: [
+        { product_id: a.productId, ordered_qty: qtyA, unit_cost: 100 },
+        { product_id: b.productId, ordered_qty: qtyB, unit_cost: 40 },
+      ],
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const po = created.body.data.purchase_order;
+    expect((await post(`/purchase-orders/${po.id}/send`)).status).toBe(200);
+    return {
+      po,
+      a,
+      b,
+      itemA: po.lines.find((l: any) => l.product_id === a.productId).id as string,
+      itemB: po.lines.find((l: any) => l.product_id === b.productId).id as string,
+    };
+  }
+
+  const keysDeep = (value: unknown, found = new Set<string>()): Set<string> => {
+    if (Array.isArray(value)) value.forEach((v) => keysDeep(v, found));
+    else if (value && typeof value === 'object') {
+      for (const [k, v] of Object.entries(value)) {
+        found.add(k);
+        keysDeep(v, found);
+      }
+    }
+    return found;
+  };
+
+  it('may list, open and receive; creating, editing, sending, cancelling and suggestions stay Admin/Operations', async () => {
+    const { po, a, itemA } = await sentOrder();
+    expect((await staffGet('/purchase-orders')).status).toBe(200);
+    expect((await staffGet(`/purchase-orders/${po.id}`)).status).toBe(200);
+
+    expect((await get('/reorder-suggestions', tokens.staff)).status).toBe(403);
+    expect((await post('/purchase-orders', { lines: [{ product_id: a.productId, ordered_qty: 1 }] }, tokens.staff)).status).toBe(403);
+    expect((await patch(`/purchase-orders/${po.id}`, { notes: 'x' }, tokens.staff)).status).toBe(403);
+    expect((await post(`/purchase-orders/${po.id}/send`, {}, tokens.staff)).status).toBe(403);
+    expect((await post(`/purchase-orders/${po.id}/cancel`, { reason: 'x' }, tokens.staff)).status).toBe(403);
+    const still = (await get(`/purchase-orders/${po.id}`)).body.data.purchase_order;
+    expect(still.status).toBe('SENT');
+    expect(still.notes).toBe('Dry goods');
+
+    expect((await staffReceive(po.id, { lines: [{ item_id: itemA, received_qty: 1 }] })).status).toBe(200);
+    expect((await request(app).get(`${A}/purchase-orders/${po.id}`)).status).toBe(401);
+  });
+
+  it('lists only receivable orders (sent / part received) by default, any status when asked, with no money', async () => {
+    const open = await sentOrder();
+    const draft = await createPo({ supplier_id: sup, lines: [{ product_id: open.a.productId, ordered_qty: 2 }] });
+    const closed = await sentOrder(2, 2);
+    expect((await post(`/purchase-orders/${closed.po.id}/cancel`, { reason: 'test' })).status).toBe(200);
+    // part received -> still receivable
+    expect((await staffReceive(open.po.id, { lines: [{ item_id: open.itemA, received_qty: 3 }] })).status).toBe(200);
+
+    const list = await staffGet('/purchase-orders?limit=100');
+    expect(list.status).toBe(200);
+    const rows = list.body.data.purchase_orders as { id: string; status: string }[];
+    expect(rows.every((r) => r.status === 'SENT' || r.status === 'PARTIAL')).toBe(true);
+    expect(rows.map((r) => r.id)).toContain(open.po.id);
+    expect(rows.find((r) => r.id === open.po.id)!.status).toBe('PARTIAL');
+    expect(rows.map((r) => r.id)).not.toContain(draft.body.data.purchase_order.id);
+    expect(rows.map((r) => r.id)).not.toContain(closed.po.id);
+    expect(rows.find((r) => r.id === open.po.id)).toMatchObject({
+      supplier_name: expect.any(String),
+      line_count: 2,
+      units_ordered: 14,
+      units_received: 3,
+    });
+    for (const key of MONEY_KEYS) expect(keysDeep(list.body.data).has(key), key).toBe(false);
+
+    const cancelled = await staffGet('/purchase-orders?status=CANCELLED&limit=100');
+    expect((cancelled.body.data.purchase_orders as { id: string }[]).map((r) => r.id)).toContain(closed.po.id);
+    // the admin default is still everything
+    const adminList = await get('/purchase-orders?limit=100');
+    const adminRows = adminList.body.data.purchase_orders as { id: string }[];
+    expect(adminRows.map((r) => r.id)).toEqual(expect.arrayContaining([draft.body.data.purchase_order.id, closed.po.id, open.po.id]));
+    expect(adminRows[0]).toHaveProperty('cost_ordered');
+    // ?status=RECEIVABLE (what the Deliveries page asks for) gives Admin the same SENT / PARTIAL list, with costs
+    const receivable = await get('/purchase-orders?status=RECEIVABLE&limit=100');
+    const receivableRows = receivable.body.data.purchase_orders as { id: string; status: string }[];
+    expect(receivableRows.every((r) => r.status === 'SENT' || r.status === 'PARTIAL')).toBe(true);
+    expect(receivableRows.map((r) => r.id)).toContain(open.po.id);
+    expect(receivableRows.map((r) => r.id)).not.toContain(draft.body.data.purchase_order.id);
+    expect(receivableRows[0]).toHaveProperty('cost_ordered');
+  });
+
+  it('the order detail hides every cost, total, supplier phone and the share text, but keeps the goods', async () => {
+    const { po, a } = await sentOrder();
+    const adminView = (await get(`/purchase-orders/${po.id}`)).body.data.purchase_order;
+    expect(adminView.supplier_phone).toBeTruthy();
+    expect(adminView.share.text).toBeTruthy();
+    expect(adminView.lines[0]).toHaveProperty('unit_cost');
+
+    const res = await staffGet(`/purchase-orders/${po.id}`);
+    expect(res.status).toBe(200);
+    const view = res.body.data.purchase_order;
+    for (const key of MONEY_KEYS) expect(keysDeep(res.body.data).has(key), key).toBe(false);
+    expect(JSON.stringify(res.body)).not.toContain(adminView.supplier_phone);
+    expect(view).toMatchObject({
+      id: po.id,
+      po_number: po.po_number,
+      status: 'SENT',
+      notes: 'Dry goods',
+      supplier_name: expect.stringContaining('Phone Supplier'),
+    });
+    expect(view.totals).toEqual({ lines: 2, units_ordered: 14, units_received: 0 });
+    const line = view.lines.find((l: any) => l.product_id === a.productId);
+    expect(line).toMatchObject({ ordered_qty: 10, received_qty: 0, remaining_qty: 10, stock_counted: true });
+    expect(line.name).toBeTruthy();
+    expect((await staffGet('/purchase-orders/00000000-0000-4000-8000-000000000000')).status).toBe(404);
+  });
+
+  it('receiving adds stock through the ledger, audits the packing user, and cannot change costs; close_short works', async () => {
+    const { po, a, b, itemA, itemB } = await sentOrder();
+    const costA = await costOf(a);
+    const ledgerBefore = (await ledger(a)).length;
+
+    const first = await staffReceive(po.id, {
+      // a packing user trying to slip in a cost change
+      lines: [{ item_id: itemA, received_qty: 6, unit_cost: 1, update_product_cost: true }],
+    });
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect(first.body.data.purchase_order.status).toBe('PARTIAL');
+    expect(first.body.data.received).toHaveLength(1);
+    expect(first.body.data.received[0]).toMatchObject({ stock_added: true, stock_on_hand: 6, received_qty: 6 });
+    for (const key of MONEY_KEYS) expect(keysDeep(first.body.data).has(key), key).toBe(false);
+
+    expect(await stockOf(a)).toBe(6);
+    const rows = await ledger(a);
+    expect(rows).toHaveLength(ledgerBefore + 1);
+    expect(rows[rows.length - 1]).toMatchObject({ quantity_delta: 6, previous_quantity: 0, new_quantity: 6, created_by_user_id: users.staff.id });
+    expect(rows[rows.length - 1]!.notes).toContain(po.po_number);
+    await orders.expectLedgerChain(a);
+
+    // costs untouched: the product cost, and the line cost as the admin sees it
+    expect(await costOf(a)).toBe(costA);
+    const adminLines = (await get(`/purchase-orders/${po.id}`)).body.data.purchase_order.lines;
+    expect(adminLines.find((l: any) => l.id === itemA)).toMatchObject({ unit_cost: 100, received_qty: 6, remaining_qty: 4 });
+    expect(await auditActions(a.productId)).not.toContain('PURCHASE_ORDER_COST_UPDATED');
+
+    // the audit row names the packing user, like the admin path
+    const audit = (
+      await pool.query(`SELECT actor_user_id, new_values FROM audit_logs WHERE entity_id = $1 AND action = 'PURCHASE_ORDER_RECEIVED'`, [po.id])
+    ).rows;
+    expect(audit).toHaveLength(1);
+    expect(audit[0].actor_user_id).toBe(users.staff.id);
+    expect(audit[0].new_values).toMatchObject({ status: 'PARTIAL', po_number: po.po_number, close_short: false });
+    expect(audit[0].new_values.cost_updates).toEqual([]);
+
+    // the other line arrives short and the order is closed short
+    const second = await staffReceive(po.id, { lines: [{ item_id: itemB, received_qty: 2 }], close_short: true });
+    expect(second.status, JSON.stringify(second.body)).toBe(200);
+    expect(second.body.data.purchase_order.status).toBe('RECEIVED');
+    expect(second.body.data.purchase_order.received_at).toBeTruthy();
+    expect(await stockOf(b)).toBe(2);
+    expect(await auditActions(po.id)).toEqual(['PURCHASE_ORDER_CREATED', 'PURCHASE_ORDER_SENT', 'PURCHASE_ORDER_RECEIVED', 'PURCHASE_ORDER_RECEIVED']);
+
+    // closed now: it leaves the packing list and cannot be received again
+    const listed = (await staffGet('/purchase-orders?limit=100')).body.data.purchase_orders as { id: string }[];
+    expect(listed.map((r) => r.id)).not.toContain(po.id);
+    expect((await staffReceive(po.id, { lines: [{ item_id: itemA, received_qty: 1 }] })).status).toBe(409);
+    expect(await stockOf(a)).toBe(6);
+  });
+
+  it('refuses a draft, bad lines and nothing-to-receive without moving stock', async () => {
+    const { po, a, itemA } = await sentOrder();
+    const draft = await createPo({ supplier_id: sup, lines: [{ product_id: a.productId, ordered_qty: 2 }] });
+    const draftPo = draft.body.data.purchase_order;
+    const before = await stockOf(a);
+    expect((await staffReceive(draftPo.id, { lines: [{ item_id: draftPo.lines[0].id, received_qty: 1 }] })).status).toBe(409);
+    expect((await staffReceive(po.id, { lines: [{ item_id: itemA, received_qty: 0 }] })).body.error.code).toBe('NOTHING_TO_RECEIVE');
+    expect((await staffReceive(po.id, { lines: [{ item_id: '00000000-0000-4000-8000-000000000000', received_qty: 1 }] })).body.error.code).toBe(
+      'ITEM_NOT_ON_ORDER'
+    );
+    expect((await staffReceive(po.id, { lines: [{ item_id: itemA, received_qty: -2 }] })).status).toBe(400);
+    expect(await stockOf(a)).toBe(before);
+  });
+
+  it('is still 503 before migration 058', async () => {
+    setPurchasingReadyForTests(false);
+    try {
+      const id = '00000000-0000-4000-8000-000000000000';
+      expect((await staffGet('/purchase-orders')).status).toBe(503);
+      expect((await staffGet(`/purchase-orders/${id}`)).status).toBe(503);
+      expect((await staffReceive(id, { lines: [{ item_id: id, received_qty: 1 }] })).status).toBe(503);
+    } finally {
+      setPurchasingReadyForTests(null);
+    }
   });
 });

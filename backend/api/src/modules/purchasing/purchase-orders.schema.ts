@@ -77,7 +77,8 @@ export const patchPurchaseOrderSchema = z
 export type PatchPurchaseOrderInput = z.infer<typeof patchPurchaseOrderSchema>;
 
 export const listPurchaseOrdersQuerySchema = z.object({
-  status: z.enum(['ALL', 'OPEN', 'DRAFT', 'SENT', 'PARTIAL', 'RECEIVED', 'CANCELLED']).default('ALL'),
+  /** Omitted: everything for Admin and Operations, only SENT and PARTIAL orders for packing staff. */
+  status: z.enum(['ALL', 'OPEN', 'RECEIVABLE', 'DRAFT', 'SENT', 'PARTIAL', 'RECEIVED', 'CANCELLED']).optional(),
   supplier_id: z.string().uuid().optional(),
   search: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).default(1),
