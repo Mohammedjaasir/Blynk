@@ -92,7 +92,9 @@ function tokens(c) {
     whatsappUs: wa('WhatsApp us'),
     phoneLink: tel('phone'),
     whatsappLink: wa('WhatsApp'),
-    hours: esc(c.hours),
+    // The hours come from the API Admin / Ops control (store-hours.js fills the data-hours spans in; owner,
+    // 2026-10-20: no typed-in opening hours). The words written here only show if that script cannot run.
+    hours: '<span data-hours="dash">8 AM – 9 PM</span>, <span data-hours="days-lower">every day</span>',
     supportEmail: mail(c.supportEmail),
     privacyEmail: mail(privacyEmail),
     registeredAddress: esc(c.registeredAddress || ''),
@@ -261,6 +263,7 @@ ${body}
       </nav>
     </div>
   </footer>
+  <script src="/store-hours.js?v=20261020a" defer></script>
 </body>
 </html>
 `;

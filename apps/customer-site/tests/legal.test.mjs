@@ -67,7 +67,9 @@ test('the phone number is never shown as text on the legal pages, only in the Ca
     assert.ok(!text.includes('71 710 7374'), `${n}: the number is visible`);
     assert.match(pages[n], /<a href="tel:\+94717107374">Call us<\/a>/, `${n}: Call us link`);
     assert.match(pages[n], /<a href="https:\/\/wa\.me\/94717107374" target="_blank" rel="noopener">WhatsApp us<\/a>/, `${n}: WhatsApp us link`);
-    assert.match(text, /Hours: 8:00 am – 9:00 pm, daily/, `${n}: hours`);
+    // the hours are live (store-hours.js fills them from the API; owner 2026-10-20): the written words are only the fallback
+    assert.match(text, /Hours:s+8 AM – 9 PMs*, every day/, `${n}: hours`);
+    assert.match(pages[n], /<span data-hours="dash">/, `${n}: live hours marker`);
   }
   // The same number as the home page's support links.
   const home = read('index.html');
@@ -183,7 +185,8 @@ test('each page: owner title, Last updated date, a contents list that matches it
     assert.ok(toc.length >= 7, `${n}: ${toc.length} contents entries`);
     assert.deepEqual(toc, sections, `${n}: contents list and sections differ`);
     assert.equal(new Set(sections).size, sections.length, `${n}: duplicate ids`);
-    assert.doesNotMatch(html, /<script/i, `${n} has a script`);
+    // no tracking or other scripts - the one exception is the live opening hours (store-hours.js)
+    assert.deepEqual([...html.matchAll(/<script[^>]*>/gi)].map((m) => m[0].replace(/\?v=\d+[a-z]?/, '')), ['<script src="/store-hours.js" defer>'], `${n}: scripts`);
   }
   // The owner's tables.
   assert.equal((pages.privacy.match(/<table class="legal-table"/g) || []).length, 1);
