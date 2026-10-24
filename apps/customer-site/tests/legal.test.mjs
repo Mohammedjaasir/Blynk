@@ -172,12 +172,12 @@ test('once the owner fills in the details they appear on the pages', () => {
 
 test('each page: owner title, Last updated date, a contents list that matches its sections, no tracking', () => {
   const c = readConfig();
-  assert.equal(c.lastUpdated, '2026-10-15');
+  assert.equal(c.lastUpdated, '2026-10-25');
   const titles = { terms: 'Terms and Conditions', privacy: 'Privacy Policy', refunds: 'Return, Refund and Cancellation Policy' };
   for (const n of NAMES) {
     const html = pages[n];
     assert.match(html, new RegExp(`<h1>${titles[n].replace(/[,]/g, '\\$&')}</h1>`), n);
-    assert.match(html, /<p class="legal-meta">Last updated: <time datetime="2026-10-15">15 October 2026<\/time><\/p>/, n);
+    assert.match(html, /<p class="legal-meta">Last updated: <time datetime="2026-10-25">25 October 2026<\/time><\/p>/, n);
     const toc = [...html.match(/<nav class="legal-toc"[\s\S]*?<\/nav>/)[0].matchAll(/href="#([^"]+)"/g)].map((m) => m[1]);
     const sections = [...html.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]);
     assert.ok(toc.length >= 7, `${n}: ${toc.length} contents entries`);

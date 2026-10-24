@@ -6,16 +6,22 @@ This policy explains how **{{business}}**, operating Blynk.lk, collects and uses
 | --- | --- | --- |
 | Identity and contact | Name, mobile number, email | You, when you sign up or order |
 | Delivery | Address, landmarks, map pin, delivery notes | You |
+| Location | The precise location of your phone, only when you tap "Use my current location" to set your delivery spot. We do not track your location in the background | Your phone, with your permission |
+| Date of birth | Day and month, if you give it for the birthday offer | You |
 | Orders | Items bought, amounts, order history, Blynk Points and Blynk Wallet balance | Your use of the Platform |
 | Payment | Payment method, transaction reference (not full card numbers) | You and our payment provider |
 | Reloads and bills | Mobile, account or DTH numbers you enter | You |
 | Device and usage | IP address, browser, device type, pages viewed, cookies | Your device, Google Tag Manager and analytics tools |
+| Appointments | Name, phone number and notes for a doctor or dental appointment you book through the app | You |
+| Ratings and requests | Star ratings and comments on an order, products you ask us to stock, feedback you send | You |
+| Notifications | A device token, so we can send you order updates and offers you agreed to | Your phone, with your permission |
 | Communications | Calls, WhatsApp messages, support requests | You |
 
 ### 2. How we use it
 
 1. To process, confirm and deliver your orders, including calling you before packing.
 2. To take payment, issue refunds to your Blynk Wallet and manage Blynk Points.
+   While a delivery is on its way, to show you your rider's position on the map and an estimated arrival time.
 3. To process mobile reloads and bill payments you request.
 4. To provide customer support and handle returns and complaints.
 5. To prevent fraud and keep the Platform secure.
@@ -33,7 +39,9 @@ We use your data because it is needed to perform our contract with you (your ord
 We never sell your personal data. We share only what is needed with:
 
 - Our delivery riders — your name, phone number and address for that order
-- Payment providers and banks — to process payments
+- Payment providers and banks (for example PayHere) — to process online payments
+- Doctors and clinics — your name, phone number and notes, only for an appointment you book
+- Google (Firebase) — to deliver app notifications to your phone
 - Reload and bill payment providers — the number and amount you submit
 - Hosting, SMS, WhatsApp and IT service providers that run the Platform for us
 - Analytics and advertising providers such as Google and Meta, through cookies and tags
@@ -50,6 +58,7 @@ We use cookies and Google Tag Manager to keep you logged in, remember your cart,
 - Account data — while your account is active, and up to **12 months** after you close it
 - Order and payment records — up to **6 years** for tax and accounting
 - Call and chat records — up to **6 months**
+- Appointment records — up to **12 months** after the appointment
 - Marketing data — until you opt out
 
 ### 7. Security
