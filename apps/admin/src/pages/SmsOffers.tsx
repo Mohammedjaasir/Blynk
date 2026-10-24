@@ -1,13 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { smsOffers as smsOffersApi } from '../api/resources';
-import type { SmsLanguage, SmsOffer, SmsOfferAudience, SmsOfferEstimate } from '../api/types';
+import type { SmsLanguage, SmsOffer, SmsOfferEstimate } from '../api/types';
+import { CustomerGroupPicker } from '../components/CustomerGroupPicker';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
 import { useSignedInUser } from '../auth/AuthContext';
 import { formatDay } from '../lib/coupons';
+import { audienceFromDraft, audienceLabel, blankAudienceDraft } from '../lib/customerGroups';
 import { formatClock } from '../lib/orders';
 import {
-  AUDIENCE_LABEL,
   LANGUAGE_LABEL,
   LAUNCH_LANGUAGES,
   MAX_OFFER_TEXT,
@@ -42,7 +43,9 @@ type Estimate = { key: string; data: SmsOfferEstimate } | { key: string; error: 
 
 export function SmsOffers() {
   const toast = useToast();
-  const [audience, setAudience] = useState<SmsOfferAudience>('ALL');
+  // "Send to" (customer groups, 2026-10-24) replaces the old audience words.
+  const [groupDraft, setGroupDraft] = useState(blankAudienceDraft);
+  const built = useMemo(() => audienceFromDraft(groupDraft), [groupDraft]);
   const [fallback, setFallback] = useState<SmsLanguage>('en');
   const [texts, setTexts] = useState<Record<SmsLanguage, string>>(EMPTY_TEXTS);
   const [estimate, setEstimate] = useState<Estimate>(null);
@@ -62,13 +65,18 @@ export function SmsOffers() {
 
   const enabled = useMemo(() => SMS_LANGUAGES.filter((l) => languages.includes(l)), [languages]);
   const multilingual = enabled.length > 1;
-  const input = useMemo(() => offerInput(audience, fallback, texts, enabled), [audience, fallback, texts, enabled]);
-  const key = JSON.stringify(input);
+  const input = useMemo(
+    () => offerInput(built.audience ?? { group: 'ALL' }, fallback, texts, enabled),
+    [built.audience, fallback, texts, enabled]
+  );
+  // A group with a bad number is not counted (the picker says why) and cannot be sent.
+  const key = built.audience ? JSON.stringify(input) : '';
 
   // Debounced estimate; only the answer for the latest inputs is kept.
   const latest = useRef(key);
   useEffect(() => {
     latest.current = key;
+    if (!key) return;
     const timer = setTimeout(() => {
       smsOffersApi
         .estimate(JSON.parse(key))
@@ -97,7 +105,7 @@ export function SmsOffers() {
     void loadHistory();
   }, [loadHistory]);
 
-  const current = estimate && estimate.key === key && 'data' in estimate ? estimate.data : null;
+  const current = key && estimate && estimate.key === key && 'data' in estimate ? estimate.data : null;
   const hasText = Object.keys(input.messages).length > 0;
   const canSend = !!current && hasText && current.recipients > 0 && current.missing_languages.length === 0 && !sending;
 
@@ -131,17 +139,22 @@ export function SmsOffers() {
 
       <div className="sms-offers">
         <div className="form sms-offers__compose">
-          <div className="form__row">
-            <Field label="Audience">
-              <select className="input" value={audience} onChange={(e) => setAudience(e.target.value as SmsOfferAudience)}>
-                {(Object.keys(AUDIENCE_LABEL) as SmsOfferAudience[]).map((a) => (
-                  <option key={a} value={a}>
-                    {AUDIENCE_LABEL[a]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            {multilingual ? (
+          <CustomerGroupPicker
+            value={groupDraft}
+            onChange={setGroupDraft}
+            count={
+              current ? (
+                <span data-testid="sms-group-count">
+                  {current.recipients} {current.recipients === 1 ? 'customer' : 'customers'}
+                  {groupDraft.group === 'ALL' ? '' : ' in this group'} can get offers by SMS.
+                </span>
+              ) : (
+                <Spinner label="Counting the group" />
+              )
+            }
+          />
+          {multilingual ? (
+            <div className="form__row">
               <Field label="Customers without a language get">
                 <select className="input" value={input.fallback_language} onChange={(e) => setFallback(e.target.value as SmsLanguage)}>
                   {enabled.map((l) => (
@@ -151,8 +164,8 @@ export function SmsOffers() {
                   ))}
                 </select>
               </Field>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           <Field label="Send test to" hint="The mobile number test SMS go to, e.g. 077 123 4567.">
             <input
@@ -224,7 +237,9 @@ export function SmsOffers() {
       {confirming && current ? (
         <ConfirmDialog
           title="Send offer"
-          message={`Send to ${current.recipients} ${current.recipients === 1 ? 'customer' : 'customers'}, about ${current.sms_parts_total} SMS parts?`}
+          message={`Send to ${current.recipients} ${current.recipients === 1 ? 'customer' : 'customers'}${
+            input.audience.group === 'ALL' ? '' : ` (${audienceLabel(input.audience)})`
+          }, about ${current.sms_parts_total} SMS parts?`}
           confirmLabel="Send"
           onCancel={() => setConfirming(false)}
           onConfirm={() => void send()}
@@ -397,7 +412,7 @@ function OfferHistory({ offers }: { offers: SmsOffer[] }) {
                     {formatDay(o.created_at)} {formatClock(o.created_at)}
                   </td>
                   <td>{o.sent_by_name ?? '—'}</td>
-                  <td>{AUDIENCE_LABEL[o.audience] ?? o.audience}</td>
+                  <td>{audienceLabel(o.audience_group ?? o.audience)}</td>
                   <td className="num mono">{o.recipient_count}</td>
                   <td className="num mono">{o.sms_parts_total}</td>
                   <td className="cell__secondary sms-offers__snippet">

@@ -38,6 +38,10 @@ import { Staff } from './pages/Staff';
 import { Sellers } from './pages/Sellers';
 import { SellerDetail } from './pages/SellerDetail';
 import { SellerProducts } from './pages/SellerProducts';
+import { RepeatBaskets } from './pages/RepeatBaskets';
+import { Ratings } from './pages/Ratings';
+import { ProductRequests } from './pages/ProductRequests';
+import { OrderView } from './pages/OrderView';
 
 /**
  * Route protection here is for the operator's benefit only. Every admin
@@ -88,6 +92,8 @@ export function AppRoutes() {
       >
         <Route index element={<AdminOnly><Dashboard /></AdminOnly>} />
         <Route path="orders" element={<Orders />} />
+        {/* One order read-only (2026-10-24): Ratings and Repeat baskets link here. */}
+        <Route path="orders/:id" element={<AdminOnly><OrderView /></AdminOnly>} />
         <Route path="products" element={<AdminOnly><Products /></AdminOnly>} />
         <Route path="products/new" element={<AdminOnly><ProductForm /></AdminOnly>} />
         <Route path="products/import" element={<AdminOnly><ProductImport /></AdminOnly>} />
@@ -130,6 +136,10 @@ export function AppRoutes() {
         {/* Push to every customer who allowed notifications (owner, 2026-10-19). */}
         <Route path="notifications" element={<AdminOnly><Notifications /></AdminOnly>} />
         <Route path="feedback" element={<AdminOnly><Feedback /></AdminOnly>} />
+        {/* Repeat baskets, ratings + tips, product requests (2026-10-24, migrations 054-056). */}
+        <Route path="repeat-baskets" element={<AdminOnly><RepeatBaskets /></AdminOnly>} />
+        <Route path="ratings" element={<AdminOnly><Ratings /></AdminOnly>} />
+        <Route path="product-requests" element={<AdminOnly><ProductRequests /></AdminOnly>} />
         <Route path="dental-doctors" element={<AdminOnly><DentalDoctors /></AdminOnly>} />
         <Route path="staff" element={<AdminOnly><Staff /></AdminOnly>} />
         <Route path="rider-requests" element={<AdminOnly><RiderRequests /></AdminOnly>} />

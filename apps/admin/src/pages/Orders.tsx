@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { AssignRiderDialog, MarkDeliveredDialog, NoteDialog, needsNote } from '../components/OrderDialogs';
 import { OrderPanel } from '../components/OrderPanel';
+import { RepeatTag } from '../components/OrderRatingTip';
 import { ConfirmDialog, Spinner } from '../components/ui';
 import {
   ACTION_LABEL,
@@ -368,6 +369,7 @@ function OrderRow({
             <span className="ticket__scheduled">{scheduledLabel(order.scheduled_for, order.scheduled_until)}</span>
           ) : null}
           {payment ? <span className={`pay-chip pay-chip--${payment.tone}`}>{payment.text}</span> : null}
+          <RepeatTag basketId={order.repeat_basket_id} />
           {walletUsed(order) > 0 ? (
             <span className="pay-chip wallet-chip">{paidByWalletOnly(order) ? 'Paid by wallet' : `Wallet ${formatMoney(walletUsed(order))}`}</span>
           ) : null}

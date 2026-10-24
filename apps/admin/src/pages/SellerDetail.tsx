@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { sellers as sellersApi } from '../api/resources';
+import { sellerPayoutRequests, sellerStockNotes, sellers as sellersApi } from '../api/resources';
+import { ApiError } from '../api/client';
 import { DatePicker } from '../components/DatePicker';
 import { PageHeader } from '../components/Layout';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
@@ -20,22 +21,33 @@ import {
   pointText,
   type MapPoint,
   lkr,
+  METHOD_LABEL,
+  normalisePhone,
+  notReady,
   parseCommission,
   parseMoney,
+  parseQuantity,
+  phoneInUseText,
+  readablePhone,
   sellerContact,
   reasonProblem,
   sellerActions,
   sellerStatusTone,
+  STOCK_NOTE_MAX,
   type AdminSeller,
+  type PayoutRequest,
   type SellerPayout,
   type SellerStatement,
+  type StockNote,
 } from '../lib/sellers';
 import './sellers.css';
 
 /**
- * One seller: profile, status decisions (approve / reject with a reason / suspend), commission, the
- * statement of what Blynk owes them, and the payouts ledger (payments are made by hand and recorded
- * here; a mistaken entry can be deleted).
+ * One seller: profile (staff keep the sign-in phone and contact details: sellers are invite-only),
+ * status decisions (approve / reject with a reason / suspend), commission (their own rate, or the
+ * category rates), goods they say are coming (receive onto the stock / cancel), the statement of
+ * what Blynk owes them, their payout requests (pay / decline) and the payouts ledger (payments are
+ * made by hand and recorded here; a mistaken entry can be deleted).
  */
 const stamp = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' });
 const dayText = (key: string) => (/^\d{4}-\d{2}-\d{2}/.test(key) ? stamp.format(new Date(`${key.slice(0, 10)}T00:00:00+05:30`)) : key);
@@ -53,12 +65,16 @@ export function SellerDetail() {
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [commission, setCommission] = useState('');
+  const [commissionMode, setCommissionMode] = useState<'category' | 'own'>('own');
   const [commissionError, setCommissionError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<SellerPayout | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const adopt = useCallback((s: AdminSeller) => {
     setSeller(s);
-    setCommission(String(Number(s.commission_percent)));
+    const own = s.commission_percent !== null && s.commission_percent !== undefined;
+    setCommissionMode(own ? 'own' : 'category');
+    setCommission(own ? String(Number(s.commission_percent)) : '');
     setCommissionError(null);
   }, []);
 
@@ -115,15 +131,19 @@ export function SellerDetail() {
 
   async function saveCommission() {
     if (!seller) return;
-    const read = parseCommission(commission);
-    if ('error' in read) {
-      setCommissionError(read.error);
-      return;
+    let value: number | null = null;
+    if (commissionMode === 'own') {
+      const read = parseCommission(commission);
+      if ('error' in read) {
+        setCommissionError(read.error);
+        return;
+      }
+      value = read.value;
     }
     setCommissionError(null);
     setBusy(true);
     try {
-      const updated = await sellersApi.update(seller.id, { commission_percent: read.value });
+      const updated = await sellersApi.update(seller.id, { commission_percent: value });
       adopt({ ...seller, ...updated });
       // The commission changes what is earned: read the statement again.
       const d = await sellersApi.get(seller.id);
@@ -187,6 +207,9 @@ export function SellerDetail() {
         <div className="seller-card__head">
           <Badge tone={sellerStatusTone(seller.status)}>{SELLER_STATUS_LABEL[seller.status]}</Badge>
           <div className="row-actions">
+            <button type="button" className="button button--ghost" disabled={busy} onClick={() => setEditing(true)}>
+              Edit details
+            </button>
             {actions.approve ? (
               <button type="button" className="button" disabled={busy} onClick={() => setDeciding('approve')}>
                 {seller.status === 'PENDING' ? 'Approve' : 'Approve again'}
@@ -213,6 +236,13 @@ export function SellerDetail() {
             ) : null}
           </div>
         </div>
+        <p className="form__note seller-signin">
+          {seller.phone
+            ? `Signs in with ${readablePhone(seller.phone)} (SMS code on the seller site).`
+            : seller.email
+              ? `Signs in with ${seller.email} (email and password). Add a phone number with Edit details to let them use an SMS code.`
+              : 'No sign-in number yet: add one with Edit details.'}
+        </p>
         <dl className="seller-card__facts">
           <div>
             <dt>{seller.phone || !seller.email ? 'Phone' : 'Email'}</dt>
@@ -250,21 +280,69 @@ export function SellerDetail() {
             if (!busy) void saveCommission();
           }}
         >
-          <label className="field">
-            <span className="field__label">Commission (% kept by Blynk from the seller's price)</span>
-            <input
-              className="input seller-commission__input"
-              inputMode="decimal"
-              aria-label="Commission percent"
-              value={commission}
-              onChange={(e) => {
-                setCommission(e.target.value);
-                setCommissionError(null);
-              }}
-            />
-            {commissionError ? <span className="field__error">{commissionError}</span> : <span className="field__hint">0 means Blynk's gain is only the markup on the seller's price.</span>}
-          </label>
-          <button type="submit" className="button" disabled={busy || commission.trim() === String(Number(seller.commission_percent))}>
+          <fieldset className="seller-commission__mode">
+            <legend className="field__label">Commission (% kept by Blynk from the seller's price)</legend>
+            <label className="seller-commission__choice">
+              <input
+                type="radio"
+                name="commission-mode"
+                checked={commissionMode === 'category'}
+                onChange={() => {
+                  setCommissionMode('category');
+                  setCommissionError(null);
+                }}
+              />
+              Use category rates
+            </label>
+            <label className="seller-commission__choice">
+              <input
+                type="radio"
+                name="commission-mode"
+                checked={commissionMode === 'own'}
+                onChange={() => {
+                  setCommissionMode('own');
+                  setCommissionError(null);
+                }}
+              />
+              Own rate
+            </label>
+          </fieldset>
+          {commissionMode === 'own' ? (
+            <label className="field">
+              <span className="field__label">Own rate (%)</span>
+              <input
+                className="input seller-commission__input"
+                inputMode="decimal"
+                aria-label="Commission percent"
+                value={commission}
+                onChange={(e) => {
+                  setCommission(e.target.value);
+                  setCommissionError(null);
+                }}
+              />
+              {commissionError ? (
+                <span className="field__error">{commissionError}</span>
+              ) : (
+                <span className="field__hint">Used for every sale of this seller, whatever the category. 0 means Blynk's gain is only the markup.</span>
+              )}
+            </label>
+          ) : (
+            <p className="field__hint seller-commission__hint">
+              Each sale uses its category's rate (a sub-category falls back to its main category), else the default. Set them under Sellers → Seller commission.
+            </p>
+          )}
+          <button
+            type="submit"
+            className="button"
+            disabled={
+              busy ||
+              (commissionMode === 'category'
+                ? seller.commission_percent === null || seller.commission_percent === undefined
+                : seller.commission_percent !== null &&
+                  seller.commission_percent !== undefined &&
+                  commission.trim() === String(Number(seller.commission_percent)))
+            }
+          >
             Save commission
           </button>
         </form>
@@ -272,7 +350,11 @@ export function SellerDetail() {
 
       <LocationSection seller={seller} onChanged={(s) => adopt({ ...seller, ...s })} />
 
+      <StockNotesSection seller={seller} />
+
       <StatementSection statement={statement} />
+
+      <PayoutRequestsSection seller={seller} onPaid={(s) => setStatement(s)} />
 
       <PayoutsSection
         seller={seller}
@@ -364,6 +446,18 @@ export function SellerDetail() {
             </div>
           </form>
         </div>
+      ) : null}
+
+      {editing ? (
+        <EditDetailsDialog
+          seller={seller}
+          onClose={() => setEditing(false)}
+          onSaved={(s) => {
+            adopt({ ...seller, ...s });
+            setEditing(false);
+            toast.success('Seller details saved.');
+          }}
+        />
       ) : null}
 
       {deleting ? (
@@ -581,6 +675,8 @@ function LocationPoint({
 }
 
 function StatementSection({ statement }: { statement: SellerStatement }) {
+  // Per-line rates (migration 057); an older API sends none.
+  const perLine = statement.lines.some((l) => typeof l.commission_percent === 'number');
   return (
     <section className="seller-card" aria-label="Statement">
       <h2 className="form__section-title">Statement (delivered orders)</h2>
@@ -590,7 +686,11 @@ function StatementSection({ statement }: { statement: SellerStatement }) {
           <dd>{lkr(statement.gross)}</dd>
         </div>
         <div>
-          <dt>Commission ({Number(statement.commission_percent)}%)</dt>
+          <dt>
+            {statement.commission_percent === null || statement.commission_percent === undefined
+              ? 'Commission (category rates)'
+              : `Commission (${Number(statement.commission_percent)}%)`}
+          </dt>
           <dd>{lkr(statement.commission)}</dd>
         </div>
         <div>
@@ -620,6 +720,11 @@ function StatementSection({ statement }: { statement: SellerStatement }) {
                 <th scope="col" className="num">
                   Amount
                 </th>
+                {perLine ? (
+                  <th scope="col" className="num">
+                    Blynk keeps
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -628,6 +733,11 @@ function StatementSection({ statement }: { statement: SellerStatement }) {
                   <td>{l.name}</td>
                   <td className="num">{l.units}</td>
                   <td className="num">{lkr(l.gross)}</td>
+                  {perLine ? (
+                    <td className="num">
+                      {lkr(l.commission)} ({Number(l.commission_percent ?? 0)}%)
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -762,6 +872,485 @@ function PayoutsSection({
           </table>
         </div>
       )}
+    </section>
+  );
+}
+
+/** The 409 PHONE_IN_USE text with the account kind, else the API's own message. */
+function saveError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.code === 'PHONE_IN_USE') {
+    return phoneInUseText((err.details as { role?: unknown } | undefined)?.role);
+  }
+  return errorMessage(err, fallback);
+}
+
+/**
+ * Sellers are invite-only (2026-10-24): staff keep the shop name, the sign-in phone and the contact
+ * details. Only changed fields are sent; a number another account uses is refused (409).
+ */
+function EditDetailsDialog({ seller, onClose, onSaved }: { seller: AdminSeller; onClose(): void; onSaved(s: AdminSeller): void }) {
+  const [shop, setShop] = useState(seller.shop_name);
+  const [phone, setPhone] = useState(seller.phone ? readablePhone(seller.phone) : '');
+  const [contact, setContact] = useState(seller.contact_name ?? '');
+  const [address, setAddress] = useState(seller.address ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    const body: Parameters<typeof sellersApi.update>[1] = {};
+    const name = shop.trim();
+    if (name.length < 2 || name.length > 80) {
+      setError('The shop name must be 2 to 80 characters.');
+      return;
+    }
+    if (name !== seller.shop_name) body.shop_name = name;
+    if (phone.trim()) {
+      const normalised = normalisePhone(phone);
+      if (!normalised) {
+        setError('Enter a Sri Lankan mobile number, like 077 123 4567.');
+        return;
+      }
+      if (normalised !== seller.phone) body.phone = normalised;
+    } else if (seller.phone) {
+      setError('A seller needs a phone number to sign in with an SMS code.');
+      return;
+    }
+    if (contact.trim() !== (seller.contact_name ?? '')) body.contact_name = contact.trim() || null;
+    if (address.trim() !== (seller.address ?? '')) body.address = address.trim() || null;
+    if (Object.keys(body).length === 0) {
+      onClose();
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      onSaved(await sellersApi.update(seller.id, body));
+    } catch (err) {
+      setError(saveError(err, 'Could not save the details.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label="Edit seller details">
+      <form
+        className="modal__panel"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy) void save();
+        }}
+      >
+        <h2 className="modal__title">Edit {seller.shop_name}</h2>
+        <label className="field">
+          <span className="field__label">Shop name</span>
+          <input className="input" maxLength={80} value={shop} onChange={(e) => setShop(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">Phone (they sign in with it)</span>
+          <input className="input" inputMode="tel" placeholder="077 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">Contact name</span>
+          <input className="input" maxLength={80} value={contact} onChange={(e) => setContact(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">Address</span>
+          <input className="input" maxLength={255} value={address} onChange={(e) => setAddress(e.target.value)} />
+        </label>
+        {error ? (
+          <p className="field__error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="modal__actions">
+          <button type="button" className="button button--ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="button" disabled={busy}>
+            {busy ? 'Saving…' : 'Save details'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/** A list section's load state: rows, "after the database update" (503 before migration 057), or an error. */
+type Loaded<T> = { rows: T[] } | { notReady: true } | { error: string } | null;
+
+function useSellerList<T>(load: () => Promise<T[]>, deps: unknown[]): [Loaded<T>, (rows: T[]) => void] {
+  const [state, setState] = useState<Loaded<T>>(null);
+  useEffect(() => {
+    let live = true;
+    load()
+      .then((rows) => live && setState({ rows }))
+      .catch((err) => {
+        if (!live) return;
+        setState(notReady(err) ? { notReady: true } : { error: errorMessage(err, 'Could not load this list.') });
+      });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return [state, (rows: T[]) => setState({ rows })];
+}
+
+function ListState({ state, empty }: { state: Loaded<unknown>; empty: string }) {
+  if (state === null) return <p className="form__note">Loading…</p>;
+  if ('notReady' in state) return <p className="form__note">Available after the next database update.</p>;
+  if ('error' in state) return <p className="form__note seller-list__error">{state.error}</p>;
+  return state.rows.length === 0 ? <p className="form__note">{empty}</p> : null;
+}
+
+/**
+ * Goods the seller says they are bringing (migration 057). Receiving puts the counted quantity on
+ * the product's tracked stock (a restock in the stock history) and texts the seller.
+ */
+function StockNotesSection({ seller }: { seller: AdminSeller }) {
+  const toast = useToast();
+  const [state, setRows] = useSellerList<StockNote>(() => sellerStockNotes.list({ status: 'SENT', seller_id: seller.id }), [seller.id]);
+  const [receiving, setReceiving] = useState<StockNote | null>(null);
+  const [quantity, setQuantity] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<StockNote | null>(null);
+  const [busy, setBusy] = useState(false);
+  const rows = state && 'rows' in state ? state.rows : [];
+
+  async function receive(note: StockNote) {
+    const read = parseQuantity(quantity);
+    if ('error' in read) {
+      setError(read.error);
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await sellerStockNotes.receive(note.id, read.value);
+      setRows(rows.filter((n) => n.id !== note.id));
+      setReceiving(null);
+      toast.success(`${read.value} of ${note.product_name} received. Stock now ${r.stock_on_hand ?? read.value}.`);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not receive the goods.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel(note: StockNote) {
+    setBusy(true);
+    try {
+      await sellerStockNotes.cancel(note.id);
+      setRows(rows.filter((n) => n.id !== note.id));
+      toast.success('Stock note cancelled.');
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not cancel the stock note.'));
+    } finally {
+      setCancelling(null);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="seller-card" aria-label="Stock coming in">
+      <h2 className="form__section-title">Stock coming in</h2>
+      <p className="form__note">Goods the seller says they are bringing. Count what arrives and receive it: it goes onto the product's stock.</p>
+      <ListState state={state} empty="Nothing on its way." />
+      {rows.length > 0 ? (
+        <div className="table-wrap">
+          <table className="table" aria-label="Stock notes">
+            <thead>
+              <tr>
+                <th scope="col">Product</th>
+                <th scope="col" className="num">
+                  Coming
+                </th>
+                <th scope="col">Expected</th>
+                <th scope="col" className="num">
+                  In stock now
+                </th>
+                <th scope="col">Note</th>
+                <th scope="col" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((n) => (
+                <tr key={n.id}>
+                  <td>{n.product_name}</td>
+                  <td className="num">{n.quantity}</td>
+                  <td>{n.expected_on ? dayText(n.expected_on) : 'Not said'}</td>
+                  <td className="num">{n.stock_on_hand ?? '—'}</td>
+                  <td>{n.note || '—'}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="button button--sm"
+                        aria-label={`Receive ${n.product_name}`}
+                        onClick={() => {
+                          setQuantity(String(n.quantity));
+                          setError(null);
+                          setReceiving(n);
+                        }}
+                      >
+                        Receive
+                      </button>
+                      <button type="button" className="button button--sm button--ghost" aria-label={`Cancel stock note for ${n.product_name}`} onClick={() => setCancelling(n)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {receiving ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-label="Receive stock">
+          <form
+            className="modal__panel"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!busy) void receive(receiving);
+            }}
+          >
+            <h2 className="modal__title">Receive {receiving.product_name}</h2>
+            <p className="modal__message">The seller said {receiving.quantity}. Enter how many actually arrived; that number goes onto the stock and the seller gets an SMS.</p>
+            <label className="field">
+              <span className="field__label">Received quantity</span>
+              <input
+                className="input"
+                inputMode="numeric"
+                maxLength={String(STOCK_NOTE_MAX).length + 1}
+                value={quantity}
+                onChange={(e) => {
+                  setQuantity(e.target.value);
+                  setError(null);
+                }}
+              />
+              {error ? <span className="field__error">{error}</span> : null}
+            </label>
+            <div className="modal__actions">
+              <button type="button" className="button button--ghost" onClick={() => setReceiving(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="button" disabled={busy}>
+                {busy ? 'Receiving…' : 'Receive'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {cancelling ? (
+        <ConfirmDialog
+          title="Cancel this stock note?"
+          message={`${cancelling.quantity} of ${cancelling.product_name} will no longer be expected. Nothing changes in the stock.`}
+          confirmLabel={busy ? 'Cancelling…' : 'Cancel note'}
+          destructive
+          onConfirm={() => {
+            if (!busy) void cancel(cancelling);
+          }}
+          onCancel={() => setCancelling(null)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * The seller's waiting payout request (migration 057). Paying records the payout in the ledger below
+ * (same as Record payment) and texts the seller; declining needs a reason, which is texted too.
+ */
+function PayoutRequestsSection({ seller, onPaid }: { seller: AdminSeller; onPaid(s: SellerStatement): void }) {
+  const toast = useToast();
+  const today = colomboDateKey();
+  const [state, setRows] = useSellerList<PayoutRequest>(() => sellerPayoutRequests.list({ status: 'REQUESTED', seller_id: seller.id }), [seller.id]);
+  const [paying, setPaying] = useState<PayoutRequest | null>(null);
+  const [declining, setDeclining] = useState<PayoutRequest | null>(null);
+  const [date, setDate] = useState(today);
+  const [note, setNote] = useState('');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const rows = state && 'rows' in state ? state.rows : [];
+
+  async function pay(req: PayoutRequest) {
+    setBusy(true);
+    try {
+      const r = await sellerPayoutRequests.pay(req.id, { paid_on: date || today, ...(note.trim() ? { note: note.trim() } : {}) });
+      setRows(rows.filter((x) => x.id !== req.id));
+      onPaid(r.statement);
+      setPaying(null);
+      toast.success(`Paid ${lkr(req.amount)} and recorded it.`);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not record the payment.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decline(req: PayoutRequest) {
+    const problem = reasonProblem(reason);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setBusy(true);
+    try {
+      await sellerPayoutRequests.decline(req.id, reason.trim());
+      setRows(rows.filter((x) => x.id !== req.id));
+      setDeclining(null);
+      toast.success('Payout request declined.');
+    } catch (err) {
+      setError(errorMessage(err, 'Could not decline the request.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="seller-card" aria-label="Payout requests">
+      <h2 className="form__section-title">Payout requests</h2>
+      <ListState state={state} empty="No payout request waiting." />
+      {rows.map((r) => (
+        <div key={r.id} className="seller-request" role="group" aria-label={`Payout request of ${lkr(r.amount)}`}>
+          <dl className="seller-card__facts">
+            <div>
+              <dt>Asked for</dt>
+              <dd>
+                <strong>{lkr(r.amount)}</strong> ({METHOD_LABEL[r.method]})
+              </dd>
+            </div>
+            <div>
+              <dt>Due now</dt>
+              <dd>{lkr(r.due)}</dd>
+            </div>
+            <div>
+              <dt>Asked on</dt>
+              <dd>{stamp.format(new Date(r.created_at))}</dd>
+            </div>
+            {r.bank_details ? (
+              <div>
+                <dt>Bank details</dt>
+                <dd>{r.bank_details}</dd>
+              </div>
+            ) : null}
+            {r.note ? (
+              <div>
+                <dt>Note from the seller</dt>
+                <dd>{r.note}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {r.amount > r.due ? <p className="submission__warn">This is more than is due now: decline it and let the seller ask again.</p> : null}
+          <div className="row-actions">
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setDate(today);
+                setNote('');
+                setError(null);
+                setPaying(r);
+              }}
+            >
+              Mark paid
+            </button>
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => {
+                setReason('');
+                setError(null);
+                setDeclining(r);
+              }}
+            >
+              Decline
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {paying ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-label="Pay the seller">
+          <form
+            className="modal__panel"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!busy) void pay(paying);
+            }}
+          >
+            <h2 className="modal__title">Paid {lkr(paying.amount)}?</h2>
+            <p className="modal__message">
+              Pay {seller.shop_name} yourself ({METHOD_LABEL[paying.method].toLowerCase()}), then record it here. It is added to the payments below and the seller gets an SMS.
+            </p>
+            <div className="field">
+              <span className="field__label">Paid on</span>
+              <DatePicker value={date} onChange={setDate} label="Paid on" today={today} max={today} markPast={false} />
+            </div>
+            <label className="field">
+              <span className="field__label">Note (optional)</span>
+              <input className="input" aria-label="Payout note" maxLength={200} placeholder="Transfer ref 1234" value={note} onChange={(e) => setNote(e.target.value)} />
+            </label>
+            {error ? (
+              <p className="field__error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <div className="modal__actions">
+              <button type="button" className="button button--ghost" onClick={() => setPaying(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="button" disabled={busy}>
+                {busy ? 'Recording…' : 'Record payment'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {declining ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-label="Decline payout request">
+          <form
+            className="modal__panel"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!busy) void decline(declining);
+            }}
+          >
+            <h2 className="modal__title">Decline {lkr(declining.amount)}?</h2>
+            <label className="field">
+              <span className="field__label">Reason (sent to the seller by SMS)</span>
+              <textarea
+                className="input"
+                rows={3}
+                maxLength={REASON_LIMITS.max}
+                value={reason}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  setError(null);
+                }}
+              />
+              {error ? <span className="field__error">{error}</span> : null}
+            </label>
+            <div className="modal__actions">
+              <button type="button" className="button button--ghost" onClick={() => setDeclining(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="button button--danger" disabled={busy || !reason.trim()}>
+                {busy ? 'Declining…' : 'Decline'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -52,3 +52,19 @@
   .seller-payout-form { grid-template-columns: 1fr; }
   .submission__body { grid-template-columns: 1fr; }
 }
+
+/* Invite-only sellers, commission by category, stock notes and payout requests (migration 057) */
+.sellers__chip--stock { background: #e8f0fe; color: #1a3d8f; }
+.sellers__chip--payout { background: #e6f4ea; color: #1b5e20; }
+.sellers__check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.sellers__commission { max-width: 720px; }
+.sellers__commission-form { display: grid; gap: 12px; }
+.sellers__subcategory { padding-left: 28px; color: var(--ink-2); }
+.sellers__rate { width: 110px; text-align: right; }
+.seller-signin { margin: 0; }
+.seller-commission__mode { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 0; padding: 0; border: 0; }
+.seller-commission__mode legend { width: 100%; margin-bottom: 4px; }
+.seller-commission__choice { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+.seller-commission__hint { margin: 0; max-width: 420px; }
+.seller-request { display: grid; gap: 10px; padding: 12px; border: 1px solid #e0b100; background: #fffbea; border-radius: var(--radius); }
+.seller-list__error { color: var(--ink-3); }

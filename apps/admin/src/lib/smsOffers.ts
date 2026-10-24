@@ -1,6 +1,7 @@
 import { errorMessage } from './apiErrors';
 import { ApiError } from '../api/client';
 import type { SmsLanguage, SmsOfferAudience, SmsOfferInput } from '../api/types';
+import type { CustomerAudience } from './customerGroups';
 
 /**
  * SMS offers (backend migration 027). The counting rules mirror
@@ -16,6 +17,7 @@ export const LANGUAGE_LABEL: Record<SmsLanguage, string> = {
   en: 'English',
 };
 
+/** Offers sent before customer groups (2026-10-24); new ones use lib/customerGroups audienceLabel. */
 export const AUDIENCE_LABEL: Record<SmsOfferAudience, string> = {
   ALL: 'All customers',
   ORDERED_30D: 'Ordered in last 30 days',
@@ -76,7 +78,7 @@ export const LAUNCH_LANGUAGES: readonly SmsLanguage[] = ['en'];
  * must be an enabled language; with one language on, it is that language.
  */
 export function offerInput(
-  audience: SmsOfferAudience,
+  audience: CustomerAudience,
   fallback: SmsLanguage,
   texts: Record<SmsLanguage, string>,
   enabled: readonly SmsLanguage[] = SMS_LANGUAGES

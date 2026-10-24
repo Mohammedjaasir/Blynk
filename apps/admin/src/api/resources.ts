@@ -6,9 +6,15 @@ import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
 import type {
   AdminSeller,
   AdminSubmission,
+  CommissionSettings,
+  CreateSellerBody,
+  PayoutRequest,
+  PayoutRequestStatus,
   SellerPayout,
   SellerStatement,
   SellerStatus,
+  StockNote,
+  StockNoteStatus,
   SubmissionStatus,
 } from '../lib/sellers';
 import type {
@@ -969,8 +975,23 @@ export const sellers = {
     return apiRequest<{ sellers: AdminSeller[] }>(`/admin/sellers${qs ? `?${qs}` : ''}`).then((d) => d.sellers);
   },
   get: (id: string) => apiRequest<{ seller: AdminSeller; statement: SellerStatement }>(`/admin/sellers/${id}`),
-  /** Approve / reject (reason needed) / suspend, and/or set the commission percent. */
-  update: (id: string, body: { status?: 'APPROVED' | 'REJECTED' | 'SUSPENDED'; rejection_reason?: string; commission_percent?: number }) =>
+  /** Sellers are invite-only (2026-10-24): staff add each shop with the phone it signs in with. 409 PHONE_IN_USE when the number has an account. */
+  create: (body: CreateSellerBody) =>
+    apiRequest<{ seller: AdminSeller }>('/admin/sellers', { method: 'POST', body: { ...body } }).then((d) => d.seller),
+  /** Approve / reject (reason needed) / suspend, the commission percent (null = category rates), the sign-in phone and contact details. */
+  update: (
+    id: string,
+    body: {
+      status?: 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+      rejection_reason?: string;
+      commission_percent?: number | null;
+      phone?: string;
+      shop_name?: string;
+      contact_name?: string | null;
+      address?: string | null;
+      note?: string | null;
+    }
+  ) =>
     apiRequest<{ seller: AdminSeller }>(`/admin/sellers/${id}`, { method: 'PATCH', body: { ...body } }).then((d) => d.seller),
   recordPayout: (id: string, body: { amount: number; note?: string; paid_on?: string }) =>
     apiRequest<{ payout: SellerPayout; statement: SellerStatement }>(`/admin/sellers/${id}/payouts`, { method: 'POST', body: { ...body } }),
@@ -998,4 +1019,51 @@ export const sellerSubmissions = {
     apiRequest<{ submission: AdminSubmission; product: AdminProduct }>(`/admin/seller-submissions/${id}/approve`, { method: 'POST', body: { ...body } }),
   reject: (id: string, reason: string) =>
     apiRequest<{ submission: AdminSubmission }>(`/admin/seller-submissions/${id}/reject`, { method: 'POST', body: { reason } }).then((d) => d.submission),
+};
+
+const sellerQuery = (params: { status?: string; seller_id?: string }) => {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  if (params.seller_id) query.set('seller_id', params.seller_id);
+  const qs = query.toString();
+  return qs ? `?${qs}` : '';
+};
+
+/** Goods sellers say they are bringing (migration 057). Receiving adds the counted quantity to the product's tracked stock. */
+export const sellerStockNotes = {
+  /** SENT (still coming, soonest first) unless asked; ALL = every status. */
+  list: (params: { status?: StockNoteStatus | 'ALL'; seller_id?: string } = {}) =>
+    apiRequest<{ stock_notes: StockNote[] }>(`/admin/seller-stock-notes${sellerQuery(params)}`).then((d) => d.stock_notes ?? []),
+  receive: (id: string, received_quantity: number) =>
+    apiRequest<{ stock_note: StockNote; stock_on_hand: number | null }>(`/admin/seller-stock-notes/${id}/receive`, {
+      method: 'POST',
+      body: { received_quantity },
+    }),
+  cancel: (id: string, reason?: string) =>
+    apiRequest<{ stock_note: StockNote }>(`/admin/seller-stock-notes/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }).then(
+      (d) => d.stock_note
+    ),
+};
+
+/** Sellers asking to be paid (migration 057). Paying records the payout (the same ledger as "Record payment"). */
+export const sellerPayoutRequests = {
+  /** REQUESTED (waiting, oldest first) unless asked; ALL = every status. */
+  list: (params: { status?: PayoutRequestStatus | 'ALL'; seller_id?: string } = {}) =>
+    apiRequest<{ payout_requests: PayoutRequest[] }>(`/admin/seller-payout-requests${sellerQuery(params)}`).then((d) => d.payout_requests ?? []),
+  pay: (id: string, body: { paid_on?: string; note?: string } = {}) =>
+    apiRequest<{ payout_request: PayoutRequest; payout: SellerPayout; statement: SellerStatement }>(`/admin/seller-payout-requests/${id}/pay`, {
+      method: 'POST',
+      body: { ...body },
+    }),
+  decline: (id: string, reason: string) =>
+    apiRequest<{ payout_request: PayoutRequest }>(`/admin/seller-payout-requests/${id}/decline`, { method: 'POST', body: { reason } }).then(
+      (d) => d.payout_request
+    ),
+};
+
+/** What Blynk keeps from seller sales: a default %, optional per-category rates (a sub-category falls back to its main one); a seller's own rate beats both. */
+export const sellerCommission = {
+  get: () => apiRequest<CommissionSettings>('/admin/settings/seller-commission'),
+  save: (body: { default_percent: number; categories: { category_id: string; percent: number | null }[] }) =>
+    apiRequest<CommissionSettings>('/admin/settings/seller-commission', { method: 'PUT', body: { ...body } }),
 };

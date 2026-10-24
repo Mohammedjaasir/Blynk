@@ -22,6 +22,7 @@ import { OrderBill } from './OrderBill';
 import { OrderItems } from './OrderItems';
 import { OrderWalletRefund } from './OrderWalletRefund';
 import { OrderFreeDelivery } from './OrderFreeDelivery';
+import { OrderRatingTip, RepeatTag } from './OrderRatingTip';
 import { walletUsed } from '../lib/wallet';
 
 /**
@@ -84,7 +85,11 @@ export function OrderPanel({
       <header className="order-panel__head">
         <div>
           <p className="order-panel__number mono">#{number}</p>
-          <p className="order-panel__status">{STATUS_LABEL[order.order_status]}</p>
+          <p className="order-panel__status">
+            {STATUS_LABEL[order.order_status]}
+            {/* Placed from a repeat basket (migration 054). */}
+            <RepeatTag basketId={detail?.repeat_basket_id ?? order.repeat_basket_id} />
+          </p>
         </div>
         <button type="button" className="button button--ghost button--sm" onClick={onClose}>
           Close
@@ -172,6 +177,9 @@ export function OrderPanel({
               <p className="order-panel__meta">Cancelled: {detail.cancellation_reason}</p>
             ) : null}
           </section>
+
+          {/* Rating and rider tip (migration 055). */}
+          <OrderRatingTip detail={detail} />
 
           {detail.delivery ? (
             <section className="order-panel__section" aria-label="Rider">

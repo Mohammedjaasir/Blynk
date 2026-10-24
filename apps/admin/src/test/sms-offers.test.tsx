@@ -134,14 +134,14 @@ describe('SMS parts (lib)', () => {
   });
 
   it('sends only the languages that have text', () => {
-    expect(offerInput('ALL', 'ta', { si: '  ', ta: ' சலுகை ', en: '' })).toEqual({
-      audience: 'ALL',
+    expect(offerInput({ group: 'ALL' }, 'ta', { si: '  ', ta: ' சலுகை ', en: '' })).toEqual({
+      audience: { group: 'ALL' },
       fallback_language: 'ta',
       messages: { ta: 'சலுகை' },
     });
     // Languages switched off are never sent, and the fallback is an enabled one.
-    expect(offerInput('ALL', 'ta', { si: 'සිංහල', ta: 'சலுகை', en: ' Rice ' }, ['en'])).toEqual({
-      audience: 'ALL',
+    expect(offerInput({ group: 'ALL' }, 'ta', { si: 'සිංහල', ta: 'சலுகை', en: ' Rice ' }, ['en'])).toEqual({
+      audience: { group: 'ALL' },
       fallback_language: 'en',
       messages: { en: 'Rice' },
     });
@@ -176,10 +176,15 @@ describe('SMS offers page', () => {
     expect(panel).toHaveTextContent('Opted out3');
     expect(panel).toHaveTextContent('SMS parts70');
 
-    await user.selectOptions(screen.getByLabelText('Audience'), 'ORDERED_30D');
+    // "Send to" customer groups (2026-10-24) replaced the old audience words.
+    await user.selectOptions(screen.getByLabelText('Send to'), 'LAPSED');
     await user.selectOptions(screen.getByLabelText('Customers without a language get'), 'ta');
     await waitFor(() =>
-      expect(api.sent('POST', '/admin/sms-offers/estimate')).toContainEqual({ audience: 'ORDERED_30D', fallback_language: 'ta', messages: {} })
+      expect(api.sent('POST', '/admin/sms-offers/estimate')).toContainEqual({
+        audience: { group: 'LAPSED', days: 14 },
+        fallback_language: 'ta',
+        messages: {},
+      })
     );
     expect(await within(panel).findByText('No language (get Tamil)')).toBeInTheDocument();
   });
@@ -236,7 +241,7 @@ describe('SMS offers page', () => {
     expect(await screen.findByText('Offer sent to 35 customers.')).toBeInTheDocument();
     expect(api.sent('POST', '/admin/sms-offers')).toEqual([
       {
-        audience: 'ALL',
+        audience: { group: 'ALL' },
         fallback_language: 'en',
         messages: { si: 'සිංහල දීමනාව', ta: 'தமிழ் சலுகை', en: 'Rice 10% off today' },
       },
@@ -407,7 +412,7 @@ describe('SMS offers page, English only (launch)', () => {
     await user.click(within(screen.getByRole('dialog', { name: 'Send offer' })).getByRole('button', { name: 'Send' }));
     expect(await screen.findByText('Offer sent to 35 customers.')).toBeInTheDocument();
     expect(api.sent('POST', '/admin/sms-offers')).toEqual([
-      { audience: 'ALL', fallback_language: 'en', messages: { en: 'Rice 10% off today' } },
+      { audience: { group: 'ALL' }, fallback_language: 'en', messages: { en: 'Rice 10% off today' } },
     ]);
     expect(api.sent('POST', '/admin/sms-offers/estimate').every((b) => b.fallback_language === 'en')).toBe(true);
   });

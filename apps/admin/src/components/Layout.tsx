@@ -119,6 +119,10 @@ export function Layout() {
               <NavLink to="/purchase-list" className="nav__item">
                 Purchase list
               </NavLink>
+              {/* "Can't find it? Ask us" requests (2026-10-24). */}
+              <NavLink to="/product-requests" className="nav__item">
+                Product requests
+              </NavLink>
 
               {/* Seller portal (2026-10-24): sellers, and their products waiting for approval. */}
               <p className="nav__group">Sellers</p>
@@ -179,6 +183,13 @@ export function Layout() {
               </NavLink>
               <NavLink to="/feedback" className="nav__item">
                 Feedback
+              </NavLink>
+              {/* Repeat baskets and order ratings (2026-10-24). */}
+              <NavLink to="/repeat-baskets" className="nav__item">
+                Repeat baskets
+              </NavLink>
+              <NavLink to="/ratings" className="nav__item">
+                Ratings
               </NavLink>
 
               <p className="nav__group">Doctors</p>

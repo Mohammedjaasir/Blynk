@@ -20,7 +20,8 @@ export interface AdminSeller {
   note: string | null;
   status: SellerStatus;
   rejection_reason: string | null;
-  commission_percent: number;
+  /** The seller's own rate; null = each sale uses its category's rate or the default (migration 057). */
+  commission_percent: number | null;
   created_at: string;
   /** null for a seller who signed up with an email address. */
   phone: string | null;
@@ -103,6 +104,9 @@ export interface StatementLine {
   name: string;
   units: number;
   gross: number;
+  /** The percent Blynk keeps on this line and what that comes to (an API from before 057 leaves them out). */
+  commission_percent?: number;
+  commission?: number;
 }
 export interface SellerPayout {
   id: string;
@@ -111,7 +115,8 @@ export interface SellerPayout {
   paid_on: string;
 }
 export interface SellerStatement {
-  commission_percent: number;
+  /** The seller's own rate; null = category rates / the default, per line. */
+  commission_percent: number | null;
   gross: number;
   commission: number;
   earned: number;
@@ -341,3 +346,194 @@ export function changedFields(
   }
   return out;
 }
+
+
+// ---------------------------------------------------------------- adding sellers (invite-only, 2026-10-24)
+
+export interface CreateSellerBody {
+  shop_name: string;
+  phone: string;
+  contact_name?: string;
+  address?: string;
+  commission_percent?: number | null;
+  status?: 'APPROVED' | 'PENDING';
+}
+
+/** "077 123 4567", "0771234567", "+94771234567" -> "+94771234567", or null when it is not a Sri Lankan mobile number. */
+export function normalisePhone(text: string): string | null {
+  const t = text.replace(/[\s\-()]/g, '');
+  const local = t.startsWith('+94') ? t.slice(3) : t.startsWith('94') && t.length === 11 ? t.slice(2) : t.startsWith('0') ? t.slice(1) : t;
+  return /^7[0-8]\d{7}$/.test(local) ? `+94${local}` : null;
+}
+
+/** An optional commission typed in a field: blank = none (null), else 0 to 100 with at most 2 decimals. */
+export function parseOptionalCommission(text: string): { value: number | null } | { error: string } {
+  if (!text.trim()) return { value: null };
+  return parseCommission(text);
+}
+
+export interface NewSellerForm {
+  shop_name: string;
+  phone: string;
+  contact_name: string;
+  address: string;
+  commission: string;
+  approve: boolean;
+}
+
+/** The add-seller form, read into the POST body (or the first problem). */
+export function newSellerBody(form: NewSellerForm): { body: CreateSellerBody } | { error: string; field: 'shop_name' | 'phone' | 'commission' } {
+  const shop = form.shop_name.trim();
+  if (shop.length < 2) return { error: 'Enter the shop name (at least 2 characters).', field: 'shop_name' };
+  if (shop.length > 80) return { error: 'The shop name can be at most 80 characters.', field: 'shop_name' };
+  const phone = normalisePhone(form.phone);
+  if (!phone) return { error: 'Enter a Sri Lankan mobile number, like 077 123 4567.', field: 'phone' };
+  const pct = parseOptionalCommission(form.commission);
+  if ('error' in pct) return { error: pct.error, field: 'commission' };
+  return {
+    body: {
+      shop_name: shop,
+      phone,
+      ...(form.contact_name.trim() ? { contact_name: form.contact_name.trim() } : {}),
+      ...(form.address.trim() ? { address: form.address.trim() } : {}),
+      ...(pct.value !== null ? { commission_percent: pct.value } : {}),
+      status: form.approve ? 'APPROVED' : 'PENDING',
+    },
+  };
+}
+
+const ROLE_WORD: Record<string, string> = {
+  CUSTOMER: 'customer',
+  RIDER: 'rider',
+  SELLER: 'seller',
+  ADMIN: 'staff',
+  OPERATIONS: 'staff',
+  PACKING_STAFF: 'staff',
+};
+
+/** "This number already has a Blynk account (customer)." from a 409 PHONE_IN_USE's details.role. */
+export function phoneInUseText(role: unknown): string {
+  const kind = typeof role === 'string' ? ROLE_WORD[role] : undefined;
+  return kind ? `This number already has a Blynk account (${kind}).` : 'This number already has a Blynk account.';
+}
+
+// ---------------------------------------------------------------- commission (migration 057)
+
+export interface CategoryRate {
+  category_id: string;
+  name: string;
+  parent_id: string | null;
+  percent: number | null;
+}
+export interface CommissionSettings {
+  default_percent: number;
+  categories: CategoryRate[];
+  /** false until migration 057 has run (category rates cannot be saved yet). */
+  ready?: boolean;
+}
+
+/** Main categories, each followed by its sub-categories (a sub-category whose main one is gone counts as main). */
+export function categoryTree(rows: readonly CategoryRate[]): { row: CategoryRate; depth: 0 | 1 }[] {
+  const ids = new Set(rows.map((r) => r.category_id));
+  const mains = rows.filter((r) => !r.parent_id || !ids.has(r.parent_id));
+  const out: { row: CategoryRate; depth: 0 | 1 }[] = [];
+  for (const m of mains) {
+    out.push({ row: m, depth: 0 });
+    for (const c of rows) if (c.parent_id === m.category_id) out.push({ row: c, depth: 1 });
+  }
+  return out;
+}
+
+/** The commission settings form, read into the PUT body (or the first problem). Blank category = no rate (null). */
+export function commissionBody(
+  defaultText: string,
+  rates: Readonly<Record<string, string>>
+): { body: { default_percent: number; categories: { category_id: string; percent: number | null }[] } } | { error: string } {
+  const d = parseCommission(defaultText);
+  if ('error' in d) return { error: `Default: ${d.error}` };
+  const categories: { category_id: string; percent: number | null }[] = [];
+  for (const [category_id, text] of Object.entries(rates)) {
+    const r = parseOptionalCommission(text);
+    if ('error' in r) return { error: r.error };
+    categories.push({ category_id, percent: r.value });
+  }
+  return { body: { default_percent: d.value, categories } };
+}
+
+/** How a seller's rate reads: their own rate, else category rates. */
+export const commissionText = (pct: number | null | undefined): string =>
+  pct === null || pct === undefined ? 'Category rates' : `${Number(pct)}%`;
+
+// ---------------------------------------------------------------- stock notes and payout requests (migration 057)
+
+export type StockNoteStatus = 'SENT' | 'RECEIVED' | 'CANCELLED';
+export type PayoutRequestStatus = 'REQUESTED' | 'PAID' | 'DECLINED' | 'WITHDRAWN';
+
+export interface StockNote {
+  id: string;
+  product_id: string;
+  product_name: string;
+  image_url: string | null;
+  unit: string;
+  pack_size: string | null;
+  quantity: number;
+  expected_on: string | null;
+  note: string | null;
+  status: StockNoteStatus;
+  received_quantity: number | null;
+  received_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  stock_on_hand: number | null;
+  seller: { id: string; shop_name: string; phone: string | null; email: string | null };
+}
+
+export interface PayoutRequest {
+  id: string;
+  amount: number;
+  method: 'BANK' | 'CASH';
+  bank_details: string | null;
+  note: string | null;
+  status: PayoutRequestStatus;
+  decline_reason: string | null;
+  payout_id: string | null;
+  paid_on: string | null;
+  handled_at: string | null;
+  created_at: string;
+  seller: { id: string; shop_name: string; phone: string | null; email: string | null };
+  /** What is due to the seller right now. */
+  due: number;
+}
+
+export const STOCK_NOTE_MAX = 10_000;
+
+/** A received quantity typed by staff: a whole number 1 to 10,000. */
+export function parseQuantity(text: string): { value: number } | { error: string } {
+  const t = text.trim().replace(/,/g, '');
+  if (!/^\d+$/.test(t)) return { error: 'Enter how many arrived (a whole number).' };
+  const value = Number(t);
+  if (value < 1) return { error: 'At least 1. Cancel the note if nothing came.' };
+  if (value > STOCK_NOTE_MAX) return { error: `At most ${STOCK_NOTE_MAX.toLocaleString('en-US')}.` };
+  return { value };
+}
+
+/** Open stock notes and payout requests per seller id, for the Sellers list badges. */
+export function openCounts(
+  notes: ReadonlyArray<{ seller: { id: string } }>,
+  requests: ReadonlyArray<{ seller: { id: string } }>
+): Map<string, { stock: number; payout: number }> {
+  const out = new Map<string, { stock: number; payout: number }>();
+  const bump = (id: string, key: 'stock' | 'payout') => {
+    const c = out.get(id) ?? { stock: 0, payout: 0 };
+    c[key] += 1;
+    out.set(id, c);
+  };
+  for (const n of notes) bump(n.seller.id, 'stock');
+  for (const r of requests) bump(r.seller.id, 'payout');
+  return out;
+}
+
+export const METHOD_LABEL: Record<PayoutRequest['method'], string> = { BANK: 'Bank transfer', CASH: 'Cash' };
+
+/** Is this the "database update pending" answer (503 SELLER_REQUESTS_NOT_READY)? */
+export const notReady = (err: unknown): boolean => (err as { code?: string } | null)?.code === 'SELLER_REQUESTS_NOT_READY';

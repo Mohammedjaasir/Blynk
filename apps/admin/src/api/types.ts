@@ -1,5 +1,6 @@
 import type { ActiveDelivery, ItemsSummary, OrderStatus } from '../lib/orders';
 import type { PaymentMethod, PaymentStatus } from '../lib/payments';
+import type { CustomerAudience } from '../lib/customerGroups';
 
 /** Shapes returned by the Blynk API - mirrors of the backend DTOs. */
 
@@ -864,6 +865,16 @@ export interface BoardOrder {
   payment_status?: PaymentStatus | string;
   /** Online orders only (migration 047): when an unpaid order is cancelled. */
   payment_expires_at?: string | null;
+  /** Migration 054: the repeat basket this order was placed from ("Repeat" tag); null/absent otherwise. */
+  repeat_basket_id?: string | null;
+}
+
+/** The customer's rating of a delivered order (migration 055), as staff see it. */
+export interface OrderRatingInfo {
+  stars: number;
+  tags?: string[] | null;
+  comment?: string | null;
+  created_at?: string | null;
 }
 
 export interface OrderItemRow {
@@ -976,6 +987,14 @@ export interface OrderDetail {
   combos?: OrderCombo[];
   history: OrderHistoryRow[];
   delivery: { id: string; assignment_status: string; rider_name?: string | null } | null;
+  /** Migration 054: the repeat basket this order came from; null/absent otherwise. */
+  repeat_basket_id?: string | null;
+  /** Migration 055: the rider tip added at checkout (LKR; 0 = none), collected with cash on delivery. */
+  rider_tip?: number | string | null;
+  /** Migration 055: the tip paid from the Blynk Wallet after delivery (LKR; 0 = none). */
+  rider_tip_wallet?: number | string | null;
+  /** Migration 055: the customer's rating; null = not rated, absent on an older API. */
+  rating?: OrderRatingInfo | null;
 }
 
 /** GET /admin/riders */
@@ -1628,17 +1647,19 @@ export interface CashReconciliation {
 /** Backend migration 027. ADMIN and OPERATIONS. */
 export type SmsLanguage = 'si' | 'ta' | 'en';
 
+/** The audience word offers were sent with before customer groups (2026-10-24); history rows can still carry it. */
 export type SmsOfferAudience = 'ALL' | 'ORDERED_30D' | 'ORDERED_90D' | 'NEVER_ORDERED';
 
 export interface SmsOfferInput {
-  audience: SmsOfferAudience;
+  /** Customer group (docs/superpowers/plans/2026-10-24-groups-ratings-requests.md section A). */
+  audience: CustomerAudience;
   fallback_language: SmsLanguage;
   messages: Partial<Record<SmsLanguage, string>>;
 }
 
 /** POST /admin/sms-offers/estimate. */
 export interface SmsOfferEstimate {
-  audience: SmsOfferAudience;
+  audience: SmsOfferAudience | CustomerAudience;
   recipients: number;
   /** Recipients per language, after the fallback. */
   by_language: Record<SmsLanguage, number>;
@@ -1669,7 +1690,9 @@ export interface SmsOfferTestResult {
 
 export interface SmsOffer {
   id: string;
-  audience: SmsOfferAudience;
+  audience: SmsOfferAudience | CustomerAudience;
+  /** The customer group it went to (2026-10-24); null/absent when sent to one of the original audiences. */
+  audience_group?: CustomerAudience | null;
   fallback_language: SmsLanguage;
   message_si: string | null;
   message_ta: string | null;
