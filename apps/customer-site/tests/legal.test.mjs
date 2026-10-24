@@ -68,7 +68,7 @@ test('the phone number is never shown as text on the legal pages, only in the Ca
     assert.match(pages[n], /<a href="tel:\+94717107374">Call us<\/a>/, `${n}: Call us link`);
     assert.match(pages[n], /<a href="https:\/\/wa\.me\/94717107374" target="_blank" rel="noopener">WhatsApp us<\/a>/, `${n}: WhatsApp us link`);
     // the hours are live (store-hours.js fills them from the API; owner 2026-10-20): the written words are only the fallback
-    assert.match(text, /Hours:s+8 AM – 9 PMs*, every day/, `${n}: hours`);
+    assert.match(text, /Hours:\s+8 AM – 9 PM\s*, every day/, `${n}: hours`);
     assert.match(pages[n], /<span data-hours="dash">/, `${n}: live hours marker`);
   }
   // The same number as the home page's support links.
