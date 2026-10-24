@@ -1,3 +1,4 @@
+import { revenueOf } from './revenue-sql.js';
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { AppError } from '../../middleware/error.middleware.js';
@@ -19,7 +20,7 @@ const orderStats = db
     'customer_id',
     sql<number>`count(*)::int`.as('orders_count'),
     sql<number>`(count(*) FILTER (WHERE order_status = 'DELIVERED'))::int`.as('delivered_count'),
-    sql<string>`coalesce(sum(total_amount + wallet_amount_used) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('delivered_spend'),
+    sql<string>`coalesce(sum(${revenueOf()}) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('delivered_spend'),
     sql<Date | null>`max(placed_at)`.as('last_order_at'),
   ])
   .groupBy('customer_id')

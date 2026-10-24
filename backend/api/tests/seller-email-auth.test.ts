@@ -9,8 +9,10 @@ import { tokens } from './helpers/stock.js';
 
 /**
  * Seller portal email + password (owner, 2026-10-24; no email provider, so no
- * verification mail): POST /auth/seller/register-email makes a SELLER with no
- * phone and a PENDING shop and signs it in; POST /auth/seller/login-email signs
+ * verification mail). Sellers are invite-only since 2026-10-24, so
+ * POST /auth/seller/register-email is closed (403 SELLER_SIGNUP_CLOSED); email
+ * sellers that already exist (made directly here, as the old sign-up did: no
+ * phone, a PENDING shop) keep signing in: POST /auth/seller/login-email signs
  * a SELLER in with the staff password rules and lockout; every other account,
  * an unknown email and a wrong password get the same 401. Staff sign-in refuses
  * a seller. An email-only seller is never texted. Own rows only, all removed.
@@ -53,6 +55,19 @@ beforeAll(purge);
 afterAll(purge);
 beforeEach(() => authRateLimiter.reset());
 
+/** An email-only seller as the closed sign-up used to make one: no phone (placeholder), a hashed password, a PENDING shop. */
+async function emailSeller(email: string, shopName: string, password = PASSWORD) {
+  const userId = (
+    await pool.query(
+      `INSERT INTO users (phone, email, role, staff_password_hash)
+       VALUES ('nophone:' || substr(md5(random()::text), 1, 12), lower($1), 'SELLER', crypt($2, gen_salt('bf', 4))) RETURNING id`,
+      [email, password]
+    )
+  ).rows[0].id as string;
+  const sellerId = (await pool.query('INSERT INTO sellers (user_id, shop_name) VALUES ($1, $2) RETURNING id', [userId, shopName])).rows[0].id as string;
+  return { userId, sellerId };
+}
+
 /** A user of any role with an email and a password, made directly. */
 async function userWithPassword(n: number, role: string, email: string) {
   const row = (
@@ -65,84 +80,22 @@ async function userWithPassword(n: number, role: string, email: string) {
 }
 
 describe('POST /api/v1/auth/seller/register-email', () => {
-  it('makes a SELLER with no phone, a hashed password and a PENDING shop, and signs it in', async () => {
-    const res = await register({ email: `  ${mail('Green.Basket').toUpperCase()} `, password: PASSWORD, shop_name: '  Green Basket  ' });
-    expect(res.status, JSON.stringify(res.body)).toBe(201);
-    const data = res.body.data;
-    expect(Object.keys(data).sort()).toEqual(['access_token', 'expires_in', 'refresh_token', 'token_type', 'user']);
-    expect(data).toMatchObject({ token_type: 'Bearer', expires_in: 900 });
-    expect(data.user).toEqual({ id: expect.any(String), phone: null, role: 'SELLER', full_name: null, email: mail('green.basket') });
-
-    const user = (
-      await pool.query('SELECT role, email, phone, staff_password_hash, phone_verified_at FROM users WHERE id = $1', [data.user.id])
-    ).rows[0];
-    expect(user.role).toBe('SELLER');
-    expect(user.email).toBe(mail('green.basket'));
-    expect(user.phone).toMatch(/^nophone:[0-9a-f]{12}$/);
-    expect(user.staff_password_hash).toMatch(/^\$2[aby]?\$/);
-    expect(user.staff_password_hash).not.toContain(PASSWORD);
-    expect(user.phone_verified_at).toBeNull();
-    const seller = (await pool.query('SELECT shop_name, status FROM sellers WHERE user_id = $1', [data.user.id])).rows;
-    expect(seller).toEqual([{ shop_name: 'Green Basket', status: 'PENDING' }]);
-
-    // The session works on the seller routes, /auth/me and /auth/refresh.
-    const me = await request(app).get('/api/v1/seller/me').set(bearer(data.access_token));
-    expect(me.status).toBe(200);
-    expect(me.body.data.seller).toMatchObject({ shop_name: 'Green Basket', status: 'PENDING' });
-    const who = await request(app).get('/api/v1/auth/me').set(bearer(data.access_token));
-    expect(who.body.data).toMatchObject({ id: data.user.id, role: 'SELLER', phone: null, email: mail('green.basket') });
-    const refreshed = await request(app).post('/api/v1/auth/refresh').send({ refresh_token: data.refresh_token });
-    expect(refreshed.status).toBe(200);
-    expect((await request(app).get('/api/v1/seller/me').set(bearer(refreshed.body.data.access_token))).status).toBe(200);
-  });
-
-  it.each([
-    ['a short password', { email: mail('v1'), password: 'short7!', shop_name: 'Shop' }],
-    ['a 129-character password', { email: mail('v2'), password: 'x'.repeat(129), shop_name: 'Shop' }],
-    ['a bad email', { email: 'not-an-email', password: PASSWORD, shop_name: 'Shop' }],
-    ['a one-letter shop name', { email: mail('v3'), password: PASSWORD, shop_name: 'A' }],
-    ['an 81-character shop name', { email: mail('v4'), password: PASSWORD, shop_name: 'S'.repeat(81) }],
-    ['no shop name', { email: mail('v5'), password: PASSWORD }],
-  ])('refuses %s (VALIDATION_ERROR, nothing created)', async (_label, body) => {
-    const res = await register(body);
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_ERROR');
-    expect((await pool.query('SELECT 1 FROM users WHERE email = $1', [body.email])).rowCount).toBe(0);
-  });
-
-  it('accepts 8- and 128-character passwords', async () => {
-    expect((await register({ email: mail('len8'), password: 'abcdefgh', shop_name: 'Eight' })).status).toBe(201);
-    expect((await register({ email: mail('len128'), password: 'p'.repeat(128), shop_name: 'Long' })).status).toBe(201);
-    expect((await login(mail('len128'), 'p'.repeat(128))).status).toBe(200);
-  });
-
-  it('refuses an email any account already uses, ignoring case (409 EMAIL_IN_USE)', async () => {
-    expect((await register({ email: mail('taken'), password: PASSWORD, shop_name: 'First' })).status).toBe(201);
-    const again = await register({ email: mail('TAKEN'), password: 'Other-pass-99', shop_name: 'Second' });
-    expect(again.status).toBe(409);
-    expect(again.body.error.code).toBe('EMAIL_IN_USE');
-
-    // A customer's (or staff member's) email too.
-    await userWithPassword(10, 'CUSTOMER', mail('customer'));
-    await userWithPassword(11, 'ADMIN', mail('admin'));
-    for (const email of [mail('customer'), mail('Admin')]) {
-      const res = await register({ email, password: PASSWORD, shop_name: 'Nope' });
-      expect(res.status).toBe(409);
-      expect(res.body.error.code).toBe('EMAIL_IN_USE');
+  it('is closed: 403 SELLER_SIGNUP_CLOSED for any body, and nothing is created', async () => {
+    await emailSeller(mail('taken'), 'Existing Shop');
+    for (const body of [
+      { email: mail('green.basket'), password: PASSWORD, shop_name: 'Green Basket' },
+      { email: 'not-an-email', password: 'short', shop_name: 'A' },
+      { email: mail('taken'), password: PASSWORD, shop_name: 'Second' },
+      {},
+    ]) {
+      const res = await register(body);
+      expect(res.status, JSON.stringify(body)).toBe(403);
+      expect(res.body.error.code).toBe('SELLER_SIGNUP_CLOSED');
     }
-    const counts = (
-      await pool.query(`SELECT count(*)::int AS n FROM users WHERE lower(email) IN ($1, $2, $3)`, [mail('taken'), mail('customer'), mail('admin')])
-    ).rows[0];
-    expect(counts.n).toBe(3);
-    expect((await pool.query(`SELECT 1 FROM sellers WHERE shop_name IN ('Second', 'Nope')`)).rowCount).toBe(0);
-  });
-
-  it('is rate-limited per device', async () => {
-    let last = 0;
-    for (let i = 0; i < 11; i++) {
-      last = (await register({ email: mail(`rate${i}`), password: PASSWORD, shop_name: `Rate ${i}` })).status;
-    }
-    expect(last).toBe(429);
+    expect((await pool.query('SELECT 1 FROM users WHERE lower(email) = $1', [mail('green.basket')])).rowCount).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM sellers WHERE shop_name IN ('Green Basket', 'Second', 'A')`)).rowCount).toBe(0);
+    // an email seller made before the sign-up closed still signs in
+    expect((await login(mail('taken'), PASSWORD)).status).toBe(200);
   });
 });
 
@@ -152,10 +105,7 @@ describe('POST /api/v1/auth/seller/login-email', () => {
 
   beforeAll(async () => {
     authRateLimiter.reset();
-    const res = await register({ email: mail('login'), password: PASSWORD, shop_name: 'Login Shop' });
-    expect(res.status).toBe(201);
-    userId = res.body.data.user.id;
-    sellerId = (await pool.query('SELECT id FROM sellers WHERE user_id = $1', [userId])).rows[0].id;
+    ({ userId, sellerId } = await emailSeller(mail('login'), 'Login Shop'));
   });
   beforeEach(async () => {
     await pool.query('UPDATE users SET login_failed_attempts = 0, login_locked_until = NULL WHERE id = $1', [userId]);
@@ -243,14 +193,8 @@ describe('POST /api/v1/auth/seller/login-email', () => {
 
 describe('Admin and SMS for an email-only seller', () => {
   it('lists it with its email (phone null), finds it by email, and queues no SMS on approval or rejection', async () => {
-    const a = await register({ email: mail('admin-view'), password: PASSWORD, shop_name: 'Email Only Shop' });
-    const b = await register({ email: mail('admin-reject'), password: PASSWORD, shop_name: 'Email Reject Shop' });
-    expect(a.status).toBe(201);
-    expect(b.status).toBe(201);
-    const aUser = a.body.data.user.id as string;
-    const bUser = b.body.data.user.id as string;
-    const aSeller = (await pool.query('SELECT id FROM sellers WHERE user_id = $1', [aUser])).rows[0].id as string;
-    const bSeller = (await pool.query('SELECT id FROM sellers WHERE user_id = $1', [bUser])).rows[0].id as string;
+    const { userId: aUser, sellerId: aSeller } = await emailSeller(mail('admin-view'), 'Email Only Shop');
+    const { userId: bUser, sellerId: bSeller } = await emailSeller(mail('admin-reject'), 'Email Reject Shop');
 
     const found = await request(app).get('/api/v1/admin/sellers?search=admin-view%40seller-email').set(bearer(tokens.admin));
     expect(found.status).toBe(200);

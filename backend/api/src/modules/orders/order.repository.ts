@@ -144,6 +144,17 @@ export interface CreateOrderData {
    * window. Absent = COD, exactly as before.
    */
   online_payment?: { window_minutes: number } | null;
+  /**
+   * Rider tip (owner, 2026-10-24; migration 055): collected in cash with the
+   * order, added to total_amount after every discount and the wallet. Absent
+   * or 0 = no tip (and the column is not written, so it works before 055).
+   */
+  rider_tip?: number;
+  /**
+   * Repeat baskets (owner, 2026-10-24; migration 054): the basket the worker
+   * placed this order from. Absent = an ordinary order (column not written).
+   */
+  repeat_basket_id?: string | null;
 }
 
 /** Migration 033: an order's combo lines as the API returns them. */
@@ -403,6 +414,10 @@ export class OrderRepository {
       }
       const initialStatus = initialOrderStatus(paymentMethod);
       const paymentExpiresAt = paymentMethod === 'ONLINE' && data.online_payment ? new Date(Date.now() + data.online_payment.window_minutes * 60_000) : null;
+      // Migration 055: the rider's tip rides on what is collected (cash only -
+      // order.service refuses a tip with ONLINE), never on items or the fee.
+      const riderTip = data.rider_tip && data.rider_tip > 0 ? Number(data.rider_tip.toFixed(2)) : 0;
+      const collectAmount = Number((totalAmount + riderTip).toFixed(2));
 
       // 1. Insert orders record
       const [order] = await trx
@@ -430,7 +445,11 @@ export class OrderRepository {
           ...orderRewardColumns(referral, points),
           coupon_code: coupon?.code ?? null,
           ...(walletUsed > 0 ? { wallet_amount_used: walletUsed } : {}),
-          total_amount: totalAmount,
+          // Migration 055: written only with a tip (the column defaults to 0).
+          ...(riderTip > 0 ? { rider_tip: riderTip } : {}),
+          // Migration 054: written only for a repeat basket's order.
+          ...(data.repeat_basket_id ? { repeat_basket_id: data.repeat_basket_id } : {}),
+          total_amount: collectAmount,
           scheduled_for: data.scheduled_for,
           scheduled_until: data.delivery_slot?.until ?? null,
           delivery_recipient_name: data.delivery_recipient_name,
@@ -496,7 +515,7 @@ export class OrderRepository {
           order_id: order.id,
           payment_method: paymentMethod,
           payment_status: 'PENDING',
-          amount: totalAmount,
+          amount: collectAmount,
           ...(paymentMethod === 'ONLINE' ? { gateway: 'PAYHERE' } : {}),
         })
         .returningAll()
@@ -525,6 +544,9 @@ export class OrderRepository {
         points_discount_amount: Number(Number(order.points_discount_amount ?? 0).toFixed(2)),
         wallet_amount_used: Number(Number(order.wallet_amount_used ?? 0).toFixed(2)),
         total_amount: Number(Number(order.total_amount).toFixed(2)),
+        // Migration 055: the checkout tip (cash, inside total_amount) and a wallet tip after delivery; 0 before 055.
+        rider_tip: Number(Number(order.rider_tip ?? 0).toFixed(2)),
+        rider_tip_wallet: Number(Number(order.rider_tip_wallet ?? 0).toFixed(2)),
         delivery_latitude: Number(order.delivery_latitude),
         delivery_longitude: Number(order.delivery_longitude),
         items: items.map((it) => ({
@@ -605,6 +627,9 @@ export class OrderRepository {
       points_discount_amount: Number(Number(order.points_discount_amount ?? 0).toFixed(2)),
       wallet_amount_used: Number(Number(order.wallet_amount_used ?? 0).toFixed(2)),
       total_amount: Number(Number(order.total_amount).toFixed(2)),
+      // Migration 055: the checkout tip (cash, inside total_amount) and a wallet tip after delivery; 0 before 055.
+      rider_tip: Number(Number(order.rider_tip ?? 0).toFixed(2)),
+      rider_tip_wallet: Number(Number(order.rider_tip_wallet ?? 0).toFixed(2)),
       items: items.map((it) => ({
         ...it,
         unit_selling_price: Number(Number(it.unit_selling_price).toFixed(2)),
@@ -679,6 +704,8 @@ export class OrderRepository {
       points_discount_amount: Number(Number(o.points_discount_amount ?? 0).toFixed(2)),
       wallet_amount_used: Number(Number(o.wallet_amount_used ?? 0).toFixed(2)),
       total_amount: Number(Number(o.total_amount).toFixed(2)),
+      rider_tip: Number(Number(o.rider_tip ?? 0).toFixed(2)),
+      rider_tip_wallet: Number(Number(o.rider_tip_wallet ?? 0).toFixed(2)),
       items: items
         .filter((it) => it.order_id === o.id)
         .map((it) => ({
@@ -782,6 +809,8 @@ export class OrderRepository {
         points_discount_amount: Number(Number(o.points_discount_amount ?? 0).toFixed(2)),
         wallet_amount_used: Number(Number(o.wallet_amount_used ?? 0).toFixed(2)),
         total_amount: Number(Number(o.total_amount).toFixed(2)),
+        rider_tip: Number(Number(o.rider_tip ?? 0).toFixed(2)),
+        rider_tip_wallet: Number(Number(o.rider_tip_wallet ?? 0).toFixed(2)),
         items_summary: {
           total: summary?.total ?? 0,
           pending: summary?.pending ?? 0,

@@ -37,6 +37,12 @@ import { feedbackRouter } from './modules/feedback/index.js';
 import { rewardsMeRouter } from './modules/loyalty/index.js';
 // Blynk Wallet (owner, 2026-10-15; migration 049).
 import { walletMeRouter } from './modules/wallet/index.js';
+// Buy again + repeat baskets (owner, 2026-10-24; migration 054).
+import { adminRepeatRouter, repeatMeRouter } from './modules/repeat-baskets/repeat.routes.js';
+// "Can't find it? Ask us" (owner, 2026-10-24; migration 056).
+import { adminProductRequestsRouter, productRequestsMeRouter, productRequestsRouter } from './modules/catalog/product-requests.js';
+// Order ratings + rider tips (owner, 2026-10-24; migration 055).
+import { adminRatingsRouter, orderRatingsRouter } from './modules/ratings/index.js';
 
 export function createApp(): Express {
   const app = express();
@@ -136,6 +142,9 @@ export function createApp(): Express {
   apiRouter.use('/me', meRouter);
   apiRouter.use('/me', rewardsMeRouter);
   apiRouter.use('/me', walletMeRouter);
+  apiRouter.use('/me', repeatMeRouter);
+  apiRouter.use('/me', productRequestsMeRouter);
+  apiRouter.use('/product-requests', productRequestsRouter);
   apiRouter.use('/users', usersRouter);
   apiRouter.use('/categories', categoriesRouter);
   apiRouter.use('/products', productsRouter);
@@ -144,6 +153,7 @@ export function createApp(): Express {
   apiRouter.use('/promotions', promotionsRouter);
   apiRouter.use('/pricing', pricingRouter);
   apiRouter.use('/inventory', inventoryRouter);
+  apiRouter.use('/orders', orderRatingsRouter);
   apiRouter.use('/orders', ordersRouter);
   apiRouter.use('/payments', paymentsRouter);
   apiRouter.use('/deliveries', deliveriesRouter);
@@ -152,6 +162,9 @@ export function createApp(): Express {
   apiRouter.use('/notifications', notificationsRouter);
   apiRouter.use('/seller', sellerRouter);
   apiRouter.use('/admin', adminSellersRouter);
+  apiRouter.use('/admin', adminRepeatRouter);
+  apiRouter.use('/admin', adminProductRequestsRouter);
+  apiRouter.use('/admin', adminRatingsRouter);
   apiRouter.use('/admin', adminRouter);
   apiRouter.use('/audit', auditRouter);
   apiRouter.use('/configuration', configurationRouter);

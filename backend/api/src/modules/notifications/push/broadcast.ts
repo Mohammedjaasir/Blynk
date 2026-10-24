@@ -9,6 +9,14 @@ import { AppError } from '../../../middleware/error.middleware.js';
 import { logger } from '../../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../../audit/audit.writer.js';
 import { isPushEnabled } from './push.sender.js';
+import {
+  ALL_CUSTOMERS,
+  audienceCondition,
+  audienceFromStored,
+  customerAudienceSchema,
+  parseAudienceQuery,
+  type CustomerAudience,
+} from '../customer-groups.js';
 
 /**
  * A push notification to every customer who allowed notifications (owner, 2026-10-19: "I must be
@@ -29,6 +37,11 @@ import { isPushEnabled } from './push.sender.js';
  * A picture (owner, 2026-10-24: a big-picture notification like PickMe's): `image_url`, an https
  * address the phone can load (Admin / Ops upload one), is shown under the text - Android's big
  * picture, and the image of a web push.
+ *
+ * Customer groups (owner, 2026-10-24): an optional `audience` ({ group: 'ALL' | 'LAPSED' | 'NEW' |
+ * 'BIG_SPENDERS' | 'NEVER_ORDERED', days?, min_spend_lkr? }, notifications/customer-groups.ts) sends
+ * to one group only; missing = ALL, exactly as before. GET .../audience?group=&days=&min_spend_lkr=
+ * counts that group. The audit row and the list carry the audience.
  */
 export const PUSH_BROADCAST_TYPE = 'PUSH_BROADCAST';
 export const BROADCAST_LIMITS = { titleChars: 60, bodyChars: 180, imageChars: 500, cooldownMs: 2 * 60 * 1000 } as const;
@@ -54,21 +67,25 @@ export const broadcastSchema = z
       .refine((v) => /^https:\/\/[^\s]+$/i.test(v), 'The picture must be an https:// address')
       .nullish()
       .transform((v) => v || null),
+    audience: customerAudienceSchema.optional(),
   })
   .strict();
 
-const audienceQuery = () =>
+const audienceQuery = (audience: CustomerAudience = ALL_CUSTOMERS) =>
   db
     .selectFrom('device_tokens as d')
     .innerJoin('users as u', 'u.id', 'd.user_id')
     .where('u.role', '=', 'CUSTOMER')
-    .where('u.is_active', '=', true);
+    .where('u.is_active', '=', true)
+    .where(audienceCondition(audience));
 
-export async function broadcastAudience(): Promise<{ push_enabled: boolean; customers: number; devices: number }> {
-  const row = await audienceQuery()
+export async function broadcastAudience(
+  audience: CustomerAudience = ALL_CUSTOMERS
+): Promise<{ push_enabled: boolean; customers: number; devices: number; audience: CustomerAudience }> {
+  const row = await audienceQuery(audience)
     .select([sql<number>`count(DISTINCT u.id)::int`.as('customers'), sql<number>`count(*)::int`.as('devices')])
     .executeTakeFirst();
-  return { push_enabled: isPushEnabled(), customers: row?.customers ?? 0, devices: row?.devices ?? 0 };
+  return { push_enabled: isPushEnabled(), customers: row?.customers ?? 0, devices: row?.devices ?? 0, audience };
 }
 
 export async function sendBroadcast(input: z.infer<typeof broadcastSchema>, actor: AuditActor): Promise<{ id: string; queued: number }> {
@@ -80,6 +97,7 @@ export async function sendBroadcast(input: z.infer<typeof broadcastSchema>, acto
     );
   }
   const id = randomUUID();
+  const audience = input.audience ?? ALL_CUSTOMERS;
   return await db.transaction().execute(async (trx) => {
     // one broadcast at a time, and never twice within the cooldown (a double tap, two staff at once)
     await sql`SELECT pg_advisory_xact_lock(hashtext('push_broadcast'))`.execute(trx);
@@ -105,7 +123,7 @@ export async function sendBroadcast(input: z.infer<typeof broadcastSchema>, acto
         SELECT DISTINCT u.id, 'PUSH'::notification_channel_enum, ${PUSH_BROADCAST_TYPE}, u.id::text, ${payload}::jsonb,
                'QUEUED'::notification_status_enum, 3, ${`broadcast:${id}:`} || u.id::text
         FROM device_tokens d JOIN users u ON u.id = d.user_id
-        WHERE u.role = 'CUSTOMER' AND u.is_active = true
+        WHERE u.role = 'CUSTOMER' AND u.is_active = true AND ${audienceCondition(audience)}
         ON CONFLICT (idempotency_key) DO NOTHING
         RETURNING 1
       )
@@ -115,10 +133,10 @@ export async function sendBroadcast(input: z.infer<typeof broadcastSchema>, acto
       action: 'PUSH_BROADCAST_SENT',
       entityType: 'PUSH_BROADCAST',
       entityId: SETTINGS_ENTITY_ID,
-      newValues: { broadcast_id: id, title: input.title, body: input.body, image_url: input.image_url, queued },
+      newValues: { broadcast_id: id, title: input.title, body: input.body, image_url: input.image_url, audience, queued },
     });
-    logger.info({ actorId: actor.actorId, broadcastId: id, queued }, 'Push broadcast queued');
-    return { id, queued };
+    logger.info({ actorId: actor.actorId, broadcastId: id, queued, audience }, 'Push broadcast queued');
+    return { id, queued, audience };
   });
 }
 
@@ -139,6 +157,7 @@ export async function recentBroadcasts() {
       body: String(v.body ?? ''),
       image_url: typeof v.image_url === 'string' && v.image_url ? v.image_url : null,
       queued: Number(v.queued ?? 0),
+      audience: audienceFromStored(v.audience),
       sent_at: r.created_at,
       sent_by: r.full_name ?? r.email ?? null,
     };
@@ -154,9 +173,9 @@ const actorOf = (req: Request): AuditActor => ({
 export const adminPushBroadcastRouter = Router();
 const staff = [requireAuth, requireRoles(['ADMIN', 'OPERATIONS'])];
 
-adminPushBroadcastRouter.get('/push-broadcasts/audience', ...staff, async (_req, res, next) => {
+adminPushBroadcastRouter.get('/push-broadcasts/audience', ...staff, async (req, res, next) => {
   try {
-    res.json({ success: true, data: await broadcastAudience() });
+    res.json({ success: true, data: await broadcastAudience(parseAudienceQuery(req.query as Record<string, unknown>)) });
   } catch (err) {
     next(err);
   }

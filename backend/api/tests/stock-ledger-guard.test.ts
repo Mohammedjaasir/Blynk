@@ -22,7 +22,9 @@ function sourceFiles(dir: string): string[] {
 
 const files = sourceFiles(SRC)
   .map((full) => ({ rel: relative(SRC, full).split(sep).join('/'), text: readFileSync(full, 'utf8') }))
-  .filter((f) => f.rel !== WRITER && !f.rel.startsWith('database/seeds/'));
+  // The one-off launch wipe (database/fresh-start.ts, owner 2026-10-20) resets stock AND deletes the whole
+  // ledger together on purpose, by hand, so it is not a bypass of the writer.
+  .filter((f) => f.rel !== WRITER && !f.rel.startsWith('database/seeds/') && f.rel !== 'database/fresh-start.ts');
 
 /** `.updateTable('inventory')` statements (up to the next `.execute`) that set a quantity. */
 function quantityUpdates(text: string): string[] {

@@ -1,3 +1,4 @@
+import { revenueOf } from './revenue-sql.js';
 import { sql } from 'kysely';
 import { DateTime } from 'luxon';
 import { db } from '../../database/connection.js';
@@ -96,7 +97,7 @@ export async function orderMap(range: OrderMapRange, status: 'delivered' | 'all'
       'cx',
       sql<number>`count(*)::int`.as('orders'),
       sql<number>`(count(*) FILTER (WHERE order_status = 'DELIVERED'))::int`.as('delivered'),
-      sql<string>`coalesce(sum(total_amount + wallet_amount_used) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('revenue'),
+      sql<string>`coalesce(sum(${revenueOf()}) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('revenue'),
       // The town most of the cell's orders name (a place, not a person).
       sql<string | null>`mode() WITHIN GROUP (ORDER BY delivery_city)`.as('area'),
       // The address line most of the cell's orders name - what tells one
@@ -108,7 +109,7 @@ export async function orderMap(range: OrderMapRange, status: 'delivered' | 'all'
     ])
     .groupBy(['cy', 'cx'])
     .orderBy(sql`count(*)`, 'desc')
-    .orderBy(sql`coalesce(sum(total_amount + wallet_amount_used) FILTER (WHERE order_status = 'DELIVERED'), 0)`, 'desc')
+    .orderBy(sql`coalesce(sum(${revenueOf()}) FILTER (WHERE order_status = 'DELIVERED'), 0)`, 'desc')
     .orderBy('cy')
     .orderBy('cx')
     .execute();
@@ -117,7 +118,7 @@ export async function orderMap(range: OrderMapRange, status: 'delivered' | 'all'
     .selectFrom(base.as('o'))
     .select([
       sql<number>`count(*)::int`.as('orders'),
-      sql<string>`coalesce(sum(total_amount + wallet_amount_used) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('revenue'),
+      sql<string>`coalesce(sum(${revenueOf()}) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('revenue'),
       sql<number>`(count(*) FILTER (WHERE distance_km <= ${radiusKm - EDGE_KM}))::int`.as('inside'),
       sql<number>`(count(*) FILTER (WHERE distance_km > ${radiusKm - EDGE_KM} AND distance_km <= ${radiusKm}))::int`.as('near_edge'),
       sql<number>`(count(*) FILTER (WHERE distance_km > ${radiusKm}))::int`.as('outside'),
@@ -209,7 +210,7 @@ export async function orderMapCell(
       'o.delivery_city as city',
       sql<number>`count(*)::int`.as('orders'),
       sql<number>`(count(*) FILTER (WHERE o.order_status = 'DELIVERED'))::int`.as('delivered'),
-      sql<string>`coalesce(sum(o.total_amount + o.wallet_amount_used) FILTER (WHERE o.order_status = 'DELIVERED'), 0)`.as('revenue'),
+      sql<string>`coalesce(sum(${revenueOf('o')}) FILTER (WHERE o.order_status = 'DELIVERED'), 0)`.as('revenue'),
       sql<number>`count(DISTINCT o.customer_id)::int`.as('customers'),
       sql<Date>`max(o.placed_at)`.as('last_order_at'),
       sql<string>`avg(o.delivery_latitude)`.as('lat'),
@@ -248,7 +249,7 @@ export async function orderMapCell(
     .select([
       sql<number>`count(*)::int`.as('orders'),
       sql<number>`(count(*) FILTER (WHERE o.order_status = 'DELIVERED'))::int`.as('delivered'),
-      sql<string>`coalesce(sum(o.total_amount + o.wallet_amount_used) FILTER (WHERE o.order_status = 'DELIVERED'), 0)`.as('revenue'),
+      sql<string>`coalesce(sum(${revenueOf('o')}) FILTER (WHERE o.order_status = 'DELIVERED'), 0)`.as('revenue'),
       sql<number>`count(DISTINCT o.customer_id)::int`.as('customers'),
     ])
     .executeTakeFirstOrThrow();

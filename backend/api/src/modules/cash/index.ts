@@ -206,7 +206,16 @@ export async function reconciliation(date: string) {
       const kept = money(c?.cash_kept);
       const dayBonuses = money(c?.day_bonuses);
       const adjustments = money(c?.adjustments);
-      const { expected_handin: expected, payable_to_rider } = dayCash({ collected: cash, kept, day_bonuses: dayBonuses, adjustments });
+      // Migration 055: the rider's tips - cash tips stay in hand, wallet tips are owed.
+      const tipsCash = money(c?.tips_cash);
+      const tipsWallet = money(c?.tips_wallet);
+      const { expected_handin: expected, payable_to_rider } = dayCash({
+        collected: cash,
+        kept,
+        day_bonuses: dayBonuses,
+        adjustments,
+        tips: tipsCash + tipsWallet,
+      });
       const inHand = money(h?.handed_in);
       const difference = money(inHand - expected);
       return {
@@ -224,7 +233,11 @@ export async function reconciliation(date: string) {
         day_bonuses: dayBonuses,
         /** Staff adjustments dated that day, signed (negative = deduction). */
         adjustments,
-        /** What should be handed in: max(0, collected - kept_share - day_bonuses - adjustments). */
+        /** Migration 055: checkout tips collected with the orders - the rider keeps them. */
+        tips_cash: tipsCash,
+        /** Migration 055: tips paid from customers' Blynk Wallets that day - owed to the rider. */
+        tips_wallet: tipsWallet,
+        /** What should be handed in: max(0, collected - kept_share - tips - day_bonuses - adjustments). */
         expected_handin: expected,
         /** What the day's cash could not cover: Blynk owes the rider. */
         payable_to_rider,
@@ -235,8 +248,9 @@ export async function reconciliation(date: string) {
     })
     .sort((a, b) => (a.rider_name ?? '').localeCompare(b.rider_name ?? '') || a.rider_id.localeCompare(b.rider_id));
 
-  const total = (k: 'collected' | 'kept_share' | 'day_bonuses' | 'adjustments' | 'expected_handin' | 'payable_to_rider' | 'handed_in') =>
-    money(riders.reduce((s, r) => s + r[k], 0));
+  const total = (
+    k: 'collected' | 'kept_share' | 'day_bonuses' | 'adjustments' | 'tips_cash' | 'tips_wallet' | 'expected_handin' | 'payable_to_rider' | 'handed_in'
+  ) => money(riders.reduce((s, r) => s + r[k], 0));
   const expectedTotal = total('expected_handin');
   const handedTotal = total('handed_in');
   return {
@@ -248,6 +262,8 @@ export async function reconciliation(date: string) {
       kept_share: total('kept_share'),
       day_bonuses: total('day_bonuses'),
       adjustments: total('adjustments'),
+      tips_cash: total('tips_cash'),
+      tips_wallet: total('tips_wallet'),
       expected_handin: expectedTotal,
       payable_to_rider: total('payable_to_rider'),
       handed_in: handedTotal,

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeSriLankanPhone } from '../../utils/phone.js';
 
 /**
  * Staff side of the seller portal (docs/superpowers/plans/2026-10-24-seller-portal.md):
@@ -54,21 +55,77 @@ export type ListSellersQuery = z.infer<typeof listSellersQuerySchema>;
 /** GET /admin/sellers/:id - the statement can be limited to a period (delivery date, Colombo). */
 export const sellerDetailQuerySchema = z.object({ from: day.optional(), to: day.optional() });
 
+/** A percent 0-100 with at most 2 decimals; null = no own rate (seller.commission.ts). */
+const percent = (label: string) =>
+  z
+    .number({ invalid_type_error: `${label} must be a number` })
+    .min(0, `${label} cannot be negative`)
+    .max(100, `${label} cannot be above 100`)
+    .refine(twoDecimals, `${label} can have at most 2 decimals`);
+
+/** A Sri Lankan mobile/landline number, normalised to +94... like the OTP schema does. */
+const phone = z
+  .string({ required_error: 'Phone number is required', invalid_type_error: 'Phone number must be text' })
+  .trim()
+  .transform((raw, ctx) => {
+    try {
+      return normalizeSriLankanPhone(raw);
+    } catch (err) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: err instanceof Error ? err.message : 'Invalid Sri Lankan phone number' });
+      return z.NEVER;
+    }
+  });
+
+/** Optional profile text: trimmed, blank = cleared (null). */
+const profileText = (label: string, max: number) =>
+  z
+    .string({ invalid_type_error: `${label} must be text` })
+    .trim()
+    .max(max, `${label} must be at most ${max} characters`)
+    .nullable()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v ? v : null));
+
+const shopName = z
+  .string({ required_error: 'Shop name is required', invalid_type_error: 'Shop name must be text' })
+  .trim()
+  .min(2, 'Shop name must be at least 2 characters')
+  .max(80, 'Shop name must be at most 80 characters');
+
+/**
+ * POST /admin/sellers - sellers are invite-only (owner, 2026-10-24): staff add the shop with the
+ * phone number the seller signs in with. Approved straight away unless status PENDING is sent.
+ */
+export const createSellerSchema = z
+  .object({
+    shop_name: shopName,
+    phone,
+    contact_name: profileText('Contact name', 80),
+    address: profileText('Address', 255),
+    note: profileText('Note', 500),
+    commission_percent: percent('Commission').nullable().optional(),
+    status: z.enum(['APPROVED', 'PENDING'], { errorMap: () => ({ message: 'status must be APPROVED or PENDING' }) }).default('APPROVED'),
+  })
+  .strict();
+export type CreateSellerInput = z.infer<typeof createSellerSchema>;
+
 /** PATCH /admin/sellers/:id */
 export const patchSellerSchema = z
   .object({
     status: z.enum(['APPROVED', 'REJECTED', 'SUSPENDED'], { errorMap: () => ({ message: 'status must be APPROVED, REJECTED or SUSPENDED' }) }).optional(),
     rejection_reason: reason('The reason').nullable().optional(),
-    commission_percent: z
-      .number({ invalid_type_error: 'Commission must be a number' })
-      .min(0, 'Commission cannot be negative')
-      .max(100, 'Commission cannot be above 100')
-      .refine(twoDecimals, 'Commission can have at most 2 decimals')
-      .optional(),
+    // null = no own rate: the category's rate or the default applies (migration 057)
+    commission_percent: percent('Commission').nullable().optional(),
+    // invite-only (2026-10-24): staff keep the sign-in phone and the contact details
+    phone: phone.optional(),
+    shop_name: shopName.optional(),
+    contact_name: profileText('Contact name', 80),
+    address: profileText('Address', 255),
+    note: profileText('Note', 500),
   })
   .strict()
   .superRefine((v, ctx) => {
-    if (v.status === undefined && v.commission_percent === undefined && v.rejection_reason === undefined) {
+    if (Object.values(v).every((x) => x === undefined)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nothing to change' });
     }
     if (v.status === 'REJECTED' && !v.rejection_reason) {
@@ -124,6 +181,25 @@ export const recordPayoutSchema = z
   })
   .strict();
 export type RecordPayoutInput = z.infer<typeof recordPayoutSchema>;
+
+/** PUT /admin/settings/seller-commission (seller.commission.ts) - categories left out keep their rate. */
+export const commissionSettingsSchema = z
+  .object({
+    default_percent: percent('Default commission'),
+    categories: z
+      .array(
+        z
+          .object({
+            category_id: z.string().uuid('category_id must be a category id'),
+            percent: percent('Category commission').nullable(),
+          })
+          .strict()
+      )
+      .max(2000)
+      .optional(),
+  })
+  .strict();
+export type CommissionSettingsInput = z.infer<typeof commissionSettingsSchema>;
 
 /**
  * What the seller proposed (seller_submissions.payload, written by the seller API). Read leniently:

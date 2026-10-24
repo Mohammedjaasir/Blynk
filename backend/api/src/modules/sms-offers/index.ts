@@ -13,7 +13,9 @@ import {
   listOffers,
   sendOffer,
   sendTestOffer,
+  smsGroupCounts,
 } from './sms-offers.service.js';
+import { customerAudienceSchema, parseAudienceQuery } from '../notifications/customer-groups.js';
 
 /** SMS offers (migration 027): Admin and Operations, mounted under /admin. */
 export const smsOffersRouter = Router();
@@ -32,7 +34,12 @@ const actorOf = (req: Request): AuditActor => ({
 const language = z.enum(SMS_LANGUAGES as [string, ...string[]]);
 const text = z.string().trim().max(MAX_OFFER_TEXT, `Keep each text under ${MAX_OFFER_TEXT} characters`);
 const offerSchema = z.object({
-  audience: z.enum(SMS_OFFER_AUDIENCES as [string, ...string[]]),
+  // The original audiences (a string, unchanged) or a customer group (owner, 2026-10-24:
+  // { group: 'LAPSED', days: 14 } etc., notifications/customer-groups.ts). Missing = ALL.
+  audience: z
+    .union([z.enum(SMS_OFFER_AUDIENCES as [string, ...string[]]), customerAudienceSchema])
+    .optional()
+    .transform((a) => a ?? 'ALL'),
   fallback_language: language,
   messages: z.object({ si: text.optional(), ta: text.optional(), en: text.optional() }),
 });
@@ -52,6 +59,19 @@ const testPhone = z
       return z.NEVER;
     }
   });
+
+/**
+ * A customer group's size for SMS (owner, 2026-10-24): ?group=&days=&min_spend_lkr=
+ * -> { audience, customers, phones, opted_out }. No group = all customers.
+ */
+smsOffersRouter.get(
+  '/sms-offers/audience',
+  ...STAFF,
+  wrap(async (req, res) => {
+    const audience = parseAudienceQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await smsGroupCounts(audience) });
+  })
+);
 
 /** Who would get it, in which language, and how many SMS parts it costs. */
 smsOffersRouter.post(

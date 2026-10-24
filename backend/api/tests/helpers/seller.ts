@@ -21,13 +21,19 @@ export function sellerFixtures(app: Express, phoneBase: string) {
     return request(app).post('/api/v1/auth/otp/verify').send({ phone: phone(n), otp: asked.body.data.dev_otp, ...extra });
   }
 
-  /** A seller made through the sign-in itself, then set to `status` directly (Admin's API is another module). */
+  /**
+   * A seller as staff add one (sellers are invite-only since 2026-10-24: a SELLER user with the
+   * phone and its sellers row, no own commission rate), in `status`, then signed in through the
+   * real SMS-code flow. The shop is named after the phone unless `shop_name` is given.
+   */
   async function makeSeller(n: number, status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' = 'APPROVED', shop_name?: string) {
-    const res = await signIn(n, { app: 'seller', ...(shop_name ? { shop_name } : {}) });
+    const userId = (await pool.query(`INSERT INTO users (phone, role) VALUES ($1, 'SELLER') RETURNING id`, [phone(n)])).rows[0].id as string;
+    const sellerId = (
+      await pool.query('INSERT INTO sellers (user_id, shop_name, status) VALUES ($1, $2, $3) RETURNING id', [userId, shop_name ?? phone(n), status])
+    ).rows[0].id as string;
+    const res = await signIn(n);
     expect(res.status).toBe(200);
-    const userId = res.body.data.user.id as string;
-    const sellerId = (await pool.query('SELECT id FROM sellers WHERE user_id = $1', [userId])).rows[0].id as string;
-    if (status !== 'PENDING') await pool.query('UPDATE sellers SET status = $2 WHERE id = $1', [sellerId, status]);
+    expect(res.body.data.user.id).toBe(userId);
     return { userId, sellerId, token: res.body.data.access_token as string, refresh: res.body.data.refresh_token as string, phone: phone(n) };
   }
 

@@ -13,7 +13,10 @@ import { priceForProduct } from '../catalog/catalog.pricing.js';
 import { generateUniqueSlug, randomSlugSuffix } from '../catalog/catalog.slugs.js';
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { notificationService } from '../notifications/notification.service.js';
+import { phoneHash } from '../users/phone-identity.js';
 import { sellerStatement } from './seller.statement.js';
+import { commissionContext, earnedSql, type CommissionContext } from './seller.commission.js';
+import { hasSellerRequestTables, requestsNotReady } from './seller-requests.guard.js';
 import {
   hasSellerLocationColumns,
   locationContext,
@@ -25,6 +28,7 @@ import {
 import {
   submissionPayloadSchema,
   type ApproveSubmissionInput,
+  type CreateSellerInput,
   type ListSellersQuery,
   type ListSubmissionsQuery,
   type PatchSellerInput,
@@ -74,7 +78,7 @@ interface SellerRow {
   note: string | null;
   status: string;
   rejection_reason: string | null;
-  commission_percent: string;
+  commission_percent: string | null;
   created_at: Date;
   user_id: string;
   phone: string;
@@ -82,7 +86,8 @@ interface SellerRow {
   full_name: string | null;
   products_live: number;
   submissions_pending: number;
-  gross: string;
+  /** delivered sales less commission, line by line (seller.commission.ts) */
+  earned: string;
   paid: string;
   // migration 053 (NULL / 'NONE' until it has run: locationSelect)
   latitude: number | null;
@@ -96,9 +101,9 @@ interface SellerRow {
 }
 
 function presentSeller(r: SellerRow, ctx: LocationContext) {
-  const pct = Number(r.commission_percent);
-  const gross = round2(Number(r.gross));
-  const earned = round2(gross - round2((gross * pct) / 100));
+  // null = no own rate: each sale uses its category's rate or the default (seller.commission.ts)
+  const pct = r.commission_percent === null ? null : Number(r.commission_percent);
+  const earned = round2(Number(r.earned));
   return {
     id: r.id,
     shop_name: r.shop_name,
@@ -122,7 +127,12 @@ function presentSeller(r: SellerRow, ctx: LocationContext) {
 }
 
 /** AdminSeller rows (one query for any number of sellers; `due` follows seller.statement's rules). */
-async function sellerRows(executor: typeof db | Trx, where: ReturnType<typeof sql>[], located: boolean): Promise<SellerRow[]> {
+async function sellerRows(
+  executor: typeof db | Trx,
+  where: ReturnType<typeof sql>[],
+  located: boolean,
+  commission: CommissionContext
+): Promise<SellerRow[]> {
   const cond = where.length ? sql`WHERE ${sql.join(where, sql` AND `)}` : sql``;
   const r = await sql<SellerRow>`
     SELECT s.id, s.shop_name, s.contact_name, s.address, s.note, s.status, s.rejection_reason,
@@ -130,12 +140,7 @@ async function sellerRows(executor: typeof db | Trx, where: ReturnType<typeof sq
            ${locationSelect(located)},
            (SELECT count(*)::int FROM products p WHERE p.seller_id = s.id AND p.deleted_at IS NULL AND p.is_active) AS products_live,
            (SELECT count(*)::int FROM seller_submissions x WHERE x.seller_id = s.id AND x.status = 'PENDING') AS submissions_pending,
-           (SELECT COALESCE(SUM(oi.quantity * oi.estimated_unit_cost), 0)::text
-              FROM order_items oi
-              JOIN orders o ON o.id = oi.order_id
-              JOIN products p ON p.id = oi.product_id
-             WHERE p.seller_id = s.id AND o.order_status = 'DELIVERED'
-               AND oi.item_status NOT IN ('UNAVAILABLE', 'SUBSTITUTED')) AS gross,
+           ${earnedSql(sql`s.id`, commission)} AS earned,
            (SELECT COALESCE(SUM(amount), 0)::text FROM seller_payouts WHERE seller_id = s.id) AS paid
       FROM sellers s
       JOIN users u ON u.id = s.user_id
@@ -145,8 +150,8 @@ async function sellerRows(executor: typeof db | Trx, where: ReturnType<typeof sq
 }
 
 async function oneSeller(executor: typeof db | Trx, id: string) {
-  const ctx = await locationContext();
-  const [row] = await sellerRows(executor, [sql`s.id = ${id}`], ctx.columns);
+  const [ctx, commission] = await Promise.all([locationContext(), commissionContext()]);
+  const [row] = await sellerRows(executor, [sql`s.id = ${id}`], ctx.columns, commission);
   if (!row) throw new AppError('Seller not found.', 404, 'SELLER_NOT_FOUND');
   return presentSeller(row, ctx);
 }
@@ -193,12 +198,18 @@ export const sellerRejectedSms = (reason: string) => `Blynk: your seller applica
 export const productApprovedSms = (name: string) => `Blynk: ${smsName(name)} is live.`;
 export const productRejectedSms = (name: string, reason: string) => `Blynk: ${smsName(name)} was not approved: ${smsReason(reason)}`;
 
-async function textSeller(
-  user: { id: string; phone: string },
-  type: 'SELLER_APPROVED' | 'SELLER_REJECTED' | 'SELLER_PRODUCT_APPROVED' | 'SELLER_PRODUCT_REJECTED',
-  text: string,
-  key: string
-) {
+/** Every SMS type sent to sellers (each one is a pass-through text in notification.templates.ts). */
+export type SellerSmsType =
+  | 'SELLER_APPROVED'
+  | 'SELLER_REJECTED'
+  | 'SELLER_PRODUCT_APPROVED'
+  | 'SELLER_PRODUCT_REJECTED'
+  // migration 057 (seller-requests.service.ts)
+  | 'SELLER_STOCK_RECEIVED'
+  | 'SELLER_PAYOUT_PAID'
+  | 'SELLER_PAYOUT_DECLINED';
+
+export async function textSeller(user: { id: string; phone: string }, type: SellerSmsType, text: string, key: string) {
   // A seller who signed up with an email has no phone: nothing to text (they
   // see the change when they next open the seller site).
   const phone = publicPhone(user.phone);
@@ -231,14 +242,92 @@ export async function listSellers(query: ListSellersQuery) {
     const like = `%${query.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     where.push(sql`(s.shop_name ILIKE ${like} OR (u.phone NOT LIKE 'nophone:%' AND u.phone ILIKE ${like}) OR u.email ILIKE ${like} OR s.contact_name ILIKE ${like} OR u.full_name ILIKE ${like})`);
   }
-  const ctx = await locationContext();
-  return { sellers: (await sellerRows(db, where, ctx.columns)).map((r) => presentSeller(r, ctx)) };
+  const [ctx, commission] = await Promise.all([locationContext(), commissionContext()]);
+  return { sellers: (await sellerRows(db, where, ctx.columns, commission)).map((r) => presentSeller(r, ctx)) };
 }
 
 export async function getSeller(id: string, period: { from?: string; to?: string } = {}) {
   const seller = await oneSeller(db, id);
   const statement = await sellerStatement(id, period);
   return { seller, statement };
+}
+
+const ROLE_WORD: Record<string, string> = {
+  CUSTOMER: 'customer',
+  RIDER: 'rider',
+  SELLER: 'seller',
+  ADMIN: 'staff',
+  OPERATIONS: 'staff',
+  PACKING_STAFF: 'staff',
+};
+
+/** One number = one account: 409 PHONE_IN_USE (with the account's role) when another user has it. */
+async function assertPhoneFree(trx: Trx, phone: string, exceptUserId: string | null = null) {
+  let q = trx.selectFrom('users').select(['id', 'role']).where('phone', '=', phone);
+  if (exceptUserId) q = q.where('id', '!=', exceptUserId);
+  const other = await q.executeTakeFirst();
+  if (other) {
+    const kind = ROLE_WORD[other.role] ?? 'other';
+    throw new AppError(`This number already has a Blynk account (${kind}).`, 409, 'PHONE_IN_USE', { role: other.role, field: 'phone' });
+  }
+}
+
+/**
+ * POST /admin/sellers - sellers are invite-only (owner, 2026-10-24). A SELLER user with the phone
+ * the seller will sign in with (SMS code on the seller site; no password, no email) plus the
+ * sellers row, APPROVED unless staff chose PENDING. No SMS is sent: staff tell the seller.
+ * Audited SELLER_CREATED.
+ */
+export async function createSeller(input: CreateSellerInput, actor: AuditActor) {
+  const commission = await commissionContext();
+  // Before migration 057 every seller needs a rate of their own: none given = 0 (the old default).
+  const pct = input.commission_percent === undefined || input.commission_percent === null ? (commission.ready ? null : 0) : input.commission_percent;
+  try {
+    const seller = await db.transaction().execute(async (trx) => {
+      await assertPhoneFree(trx, input.phone);
+      const user = await trx
+        .insertInto('users')
+        .values({ phone: input.phone, phone_hash: phoneHash(input.phone), role: 'SELLER', is_active: true })
+        .returning(['id'])
+        .executeTakeFirstOrThrow();
+      const created = await trx
+        .insertInto('sellers')
+        .values({
+          user_id: user.id,
+          shop_name: input.shop_name,
+          contact_name: input.contact_name ?? null,
+          address: input.address ?? null,
+          note: input.note ?? null,
+          commission_percent: pct,
+          status: input.status,
+          ...(input.status === 'APPROVED' ? { reviewed_by: actor.actorId, reviewed_at: sql`now()` } : {}),
+        })
+        .returning(['id'])
+        .executeTakeFirstOrThrow();
+      await writeAudit(trx, actor, {
+        action: 'SELLER_CREATED',
+        entityType: 'SELLER',
+        entityId: created.id,
+        newValues: {
+          seller_id: created.id,
+          user_id: user.id,
+          shop_name: input.shop_name,
+          phone: input.phone,
+          status: input.status,
+          commission_percent: pct,
+        },
+      });
+      return oneSeller(trx, created.id);
+    });
+    logger.info({ sellerId: seller.id, by: actor.actorId }, 'Seller added by staff');
+    return { seller };
+  } catch (err) {
+    // Two adds of one number at once meet at the users.phone unique key.
+    if ((err as { code?: string }).code === '23505') {
+      throw new AppError('This number already has a Blynk account.', 409, 'PHONE_IN_USE', { field: 'phone' });
+    }
+    throw err;
+  }
 }
 
 export async function updateSeller(id: string, input: PatchSellerInput, actor: AuditActor) {
@@ -277,14 +366,40 @@ export async function updateSeller(id: string, input: PatchSellerInput, actor: A
       newValues.rejection_reason = input.rejection_reason;
     }
 
-    if (input.commission_percent !== undefined && input.commission_percent !== Number(current.commission_percent)) {
+    const currentPct = current.commission_percent === null ? null : Number(current.commission_percent);
+    if (input.commission_percent !== undefined && input.commission_percent !== currentPct) {
+      // "No own rate" only exists once migration 057 has run (the column was NOT NULL before).
+      if (input.commission_percent === null && !(await hasSellerRequestTables())) throw requestsNotReady();
       set.commission_percent = input.commission_percent;
-      oldValues.commission_percent = Number(current.commission_percent);
+      oldValues.commission_percent = currentPct;
       newValues.commission_percent = input.commission_percent;
     }
 
+    // Profile fields staff keep for invite-only sellers (2026-10-24).
+    for (const key of ['shop_name', 'contact_name', 'address', 'note'] as const) {
+      const next = input[key];
+      if (next !== undefined && next !== current[key]) {
+        set[key] = next;
+        oldValues[key] = current[key];
+        newValues[key] = next;
+      }
+    }
+
+    // The sign-in phone: one number = one account.
+    let phoneChanged = false;
+    if (input.phone !== undefined) {
+      const owner = await trx.selectFrom('users').select(['id', 'phone']).where('id', '=', current.user_id).forUpdate().executeTakeFirstOrThrow();
+      if (input.phone !== owner.phone) {
+        await assertPhoneFree(trx, input.phone, owner.id);
+        await trx.updateTable('users').set({ phone: input.phone, phone_hash: phoneHash(input.phone), updated_at: new Date() }).where('id', '=', owner.id).execute();
+        oldValues.phone = publicPhone(owner.phone);
+        newValues.phone = input.phone;
+        phoneChanged = true;
+      }
+    }
+
     let switchedOff = 0;
-    if (Object.keys(set).length > 0) {
+    if (Object.keys(set).length > 0 || phoneChanged) {
       await trx
         .updateTable('sellers')
         .set({ ...(set as object), updated_at: sql`now()` })
@@ -734,24 +849,37 @@ export async function rejectSubmission(id: string, reason: string, actor: AuditA
 /** Today in Colombo as YYYY-MM-DD (the DB's CURRENT_DATE follows the server's zone). */
 const colomboToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
-export async function recordPayout(sellerId: string, input: RecordPayoutInput, actor: AuditActor) {
-  const payout = await db.transaction().execute(async (trx) => {
-    const seller = await trx.selectFrom('sellers').select(['id', 'shop_name']).where('id', '=', sellerId).forUpdate().executeTakeFirst();
-    if (!seller) throw new AppError('Seller not found.', 404, 'SELLER_NOT_FOUND');
-    const paidOn = input.paid_on ?? colomboToday();
-    const [row] = await trx
-      .insertInto('seller_payouts')
-      .values({ seller_id: sellerId, amount: input.amount, note: input.note, paid_on: paidOn, created_by: actor.actorId })
-      .returning(['id', 'amount', 'note', sql<string>`to_char(paid_on, 'YYYY-MM-DD')`.as('paid_on')])
-      .execute();
-    await writeAudit(trx, actor, {
-      action: 'SELLER_PAYOUT_RECORDED',
-      entityType: 'SELLER',
-      entityId: sellerId,
-      newValues: { payout_id: row!.id, amount: input.amount, note: input.note, paid_on: paidOn, shop_name: seller.shop_name },
-    });
-    return { id: row!.id, amount: round2(Number(row!.amount)), note: row!.note, paid_on: row!.paid_on as unknown as string };
+/**
+ * One ledger entry with its SELLER_PAYOUT_RECORDED audit row, inside the caller's transaction
+ * (POST /admin/sellers/:id/payouts, and paying a seller's payout request in seller-requests.service.ts).
+ * Locks the seller row; 404 SELLER_NOT_FOUND.
+ */
+export async function insertPayout(
+  trx: Trx,
+  sellerId: string,
+  input: { amount: number; note: string | null; paid_on?: string },
+  actor: AuditActor,
+  extraAudit: Record<string, unknown> = {}
+) {
+  const seller = await trx.selectFrom('sellers').select(['id', 'shop_name']).where('id', '=', sellerId).forUpdate().executeTakeFirst();
+  if (!seller) throw new AppError('Seller not found.', 404, 'SELLER_NOT_FOUND');
+  const paidOn = input.paid_on ?? colomboToday();
+  const [row] = await trx
+    .insertInto('seller_payouts')
+    .values({ seller_id: sellerId, amount: input.amount, note: input.note, paid_on: paidOn, created_by: actor.actorId })
+    .returning(['id', 'amount', 'note', sql<string>`to_char(paid_on, 'YYYY-MM-DD')`.as('paid_on')])
+    .execute();
+  await writeAudit(trx, actor, {
+    action: 'SELLER_PAYOUT_RECORDED',
+    entityType: 'SELLER',
+    entityId: sellerId,
+    newValues: { payout_id: row!.id, amount: input.amount, note: input.note, paid_on: paidOn, shop_name: seller.shop_name, ...extraAudit },
   });
+  return { id: row!.id, amount: round2(Number(row!.amount)), note: row!.note, paid_on: row!.paid_on as unknown as string };
+}
+
+export async function recordPayout(sellerId: string, input: RecordPayoutInput, actor: AuditActor) {
+  const payout = await db.transaction().execute((trx) => insertPayout(trx, sellerId, input, actor));
   logger.info({ sellerId, payoutId: payout.id, by: actor.actorId }, 'Seller payout recorded');
   return { payout, statement: await sellerStatement(sellerId) };
 }

@@ -18,6 +18,9 @@ import { RIDER_BATCHING_KEY, getBatchingRules, type BatchingRules } from '../rid
 import { kmTiersFrom, kmTiersSchema, priceByKmTiers, type KmTier } from '../pricing/km-tiers.js';
 import { pointsSettings } from '../loyalty/points.service.js';
 import { publicPointsProgram } from '../loyalty/points.rules.js';
+import { hasProductRequestsTable } from '../catalog/product-requests.ready.js';
+import { ratingsReady } from '../ratings/ratings.ready.js';
+import { repeatBasketsReady } from '../repeat-baskets/repeat.ready.js';
 
 /**
  * Store-wide settings and the public store facts (GET /store).
@@ -844,6 +847,15 @@ export class SettingsService {
       // Owner's brother, 2026-10-24: staff-made product rails on Home; only the LIVE ones, in
       // order ([] = none) (home-sections.ts).
       home_sections: await homeSectionsService.readPublic(now),
+      // "Can't find it? Ask us" (owner, 2026-10-24): false until migration 056 has run
+      // (never an error; catalog/product-requests.ready.ts).
+      product_requests_enabled: await hasProductRequestsTable(),
+      // Rate the order + tip the rider (owner, 2026-10-24): false until migration 055 has run
+      // (never an error; ratings/ratings.ready.ts). Tips follow the same switch.
+      ratings_enabled: await ratingsReady(),
+      // Buy again + repeat baskets (owner, 2026-10-24): false until migration 054 has run
+      // (never an error; repeat-baskets/repeat.ready.ts). The app hides repeat baskets while false.
+      repeat_baskets_enabled: await repeatBasketsReady(),
     };
   }
 }

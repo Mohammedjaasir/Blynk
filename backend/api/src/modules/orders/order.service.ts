@@ -41,6 +41,8 @@ import { pointsEarnPreview } from '../loyalty/points.service.js';
 import { isReady, paymentGateway, publicOnlinePayment } from '../payments/gateway-settings.js';
 // Blynk Wallet (owner, 2026-10-15; migration 049).
 import { checkoutWalletInfo, customerOrderWallet } from '../wallet/wallet.service.js';
+// Ratings + rider tips (owner, 2026-10-24; migration 055).
+import { checkoutRiderTip, checkoutTipInfo, staffOrderRating } from '../ratings/ratings.service.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -127,6 +129,8 @@ export function sanitizeCustomerOrder(order: any) {
   return {
     ...safeOrder,
     can_cancel: customerCanCancel(order.order_status),
+    // Repeat baskets (migration 054): the basket this order came from; null before 054.
+    repeat_basket_id: order.repeat_basket_id ?? null,
     items: Array.isArray(order.items) ? order.items.map(sanitizeCustomerOrderItem) : order.items,
     // PayHere (migration 047): the raw gateway notification stays staff-side.
     ...(order.payment && typeof order.payment === 'object' ? { payment: sanitizeCustomerPayment(order.payment) } : {}),
@@ -327,7 +331,9 @@ export class OrderService {
   async createOrder(
     customerId: string,
     input: CreateOrderInput,
-    idempotencyKeyHeader?: string
+    idempotencyKeyHeader?: string,
+    // Repeat baskets (migration 054): set only by the worker placing a basket (repeat-baskets/repeat.runner.ts).
+    options: { repeatBasketId?: string } = {}
   ) {
     const idempotencyKey =
       input.idempotency_key || idempotencyKeyHeader || `idemp_${Date.now()}_${Math.random()}`;
@@ -423,6 +429,9 @@ export class OrderService {
       }
       onlinePayment = { window_minutes: gateway.payment_window_minutes };
     }
+    // 3d. Rider tip (owner, 2026-10-24; migration 055): paid in cash with the
+    // order, so cash on delivery only. Ignored (0) until 055 exists.
+    const riderTip = await checkoutRiderTip(customerId, input.rider_tip_lkr, input.payment_method === 'ONLINE');
     const deliveryNote = input.delivery_note?.trim() ? input.delivery_note.trim() : null;
 
     // 4. Scheduled delivery: the slot's start, or null for as soon as possible.
@@ -486,6 +495,8 @@ export class OrderService {
       items: orderItemsData,
       combos: orderCombos,
       online_payment: onlinePayment,
+      ...(riderTip > 0 ? { rider_tip: riderTip } : {}),
+      ...(options.repeatBasketId ? { repeat_basket_id: options.repeatBasketId } : {}),
     };
 
     const createdOrder = await createWithUniqueNumber(orderData);
@@ -640,6 +651,9 @@ export class OrderService {
       ...(await checkoutRewardsInfo(db, customerId, charged)),
       // Blynk Wallet (migration 049): balance and whether checkout offers "Use wallet balance".
       wallet: await checkoutWalletInfo(db, customerId),
+      // Rider tip (migration 055): tip_options [50, 100, 200] (or a custom
+      // amount up to tip_max_lkr), cash on delivery only; [] until 055 exists.
+      ...(await checkoutTipInfo()),
     };
   }
 
@@ -722,7 +736,8 @@ export class OrderService {
     ]);
 
     return {
-      orders,
+      // Repeat baskets (migration 054): the "Repeat" tag; null before 054.
+      orders: orders.map((o) => ({ ...o, repeat_basket_id: o.repeat_basket_id ?? null })),
       pagination: {
         page,
         limit,
@@ -742,8 +757,12 @@ export class OrderService {
     // and/or each seller's approved shop (pickup-points.ts), worked out on read.
     return {
       ...order,
+      // Repeat baskets (migration 054): the "Repeat" tag; null before 054.
+      repeat_basket_id: order.repeat_basket_id ?? null,
       delivery_fee_waiver: await deliveryFeeWaiver(order.id),
       pickups: await orderPickups({ id: order.id, dark_store_id: order.dark_store_id }),
+      // Ratings (migration 055): the customer's rating of this order, or null.
+      rating: await staffOrderRating(order.id),
     };
   }
 

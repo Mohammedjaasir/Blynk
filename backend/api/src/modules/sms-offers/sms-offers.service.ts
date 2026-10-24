@@ -10,6 +10,7 @@ import { DAY_KEYS, DEFAULT_WEEKLY_HOURS, dayKeyOf, hhmmLabel, smsAllowedAt, stor
 import { DateTime } from 'luxon';
 import { storeSchedule } from '../configuration/store-schedule.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
+import { audienceCondition, audienceFromStored, type CustomerAudience } from '../notifications/customer-groups.js';
 
 /**
  * SMS offers to registered customers (migration 027, owner 2026-10-06).
@@ -92,15 +93,34 @@ export function smsParts(text: string): number {
 type Executor = Kysely<Database> | Transaction<Database>;
 
 /**
+ * Who an offer goes to: one of the original audiences ('ALL', 'ORDERED_30D',
+ * 'ORDERED_90D', 'NEVER_ORDERED' - unchanged), or a customer group (owner,
+ * 2026-10-24; notifications/customer-groups.ts) such as { group: 'LAPSED', days: 14 }.
+ */
+export type OfferAudience = SmsOfferAudience | CustomerAudience;
+
+/**
+ * sms_offers.audience (a CHECKed column from migration 027): the original
+ * value as sent; a group NEVER_ORDERED is the same set as the original one;
+ * the other groups are stored as ALL and the group itself is kept in the
+ * SMS_OFFER_SENT audit row (listOffers reads it back as `audience_group`).
+ */
+export function offerColumnAudience(audience: OfferAudience): SmsOfferAudience {
+  if (typeof audience === 'string') return audience;
+  return audience.group === 'NEVER_ORDERED' ? 'NEVER_ORDERED' : 'ALL';
+}
+
+/**
  * Customers an audience reaches: active, registered, not opted out. With
  * `optedOut` it is the same audience's customers who turned offers off.
  */
-function audienceQuery(executor: Executor, audience: SmsOfferAudience, optedOut = false) {
+function audienceQuery(executor: Executor, audience: OfferAudience, optedOut = false) {
   let q = executor
     .selectFrom('users as u')
     .where('u.role', '=', 'CUSTOMER')
     .where('u.is_active', '=', true)
     .where('u.sms_offers_opted_out_at', optedOut ? 'is not' : 'is', null);
+  if (typeof audience === 'object') return q.where(audienceCondition(audience));
   const ordered = (days: number) =>
     sql<boolean>`exists (select 1 from orders o where o.customer_id = u.id and o.created_at >= now() - make_interval(days => ${days}))`;
   if (audience === 'ORDERED_30D') q = q.where(ordered(30));
@@ -109,8 +129,25 @@ function audienceQuery(executor: Executor, audience: SmsOfferAudience, optedOut 
   return q;
 }
 
+/**
+ * The SMS side of a customer group's preview: `customers` in the group who
+ * have not turned offers off, `phones` of them an SMS can reach (a Sri Lankan
+ * mobile - what a send queues), and `opted_out` reachable ones who turned
+ * offers off.
+ */
+export async function smsGroupCounts(audience: CustomerAudience) {
+  const rows = await audienceQuery(db, audience).select(['u.phone']).execute();
+  const optedOutRows = await audienceQuery(db, audience, true).select(['u.phone']).execute();
+  return {
+    audience,
+    customers: rows.length,
+    phones: rows.filter((r) => smsRecipient(r.phone)).length,
+    opted_out: optedOutRows.filter((r) => smsRecipient(r.phone)).length,
+  };
+}
+
 export interface AudienceSummary {
-  audience: SmsOfferAudience;
+  audience: OfferAudience;
   recipients: number;
   /** Recipients per language they will be sent, after the fallback. */
   by_language: Record<SmsLanguage, number>;
@@ -129,7 +166,7 @@ function smsRecipient(phone: string): string | null {
   }
 }
 
-export async function summarizeAudience(audience: SmsOfferAudience, fallback: SmsLanguage): Promise<AudienceSummary> {
+export async function summarizeAudience(audience: OfferAudience, fallback: SmsLanguage): Promise<AudienceSummary> {
   // Counted with exactly the filter sendOffer applies (a valid Sri Lankan
   // mobile), so the estimate is what a send queues.
   const rows = await audienceQuery(db, audience).select(['u.phone', 'u.sms_language']).execute();
@@ -181,7 +218,7 @@ export interface OfferEstimate extends AudienceSummary {
 }
 
 export async function estimateOffer(
-  audience: SmsOfferAudience,
+  audience: OfferAudience,
   fallback: SmsLanguage,
   messages: OfferMessages
 ): Promise<OfferEstimate> {
@@ -243,7 +280,7 @@ export async function assertSmsSendingWindow(now: Date = orderingClock.now()) {
 /** Sends an offer to its audience: one outbox SMS per customer. */
 export async function sendOffer(
   actor: AuditActor,
-  input: { audience: SmsOfferAudience; fallback_language: SmsLanguage; messages: OfferMessages }
+  input: { audience: OfferAudience; fallback_language: SmsLanguage; messages: OfferMessages }
 ) {
   await assertSmsSendingWindow();
   const estimate = await estimateOffer(input.audience, input.fallback_language, input.messages);
@@ -262,7 +299,7 @@ export async function sendOffer(
       .insertInto('sms_offers')
       .values({
         created_by: actor.actorId,
-        audience: input.audience,
+        audience: offerColumnAudience(input.audience),
         fallback_language: input.fallback_language,
         message_si: input.messages.si?.trim() || null,
         message_ta: input.messages.ta?.trim() || null,
@@ -318,7 +355,7 @@ export async function sendOffer(
       entityId: offer.id,
       newValues: { audience: input.audience, fallback_language: input.fallback_language, recipients, sms_parts_total: parts },
     });
-    return { id: offer.id, created_at: offer.created_at, recipients, sms_parts_total: parts };
+    return { id: offer.id, created_at: offer.created_at, audience: input.audience, recipients, sms_parts_total: parts };
   });
 }
 
@@ -385,9 +422,13 @@ export async function sendTestOffer(actor: AuditActor, language: SmsLanguage, me
   return { sent_to: `${phone.slice(0, 6)}****${phone.slice(-2)}`, sms_parts: smsParts(text) };
 }
 
-/** The latest offers, newest first, with who sent them. */
+/**
+ * The latest offers, newest first, with who sent them. `audience_group` is the
+ * customer group the offer went to (from its audit row), or null for an offer
+ * sent to one of the original audiences.
+ */
 export async function listOffers(limit = 50) {
-  return db
+  const rows = await db
     .selectFrom('sms_offers as o')
     .leftJoin('users as s', 's.id', 'o.created_by')
     .select([
@@ -402,8 +443,15 @@ export async function listOffers(limit = 50) {
       'o.created_at',
       's.full_name as sent_by_name',
       's.role as sent_by_role',
+      sql<unknown>`(SELECT a.new_values->'audience' FROM audit_logs a
+                     WHERE a.entity_type = 'sms_offer' AND a.entity_id = o.id AND a.action = 'SMS_OFFER_SENT'
+                     ORDER BY a.created_at DESC LIMIT 1)`.as('audit_audience'),
     ])
     .orderBy('o.created_at', 'desc')
     .limit(limit)
     .execute();
+  return rows.map(({ audit_audience, ...row }) => ({
+    ...row,
+    audience_group: audit_audience && typeof audit_audience === 'object' ? audienceFromStored(audit_audience) : null,
+  }));
 }

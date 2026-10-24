@@ -203,7 +203,10 @@ export async function recordWalletPayment(executor: DBConnection, p: { orderId: 
 // An order's money
 // ---------------------------------------------------------------------------
 
-type MoneyOrder = Pick<OrderRow, 'id' | 'customer_id' | 'payment_method' | 'payment_status' | 'total_amount' | 'wallet_amount_used' | 'delivery_fee'>;
+type MoneyOrder = Pick<OrderRow, 'id' | 'customer_id' | 'payment_method' | 'payment_status' | 'total_amount' | 'wallet_amount_used' | 'delivery_fee'> & {
+  /** Migration 055: the checkout tip inside total_amount - the rider's, never refunded (absent before 055). */
+  rider_tip?: unknown;
+};
 
 /**
  * What was paid for an order (wallet, PayHere, cash collected on delivery),
@@ -219,7 +222,11 @@ export async function orderMoney(executor: DBConnection, order: MoneyOrder) {
   const walletDebited = -sumOf(['ORDER_PAYMENT']);
   const credited = sumOf(CREDIT_KINDS);
   const onlinePaid = payment && payment.payment_method === 'ONLINE' && payment.payment_status === 'PAID' ? money(payment.amount) : 0;
-  const cashCollected = order.payment_method === 'COD' && order.payment_status === 'PAID' ? money(order.total_amount) : 0;
+  // Migration 055: a checkout tip was collected too, but it went to the rider - not refundable.
+  const cashCollected =
+    order.payment_method === 'COD' && order.payment_status === 'PAID'
+      ? round2(Math.max(0, money(order.total_amount) - money(order.rider_tip)))
+      : 0;
   const { paid, refundable } = refundableFor({ walletDebited, onlinePaid, cashCollected, credited });
   return {
     wallet: walletDebited,
@@ -303,7 +310,8 @@ export async function settleWalletAfterItemChange(
 ): Promise<{ wallet_amount_used: number; total_amount: number }> {
   const used = money(order.wallet_amount_used);
   const keep = round2(Math.min(used, Math.max(0, due)));
-  const total = round2(Math.max(0, due) - keep);
+  // Migration 055: the checkout tip is still collected in cash on top (0 before 055).
+  const total = round2(Math.max(0, due) - keep + money(order.rider_tip));
   const paidOnline = order.payment_method === 'ONLINE' && order.payment_status === 'PAID';
   if (paidOnline) {
     const m = await orderMoney(executor, order);
@@ -346,6 +354,8 @@ function customerReason(e: { kind: WalletEntryKind; reason: string | null; order
       return 'Adjusted by Blynk';
     case 'EXPIRED':
       return 'Expired';
+    case 'RIDER_TIP':
+      return e.order_number ? `Tip for your rider on order ${e.order_number}` : 'Tip for your rider';
     default:
       return e.reason ?? 'Refund';
   }

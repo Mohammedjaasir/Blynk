@@ -2,6 +2,8 @@ import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import type { RiderBonusKind } from '../../database/types.js';
 import { rangeBounds, STORE_ZONE, type DateRange } from '../reports/sales.service.js';
+// Rider tips (owner, 2026-10-24; migration 055).
+import { ratingsReady } from '../ratings/ratings.ready.js';
 
 /*
  * The rider pay ledger (migration 038; owner, 2026-10-10): what each rider
@@ -24,6 +26,17 @@ import { rangeBounds, STORE_ZONE, type DateRange } from '../reports/sales.servic
  * day's cash like a commission share; a deduction is added to what the rider
  * hands in that day; anything the day's cash cannot cover is owed to the
  * rider. Days are summed for a range.
+ *
+ * Tips (migration 055; owner, 2026-10-24) go 100% to the rider who delivered
+ * the order and are never part of the delivery pay above:
+ *   tips_cash     = sum of min(orders.rider_tip, cod) - the checkout tip the
+ *                   rider collected with the order and keeps (that door's
+ *                   kept_share is then min(earning, cod - tip))
+ *   tips_wallet   = orders.rider_tip_wallet paid that day (Colombo date of
+ *                   rider_tip_wallet_at) from the customer's Blynk Wallet -
+ *                   Blynk holds it, so it is owed to the rider
+ *   raw           = collected - kept_share - tips_cash - tips_wallet
+ *                   - day_bonuses - adjustments
  */
 
 const money = (v: unknown) => Number(Number(v ?? 0).toFixed(2));
@@ -61,6 +74,14 @@ export interface LedgerTotals {
   /** Sum over days of max(0, -raw). */
   payable_to_rider: number;
   coupon_discount: number;
+  /** Migration 055: checkout tips the rider collected in cash and keeps. */
+  tips_cash: number;
+  /** Migration 055: tips customers paid from the Blynk Wallet after delivery (owed to the rider). */
+  tips_wallet: number;
+  /** tips_cash + tips_wallet - never part of total_earnings (the delivery pay). */
+  tips: number;
+  /** total_earnings + tips. */
+  total_with_tips: number;
 }
 
 export function emptyTotals(): LedgerTotals {
@@ -83,12 +104,16 @@ export function emptyTotals(): LedgerTotals {
     cash_to_hand_in: 0,
     payable_to_rider: 0,
     coupon_discount: 0,
+    tips_cash: 0,
+    tips_wallet: 0,
+    tips: 0,
+    total_with_tips: 0,
   };
 }
 
-/** The day rule for one rider-day. */
-export function dayCash(input: { collected: number; kept: number; day_bonuses: number; adjustments: number }) {
-  const raw = money(input.collected - input.kept - input.day_bonuses - input.adjustments);
+/** The day rule for one rider-day. `tips` (migration 055): cash tips kept + wallet tips owed. */
+export function dayCash(input: { collected: number; kept: number; day_bonuses: number; adjustments: number; tips?: number }) {
+  const raw = money(input.collected - input.kept - (input.tips ?? 0) - input.day_bonuses - input.adjustments);
   return { expected_handin: Math.max(0, raw), payable_to_rider: Math.max(0, money(-raw)) };
 }
 
@@ -105,8 +130,12 @@ interface DayParts {
   day_bonus: number;
   additions: number;
   deductions: number;
+  tips_cash: number;
+  tips_wallet: number;
 }
 const emptyDay = (): DayParts => ({
+  tips_cash: 0,
+  tips_wallet: 0,
   deliveries: 0,
   delivery_charges: 0,
   customer_delivery_fees: 0,
@@ -125,6 +154,9 @@ const emptyDay = (): DayParts => ({
 export async function riderLedger(range: DateRange, riderId?: string): Promise<Map<string, LedgerTotals>> {
   const { start, end } = rangeBounds(range);
   const dayExpr = sql<string>`((d.delivered_at AT TIME ZONE ${sql.lit(STORE_ZONE)})::date)::text`;
+  // Migration 055: the tip columns exist only once it has run.
+  const tipsReady = await ratingsReady();
+  const cashTip = tipsReady ? sql`least(coalesce(o.rider_tip, 0), d.cod_collected_amount)` : sql`0`;
   let deliveriesQ = db
     .selectFrom('deliveries as d')
     .innerJoin('orders as o', 'o.id', 'd.order_id')
@@ -138,8 +170,9 @@ export async function riderLedger(range: DateRange, riderId?: string): Promise<M
       sql<string>`coalesce(sum(coalesce(d.rider_base_earning_lkr, d.rider_earning_lkr, 0)), 0)`.as('base'),
       sql<string>`coalesce(sum(coalesce(d.rider_bonus_lkr, 0)), 0)`.as('delivery_bonus'),
       sql<string>`coalesce(sum(d.cod_collected_amount), 0)`.as('collected'),
-      sql<string>`coalesce(sum(least(coalesce(d.rider_earning_lkr, 0), d.cod_collected_amount)), 0)`.as('kept'),
+      sql<string>`coalesce(sum(least(coalesce(d.rider_earning_lkr, 0), d.cod_collected_amount - ${cashTip})), 0)`.as('kept'),
       sql<string>`coalesce(sum(o.discount_amount), 0)`.as('coupon_discount'),
+      sql<string>`coalesce(sum(${cashTip}), 0)`.as('tips_cash'),
     ])
     .where('d.assignment_status', '=', 'DELIVERED')
     .where('d.delivered_at', '>=', start)
@@ -170,10 +203,23 @@ export async function riderLedger(range: DateRange, riderId?: string): Promise<M
     .where(sql`adjustment_date`, '<=', range.to);
   if (riderId) adjQ = adjQ.where('rider_id', '=', riderId);
 
-  const [deliveryRows, lineRows, adjRows] = await Promise.all([
+  // Migration 055: wallet tips, to the rider of the DELIVERED delivery, on the day they were paid.
+  const tipDayExpr = sql<string>`((o.rider_tip_wallet_at AT TIME ZONE ${sql.lit(STORE_ZONE)})::date)::text`;
+  let walletTipsQ = db
+    .selectFrom('orders as o')
+    .innerJoin('deliveries as d', 'd.order_id', 'o.id')
+    .select(['d.rider_id', tipDayExpr.as('day'), sql<string>`coalesce(sum(o.rider_tip_wallet), 0)`.as('amount')])
+    .where('d.assignment_status', '=', 'DELIVERED')
+    .where('o.rider_tip_wallet', '>', 0)
+    .where('o.rider_tip_wallet_at', '>=', start)
+    .where('o.rider_tip_wallet_at', '<', end);
+  if (riderId) walletTipsQ = walletTipsQ.where('d.rider_id', '=', riderId);
+
+  const [deliveryRows, lineRows, adjRows, walletTipRows] = await Promise.all([
     deliveriesQ.groupBy(['d.rider_id', dayExpr]).execute(),
     linesQ.groupBy(['rider_id', sql`earning_date`, 'kind']).execute(),
     adjQ.groupBy(['rider_id', sql`adjustment_date`]).execute(),
+    tipsReady ? walletTipsQ.groupBy(['d.rider_id', tipDayExpr]).execute() : Promise.resolve([]),
   ]);
 
   const days = new Map<string, Map<string, DayParts>>();
@@ -196,7 +242,9 @@ export async function riderLedger(range: DateRange, riderId?: string): Promise<M
     p.collected += Number(r.collected);
     p.kept += Number(r.kept);
     p.coupon_discount += Number(r.coupon_discount);
+    p.tips_cash += Number(r.tips_cash);
   }
+  for (const r of walletTipRows) dayOf(r.rider_id, r.day).tips_wallet += Number(r.amount);
   for (const r of lineRows) {
     const b = breakdowns.get(r.rider_id) ?? emptyBreakdown();
     b[r.kind] = money(b[r.kind] + Number(r.amount));
@@ -226,7 +274,15 @@ export async function riderLedger(range: DateRange, riderId?: string): Promise<M
       t.cash_collected += p.collected;
       t.cash_kept += p.kept;
       t.coupon_discount += p.coupon_discount;
-      const cash = dayCash({ collected: p.collected, kept: p.kept, day_bonuses: p.day_bonus, adjustments: p.additions - p.deductions });
+      t.tips_cash += p.tips_cash;
+      t.tips_wallet += p.tips_wallet;
+      const cash = dayCash({
+        collected: p.collected,
+        kept: p.kept,
+        day_bonuses: p.day_bonus,
+        adjustments: p.additions - p.deductions,
+        tips: p.tips_cash + p.tips_wallet,
+      });
       t.cash_to_hand_in += cash.expected_handin;
       t.payable_to_rider += cash.payable_to_rider;
     }
@@ -236,6 +292,8 @@ export async function riderLedger(range: DateRange, riderId?: string): Promise<M
     t.adjustments = money(t.additions - t.deductions);
     t.blynk_delivery_share = money(t.delivery_charges - t.rider_share);
     t.total_earnings = money(t.rider_share + t.day_bonuses + t.adjustments);
+    t.tips = money(t.tips_cash + t.tips_wallet);
+    t.total_with_tips = money(t.total_earnings + t.tips);
     t.bonus_breakdown = breakdowns.get(rider) ?? emptyBreakdown();
     out.set(rider, t);
   }

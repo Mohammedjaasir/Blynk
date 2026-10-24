@@ -77,7 +77,7 @@ describe('GET /seller/me and PUT /seller/profile', () => {
       note: null,
       status: 'APPROVED',
       rejection_reason: null,
-      commission_percent: 0,
+      commission_percent: null, // no own rate: the category rate or the default applies (seller.commission.ts)
       created_at: expect.any(String),
       // the shop location (migration 053; tests/seller-location.test.ts)
       latitude: null,
@@ -92,6 +92,7 @@ describe('GET /seller/me and PUT /seller/profile', () => {
       pending_distance_km_from_store: null,
     });
     expect(res.body.data.counts).toEqual({ products: 1, pending: 1 });
+    expect(res.body.data.commission_rule).toEqual({ override_percent: null, default_percent: expect.any(Number) });
   });
 
   it('a SELLER user without a shop row gets 404 SELLER_NOT_FOUND', async () => {

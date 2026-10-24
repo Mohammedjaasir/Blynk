@@ -212,7 +212,7 @@ describe('Approving, rejecting and suspending a seller', () => {
     const s = await fx.seller();
     expect((await patchSeller(s.id, {})).status).toBe(400);
     expect((await patchSeller(s.id, { status: 'PENDING' })).status).toBe(400);
-    expect((await patchSeller(s.id, { shop_name: 'Mine now' })).status).toBe(400); // unknown field
+    expect((await patchSeller(s.id, { surprise: 'Mine now' })).status).toBe(400); // unknown field
     expect((await patchSeller('00000000-0000-4000-8000-000000000999', { commission_percent: 1 })).status).toBe(404);
     expect((await patchSeller('nope', { commission_percent: 1 })).status).toBe(400);
   });

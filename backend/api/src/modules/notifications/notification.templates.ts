@@ -253,8 +253,16 @@ export class NotificationTemplates {
       case 'SELLER_REJECTED':
       case 'SELLER_PRODUCT_APPROVED':
       case 'SELLER_PRODUCT_REJECTED':
+      // Seller stock received / payout paid or declined (migration 057, sellers/seller-requests.service.ts).
+      case 'SELLER_STOCK_RECEIVED':
+      case 'SELLER_PAYOUT_PAID':
+      case 'SELLER_PAYOUT_DECLINED':
       // Birthday SMS (migration 034, birthday/birthday.sms.ts): complete when queued.
       case 'BIRTHDAY_OFFER':
+      // Repeat basket placed / skipped (migration 054, repeat-baskets/repeat.runner.ts): complete when queued.
+      case 'REPEAT_BASKET':
+      // A requested product is here (migration 056, catalog/product-requests.ts): complete when queued.
+      case 'PRODUCT_REQUEST_ADDED':
       case 'SMS_OFFER': {
         // Migration 027: the text is complete when queued (the customer's
         // language, opt-out line included), so it is sent exactly as written.

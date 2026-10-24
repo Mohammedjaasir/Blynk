@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { orderComboLineSchema } from '../catalog/catalog.combos.js';
 import { normalizeSriLankanPhone } from '../../utils/phone.js';
+import { riderTipLkrSchema } from '../ratings/ratings.rules.js';
 
 /**
  * The receiver of an order placed "For someone else" (owner, 2026-10-12): for
@@ -104,6 +105,12 @@ export const createOrderSchema = z.object({
    * AWAITING_PAYMENT; it reaches the store only once paid. Omitted = COD.
    */
   payment_method: z.enum(['COD', 'ONLINE'], { invalid_type_error: 'payment_method must be COD or ONLINE' }).optional(),
+  /**
+   * A tip for the rider (owner, 2026-10-24; migration 055): 0-1000 whole LKR,
+   * collected in cash with the order (cash on delivery only). Ignored until
+   * migration 055 exists.
+   */
+  rider_tip_lkr: riderTipLkrSchema.optional(),
 }).refine((v) => v.items.length + (v.combos?.length ?? 0) > 0, {
   message: 'At least one order item is required',
   path: ['items'],

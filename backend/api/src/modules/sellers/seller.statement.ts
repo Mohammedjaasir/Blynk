@@ -1,15 +1,20 @@
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { AppError } from '../../middleware/error.middleware.js';
+import { commissionContext, linePercentSql } from './seller.commission.js';
 
 /**
  * A seller's statement (seller portal, docs/superpowers/plans/2026-10-24-seller-portal.md).
  * Computed on every read, never stored.
  *
- * Over the items of DELIVERED orders whose product belongs to the seller:
+ * Over the items of DELIVERED orders whose product belongs to the seller, per product (line):
  *   gross      = SUM(quantity x order_items.estimated_unit_cost)  - the cost snapshot taken
  *                when the order was placed, which is the seller's price then (purchase_cost)
- *   commission = gross x sellers.commission_percent / 100
+ *   commission = ROUND(line gross x the line's percent / 100, 2)   - the percent is the seller's own
+ *                rate, else the category's, else the main category's, else the global default
+ *                (seller.commission.ts; before migration 057 just the seller's own rate)
+ * and in total:
+ *   commission = the sum of the lines' commission
  *   earned     = gross - commission
  *   paid       = SUM(seller_payouts.amount)                        - the manual payouts ledger
  *   due        = earned - paid
@@ -23,6 +28,9 @@ export interface StatementLine {
   name: string;
   units: number;
   gross: number;
+  /** The percent Blynk keeps on this line, and what that comes to. */
+  commission_percent: number;
+  commission: number;
 }
 
 export interface StatementPayout {
@@ -33,7 +41,8 @@ export interface StatementPayout {
 }
 
 export interface Statement {
-  commission_percent: number;
+  /** The seller's own rate; null = each line uses its category's rate or the default. */
+  commission_percent: number | null;
   gross: number;
   commission: number;
   earned: number;
@@ -56,20 +65,25 @@ export async function sellerStatement(
   const from = opts.from ? sql` AND (${delivered})::date >= ${opts.from}::date` : sql``;
   const to = opts.to ? sql` AND (${delivered})::date <= ${opts.to}::date` : sql``;
 
+  const ctx = await commissionContext();
+  const pct = linePercentSql(ctx);
   const lineRows = (
-    await sql<{ product_id: string; name: string; units: string; gross: string }>`
+    await sql<{ product_id: string; name: string; units: string; gross: string; pct: string; commission: string }>`
       SELECT p.id AS product_id, p.name,
              SUM(oi.quantity)::text AS units,
-             SUM(oi.quantity * oi.estimated_unit_cost)::text AS gross
+             SUM(oi.quantity * oi.estimated_unit_cost)::text AS gross,
+             (${pct})::text AS pct,
+             ROUND(SUM(oi.quantity * oi.estimated_unit_cost) * (${pct}) / 100, 2)::text AS commission
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id
         JOIN products p ON p.id = oi.product_id
+        JOIN sellers ss ON ss.id = p.seller_id
        WHERE p.seller_id = ${sellerId}
          AND o.order_status = 'DELIVERED'
          AND oi.item_status NOT IN ('UNAVAILABLE', 'SUBSTITUTED')
          ${from} ${to}
-       GROUP BY p.id, p.name
-       ORDER BY gross DESC, p.name ASC`.execute(db)
+       GROUP BY p.id, p.name, ss.id
+       ORDER BY SUM(oi.quantity * oi.estimated_unit_cost) DESC, p.name ASC`.execute(db)
   ).rows;
 
   const payoutFrom = opts.from ? sql` AND paid_on >= ${opts.from}::date` : sql``;
@@ -87,10 +101,12 @@ export async function sellerStatement(
     name: r.name,
     units: Number(r.units),
     gross: round2(Number(r.gross)),
+    commission_percent: Number(r.pct),
+    commission: round2(Number(r.commission)),
   }));
-  const commissionPercent = Number(seller.commission_percent);
+  const commissionPercent = seller.commission_percent === null ? null : Number(seller.commission_percent);
   const gross = round2(lines.reduce((sum, l) => sum + l.gross, 0));
-  const commission = round2((gross * commissionPercent) / 100);
+  const commission = round2(lines.reduce((sum, l) => sum + l.commission, 0));
   const earned = round2(gross - commission);
   const payouts = payoutRows.map((r) => ({ id: r.id, amount: round2(Number(r.amount)), note: r.note, paid_on: r.paid_on }));
   const paid = round2(payouts.reduce((sum, p) => sum + p.amount, 0));

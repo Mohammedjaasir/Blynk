@@ -7,7 +7,6 @@ import {
   refreshTokenSchema,
   logoutSchema,
   staffLoginSchema,
-  sellerRegisterEmailSchema,
   sellerLoginEmailSchema,
 } from './auth.schema.js';
 import {
@@ -34,7 +33,8 @@ authRouter.post('/otp/verify', validate({ body: verifyOtpSchema }), verifyOtpCon
 // Staff email + password sign-in (migration 012): ADMIN / PACKING_STAFF / OPERATIONS only.
 authRouter.post('/staff/login', validate({ body: staffLoginSchema }), staffLoginController);
 // Seller portal email + password (owner, 2026-10-24): SELLER accounts only.
-authRouter.post('/seller/register-email', validate({ body: sellerRegisterEmailSchema }), sellerRegisterEmailController);
+// Sign-up closed (sellers are invite-only, owner 2026-10-24): always 403 SELLER_SIGNUP_CLOSED.
+authRouter.post('/seller/register-email', sellerRegisterEmailController);
 authRouter.post('/seller/login-email', validate({ body: sellerLoginEmailSchema }), sellerLoginEmailController);
 authRouter.post('/refresh', validate({ body: refreshTokenSchema }), refreshTokensController);
 authRouter.post('/logout', validate({ body: logoutSchema }), logoutController);

@@ -3,10 +3,13 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { bearer, sellerFixtures } from './helpers/seller.js';
+import { auth, tokens } from './helpers/stock.js';
 
 /**
- * Seller portal sign-in: the SMS code flow with app: 'seller' creates a SELLER
- * user and a PENDING sellers row; a number used for any other account is
+ * Seller portal sign-in (invite-only since 2026-10-24): staff add the seller
+ * (POST /admin/sellers), who then signs in with the SMS code flow and
+ * app: 'seller'; an unknown number is SELLER_NOT_REGISTERED and nothing is
+ * created; a number used for any other account is
  * PHONE_IN_USE; the customer / rider / staff sign-ins refuse a SELLER number
  * (SELLER_SIGN_IN_REQUIRED); a seller token opens no other app's routes.
  */
@@ -14,28 +17,43 @@ const app = createApp();
 const fx = sellerFixtures(app, '+947700120');
 
 beforeAll(fx.purge);
-afterAll(fx.cleanup);
+afterAll(async () => {
+  await pool.query(`DELETE FROM audit_logs WHERE action = 'SELLER_CREATED' AND new_values->>'phone' LIKE $1`, ['+947700120%']);
+  await fx.cleanup();
+});
 
 const sellerRow = async (userId: string) =>
   (await pool.query('SELECT shop_name, status, commission_percent::float AS commission FROM sellers WHERE user_id = $1', [userId])).rows[0];
 
 describe('Seller sign-in', () => {
-  it('a new number becomes a SELLER user with a PENDING shop named after the phone', async () => {
-    const res = await fx.signIn(1);
+  it('an unknown number is refused with SELLER_NOT_REGISTERED and nothing is created (sign-up is closed)', async () => {
+    for (const extra of [{ app: 'seller' }, { app: 'seller', shop_name: 'Green Basket' }]) {
+      const res = await fx.signIn(1, extra);
+      expect(res.status, JSON.stringify(extra)).toBe(403);
+      expect(res.body.error.code).toBe('SELLER_NOT_REGISTERED');
+      expect(res.body.error.message).toBe('This number is not registered as a Blynk seller. Ask Blynk to add your shop.');
+    }
+    expect((await pool.query('SELECT 1 FROM users WHERE phone = $1', [fx.phone(1)])).rowCount).toBe(0);
+  });
+
+  it('a seller staff added signs in with the SMS code: same user, phone verified, shop untouched', async () => {
+    const created = await request(app)
+      .post('/api/v1/admin/sellers')
+      .set(auth(tokens.admin))
+      .send({ shop_name: 'Green Basket', phone: `0${fx.phone(2).slice(3)}` });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const res = await fx.signIn(2, { app: 'seller', shop_name: 'Ignored Name' });
     expect(res.status).toBe(200);
-    expect(res.body.data.user).toMatchObject({ phone: fx.phone(1), role: 'SELLER' });
+    expect(res.body.data.user).toMatchObject({ phone: fx.phone(2), role: 'SELLER' });
     expect(res.body.data.access_token).toBeTruthy();
-    expect(await sellerRow(res.body.data.user.id)).toEqual({ shop_name: fx.phone(1), status: 'PENDING', commission: 0 });
+    const row = await sellerRow(res.body.data.user.id);
+    expect(row).toEqual({ shop_name: 'Green Basket', status: 'APPROVED', commission: null });
     const user = (await pool.query('SELECT role, phone_verified_at, phone_hash FROM users WHERE id = $1', [res.body.data.user.id])).rows[0];
     expect(user.role).toBe('SELLER');
     expect(user.phone_verified_at).not.toBeNull();
     expect(user.phone_hash).not.toBeNull();
-  });
-
-  it('takes the shop name from the optional shop_name field', async () => {
-    const res = await fx.signIn(2, { app: 'seller', shop_name: '  Green Basket  ' });
-    expect(res.status).toBe(200);
-    expect((await sellerRow(res.body.data.user.id)).shop_name).toBe('Green Basket');
+    const me = await request(app).get('/api/v1/seller/me').set(bearer(res.body.data.access_token));
+    expect(me.body.data.seller).toMatchObject({ id: created.body.data.seller.id, shop_name: 'Green Basket', status: 'APPROVED' });
   });
 
   it('refuses a one-letter shop name', async () => {

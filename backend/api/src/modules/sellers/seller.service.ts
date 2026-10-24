@@ -12,6 +12,7 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { priceForProduct } from '../catalog/catalog.pricing.js';
 import type { CreateProductInput, EditProductInput, ProfileInput } from './seller.schema.js';
 import { sellerStatement, type Statement } from './seller.statement.js';
+import { commissionRule } from './seller.commission.js';
 
 /**
  * Seller-facing logic (role SELLER; docs/superpowers/plans/2026-10-24-seller-portal.md). A seller
@@ -32,7 +33,8 @@ export interface SellerDto extends SellerLocation {
   note: string | null;
   status: SellerRow['status'];
   rejection_reason: string | null;
-  commission_percent: number;
+  /** The seller's own rate; null = the category's rate or the default (seller.commission.ts). */
+  commission_percent: number | null;
   created_at: Date;
 }
 
@@ -89,7 +91,7 @@ export const toSellerDto = (s: SellerRow, ctx: LocationContext): SellerDto => ({
   note: s.note,
   status: s.status,
   rejection_reason: s.rejection_reason,
-  commission_percent: Number(s.commission_percent),
+  commission_percent: s.commission_percent === null ? null : Number(s.commission_percent),
   created_at: s.created_at,
   ...presentLocation(s as unknown as Record<string, unknown>, ctx),
 });
@@ -210,7 +212,13 @@ export class SellerService {
         .executeTakeFirstOrThrow(),
       locationContext(),
     ]);
-    return { seller: toSellerDto(seller, ctx), counts: { products: Number(products.n), pending: Number(pending.n) } };
+    const dto = toSellerDto(seller, ctx);
+    return {
+      seller: dto,
+      counts: { products: Number(products.n), pending: Number(pending.n) },
+      // What Blynk keeps (owner, 2026-10-24): the seller's own rate, else per category, else the default.
+      commission_rule: await commissionRule(dto.commission_percent),
+    };
   }
 
   async updateProfile(userId: string, input: ProfileInput) {

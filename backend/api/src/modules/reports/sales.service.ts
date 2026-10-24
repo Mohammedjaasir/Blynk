@@ -1,3 +1,4 @@
+import { revenueOf } from './revenue-sql.js';
 import { sql } from 'kysely';
 import { DateTime } from 'luxon';
 import { db } from '../../database/connection.js';
@@ -64,7 +65,7 @@ export async function salesReport(range: DateRange) {
       sql<number>`count(*)::int`.as('order_count'),
       sql<number>`(count(*) FILTER (WHERE order_status = 'DELIVERED'))::int`.as('delivered_count'),
       sql<number>`(count(*) FILTER (WHERE order_status = 'CANCELLED'))::int`.as('cancelled_count'),
-      sql<string>`coalesce(sum(total_amount + wallet_amount_used) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('delivered_revenue'),
+      sql<string>`coalesce(sum(${revenueOf()}) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('delivered_revenue'),
       sql<string>`coalesce(sum(discount_amount) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('discount_given'),
       sql<string>`coalesce(sum(delivery_fee) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('delivery_fees'),
     ])

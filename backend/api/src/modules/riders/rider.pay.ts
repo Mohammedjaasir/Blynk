@@ -654,6 +654,10 @@ export async function ownEarnings(riderId: string) {
     cash_to_keep: Math.max(0, money(x.cash_collected - x.cash_to_hand_in)),
     cash_to_hand_in: x.cash_to_hand_in,
     payable_to_rider: x.payable_to_rider,
+    /** Migration 055: the "Tips" line - never part of `earnings` (the delivery pay). */
+    tips: x.tips,
+    tips_cash: x.tips_cash,
+    tips_wallet: x.tips_wallet,
   });
   const now = new Date();
   const order = (k: RiderBonusKind) => BONUS_KINDS.indexOf(k);

@@ -94,8 +94,8 @@ describe('Seller statement', () => {
       paid: 150.25,
       due: 641.75,
       lines: [
-        { product_id: jam.productId, name: expect.any(String), units: 6, gross: 720 },
-        { product_id: tea.productId, name: expect.any(String), units: 2, gross: 160 },
+        { product_id: jam.productId, name: expect.any(String), units: 6, gross: 720, commission_percent: 10, commission: 72 },
+        { product_id: tea.productId, name: expect.any(String), units: 2, gross: 160, commission_percent: 10, commission: 16 },
       ],
       payouts: [
         { id: expect.any(String), amount: 50.25, note: null, paid_on: '2026-03-25' },
@@ -107,8 +107,9 @@ describe('Seller statement', () => {
   it('another seller sees only their own figures', async () => {
     const res = await statement(other.token);
     expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ commission_percent: 0, gross: 350, commission: 0, earned: 350, paid: 0, due: 350, payouts: [] });
-    expect(res.body.data.lines).toEqual([{ product_id: foreign.productId, name: expect.any(String), units: 7, gross: 350 }]);
+    expect(res.body.data).toMatchObject({ commission_percent: null, gross: 350, commission: 0, earned: 350, paid: 0, due: 350, payouts: [] });
+    // no own rate: the category rate or the default (0 here) applies, line by line
+    expect(res.body.data.lines).toEqual([{ product_id: foreign.productId, name: expect.any(String), units: 7, gross: 350, commission_percent: 0, commission: 0 }]);
   });
 
   it('limits sales and payouts to a delivery-date range read in Colombo time', async () => {
@@ -132,7 +133,7 @@ describe('Seller statement', () => {
     const fresh = await sf.makeSeller(3, 'PENDING');
     const res = await statement(fresh.token);
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ commission_percent: 0, gross: 0, commission: 0, earned: 0, paid: 0, due: 0, lines: [], payouts: [] });
+    expect(res.body.data).toEqual({ commission_percent: null, gross: 0, commission: 0, earned: 0, paid: 0, due: 0, lines: [], payouts: [] });
   });
 
   it('works while the seller is not approved or is suspended', async () => {

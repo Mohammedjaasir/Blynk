@@ -412,6 +412,15 @@ export interface OrdersTable {
    * - discount_amount - wallet_amount_used is what is still to pay.
    */
   wallet_amount_used: ColumnType<number, number | string | undefined, number | string>;
+  /**
+   * Migration 055 (owner, 2026-10-24): a tip for the rider added at checkout,
+   * collected in cash with the order (part of total_amount, not of the items
+   * or the delivery fee). Absent before 055 - read as 0 (modules/ratings).
+   */
+  rider_tip: ColumnType<number, number | string | undefined, number | string>;
+  /** Migration 055: a tip paid after delivery from the Blynk Wallet (not part of total_amount) and when. */
+  rider_tip_wallet: ColumnType<number, number | string | undefined, number | string>;
+  rider_tip_wallet_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
   scheduled_for: Date | null;
   /** Migration 036 (owner, 2026-10-10): end of the delivery slot the customer picked; scheduled_for is its start. */
   scheduled_until: ColumnType<Date | null, Date | null | undefined, Date | null>;
@@ -440,6 +449,8 @@ export interface OrdersTable {
   free_delivery_reason: ColumnType<FreeDeliveryReason | null, FreeDeliveryReason | null | undefined, FreeDeliveryReason | null>;
   /** Migration 047: an unpaid ONLINE order is cancelled after this moment. */
   payment_expires_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  /** Migration 054 (owner, 2026-10-24): the repeat basket this order was placed from (NULL = ordinary). */
+  repeat_basket_id: ColumnType<string | null, string | null | undefined, string | null>;
   cancellation_reason: string | null;
   cancelled_by_user_id: string | null;
   cancelled_at: Date | null;
@@ -1115,7 +1126,8 @@ export interface SellersTable {
   address: string | null;
   note: string | null;
   status: Generated<SellerStatus>;
-  commission_percent: ColumnType<string, number | string | undefined, number | string>;
+  /** Migration 057: NULL = no own rate (the category's rate or the default applies; seller.commission.ts). */
+  commission_percent: ColumnType<string | null, number | string | null | undefined, number | string | null>;
   rejection_reason: ColumnType<string | null, string | null | undefined, string | null>;
   reviewed_by: ColumnType<string | null, string | null | undefined, string | null>;
   reviewed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
@@ -1165,7 +1177,64 @@ export interface SellerPayoutsTable {
   created_at: Generated<Date>;
 }
 
+/** Migration 054 (owner, 2026-10-24): "deliver this basket every Monday" (modules/repeat-baskets). */
+export type RepeatFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY';
+export type RepeatBasketStatus = 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+export type RepeatRunStatus = 'PLACED' | 'SKIPPED' | 'FAILED';
+export interface RepeatBasketLine {
+  product_id: string;
+  variant_id: string | null;
+  quantity: number;
+}
+export interface RepeatBasketsTable {
+  id: Generated<string>;
+  user_id: string;
+  name: ColumnType<string, string | undefined, string>;
+  items: ColumnType<RepeatBasketLine[], string, string>;
+  frequency: RepeatFrequency;
+  weekday: number | null;
+  place_at: string;
+  start_date: ColumnType<string | null, string | null | undefined, string | null>;
+  address_id: string | null;
+  notes: string | null;
+  status: ColumnType<RepeatBasketStatus, RepeatBasketStatus | undefined, RepeatBasketStatus>;
+  skip_next: ColumnType<boolean, boolean | undefined, boolean>;
+  next_run_at: Date | null;
+  last_run_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  last_order_id: ColumnType<string | null, string | null | undefined, string | null>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+export interface RepeatBasketRunsTable {
+  id: Generated<string>;
+  basket_id: string;
+  run_at: Date;
+  status: RepeatRunStatus;
+  order_id: string | null;
+  reason: string | null;
+  created_at: Generated<Date>;
+}
+
+/** Migration 056 (owner, 2026-10-24): "Can't find it? Ask us" (modules/catalog/product-requests.ts). */
+export type ProductRequestStatus = 'NEW' | 'PLANNED' | 'ADDED' | 'DECLINED';
+export interface ProductRequestsTable {
+  id: Generated<string>;
+  user_id: string | null;
+  name: string;
+  /** Generated: lower(btrim(regexp_replace(name, '\s+', ' ', 'g'))). */
+  name_key: ColumnType<string, never, never>;
+  note: string | null;
+  category_id: string | null;
+  photo_url: string | null;
+  status: ColumnType<ProductRequestStatus, ProductRequestStatus | undefined, ProductRequestStatus>;
+  product_id: string | null;
+  staff_note: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
 export interface Database {
+  product_requests: ProductRequestsTable;
   sellers: SellersTable;
   seller_submissions: SellerSubmissionsTable;
   seller_payouts: SellerPayoutsTable;
@@ -1227,6 +1296,23 @@ export interface Database {
   referral_rewards: ReferralRewardsTable;
   points_ledger: PointsLedgerTable;
   wallet_entries: WalletEntriesTable;
+  /** Migration 054 (owner, 2026-10-24): repeat baskets. */
+  repeat_baskets: RepeatBasketsTable;
+  repeat_basket_runs: RepeatBasketRunsTable;
+  /** Migration 055 (owner, 2026-10-24). */
+  order_ratings: OrderRatingsTable;
+}
+
+/** Migration 055 (owner, 2026-10-24): a customer's rating of a delivered order (one per order). */
+export interface OrderRatingsTable {
+  order_id: string;
+  user_id: string;
+  rider_id: string | null;
+  stars: number;
+  tags: ColumnType<string[], string[] | undefined, string[]>;
+  comment: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
 }
 
 /**
@@ -1318,7 +1404,9 @@ export type WalletEntryKind =
   | 'ADJUSTMENT'
   | 'ORDER_PAYMENT'
   | 'ORDER_PAYMENT_RETURNED'
-  | 'EXPIRED';
+  | 'EXPIRED'
+  /** Migration 055: a tip for the rider paid from the wallet after delivery (one per order). */
+  | 'RIDER_TIP';
 
 /** Migration 049 (owner, 2026-10-15): the Blynk Wallet ledger, append-only and signed. */
 export interface WalletEntriesTable {

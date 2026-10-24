@@ -14,6 +14,21 @@ import {
   statementQuerySchema,
 } from './seller.schema.js';
 import { sellerService } from './seller.service.js';
+import {
+  createPayoutRequestSchema,
+  createStockNoteSchema,
+  insightsQuerySchema,
+  sellerStockNotesQuerySchema,
+} from './seller-requests.schema.js';
+import {
+  cancelOwnStockNote,
+  createPayoutRequest,
+  createStockNote,
+  listSellerPayoutRequests,
+  listSellerStockNotes,
+  sellerInsights,
+  withdrawPayoutRequest,
+} from './seller-requests.service.js';
 
 /**
  * Seller-facing API (role SELLER), mounted at /api/v1/seller
@@ -113,4 +128,46 @@ sellerRouter.get(
     const { from, to } = req.query as { from?: string; to?: string };
     return { data: await sellerService.statement(req.user!.id, { from, to }) };
   })
+);
+
+// ----------------------------------------------------------------------------
+// Stock notes, payout requests (migration 057) and the dashboard (seller-requests.service.ts)
+// ----------------------------------------------------------------------------
+
+sellerRouter.post(
+  '/stock-notes',
+  validate({ body: createStockNoteSchema }),
+  handle(async (req) => ({ status: 201, data: await createStockNote(req.user!.id, req.body) }))
+);
+
+sellerRouter.get(
+  '/stock-notes',
+  validate({ query: sellerStockNotesQuerySchema }),
+  handle(async (req) => ({ data: await listSellerStockNotes(req.user!.id, (req.query as { status?: never }).status) }))
+);
+
+sellerRouter.delete(
+  '/stock-notes/:id',
+  validate({ params: idParamSchema }),
+  handle(async (req) => ({ data: await cancelOwnStockNote(req.user!.id, String(req.params.id)) }))
+);
+
+sellerRouter.post(
+  '/payout-requests',
+  validate({ body: createPayoutRequestSchema }),
+  handle(async (req) => ({ status: 201, data: await createPayoutRequest(req.user!.id, req.body) }))
+);
+
+sellerRouter.get('/payout-requests', handle(async (req) => ({ data: await listSellerPayoutRequests(req.user!.id) })));
+
+sellerRouter.delete(
+  '/payout-requests/:id',
+  validate({ params: idParamSchema }),
+  handle(async (req) => ({ data: await withdrawPayoutRequest(req.user!.id, String(req.params.id)) }))
+);
+
+sellerRouter.get(
+  '/insights',
+  validate({ query: insightsQuerySchema }),
+  handle(async (req) => ({ data: await sellerInsights(req.user!.id, Number((req.query as { days?: number }).days ?? 7)) }))
 );

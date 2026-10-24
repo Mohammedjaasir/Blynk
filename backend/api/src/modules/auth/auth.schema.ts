@@ -40,11 +40,12 @@ export const verifyOtpSchema = z
     create_account: z.boolean().optional().default(true),
     // The Rider app sends 'rider': a customer whose rider application is
     // waiting or was rejected is told so instead of being signed in there.
-    // The Seller portal sends 'seller': a number with no account becomes a
-    // PENDING seller (seller.service.ts), a number used for any other kind of
-    // account is refused (PHONE_IN_USE).
+    // The Seller portal sends 'seller': only a seller staff added signs in
+    // (invite-only, 2026-10-24); a number with no account is refused
+    // (SELLER_NOT_REGISTERED), one used for any other kind of account too
+    // (PHONE_IN_USE).
     app: z.enum(['rider', 'seller']).optional(),
-    // Seller portal first sign-in: the shop's name (else the phone number).
+    // Ignored since sellers are invite-only (kept so older seller sites still validate).
     shop_name: z.string().trim().min(2, 'Shop name must be at least 2 characters.').max(80, 'Shop name is too long.').optional(),
   })
   .refine((data) => Boolean(data.phone || data.phone_number), {

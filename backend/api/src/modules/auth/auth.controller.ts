@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { authService } from './auth.service.js';
+import { authService, sellerSignupClosed } from './auth.service.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { clientIp as clientIpOf } from '../../utils/client-ip.js';
 
@@ -91,17 +91,13 @@ export async function getCurrentUserController(req: Request, res: Response, next
   }
 }
 
-/** POST /auth/seller/register-email: a new SELLER (PENDING shop) signed in with email + password. */
-export async function sellerRegisterEmailController(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const result = await authService.registerSellerWithEmail(req.body.email, req.body.password, req.body.shop_name, {
-      ipAddress: clientIpOf(req) ?? undefined,
-      deviceInfo: req.headers['user-agent'] || undefined,
-    });
-    res.status(201).json({ success: true, data: result });
-  } catch (err) {
-    next(err);
-  }
+/**
+ * POST /auth/seller/register-email: closed (owner, 2026-10-24: sellers are invite-only - Blynk staff
+ * add each shop with POST /admin/sellers). Always 403 SELLER_SIGNUP_CLOSED, whatever the body;
+ * sellers who already have an email + password keep signing in with /auth/seller/login-email.
+ */
+export async function sellerRegisterEmailController(_req: Request, _res: Response, next: NextFunction): Promise<void> {
+  next(sellerSignupClosed());
 }
 
 /** POST /auth/seller/login-email: a SELLER with a password signs in. */

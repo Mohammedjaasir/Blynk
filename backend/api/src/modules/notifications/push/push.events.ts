@@ -96,6 +96,45 @@ export async function enqueueNewOrderStaffPush(
   );
 }
 
+/**
+ * "Low rating" on every Admin / Operations staff device (owner, 2026-10-24; migration 055): a
+ * customer rated an order 1 or 2 stars ("2-star rating on order X: Late, Missing item"). Queued in
+ * the rating's transaction like the new-order alert, once per order and staff member. Best effort:
+ * never fails or blocks the rating.
+ */
+export async function enqueueLowRatingStaffPush(
+  trx: Trx,
+  input: { order: { id: string; order_number: string }; stars: number; body: string },
+): Promise<void> {
+  if (!isPushEnabled()) return;
+  await bestEffort(
+    trx,
+    async () => {
+      const staff = await trx
+        .selectFrom('users as u')
+        .select('u.id')
+        .where('u.role', 'in', ['ADMIN', 'OPERATIONS'])
+        .where('u.is_active', '=', true)
+        .where((eb) => eb.exists(eb.selectFrom('device_tokens as d').select('d.id').whereRef('d.user_id', '=', 'u.id')))
+        .execute();
+      for (const s of staff) {
+        await enqueuePush(trx, {
+          userId: s.id,
+          orderId: input.order.id,
+          type: PUSH_TYPES.LOW_RATING,
+          idempotencyKey: `low-rating:${input.order.id}:${s.id}`,
+          payload: {
+            title: `${input.stars}-star rating`,
+            body: input.body,
+            data: { type: 'staff_rating', order_id: input.order.id },
+          },
+        });
+      }
+    },
+    (err) => logger.error({ err, orderId: input.order.id }, 'Could not queue the low-rating staff push; the rating stands')
+  );
+}
+
 /** "1st", "2nd", "100th", "1,000th". */
 export function ordinal(n: number): string {
   const tens = n % 100;

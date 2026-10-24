@@ -12,7 +12,7 @@ import { SmsProvider } from '../notifications/providers/sms.provider.js';
 import { localizedTexts } from '../notifications/sms-i18n.js';
 import { smsLanguageForPhone } from '../notifications/sms-language.js';
 import { generateAccessToken, generateRefreshToken, hashToken } from './token.service.js';
-import { generatePlaceholderPhone, isEmailOnlyRole, publicPhone } from '../../utils/phone.js';
+import { isEmailOnlyRole, publicPhone } from '../../utils/phone.js';
 
 
 const otpSms = new SmsProvider();
@@ -163,6 +163,14 @@ export const sellerSignInRequired = () =>
   new AppError('This number is a Blynk seller account. Sign in on the seller site.', 403, 'SELLER_SIGN_IN_REQUIRED');
 export const phoneInUse = () =>
   new AppError('This number is already used for a Blynk account.', 403, 'PHONE_IN_USE');
+/**
+ * Sellers are invite-only (owner, 2026-10-24): Blynk staff add each shop (POST /admin/sellers), so
+ * an unknown number on the seller sign-in, and the email sign-up, are refused.
+ */
+export const sellerNotRegistered = () =>
+  new AppError('This number is not registered as a Blynk seller. Ask Blynk to add your shop.', 403, 'SELLER_NOT_REGISTERED');
+export const sellerSignupClosed = () =>
+  new AppError('Seller sign-up is closed. Ask Blynk to add your shop.', 403, 'SELLER_SIGNUP_CLOSED');
 
 /** The sign-in code SMS: "123456 is your Blynk code. Valid 2 min. Do not share it." */
 export const otpSmsText = (otp: string, minutes: number, lang: SmsLanguage = 'en') =>
@@ -442,9 +450,10 @@ export class AuthService {
         // transaction, so the code is not consumed and nothing is written.
         throw new AppError('No Blynk account uses this number.', 404, 'ACCOUNT_NOT_FOUND');
       } else if (meta.app === 'seller') {
-        // First sign-in on the Seller portal: a SELLER user and a PENDING shop
-        // profile that Admin approves before anything can be listed.
-        user = await authRepository.createSeller(trx, phone, meta.shopName?.trim() || phone);
+        // Sellers are invite-only (owner, 2026-10-24): staff add the shop first
+        // (POST /admin/sellers). Thrown inside the transaction, so the code is
+        // not consumed and nothing is written.
+        throw sellerNotRegistered();
       } else {
         // First-time login: auto-register as CUSTOMER strictly
         user = await authRepository.createOrGetCustomer(trx, phone);
@@ -535,65 +544,6 @@ export class AuthService {
     meta: { ipAddress?: string; deviceInfo?: string }
   ): Promise<AuthTokensResult> {
     return this.passwordSignIn(email, password, meta, { roles: ['SELLER'], kind: 'seller' });
-  }
-
-  /**
-   * Seller portal sign-up with email + password (owner, 2026-10-24; no email
-   * provider, so nothing is sent and the address is not verified). Creates a
-   * SELLER user - no phone, so users.phone holds a 'nophone:' placeholder like
-   * Admin / Inventory accounts (never texted, shown as null) - with the
-   * password hashed like staff passwords (pgcrypto bcrypt), plus a PENDING
-   * sellers row, and signs it in. An email any account already uses (any
-   * role, ignoring case) is 409 EMAIL_IN_USE.
-   */
-  async registerSellerWithEmail(
-    email: string,
-    password: string,
-    shopName: string,
-    meta: { ipAddress?: string; deviceInfo?: string }
-  ): Promise<AuthTokensResult> {
-    authRateLimiter.checkLimit(
-      `seller_register_ip:${meta.ipAddress ?? 'unknown'}`,
-      10,
-      60 * 60 * 1000,
-      'Too many sign-ups from this device. Please wait before retrying.'
-    );
-    const emailInUse = () =>
-      new AppError('This email is already used for a Blynk account.', 409, 'EMAIL_IN_USE');
-    const address = email.trim().toLowerCase();
-
-    try {
-      return await db.transaction().execute(async (trx) => {
-        const clash = await trx
-          .selectFrom('users')
-          .select('id')
-          .where(sql`lower(email)`, '=', address)
-          .executeTakeFirst();
-        if (clash) throw emailInUse();
-
-        const now = new Date();
-        const user = await trx
-          .insertInto('users')
-          .values({
-            phone: generatePlaceholderPhone(),
-            email: address,
-            role: 'SELLER',
-            is_active: true,
-            last_login_at: now,
-            staff_password_hash: sql<string>`crypt(${password}, gen_salt('bf', 10))`,
-          })
-          .returningAll()
-          .executeTakeFirstOrThrow();
-        await trx.insertInto('sellers').values({ user_id: user.id, shop_name: shopName.trim() }).execute();
-        logger.info({ userId: user.id }, 'Seller signed up with email and password');
-        return this.issueTokens(trx, user, meta);
-      });
-    } catch (err) {
-      // Two sign-ups with one email at once meet at users_email_lower_key.
-      const pg = err as { code?: string; constraint?: string };
-      if (pg.code === '23505' && pg.constraint?.includes('email')) throw emailInUse();
-      throw err;
-    }
   }
 
   /** Email + password sign-in shared by staff and sellers (see loginWithPassword). */

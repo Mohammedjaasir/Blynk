@@ -5,6 +5,8 @@ import { validate } from '../../middleware/validate.middleware.js';
 import type { AuditActor } from '../audit/audit.writer.js';
 import {
   approveSubmissionSchema,
+  commissionSettingsSchema,
+  createSellerSchema,
   idParamSchema,
   listSellersQuerySchema,
   listSubmissionsQuerySchema,
@@ -18,6 +20,7 @@ import {
 import {
   approveLocation,
   approveSubmission,
+  createSeller,
   rejectLocation,
   deletePayout,
   getSeller,
@@ -27,6 +30,24 @@ import {
   rejectSubmission,
   updateSeller,
 } from './admin-sellers.service.js';
+import { getCommissionSettings, setCommissionSettings } from './seller.commission.js';
+import {
+  cancelStockNoteSchema,
+  declinePayoutRequestSchema,
+  idParamSchema as requestIdParamSchema,
+  payPayoutRequestSchema,
+  receiveStockNoteSchema,
+  staffPayoutRequestsQuerySchema,
+  staffStockNotesQuerySchema,
+} from './seller-requests.schema.js';
+import {
+  cancelStockNote,
+  declinePayoutRequest,
+  listPayoutRequests,
+  listStockNotes,
+  payPayoutRequest,
+  receiveStockNote,
+} from './seller-requests.service.js';
 
 /**
  * Staff-facing seller API (ADMIN, OPERATIONS), mounted at /api/v1/admin next to the other admin
@@ -34,6 +55,7 @@ import {
  * live in admin-sellers.service.ts.
  *
  *   GET    /admin/sellers                              ?status=&search=
+ *   POST   /admin/sellers                              add a seller (invite-only, 2026-10-24)
  *   GET    /admin/sellers/:id                          seller + statement (?from=&to=)
  *   PATCH  /admin/sellers/:id                          approve / reject / suspend, commission
  *   POST   /admin/sellers/:id/location/approve         the seller's waiting shop pin becomes the one in use
@@ -43,6 +65,14 @@ import {
  *   POST   /admin/seller-submissions/:id/reject        { reason }
  *   POST   /admin/sellers/:id/payouts                  { amount, note?, paid_on? }
  *   DELETE /admin/sellers/:id/payouts/:payoutId
+ *   GET    /admin/settings/seller-commission           default % + category rates (seller.commission.ts)
+ *   PUT    /admin/settings/seller-commission           { default_percent, categories?: [{ category_id, percent|null }] }
+ *   GET    /admin/seller-stock-notes                   ?status=SENT (default)&seller_id=   (migration 057)
+ *   POST   /admin/seller-stock-notes/:id/receive       { received_quantity } - onto the tracked stock
+ *   POST   /admin/seller-stock-notes/:id/cancel        { reason? }
+ *   GET    /admin/seller-payout-requests               ?status=REQUESTED (default)&seller_id=
+ *   POST   /admin/seller-payout-requests/:id/pay       { paid_on?, note? } - records the payout
+ *   POST   /admin/seller-payout-requests/:id/decline   { reason }
  *
  * The role check is per route, not router-wide: this router sits in front of the rest of /admin.
  */
@@ -72,6 +102,15 @@ adminSellersRouter.get(
   validate({ query: listSellersQuerySchema }),
   handle(async (req, res) => {
     res.status(200).json({ success: true, data: await listSellers(req.query as never) });
+  })
+);
+
+adminSellersRouter.post(
+  '/sellers',
+  ...staff,
+  validate({ body: createSellerSchema }),
+  handle(async (req, res) => {
+    res.status(201).json({ success: true, data: await createSeller(req.body, actorOf(req)) });
   })
 );
 
@@ -154,5 +193,84 @@ adminSellersRouter.delete(
   validate({ params: payoutParamSchema }),
   handle(async (req, res) => {
     res.status(200).json({ success: true, data: await deletePayout(req.params.id as string, req.params.payoutId as string, actorOf(req)) });
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Commission settings (seller.commission.ts)
+// ----------------------------------------------------------------------------
+
+adminSellersRouter.get(
+  '/settings/seller-commission',
+  ...staff,
+  handle(async (_req, res) => {
+    res.status(200).json({ success: true, data: await getCommissionSettings() });
+  })
+);
+
+adminSellersRouter.put(
+  '/settings/seller-commission',
+  ...staff,
+  validate({ body: commissionSettingsSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await setCommissionSettings(req.body, actorOf(req)) });
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Stock notes and payout requests (migration 057; seller-requests.service.ts)
+// ----------------------------------------------------------------------------
+
+adminSellersRouter.get(
+  '/seller-stock-notes',
+  ...staff,
+  validate({ query: staffStockNotesQuerySchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await listStockNotes(req.query as never) });
+  })
+);
+
+adminSellersRouter.post(
+  '/seller-stock-notes/:id/receive',
+  ...staff,
+  validate({ params: requestIdParamSchema, body: receiveStockNoteSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await receiveStockNote(req.params.id as string, req.body.received_quantity, actorOf(req)) });
+  })
+);
+
+adminSellersRouter.post(
+  '/seller-stock-notes/:id/cancel',
+  ...staff,
+  validate({ params: requestIdParamSchema, body: cancelStockNoteSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await cancelStockNote(req.params.id as string, req.body.reason ?? null, actorOf(req)) });
+  })
+);
+
+adminSellersRouter.get(
+  '/seller-payout-requests',
+  ...staff,
+  validate({ query: staffPayoutRequestsQuerySchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await listPayoutRequests(req.query as never) });
+  })
+);
+
+adminSellersRouter.post(
+  '/seller-payout-requests/:id/pay',
+  ...staff,
+  validate({ params: requestIdParamSchema, body: payPayoutRequestSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await payPayoutRequest(req.params.id as string, req.body, actorOf(req)) });
+  })
+);
+
+adminSellersRouter.post(
+  '/seller-payout-requests/:id/decline',
+  ...staff,
+  validate({ params: requestIdParamSchema, body: declinePayoutRequestSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await declinePayoutRequest(req.params.id as string, req.body.reason, actorOf(req)) });
   })
 );
