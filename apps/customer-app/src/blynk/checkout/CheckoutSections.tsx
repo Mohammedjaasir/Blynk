@@ -8,9 +8,10 @@ import {
   DETAILS_COPY, RECIPIENT_NAME_MAX, recipientNameError, recipientPhoneError, type CheckoutDetails,
 } from './details';
 import {
-  balanceLine, BIRTHDAY_SUB, birthdayBanner, canRedeem, redeemLine, REFERRAL_SUB, referralLine,
+  balanceLine, birthdaySub, birthdayBanner, canRedeem, redeemLine, referralSub, referralLine,
   type Birthday, type PointsProgram, type Referral,
 } from './rewards';
+import { CHECKOUT_UI, PHONE_HINT } from './words';
 import { asapOffered, SLOT_COPY, slotsByDay, type DeliverySlots } from './slots';
 import { WALLET_COPY } from '@/blynk/wallet/copy';
 import { canUseWallet, walletUseLine, type CheckoutWallet } from '@/blynk/wallet/models';
@@ -35,7 +36,7 @@ export function BirthdayBanner({ birthday }: { birthday: Birthday | null }) {
       <Text style={{ fontSize: 22 }}>🎁</Text>
       <View style={{ flex: 1 }}>
         <Text style={s.bdayTitle}>{birthdayBanner(birthday)}</Text>
-        <Text style={s.bdaySub}>{BIRTHDAY_SUB}</Text>
+        <Text style={s.bdaySub}>{birthdaySub()}</Text>
       </View>
     </Animated.View>
   );
@@ -79,7 +80,7 @@ export function SlotPickerCard({ slots, failed, loading, storeOpen, picked, onPi
         <Text style={s.head}>{SLOT_COPY.title}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
           <Text style={[s.muted, { flex: 1 }]}>{SLOT_COPY.loadFailed}</Text>
-          <Pressable onPress={onRetry} disabled={loading} hitSlop={8}><Text style={s.link}>Retry</Text></Pressable>
+          <Pressable onPress={onRetry} disabled={loading} hitSlop={8}><Text style={s.link}>{CHECKOUT_UI.retry}</Text></Pressable>
         </View>
       </View>
     );
@@ -192,7 +193,7 @@ export function DeliveryDetailsCard({ details, setDetails, allowForSomeoneElse, 
               />
               <Field
                 label={DETAILS_COPY.phoneLabel}
-                hint={DETAILS_COPY.phoneHint}
+                hint={PHONE_HINT}
                 keyboard="phone-pad"
                 max={16}
                 value={details.recipientPhone}
@@ -235,7 +236,7 @@ export function RewardsCard({ referral, points, usePoints, onUsePoints, redeem, 
           <Text style={{ fontSize: 16 }}>🎟️</Text>
           <View style={{ flex: 1 }}>
             <Text style={[s.optTitle, { color: C.green }]}>{referralLine(referral!)}</Text>
-            <Text style={s.muted}>{REFERRAL_SUB}</Text>
+            <Text style={s.muted}>{referralSub()}</Text>
           </View>
         </View>
       )}
@@ -245,13 +246,13 @@ export function RewardsCard({ referral, points, usePoints, onUsePoints, redeem, 
             onPress={() => onUsePoints(!usePoints)}
             accessibilityRole="switch"
             accessibilityState={{ checked: usePoints }}
-            accessibilityLabel="Use points"
+            accessibilityLabel={CHECKOUT_UI.usePoints}
             style={[s.optRow, { paddingVertical: 0 }]}
           >
             <Text style={{ fontSize: 16, marginRight: 10 }}>⭐</Text>
             <View style={{ flex: 1 }}>
               <Text style={s.optTitle}>{balanceLine(points!)}</Text>
-              <Text style={s.muted}>Use points</Text>
+              <Text style={s.muted}>{CHECKOUT_UI.usePoints}</Text>
             </View>
             <Toggle on={usePoints} />
           </Pressable>

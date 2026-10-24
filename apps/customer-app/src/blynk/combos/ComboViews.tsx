@@ -1,3 +1,4 @@
+import { COMPONENT_WORDS } from '@/blynk/ui/componentWords';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -75,20 +76,20 @@ export function ComboThumb({ combo, size, radius = 10 }: { combo: Combo; size: n
 export function ComboAdd({ combo, compact }: { combo: Combo; compact?: boolean }) {
   const q = useCartSelect((c) => c.comboQty[combo.id] ?? 0);
   if (!combo.is_available) {
-    return <View style={[s.add, s.soldOut, compact && s.addCompact]}><Text style={s.soldTxt}>Sold out</Text></View>;
+    return <View style={[s.add, s.soldOut, compact && s.addCompact]}><Text style={s.soldTxt}>{COMPONENT_WORDS.soldOut}</Text></View>;
   }
   if (q === 0) {
     return (
       <PressScale onPress={() => cartActions.addCombo(combo)} haptic scaleTo={0.92}>
-        <View style={[s.add, compact && s.addCompact]} accessible accessibilityRole="button" accessibilityLabel={`Add ${combo.name}`}>
-          <Text style={s.addTxt}>ADD</Text>
+        <View style={[s.add, compact && s.addCompact]} accessible accessibilityRole="button" accessibilityLabel={COMPONENT_WORDS.addLabel(combo.name)}>
+          <Text style={s.addTxt}>{COMPONENT_WORDS.add}</Text>
         </View>
       </PressScale>
     );
   }
   return (
     <View style={[s.add, s.stepper, compact && s.addCompact]}>
-      <Pressable hitSlop={6} onPress={() => { tap(); cartActions.removeCombo(combo); }} accessibilityLabel={`One less ${combo.name}`}>
+      <Pressable hitSlop={6} onPress={() => { tap(); cartActions.removeCombo(combo); }} accessibilityLabel={COMPONENT_WORDS.oneLess(combo.name)}>
         <Text style={s.stepSign}>−</Text>
       </Pressable>
       <Animated.Text key={q} entering={FadeIn.duration(150)} style={s.stepQty}>{q}</Animated.Text>
@@ -96,7 +97,7 @@ export function ComboAdd({ combo, compact }: { combo: Combo; compact?: boolean }
         hitSlop={6}
         disabled={q >= MAX_COMBO_QTY}
         onPress={() => { tap(); cartActions.addCombo(combo); }}
-        accessibilityLabel={`One more ${combo.name}`}
+        accessibilityLabel={COMPONENT_WORDS.oneMore(combo.name)}
       >
         <Text style={[s.stepSign, q >= MAX_COMBO_QTY && { opacity: 0.35 }]}>+</Text>
       </Pressable>
@@ -111,7 +112,7 @@ function ComboCard({ combo, showSavings }: { combo: Combo; showSavings: boolean 
     <View style={s.card}>
       <View style={!combo.is_available && { opacity: 0.5 }}>
         <ComboThumb combo={combo} size={CARD_W - 20} />
-        {saving && <View style={s.saveTag}><Text style={s.saveTxt}>Save {formatLkr(combo.saving)}</Text></View>}
+        {saving && <View style={s.saveTag}><Text style={s.saveTxt}>{COMPONENT_WORDS.save(formatLkr(combo.saving))}</Text></View>}
       </View>
       <Text style={s.name} numberOfLines={2}>{combo.name}</Text>
       <Text style={s.summary} numberOfLines={2}>{comboSummary(combo)}</Text>
@@ -136,7 +137,7 @@ export function ComboRail({ style }: { style?: StyleProp<ViewStyle> }) {
   const showSavings = offerSavingsOn(store);
   return (
     <Animated.View entering={FadeIn.duration(220)} style={style}>
-      <Text style={s.h2} accessibilityRole="header">Combo packs</Text>
+      <Text style={s.h2} accessibilityRole="header">{COMPONENT_WORDS.comboPacks}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 12 }}>
         {combos.map((c) => <ComboCard key={c.id} combo={c} showSavings={showSavings} />)}
       </ScrollView>

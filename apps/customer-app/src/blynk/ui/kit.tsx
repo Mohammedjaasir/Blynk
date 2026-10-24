@@ -1,3 +1,4 @@
+import { COMPONENT_WORDS } from '@/blynk/ui/componentWords';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
@@ -164,7 +165,7 @@ export const ListSkeleton = ({ rows = 4, h = 84 }: { rows?: number; h?: number }
 
 /** Five read-only stars. */
 export const Stars = ({ stars, size = 16 }: { stars: number; size?: number }) => (
-  <View style={{ flexDirection: 'row', gap: 3 }} accessible accessibilityLabel={`Rated ${stars} out of 5 stars`}>
+  <View style={{ flexDirection: 'row', gap: 3 }} accessible accessibilityLabel={COMPONENT_WORDS.rated(stars)}>
     {[1, 2, 3, 4, 5].map((s) => <StarIcon key={s} size={size} color={s <= stars ? C.ink : '#D5D5DC'} />)}
   </View>
 );

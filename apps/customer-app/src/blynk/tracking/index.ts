@@ -12,5 +12,5 @@
  *
  * Unmounting closes the stream; a logout closes every stream (stopAllTracking).
  */
-export { LiveTracking, isTrackable, destinationOf, onTheWayText, MAP_SECTION_TITLE } from './LiveTracking';
+export { LiveTracking, isTrackable, destinationOf, onTheWayText } from './LiveTracking';
 export { useLiveTracking, stopAllTracking } from './useLiveTracking';

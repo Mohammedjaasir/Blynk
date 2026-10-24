@@ -1,6 +1,7 @@
 import { ApiError, apiDelete, apiGet, apiPost } from '@/blynk/api/client';
 import type { Combo, Product } from '@/blynk/api/types';
 import { authed, getSession } from '@/blynk/auth/session';
+import { BROWSE_ERRORS, DETAIL_LABELS, NOTIFY_ME } from './browseWords';
 import { normalizeProductExtras } from './variants';
 
 /*
@@ -19,7 +20,7 @@ export async function fetchProductDetail(id: string, signal?: AbortSignal): Prom
     ? await authed((t) => apiGet<Raw>(path(id), t, signal))
     : await apiGet<Raw>(path(id), null, signal);
   const p = r?.product;
-  if (!p || typeof p !== 'object' || typeof p.id !== 'string') throw new ApiError('Malformed product response', 500);
+  if (!p || typeof p !== 'object' || typeof p.id !== 'string') throw new ApiError(BROWSE_ERRORS.malformed, 500);
   const { notify_me_subscribed, ...product } = p;
   const n = (v: unknown) => (typeof v === 'string' ? Number(v) : v);
   return {
@@ -48,11 +49,8 @@ export async function setNotifyMe(id: string, on: boolean): Promise<NotifyResult
   }
 }
 
-/** Label before the customer asks. */
-export const NOTIFY_ME_LABEL = "Notify me when it's back";
-/** Label once they have asked (tapping it again cancels). */
-export const NOTIFY_ME_ON_LABEL = "We'll tell you when it's back";
-export const NOTIFY_ME_ON_HINT = 'Tap again if you no longer want the alert.';
+/* The "Notify me" words (label before the customer asks, label once they have, the hint) are NOTIFY_ME in ./browseWords. */
+export { NOTIFY_ME };
 
 /** What tapping the button does for this customer right now. */
 export function notifyMeAction(signedIn: boolean, subscribed: boolean): 'sign-in' | 'subscribe' | 'unsubscribe' {
@@ -74,8 +72,8 @@ export const unitLine = (p: Pick<Product, 'unit' | 'pack_size'>) =>
 /** The "Product details" rows: only the ones with real content. */
 export function detailRows(p: Pick<Product, 'unit' | 'pack_size' | 'category_name'>): [string, string][] {
   const rows: [string, string][] = [];
-  if ((p.unit ?? '').trim()) rows.push(['Unit', p.unit]);
-  if ((p.pack_size ?? '').trim()) rows.push(['Pack', p.pack_size as string]);
-  if ((p.category_name ?? '').trim()) rows.push(['Category', p.category_name]);
+  if ((p.unit ?? '').trim()) rows.push([DETAIL_LABELS.unit, p.unit]);
+  if ((p.pack_size ?? '').trim()) rows.push([DETAIL_LABELS.pack, p.pack_size as string]);
+  if ((p.category_name ?? '').trim()) rows.push([DETAIL_LABELS.category, p.category_name]);
   return rows;
 }

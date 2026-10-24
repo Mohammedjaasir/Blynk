@@ -60,7 +60,7 @@ export function CoverageMap({ coverage, width, height, compact = false, pin = nu
   const scaleKm = coverage.radiusKm >= 3 ? 1 : 0.5;
 
   return (
-    <View style={{ width, height, borderRadius: compact ? 12 : 18, overflow: 'hidden', backgroundColor: LAND }} accessible accessibilityLabel={`${AREA.radiusLabel(coverage)} around ${coverage.landmark ?? coverage.town}`}>
+    <View style={{ width, height, borderRadius: compact ? 12 : 18, overflow: 'hidden', backgroundColor: LAND }} accessible accessibilityLabel={AREA.mapLabel(coverage)}>
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id="sea" x1="0" y1="0" x2="1" y2="0">
@@ -170,7 +170,7 @@ function PlaceMark({ p, f, coverage, compact, highlight }: { p: PlaceAt; f: Fram
       <G>
         <Path d={`M${tip.x} ${tip.y} L${l.x} ${l.y} L${rr.x} ${rr.y} Z`} fill={OUTSIDE} />
         <Halo x={e.x + (right ? -12 : 12)} y={e.y - 10} size={10.5} anchor={right ? 'end' : 'start'} color={OUTSIDE} weight={F.semi}>{p.name}</Halo>
-        <Halo x={e.x + (right ? -12 : 12)} y={e.y + 3} size={10} anchor={right ? 'end' : 'start'} color={OUTSIDE} weight={F.medium}>{`${kmText(p.km)} · outside`}</Halo>
+        <Halo x={e.x + (right ? -12 : 12)} y={e.y + 3} size={10} anchor={right ? 'end' : 'start'} color={OUTSIDE} weight={F.medium}>{`${kmText(p.km)} · ${AREA.outsideTag}`}</Halo>
       </G>
     );
   }
@@ -184,7 +184,7 @@ function PlaceMark({ p, f, coverage, compact, highlight }: { p: PlaceAt; f: Fram
       {!compact && (
         <G>
           <Halo x={lx} y={ly} size={11} anchor={left ? 'end' : 'start'} color={color} weight={p.inside ? F.semi : F.medium}>
-            {`${p.name} ${kmText(p.km)}${p.inside ? '' : ' · outside'}`}
+            {`${p.name} ${kmText(p.km)}${p.inside ? '' : ` · ${AREA.outsideTag}`}`}
           </Halo>
         </G>
       )}

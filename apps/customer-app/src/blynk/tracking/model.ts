@@ -1,3 +1,5 @@
+import { TRACKING_WORDS } from './words';
+
 /*
  * The rider's live point, the road route and the words under the map, as the Flutter shop has
  * them (Models/rider_location_model.dart, rider_route_model.dart, rider_heading.dart,
@@ -94,19 +96,16 @@ export function parseRoute(raw: unknown): RiderRoute | null {
 /** "Arriving in ~6 min": whole minutes, rounded up, never below 1. */
 export function arrivingText(durationS: number): string {
   const minutes = durationS <= 0 ? 1 : Math.ceil(durationS / 60);
-  return `Arriving in ~${minutes} min`;
+  return TRACKING_WORDS.arriving(minutes);
 }
 
 /** "Last seen 45 seconds ago" / "Last seen 2 minutes ago"; never negative. */
 export function lastSeenText(ageMs: number): string {
   const s = Math.floor(ageMs / 1000);
-  if (s <= 0) return 'Last seen just now';
-  if (s < 60) return `Last seen ${s} ${s === 1 ? 'second' : 'seconds'} ago`;
-  const m = Math.floor(s / 60);
-  return `Last seen ${m} ${m === 1 ? 'minute' : 'minutes'} ago`;
+  if (s <= 0) return TRACKING_WORDS.lastSeenNow;
+  if (s < 60) return TRACKING_WORDS.lastSeenSeconds(s);
+  return TRACKING_WORDS.lastSeenMinutes(Math.floor(s / 60));
 }
-
-export const UNAVAILABLE_TEXT = 'Live location unavailable right now.';
 
 /* ------------------------------------------------------------------ heading */
 
@@ -157,10 +156,10 @@ export function trackingView(
   const riderVisible = !!s.current && !!freshness && freshness !== 'offline' && !s.closed && !s.unavailable;
   const live = riderVisible && freshness === 'live';
   const caption = live
-    ? { live: true, text: 'Live' }
+    ? { live: true, text: TRACKING_WORDS.live }
     : riderVisible && freshness === 'stale' && s.current
       ? { live: false, text: lastSeenText(now - s.current.capturedAt) }
-      : { live: false, text: UNAVAILABLE_TEXT };
+      : { live: false, text: TRACKING_WORDS.unavailable };
   return {
     riderVisible,
     rider: riderVisible ? s.current : null,

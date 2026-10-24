@@ -12,7 +12,7 @@ import { withSpring } from '@/lib/motion';
 import { C, F } from '@/lib/theme';
 import { getBundleQuote } from './api';
 import {
-  bundleBadgeNote, bundleBadgeText, bundleOfferFor, giftJustUnlocked, giftLines, giftSignature, liveBundleOffers,
+  BUNDLE_WORDS, bundleBadgeNote, bundleBadgeText, bundleOfferFor, giftJustUnlocked, giftLines, giftSignature, liveBundleOffers,
   progressFraction, progressText, usableQuote, type BundleProgress, type BundleQuote,
 } from './model';
 import { formatLkr } from '@/blynk/lib/money';
@@ -109,8 +109,8 @@ export function BundleProgressCard({ progress, offers }: { progress: BundleProgr
 /** The "Free" line under a cart line: how many units are free and what that saves. */
 export function FreeUnitsRow({ name, sizeLabel, free, value }: { name: string; sizeLabel?: string | null; free: number; value: number }) {
   return (
-    <View style={styles.freeRow} accessible accessibilityLabel={`${free} free ${name}, saves ${formatLkr(value)}`}>
-      <View style={styles.freeChip}><Text style={styles.freeChipTxt}>Free</Text></View>
+    <View style={styles.freeRow} accessible accessibilityLabel={BUNDLE_WORDS.freeLineLabel(free, name, formatLkr(value))}>
+      <View style={styles.freeChip}><Text style={styles.freeChipTxt}>{BUNDLE_WORDS.free}</Text></View>
       <Text style={styles.freeName} numberOfLines={1}>{free} × {name}{sizeLabel ? ` ${sizeLabel}` : ''}</Text>
       <Text style={styles.freeValue}>−{formatLkr(value)}</Text>
     </View>
@@ -141,7 +141,7 @@ export function GiftRows({ quote }: { quote: BundleQuote | null }) {
         <Animated.View key={g.key} entering={FadeIn.duration(220)} style={styles.giftRow} accessible accessibilityLabel={g.label}>
           <GiftPresent burstKey={burst} />
           <Text style={styles.giftName} numberOfLines={2}>{g.label}</Text>
-          <Text style={styles.freeValue}>Free</Text>
+          <Text style={styles.freeValue}>{BUNDLE_WORDS.free}</Text>
         </Animated.View>
       ))}
     </>

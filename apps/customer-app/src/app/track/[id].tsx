@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '@/blynk/api/client';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { getOrder } from '@/blynk/orders/api';
+import { TRACK_SCREEN as W } from '@/blynk/orders/screenWords';
 import { statusLabel } from '@/blynk/orders/status';
 import type { Order } from '@/blynk/orders/types';
 import { isTrackable, LiveTracking } from '@/blynk/tracking';
@@ -39,7 +40,7 @@ export default function TrackOrder() {
     busy.current = true;
     getOrder(id)
       .then((o) => { setOrder(o as Tracked); setError(null); })
-      .catch((e) => setError(e instanceof ApiError && (e.status === 404 || e.status === 400) ? 'This order could not be found.' : (e as Error).message))
+      .catch((e) => setError(e instanceof ApiError && (e.status === 404 || e.status === 400) ? W.notFound : (e as Error).message))
       .finally(() => { busy.current = false; });
   }, [id, signedIn]);
 
@@ -53,8 +54,8 @@ export default function TrackOrder() {
   const back = () => (router.canGoBack() ? router.back() : router.replace({ pathname: '/order/[id]', params: { id } }));
 
   let body: React.ReactNode;
-  if (DEMO) body = <Note text="Live tracking works in the live app." />;
-  else if (!signedIn) body = <Note text="Log in to track your order." cta="Log in" onRetry={openSignIn} />;
+  if (DEMO) body = <Note text={W.preview} />;
+  else if (!signedIn) body = <Note text={W.login} cta={W.loginCta} onRetry={openSignIn} />;
   else if (error && !order) body = <Note text={error} onRetry={load} />;
   else if (!order) body = <View style={styles.center}><ActivityIndicator color={C.brandInk} /></View>;
   else if (!isTrackable(order)) {
@@ -62,8 +63,8 @@ export default function TrackOrder() {
     body = (
       <DeliveredRating order={order} top={insets.top} onViewOrder={() => router.replace({ pathname: '/order/[id]', params: { id } })} fallback={(
       <Note
-        text={`This order is ${statusLabel(order.order_status).toLowerCase()}. Live tracking shows while it is out for delivery.`}
-        cta="View order"
+        text={W.notTrackable(statusLabel(order.order_status).toLowerCase())}
+        cta={W.viewOrder}
         onRetry={() => router.replace({ pathname: '/order/[id]', params: { id } })}
       />
       )} />
@@ -87,14 +88,14 @@ export default function TrackOrder() {
         <PressScale onPress={back} style={styles.back}><BackIcon size={20} color={C.ink} stroke={1.9} /></PressScale>
         {!!order && (
           <View style={styles.badge}>
-            <Text style={styles.badgeTxt}>Order {order.order_number}</Text>
+            <Text style={styles.badgeTxt}>{W.badge(order.order_number)}</Text>
           </View>
         )}
       </View>
       {!!order?.rider_contact?.phone && isTrackable(order) && (
         <View style={[styles.callWrap, { bottom: insets.bottom + 16 }]} pointerEvents="box-none">
           <PressScale onPress={() => Linking.openURL(`tel:${order.rider_contact!.phone}`)} style={styles.call} haptic>
-            <Text style={styles.callTxt}>Call rider</Text>
+            <Text style={styles.callTxt}>{W.callRider}</Text>
           </PressScale>
         </View>
       )}
@@ -102,12 +103,12 @@ export default function TrackOrder() {
   );
 }
 
-function Note({ text, cta = 'Try again', onRetry }: { text: string; cta?: string; onRetry?: () => void }) {
+function Note({ text, cta, onRetry }: { text: string; cta?: string; onRetry?: () => void }) {
   return (
     <View style={styles.center}>
       <Text style={styles.note}>{text}</Text>
       {!!onRetry && (
-        <PressScale onPress={onRetry} style={styles.btn}><Text style={styles.btnTxt}>{cta}</Text></PressScale>
+        <PressScale onPress={onRetry} style={styles.btn}><Text style={styles.btnTxt}>{cta ?? W.tryAgain}</Text></PressScale>
       )}
     </View>
   );

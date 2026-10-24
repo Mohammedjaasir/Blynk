@@ -1,5 +1,49 @@
 import type { Category, Product, PublicHomeSection } from '../api/types';
 import { inCategory } from '../catalog/membership';
+import { localized } from '../i18n/localized';
+
+/** Words of the Home rails and the "Ends in" pills (shared with flash deals). */
+export const COUNTDOWN_WORDS = localized(
+  {
+    endsIn: (time: string) => `Ends in ${time}`,
+    /** "2h 10m" (hours and minutes) in the flash-deal pill. */
+    hoursMinutes: (h: number, m: number) => `${h}h ${m}m`,
+    /** "2d 04:10" (days, then hours:minutes). */
+    daysClock: (d: number, hhmm: string) => `${d}d ${hhmm}`,
+    /** Screen reader: "Ends in 1 hour 59 minutes" (minutes only, never the ticking seconds). */
+    speechMinutes: (m: number) => `Ends in ${m} minute${m === 1 ? '' : 's'}`,
+    speechHours: (h: number) => `Ends in ${h} hour${h === 1 ? '' : 's'}`,
+    speechHoursMinutes: (h: number, m: number) => `Ends in ${h} hour${h === 1 ? '' : 's'} ${m} minute${m === 1 ? '' : 's'}`,
+    seeAll: 'See all',
+    seeAllOf: (title: string) => `See all ${title}`,
+    flashDeals: 'Flash deals',
+  },
+  {
+    si: {
+      endsIn: (time: string) => `${time} කින් අවසන්`,
+      hoursMinutes: (h: number, m: number) => `පැය ${h} මිනි ${m}`,
+      daysClock: (d: number, hhmm: string) => `දින ${d} ${hhmm}`,
+      speechMinutes: (m: number) => `මිනිත්තු ${m} කින් අවසන් වේ`,
+      speechHours: (h: number) => `පැය ${h} කින් අවසන් වේ`,
+      speechHoursMinutes: (h: number, m: number) => `පැය ${h} මිනිත්තු ${m} කින් අවසන් වේ`,
+      seeAll: 'සියල්ල බලන්න',
+      seeAllOf: (title: string) => `${title} සියල්ල බලන්න`,
+      flashDeals: 'ෆ්ලෑෂ් දීමනා',
+    },
+    ta: {
+      endsIn: (time: string) => `${time} இல் முடிகிறது`,
+      hoursMinutes: (h: number, m: number) => `${h} மணி ${m} நிமி`,
+      daysClock: (d: number, hhmm: string) => `${d} நாள் ${hhmm}`,
+      speechMinutes: (m: number) => `${m} நிமிடத்தில் முடிகிறது`,
+      speechHours: (h: number) => `${h} மணி நேரத்தில் முடிகிறது`,
+      speechHoursMinutes: (h: number, m: number) => `${h} மணி ${m} நிமிடத்தில் முடிகிறது`,
+      seeAll: 'அனைத்தையும் பார்க்க',
+      seeAllOf: (title: string) => `${title} அனைத்தையும் பார்க்க`,
+      flashDeals: 'ஃப்ளாஷ் டீல்கள்',
+    },
+  },
+  'promo.COUNTDOWN_WORDS',
+);
 
 /*
  * Staff-made Home rails (Admin / Ops "Home sections", 2026-10-24; docs/superpowers/plans/
@@ -111,14 +155,14 @@ export function countdownText(remainingMs: number): string | null {
   const h = Math.floor((total % 86400) / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  return days > 0 ? `${days}d ${pad(h)}:${pad(m)}` : `${pad(h)}:${pad(m)}:${pad(s)}`;
+  return days > 0 ? COUNTDOWN_WORDS.daysClock(days, `${pad(h)}:${pad(m)}`) : `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
 /** The header pill: "Ends in 02:14:09", or null when the section has no countdown or it is over. */
 export function endsInText(endsAtMs: number | null, nowMs: number): string | null {
   if (endsAtMs === null) return null;
   const t = countdownText(endsAtMs - nowMs);
-  return t === null ? null : `Ends in ${t}`;
+  return t === null ? null : COUNTDOWN_WORDS.endsIn(t);
 }
 
 /** Under an hour left: the pill turns urgent. */

@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { Text, View } from 'react-native';
 import { townFromHub } from '@/blynk/address/forms';
+import { ABOUT_SCREEN as W } from '@/blynk/account/screenWords';
 import { openPolicy } from '@/blynk/legal/open';
 import { LEGAL, POLICIES, POLICY_ORDER } from '@/blynk/legal/policies';
 import { hoursSummary } from '@/blynk/lib/storeText';
@@ -19,12 +20,12 @@ export default function About() {
   const hours = hoursSummary(store);
   const town = townFromHub(store?.hub_name);
   return (
-    <Page title="About us" bg="#fff">
+    <Page title={W.title} bg="#fff">
       <Text style={{ fontFamily: F.black, fontSize: 34, color: C.ink, letterSpacing: -0.6 }}>Blynk</Text>
-      {!!version && <Text style={{ fontFamily: F.regular, fontSize: 12.5, color: C.sub, marginTop: 4 }}>Version {version}</Text>}
+      {!!version && <Text style={{ fontFamily: F.regular, fontSize: 12.5, color: C.sub, marginTop: 4 }}>{W.version(version)}</Text>}
       <Body style={{ marginTop: 22, lineHeight: 21 }}>
-        {`Blynk delivers freshly sourced groceries and quality essentials in ${town}. You place the order in the app and pay in cash when it arrives${store?.online_payment?.enabled ? ', or online by card or wallet' : ''}.`}
-        {hours ? ` Deliveries go out ${hours}.` : ''}
+        {W.description(town, !!store?.online_payment?.enabled)}
+        {hours ? W.deliveries(hours) : ''}
       </Body>
       <SectionTitle style={{ marginTop: 28 }}>{LEGAL.policiesTitle}</SectionTitle>
       <Card style={{ borderWidth: 1, borderColor: C.line, paddingVertical: 4 }}>

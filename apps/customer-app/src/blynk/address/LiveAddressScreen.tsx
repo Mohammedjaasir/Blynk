@@ -21,16 +21,16 @@ import { useSession } from '@/blynk/auth/session';
 import { useStore } from '@/blynk/store/StoreContext';
 import { BackIcon, CloseIcon } from '@/components/icons';
 import { PressScale, Skeleton } from '@/components/ui';
-import { ADDRESS as VIDEO } from '@/demo/cart';
 import { useCartSelect } from '@/lib/cart';
 import { withSpring } from '@/lib/motion';
 import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 import { addressErrorText, isOutsideRadius, type SavedAddress, type UpdateAddressBody } from './api';
 import {
-  COPY, DEFAULT_LABEL, metresBetween, numParam, safeReturn, townFromHub, validateAddress,
+  COPY, DEFAULT_LABEL, metresBetween, numParam, PHONE_HINT, safeReturn, townFromHub, validateAddress,
   type AddressFields, type FieldErrors, type Pin as LatLng,
 } from './forms';
+import { LIVE_ADDRESS } from './words';
 import {
   loadMapLibre, locateOnce, MAP_ATTRIBUTION, MAP_STYLE, MAP_ZOOM, type MlMap,
 } from './maplibre';
@@ -47,31 +47,8 @@ const PIN_TOP = PIN_Y - 17;
 /** Zoom for each way into the map: the store (see the streets around it), an area's centre, a GPS fix. */
 const ZOOM = { store: 15, area: 15.5, gps: 17 } as const;
 
-const T = {
-  search: 'Move the map to your delivery spot',
-  moving: VIDEO.loadingHint, // "Order will be delivered here"
-  placed: VIDEO.placedHint, // "Place the pin at exact delivery location"
-  mustMove: 'Move the map so the pin sits on your house',
-  area: 'Area',
-  spot: 'Your delivery spot',
-  spotLine: "You'll add the house number and street next.",
-  cta: VIDEO.cta, // "Confirm & proceed"
-  current: VIDEO.current,
-  locating: 'Finding you…',
-  gpsOff: "We couldn't get your location. Move the map to your delivery spot.",
-  mapFailed: "The map didn't load. Check your connection and try again.",
-  retry: 'Try again',
-  web: 'The map opens in the Blynk web app.',
-  addTitle: 'Add address details',
-  editTitle: 'Edit address',
-  change: 'Change',
-  pinSet: 'Pin placed on the map',
-  save: 'Save address',
-  saving: 'Saving…',
-  guestNote: "We'll keep this on your phone and save it to your account when you sign in.",
-  movePin: 'Move the pin',
-  gone: 'This address no longer exists.',
-};
+/** The screen's words (src/blynk/address/words.ts); read while rendering, never copied at load. */
+const T = LIVE_ADDRESS;
 
 /** The delivery circle and the store on the MapLibre picker (drawn once the style has loaded). */
 function drawCoverage(map: MlMap, c: Coverage) {
@@ -279,7 +256,7 @@ export function LiveAddressScreen() {
           {tip ? (
             <Animated.View exiting={ZoomOut.duration(150)} style={{ alignItems: 'center' }}>
               <View style={styles.tip}>
-                <Text style={styles.tipTxt}>{VIDEO.tip}</Text>
+                <Text style={styles.tipTxt}>{T.tip}</Text>
                 <Pressable hitSlop={10} onPress={() => setTip(false)} style={styles.tipX}><CloseIcon size={8} color="#fff" stroke={3} /></Pressable>
               </View>
               <View style={styles.tipArrow} />
@@ -490,7 +467,7 @@ function AddressForm({ pin, area: autoArea, choices, editing, signedIn, prefill,
         )}
 
         <Field label={COPY.name} value={f.name} placeholder={COPY.nameHint} onChange={put('name')} error={errors.name} autoComplete="name" maxLength={80} />
-        <Field label={COPY.phone} value={f.phone} placeholder={COPY.phoneHint} onChange={put('phone')} error={errors.phone} keyboardType="phone-pad" autoComplete="tel" maxLength={20} />
+        <Field label={COPY.phone} value={f.phone} placeholder={PHONE_HINT} onChange={put('phone')} error={errors.phone} keyboardType="phone-pad" autoComplete="tel" maxLength={20} />
         <Field label={COPY.other} value={f.other} placeholder={COPY.otherHint} onChange={put('other')} error={errors.other} keyboardType="phone-pad" maxLength={20} />
         <View style={{ marginTop: 22 }}>
           <Text style={styles.label}>{T.area}</Text>

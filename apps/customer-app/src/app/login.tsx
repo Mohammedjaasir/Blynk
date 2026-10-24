@@ -9,13 +9,14 @@ import { GATE_PARAMS, isFromGate, rememberSkippedLogin } from '@/blynk/auth/gate
 import { authErrorText } from '@/blynk/auth/forms';
 import { toE164 } from '@/blynk/auth/phone';
 import { getSession, needsRegistration } from '@/blynk/auth/session';
+import { LOGIN_WORDS } from '@/blynk/auth/words';
 import { AgreeLine } from '@/blynk/legal/PolicyLinks';
 import { loginHeroLayout } from '@/blynk/ui/loginHero';
+import { LanguagePicker } from '@/components/LanguagePicker';
 import { LOGIN_GATE } from '@/blynk/ui/strings';
 import { BackIcon } from '@/components/icons';
 import { LoginHero } from '@/components/LoginHero';
 import { PressScale } from '@/components/ui';
-import { COPY } from '@/demo/cart';
 import { LIVE } from '@/demo/cartLive';
 import { DEMO } from '@/demo/mode';
 import { useKeyboardInset } from '@/lib/keyboard';
@@ -107,7 +108,7 @@ export default function Login() {
     </PressScale>
   ) : undefined;
   const backButton = gate ? undefined : (
-    <PressScale onPress={goBack} style={styles.back} accessibilityRole="button" accessibilityLabel="Back">
+    <PressScale onPress={goBack} style={styles.back} accessibilityRole="button" accessibilityLabel={LOGIN_WORDS.back}>
       <BackIcon size={20} color={C.brandInk} stroke={1.6} />
     </PressScale>
   );
@@ -124,8 +125,9 @@ export default function Login() {
         <LoginHero layout={layout} topInset={insets.top} leading={backButton} trailing={skipButton} />
         <View style={[styles.sheet, layout.overlap ? { marginTop: -layout.overlap, borderTopLeftRadius: 24, borderTopRightRadius: 24 } : null]}>
           <View onLayout={(e) => setFormH(Math.ceil(e.nativeEvent.layout.height) + insets.bottom)} style={styles.form}>
-            <Text style={styles.title}>{COPY.login}</Text>
-            <Text style={styles.sub}>{COPY.loginSub}</Text>
+            <View style={{ marginBottom: 16 }}><LanguagePicker compact /></View>
+            <Text style={styles.title}>{LOGIN_WORDS.title}</Text>
+            <Text style={styles.sub}>{LOGIN_WORDS.sub}</Text>
             <Pressable onPress={() => input.current?.focus()} style={styles.phoneRow}>
               <Text style={styles.cc}>{LIVE.countryFlag}  {LIVE.countryCode}</Text>
               <TextInput
@@ -139,20 +141,20 @@ export default function Login() {
                 onSubmitEditing={submit}
                 keyboardType="number-pad"
                 autoComplete="tel-national"
-                placeholder={COPY.mobileLabel}
+                placeholder={LOGIN_WORDS.mobileLabel}
                 placeholderTextColor={C.faint}
                 style={styles.input}
                 maxLength={10}
-                accessibilityLabel={COPY.mobileLabel}
+                accessibilityLabel={LOGIN_WORDS.mobileLabel}
               />
             </Pressable>
             {!!error && <Text style={styles.err} accessibilityRole="alert">{error}</Text>}
             <PressScale disabled={!ready || sending} onPress={submit} haptic scaleTo={0.97}>
               <View style={[styles.cta, { backgroundColor: ready ? C.brand : C.brandSoft }]}>
-                <Text style={styles.ctaTxt}>{sending ? LIVE.sending : COPY.continue}</Text>
+                <Text style={styles.ctaTxt}>{sending ? LOGIN_WORDS.sending : LOGIN_WORDS.continue}</Text>
               </View>
             </PressScale>
-            <Text style={styles.note}>We send a 6-digit code by SMS to sign you in.</Text>
+            <Text style={styles.note}>{LOGIN_WORDS.note}</Text>
             <AgreeLine style={{ marginTop: 14 }} />
           </View>
         </View>

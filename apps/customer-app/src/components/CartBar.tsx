@@ -1,3 +1,4 @@
+import { COMPONENT_WORDS } from '@/blynk/ui/componentWords';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -47,10 +48,9 @@ function TrolleyIcon({ size = 18, color = C.brandInk }: { size?: number; color?:
  * the cart has items - no free-delivery claim (owner, 2026-10-16/17: reworded, not removed, when
  * the claim was dropped).
  */
-const LIVE_STRIP_LINE = 'Great picks, every time!';
 function useStripOn(total: number, count: number) {
   // the line is Admin / Ops' when set (app_texts; owner, 2026-10-18)
-  const line = appText(useStore(), 'cart_bar_line', LIVE_STRIP_LINE);
+  const line = appText(useStore(), 'cart_bar_line', COMPONENT_WORDS.stripLine);
   return DEMO
     ? { count: count > 0 && total >= STORE.freeDeliveryAbove ? 1 : 0, line: null }
     : { count: count > 0 ? 1 : 0, line };
@@ -120,12 +120,12 @@ export function CartBar() {
           </Animated.View>
           <Animated.View style={[styles.row, rowA]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <RollingText text={`${count} Item${count > 1 ? 's' : ''}`} numeric={count} style={[styles.txt, { color: barInk }]} />
+              <RollingText text={COMPONENT_WORDS.items(count)} numeric={count} style={[styles.txt, { color: barInk }]} />
               <Text style={[styles.txt, { color: barInk }]}>{'  |  '}</Text>
               <RollingText text={money(total)} numeric={total} style={[styles.txt, { color: barInk }]} />
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={[styles.txt, { color: barInk }]}>View Cart</Text>
+              <Text style={[styles.txt, { color: barInk }]}>{COMPONENT_WORDS.viewCart}</Text>
               <TrolleyIcon size={17} color={barInk} />
             </View>
           </Animated.View>

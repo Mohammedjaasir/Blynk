@@ -5,6 +5,7 @@ import Animated, {
   Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Rect } from 'react-native-svg';
+import { OPENING_WORDS } from '@/blynk/account/screenWords';
 import type { Product } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { categoryHref } from '@/blynk/catalog/tree';
@@ -31,7 +32,6 @@ const LAP = 1100; // ms per lap
 // at 430 ms the brackets sit centred on the top-left and bottom-right corners (video f_051)
 const START = PERIM - RX * (Math.PI / 4) - DASH / 2 - (PERIM * 430) / LAP - PERIM * 0.1;
 const STAY = 900;
-const LIVE_SUB = 'Opening aisle to explore...';
 
 type Course = { name: string; emoji?: string; product?: Product | null };
 
@@ -52,7 +52,7 @@ function Opening() {
   // Live: the aisle (a Blynk category, by slug) names the intro and fills the printed card.
   const cat = DEMO ? null : findAisle(data, id);
   const title = DEMO ? OPENING.title : openingTitle(data, cat, name);
-  const sub = DEMO ? OPENING.sub : LIVE_SUB;
+  const sub = DEMO ? OPENING.sub : OPENING_WORDS.sub;
   const courses: Course[] = DEMO ? OPENING.courses : openingCourses(data, cat);
   const plate = DEMO ? null : (courses.find((c) => c.product?.image_url)?.product ?? null);
   const run = useSharedValue(0);
@@ -124,7 +124,7 @@ function MenuCard({ courses, plate }: { courses: Course[]; plate: Product | null
           {DEMO ? <Text style={{ fontSize: 22 }}>{OPENING.heroEmoji}</Text> : plate && <CardPhoto product={plate} size={26} />}
         </View>
         <View style={{ flex: 1, alignItems: 'center', paddingTop: 6 }}>
-          <Text style={styles.cardHead}>{DEMO ? OPENING.menuHead : 'PRICE LIST'}</Text>
+          <Text style={styles.cardHead}>{DEMO ? OPENING.menuHead : OPENING_WORDS.priceList}</Text>
           <View style={[styles.line, { width: 18, marginTop: 2 }]} />
         </View>
       </View>

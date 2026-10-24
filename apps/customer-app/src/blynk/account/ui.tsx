@@ -7,6 +7,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ENTER, enterDelay } from '@/blynk/account/tabHeroes';
 import { BackIcon, ChevronIcon } from '@/components/icons';
+import { ACCOUNT_COMMON } from './screenWords';
 import { PressScale } from '@/components/ui';
 import { withSpring } from '@/lib/motion';
 import { goBack } from '@/lib/nav';
@@ -145,7 +146,7 @@ export function Sheet({ children, onClose, label }: { children: ReactNode; onClo
   const insets = useSafeAreaInsets();
   return (
     <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} style={s.backdrop} accessibilityViewIsModal accessibilityLabel={label}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={ACCOUNT_COMMON.close} />
       <Animated.View entering={SlideInDown.duration(260)} exiting={SlideOutDown.duration(180)} style={[s.sheet, { paddingBottom: insets.bottom + 20 }]}>
         {children}
       </Animated.View>

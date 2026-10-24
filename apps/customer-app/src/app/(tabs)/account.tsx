@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { deleteReducer, DELETE_COPY, runDelete } from '@/blynk/account/deleteFlow';
 import { showNotice } from '@/blynk/account/notice';
+import { ACCOUNT_COMMON, ACCOUNT_SCREEN as W } from '@/blynk/account/screenWords';
 import { accountStyles as A, Button, Card, Enter, ErrorText, Row, SectionLabel, Sheet } from '@/blynk/account/ui';
 import { deleteAccount, getProfile, SMS_LANGUAGES, type AccountProfile } from '@/blynk/api/account';
 import { trackShare } from '@/blynk/analytics/track';
@@ -16,6 +17,7 @@ import { needsRegistration, signOut, useSession } from '@/blynk/auth/session';
 import { requestPushPermission } from '@/blynk/push';
 import { fetchPoints, fetchReferral } from '@/blynk/rewards/api';
 import { pointsBalanceText } from '@/blynk/rewards/models';
+import { LanguagePicker } from '@/components/LanguagePicker';
 import { ProductRequestsCard } from '@/blynk/requests/AskUs';
 import { RepeatBasketsRow } from '@/blynk/repeat/entries';
 import { POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
@@ -107,8 +109,8 @@ export default function Account() {
   ];
   const lang = shownProfile ? SMS_LANGUAGES.find((l) => l.wire === shownProfile.sms_language)?.label ?? null : null;
   const smsSub = shownProfile
-    ? [lang ? `SMS in ${lang.replace(/ \(.+\)$/, '')}` : 'Pick a language for your SMS', shownProfile.sms_offers ? 'offers on' : 'offers off'].join(' · ')
-    : 'SMS language and offers';
+    ? [lang ? W.smsIn(lang.replace(/ \(.+\)$/, '')) : W.smsPick, shownProfile.sms_offers ? W.offersOn : W.offersOff].join(' · ')
+    : W.smsDefault;
 
   const doLogout = () => {
     setLogout(false);
@@ -125,18 +127,18 @@ export default function Account() {
   };
 
   const shareApp = async () => {
-    const r = await shareText(`Order groceries on Blynk: ${SHARE_BASE_URL}`, 'Blynk');
+    const r = await shareText(W.shareMessage(SHARE_BASE_URL), 'Blynk');
     trackShare(r, 'app');
-    if (r === 'copied') showNotice('Link copied');
+    if (r === 'copied') showNotice(W.linkCopied);
   };
 
   const askPush = async () => {
     const r = await requestPushPermission();
     setPerm(r);
-    if (r === 'denied') showNotice('Notifications are blocked. Allow them for Blynk in your browser settings.');
+    if (r === 'denied') showNotice(W.updatesBlockedNotice);
   };
 
-  const pushSub = perm === 'granted' ? 'On for this phone' : perm === 'denied' ? 'Blocked in your browser settings' : 'Get a note when your order moves';
+  const pushSub = perm === 'granted' ? W.updatesOn : perm === 'denied' ? W.updatesBlocked : W.updatesAsk;
 
   return (
     <View style={A.screen}>
@@ -154,29 +156,36 @@ export default function Account() {
           bleed={15}
         />
 
-        {DEMO && <Text style={[A.body, { marginBottom: 12 }]}>Your account opens with ordering. This is a preview.</Text>}
+        {DEMO && <Text style={[A.body, { marginBottom: 12 }]}>{W.preview}</Text>}
 
         <Card tone={TONE.you} stagger={0}>
-          {signedIn && <Row icon="🙂" title="About you" sub="Name, email and birthday" onPress={() => router.push('/profile')} />}
-          {signedIn && points?.enabled && <Row icon="⭐" title="Blynk Points" sub={points.text} onPress={() => router.push('/points')} />}
+          {signedIn && <Row icon="🙂" title={W.aboutYou} sub={W.aboutYouSub} onPress={() => router.push('/profile')} />}
+          {signedIn && points?.enabled && <Row icon="⭐" title={W.points} sub={points.text} onPress={() => router.push('/points')} />}
           {(signedIn || DEMO) && showWalletRow(wallet) && (
             <Row icon="👛" title={WALLET_COPY.title} sub={WALLET_COPY.rowSub(wallet!.balance)} onPress={() => router.push('/wallet')} />
           )}
           {/* a guest hears the earn rule while points are on (owner, 2026-10-14) */}
-          {!signedIn && !DEMO && !!pointsRule && <Row icon="⭐" title="Blynk Points" sub={POINTS_COPY.profileGuest(pointsRule)} onPress={() => router.push('/points')} />}
-          {signedIn && referOn && <Row icon="🎁" title="Refer a friend" sub="Invite friends with your code" onPress={() => router.push('/refer')} />}
-          <Row icon="🧾" title="Your orders" sub="Track, reorder or get help" onPress={() => router.push('/orders')} />
+          {!signedIn && !DEMO && !!pointsRule && <Row icon="⭐" title={W.points} sub={POINTS_COPY.profileGuest(pointsRule)} onPress={() => router.push('/points')} />}
+          {signedIn && referOn && <Row icon="🎁" title={W.refer} sub={W.referSub} onPress={() => router.push('/refer')} />}
+          <Row icon="🧾" title={W.orders} sub={W.ordersSub} onPress={() => router.push('/orders')} />
           {/* repeat baskets (migration 054; hidden while off) */}
           <RepeatBasketsRow />
-          <Row icon="📍" title="Address book" sub="Home, work and anywhere else" onPress={() => router.push('/addresses')} />
+          <Row icon="📍" title={W.addresses} sub={W.addressesSub} onPress={() => router.push('/addresses')} />
           {/* a guest is sent to log in first (Flutter SmsPreferencesScreen.open) */}
-          <Row icon="💬" title="SMS & offers" sub={smsSub} onPress={() => router.push(signedIn ? '/settings' : '/login')} last />
+          <Row icon="💬" title={W.sms} sub={smsSub} onPress={() => router.push(signedIn ? '/settings' : '/login')} last />
+        </Card>
+
+        <Card stagger={1}>
+          <View style={{ padding: 14, gap: 10 }}>
+            <Text style={{ fontFamily: F.semi, fontSize: 14.5, color: C.ink }}>Language · භාෂාව · மொழி</Text>
+            <LanguagePicker />
+          </View>
         </Card>
 
         {(doctorsOn || appointmentsRow) && (
           <Card tone={TONE.doctors} stagger={7}>
-            {doctorsOn && <Row icon="🩺" title="Channel doctors" sub="Book an appointment with a doctor" onPress={() => router.push('/doctors')} last={!appointmentsRow} />}
-            {appointmentsRow && <Row icon="📅" title="My appointments" onPress={() => router.push('/doctors/appointments')} last />}
+            {doctorsOn && <Row icon="🩺" title={W.doctors} sub={W.doctorsSub} onPress={() => router.push('/doctors')} last={!appointmentsRow} />}
+            {appointmentsRow && <Row icon="📅" title={W.appointments} onPress={() => router.push('/doctors/appointments')} last />}
           </Card>
         )}
 
@@ -184,10 +193,10 @@ export default function Account() {
           <Card tone={TONE.updates} stagger={8}>
             <Row
               icon="🔔"
-              title="Order updates"
+              title={W.updates}
               sub={pushSub}
               onPress={perm === 'default' ? askPush : undefined}
-              right={perm === 'default' ? <Text style={styles.allow}>Allow</Text> : undefined}
+              right={perm === 'default' ? <Text style={styles.allow}>{W.updatesAllow}</Text> : undefined}
               last
             />
           </Card>
@@ -197,36 +206,36 @@ export default function Account() {
         <ProductRequestsCard stagger={8} />
 
         <Card tone={TONE.more} stagger={8}>
-          <Row icon="🛟" title="Help & support" sub="Call or WhatsApp the store" onPress={() => router.push('/help')} />
-          <Row icon="✍️" title="Send feedback" sub="Tell us what you think" onPress={() => router.push(signedIn ? '/feedback' : '/login')} />
-          <Row icon="📤" title="Share the app" sub="Spread the word" onPress={() => void shareApp()} />
-          <Row icon="ℹ️" title="About us" sub="Who we are and what we promise" onPress={() => router.push('/about')} last={!signedIn} />
-          {signedIn && <Row icon="↩️" title="Log out" onPress={() => setLogout(true)} last />}
+          <Row icon="🛟" title={W.help} sub={W.helpSub} onPress={() => router.push('/help')} />
+          <Row icon="✍️" title={W.feedback} sub={W.feedbackSub} onPress={() => router.push(signedIn ? '/feedback' : '/login')} />
+          <Row icon="📤" title={W.share} sub={W.shareSub} onPress={() => void shareApp()} />
+          <Row icon="ℹ️" title={W.about} sub={W.aboutSub} onPress={() => router.push('/about')} last={!signedIn} />
+          {signedIn && <Row icon="↩️" title={W.logOut} onPress={() => setLogout(true)} last />}
         </Card>
 
         {signedIn && (
           <Enter slot={8}>
             <View style={{ marginTop: 24 }}>
-              <SectionLabel>Danger zone</SectionLabel>
-              <Button label="Delete account" kind="danger" onPress={() => dispatch({ type: 'open' })} style={{}} />
+              <SectionLabel>{W.danger}</SectionLabel>
+              <Button label={W.deleteAccount} kind="danger" onPress={() => dispatch({ type: 'open' })} style={{}} />
             </View>
           </Enter>
         )}
       </ScrollView>
 
       {logout && (
-        <Sheet label="Log out" onClose={() => setLogout(false)}>
-          <Text style={A.sheetTitle}>Log out?</Text>
-          <Text style={A.body}>You can browse without an account.</Text>
+        <Sheet label={W.logOut} onClose={() => setLogout(false)}>
+          <Text style={A.sheetTitle}>{W.logOutTitle}</Text>
+          <Text style={A.body}>{W.logOutSub}</Text>
           <View style={A.pair}>
-            <Button label="Cancel" kind="secondary" onPress={() => setLogout(false)} style={{ flex: 1 }} />
-            <Button label="Log out" kind="danger" onPress={doLogout} style={{ flex: 1 }} />
+            <Button label={ACCOUNT_COMMON.cancel} kind="secondary" onPress={() => setLogout(false)} style={{ flex: 1 }} />
+            <Button label={W.logOut} kind="danger" onPress={doLogout} style={{ flex: 1 }} />
           </View>
         </Sheet>
       )}
 
       {(del.step === 'confirm' || del.step === 'deleting') && (
-        <Sheet label="Delete account" onClose={del.step === 'confirm' ? () => dispatch({ type: 'cancel' }) : undefined}>
+        <Sheet label={W.deleteAccount} onClose={del.step === 'confirm' ? () => dispatch({ type: 'cancel' }) : undefined}>
           <Text style={A.sheetTitle}>{DELETE_COPY.title}</Text>
           {DELETE_COPY.points.map((p) => (
             <View key={p} style={styles.point}>

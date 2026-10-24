@@ -1,4 +1,5 @@
 import { toE164 } from '@/blynk/auth/phone';
+import { localized } from '@/blynk/i18n/localized';
 import type { PlaceOrderBody } from '@/blynk/orders/types';
 
 /*
@@ -15,22 +16,56 @@ export const RECIPIENT_NAME_MIN = 2;
 export const RECIPIENT_NAME_MAX = 80;
 export const NOTE_MAX = 300;
 
-export const DETAILS_COPY = {
-  title: 'Delivery details',
-  forSomeoneElse: 'For someone else',
-  forSomeoneElseSub: (codeToReceiver: boolean) => (codeToReceiver
-    ? 'Send this order to family. They get the order texts and the delivery code; you get updates too.'
-    : 'Send this order to family. They get the order texts; you get the delivery code and updates.'),
-  nameLabel: "Receiver's name",
-  phoneLabel: "Receiver's mobile",
-  phoneHint: '07X XXX XXXX',
-  onlyThisOrder: 'Only for this order - your saved address stays the same.',
-  noteLabel: 'Note for the rider (optional)',
-  noteHint: 'Gate, floor, landmark',
-  nameError: "Enter the receiver's name",
-  phoneError: "Enter the receiver's Sri Lankan mobile number",
-  noteError: 'Check the note for the rider',
-} as const;
+export const DETAILS_COPY = localized(
+  {
+    title: 'Delivery details',
+    forSomeoneElse: 'For someone else',
+    forSomeoneElseSub: (codeToReceiver: boolean) => (codeToReceiver
+      ? 'Send this order to family. They get the order texts and the delivery code; you get updates too.'
+      : 'Send this order to family. They get the order texts; you get the delivery code and updates.'),
+    nameLabel: "Receiver's name",
+    phoneLabel: "Receiver's mobile",
+    onlyThisOrder: 'Only for this order - your saved address stays the same.',
+    noteLabel: 'Note for the rider (optional)',
+    noteHint: 'Gate, floor, landmark',
+    nameError: "Enter the receiver's name",
+    phoneError: "Enter the receiver's Sri Lankan mobile number",
+    noteError: 'Check the note for the rider',
+  } as const,
+  {
+    si: {
+      title: 'බෙදාහැරීමේ විස්තර',
+      forSomeoneElse: 'වෙනත් කෙනෙකු සඳහා',
+      forSomeoneElseSub: (codeToReceiver: boolean) => (codeToReceiver
+        ? 'මෙම ඇණවුම පවුලේ කෙනෙකුට යවන්න. ඇණවුම් පණිවිඩ සහ බෙදාහැරීමේ කේතය ඔවුන්ට ලැබේ; ඔබටත් යාවත්කාලීන ලැබේ.'
+        : 'මෙම ඇණවුම පවුලේ කෙනෙකුට යවන්න. ඇණවුම් පණිවිඩ ඔවුන්ට ලැබේ; බෙදාහැරීමේ කේතය සහ යාවත්කාලීන ඔබට ලැබේ.'),
+      nameLabel: 'ලබන්නාගේ නම',
+      phoneLabel: 'ලබන්නාගේ ජංගම අංකය',
+      onlyThisOrder: 'මෙම ඇණවුමට පමණයි - ඔබගේ සුරකින ලද ලිපිනය වෙනස් නොවේ.',
+      noteLabel: 'රයිඩර් සඳහා සටහන (අත්‍යවශ්‍ය නොවේ)',
+      noteHint: 'ගේට්ටුව, මහල, ලකුණු කරගත හැකි ස්ථානය',
+      nameError: 'ලබන්නාගේ නම ඇතුළත් කරන්න',
+      phoneError: 'ලබන්නාගේ ශ්‍රී ලංකා ජංගම දුරකථන අංකය ඇතුළත් කරන්න',
+      noteError: 'රයිඩර් සඳහා සටහන පරීක්ෂා කරන්න',
+    },
+    ta: {
+      title: 'டெலிவரி விவரங்கள்',
+      forSomeoneElse: 'வேறொருவருக்காக',
+      forSomeoneElseSub: (codeToReceiver: boolean) => (codeToReceiver
+        ? 'இந்த ஆர்டரை குடும்பத்தினருக்கு அனுப்புங்கள். ஆர்டர் செய்திகளும் டெலிவரி குறியீடும் அவர்களுக்கு வரும்; உங்களுக்கும் அப்டேட்கள் வரும்.'
+        : 'இந்த ஆர்டரை குடும்பத்தினருக்கு அனுப்புங்கள். ஆர்டர் செய்திகள் அவர்களுக்கு வரும்; டெலிவரி குறியீடும் அப்டேட்களும் உங்களுக்கு வரும்.'),
+      nameLabel: 'பெறுபவரின் பெயர்',
+      phoneLabel: 'பெறுபவரின் மொபைல் எண்',
+      onlyThisOrder: 'இந்த ஆர்டருக்கு மட்டும் - உங்கள் சேமித்த முகவரி மாறாது.',
+      noteLabel: 'ரைடருக்கான குறிப்பு (விருப்பம்)',
+      noteHint: 'கேட், மாடி, அடையாளம்',
+      nameError: 'பெறுபவரின் பெயரை உள்ளிடுங்கள்',
+      phoneError: 'பெறுபவரின் இலங்கை மொபைல் எண்ணை உள்ளிடுங்கள்',
+      noteError: 'ரைடருக்கான குறிப்பைச் சரிபாருங்கள்',
+    },
+  },
+  'checkout.DETAILS_COPY',
+);
 
 export interface CheckoutDetails {
   forSomeoneElse: boolean;

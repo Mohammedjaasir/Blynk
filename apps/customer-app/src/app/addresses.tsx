@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addressErrorText, addressSummary, type SavedAddress } from '@/blynk/address/api';
 import { safeReturn } from '@/blynk/address/forms';
 import { SmallPin } from '@/blynk/address/pins';
+import { ADDRESS_BOOK, labelText } from '@/blynk/address/words';
 import { CoverageCard } from '@/blynk/area/AreaSteps';
 import { coverageOf } from '@/blynk/area/coverage';
 import { chooseAddress, loadAddresses, removeAddress, useDeliveryLocation } from '@/blynk/address/store';
@@ -19,24 +20,8 @@ import { DEMO } from '@/demo/mode';
 import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 
-const T = {
-  title: 'Saved addresses',
-  choose: 'Choose a delivery address',
-  add: 'Add new address',
-  addSub: 'See where we deliver, then set your spot',
-  selected: 'Delivering here',
-  isDefault: 'Default',
-  edit: 'Edit',
-  del: 'Delete',
-  confirm: 'Delete this address?',
-  cancel: 'Cancel',
-  deleting: 'Deleting…',
-  empty: 'No saved addresses yet.',
-  retry: 'Try again',
-  guest: 'Sign in at the cart to save addresses to your account.',
-  guestPin: 'Your delivery spot (on this phone)',
-  preview: 'Saved addresses arrive with ordering. This is a preview.',
-};
+/** The screen's words (src/blynk/address/words.ts); read while rendering, never copied at load. */
+const T = ADDRESS_BOOK;
 
 /**
  * The signed-in customer's address book: choose one (it becomes the default), edit, delete,
@@ -141,7 +126,7 @@ export default function Addresses() {
                   <Pressable onPress={() => void choose(a)} style={[styles.card, on && styles.cardOn]} accessibilityRole="button" accessibilityState={{ selected: on }}>
                     <View style={styles.cardTop}>
                       <View style={[styles.radio, on && styles.radioOn]}>{on && <View style={styles.radioDot} />}</View>
-                      <Text style={styles.label}>{a.label}</Text>
+                      <Text style={styles.label}>{labelText(a.label)}</Text>
                       {a.is_default && <Text style={styles.chip}>{T.isDefault}</Text>}
                       <View style={{ flex: 1 }} />
                       {busy === a.id && <ActivityIndicator size="small" color={C.brandInk} />}

@@ -4,6 +4,7 @@ import { useStore } from '@/blynk/store/StoreContext';
 import { POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
 import { fetchPoints } from '@/blynk/rewards/api';
 import { entryLabel, entryPoints, formatPointsDate, howItWorks, pointsBalanceText } from '@/blynk/rewards/models';
+import { REWARD_WORDS as W } from '@/blynk/rewards/words';
 import { Body, ListSkeleton, Page, SectionTitle, StateView } from '@/blynk/ui/kit';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { useLoad } from '@/blynk/ui/useLoad';
@@ -23,12 +24,12 @@ export default function Points() {
   const rule = pointsRuleOf(useStore());
 
   let body: React.ReactNode;
-  if (DEMO) body = <StateView title="Blynk Points" message="Your points show here once the shop is live." />;
-  else if (!session) body = <StateView title="Log in to see your points" message={rule ? POINTS_COPY.guestHow(rule) : undefined} action="Log in" onAction={openSignIn} />;
+  if (DEMO) body = <StateView title={W.pointsTitle} message={W.pointsDemo} />;
+  else if (!session) body = <StateView title={W.pointsLogIn} message={rule ? POINTS_COPY.guestHow(rule) : undefined} action={W.logIn} onAction={openSignIn} />;
   else if (!info) body = failed
-    ? <StateView title="Couldn't load your points" message="Check your connection and try again." action="Try again" onAction={load.reload} />
+    ? <StateView title={W.pointsLoadFailed} message={W.loadFailedSub} action={W.tryAgain} onAction={load.reload} />
     : <ListSkeleton rows={3} h={70} />;
-  else if (!info.enabled) body = <StateView title="Not available right now" message="Blynk Points aren't running at the moment." />;
+  else if (!info.enabled) body = <StateView title={W.notAvailable} message={W.pointsOff} />;
   else {
     const how = info.program ? howItWorks(info.program) : [];
     body = (
@@ -36,18 +37,18 @@ export default function Points() {
         <View style={s.balance}><Text style={s.balanceTxt}>{pointsBalanceText(info.balance, info.valueLkr)}</Text></View>
         {how.length > 0 && (
           <View style={{ marginTop: 22 }}>
-            <SectionTitle>How it works</SectionTitle>
+            <SectionTitle>{W.howTitle}</SectionTitle>
             {how.map((line) => <Body key={line} sub style={{ marginBottom: 4 }}>{line}</Body>)}
           </View>
         )}
         <View style={{ marginTop: 22 }}>
-          <SectionTitle>History</SectionTitle>
+          <SectionTitle>{W.historyTitle}</SectionTitle>
           {info.history.length === 0 ? (
-            <Body sub>No points yet. You earn them when an order is delivered.</Body>
+            <Body sub>{W.pointsEmpty}</Body>
           ) : info.history.map((e) => {
             const details = [
               e.createdAt ? formatPointsDate(e.createdAt) : null,
-              e.kind === 'EARN' && e.expiresAt ? `Expires ${formatPointsDate(e.expiresAt)}` : null,
+              e.kind === 'EARN' && e.expiresAt ? W.expires(formatPointsDate(e.expiresAt)) : null,
             ].filter(Boolean).join(' · ');
             return (
               <View key={e.id} style={s.row}>
@@ -63,7 +64,7 @@ export default function Points() {
       </View>
     );
   }
-  return <Page title="Blynk Points">{body}</Page>;
+  return <Page title={W.pointsTitle}>{body}</Page>;
 }
 
 const s = StyleSheet.create({

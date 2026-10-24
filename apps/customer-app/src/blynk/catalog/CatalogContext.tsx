@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { cartActions } from '@/lib/cart';
 import { getCategories, getHomeGroups, getPromotions } from '../api/catalog';
 import { ApiError } from '../api/client';
+import { BROWSE_ERRORS } from './browseWords';
 import type { Category, HomeGroup, Product, Promotion } from '../api/types';
 import { ancestorsOf, topLevelOf } from '../lib/categories';
 import { startCatalogLive } from '../lib/catalogLive';
@@ -70,7 +71,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       cartActions.reconcileWith(d.products);
       return true;
     } catch (e) {
-      if (n === seq.current) setError(e instanceof ApiError ? e : new ApiError('Something went wrong. Please try again.', 0));
+      if (n === seq.current) setError(e instanceof ApiError ? e : new ApiError(BROWSE_ERRORS.generic, 0));
       return false;
     }
   }, []);

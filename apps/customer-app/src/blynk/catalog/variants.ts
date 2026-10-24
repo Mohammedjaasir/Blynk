@@ -1,27 +1,57 @@
 import type { Product, ProductVariant } from '@/blynk/api/types';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive, type MrpPriced } from '@/blynk/lib/pricing';
+import { localized } from '@/blynk/i18n/localized';
 
 /*
  * Variants, sold out and delivery lead time on the shop side (migration 045, owner 2026-10-14:
  * "chilli powder has 50g, 100g, 250g, 500g with different prices - show LKR 50-350, then the
  * proper price for the gram they pick"; "items that can only be delivered after some days").
  * Pure: the product card, product page, size picker and cart all read their words from here.
- * UI strings stay in VARIANT_COPY so Sinhala/Tamil can replace them later.
+ * UI strings stay in VARIANT_COPY (English, Sinhala, Tamil).
  */
 
-export const VARIANT_COPY = {
-  soldOut: 'Sold out',
-  chooseSize: 'Choose a size',
-  sizes: 'Sizes',
-  done: 'Done',
-  loadFailed: "We couldn't load the sizes.",
-  retry: 'Try again',
-  pickSizeAgain: 'Pick a size again',
-  addToCart: (label: string | null) => (label ? `Add ${label} to cart` : 'Add to cart'),
-  from: (price: string) => `From ${price}`,
-  deliveredFrom: (date: string) => `Delivered from ${date}`,
-} as const;
+export const VARIANT_COPY = localized(
+  {
+    soldOut: 'Sold out',
+    chooseSize: 'Choose a size',
+    sizes: 'Sizes',
+    done: 'Done',
+    loadFailed: "We couldn't load the sizes.",
+    retry: 'Try again',
+    pickSizeAgain: 'Pick a size again',
+    addToCart: (label: string | null) => (label ? `Add ${label} to cart` : 'Add to cart'),
+    from: (price: string) => `From ${price}`,
+    deliveredFrom: (date: string) => `Delivered from ${date}`,
+  } as const,
+  {
+    si: {
+      soldOut: 'විකිණී අවසන්',
+      chooseSize: 'ප්‍රමාණයක් තෝරන්න',
+      sizes: 'ප්‍රමාණ',
+      done: 'අවසන්',
+      loadFailed: 'ප්‍රමාණ පූරණය කළ නොහැකි විය.',
+      retry: 'නැවත උත්සාහ කරන්න',
+      pickSizeAgain: 'ප්‍රමාණය නැවත තෝරන්න',
+      addToCart: (label: string | null) => (label ? `${label} කරත්තයට දාන්න` : 'කරත්තයට දාන්න'),
+      from: (price: string) => `${price} සිට`,
+      deliveredFrom: (date: string) => `${date} සිට බෙදාහැරේ`,
+    },
+    ta: {
+      soldOut: 'விற்றுத் தீர்ந்தது',
+      chooseSize: 'அளவைத் தேர்ந்தெடுங்கள்',
+      sizes: 'அளவுகள்',
+      done: 'முடிந்தது',
+      loadFailed: 'அளவுகளை ஏற்ற முடியவில்லை.',
+      retry: 'மீண்டும் முயற்சிக்கவும்',
+      pickSizeAgain: 'அளவை மீண்டும் தேர்ந்தெடுங்கள்',
+      addToCart: (label: string | null) => (label ? `${label} கார்ட்டில் சேர்` : 'கார்ட்டில் சேர்'),
+      from: (price: string) => `${price} முதல்`,
+      deliveredFrom: (date: string) => `${date} முதல் டெலிவரி`,
+    },
+  },
+  'catalog.VARIANT_COPY',
+);
 
 /** The product is sold in sizes/packs: adding it means picking one. */
 export const hasVariants = (p: Pick<Product, 'has_variants'>): boolean => p.has_variants === true;
@@ -116,8 +146,27 @@ export function selectVariant(variants: readonly ProductVariant[], id: string | 
 
 /* ------------------------------------------------------------------ delivery lead time */
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** Short day and month names for "Fri 17 Oct" (and how a day reads in each language). */
+const DATE_WORDS = localized(
+  {
+    days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as readonly string[],
+    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as readonly string[],
+    label: (day: string, date: number, month: string) => `${day} ${date} ${month}`,
+  },
+  {
+    si: {
+      days: ['ඉරිදා', 'සඳුදා', 'අඟහ', 'බදාදා', 'බ්‍රහස්', 'සිකු', 'සෙන'],
+      months: ['ජන', 'පෙබ', 'මාර්', 'අප්‍රේ', 'මැයි', 'ජූනි', 'ජූලි', 'අගෝ', 'සැප්', 'ඔක්', 'නොවැ', 'දෙසැ'],
+      label: (day: string, date: number, month: string) => `${month} ${date}, ${day}`,
+    },
+    ta: {
+      days: ['ஞாயிறு', 'திங்கள்', 'செவ்வாய்', 'புதன்', 'வியாழன்', 'வெள்ளி', 'சனி'],
+      months: ['ஜன.', 'பிப்.', 'மார்.', 'ஏப்.', 'மே', 'ஜூன்', 'ஜூலை', 'ஆக.', 'செப்.', 'அக்.', 'நவ.', 'டிச.'],
+      label: (day: string, date: number, month: string) => `${day}, ${month} ${date}`,
+    },
+  },
+  'catalog.DATE_WORDS',
+);
 /** Sri Lanka is UTC+5:30 all year (no daylight saving). */
 const COLOMBO_OFFSET_MS = 330 * 60_000;
 
@@ -127,7 +176,7 @@ export function dayLabel(ymd: string | null | undefined): string | null {
   if (!m) return null;
   const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
   if (Number.isNaN(d.getTime()) || d.getUTCDate() !== Number(m[3])) return null;
-  return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  return DATE_WORDS.label(DATE_WORDS.days[d.getUTCDay()], d.getUTCDate(), DATE_WORDS.months[d.getUTCMonth()]);
 }
 
 /** Today (Asia/Colombo) plus `days`, as YYYY-MM-DD. */

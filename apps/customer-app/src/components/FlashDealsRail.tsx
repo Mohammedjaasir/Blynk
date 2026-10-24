@@ -1,3 +1,4 @@
+import { COUNTDOWN_WORDS } from '@/blynk/promo/homeSections';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
@@ -29,7 +30,7 @@ export function FlashDealsRail({ style }: { style?: StyleProp<ViewStyle> }) {
       <View style={s.railHead}>
         <View style={s.titleRow}>
           <View style={s.badge}><BoltIcon size={14} /></View>
-          <Text style={[T.section, { flexShrink: 1 }]} numberOfLines={1} accessibilityRole="header">Flash deals</Text>
+          <Text style={[T.section, { flexShrink: 1 }]} numberOfLines={1} accessibilityRole="header">{COUNTDOWN_WORDS.flashDeals}</Text>
         </View>
         <FlashPill endsAtMs={rail.nearestEndMs} size="head" style={{ marginTop: 4 }} />
       </View>

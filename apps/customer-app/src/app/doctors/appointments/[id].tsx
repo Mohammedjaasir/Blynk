@@ -10,6 +10,9 @@ import { openSignIn } from '@/blynk/ui/signIn';
 import { useLoad } from '@/blynk/ui/useLoad';
 import { DEMO } from '@/demo/mode';
 import { C, F } from '@/lib/theme';
+import { DOCTORS_SIGN_IN } from '@/blynk/doctors/access';
+import { DOCTOR_SCREENS as W } from '@/blynk/doctors/words';
+import { DOCTOR_UI } from '@/blynk/doctors/words';
 
 /**
  * One appointment (Flutter DentalAppointmentDetailScreen): status, doctor, clinic and where it is,
@@ -28,13 +31,13 @@ export default function AppointmentDetail() {
   }, [id], signedIn && !DEMO);
 
   let body: React.ReactNode;
-  if (DEMO) body = <StateView title="Appointment" message="Appointments show here once the shop is live." />;
-  else if (!signedIn) body = <StateView title="Log in to see this appointment" action="Log in / Sign up" onAction={openSignIn} />;
+  if (DEMO) body = <StateView title={W.appointment} message={W.detailDemo} />;
+  else if (!signedIn) body = <StateView title={W.detailLogIn} action={DOCTORS_SIGN_IN.action} onAction={openSignIn} />;
   else if (load.loading && !load.data) body = <ListSkeleton rows={4} h={96} />;
   else if (load.error || !load.data) {
     body = isNotFound(load.error)
-      ? <StateView title="Appointment not found" message="This appointment may have been removed, or belongs to a different account." />
-      : <StateView title="We couldn't load this appointment" message={errorText(load.error)} action="Try again" onAction={load.reload} />;
+      ? <StateView title={W.detailNotFound} message={W.detailNotFoundSub} />
+      : <StateView title={W.detailFailed} message={errorText(load.error)} action={DOCTOR_UI.tryAgain} onAction={load.reload} />;
   } else {
     const { appointment: a, clinic } = load.data;
     const badge = appointmentBadge(a, new Date());
@@ -50,14 +53,14 @@ export default function AppointmentDetail() {
               <Text style={s.caption}>{a.clinic.addressLine}</Text>
             </View>
           )}
-          <Fact label="When"><Text style={{ fontFamily: F.bold, fontSize: 15, color: C.ink }}>{a.startAt ? formatAppointmentDateTime(a.startAt) : 'Time unavailable'}</Text></Fact>
-          {cancelled && !!a.cancellationReason && <View style={{ marginTop: 14 }}><Fact label="Reason">{a.cancellationReason}</Fact></View>}
+          <Fact label={W.when}><Text style={{ fontFamily: F.bold, fontSize: 15, color: C.ink }}>{a.startAt ? formatAppointmentDateTime(a.startAt) : W.timeUnavailable}</Text></Fact>
+          {cancelled && !!a.cancellationReason && <View style={{ marginTop: 14 }}><Fact label={W.reason}>{a.cancellationReason}</Fact></View>}
           {clinic && <MapLink lat={clinic.latitude} lng={clinic.longitude} label={clinic.name} />}
         </Card>
-        <FeeCard label="Consultation fee" note="Indicative - payable at the clinic, in person." fee={a.consultationFeeSnapshot} />
+        <FeeCard label={W.fee} note={W.feeIndicative} fee={a.consultationFeeSnapshot} />
         <Card>
-          <Fact label="Patient">
-            <Body>{a.patientName ?? 'Not available'}</Body>
+          <Fact label={W.patient}>
+            <Body>{a.patientName ?? W.notAvailable}</Body>
             {!!a.patientPhone && <Body sub>{a.patientPhone}</Body>}
             {!!a.patientNotes && <Text style={[s.caption, { marginTop: 6 }]}>{a.patientNotes}</Text>}
           </Fact>
@@ -69,7 +72,7 @@ export default function AppointmentDetail() {
   }
   return (
     <View style={{ flex: 1 }}>
-      <Page title="Appointment">{body}</Page>
+      <Page title={W.appointment}>{body}</Page>
       {toast}
     </View>
   );

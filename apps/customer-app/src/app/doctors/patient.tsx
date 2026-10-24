@@ -4,6 +4,7 @@ import { useSession } from '@/blynk/auth/session';
 import { bookingFor, setPatient } from '@/blynk/doctors/booking';
 import { localPhone, PATIENT_NAME_MAX, PATIENT_NOTES_MAX, validatePatient } from '@/blynk/doctors/format';
 import { Body, Button, Field, Page, StateView } from '@/blynk/ui/kit';
+import { DOCTOR_SCREENS as W } from '@/blynk/doctors/words';
 
 /**
  * Step 2 of booking (Flutter DentalPatientDetailsScreen): who the appointment is for. Prefilled
@@ -21,8 +22,8 @@ export default function PatientDetails() {
 
   if (!booking) {
     return (
-      <Page title="Patient details">
-        <StateView title="Your hold expired" message="This time is no longer reserved for you. Pick a new time to continue." action="Back to doctors" onAction={() => router.replace('/doctors')} />
+      <Page title={W.patientTitle}>
+        <StateView title={W.holdExpired} message={W.holdExpiredSub} action={W.backToDoctors} onAction={() => router.replace('/doctors')} />
       </Page>
     );
   }
@@ -36,10 +37,10 @@ export default function PatientDetails() {
   };
 
   return (
-    <Page title="Patient details" footer={<Button label="Continue" onPress={next} />}>
-      <Body sub>Who is this appointment for?</Body>
+    <Page title={W.patientTitle} footer={<Button label={W.continue} onPress={next} />}>
+      <Body sub>{W.whoFor}</Body>
       <Field
-        label="Patient name"
+        label={W.patientName}
         value={name}
         onChange={(t) => { setName(t); if (errors.name) setErrors({ ...errors, name: null }); }}
         autoCapitalize="words"
@@ -48,7 +49,7 @@ export default function PatientDetails() {
         error={errors.name}
       />
       <Field
-        label="Patient phone"
+        label={W.patientPhone}
         value={phone}
         onChange={(t) => { setPhone(t); if (errors.phone) setErrors({ ...errors, phone: null }); }}
         prefix="+94"
@@ -58,10 +59,10 @@ export default function PatientDetails() {
         error={errors.phone}
       />
       <Field
-        label="Reason for visit (optional)"
+        label={W.notesLabel}
         value={notes}
         onChange={(t) => { setNotes(t); if (errors.notes) setErrors({ ...errors, notes: null }); }}
-        placeholder="e.g. tooth pain, routine check-up"
+        placeholder={W.notesPlaceholder}
         multiline
         maxLength={PATIENT_NOTES_MAX}
         error={errors.notes}

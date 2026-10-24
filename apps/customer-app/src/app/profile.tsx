@@ -5,11 +5,13 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { accountErrorText, needsLogin } from '@/blynk/account/errors';
 import { showNotice } from '@/blynk/account/notice';
+import { ACCOUNT_COMMON, PROFILE_SCREEN as W } from '@/blynk/account/screenWords';
 import { accountStyles as A, Button, Card, ErrorText, ScreenHeader } from '@/blynk/account/ui';
 import { aboutYouPatch, canEditEmail, getProfile, updateProfile, validEmail, type AccountProfile } from '@/blynk/api/account';
-import { NAME_ERROR, parseBirthday, validName } from '@/blynk/auth/forms';
+import { parseBirthday, validName } from '@/blynk/auth/forms';
 import { formatPhone } from '@/blynk/auth/phone';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
+import { AUTH_ERRORS } from '@/blynk/auth/words';
 import { DEMO } from '@/demo/mode';
 import { C, F } from '@/lib/theme';
 
@@ -52,12 +54,12 @@ export default function AboutYou() {
     if (!profile || saving) return;
     const next: typeof errors = {};
     const okName = validName(name);
-    if (!okName) next.name = NAME_ERROR;
+    if (!okName) next.name = AUTH_ERRORS.nameError;
     const emailEditable = canEditEmail(profile.role);
-    if (emailEditable && email.trim() && !validEmail(email)) next.email = 'Enter a valid email address.';
+    if (emailEditable && email.trim() && !validEmail(email)) next.email = W.emailBad;
     const blankDob = !d.trim() && !m.trim() && !y.trim();
     const dob = blankDob ? null : parseBirthday(d.trim(), m.trim(), y.trim());
-    if (!blankDob && !dob) next.dob = 'Enter a real date (day, month, year). You must be 5 or older.';
+    if (!blankDob && !dob) next.dob = W.dobBad;
     setErrors(next);
     if (next.name || next.email || next.dob) return;
     const patch = aboutYouPatch(profile, { full_name: okName ?? '', email, date_of_birth: dob });
@@ -66,7 +68,7 @@ export default function AboutYou() {
     updateProfile(patch)
       .then((p) => {
         fill(p);
-        showNotice('Saved.');
+        showNotice(W.saved);
         if (router.canGoBack()) router.back();
       })
       .catch((e) => {
@@ -79,33 +81,33 @@ export default function AboutYou() {
   return (
     <View style={A.screen}>
       <StatusBar style="dark" />
-      <ScreenHeader title="About you" top={insets.top} />
+      <ScreenHeader title={W.title} top={insets.top} />
       {DEMO ? (
-        <Text style={[A.body, { padding: 20 }]}>Your profile opens with ordering. This is a preview.</Text>
+        <Text style={[A.body, { padding: 20 }]}>{W.preview}</Text>
       ) : !profile ? (
         <View style={styles.center}>
           {loadError ? (
             <>
-              <Text style={[A.body, { textAlign: 'center' }]}>{"We couldn't load your details."}{'\n'}{loadError}</Text>
-              <Button label="Try again" onPress={() => { setLoadError(null); load(); }} style={{ marginTop: 14 }} />
+              <Text style={[A.body, { textAlign: 'center' }]}>{W.loadFailed}{'\n'}{loadError}</Text>
+              <Button label={ACCOUNT_COMMON.tryAgain} onPress={() => { setLoadError(null); load(); }} style={{ marginTop: 14 }} />
             </>
           ) : <ActivityIndicator color={C.brandInk} />}
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 40 }} keyboardShouldPersistTaps="handled">
-          <Text style={[A.body, { marginBottom: 14 }]}>Everything here is optional, except your name.</Text>
+          <Text style={[A.body, { marginBottom: 14 }]}>{W.intro}</Text>
           <Card style={{ padding: 15 }}>
-            <Text style={A.label}>Your name</Text>
-            <TextInput value={name} onChangeText={setName} style={A.input} autoComplete="name" maxLength={60} accessibilityLabel="Your name" />
+            <Text style={A.label}>{W.nameLabel}</Text>
+            <TextInput value={name} onChangeText={setName} style={A.input} autoComplete="name" maxLength={60} accessibilityLabel={W.nameLabel} />
             <ErrorText>{errors.name}</ErrorText>
 
-            <Text style={[A.label, { marginTop: 16 }]}>Phone number</Text>
+            <Text style={[A.label, { marginTop: 16 }]}>{W.phoneLabel}</Text>
             <View style={[A.input, styles.readOnly]}><Text style={styles.readTxt}>{formatPhone(profile.phone)}</Text></View>
-            <Text style={styles.hint}>Your number is your account. To use another number, log in with it.</Text>
+            <Text style={styles.hint}>{W.phoneHint}</Text>
 
             {canEditEmail(profile.role) && (
               <>
-                <Text style={[A.label, { marginTop: 16 }]}>Email (optional)</Text>
+                <Text style={[A.label, { marginTop: 16 }]}>{W.emailLabel}</Text>
                 <TextInput
                   value={email}
                   onChangeText={setEmail}
@@ -115,23 +117,23 @@ export default function AboutYou() {
                   autoComplete="email"
                   placeholder="you@example.com"
                   placeholderTextColor={C.faint}
-                  accessibilityLabel="Email"
+                  accessibilityLabel={W.emailA11y}
                 />
                 <ErrorText>{errors.email}</ErrorText>
               </>
             )}
 
-            <Text style={[A.label, { marginTop: 16 }]}>Date of birth (optional)</Text>
+            <Text style={[A.label, { marginTop: 16 }]}>{W.dobLabel}</Text>
             <View style={styles.dob}>
-              <TextInput value={d} onChangeText={(t) => setD(t.replace(/\D/g, '').slice(0, 2))} placeholder="DD" placeholderTextColor={C.faint} keyboardType="number-pad" style={[A.input, styles.dd]} accessibilityLabel="Day" />
-              <TextInput value={m} onChangeText={(t) => setM(t.replace(/\D/g, '').slice(0, 2))} placeholder="MM" placeholderTextColor={C.faint} keyboardType="number-pad" style={[A.input, styles.dd]} accessibilityLabel="Month" />
-              <TextInput value={y} onChangeText={(t) => setY(t.replace(/\D/g, '').slice(0, 4))} placeholder="YYYY" placeholderTextColor={C.faint} keyboardType="number-pad" style={[A.input, { flex: 1 }]} accessibilityLabel="Year" />
+              <TextInput value={d} onChangeText={(t) => setD(t.replace(/\D/g, '').slice(0, 2))} placeholder="DD" placeholderTextColor={C.faint} keyboardType="number-pad" style={[A.input, styles.dd]} accessibilityLabel={W.dayA11y} />
+              <TextInput value={m} onChangeText={(t) => setM(t.replace(/\D/g, '').slice(0, 2))} placeholder="MM" placeholderTextColor={C.faint} keyboardType="number-pad" style={[A.input, styles.dd]} accessibilityLabel={W.monthA11y} />
+              <TextInput value={y} onChangeText={(t) => setY(t.replace(/\D/g, '').slice(0, 4))} placeholder="YYYY" placeholderTextColor={C.faint} keyboardType="number-pad" style={[A.input, { flex: 1 }]} accessibilityLabel={W.yearA11y} />
             </View>
-            <Text style={styles.hint}>For a birthday gift from Blynk. Leave it empty to remove it.</Text>
+            <Text style={styles.hint}>{W.dobHint}</Text>
             <ErrorText>{errors.dob}</ErrorText>
           </Card>
           <ErrorText>{errors.save}</ErrorText>
-          <Button label="Save" onPress={save} busy={saving} style={{ marginTop: 10 }} />
+          <Button label={ACCOUNT_COMMON.save} onPress={save} busy={saving} style={{ marginTop: 10 }} />
         </ScrollView>
       )}
     </View>

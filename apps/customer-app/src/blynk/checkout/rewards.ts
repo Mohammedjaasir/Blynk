@@ -2,6 +2,7 @@ import { formatLkr } from '@/blynk/lib/money';
 import type { CheckoutInfo, CouponPreview } from '@/blynk/orders/types';
 import { pointsFor } from '@/blynk/store/pointsPromo';
 import { checkoutWalletOf, walletPreview } from '@/blynk/wallet/models';
+import { REWARD_WORDS as W } from './words';
 
 /*
  * Birthday gift, referral reward and Blynk Points at checkout (owner, 2026-10-09/10; the
@@ -70,13 +71,14 @@ export function pointsOf(q: CheckoutInfo | null): PointsProgram | null {
 
 const pct = (v: number) => `${v.toFixed(2).replace(/\.?0+$/, '')}%`;
 
-export const birthdayBanner = (b: Birthday) => `Happy birthday! ${pct(b.percent)} off one order this week`;
-export const BIRTHDAY_SUB = 'Taken off at checkout, no code needed.';
+export const birthdayBanner = (b: Birthday) => W.birthdayBanner(pct(b.percent));
+/** Read while rendering (a getter, not a constant, so it follows the chosen language). */
+export const birthdaySub = () => W.birthdaySub;
 
 export const referralLine = (r: Referral) => (r.mode === 'FREE_DELIVERY'
-  ? 'Referral reward: free delivery on this order'
-  : `Referral reward: ${formatLkr(r.amount)} off this order`);
-export const REFERRAL_SUB = "Applied automatically when it's your biggest saving. It doesn't add to a coupon or birthday gift.";
+  ? W.referralFree
+  : W.referralOff(formatLkr(r.amount)));
+export const referralSub = () => W.referralSub;
 
 /** The gift on an item subtotal, to the cent. */
 export const birthdayEstimate = (b: Birthday | null, subtotal: number) =>
@@ -137,10 +139,10 @@ export function earnEstimate(p: PointsProgram | null, itemsAfterDiscount: number
   if (!p || !p.enabled) return 0;
   return pointsFor({ earnPoints: p.earnPoints, earnPerLkr: p.earnPerLkr }, itemsAfterDiscount);
 }
-export const balanceLine = (p: PointsProgram) => `You have ${p.balance} ${p.balance === 1 ? 'point' : 'points'} = ${formatLkr(p.valueLkr)}`;
+export const balanceLine = (p: PointsProgram) => W.balance(p.balance, formatLkr(p.valueLkr));
 export const redeemLine = (r: { points: number; value: number }) => (r.points > 0
-  ? `About ${r.points} points (${formatLkr(r.value)}) off this order. The final amount is confirmed when you place it.`
-  : "Points can't be used on this order.");
+  ? W.redeemOn(r.points, formatLkr(r.value))
+  : W.redeemNone);
 
 export interface RewardsSummary {
   discount: DiscountEstimate;

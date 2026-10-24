@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSession } from '@/blynk/auth/session';
+import { DOCTOR_UI } from '@/blynk/doctors/words';
 import { fetchMyAppointments } from '@/blynk/doctors/api';
 import { appointmentBadge, bucketAppointments, formatAppointmentDateTime, showsRating } from '@/blynk/doctors/format';
 import { GlyphTile } from '@/blynk/doctors/glyphs';
@@ -15,6 +16,8 @@ import { useLoad } from '@/blynk/ui/useLoad';
 import { PressScale } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
 import { C, F } from '@/lib/theme';
+import { DOCTORS_SIGN_IN } from '@/blynk/doctors/access';
+import { DOCTOR_SCREENS as W } from '@/blynk/doctors/words';
 
 /** My appointments, Upcoming / Past (Flutter DentalMyAppointmentsScreen, GET /dental/appointments). */
 export default function MyAppointments() {
@@ -25,10 +28,10 @@ export default function MyAppointments() {
   const replace = (a: Appointment) => load.set((load.data ?? []).map((x) => (x.id === a.id ? a : x)));
 
   let body: React.ReactNode;
-  if (DEMO) body = <StateView title="My appointments" message="Your doctor appointments show here once the shop is live." />;
-  else if (!signedIn) body = <StateView title="Log in to see your appointments" message="Use your phone number to log in or create an account." action="Log in / Sign up" onAction={openSignIn} />;
+  if (DEMO) body = <StateView title={W.listTitle} message={W.listDemo} />;
+  else if (!signedIn) body = <StateView title={W.listLogIn} message={DOCTORS_SIGN_IN.message} action={DOCTORS_SIGN_IN.action} onAction={openSignIn} />;
   else if (load.loading && !load.data) body = <ListSkeleton rows={4} />;
-  else if (load.error && !load.data) body = <StateView title="We couldn't load your appointments" message={errorText(load.error)} action="Try again" onAction={load.reload} />;
+  else if (load.error && !load.data) body = <StateView title={W.listFailed} message={errorText(load.error)} action={DOCTOR_UI.tryAgain} onAction={load.reload} />;
   else {
     const rows = bucketAppointments(load.data ?? [], now, bucket);
     body = (
@@ -37,33 +40,33 @@ export default function MyAppointments() {
           {(['upcoming', 'past'] as const).map((b) => (
             <PressScale key={b} onPress={() => setBucket(b)} style={{ flex: 1 }} scaleTo={0.97}>
               <View style={[st.seg, bucket === b && st.segOn]} accessible accessibilityRole="button" accessibilityState={{ selected: bucket === b }}>
-                <Text style={[st.segTxt, bucket === b && { fontFamily: F.black, color: C.ink }]}>{b === 'upcoming' ? 'Upcoming' : 'Past'}</Text>
+                <Text style={[st.segTxt, bucket === b && { fontFamily: F.black, color: C.ink }]}>{b === 'upcoming' ? W.upcoming : W.past}</Text>
               </View>
             </PressScale>
           ))}
         </View>
         {rows.length === 0 ? (
           <StateView
-            title={bucket === 'upcoming' ? 'No upcoming appointments' : 'No past appointments'}
-            message={bucket === 'upcoming' ? 'Book a visit to see it here.' : null}
-            action={bucket === 'upcoming' ? 'Channel doctors' : undefined}
+            title={bucket === 'upcoming' ? W.noUpcoming : W.noPast}
+            message={bucket === 'upcoming' ? W.bookVisit : null}
+            action={bucket === 'upcoming' ? W.channelDoctors : undefined}
             onAction={() => router.push('/doctors')}
           />
         ) : rows.map((a, i) => {
           const badge = appointmentBadge(a, now);
-          const when = a.startAt ? formatAppointmentDateTime(a.startAt) : 'Time unavailable';
+          const when = a.startAt ? formatAppointmentDateTime(a.startAt) : W.timeUnavailable;
           return (
             <Animated.View key={a.id} entering={FadeInDown.delay(Math.min(i, 6) * 40).duration(220)}>
               <Card
                 onPress={() => router.push({ pathname: '/doctors/appointments/[id]', params: { id: a.id } })}
-                label={`${a.doctor?.fullName ?? 'Appointment'}, ${badge.label}, ${when}`}
+                label={`${a.doctor?.fullName ?? W.appointment}, ${badge.label}, ${when}`}
                 style={showsRating(a) ? { marginBottom: 8 } : undefined}
               >
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <GlyphTile kind="person" photo={a.doctor?.photoUrl} />
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-                      <Text style={s.title}>{a.doctor?.fullName ?? 'Appointment'}</Text>
+                      <Text style={s.title}>{a.doctor?.fullName ?? W.appointment}</Text>
                       <Badge tone={badge.tone} label={badge.label} />
                     </View>
                     {a.clinic && <Text style={s.sub}>{a.clinic.name}</Text>}
@@ -78,7 +81,7 @@ export default function MyAppointments() {
       </View>
     );
   }
-  return <Page title="My appointments">{body}</Page>;
+  return <Page title={W.listTitle}>{body}</Page>;
 }
 
 const st = StyleSheet.create({

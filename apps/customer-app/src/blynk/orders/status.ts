@@ -1,5 +1,6 @@
 import { formatLkr } from '@/blynk/lib/money';
 import { WALLET_COPY } from '@/blynk/wallet/copy';
+import { ORDER_WORDS } from './words';
 import type { Order, OrderHistoryEntry, OrderStatus } from './types';
 
 /*
@@ -9,19 +10,9 @@ import type { Order, OrderHistoryEntry, OrderStatus } from './types';
 
 export type OrderTone = 'active' | 'success' | 'neutral' | 'problem';
 
-const LABEL: Record<OrderStatus, string> = {
-  AWAITING_PAYMENT: 'Waiting for payment',
-  PLACED: 'Order placed',
-  PACKED: 'Packed',
-  OUT_FOR_DELIVERY: 'Out for delivery',
-  DELIVERED: 'Delivered',
-  CANCELLED: 'Cancelled',
-  FAILED: 'Delivery failed',
-  CUSTOMER_UNAVAILABLE: "We couldn't reach you",
-  ITEM_UNAVAILABLE: 'Item unavailable',
-};
+const KNOWN_STATUS = new Set<string>(['AWAITING_PAYMENT', 'PLACED', 'PACKED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'FAILED', 'CUSTOMER_UNAVAILABLE', 'ITEM_UNAVAILABLE']);
 
-export const statusLabel = (s: string): string => LABEL[s as OrderStatus] ?? 'Status unavailable';
+export const statusLabel = (s: string): string => (KNOWN_STATUS.has(s) ? ORDER_WORDS.labels[s as OrderStatus] : ORDER_WORDS.labels.unknown);
 
 export function statusTone(s: string): OrderTone {
   switch (s) {
@@ -36,25 +27,27 @@ export function statusTone(s: string): OrderTone {
 /** One sentence under the status, from the order status and the delivery's handover step. */
 export function statusSentence(o: Pick<Order, 'order_status' | 'scheduled_for' | 'delivery'> & Partial<Pick<Order, 'payment_expires_at' | 'payment_status'>>): string {
   const a = o.delivery?.assignment_status ?? null;
+  const w = ORDER_WORDS.sentences;
   switch (o.order_status) {
     case 'AWAITING_PAYMENT': {
       const by = clockTime(o.payment_expires_at);
-      if (o.payment_status === 'FAILED') return by ? `The last payment didn't go through. Try again by ${by}.` : "The last payment didn't go through. Try again.";
-      return by ? `Pay online by ${by} to confirm your order.` : 'Pay online to confirm your order.';
+      if (o.payment_status === 'FAILED') return by ? w.payFailedBy(by) : w.payFailed;
+      return by ? w.payBy(by) : w.pay;
     }
-    case 'PLACED': return o.scheduled_for ? "We'll start preparing it when deliveries open." : "We've received your order.";
-    case 'ITEM_UNAVAILABLE': return "Something couldn't be sourced. Your total has been updated.";
-    case 'PACKED': return a === 'ASSIGNED' || a === 'ACCEPTED' ? 'A rider has been assigned.' : 'Your order is packed.';
-    case 'OUT_FOR_DELIVERY': return a === 'ARRIVED_AT_CUSTOMER' ? 'Your rider has arrived.' : 'Your order is on its way.';
-    case 'DELIVERED': return 'Delivered. Thank you!';
-    case 'CANCELLED': return 'This order was cancelled.';
-    case 'FAILED': return "We couldn't complete this delivery.";
-    case 'CUSTOMER_UNAVAILABLE': return "The rider couldn't reach you at the address.";
-    default: return 'Pull down to refresh.';
+    case 'PLACED': return o.scheduled_for ? w.placedScheduled : w.placed;
+    case 'ITEM_UNAVAILABLE': return w.itemUnavailable;
+    case 'PACKED': return a === 'ASSIGNED' || a === 'ACCEPTED' ? w.packedAssigned : w.packed;
+    case 'OUT_FOR_DELIVERY': return a === 'ARRIVED_AT_CUSTOMER' ? w.outArrived : w.outWay;
+    case 'DELIVERED': return w.delivered;
+    case 'CANCELLED': return w.cancelled;
+    case 'FAILED': return w.failed;
+    case 'CUSTOMER_UNAVAILABLE': return w.customerUnavailable;
+    default: return w.refresh;
   }
 }
 
-export const PROGRESS_STEPS = ['Order received', 'Packed', 'On the way', 'Delivered'] as const;
+/** The four tracker steps in the customer's language (read while rendering). */
+export const progressSteps = (): readonly string[] => ORDER_WORDS.steps;
 
 /** Where the order is on the four-step tracker, and whether it stopped there (cancelled, failed). */
 export function progressOf(s: string): { step: number; stopped: boolean } {
@@ -70,7 +63,7 @@ export function progressOf(s: string): { step: number; stopped: boolean } {
 
 /** A "What happened" row: a PACKED after a failed attempt reads as a redelivery. */
 export function timelineLabel(e: Pick<OrderHistoryEntry, 'old_status' | 'new_status'>): string {
-  if (e.new_status === 'PACKED' && (e.old_status === 'FAILED' || e.old_status === 'CUSTOMER_UNAVAILABLE')) return 'Packed again for redelivery';
+  if (e.new_status === 'PACKED' && (e.old_status === 'FAILED' || e.old_status === 'CUSTOMER_UNAVAILABLE')) return ORDER_WORDS.packedAgain;
   return statusLabel(e.new_status);
 }
 
@@ -92,37 +85,36 @@ export const awaitingPayment = (o: Pick<Order, 'order_status' | 'payment_method'
 /** "Awaiting payment — pay by 9:41 PM" (or without the time when the server sent none). */
 export const payByLine = (o: Pick<Order, 'payment_expires_at'>) => {
   const by = clockTime(o.payment_expires_at);
-  return by ? `Awaiting payment — pay by ${by}` : 'Awaiting payment';
+  return by ? ORDER_WORDS.awaitingPayBy(by) : ORDER_WORDS.awaitingPay;
 };
 
 /** The one payment line: cash on delivery, or the online payment's state. */
 export function paymentLine(o: Pick<Order, 'order_status' | 'payment_status' | 'total_amount'> & Partial<Pick<Order, 'payment_method' | 'payment_expires_at' | 'wallet_amount_used'>>): string {
+  const w = ORDER_WORDS.payment;
   if (o.payment_method === 'ONLINE') {
-    if (o.payment_status === 'REFUNDED') return 'Refunded';
-    if (o.payment_status === 'PAID') return 'Paid online';
-    if (o.order_status === 'CANCELLED') return 'Not paid — nothing to pay';
+    if (o.payment_status === 'REFUNDED') return w.refunded;
+    if (o.payment_status === 'PAID') return w.paidOnline;
+    if (o.order_status === 'CANCELLED') return w.notPaidNothing;
     if (o.order_status === 'AWAITING_PAYMENT') {
       const by = clockTime(o.payment_expires_at);
-      if (o.payment_status === 'FAILED') return by ? `Payment failed — try again by ${by}` : 'Payment failed — try again';
+      if (o.payment_status === 'FAILED') return by ? w.failedBy(by) : w.failed;
       return payByLine(o);
     }
-    return 'Paying online';
+    return w.payingOnline;
   }
-  if (o.order_status === 'CANCELLED') return 'Nothing to pay';
+  if (o.order_status === 'CANCELLED') return w.nothingToPay;
   // the Blynk Wallet paid it all: nothing for the rider to collect
   if ((o.wallet_amount_used ?? 0) > 0 && o.total_amount <= 0) return WALLET_COPY.paidByWallet;
-  if (o.payment_status === 'PAID') return 'Paid in cash';
-  if (o.order_status === 'FAILED' || o.order_status === 'CUSTOMER_UNAVAILABLE') return 'Not paid';
-  return `Cash on delivery — pay ${formatLkr(o.total_amount)} to the rider`;
+  if (o.payment_status === 'PAID') return w.paidCash;
+  if (o.order_status === 'FAILED' || o.order_status === 'CUSTOMER_UNAVAILABLE') return w.notPaid;
+  return w.cod(formatLkr(o.total_amount));
 }
 
 /** "3 items" (units, as the list shows what is in the order). */
 export function itemCountText(o: Pick<Order, 'items'>): string {
   const n = o.items.reduce((s, it) => s + (it.quantity || 0), 0);
-  return `${n} item${n === 1 ? '' : 's'}`;
+  return ORDER_WORDS.itemCount(n);
 }
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "13 Oct, 9:41 PM" in Sri Lanka time (the store's timezone, UTC+5:30, no DST). */
 export function orderTime(iso: string | null | undefined): string {
@@ -132,18 +124,18 @@ export function orderTime(iso: string | null | undefined): string {
   const d = new Date(t + 330 * 60_000);
   const h = d.getUTCHours();
   const m = d.getUTCMinutes();
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+  return `${d.getUTCDate()} ${ORDER_WORDS.months[d.getUTCMonth()]}, ${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 }
 
 /** The discount rows the bill shows (only the ones that took something off). */
 export function discountRows(o: Pick<Order, 'discount_amount' | 'birthday_discount_amount' | 'referral_discount_amount' | 'points_discount_amount' | 'coupon_code'>): { label: string; amount: number }[] {
   const rows: { label: string; amount: number }[] = [];
-  if (o.birthday_discount_amount > 0) rows.push({ label: 'Birthday gift', amount: o.birthday_discount_amount });
-  if (o.referral_discount_amount > 0) rows.push({ label: 'Referral reward', amount: o.referral_discount_amount });
-  if (o.points_discount_amount > 0) rows.push({ label: 'Blynk Points', amount: o.points_discount_amount });
+  if (o.birthday_discount_amount > 0) rows.push({ label: ORDER_WORDS.discounts.birthday, amount: o.birthday_discount_amount });
+  if (o.referral_discount_amount > 0) rows.push({ label: ORDER_WORDS.discounts.referral, amount: o.referral_discount_amount });
+  if (o.points_discount_amount > 0) rows.push({ label: ORDER_WORDS.discounts.points, amount: o.points_discount_amount });
   const named = o.birthday_discount_amount + o.referral_discount_amount + o.points_discount_amount;
   const rest = Math.round((o.discount_amount - named) * 100) / 100;
-  if (rest > 0) rows.push({ label: o.coupon_code ? `Discount (${o.coupon_code})` : 'Discount', amount: rest });
+  if (rest > 0) rows.push({ label: o.coupon_code ? ORDER_WORDS.discounts.discountCode(o.coupon_code) : ORDER_WORDS.discounts.discount, amount: rest });
   return rows;
 }
 
@@ -164,16 +156,14 @@ export const showsDeliveryCode = (o: Pick<Order, 'order_status' | 'delivery_code
 export const showsDeliveryCodeComing = (o: Pick<Order, 'order_status'>) =>
   o.order_status === 'PLACED' || o.order_status === 'PACKED' || o.order_status === 'ITEM_UNAVAILABLE';
 
-export const CODE_COMING = 'Your 4-digit delivery code appears here when the rider picks up your order. We also send it by SMS.';
-
 /** The rider is at the door: no map, but the customer can still call them. */
 export const riderArrived = (o: Pick<Order, 'order_status' | 'delivery'>) =>
   o.order_status === 'OUT_FOR_DELIVERY' && o.delivery?.assignment_status === 'ARRIVED_AT_CUSTOMER';
 
 /** The line under an item the store could not supply or replaced. */
 export function itemCaption(itemStatus: string): { text: string; struck: boolean; problem: boolean } | null {
-  if (itemStatus === 'UNAVAILABLE') return { text: 'Unavailable — not charged', struck: true, problem: true };
-  if (itemStatus === 'SUBSTITUTED') return { text: 'Replaced by the store', struck: false, problem: false };
+  if (itemStatus === 'UNAVAILABLE') return { text: ORDER_WORDS.caption.unavailable, struck: true, problem: true };
+  if (itemStatus === 'SUBSTITUTED') return { text: ORDER_WORDS.caption.substituted, struck: false, problem: false };
   return null;
 }
 

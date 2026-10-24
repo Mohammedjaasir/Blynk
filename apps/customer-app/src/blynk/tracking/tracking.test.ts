@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createLocationWatcher, reconnectDelayMs, StreamRefused, type StreamHandlers } from './locationStream';
 import {
-  arrivingText, classifyFreshness, lastSeenText, parsePoint, parseRoute, trackingView, UNAVAILABLE_TEXT, type RiderPoint,
+  arrivingText, classifyFreshness, lastSeenText, parsePoint, parseRoute, trackingView, type RiderPoint,
 } from './model';
+import { TRACKING_WORDS } from './words';
 import { createRouteWatcher } from './routeWatcher';
 import { createSseParser, parseFrame } from './sse';
 
@@ -88,9 +89,9 @@ describe('model', () => {
     expect(stale).toMatchObject({ riderVisible: true, eta: null, caption: { live: false, text: 'Last seen 1 minute ago' } });
     expect(stale.route).toHaveLength(2);
     const off = trackingView(s, route, T0 + 200_000);
-    expect(off).toMatchObject({ riderVisible: false, rider: null, eta: null, route: [], caption: { text: UNAVAILABLE_TEXT } });
+    expect(off).toMatchObject({ riderVisible: false, rider: null, eta: null, route: [], caption: { text: TRACKING_WORDS.unavailable } });
     expect(trackingView({ ...s, closed: true }, route, T0).riderVisible).toBe(false);
-    expect(trackingView({ ...s, current: null }, null, T0).caption.text).toBe(UNAVAILABLE_TEXT);
+    expect(trackingView({ ...s, current: null }, null, T0).caption.text).toBe(TRACKING_WORDS.unavailable);
   });
 });
 

@@ -6,6 +6,7 @@ import { DEMO } from '@/demo/mode';
 import { C, F } from '@/lib/theme';
 import { fetchBirthdayOffer } from './api';
 import { birthdayBannerText } from './models';
+import { REWARD_WORDS } from './words';
 
 /**
  * "Happy birthday! 10% off one order this week" (Flutter BirthdayOfferBanner, owner 2026-10-09):
@@ -23,7 +24,7 @@ export function BirthdayOfferBanner({ style }: { style?: StyleProp<ViewStyle> })
       <View style={s.icon}><Text style={s.iconTxt}>%</Text></View>
       <View style={{ flex: 1 }}>
         <Text style={s.title}>{birthdayBannerText(offer)}</Text>
-        <Text style={s.sub}>Taken off at checkout, no code needed.</Text>
+        <Text style={s.sub}>{REWARD_WORDS.birthdayBannerSub}</Text>
       </View>
     </Animated.View>
   );

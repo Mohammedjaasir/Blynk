@@ -1,4 +1,5 @@
 import { formatLkr } from '@/blynk/lib/money';
+import { REWARD_WORDS as W } from './words';
 
 /*
  * Refer a friend, Blynk Points and the birthday gift (owner, 2026-10-09/10), parsed the way the
@@ -70,23 +71,16 @@ export function parseReferral(raw: unknown): ReferralInfo | null {
 
 /** The one sentence the Refer screen shows. */
 export function rewardDescription(r: ReferralReward): string {
-  return r.mode === 'LKR_OFF'
-    ? `Your friend gets ${formatLkr(r.friendAmountLkr)} off their first order. You get ${formatLkr(r.inviterAmountLkr)} off your next order after their first order is delivered.`
-    : "Your friend gets a free delivery on their first order; you get a free delivery after it's delivered.";
+  return r.mode === 'LKR_OFF' ? W.rewardLkr(formatLkr(r.friendAmountLkr), formatLkr(r.inviterAmountLkr)) : W.rewardFreeDelivery;
 }
 
-export const creditLabel = (c: ReferralCredit) => (c.mode === 'FREE_DELIVERY' ? 'A free delivery' : `${formatLkr(c.amountLkr)} off`);
+export const creditLabel = (c: ReferralCredit) => (c.mode === 'FREE_DELIVERY' ? W.creditFreeDelivery : W.creditOff(formatLkr(c.amountLkr)));
 
-export const referredByText = (by: ReferredBy) =>
-  by.firstName ? `${by.firstName} invited you to Blynk.` : 'A friend invited you to Blynk.';
+export const referredByText = (by: ReferredBy) => (by.firstName ? W.referredBy(by.firstName) : W.referredByFriend);
 
 /** "Referral code applied. Nimal invited you, and your first order gets the reward." */
 export const referralAppliedText = (inviterFirstName: string | null) =>
-  inviterFirstName
-    ? `Referral code applied. ${inviterFirstName} invited you, and your first order gets the reward.`
-    : 'Referral code applied. Your first order gets the reward.';
-
-export const REFERRAL_NOT_A_CODE = "That doesn't look like a referral code. Check it and try again.";
+  inviterFirstName ? W.applied(inviterFirstName) : W.appliedNoName;
 
 // ---------------------------------------------------------------- points
 
@@ -137,30 +131,27 @@ export function parsePoints(raw: unknown): PointsInfo | null {
   };
 }
 
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 const percent = (v: number) => `${v.toFixed(2).replace(/\.?0+$/, '')}%`;
 
 /** "How it works", from the numbers. */
 export function howItWorks(p: PointsProgram): string[] {
   const out: string[] = [];
-  if (p.earnPoints > 0 && p.earnPerLkr > 0) {
-    out.push(`Earn ${p.earnPoints} ${plural(p.earnPoints, 'point', 'points')} for every ${formatLkr(p.earnPerLkr)} you spend on items, once your order is delivered.`);
-  }
-  if (p.lkrPerPoint > 0) out.push(`Each point is worth ${formatLkr(p.lkrPerPoint)} at checkout.`);
-  if (p.minRedeemPoints > 0) out.push(`Use points once you have ${p.minRedeemPoints} or more.`);
-  if (p.maxRedeemPercent > 0) out.push(`Points can pay up to ${percent(p.maxRedeemPercent)} of an order.`);
-  if (p.expiryMonths > 0) out.push(`Points expire ${p.expiryMonths} ${plural(p.expiryMonths, 'month', 'months')} after you earn them.`);
+  if (p.earnPoints > 0 && p.earnPerLkr > 0) out.push(W.earn(p.earnPoints, formatLkr(p.earnPerLkr)));
+  if (p.lkrPerPoint > 0) out.push(W.worth(formatLkr(p.lkrPerPoint)));
+  if (p.minRedeemPoints > 0) out.push(W.minUse(p.minRedeemPoints));
+  if (p.maxRedeemPercent > 0) out.push(W.maxPercent(percent(p.maxRedeemPercent)));
+  if (p.expiryMonths > 0) out.push(W.expiry(p.expiryMonths));
   return out;
 }
 
 /** "Earned on order BL-1001", "Used on order BL-1002", ... */
 export function entryLabel(e: Pick<PointsEntry, 'kind' | 'orderNumber'>): string {
   switch (e.kind) {
-    case 'EARN': return e.orderNumber ? `Earned on order ${e.orderNumber}` : 'Earned';
-    case 'REDEEM': return e.orderNumber ? `Used on order ${e.orderNumber}` : 'Used on an order';
-    case 'REFUND': return 'Returned (order cancelled)';
-    case 'EXPIRE': return 'Expired';
-    case 'ADJUST': return 'Adjusted by Blynk';
+    case 'EARN': return e.orderNumber ? W.earnedOn(e.orderNumber) : W.earned;
+    case 'REDEEM': return e.orderNumber ? W.usedOn(e.orderNumber) : W.used;
+    case 'REFUND': return W.returned;
+    case 'EXPIRE': return W.expired;
+    case 'ADJUST': return W.adjusted;
   }
 }
 
@@ -168,12 +159,10 @@ export function entryLabel(e: Pick<PointsEntry, 'kind' | 'orderNumber'>): string
 export const entryPoints = (points: number) => (points > 0 ? `+${points}` : `${points}`);
 
 /** "120 Blynk Points = LKR 120" ("1 Blynk Point = ..."). */
-export const pointsBalanceText = (balance: number, valueLkr: number) =>
-  `${balance} Blynk ${plural(balance, 'Point', 'Points')} = ${formatLkr(valueLkr)}`;
+export const pointsBalanceText = (balance: number, valueLkr: number) => W.balance(balance, formatLkr(valueLkr));
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 /** "14 March 2027". */
-export const formatPointsDate = (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+export const formatPointsDate = (d: Date) => W.date(d.getDate(), W.months[d.getMonth()], d.getFullYear());
 
 // ---------------------------------------------------------------- birthday gift
 
@@ -191,4 +180,4 @@ export function parseBirthdayOffer(raw: unknown): BirthdayOffer | null {
 }
 
 /** "Happy birthday! 10% off one order this week". */
-export const birthdayBannerText = (o: BirthdayOffer) => `Happy birthday! ${percent(o.percent)} off one order this week`;
+export const birthdayBannerText = (o: BirthdayOffer) => W.birthdayBanner(percent(o.percent));

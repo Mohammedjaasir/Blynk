@@ -1,4 +1,5 @@
 import type { StoreInfo } from '../api/types';
+import { localized } from '../i18n/localized';
 import { formatLkr } from '../lib/money';
 import type { FreeClaim } from './freeClaim';
 
@@ -55,31 +56,80 @@ export function pointsFor(rule: Pick<PointsRule, 'earnPoints' | 'earnPerLkr'> | 
   return Math.floor(round2(base) / rule.earnPerLkr + 1e-9) * rule.earnPoints;
 }
 
-const pts = (n: number) => `${n} Blynk ${n === 1 ? 'Point' : 'Points'}`;
+type RuleLike = Pick<PointsRule, 'earnPoints' | 'earnPerLkr'>;
+
+/** The two phrases the other lines are built from ("1 point for every LKR 100", "3 Blynk Points"). */
+const RULE_WORDS = localized(
+  {
+    rule: (r: RuleLike) => `${r.earnPoints} ${r.earnPoints === 1 ? 'point' : 'points'} for every ${formatLkr(r.earnPerLkr)}`,
+    pts: (n: number) => `${n} Blynk ${n === 1 ? 'Point' : 'Points'}`,
+  },
+  {
+    si: {
+      rule: (r: RuleLike) => `සෑම ${formatLkr(r.earnPerLkr)} කටම ලකුණු ${r.earnPoints}ක්`,
+      pts: (n: number) => `Blynk ලකුණු ${n}`,
+    },
+    ta: {
+      rule: (r: RuleLike) => `ஒவ்வொரு ${formatLkr(r.earnPerLkr)} க்கும் ${r.earnPoints} ${r.earnPoints === 1 ? 'புள்ளி' : 'புள்ளிகள்'}`,
+      pts: (n: number) => `${n} Blynk ${n === 1 ? 'புள்ளி' : 'புள்ளிகள்'}`,
+    },
+  },
+  'store.POINTS_RULE',
+);
 
 /** Customer-facing words (kept together for the Sinhala / Tamil phase). */
-export const POINTS_COPY = {
-  /** "1 point for every LKR 100" (also the hero's {points_rule} token). */
-  rule: (r: Pick<PointsRule, 'earnPoints' | 'earnPerLkr'>) => `${r.earnPoints} ${r.earnPoints === 1 ? 'point' : 'points'} for every ${formatLkr(r.earnPerLkr)}`,
-  /** Hero banner AUTO title: two short words for the jumping-letter layout. */
-  heroTitle: ['EARN', 'POINTS'] as [string, string],
-  /** Home's yellow band. */
-  bandTitle: 'EARN BLYNK POINTS',
-  bandLine: (r: Pick<PointsRule, 'earnPoints' | 'earnPerLkr'>) => `${POINTS_COPY.rule(r)} · No packaging or platform fee`,
-  /** The bottom fee strip's third item: [coin, label] -> "(1) pt / LKR 100". */
-  fee: (r: Pick<PointsRule, 'earnPoints' | 'earnPerLkr'>): [string, string] => [String(r.earnPoints), `pt / ${formatLkr(r.earnPerLkr)}`],
-  /** An aisle screen's offer row. */
-  aisleTitle: 'EARN BLYNK POINTS',
-  /** Cart: signed in / a guest. */
-  cartEarn: (n: number) => `You'll earn ${pts(n)} on this order`,
-  cartGuest: (n: number) => `Sign in to earn ${pts(n)} on this order`,
-  /** Profile / the Points screen for a guest. */
-  profileGuest: (r: Pick<PointsRule, 'earnPoints' | 'earnPerLkr'>) => `${POINTS_COPY.rule(r)} · Log in to earn`,
-  guestHow: (r: Pick<PointsRule, 'earnPoints' | 'earnPerLkr'>) =>
-    `Earn ${POINTS_COPY.rule(r)} you spend on items, once your order is delivered.`,
-  /** Order placed: points are added when the order is delivered (backend onOrderDeliveredRewards). */
-  placed: (n: number) => `You'll earn ${pts(n)} when it's delivered`,
-};
+export const POINTS_COPY = localized(
+  {
+    /** "1 point for every LKR 100" (also the hero's {points_rule} token). */
+    rule: (r: RuleLike) => RULE_WORDS.rule(r),
+    /** Hero banner AUTO title: two short words for the jumping-letter layout. */
+    heroTitle: ['EARN', 'POINTS'] as [string, string],
+    /** Home's yellow band. */
+    bandTitle: 'EARN BLYNK POINTS',
+    bandLine: (r: RuleLike) => `${RULE_WORDS.rule(r)} · No packaging or platform fee`,
+    /** The bottom fee strip's third item: [coin, label] -> "(1) pt / LKR 100". */
+    fee: (r: RuleLike): [string, string] => [String(r.earnPoints), `pt / ${formatLkr(r.earnPerLkr)}`],
+    /** An aisle screen's offer row. */
+    aisleTitle: 'EARN BLYNK POINTS',
+    /** Cart: signed in / a guest. */
+    cartEarn: (n: number) => `You'll earn ${RULE_WORDS.pts(n)} on this order`,
+    cartGuest: (n: number) => `Sign in to earn ${RULE_WORDS.pts(n)} on this order`,
+    /** Profile / the Points screen for a guest. */
+    profileGuest: (r: RuleLike) => `${RULE_WORDS.rule(r)} · Log in to earn`,
+    guestHow: (r: RuleLike) => `Earn ${RULE_WORDS.rule(r)} you spend on items, once your order is delivered.`,
+    /** Order placed: points are added when the order is delivered (backend onOrderDeliveredRewards). */
+    placed: (n: number) => `You'll earn ${RULE_WORDS.pts(n)} when it's delivered`,
+  },
+  {
+    si: {
+      rule: (r: RuleLike) => RULE_WORDS.rule(r),
+      heroTitle: ['උපයන්න', 'ලකුණු'],
+      bandTitle: 'BLYNK ලකුණු උපයන්න',
+      bandLine: (r: RuleLike) => `${RULE_WORDS.rule(r)} · ඇසුරුම් හෝ වේදිකා ගාස්තු නැත`,
+      fee: (r: RuleLike): [string, string] => [String(r.earnPoints), `ලකුණු / ${formatLkr(r.earnPerLkr)}`],
+      aisleTitle: 'BLYNK ලකුණු උපයන්න',
+      cartEarn: (n: number) => `මෙම ඇණවුමෙන් ඔබට ${RULE_WORDS.pts(n)} ලැබේ`,
+      cartGuest: (n: number) => `මෙම ඇණවුමෙන් ${RULE_WORDS.pts(n)} ලබා ගැනීමට ලොග් වන්න`,
+      profileGuest: (r: RuleLike) => `${RULE_WORDS.rule(r)} · ලබා ගැනීමට ලොග් වන්න`,
+      guestHow: (r: RuleLike) => `භාණ්ඩ සඳහා ඔබ වියදම් කරන ${RULE_WORDS.rule(r)} ලැබේ, ඇණවුම බෙදාහැරි පසු.`,
+      placed: (n: number) => `ඇණවුම බෙදාහැරි පසු ඔබට ${RULE_WORDS.pts(n)} ලැබේ`,
+    },
+    ta: {
+      rule: (r: RuleLike) => RULE_WORDS.rule(r),
+      heroTitle: ['பெறுங்கள்', 'புள்ளிகள்'],
+      bandTitle: 'BLYNK புள்ளிகளைப் பெறுங்கள்',
+      bandLine: (r: RuleLike) => `${RULE_WORDS.rule(r)} · பேக்கேஜிங் அல்லது பிளாட்ஃபார்ம் கட்டணம் இல்லை`,
+      fee: (r: RuleLike): [string, string] => [String(r.earnPoints), `புள்ளி / ${formatLkr(r.earnPerLkr)}`],
+      aisleTitle: 'BLYNK புள்ளிகளைப் பெறுங்கள்',
+      cartEarn: (n: number) => `இந்த ஆர்டரில் உங்களுக்கு ${RULE_WORDS.pts(n)} கிடைக்கும்`,
+      cartGuest: (n: number) => `இந்த ஆர்டரில் ${RULE_WORDS.pts(n)} பெற உள்நுழையுங்கள்`,
+      profileGuest: (r: RuleLike) => `${RULE_WORDS.rule(r)} · பெற உள்நுழையுங்கள்`,
+      guestHow: (r: RuleLike) => `பொருட்களுக்கு நீங்கள் செலவிடும் ${RULE_WORDS.rule(r)} பெறுவீர்கள், ஆர்டர் டெலிவரி ஆன பிறகு.`,
+      placed: (n: number) => `டெலிவரி ஆனதும் உங்களுக்கு ${RULE_WORDS.pts(n)} கிடைக்கும்`,
+    },
+  },
+  'store.POINTS_COPY',
+);
 
 /**
  * Neutral words for when neither points nor free deliveries are on. Owner, 2026-10-17: "undo
@@ -87,11 +137,26 @@ export const POINTS_COPY = {
  * replacement, never a gap. aisleOffer: the aisle screen's offer row when there is no category
  * offer and no points (it used to drop to nothing).
  */
-export const NEUTRAL_COPY = {
-  bandKicker: ['Fresh picks, great prices'] as [string],
-  heroTitle: ['FRESH', 'GROCERIES'] as [string, string],
-  aisleOffer: { title: 'QUALITY YOU CAN TRUST', sub: 'Fresh picks, every day' },
-};
+export const NEUTRAL_COPY = localized(
+  {
+    bandKicker: ['Fresh picks, great prices'] as [string],
+    heroTitle: ['FRESH', 'GROCERIES'] as [string, string],
+    aisleOffer: { title: 'QUALITY YOU CAN TRUST', sub: 'Fresh picks, every day' },
+  },
+  {
+    si: {
+      bandKicker: ['නැවුම් තේරීම්, හොඳ මිල'],
+      heroTitle: ['නැවුම්', 'බඩු'],
+      aisleOffer: { title: 'විශ්වාස කළ හැකි ගුණාත්මකභාවය', sub: 'සෑම දිනකම නැවුම් තේරීම්' },
+    },
+    ta: {
+      bandKicker: ['புதியவை, சிறந்த விலை'],
+      heroTitle: ['புதிய', 'மளிகை'],
+      aisleOffer: { title: 'நம்பக்கூடிய தரம்', sub: 'தினமும் புதியவை' },
+    },
+  },
+  'store.NEUTRAL_COPY',
+);
 
 /** What Home's headline surfaces (hero AUTO, the yellow band, the fee strip) promote. */
 export type HomeMessage =

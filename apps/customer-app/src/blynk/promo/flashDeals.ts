@@ -1,6 +1,6 @@
 import type { Product } from '../api/types';
 import { isOfferActive, type PricedItem } from '../lib/pricing';
-import { countdownText, endMs } from './homeSections';
+import { COUNTDOWN_WORDS, countdownText, endMs } from './homeSections';
 
 /*
  * Flash deals (wave 2, 2026-10-25): a product offer (offer_price + offer_ends_at, the same offer staff
@@ -41,13 +41,13 @@ export function flashCountdown(remainingMs: number): string | null {
   if (!Number.isFinite(remainingMs) || remainingMs <= 0) return null;
   if (remainingMs < FLASH_CLOCK_BELOW_MS) return countdownText(remainingMs);
   const totalMin = Math.ceil(remainingMs / 60_000);
-  return `${Math.floor(totalMin / 60)}h ${totalMin % 60}m`;
+  return COUNTDOWN_WORDS.hoursMinutes(Math.floor(totalMin / 60), totalMin % 60);
 }
 
 /** The pill text: "Ends in 01:59:12" / "Ends in 2h 10m", or null once the time is up. */
 export function flashPillText(endsAtMs: number, nowMs: number): string | null {
   const t = flashCountdown(endsAtMs - nowMs);
-  return t === null ? null : `Ends in ${t}`;
+  return t === null ? null : COUNTDOWN_WORDS.endsIn(t);
 }
 
 /** Under an hour left (and still running): the pill turns red. */
@@ -60,9 +60,8 @@ export function flashSpeech(endsAtMs: number, nowMs: number): string | null {
   const min = Math.max(1, Math.ceil(left / 60_000));
   const h = Math.floor(min / 60);
   const m = min % 60;
-  const part = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
-  if (h === 0) return `Ends in ${part(m, 'minute')}`;
-  return m === 0 ? `Ends in ${part(h, 'hour')}` : `Ends in ${part(h, 'hour')} ${part(m, 'minute')}`;
+  if (h === 0) return COUNTDOWN_WORDS.speechMinutes(m);
+  return m === 0 ? COUNTDOWN_WORDS.speechHours(h) : COUNTDOWN_WORDS.speechHoursMinutes(h, m);
 }
 
 /** The products that could become a flash deal: orderable, an offer with an end date. Cheap to keep; re-filtered by the clock. */

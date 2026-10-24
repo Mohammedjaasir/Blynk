@@ -16,6 +16,7 @@ import { effectivePrice, isOfferActive, savingsPerUnit } from '../blynk/lib/pric
 import { flatFee, freeDeliveryCount, offerSavingsOn } from '../blynk/lib/storeText';
 import { appLines, appText, underAmount } from '../blynk/lib/appTexts';
 import { claimFee, claimLine, claimTitle, freeDeliveryClaim, type FreeClaim } from '../blynk/store/freeClaim';
+import { HOME_LIVE, LIVE_LOCATION_SHEET } from '../blynk/ui/homeWords';
 import { homeMessage, NEUTRAL_COPY, POINTS_COPY, pointsRuleOf, type PointsRule } from '../blynk/store/pointsPromo';
 
 /** The "Under LKR 300" rail (the video's "Meals under ₹99"). */
@@ -23,12 +24,7 @@ export const UNDER_LKR = 300;
 
 export const LIVE_LOCATION_NAME = 'Dharga Town';
 
-export const LIVE_LOCATION_SHEET = {
-  title: 'Location Permission is Off',
-  sub: 'Lets the app find your delivery spot. Your location stays on this device.',
-  cta: 'GRANT',
-  manual: 'Enter Location Manually',
-};
+export { LIVE_LOCATION_SHEET };
 
 export type LiveRailItem = {
   id: string;
@@ -58,12 +54,6 @@ export type LiveAisleCard = {
  * Catchy line pairs for the aisle cards, picked by position so a scroll of cards does not
  * repeat the same words (owner, 2026-10-18).
  */
-const AISLE_LINES: readonly [string, string][] = [
-  ['Freshly stocked, daily', 'Great quality, honest prices'],
-  ['Carefully selected items', 'Shop with confidence'],
-  ['Trusted local favourites', 'Handpicked, every time'],
-  ['Picked for your kitchen', 'Quality you can taste'],
-];
 
 export type LiveVsTile = {
   id: string;
@@ -95,7 +85,6 @@ export function lowestPrice(products: Product[], now: Date = new Date()): number
 
 // Migration 060: a product listed in this aisle through an extra category counts too (membership.ts).
 const inAisle = (data: CatalogData, catId: string) => productsInCategory(data.products, data.chainOf, catId);
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 /**
  * The free-delivery claim when the caller passes none: GET /store's new-customer offer, worded
@@ -142,7 +131,7 @@ export function liveRail(data: CatalogData | null, now: Date = new Date()): Live
     })
     .filter((r) => r.n > 0)
     .map(({ n: _n, ...r }) => r);
-  return [{ id: 'all', name: 'All', image: null, from: null, emoji: '🛒' }, ...aisles];
+  return [{ id: 'all', name: HOME_LIVE.allAisles, image: null, from: null, emoji: '🛒' }, ...aisles];
 }
 
 /** "Under LKR 300" (the amount is Admin / Ops' app_texts.home_under_amount): in-stock products at or under the line, in the chosen aisle, with the chips applied. */
@@ -157,7 +146,7 @@ export function deliveryLine(store: StoreInfo | null, claim: FreeClaim = guestCl
   const line = claimLine(claim);
   if (line) return line;
   const flat = flatFee(store);
-  return flat != null ? `Delivery ${formatLkr(flat)}` : 'Delivery fee at checkout';
+  return flat != null ? HOME_LIVE.deliveryFee(formatLkr(flat)) : HOME_LIVE.deliveryAtCheckout;
 }
 
 /** The video's restaurant cards become aisles (real categories), each with its products. */
@@ -174,8 +163,8 @@ export function liveAisles(
       const own = appLines(store, 'home_aisle_lines', []);
       const [meta, delivery] = own.length
         ? [own[(i * 2) % own.length]!, own[(i * 2 + 1) % own.length]!]
-        : AISLE_LINES[i % AISLE_LINES.length]!;
-      const offerWords = appText(store, 'home_aisle_offer', '{percent}% off everything here');
+        : HOME_LIVE.aisleLines[i % HOME_LIVE.aisleLines.length]!;
+      const offerWords = appText(store, 'home_aisle_offer', HOME_LIVE.aisleOffer);
       return {
         cat: c,
         items,
@@ -209,10 +198,10 @@ export function liveVs(
       const showSave = offerSavingsOn(store, p);
       return {
         id: p.id, name: p.name, image: p.image_url,
-        overlay: ['NOW', formatLkr(effectivePrice(p, now))],
+        overlay: [HOME_LIVE.now, formatLkr(effectivePrice(p, now))],
         // the struck regular price, always on (owner, 2026-10-18; as in the cart)
         line: showSave ? formatLkr(p.selling_price) : p.category_name, strike: showSave,
-        save: showSave && save > 0 ? `You save ${formatLkr(save)}` : null,
+        save: showSave && save > 0 ? HOME_LIVE.youSave(formatLkr(save)) : null,
         aisle: topAisle(p),
       };
     })
@@ -220,8 +209,8 @@ export function liveVs(
       const c = data.aisles.find((a) => a.id === r.id) ?? null;
       return {
         id: r.id, name: r.name, image: r.image,
-        overlay: ['ITEMS', `FROM ${formatLkr(r.from as number)}`],
-        line: c ? plural(inAisle(data, c.id).length, 'item') : '', strike: false, save: null, aisle: c,
+        overlay: [HOME_LIVE.items, HOME_LIVE.from(formatLkr(r.from as number))],
+        line: c ? HOME_LIVE.itemCount(inAisle(data, c.id).length) : '', strike: false, save: null, aisle: c,
       };
     });
   if (!tiles.length) return null;
@@ -229,7 +218,7 @@ export function liveVs(
   if (msg.kind === 'points') return { kicker: [POINTS_COPY.bandLine(msg.rule)], title: POINTS_COPY.bandTitle, tiles };
   // the words are Admin / Ops' when set (app_texts; owner, 2026-10-18)
   const title = (msg.kind === 'free' ? claimTitle(msg.claim) : null)
-    ?? (offers.length ? appText(store, 'home_band_title_offers', 'OFFER PRICES TODAY') : appText(store, 'home_band_title_aisles', 'SHOP BY AISLE'));
+    ?? (offers.length ? appText(store, 'home_band_title_offers', HOME_LIVE.titleOffers) : appText(store, 'home_band_title_aisles', HOME_LIVE.titleAisles));
   return { kicker: [appText(store, 'home_band_kicker', NEUTRAL_COPY.bandKicker[0])], title, tiles };
 }
 
@@ -242,8 +231,8 @@ export function liveVs(
  */
 export function livePromo(_store?: StoreInfo | null, _claim?: FreeClaim): { line1: string | null; fees: string[] } {
   return {
-    line1: 'Handpicked fresh, every single day',
-    fees: ['Quality checked', 'Local favourites'],
+    line1: HOME_LIVE.promoLine,
+    fees: [...HOME_LIVE.promoTicks],
   };
 }
 
@@ -252,9 +241,9 @@ export function liveFees(store: StoreInfo | null, claim: FreeClaim = guestClaim(
   const flat = flatFee(store);
   const msg = homeMessage(rule, claim);
   return [
-    ['0', 'Packaging fee'],
-    ['0', 'Platform fee'],
+    ['0', HOME_LIVE.packagingFee],
+    ['0', HOME_LIVE.platformFee],
     msg.kind === 'points' ? POINTS_COPY.fee(msg.rule)
-      : (msg.kind === 'free' ? claimFee(msg.claim) : null) ?? (flat != null ? ['LKR', `Delivery ${formatLkr(flat)}`] : ['km', 'Fee at checkout']),
+      : (msg.kind === 'free' ? claimFee(msg.claim) : null) ?? (flat != null ? ['LKR', HOME_LIVE.deliveryFee(formatLkr(flat))] : ['km', HOME_LIVE.feeAtCheckout]),
   ];
 }

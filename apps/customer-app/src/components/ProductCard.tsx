@@ -1,3 +1,4 @@
+import { COMPONENT_WORDS } from '@/blynk/ui/componentWords';
 import { hoursTag, unavailableText } from '@/blynk/catalog/hours';
 import { memo, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -114,7 +115,7 @@ export const ProductCard = memo(function ProductCard({
           )}
         </Animated.View>
         {x?.popular && (
-          <View style={styles.popular}><Text style={styles.popularTxt}>Popular</Text></View>
+          <View style={styles.popular}><Text style={styles.popularTxt}>{COMPONENT_WORDS.popular}</Text></View>
         )}
         {!!untilTag && (
           <View style={styles.untilTag} pointerEvents="none"><Text style={styles.untilTagTxt} numberOfLines={1}>{untilTag}</Text></View>

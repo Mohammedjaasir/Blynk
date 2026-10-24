@@ -1,4 +1,5 @@
 import type { Category, HomeGroup, Product } from '../api/types';
+import { localized } from '../i18n/localized';
 import { CATEGORIES } from '../ui/strings';
 import { productsInCategory } from './membership';
 
@@ -11,6 +12,17 @@ import { productsInCategory } from './membership';
  *
  * Pure functions over the API data, no React.
  */
+
+/** The closing group's name when the app makes it ("More"): read when shown, so it follows the language. */
+const MAIN_WORDS = localized(
+  { more: 'More' } as const,
+  { si: { more: 'තවත්' }, ta: { more: 'மேலும்' } },
+  'catalog.MAIN_WORDS',
+);
+
+/** A Main whose name is looked up each time it is read (the app's own group names change with the language). */
+const withName = (m: Omit<MainNode, 'name'>, name: () => string): MainNode =>
+  Object.defineProperty({ ...m }, 'name', { get: name, enumerable: true, configurable: true }) as MainNode;
 
 export interface CategoryNode {
   category: Category;
@@ -59,9 +71,9 @@ export function buildCategoryTree(groups: HomeGroup[], categories: Category[]): 
   if (rest.length) {
     const more = mains.find((m) => m.id === null);
     if (more) more.categories.push(...rest.map(node));
-    else mains.push({ id: null, key: 'more', name: 'More', categories: rest.map(node) });
+    else mains.push(withName({ id: null, key: 'more', categories: rest.map(node) }, () => MAIN_WORDS.more));
   }
-  if (mains.length === 1 && mains[0].id === null) mains[0] = { ...mains[0], name: CATEGORIES.onlyGroupTitle };
+  if (mains.length === 1 && mains[0].id === null) mains[0] = withName(mains[0], () => CATEGORIES.onlyGroupTitle);
   return mains;
 }
 

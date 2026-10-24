@@ -70,7 +70,7 @@ export function PayScreen() {
         case 'expired': fail({ title: PAY.expiredTitle, message: PAY.expiredSub, action: 'order' }); return;
         case 'notAwaiting': case 'notOnline': router.replace({ pathname: '/order/[id]', params: { id: orderId } }); return;
         case 'unavailable': fail({ title: PAY.failedTitle, message: PAY.unavailable, action: 'order' }); return;
-        case 'notFound': fail({ title: 'Order not found', message: 'This order could not be found.', action: 'home' }); return;
+        case 'notFound': fail({ title: PAY.orderNotFoundTitle, message: PAY.orderNotFoundMsg, action: 'home' }); return;
         default: fail({ title: PAY.failedTitle, message: placeErrorCopy(e).message, action: 'retry' });
       }
     }
@@ -91,7 +91,7 @@ export function PayScreen() {
     if (fresh) { void Promise.resolve().then(() => { if (mounted.current) begin(fresh); }); return; }
     getOrder(orderId)
       .then((o) => { if (mounted.current) { setOrder(o); begin(o); } })
-      .catch((e) => fail({ title: "Couldn't load this order", message: placeErrorCopy(e).message, action: 'retry' }));
+      .catch((e) => fail({ title: PAY.loadFailedTitle, message: placeErrorCopy(e).message, action: 'retry' }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, orderId]);
 
@@ -116,11 +116,11 @@ export function PayScreen() {
   const retry = () => {
     setProblem(null);
     if (order) begin(order);
-    else { started.current = false; setStage('loading'); getOrder(orderId).then((o) => { setOrder(o); begin(o); }).catch((e) => fail({ title: "Couldn't load this order", message: placeErrorCopy(e).message, action: 'retry' })); }
+    else { started.current = false; setStage('loading'); getOrder(orderId).then((o) => { setOrder(o); begin(o); }).catch((e) => fail({ title: PAY.loadFailedTitle, message: placeErrorCopy(e).message, action: 'retry' })); }
   };
 
   if (!signedIn) {
-    return <Page title={PAY.payTitle}><StateView title={PAY.signIn} message={PAY.signInSub} action="Log in" onAction={openSignIn} /></Page>;
+    return <Page title={PAY.payTitle}><StateView title={PAY.signIn} message={PAY.signInSub} action={PAY.login} onAction={openSignIn} /></Page>;
   }
 
   const by = clockTime(order?.payment_expires_at);

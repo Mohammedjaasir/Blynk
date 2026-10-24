@@ -1,5 +1,8 @@
 import { formatLkr } from '@/blynk/lib/money';
 import type { Order } from '@/blynk/orders/types';
+import { RATING_WORDS, TAG_LABELS, TIP_COPY } from './words';
+
+export { TIP_COPY };
 
 /*
  * Order ratings and rider tips (migration 055; docs/superpowers/plans/2026-10-24-groups-ratings-requests.md §B).
@@ -29,17 +32,18 @@ const DAY = 24 * HOUR;
 export const RATING_TAGS = ['ON_TIME', 'LATE', 'FRIENDLY_RIDER', 'RUDE_RIDER', 'FRESH', 'DAMAGED', 'MISSING_ITEM', 'WRONG_ITEM', 'GOOD_PACKING'] as const;
 export type RatingTag = (typeof RATING_TAGS)[number];
 
-/** The contract's tags in the customer's words. */
+/** The contract's tags in the customer's words (the label follows the language: read it while rendering). */
+const tagCopy = (tag: RatingTag, emoji: string, good: boolean) => ({ emoji, good, get label(): string { return TAG_LABELS[tag]; } });
 export const TAG_COPY: Record<RatingTag, { label: string; emoji: string; good: boolean }> = {
-  ON_TIME: { label: 'Right on time', emoji: '⏱️', good: true },
-  FRIENDLY_RIDER: { label: 'Friendly rider', emoji: '😊', good: true },
-  FRESH: { label: 'Fresh items', emoji: '🥬', good: true },
-  GOOD_PACKING: { label: 'Packed well', emoji: '📦', good: true },
-  LATE: { label: 'Came late', emoji: '🐢', good: false },
-  RUDE_RIDER: { label: 'Rider was rude', emoji: '😕', good: false },
-  DAMAGED: { label: 'Something was damaged', emoji: '💔', good: false },
-  MISSING_ITEM: { label: 'Item missing', emoji: '🔍', good: false },
-  WRONG_ITEM: { label: 'Wrong item', emoji: '🔄', good: false },
+  ON_TIME: tagCopy('ON_TIME', '⏱️', true),
+  FRIENDLY_RIDER: tagCopy('FRIENDLY_RIDER', '😊', true),
+  FRESH: tagCopy('FRESH', '🥬', true),
+  GOOD_PACKING: tagCopy('GOOD_PACKING', '📦', true),
+  LATE: tagCopy('LATE', '🐢', false),
+  RUDE_RIDER: tagCopy('RUDE_RIDER', '😕', false),
+  DAMAGED: tagCopy('DAMAGED', '💔', false),
+  MISSING_ITEM: tagCopy('MISSING_ITEM', '🔍', false),
+  WRONG_ITEM: tagCopy('WRONG_ITEM', '🔄', false),
 };
 
 export const GOOD_TAGS: RatingTag[] = ['ON_TIME', 'FRIENDLY_RIDER', 'FRESH', 'GOOD_PACKING'];
@@ -66,8 +70,7 @@ export function toggleTag(tags: readonly RatingTag[], tag: RatingTag): RatingTag
 }
 
 /** The word under the stars. */
-export const STAR_WORDS = ['Tap a star to rate', 'Very bad', 'Not good', 'It was okay', 'Good', 'Loved it!'] as const;
-export const starWord = (stars: number): string => STAR_WORDS[validStars(stars) ? stars : 0];
+export const starWord = (stars: number): string => RATING_WORDS.starWords[validStars(stars) ? stars : 0];
 
 export const validStars = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 5;
 
@@ -182,10 +185,10 @@ export function checkoutTipOptions(raw: unknown): number[] {
 export function parseCustomTip(text: string): { amount: number; error: string | null } {
   const t = text.replace(/[,\s]/g, '').replace(/^LKR/i, '');
   if (!t) return { amount: 0, error: null };
-  if (!/^\d+$/.test(t)) return { amount: 0, error: 'Enter a whole amount in rupees.' };
+  if (!/^\d+$/.test(t)) return { amount: 0, error: TIP_COPY.wholeAmount };
   const n = Number(t);
   if (n === 0) return { amount: 0, error: null };
-  if (n > TIP_MAX) return { amount: 0, error: `A tip can be up to ${formatLkr(TIP_MAX)}.` };
+  if (n > TIP_MAX) return { amount: 0, error: TIP_COPY.tooMuch(formatLkr(TIP_MAX)) };
   return { amount: n, error: null };
 }
 
@@ -204,20 +207,6 @@ export function totalWithTip(toPay: number | null, tip: number): number | null {
   if (toPay === null) return null;
   return Math.round((toPay + Math.max(0, tip)) * 100) / 100;
 }
-
-export const TIP_COPY = {
-  checkoutTitle: 'Tip your rider (optional)',
-  checkoutNote: '100% goes to your rider, paid in cash with your order.',
-  none: 'No tip',
-  custom: 'Other',
-  billLine: 'Rider tip',
-  walletTitle: 'Tip your rider',
-  walletSub: (balance: number) => `From your Blynk Wallet · balance ${formatLkr(balance)}`,
-  walletCta: (amount: number) => `Tip ${formatLkr(amount)}`,
-  thanks: (amount: number) => `${formatLkr(amount)} tip sent. 100% goes to your rider. Thank you!`,
-  tipped: (amount: number) => `You tipped your rider ${formatLkr(amount)}. Thank you!`,
-  walletLow: 'Your wallet balance is too low for a tip right now.',
-} as const;
 
 // ---------------------------------------------------------------- the one-time prompt
 

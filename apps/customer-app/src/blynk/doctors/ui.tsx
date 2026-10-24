@@ -8,18 +8,19 @@ import { isNotFound, isSignInRequired } from './api';
 import { DoctorsSignInPrompt } from './Gate';
 import { GlyphTile } from './glyphs';
 import { ratingLabel } from './types';
+import { DOCTOR_FORMAT, DOCTOR_UI as W } from './words';
 
 /* Pieces the doctors screens share (Flutter dental_widgets.dart). */
 
-export const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Something went wrong. Please try again.');
+export const errorText = (e: unknown) => (e instanceof ApiError ? e.message : DOCTOR_FORMAT.generic);
 
 /** A load failure: sign-in prompt (SIGN_IN_REQUIRED), not found, or "We couldn't load ..." with Try again. */
 export function LoadFailure({ error, title, notFound, onRetry }: {
   error: unknown; title: string; notFound?: { title: string; message: string }; onRetry: () => void;
 }) {
   if (isSignInRequired(error)) return <DoctorsSignInPrompt />;
-  if (notFound && isNotFound(error)) return <StateView title={notFound.title} message={notFound.message} action="Go back" onAction={goBack} />;
-  return <StateView title={title} message={errorText(error)} action="Try again" onAction={onRetry} />;
+  if (notFound && isNotFound(error)) return <StateView title={notFound.title} message={notFound.message} action={W.goBack} onAction={goBack} />;
+  return <StateView title={title} message={errorText(error)} action={W.tryAgain} onAction={onRetry} />;
 }
 
 /** "★ 4.6 (12)" read aloud as words; nothing before the first rating. */
@@ -27,7 +28,7 @@ export function DoctorRating({ average, count }: { average: number | null; count
   const text = ratingLabel(average, count);
   if (!text || average == null) return null;
   return (
-    <Text style={s.rating} accessibilityLabel={`Rated ${average.toFixed(1)} out of 5 from ${count} ${count === 1 ? 'rating' : 'ratings'}`}>{text}</Text>
+    <Text style={s.rating} accessibilityLabel={W.rated(average.toFixed(1), count)}>{text}</Text>
   );
 }
 
@@ -53,7 +54,7 @@ export function FeeCard({ label, note, fee }: { label: string; note: string; fee
     <Card>
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1 }}><Fact label={label}><Body>{note}</Body></Fact></View>
-        {fee != null ? <Text style={s.fee}>{formatLkr(fee)}</Text> : <Text style={s.na}>Not available</Text>}
+        {fee != null ? <Text style={s.fee}>{formatLkr(fee)}</Text> : <Text style={s.na}>{W.notAvailable}</Text>}
       </View>
     </Card>
   );
@@ -63,7 +64,7 @@ export function FeeCard({ label, note, fee }: { label: string; note: string; fee
 export function MapLink({ lat, lng, label }: { lat: number; lng: number; label: string }) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
   const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-  return <Button kind="secondary" small label="Open in Maps" onPress={() => void Linking.openURL(url).catch(() => {})} style={{ alignSelf: 'flex-start', marginTop: 12 }} />;
+  return <Button kind="secondary" small label={W.openInMaps} onPress={() => void Linking.openURL(url).catch(() => {})} style={{ alignSelf: 'flex-start', marginTop: 12 }} />;
 }
 MapLink.displayName = 'MapLink';
 

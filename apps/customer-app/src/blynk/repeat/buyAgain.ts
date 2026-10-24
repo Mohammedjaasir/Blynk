@@ -1,5 +1,6 @@
 import type { Product } from '@/blynk/api/types';
 import type { BuyAgainEntry } from './models';
+import { REPEAT_WORDS } from './words';
 
 /*
  * Home's "Buy again" rail: GET /me/buy-again (the customer's delivered products, ranked by how
@@ -58,4 +59,4 @@ export function buyAgainView(args: {
 }
 
 /** The small line under a card: "Bought 5 times" / "Bought once". */
-export const boughtText = (n: number) => (n <= 1 ? 'Bought once' : n === 2 ? 'Bought twice' : `Bought ${n} times`);
+export const boughtText = (n: number) => (n <= 1 ? REPEAT_WORDS.buyAgain.boughtOnce : n === 2 ? REPEAT_WORDS.buyAgain.boughtTwice : REPEAT_WORDS.buyAgain.bought(n));

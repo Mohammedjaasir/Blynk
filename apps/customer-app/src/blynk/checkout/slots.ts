@@ -1,3 +1,5 @@
+import { localized } from '@/blynk/i18n/localized';
+
 /*
  * Scheduled delivery (owner, 2026-10-10; the Flutter shop's delivery_slot_model.dart,
  * checkout_slot_picker.dart and cart_screen_payment_container.dart). GET /orders/slots says
@@ -37,16 +39,41 @@ export interface DeliverySlots {
   slots: DeliverySlot[];
 }
 
-export const SLOT_COPY = {
-  title: 'Delivery time',
-  asap: 'As soon as possible',
-  full: 'Full',
-  closedNote: "We're closed now. Pick a time and we'll deliver then.",
-  noSlots: 'No delivery times left right now. Check back later.',
-  loadFailed: "We couldn't load delivery times.",
-  pickSlotHint: 'Pick a delivery time above to order now.',
-  slotPickedHint: "We'll deliver at the time you picked.",
-} as const;
+export const SLOT_COPY = localized(
+  {
+    title: 'Delivery time',
+    asap: 'As soon as possible',
+    full: 'Full',
+    closedNote: "We're closed now. Pick a time and we'll deliver then.",
+    noSlots: 'No delivery times left right now. Check back later.',
+    loadFailed: "We couldn't load delivery times.",
+    pickSlotHint: 'Pick a delivery time above to order now.',
+    slotPickedHint: "We'll deliver at the time you picked.",
+  } as const,
+  {
+    si: {
+      title: 'බෙදාහැරීමේ වේලාව',
+      asap: 'හැකි ඉක්මනින්',
+      full: 'පිරී ඇත',
+      closedNote: 'දැන් අපි වසා ඇත. වේලාවක් තෝරන්න, ඒ වෙලාවට බෙදා හරිමු.',
+      noSlots: 'දැනට බෙදාහැරීමේ වේලාවන් ඉතිරි නැත. පසුව නැවත බලන්න.',
+      loadFailed: 'බෙදාහැරීමේ වේලාවන් ලබාගත නොහැකි විය.',
+      pickSlotHint: 'දැන් ඇණවුම් කිරීමට ඉහතින් බෙදාහැරීමේ වේලාවක් තෝරන්න.',
+      slotPickedHint: 'ඔබ තෝරාගත් වේලාවට බෙදා හරිමු.',
+    },
+    ta: {
+      title: 'டெலிவரி நேரம்',
+      asap: 'முடிந்தவரை விரைவாக',
+      full: 'நிரம்பிவிட்டது',
+      closedNote: 'இப்போது கடை மூடப்பட்டுள்ளது. ஒரு நேரத்தைத் தேர்ந்தெடுங்கள், அப்போது டெலிவரி செய்வோம்.',
+      noSlots: 'இப்போது டெலிவரி நேரங்கள் எதுவும் இல்லை. பிறகு மீண்டும் பாருங்கள்.',
+      loadFailed: 'டெலிவரி நேரங்களை ஏற்ற முடியவில்லை.',
+      pickSlotHint: 'இப்போது ஆர்டர் செய்ய மேலே டெலிவரி நேரத்தைத் தேர்ந்தெடுங்கள்.',
+      slotPickedHint: 'நீங்கள் தேர்ந்தெடுத்த நேரத்தில் டெலிவரி செய்வோம்.',
+    },
+  },
+  'checkout.SLOT_COPY',
+);
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
 

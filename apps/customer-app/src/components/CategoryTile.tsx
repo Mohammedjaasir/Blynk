@@ -1,3 +1,4 @@
+import { COMPONENT_WORDS } from '@/blynk/ui/componentWords';
 import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import type { Category } from '@/blynk/api/types';
@@ -37,10 +38,10 @@ export function CategoryTile({ category, size, index = 0, onPress }: { category:
   const offer = categoryOfferActive(category);
   return (
     <PressScale onPress={onPress} scaleTo={0.95} style={{ width: size }}>
-      <View accessible accessibilityRole="link" accessibilityLabel={offer ? `${category.name}, ${category.offer_percent}% off` : category.name}>
+      <View accessible accessibilityRole="link" accessibilityLabel={offer ? COMPONENT_WORDS.offLabel(category.name, category.offer_percent as number) : category.name}>
         <CategoryArt category={category} size={size} index={index} />
         {offer && (
-          <View style={styles.offer}><Text style={styles.offerTxt}>{category.offer_percent}% OFF</Text></View>
+          <View style={styles.offer}><Text style={styles.offerTxt}>{COMPONENT_WORDS.offUpper(category.offer_percent as number)}</Text></View>
         )}
         <Text style={styles.name} numberOfLines={2}>{category.name}</Text>
       </View>

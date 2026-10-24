@@ -4,6 +4,8 @@
  * that arrives as a NUMERIC string is a number, and an unknown status is 'UNKNOWN'.
  */
 
+import { DOCTOR_FORMAT as W } from './words';
+
 const str = (v: unknown) => (v == null ? '' : String(v));
 const optStr = (v: unknown) => (v == null ? null : String(v));
 const numOr = (v: unknown, fallback: number) => {
@@ -20,15 +22,11 @@ const fee = (v: unknown): number | null => { if (v == null) return null; const m
 const avg = (v: unknown): number | null => fee(v);
 
 /** The six enum codes `doctors.specialty` held before migration 030. */
-const LEGACY_SPECIALTY: Record<string, string> = {
-  GENERAL_DENTIST: 'General dentist', ORTHODONTIST: 'Orthodontist', PERIODONTIST: 'Periodontist',
-  ENDODONTIST: 'Endodontist', ORAL_SURGEON: 'Oral surgeon', PEDIATRIC_DENTIST: 'Pediatric dentist',
-};
 /** Free text since migration 030 ("Cosmetic dentist"); an old code reads as its label, nothing as "Dentist". */
 export function specialtyLabel(raw: unknown): string {
   const t = str(raw).trim();
-  if (!t) return 'Dentist';
-  return LEGACY_SPECIALTY[t] ?? t;
+  if (!t) return W.dentist;
+  return W.specialties[t] ?? t;
 }
 
 /** "★ 4.6 (12)", or null when there is nothing real to show. */

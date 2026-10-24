@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '@/blynk/api/client';
 import { MemoryStorage } from '../test/fixtures';
-import { ACCOUNT_DELETED_MESSAGE, createSessionCleaner, noticeFor, SESSION_ENDED_MESSAGE } from './cleanup';
+import { createSessionCleaner, noticeFor, SESSION_NOTICES } from './cleanup';
 import { deleteReducer, runDelete, type DeleteEvent, type DeleteState } from './deleteFlow';
 
 function json(status: number, body: unknown) {
@@ -40,12 +40,12 @@ test('one failing step does not stop the rest', () => {
   createSessionCleaner(s)(ended, 'rejected');
   expect(s.clearAddresses).toHaveBeenCalled();
   expect(s.pushSignedOut).toHaveBeenCalled();
-  expect(s.notify).toHaveBeenCalledWith(SESSION_ENDED_MESSAGE);
+  expect(s.notify).toHaveBeenCalledWith(SESSION_NOTICES.ended);
 });
 
 test('notices: refused login and deleted account are told; a logout is not', () => {
-  expect(noticeFor('rejected')).toBe(SESSION_ENDED_MESSAGE);
-  expect(noticeFor('deleted')).toBe(ACCOUNT_DELETED_MESSAGE);
+  expect(noticeFor('rejected')).toBe(SESSION_NOTICES.ended);
+  expect(noticeFor('deleted')).toBe(SESSION_NOTICES.deleted);
   expect(noticeFor('logout')).toBeNull();
 });
 

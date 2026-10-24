@@ -4,6 +4,7 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { C } from '@/lib/theme';
+import { REPEAT_WORDS } from './words';
 
 /*
  * The repeat basket bottom sheet: the app's sheet look (src/blynk/account/ui.tsx Sheet: dimmed
@@ -45,7 +46,7 @@ export function SheetModal({ onClose, label, children, busy }: {
       <CloseCtx.Provider value={close}>
         <View style={StyleSheet.absoluteFill} accessibilityViewIsModal accessibilityLabel={label}>
           <Animated.View style={[StyleSheet.absoluteFill, st.backdrop, backA]}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (!busy) close(); }} accessibilityLabel="Close" />
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (!busy) close(); }} accessibilityLabel={REPEAT_WORDS.close} />
           </Animated.View>
           <Animated.View style={[st.sheet, { maxHeight: height * 0.92 - insets.top }, sheetA]}>
             <View style={st.grab} />

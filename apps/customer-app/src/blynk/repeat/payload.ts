@@ -3,6 +3,7 @@ import type { Product } from '@/blynk/api/types';
 import { effectivePrice } from '@/blynk/lib/pricing';
 import type { OrderItem } from '@/blynk/orders/types';
 import { clampLineQty, MAX_LINES, NAME_MAX, type BasketItem, type Frequency, type RepeatBasket } from './models';
+import { REPEAT_WORDS } from './words';
 
 /*
  * What the repeat basket screens send (POST / PATCH /me/repeat-baskets) and the summary they show
@@ -152,13 +153,14 @@ export const isNotReady = (e: unknown) => e instanceof ApiError && e.status === 
 
 /** The customer's words for a refused repeat basket call. */
 export function repeatErrorText(e: unknown): string {
-  if (!(e instanceof ApiError)) return 'Something went wrong. Please try again.';
+  const w = REPEAT_WORDS.errors;
+  if (!(e instanceof ApiError)) return w.generic;
   switch (e.code) {
-    case 'BASKET_LIMIT': return 'You can have up to 5 repeat baskets. Cancel one to add another.';
-    case 'PLACE_AT_OUTSIDE_HOURS': return 'That time is outside our opening hours on that day. Pick another time.';
-    case 'BASKET_NOT_FOUND': return 'This repeat basket no longer exists.';
-    case 'REPEAT_NOT_READY': return 'Repeat baskets are not available yet. Please try again later.';
-    case 'VALIDATION_ERROR': return 'Please check the details and try again.';
-    default: return e.message || 'Something went wrong. Please try again.';
+    case 'BASKET_LIMIT': return w.basketLimit;
+    case 'PLACE_AT_OUTSIDE_HOURS': return w.outsideHours;
+    case 'BASKET_NOT_FOUND': return w.notFound;
+    case 'REPEAT_NOT_READY': return w.notReady;
+    case 'VALIDATION_ERROR': return w.validation;
+    default: return e.message || w.generic;
   }
 }

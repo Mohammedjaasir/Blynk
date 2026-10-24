@@ -1,4 +1,5 @@
 import { toE164 } from '@/blynk/auth/phone';
+import { localized } from '@/blynk/i18n/localized';
 
 /*
  * Delivery address rules and copy, copied from the Flutter shop's address form
@@ -22,26 +23,71 @@ const NAME_CHARS = /^[\p{L}\p{M} '\-.]+$/u;
 const LINE_CHARS = /^[\p{L}\p{M}\p{N} '\-.,/#()]+$/u;
 const NOTES_CHARS = /^[\p{L}\p{M}\p{N} '\-.,/#()!?:;&+]+$/u;
 
-export const COPY = {
-  name: 'Name',
-  nameHint: 'Who will receive the order',
-  nameBad: 'Enter a valid recipient name',
-  phone: 'Phone number',
-  phoneHint: '07X XXX XXXX',
-  phoneBad: 'Enter a valid Sri Lankan mobile number',
-  other: 'Another phone number (optional)',
-  otherHint: 'Family or neighbour',
-  otherSame: 'Use a different number from the recipient phone',
-  line: 'Address',
-  lineHint: 'House number, street, near which place',
-  lineBad: 'Enter your street address',
-  notes: 'Delivery instructions (optional)',
-  notesHint: 'e.g. Blue gate, call when you reach',
-  notesBad: 'Enter valid delivery instructions',
-  pinMissing: 'Please share your location',
-  outTitle: "We don't deliver there yet",
-  outBody: "We don't deliver to this address yet. Choose another address.",
-};
+/** The Sri Lankan mobile placeholder: digits and X marks only, the same in every language. */
+export const PHONE_HINT = '07X XXX XXXX';
+
+export const COPY = localized(
+  {
+    name: 'Name',
+    nameHint: 'Who will receive the order',
+    nameBad: 'Enter a valid recipient name',
+    phone: 'Phone number',
+    phoneBad: 'Enter a valid Sri Lankan mobile number',
+    other: 'Another phone number (optional)',
+    otherHint: 'Family or neighbour',
+    otherSame: 'Use a different number from the recipient phone',
+    line: 'Address',
+    lineHint: 'House number, street, near which place',
+    lineBad: 'Enter your street address',
+    notes: 'Delivery instructions (optional)',
+    notesHint: 'e.g. Blue gate, call when you reach',
+    notesBad: 'Enter valid delivery instructions',
+    pinMissing: 'Please share your location',
+    outTitle: "We don't deliver there yet",
+    outBody: "We don't deliver to this address yet. Choose another address.",
+  } as const,
+  {
+    si: {
+      name: 'නම',
+      nameHint: 'ඇණවුම භාරගන්නේ කවුද',
+      nameBad: 'වලංගු ලබන්නාගේ නමක් ඇතුළත් කරන්න',
+      phone: 'දුරකථන අංකය',
+      phoneBad: 'වලංගු ශ්‍රී ලංකා ජංගම දුරකථන අංකයක් ඇතුළත් කරන්න',
+      other: 'වෙනත් දුරකථන අංකයක් (අත්‍යවශ්‍ය නොවේ)',
+      otherHint: 'පවුලේ කෙනෙක් හෝ අසල්වැසියෙක්',
+      otherSame: 'ලබන්නාගේ අංකයට වඩා වෙනස් අංකයක් භාවිතා කරන්න',
+      line: 'ලිපිනය',
+      lineHint: 'ගෙදර අංකය, පාර, ළඟම ස්ථානය',
+      lineBad: 'ඔබේ ලිපිනය (පාර ඇතුළුව) ඇතුළත් කරන්න',
+      notes: 'බෙදාහැරීමේ උපදෙස් (අත්‍යවශ්‍ය නොවේ)',
+      notesHint: 'උදා: නිල් ගේට්ටුව, පැමිණි විට අමතන්න',
+      notesBad: 'වලංගු බෙදාහැරීමේ උපදෙස් ඇතුළත් කරන්න',
+      pinMissing: 'කරුණාකර ඔබේ ස්ථානය බෙදාගන්න',
+      outTitle: 'තවම එහි බෙදාහැරීමක් නැත',
+      outBody: 'මෙම ලිපිනයට තවම බෙදාහැරීමක් නැත. වෙනත් ලිපිනයක් තෝරන්න.',
+    },
+    ta: {
+      name: 'பெயர்',
+      nameHint: 'ஆர்டரைப் பெறுபவர் யார்',
+      nameBad: 'சரியான பெறுபவர் பெயரை உள்ளிடுங்கள்',
+      phone: 'தொலைபேசி எண்',
+      phoneBad: 'சரியான இலங்கை மொபைல் எண்ணை உள்ளிடுங்கள்',
+      other: 'வேறொரு தொலைபேசி எண் (விருப்பம்)',
+      otherHint: 'குடும்பத்தினர் அல்லது அண்டை வீட்டார்',
+      otherSame: 'பெறுபவரின் எண்ணிலிருந்து வேறுபட்ட எண்ணைப் பயன்படுத்துங்கள்',
+      line: 'முகவரி',
+      lineHint: 'வீட்டு எண், தெரு, அருகிலுள்ள இடம்',
+      lineBad: 'உங்கள் தெரு முகவரியை உள்ளிடுங்கள்',
+      notes: 'டெலிவரி வழிமுறைகள் (விருப்பம்)',
+      notesHint: 'எ.கா. நீல கேட், வந்ததும் அழையுங்கள்',
+      notesBad: 'சரியான டெலிவரி வழிமுறைகளை உள்ளிடுங்கள்',
+      pinMissing: 'உங்கள் இருப்பிடத்தைப் பகிருங்கள்',
+      outTitle: 'அங்கே இன்னும் டெலிவரி இல்லை',
+      outBody: 'இந்த முகவரிக்கு இன்னும் டெலிவரி இல்லை. வேறு முகவரியைத் தேர்ந்தெடுங்கள்.',
+    },
+  },
+  'address.COPY',
+);
 
 /** Trim the ends and collapse runs of whitespace (the Flutter normalizeText). */
 export const normalizeText = (v: string | null | undefined) => (v ?? '').trim().replace(/\s+/g, ' ');

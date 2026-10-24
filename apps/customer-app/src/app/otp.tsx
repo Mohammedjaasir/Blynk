@@ -13,6 +13,7 @@ import { GATE_PARAMS, isFromGate } from '@/blynk/auth/gate';
 import { authErrorText, needsNewCode } from '@/blynk/auth/forms';
 import { formatPhone } from '@/blynk/auth/phone';
 import { needsRegistration, signIn } from '@/blynk/auth/session';
+import { OTP_WORDS } from '@/blynk/auth/words';
 import { BackIcon } from '@/components/icons';
 import { PressScale } from '@/components/ui';
 import { COPY } from '@/demo/cart';
@@ -101,7 +102,7 @@ export default function Otp() {
     if (busy) return;
     setBusy(true);
     setError(null);
-    setInfo(LIVE.resending);
+    setInfo(OTP_WORDS.resending);
     requestOtp(phone)
       .then((r) => {
         setPendingOtp(phone, r.dev_otp);
@@ -109,7 +110,7 @@ export default function Otp() {
         setDevOtp(r.dev_otp);
         setOtp('');
         setSecs(RESEND_SECS);
-        setInfo(LIVE.resent);
+        setInfo(OTP_WORDS.resent);
       })
       .catch((e) => { if (mounted.current) { setInfo(null); setError(authErrorText(e)); } })
       .finally(() => { if (mounted.current) setBusy(false); });
@@ -127,13 +128,13 @@ export default function Otp() {
       <StatusBar style="dark" />
       <View style={[styles.head, { paddingTop: insets.top }]}>
         <PressScale onPress={back} style={styles.back}><BackIcon size={20} color={C.brandInk} stroke={1.6} /></PressScale>
-        <Text style={styles.title}>{COPY.verifyTitle}</Text>
-        <Text style={styles.sub}>{DEMO ? COPY.otpSentTo(phone) : LIVE.otpSentTo(formatPhone(phone))}</Text>
+        <Text style={styles.title}>{OTP_WORDS.title}</Text>
+        <Text style={styles.sub}>{DEMO ? COPY.otpSentTo(phone) : OTP_WORDS.sentTo(formatPhone(phone))}</Text>
         <PhoneArt />
       </View>
 
       <Pressable onPress={() => input.current?.focus()} style={{ paddingHorizontal: 15 }}>
-        <Text style={styles.label}>{COPY.enterOtp}</Text>
+        <Text style={styles.label}>{OTP_WORDS.enter}</Text>
         <View style={styles.slots}>
           {Array.from({ length: 6 }, (_, i) => (
             <Slot key={i} ch={otp[i]} active={i === otp.length} />
@@ -152,7 +153,7 @@ export default function Otp() {
           autoFocus
           maxLength={6}
           style={styles.hidden}
-          accessibilityLabel={COPY.enterOtp}
+          accessibilityLabel={OTP_WORDS.enter}
         />
         <View style={styles.retryBox}>
           {!DEMO && !!error && <Text style={styles.error} accessibilityRole="alert">{error}</Text>}
@@ -160,18 +161,18 @@ export default function Otp() {
           {!done && !DEMO && (
             <Animated.Text entering={FadeIn.delay(130).duration(1)} style={[styles.retry, error || info ? { marginTop: 6 } : null]}>
               {secs > 0
-                ? LIVE.resendIn(secs)
-                : <Text style={styles.resend} onPress={resend} accessibilityRole="button">{LIVE.resend}</Text>}
+                ? OTP_WORDS.resendIn(secs)
+                : <Text style={styles.resend} onPress={resend} accessibilityRole="button">{OTP_WORDS.resend}</Text>}
             </Animated.Text>
           )}
           {!done && DEMO && (
             <Animated.Text entering={FadeIn.delay(130).duration(1)} style={styles.retry}>
-              {secs > 0 ? COPY.retry(secs) : <Text style={styles.resend} onPress={resend}>Resend OTP</Text>}
+              {secs > 0 ? COPY.retry(secs) : <Text style={styles.resend} onPress={resend}>{OTP_WORDS.resend}</Text>}
             </Animated.Text>
           )}
         </View>
         <View style={styles.cta}>
-          <Text style={styles.ctaTxt}>{done ? (!DEMO && busy ? LIVE.verifying : COPY.verify) : COPY.enterOtp}</Text>
+          <Text style={styles.ctaTxt}>{done ? (!DEMO && busy ? OTP_WORDS.verifying : OTP_WORDS.verify) : OTP_WORDS.enter}</Text>
         </View>
         {!DEMO && !!devOtp && (
           <PressScale onPress={() => { if (!busy) setOtp(devOtp); }} style={styles.devChip} scaleTo={0.96}>

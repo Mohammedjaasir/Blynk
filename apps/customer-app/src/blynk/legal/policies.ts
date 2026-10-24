@@ -3,26 +3,54 @@
  * in the browser: a new tab on the web (the app stays where it was), the system browser on a phone.
  */
 
+import { localized } from '@/blynk/i18n/localized';
+
 export const SITE = 'https://blynk.lk';
 
 export type PolicyKind = 'privacy' | 'terms' | 'refunds';
 
-export const POLICIES: Record<PolicyKind, { label: string; path: string }> = {
-  privacy: { label: 'Privacy Policy', path: '/privacy' },
-  terms: { label: 'Terms', path: '/terms' },
-  refunds: { label: 'Refund Policy', path: '/refunds' },
-};
+/** The page of each policy on the landing site (not words: never translated). */
+const POLICY_PATHS: Record<PolicyKind, string> = { privacy: '/privacy', terms: '/terms', refunds: '/refunds' };
+
+export const POLICIES = localized<Record<PolicyKind, { label: string }>>(
+  {
+    privacy: { label: 'Privacy Policy' },
+    terms: { label: 'Terms' },
+    refunds: { label: 'Refund Policy' },
+  },
+  {
+    si: {
+      privacy: { label: 'රහස්‍යතා ප්‍රතිපත්තිය' },
+      terms: { label: 'නියම සහ කොන්දේසි' },
+      refunds: { label: 'ආපසු ගෙවීමේ ප්‍රතිපත්තිය' },
+    },
+    ta: {
+      privacy: { label: 'தனியுரிமைக் கொள்கை' },
+      terms: { label: 'விதிமுறைகள்' },
+      refunds: { label: 'ரீஃபண்ட் கொள்கை' },
+    },
+  },
+  'legal.POLICIES',
+);
 
 export const POLICY_ORDER: readonly PolicyKind[] = ['terms', 'privacy', 'refunds'];
 
-export const policyUrl = (k: PolicyKind) => `${SITE}${POLICIES[k].path}`;
+export const policyUrl = (k: PolicyKind) => `${SITE}${POLICY_PATHS[k]}`;
 
-export const LEGAL = {
-  agreePrefix: 'By continuing you agree to the ',
-  and: ' and ',
-  agreeSuffix: '.',
-  policiesTitle: 'Policies',
-};
+export const LEGAL = localized(
+  {
+    agreePrefix: 'By continuing you agree to the ',
+    and: ' and ',
+    agreeSuffix: '.',
+    policiesTitle: 'Policies',
+  },
+  {
+    // the policy names are links in the middle of the sentence: "<Terms> සහ <Privacy Policy> වලට එකඟ වෙනවා."
+    si: { agreePrefix: 'ඉදිරියට යාමෙන් ඔබ ', and: ' සහ ', agreeSuffix: ' වලට එකඟ වෙනවා.', policiesTitle: 'ප්‍රතිපත්ති' },
+    ta: { agreePrefix: 'தொடர்வதன் மூலம் நீங்கள் ', and: ' மற்றும் ', agreeSuffix: ' ஆகியவற்றை ஏற்றுக்கொள்கிறீர்கள்.', policiesTitle: 'கொள்கைகள்' },
+  },
+  'legal.LEGAL',
+);
 
 export type Opener = {
   /** Platform.OS */

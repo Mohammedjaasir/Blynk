@@ -1,4 +1,5 @@
 import type { Product } from '@/blynk/api/types';
+import { REWARD_WORDS as W } from './words';
 
 /*
  * "Your usuals" (owner, 2026-10-10; Flutter Models/usuals_model.dart and Services/reorder.dart):
@@ -81,8 +82,8 @@ export function addUsualsInto(u: Usuals, addProduct: (p: Product, n: number) => 
 export function usualsAddedMessage(r: AddUsualsResult): { text: string; ok: boolean } {
   const missing = r.unavailable;
   if (r.addedUnits === 0) {
-    return { text: missing.length ? `Nothing was added. Not available now: ${missing.join(', ')}.` : 'These are already in your cart.', ok: false };
+    return { text: missing.length ? W.usualsNothingAdded(missing.join(', ')) : W.usualsNone, ok: false };
   }
-  const added = r.addedUnits === 1 ? 'Added 1 item.' : `Added ${r.addedUnits} items.`;
-  return { text: missing.length ? `${added} Not available now: ${missing.join(', ')}.` : added, ok: true };
+  const added = r.addedUnits === 1 ? W.usualsAddedOne : W.usualsAdded(r.addedUnits);
+  return { text: missing.length ? W.usualsMissing(added, missing.join(', ')) : added, ok: true };
 }

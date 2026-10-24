@@ -24,6 +24,7 @@ import { patchBody, repeatErrorText } from './payload';
 import { ItemStrip } from './RepeatSheet';
 import { colombo, nextLine, scheduleText, whenText } from './schedule';
 import { SheetModal, useSheetClose } from './sheet';
+import { REPEAT_WORDS } from './words';
 
 /*
  * "Repeat baskets" (Profile and Home's Buy again): each basket as a card - when the next order
@@ -45,12 +46,12 @@ export function RepeatBasketsScreen() {
   return (
     <View style={st.screen}>
       <StatusBar style="dark" />
-      <ScreenHeader title="Repeat baskets" top={insets.top} />
+      <ScreenHeader title={REPEAT_WORDS.screen.title} top={insets.top} />
       <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 40 }}>
         {!on ? (
-          <Empty title="Repeat baskets are not available right now" sub="Please check again later." />
+          <Empty title={REPEAT_WORDS.screen.unavailable} sub={REPEAT_WORDS.screen.unavailableSub} />
         ) : list === null && error ? (
-          <Empty title="Couldn't load your repeat baskets" sub={error} cta="Try again" onPress={refresh} />
+          <Empty title={REPEAT_WORDS.screen.loadFailedTitle} sub={error} cta={REPEAT_WORDS.screen.tryAgain} onPress={refresh} />
         ) : list === null ? (
           <>
             <Skeleton h={190} r={16} style={{ marginBottom: 12 }} />
@@ -59,14 +60,14 @@ export function RepeatBasketsScreen() {
         ) : list.length === 0 ? (
           <Empty
             art
-            title="No repeat baskets yet"
-            sub="Get milk and bread every morning, or your weekly shop every Monday. Start from your cart or a delivered order."
-            cta="Go to my orders"
+            title={REPEAT_WORDS.screen.emptyTitle}
+            sub={REPEAT_WORDS.screen.emptySub}
+            cta={REPEAT_WORDS.screen.emptyCta}
             onPress={() => router.push('/orders')}
           />
         ) : (
           <>
-            <Text style={st.intro}>We place these orders for you, cash on delivery. You get an SMS each time.</Text>
+            <Text style={st.intro}>{REPEAT_WORDS.screen.intro}</Text>
             {list.map((b, i) => (
               <Animated.View
                 key={b.id}
@@ -87,9 +88,9 @@ export function RepeatBasketsScreen() {
               </Animated.View>
             ))}
             <Animated.Text layout={reduced ? undefined : LinearTransition} style={st.footNote}>
-              {list.length >= MAX_BASKETS ? `You have the most baskets you can (${MAX_BASKETS}).` : 'Add another from your cart or a delivered order.'}
+              {list.length >= MAX_BASKETS ? REPEAT_WORDS.screen.maxBaskets(MAX_BASKETS) : REPEAT_WORDS.screen.addAnother}
             </Animated.Text>
-            {loading && <Text style={[st.footNote, { marginTop: 4 }]}>Refreshing…</Text>}
+            {loading && <Text style={[st.footNote, { marginTop: 4 }]}>{REPEAT_WORDS.screen.refreshing}</Text>}
           </>
         )}
       </ScrollView>
@@ -129,7 +130,7 @@ function BasketCard({ basket: b, products, addressLine, onEdit, onCancel }: {
     tap();
     try {
       upsertBasket(await updateBasket(b.id, { status: v ? 'ACTIVE' : 'PAUSED' }));
-      showNotice(v ? `${b.name} is back on` : `${b.name} is paused`);
+      showNotice(v ? REPEAT_WORDS.card.backOn(b.name) : REPEAT_WORDS.card.isPaused(b.name));
     } catch (e) {
       showNotice(repeatErrorText(e), 'problem');
     } finally {
@@ -143,7 +144,7 @@ function BasketCard({ basket: b, products, addressLine, onEdit, onCancel }: {
     try {
       const next = await toggleSkipNext(b.id);
       upsertBasket(next);
-      showNotice(next.skipNext ? 'The next one is skipped' : 'The next one is back on');
+      showNotice(next.skipNext ? REPEAT_WORDS.card.skipped : REPEAT_WORDS.card.skipBack);
     } catch (e) {
       showNotice(repeatErrorText(e), 'problem');
     } finally {
@@ -166,7 +167,7 @@ function BasketCard({ basket: b, products, addressLine, onEdit, onCancel }: {
           thumbColor={active ? C.brandInk : '#FFFFFF'}
           // react-native-web colours the "on" thumb with its own prop (teal by default)
           {...({ activeThumbColor: C.brandInk, activeTrackColor: C.brand } as object)}
-          accessibilityLabel={active ? `Pause ${b.name}` : `Resume ${b.name}`}
+          accessibilityLabel={active ? REPEAT_WORDS.card.pause(b.name) : REPEAT_WORDS.card.resume(b.name)}
         />
       </View>
 
@@ -177,20 +178,18 @@ function BasketCard({ basket: b, products, addressLine, onEdit, onCancel }: {
 
       <ItemStrip items={b.items} products={products} size={38} />
       <Text style={st.meta}>
-        {units} {units === 1 ? 'item' : 'items'}
-        {b.estimate ? ` · about ${formatLkr(b.estimate.itemsTotal)} today` : ''}
-        {b.estimate && b.estimate.unavailableLines > 0 ? ` · ${b.estimate.unavailableLines} not available now` : ''}
+        {REPEAT_WORDS.card.meta(units, b.estimate ? formatLkr(b.estimate.itemsTotal) : null, b.estimate ? b.estimate.unavailableLines : 0)}
       </Text>
-      {!!addressLine && <Text style={st.meta} numberOfLines={1}>To {addressLine}</Text>}
+      {!!addressLine && <Text style={st.meta} numberOfLines={1}>{REPEAT_WORDS.card.to(addressLine)}</Text>}
 
       {!!b.lastRun && <LastRun run={b.lastRun} />}
 
       <View style={st.actions}>
         {active && (
-          <Action label={busy === 'skip' ? '…' : b.skipNext ? 'Undo skip' : 'Skip next'} onPress={() => void skip()} disabled={busy !== null} />
+          <Action label={busy === 'skip' ? '…' : b.skipNext ? REPEAT_WORDS.card.undoSkip : REPEAT_WORDS.card.skipNext} onPress={() => void skip()} disabled={busy !== null} />
         )}
-        <Action label="Edit" onPress={onEdit} disabled={busy !== null} />
-        <Action label="Cancel" onPress={onCancel} danger disabled={busy !== null} />
+        <Action label={REPEAT_WORDS.card.edit} onPress={onEdit} disabled={busy !== null} />
+        <Action label={REPEAT_WORDS.card.cancel} onPress={onCancel} danger disabled={busy !== null} />
       </View>
     </View>
   );
@@ -199,20 +198,20 @@ function BasketCard({ basket: b, products, addressLine, onEdit, onCancel }: {
 function LastRun({ run }: { run: NonNullable<RepeatBasket['lastRun']> }) {
   const when = run.runAt ? whenText(new Date(run.runAt)) : null;
   const tone = run.status === 'PLACED' ? C.greenDark : run.status === 'FAILED' ? C.problem : C.sub;
-  const word = run.status === 'PLACED' ? 'Ordered' : run.status === 'SKIPPED' ? 'Skipped' : "Couldn't order";
+  const word = run.status === 'PLACED' ? REPEAT_WORDS.card.ordered : run.status === 'SKIPPED' ? REPEAT_WORDS.card.skippedWord : REPEAT_WORDS.card.failedWord;
   return (
     <View style={st.last}>
       <View style={[st.dot, { backgroundColor: tone }]} />
       <View style={{ flex: 1 }}>
         <Text style={st.lastTxt}>
-          <Text style={{ fontFamily: F.semi, color: tone }}>Last: {word}</Text>
+          <Text style={{ fontFamily: F.semi, color: tone }}>{REPEAT_WORDS.card.last(word)}</Text>
           {when ? ` ${when}` : ''}
         </Text>
         {!!run.reason && <Text style={st.lastReason} numberOfLines={2}>{run.reason}</Text>}
       </View>
       {run.status === 'PLACED' && !!run.orderId && (
         <Pressable onPress={() => router.push(`/order/${run.orderId}`)} hitSlop={8} accessibilityRole="link">
-          <Text style={st.link}>View order</Text>
+          <Text style={st.link}>{REPEAT_WORDS.card.viewOrder}</Text>
         </Pressable>
       )}
     </View>
@@ -232,7 +231,7 @@ function Action({ label, onPress, danger, disabled }: { label: string; onPress: 
 function EditSheet({ basket, products, onClose }: { basket: RepeatBasket; products: Product[] | null; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   return (
-    <SheetModal onClose={onClose} label={`Edit ${basket.name}`} busy={busy}>
+    <SheetModal onClose={onClose} label={REPEAT_WORDS.edit.label(basket.name)} busy={busy}>
       <EditBody basket={basket} products={products} busy={busy} setBusy={setBusy} />
     </SheetModal>
   );
@@ -258,14 +257,14 @@ function EditBody({ basket: b, products, busy, setBusy }: { basket: RepeatBasket
 
   const save = async () => {
     if (busy) return;
-    if (!items.length) { setError('Keep at least one item, or cancel the basket instead.'); return; }
+    if (!items.length) { setError(REPEAT_WORDS.edit.keepOne); return; }
     const body = patchBody(b, { items, frequency: draft.frequency, weekday: draft.weekday, placeAt: draft.time ?? undefined, addressId: draft.addressId ?? undefined });
     if (!body) { close(); return; }
     setBusy(true);
     setError(null);
     try {
       upsertBasket(await updateBasket(b.id, body));
-      showNotice('Repeat basket saved');
+      showNotice(REPEAT_WORDS.edit.saved);
       close();
     } catch (e) {
       setError(repeatErrorText(e));
@@ -276,8 +275,8 @@ function EditBody({ basket: b, products, busy, setBusy }: { basket: RepeatBasket
 
   return (
     <View>
-      <Text style={st.sheetTitle}>Edit {b.name}</Text>
-      <Text style={st.label}>Items</Text>
+      <Text style={st.sheetTitle}>{REPEAT_WORDS.edit.title(b.name)}</Text>
+      <Text style={st.label}>{REPEAT_WORDS.edit.items}</Text>
       <View style={st.lines}>
         {items.map((it, i) => {
           const p = byId.get(it.product_id);
@@ -290,29 +289,29 @@ function EditBody({ basket: b, products, busy, setBusy }: { basket: RepeatBasket
             >
               {p ? <ProductImage product={p} size={38} radius={9} style={st.lineImg} /> : <View style={[st.lineImg, { width: 38, height: 38 }]} />}
               <View style={{ flex: 1 }}>
-                <Text style={st.lineName} numberOfLines={2}>{p?.name ?? 'No longer sold'}</Text>
-                {p && !p.is_available && <Text style={[st.meta, { marginTop: 0, color: C.brandText }]}>Not available now</Text>}
+                <Text style={st.lineName} numberOfLines={2}>{p?.name ?? REPEAT_WORDS.edit.noLongerSold}</Text>
+                {p && !p.is_available && <Text style={[st.meta, { marginTop: 0, color: C.brandText }]}>{REPEAT_WORDS.edit.notAvailableNow}</Text>}
               </View>
               <View style={st.stepper}>
-                <Pressable onPress={() => setQty(i, it.quantity - 1)} hitSlop={6} style={st.stepBtn} accessibilityLabel={it.quantity === 1 ? 'Remove' : 'One less'}>
+                <Pressable onPress={() => setQty(i, it.quantity - 1)} hitSlop={6} style={st.stepBtn} accessibilityLabel={it.quantity === 1 ? REPEAT_WORDS.edit.remove : REPEAT_WORDS.edit.oneLess}>
                   <Text style={st.stepTxt}>{it.quantity === 1 ? '×' : '−'}</Text>
                 </Pressable>
                 <Text style={st.stepQty}>{it.quantity}</Text>
-                <Pressable onPress={() => setQty(i, it.quantity + 1)} disabled={it.quantity >= 20} hitSlop={6} style={st.stepBtn} accessibilityLabel="One more">
+                <Pressable onPress={() => setQty(i, it.quantity + 1)} disabled={it.quantity >= 20} hitSlop={6} style={st.stepBtn} accessibilityLabel={REPEAT_WORDS.edit.oneMore}>
                   <Text style={[st.stepTxt, it.quantity >= 20 && { color: C.faint }]}>+</Text>
                 </Pressable>
               </View>
             </Animated.View>
           );
         })}
-        {items.length === 0 && <Text style={[st.meta, { padding: 12 }]}>No items left.</Text>}
+        {items.length === 0 && <Text style={[st.meta, { padding: 12 }]}>{REPEAT_WORDS.edit.noItemsLeft}</Text>}
       </View>
 
       <ScheduleFields draft={draft} onChange={setDraft} store={store} addresses={loc.addresses} showStart={false} />
       <ErrorText>{error}</ErrorText>
       <View style={st.pair}>
-        <Button label="Close" kind="secondary" onPress={close} disabled={busy} style={{ flex: 1 }} />
-        <Button label="Save" onPress={() => void save()} busy={busy} disabled={!draft.time} style={{ flex: 1 }} />
+        <Button label={REPEAT_WORDS.edit.close} kind="secondary" onPress={close} disabled={busy} style={{ flex: 1 }} />
+        <Button label={REPEAT_WORDS.edit.save} onPress={() => void save()} busy={busy} disabled={!draft.time} style={{ flex: 1 }} />
       </View>
     </View>
   );
@@ -321,7 +320,7 @@ function EditBody({ basket: b, products, busy, setBusy }: { basket: RepeatBasket
 function CancelSheet({ basket, onClose }: { basket: RepeatBasket; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   return (
-    <SheetModal onClose={onClose} label={`Cancel ${basket.name}`} busy={busy}>
+    <SheetModal onClose={onClose} label={REPEAT_WORDS.cancelSheet.label(basket.name)} busy={busy}>
       <CancelBody basket={basket} busy={busy} setBusy={setBusy} />
     </SheetModal>
   );
@@ -336,7 +335,7 @@ function CancelBody({ basket: b, busy, setBusy }: { basket: RepeatBasket; busy: 
     try {
       await cancelBasket(b.id);
       removeBasket(b.id);
-      showNotice(`${b.name} is cancelled`);
+      showNotice(REPEAT_WORDS.cancelSheet.cancelled(b.name));
       close();
     } catch (e) {
       setError(repeatErrorText(e));
@@ -346,12 +345,12 @@ function CancelBody({ basket: b, busy, setBusy }: { basket: RepeatBasket; busy: 
   };
   return (
     <View>
-      <Text style={st.sheetTitle}>Cancel {b.name}?</Text>
-      <Text style={st.meta}>No more orders will be placed from it. Orders already placed are not affected. You can pause it instead.</Text>
+      <Text style={st.sheetTitle}>{REPEAT_WORDS.cancelSheet.title(b.name)}</Text>
+      <Text style={st.meta}>{REPEAT_WORDS.cancelSheet.body}</Text>
       <ErrorText>{error}</ErrorText>
       <View style={st.pair}>
-        <Button label="Keep it" kind="secondary" onPress={close} disabled={busy} style={{ flex: 1 }} />
-        <Button label="Cancel basket" kind="danger" onPress={() => void go()} busy={busy} style={{ flex: 1 }} />
+        <Button label={REPEAT_WORDS.cancelSheet.keepIt} kind="secondary" onPress={close} disabled={busy} style={{ flex: 1 }} />
+        <Button label={REPEAT_WORDS.cancelSheet.cancelBasket} kind="danger" onPress={() => void go()} busy={busy} style={{ flex: 1 }} />
       </View>
     </View>
   );

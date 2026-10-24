@@ -1,6 +1,67 @@
 import type { Product, PublicBundleOffer, StoreInfo } from '@/blynk/api/types';
 import { lineKey } from '@/blynk/cart/cartStore';
+import { localized } from '@/blynk/i18n/localized';
 import { formatLkr } from '@/blynk/lib/money';
+
+/** Bundle-offer words (badge, the sentence under it, the cart's lines and the order's tags). */
+export const BUNDLE_WORDS = localized(
+  {
+    badgeCompact: (buy: number, get: number) => `Buy ${buy}+${get}`,
+    badgeCard: (buy: number, get: number) => `Buy ${buy} get ${get}`,
+    badgeFull: (buy: number, get: number) => `Buy ${buy} get ${get} free`,
+    anyEligible: 'any of the eligible items',
+    thisItem: 'this item',
+    /** "Add 3 of this item: the cheapest one is free." */
+    note: (total: number, which: string, get: number) => `Add ${total} of ${which}: the cheapest ${get === 1 ? 'one is' : `${get} are`} free.`,
+    gift: 'gift',
+    spendGift: (amount: string, gift: string) => `Spend ${amount}, get a free ${gift}`,
+    freeUnits: (n: number) => `${n} free`,
+    freeGiftLine: (gift: string) => `Free gift: ${gift}`,
+    progressGift: (amount: string, gift: string) => `Add ${amount} more for a free ${gift}`,
+    progressUnits: (n: number, get: number) => `Add ${n} more to get ${get} free`,
+    free: 'Free',
+    freeGift: 'Free gift',
+    /** Screen reader on a cart line's free units. */
+    freeLineLabel: (free: number, name: string, value: string) => `${free} free ${name}, saves ${value}`,
+  },
+  {
+    si: {
+      badgeCompact: (buy: number, get: number) => `${buy}+${get}`,
+      badgeCard: (buy: number, get: number) => `${buy}ට ${get} ක්`,
+      badgeFull: (buy: number, get: number) => `${buy}ක් ගන්න, ${get}ක් නොමිලේ`,
+      anyEligible: 'සුදුසුකම් ඇති ඕනෑම භාණ්ඩයකින්',
+      thisItem: 'මෙම භාණ්ඩයෙන්',
+      note: (total: number, which: string, get: number) => `${which} ${total}ක් එක් කරන්න: වඩාත්ම අඩු මිලැති ${get}ක් නොමිලේ.`,
+      gift: 'තෑග්ග',
+      spendGift: (amount: string, gift: string) => `${amount} වියදම් කරන්න, නොමිලේ ${gift} ලබා ගන්න`,
+      freeUnits: (n: number) => `${n}ක් නොමිලේ`,
+      freeGiftLine: (gift: string) => `නොමිලේ තෑග්ග: ${gift}`,
+      progressGift: (amount: string, gift: string) => `නොමිලේ ${gift} සඳහා තවත් ${amount} එක් කරන්න`,
+      progressUnits: (n: number, get: number) => `${get}ක් නොමිලේ ලබා ගැනීමට තවත් ${n}ක් එක් කරන්න`,
+      free: 'නොමිලේ',
+      freeGift: 'නොමිලේ තෑග්ග',
+      freeLineLabel: (free: number, name: string, value: string) => `${name} ${free}ක් නොමිලේ, ${value} ඉතිරියි`,
+    },
+    ta: {
+      badgeCompact: (buy: number, get: number) => `${buy}+${get}`,
+      badgeCard: (buy: number, get: number) => `${buy} வாங்கினால் ${get}`,
+      badgeFull: (buy: number, get: number) => `${buy} வாங்கினால் ${get} இலவசம்`,
+      anyEligible: 'தகுதியுள்ள எந்தப் பொருளிலும்',
+      thisItem: 'இந்தப் பொருளில்',
+      note: (total: number, which: string, get: number) => `${which} ${total} சேர்க்கவும்: மிகக் குறைந்த விலை உள்ள ${get} இலவசம்.`,
+      gift: 'பரிசு',
+      spendGift: (amount: string, gift: string) => `${amount} செலவு செய்தால், இலவச ${gift} கிடைக்கும்`,
+      freeUnits: (n: number) => `${n} இலவசம்`,
+      freeGiftLine: (gift: string) => `இலவச பரிசு: ${gift}`,
+      progressGift: (amount: string, gift: string) => `இலவச ${gift} பெற இன்னும் ${amount} சேர்க்கவும்`,
+      progressUnits: (n: number, get: number) => `${get} இலவசமாகப் பெற இன்னும் ${n} சேர்க்கவும்`,
+      free: 'இலவசம்',
+      freeGift: 'இலவச பரிசு',
+      freeLineLabel: (free: number, name: string, value: string) => `${name} ${free} இலவசம், ${value} சேமிப்பு`,
+    },
+  },
+  'bundles.BUNDLE_WORDS',
+);
 
 /*
  * Bundle offers (owner, 2026-10-25: "buy 2 get 1", "spend X, get a gift"): the rules live in Admin / Ops
@@ -52,16 +113,16 @@ export function bundleOfferFor(product: Pick<Product, 'id' | 'category_id'>, off
 export function bundleBadgeText(offer: Pick<PublicBundleOffer, 'buy_qty' | 'get_qty'>, size: 'full' | 'card' | 'compact' = 'full'): string {
   const buy = offer.buy_qty ?? 0;
   const get = offer.get_qty ?? 0;
-  if (size === 'compact') return `Buy ${buy}+${get}`;
-  return size === 'card' ? `Buy ${buy} get ${get}` : `Buy ${buy} get ${get} free`;
+  if (size === 'compact') return BUNDLE_WORDS.badgeCompact(buy, get);
+  return size === 'card' ? BUNDLE_WORDS.badgeCard(buy, get) : BUNDLE_WORDS.badgeFull(buy, get);
 }
 
 /** One line under the badge on the product page: what the offer means in a sentence. */
 export function bundleBadgeNote(offer: Pick<PublicBundleOffer, 'buy_qty' | 'get_qty' | 'category' | 'product_ids'>): string {
   const buy = offer.buy_qty ?? 0;
   const get = offer.get_qty ?? 0;
-  const which = offer.category || (offer.product_ids?.length ?? 0) > 1 ? 'any of the eligible items' : 'this item';
-  return `Add ${buy + get} of ${which}: the cheapest ${get === 1 ? 'one is' : `${get} are`} free.`;
+  const which = offer.category || (offer.product_ids?.length ?? 0) > 1 ? BUNDLE_WORDS.anyEligible : BUNDLE_WORDS.thisItem;
+  return BUNDLE_WORDS.note(buy + get, which, get);
 }
 
 /** The gift as people read it: "Biscuit pack" or "2 x Biscuit pack". */
@@ -69,7 +130,7 @@ export const giftWords = (name: string, qty: number) => (qty > 1 ? `${qty} x ${n
 
 /** "Spend LKR 3,000, get a free Biscuit pack" (the offer in a sentence, for a rule that is not applied yet). */
 export function spendGiftText(offer: Pick<PublicBundleOffer, 'min_subtotal' | 'gift_product_name' | 'gift_qty'>): string {
-  return `Spend ${formatLkr(offer.min_subtotal ?? 0)}, get a free ${giftWords(offer.gift_product_name?.trim() || 'gift', offer.gift_qty ?? 1)}`;
+  return BUNDLE_WORDS.spendGift(formatLkr(offer.min_subtotal ?? 0), giftWords(offer.gift_product_name?.trim() || BUNDLE_WORDS.gift, offer.gift_qty ?? 1));
 }
 
 /* ---------------------------------------------------------------- the cart's quote (POST /orders/bundle-quote) */
@@ -175,13 +236,13 @@ export function freeUnitsByLine(quote: BundleQuote | null | undefined): Map<stri
 }
 
 /** "1 free", "2 free". */
-export const freeUnitsText = (n: number) => `${n} free`;
+export const freeUnitsText = (n: number) => BUNDLE_WORDS.freeUnits(n);
 
 /** The gift lines of a quote: "Free gift: Biscuit pack" with what they are worth. */
 export function giftLines(quote: BundleQuote | null | undefined): { key: string; label: string; productId: string; value: number }[] {
   const q = usableQuote(quote);
   if (!q) return [];
-  return q.gift_items.map((g, i) => ({ key: `${g.offer_id}:${g.product_id}:${i}`, label: `Free gift: ${giftWords(g.name || 'gift', g.quantity)}`, productId: g.product_id, value: g.value_lkr }));
+  return q.gift_items.map((g, i) => ({ key: `${g.offer_id}:${g.product_id}:${i}`, label: BUNDLE_WORDS.freeGiftLine(giftWords(g.name || BUNDLE_WORDS.gift, g.quantity)), productId: g.product_id, value: g.value_lkr }));
 }
 
 /** A string that changes when a gift is added or taken away (to play the unlock animation once per unlock). */
@@ -201,12 +262,12 @@ export function progressText(p: BundleProgress | null | undefined, offers: reado
   if (p.type === 'SPEND_GET_GIFT' || (p.remaining_lkr != null && p.remaining_units == null)) {
     if (p.remaining_lkr == null || p.remaining_lkr <= 0) return null;
     const offer = offers.find((o) => o.id === p.offer_id);
-    const name = (p.gift_product_name ?? offer?.gift_product_name ?? '').trim() || 'gift';
-    return `Add ${formatLkr(round2(p.remaining_lkr))} more for a free ${giftWords(name, p.gift_qty ?? offer?.gift_qty ?? 1)}`;
+    const name = (p.gift_product_name ?? offer?.gift_product_name ?? '').trim() || BUNDLE_WORDS.gift;
+    return BUNDLE_WORDS.progressGift(formatLkr(round2(p.remaining_lkr)), giftWords(name, p.gift_qty ?? offer?.gift_qty ?? 1));
   }
   if (p.remaining_units == null || p.remaining_units <= 0) return null;
   const get = p.get_qty ?? offers.find((o) => o.id === p.offer_id)?.get_qty ?? 1;
-  return `Add ${p.remaining_units} more to get ${get} free`;
+  return BUNDLE_WORDS.progressUnits(p.remaining_units, get);
 }
 
 /** How far along the card's bar is, 0..1 (null = no bar: not enough is known). */
@@ -236,9 +297,9 @@ export interface OrderBundleFields {
 }
 
 /** How a line reads on the order: "Free", "Free gift", or null for an ordinary line. */
-export function orderLineTag(item: OrderBundleFields): 'Free' | 'Free gift' | null {
+export function orderLineTag(item: OrderBundleFields): string | null {
   if (!item.is_bundle_free) return null;
-  return item.bundle_kind === 'GIFT' ? 'Free gift' : 'Free';
+  return item.bundle_kind === 'GIFT' ? BUNDLE_WORDS.freeGift : BUNDLE_WORDS.free;
 }
 
 /** The "Bundle savings" amount an order shows (0 hides the row). */

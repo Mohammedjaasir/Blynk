@@ -5,6 +5,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { categoryCounts } from '@/blynk/catalog/membership';
+import { CATEGORY_SCREEN } from '@/blynk/catalog/browseWords';
 import { categoryHref, type MainNode } from '@/blynk/catalog/tree';
 import { CATEGORIES } from '@/blynk/ui/strings';
 import { ListSkeleton, Page, StateView } from '@/blynk/ui/kit';
@@ -52,7 +53,7 @@ export default function CategoriesScreen() {
       <ScrollView ref={scroll} contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 110 }}>
         <OfflineBanner onRetry={() => void refresh()} style={{ marginBottom: 12 }} />
         {DEMO ? (
-          <StateView title={CATEGORIES.title} message="Categories open with the live shop. This is a preview." />
+          <StateView title={CATEGORIES.title} message={CATEGORY_SCREEN.preview} />
         ) : !data && error ? (
           <StateView title={CATEGORIES.loadFailed} message={error.message} action={CATEGORIES.tryAgain} onAction={() => void refresh()} />
         ) : !data ? (
@@ -82,7 +83,7 @@ export default function CategoriesScreen() {
                           scaleTo={0.95}
                           style={styles.sub}
                           accessibilityRole="link"
-                          accessibilityLabel={`${s.name}, in ${node.category.name}`}
+                          accessibilityLabel={CATEGORY_SCREEN.subIn(s.name, node.category.name)}
                         >
                           <Text style={styles.subTxt} numberOfLines={1}>{s.name}</Text>
                         </PressScale>

@@ -1,4 +1,5 @@
 import type { Session, SessionEndReason } from '@/blynk/auth/session';
+import { localized } from '@/blynk/i18n/localized';
 
 /*
  * The one place that forgets a customer's data when their session ends - logout, the server
@@ -8,8 +9,23 @@ import type { Session, SessionEndReason } from '@/blynk/auth/session';
  */
 
 /** What the customer is told afterwards (Flutter: kSessionEndedMessage, DeleteAccountSheet.doneMessage). */
-export const SESSION_ENDED_MESSAGE = "You've been logged out. Log in again to see your orders.";
-export const ACCOUNT_DELETED_MESSAGE = 'Your account has been deleted.';
+export const SESSION_NOTICES = localized(
+  {
+    ended: "You've been logged out. Log in again to see your orders.",
+    deleted: 'Your account has been deleted.',
+  } as const,
+  {
+    si: {
+      ended: 'ඔබව ඉවත් කර ඇත. ඔබේ ඇණවුම් බැලීමට නැවත ඇතුල් වන්න.',
+      deleted: 'ඔබේ ගිණුම මකා දමා ඇත.',
+    },
+    ta: {
+      ended: 'நீங்கள் வெளியேற்றப்பட்டுள்ளீர்கள். உங்கள் ஆர்டர்களைப் பார்க்க மீண்டும் உள்நுழையுங்கள்.',
+      deleted: 'உங்கள் கணக்கு நீக்கப்பட்டுவிட்டது.',
+    },
+  },
+  'account.SESSION_NOTICES',
+);
 
 export type CleanupSteps = {
   /** Close every live rider stream and drop its last point. */
@@ -26,8 +42,8 @@ export type CleanupSteps = {
 };
 
 export function noticeFor(reason: SessionEndReason): string | null {
-  if (reason === 'rejected') return SESSION_ENDED_MESSAGE;
-  if (reason === 'deleted') return ACCOUNT_DELETED_MESSAGE;
+  if (reason === 'rejected') return SESSION_NOTICES.ended;
+  if (reason === 'deleted') return SESSION_NOTICES.deleted;
   return null; // a logout the customer asked for needs no message
 }
 

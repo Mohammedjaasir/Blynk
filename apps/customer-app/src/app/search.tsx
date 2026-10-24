@@ -10,6 +10,7 @@ import { getProducts } from '@/blynk/api/catalog';
 import { ApiError } from '@/blynk/api/client';
 import type { Product } from '@/blynk/api/types';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
+import { SEARCH } from '@/blynk/catalog/browseWords';
 import { categoriesHref, categoryHref } from '@/blynk/catalog/tree';
 import { CATEGORIES } from '@/blynk/ui/strings';
 import {
@@ -67,7 +68,7 @@ export default function Search() {
           if (n === seq.current) setAnswer({ key, results: r.products, total: r.pagination.total, page: r.pagination.page, pages: r.pagination.total_pages, error: null });
         })
         .catch((e) => {
-          if (n === seq.current) setAnswer({ ...EMPTY, key, error: e instanceof ApiError ? e.message : 'Search failed. Please try again.' });
+          if (n === seq.current) setAnswer({ ...EMPTY, key, error: e instanceof ApiError ? e.message : SEARCH.failed });
         });
     }, 350);
     return () => clearTimeout(timer);
@@ -111,7 +112,7 @@ export default function Search() {
   const tile = (width - 16 * 2 - 12) / 2;
   const rows: Product[][] = [];
   for (let i = 0; i < (results ?? []).length; i += 2) rows.push((results ?? []).slice(i, i + 2));
-  const scope = activeAisle ? ` in ${activeAisle.name}` : '';
+  const scope = activeAisle ? activeAisle.name : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top }}>
@@ -124,15 +125,15 @@ export default function Search() {
             {!q && (
               <View pointerEvents="none" style={styles.hintRow}>
                 {name ? (
-                  <Text style={styles.hint}>Search in {name}</Text>
+                  <Text style={styles.hint}>{SEARCH.searchIn(name)}</Text>
                 ) : hints.length > 0 ? (
                   <>
-                    <Text style={styles.hint}>{"Search for '"}</Text>
+                    <Text style={styles.hint}>{SEARCH.forOpen}</Text>
                     <RollingText text={hints[t % hints.length]} style={styles.hint} />
-                    <Text style={styles.hint}>{"'"}</Text>
+                    <Text style={styles.hint}>{SEARCH.forClose}</Text>
                   </>
                 ) : (
-                  <Text style={styles.hint}>Search groceries &amp; essentials</Text>
+                  <Text style={styles.hint}>{SEARCH.hint}</Text>
                 )}
               </View>
             )}
@@ -146,12 +147,12 @@ export default function Search() {
               autoCorrect={false}
               maxLength={SEARCH_MAX}
               style={styles.input}
-              accessibilityLabel={name ? `Search in ${name}` : 'Search groceries and essentials'}
+              accessibilityLabel={name ? SEARCH.searchIn(name) : SEARCH.a11yDefault}
             />
           </View>
           {!!q && (
             <PressScale onPress={clearQuery} style={styles.clear}>
-              <View accessible accessibilityRole="button" accessibilityLabel="Clear search"><CloseIcon size={9} color="#fff" /></View>
+              <View accessible accessibilityRole="button" accessibilityLabel={SEARCH.clear}><CloseIcon size={9} color="#fff" /></View>
             </PressScale>
           )}
         </View>
@@ -159,7 +160,7 @@ export default function Search() {
 
       {!!term && aisles.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsBar} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
-          <Chip label="All" on={!slug} onPress={() => setSlug(null)} />
+          <Chip label={SEARCH.all} on={!slug} onPress={() => setSlug(null)} />
           {aisles.map((a) => <Chip key={a.id} label={a.name} on={slug === a.slug} onPress={() => setSlug(a.slug)} />)}
         </ScrollView>
       )}
@@ -173,20 +174,20 @@ export default function Search() {
       >
         {!term ? (
           DEMO ? (
-            <Empty title="What are you looking for?" sub="Search opens here once the shop is live." />
+            <Empty title={SEARCH.whatLooking} sub={SEARCH.demoSub} />
           ) : recent.length === 0 && aisles.length === 0 ? (
-            <Empty title="What are you looking for?" sub="Search for groceries, snacks and everyday essentials." />
+            <Empty title={SEARCH.whatLooking} sub={SEARCH.emptySub} />
           ) : (
             <Animated.View entering={FadeIn.duration(180)}>
               {recent.length > 0 && (
                 <>
                   <View style={styles.headRow}>
-                    <Text style={styles.h2}>Recent searches</Text>
-                    <PressScale onPress={clearRecent} style={{ padding: 4 }}><Text style={styles.action}>Clear</Text></PressScale>
+                    <Text style={styles.h2}>{SEARCH.recent}</Text>
+                    <PressScale onPress={clearRecent} style={{ padding: 4 }}><Text style={styles.action}>{SEARCH.clearRecent}</Text></PressScale>
                   </View>
                   {recent.map((r) => (
                     <PressScale key={r} onPress={() => pickRecent(r)} scaleTo={0.99}>
-                      <View style={styles.recentRow} accessible accessibilityRole="button" accessibilityLabel={`Search for ${r}`}>
+                      <View style={styles.recentRow} accessible accessibilityRole="button" accessibilityLabel={SEARCH.searchFor(r)}>
                         <SearchIcon size={14} color={C.sub} />
                         <Text style={styles.recentTxt} numberOfLines={1}>{r}</Text>
                       </View>
@@ -196,7 +197,7 @@ export default function Search() {
               )}
               {aisles.length > 0 && (
                 <>
-                  <Text style={[styles.h2, { marginTop: recent.length ? 22 : 0, marginBottom: 10 }]}>Browse categories</Text>
+                  <Text style={[styles.h2, { marginTop: recent.length ? 22 : 0, marginBottom: 10 }]}>{SEARCH.browse}</Text>
                   <View style={styles.wrap}>
                     {aisles.map((a) => <Chip key={a.id} label={a.name} onPress={() => (DEMO ? openAisle(a) : router.push(categoryHref(a.slug)))} />)}
                     {!DEMO && <Chip label={CATEGORIES.allCategories} onPress={() => router.push(categoriesHref())} />}
@@ -206,22 +207,22 @@ export default function Search() {
             </Animated.View>
           )
         ) : DEMO ? (
-          <Empty title="Search opens soon" sub="This is a preview." />
+          <Empty title={SEARCH.soonTitle} sub={SEARCH.soonSub} />
         ) : error ? (
-          <Empty title="Couldn't load results" sub={error} cta="Try again" onPress={() => setRetry((r) => r + 1)} />
+          <Empty title={SEARCH.failedTitle} sub={error} cta={SEARCH.tryAgain} onPress={() => setRetry((r) => r + 1)} />
         ) : !results ? (
           <View style={{ flexDirection: 'row', gap: 12 }}><Skeleton w={tile} h={tile} r={14} /><Skeleton w={tile} h={tile} r={14} /></View>
         ) : results.length === 0 ? (
           <Empty
-            title={`No results for "${term}"${scope}`}
-            sub="Check the spelling or browse categories."
-            cta="Browse categories"
+            title={SEARCH.noResults(term, scope)}
+            sub={SEARCH.checkSpelling}
+            cta={SEARCH.browse}
             onPress={() => { setQ(''); setSlug(null); }}
             extra={<AskUsPrompt name={term} categoryId={activeAisle && 'id' in activeAisle ? activeAisle.id : null} style={{ marginTop: 26, alignSelf: 'stretch' }} />}
           />
         ) : (
           <>
-            <Text style={styles.count}>Search results · {answer.total} {answer.total === 1 ? 'item' : 'items'}{scope}</Text>
+            <Text style={styles.count}>{SEARCH.resultsCount(answer.total, scope)}</Text>
             {rows.map((row, ri) => (
               <View key={ri} style={{ flexDirection: 'row', gap: 12, marginBottom: 18 }}>
                 {row.map((p, ci) => (
@@ -233,7 +234,7 @@ export default function Search() {
             ))}
             {answer.page < answer.pages && (
               <PressScale onPress={loadMore} disabled={more} style={styles.more}>
-                <Text style={styles.action}>{more ? 'Loading…' : 'Show more results'}</Text>
+                <Text style={styles.action}>{more ? SEARCH.loading : SEARCH.more}</Text>
               </PressScale>
             )}
           </>

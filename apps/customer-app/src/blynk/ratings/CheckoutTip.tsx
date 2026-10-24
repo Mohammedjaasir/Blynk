@@ -14,7 +14,8 @@ import { tap } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
 import { withSpring } from '@/lib/motion';
 import { C, F } from '@/lib/theme';
-import { checkoutTip, checkoutTipOptions, parseCustomTip, TIP_COPY, totalWithTip } from './model';
+import { checkoutTip, checkoutTipOptions, parseCustomTip, totalWithTip } from './model';
+import { TIP_COPY } from './words';
 
 /*
  * "Tip your rider (optional)" at checkout (migration 055): chips No tip / 50 / 100 / 200 (checkout-info
@@ -103,9 +104,9 @@ export function CheckoutTipRow({ ctl }: { ctl: CheckoutTipCtl }) {
               onChangeText={ctl.setCustomText}
               keyboardType="number-pad"
               autoFocus
-              placeholder="Up to 1,000"
+              placeholder={TIP_COPY.customPlaceholder}
               placeholderTextColor="#9A9AA2"
-              accessibilityLabel="Tip amount in rupees"
+              accessibilityLabel={TIP_COPY.customLabel}
               maxLength={4}
               style={[s.input, Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null]}
             />
@@ -113,7 +114,7 @@ export function CheckoutTipRow({ ctl }: { ctl: CheckoutTipCtl }) {
           {!!ctl.customError && <Text style={s.err} accessibilityRole="alert">{ctl.customError}</Text>}
         </Animated.View>
       )}
-      <Text style={s.note}>{ctl.tip > 0 ? `Thank you! ${TIP_COPY.checkoutNote}` : TIP_COPY.checkoutNote}</Text>
+      <Text style={s.note}>{ctl.tip > 0 ? TIP_COPY.checkoutNoteThanks : TIP_COPY.checkoutNote}</Text>
     </Animated.View>
   );
 }

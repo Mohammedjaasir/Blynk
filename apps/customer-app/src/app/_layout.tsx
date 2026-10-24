@@ -6,12 +6,13 @@ import {
 import { useFonts } from 'expo-font';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { Fragment, useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SessionEffects } from '@/blynk/account/SessionEffects';
 // GTM events: page views, who is shopping, the catalogue for item names (src/blynk/analytics)
 import { AnalyticsHost } from '@/blynk/analytics/AnalyticsHost';
+import { useLang } from '@/blynk/i18n/useLang';
 import { CatalogProvider } from '@/blynk/catalog/CatalogContext';
 import { configProblem } from '@/blynk/lib/config';
 import { installConnectivity } from '@/blynk/lib/connectivity';
@@ -50,6 +51,8 @@ export default function RootLayout() {
 }
 
 function AppShell() {
+  // a new language restarts the screens (never the cart or the store): every word is read afresh
+  const lang = useLang();
   const [loaded] = useFonts({
     Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold, Outfit_800ExtraBold,
     BowlbyOne_400Regular, Anton_400Regular,
@@ -66,6 +69,7 @@ function AppShell() {
         <CartProvider>
           <StoreProvider>
             <CatalogProvider>
+              <Fragment key={lang}>
               <StatusBar style="auto" />
               <ThemeColor />
               {/* before the screens: its page_view goes out ahead of the screen's own events */}
@@ -95,6 +99,7 @@ function AppShell() {
               <RatingPromptHost />
               {/* the launch intro's exit, over the whole window and everything in it (src/lib/splash.ts) */}
               <SplashHandoverHost />
+              </Fragment>
             </CatalogProvider>
           </StoreProvider>
         </CartProvider>

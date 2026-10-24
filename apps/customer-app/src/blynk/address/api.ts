@@ -1,6 +1,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from '@/blynk/api/client';
 import { authed } from '@/blynk/auth/session';
 import { COPY } from './forms';
+import { ADDRESS_ERRORS } from './words';
 
 /*
  * The signed-in customer's address book (backend modules/users/address.*). Every call goes
@@ -106,15 +107,16 @@ export const isOutsideRadius = (e: unknown) => e instanceof ApiError && e.code =
 
 /** What to tell the customer when an address call fails. */
 export function addressErrorText(e: unknown): string {
-  if (!(e instanceof ApiError)) return 'Something went wrong. Please try again.';
+  if (!(e instanceof ApiError)) return ADDRESS_ERRORS.generic;
   switch (e.code) {
     case 'DELIVERY_OUTSIDE_RADIUS': return COPY.outBody;
     case 'ALTERNATE_PHONE_SAME_AS_RECIPIENT': return COPY.otherSame;
-    case 'ADDRESS_NOT_FOUND': return 'This address no longer exists.';
-    case 'VALIDATION_ERROR': return 'Please check the details and try again.';
-    case 'UNAUTHENTICATED': return 'Your sign-in has expired. Please sign in again.';
-    case 'STORE_UNAVAILABLE': return 'Blynk is not taking orders right now. Please try again later.';
-    default: return e.message || 'Something went wrong. Please try again.';
+    case 'ADDRESS_NOT_FOUND': return ADDRESS_ERRORS.notFound;
+    case 'VALIDATION_ERROR': return ADDRESS_ERRORS.validation;
+    case 'UNAUTHENTICATED': return ADDRESS_ERRORS.expired;
+    case 'STORE_UNAVAILABLE': return ADDRESS_ERRORS.storeUnavailable;
+    case 'BAD_ADDRESS': return ADDRESS_ERRORS.incomplete;
+    default: return e.message || ADDRESS_ERRORS.generic;
   }
 }
 

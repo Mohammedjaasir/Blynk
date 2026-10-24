@@ -5,7 +5,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { AskUsPrompt, openAskUs, useAskUsOn } from '@/blynk/requests/AskUs';
 import { fetchMyRequests } from '@/blynk/requests/api';
-import { ASK_COPY, statusChip, type MyRequest } from '@/blynk/requests/model';
+import { ASK_COPY, requestDate, statusChip, type MyRequest } from '@/blynk/requests/model';
 import { Badge, Card, ListSkeleton, Page, StateView } from '@/blynk/ui/kit';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { DEMO } from '@/demo/mode';
@@ -30,7 +30,7 @@ export default function MyRequests() {
     const ctrl = new AbortController();
     fetchMyRequests(ctrl.signal)
       .then((l) => { setList(l); setError(null); })
-      .catch((e) => { if (!ctrl.signal.aborted) setError((e as Error).message || "We couldn't load your requests."); });
+      .catch((e) => { if (!ctrl.signal.aborted) setError((e as Error).message || ASK_COPY.loadFailed); });
     return () => ctrl.abort();
   }, [signedIn, on, tick, session?.user.id]);
 
@@ -39,9 +39,9 @@ export default function MyRequests() {
   ) : undefined;
 
   let body: React.ReactNode;
-  if (DEMO || !on) body = <StateView title={ASK_COPY.myRequests} message="Product requests open soon." />;
-  else if (!signedIn) body = <StateView title="Log in to see your requests" message="Requests you send while signed in show here." action="Log in" onAction={openSignIn} />;
-  else if (error && !list) body = <StateView title="Couldn't load your requests" message={error} action="Try again" onAction={load} />;
+  if (DEMO || !on) body = <StateView title={ASK_COPY.myRequests} message={ASK_COPY.soon} />;
+  else if (!signedIn) body = <StateView title={ASK_COPY.loginTitle} message={ASK_COPY.loginSub} action={ASK_COPY.login} onAction={openSignIn} />;
+  else if (error && !list) body = <StateView title={ASK_COPY.loadFailedTitle} message={error} action={ASK_COPY.tryAgain} onAction={load} />;
   else if (!list) body = <ListSkeleton rows={3} h={92} />;
   else if (!list.length) body = <StateView title={ASK_COPY.empty} message={ASK_COPY.emptySub} action={ASK_COPY.cta} onAction={() => openAskUs()} />;
   else {
@@ -57,7 +57,7 @@ export default function MyRequests() {
 
 function RequestRow({ r, index }: { r: MyRequest; index: number }) {
   const chip = statusChip(r.status);
-  const when = r.createdAt ? r.createdAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null;
+  const when = r.createdAt ? requestDate(r.createdAt) : null;
   return (
     <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(260)}>
       <Card>
@@ -65,7 +65,7 @@ function RequestRow({ r, index }: { r: MyRequest; index: number }) {
           <Text style={s.name} numberOfLines={2}>{r.name}</Text>
           <Badge tone={chip.tone} label={chip.label} />
         </View>
-        <Text style={s.meta}>{[r.categoryName, when ? `Asked ${when}` : null].filter(Boolean).join(' · ')}</Text>
+        <Text style={s.meta}>{[r.categoryName, when ? ASK_COPY.asked(when) : null].filter(Boolean).join(' · ')}</Text>
         {!!r.note && <Text style={s.note} numberOfLines={2}>{r.note}</Text>}
         <Text style={[s.status, r.status === 'ADDED' && { color: C.greenDark }]}>{chip.sub}</Text>
         {r.status === 'ADDED' && !!r.productId && (

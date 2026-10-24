@@ -1,3 +1,4 @@
+import { COMPONENT_WORDS } from '@/blynk/ui/componentWords';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
@@ -57,7 +58,7 @@ export function EmptyCartArt() {
     ],
   }));
   return (
-    <View style={styles.box} accessible accessibilityRole="image" accessibilityLabel="An empty basket">
+    <View style={styles.box} accessible accessibilityRole="image" accessibilityLabel={COMPONENT_WORDS.emptyBasket}>
       {ITEMS.map((it, i) => <Drop key={it.glyph} {...it} index={i} still={!!reduced} />)}
       <Animated.Text entering={ZoomIn.springify().mass(1).energyThreshold(1e-4)} style={[styles.basket, basketA]}>🧺</Animated.Text>
     </View>

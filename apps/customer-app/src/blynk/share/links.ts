@@ -10,6 +10,8 @@
  * The site address is a build value (EXPO_PUBLIC_SHARE_BASE_URL), https only. Without one it
  * is https://blynk.lk, the shop's public site. Expo inlines EXPO_PUBLIC_* at build time.
  */
+import { SHARE_WORDS } from './words';
+
 export const SHARE_BASE_URL: string = process.env.EXPO_PUBLIC_SHARE_BASE_URL || 'https://blynk.lk';
 
 /** Product ids are the API's ids: letters, digits, '-' and '_' only. */
@@ -48,7 +50,8 @@ export function productUrl(productId: string, baseUrl: string = SHARE_BASE_URL):
 /** What the share sheet sends: the name, then the link when there is one. */
 export function productShareText(name: string, productId: string, baseUrl: string = SHARE_BASE_URL): string {
   const url = productUrl(productId, baseUrl);
-  return url ? `${name} on Blynk\n${url}` : `${name} on Blynk`;
+  const text = SHARE_WORDS.product(name);
+  return url ? `${text}\n${url}` : text;
 }
 
 /** Refer a friend: `<site>/app/?ref=CODE`, or null without an https site or with a code that is not plain letters and digits. */
@@ -61,8 +64,7 @@ export function referralUrl(code: string, baseUrl: string = SHARE_BASE_URL): str
 /** What the referral share sheet sends: the code, then the link when there is one. */
 export function referralShareText(code: string, baseUrl: string = SHARE_BASE_URL): string {
   const url = referralUrl(code, baseUrl);
-  const text = `Join me on Blynk and get a reward on your first order. Use my code ${code}`;
-  return url ? `${text} or this link:\n${url}` : `${text} when you sign up.`;
+  return url ? `${SHARE_WORDS.referralWithLink(code)}\n${url}` : SHARE_WORDS.referralNoLink(code);
 }
 
 /** The `ref` code in a page's query string (normalised), or null when absent or malformed. */

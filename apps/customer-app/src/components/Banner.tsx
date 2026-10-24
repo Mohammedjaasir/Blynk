@@ -7,6 +7,7 @@ import Animated, {
 import Svg, { Defs, Ellipse, LinearGradient as SvgGrad, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { PublicHeroBanner } from '@/blynk/api/types';
 import { appColor } from '@/blynk/lib/appTexts';
+import { graphemes, hasIndic } from '@/blynk/lib/graphemes';
 import { useStore } from '@/blynk/store/StoreContext';
 import { HERO_COPY, HERO_LAYOUT, heroSubSize, heroWaveSpan, heroWordSize, resolveHero } from '@/blynk/promo/heroBanner';
 import { openPromoDestination } from '@/lib/nav';
@@ -73,7 +74,7 @@ function WaveWord({ word, color, wave, offset, clockO }: {
   const size = heroWordSize(word);
   return (
     <View style={{ flexDirection: 'row' }}>
-      {word.split('').map((ch, i) => (
+      {graphemes(word).map((ch, i) => (
         <WaveLetter key={i} ch={ch} color={color} size={size} wave={wave} at={offset + i} clock={clockO && ch === 'O'} />
       ))}
     </View>
@@ -329,7 +330,7 @@ export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, 
         {/* a custom (or the guest's longer) line may run 44 pt past the column (it shrinks to end before the item) */}
         {line && (
           <View style={[styles.subWrap, model?.fit && { marginRight: HERO_LAYOUT.textW - HERO_LAYOUT.subRoom }]}>
-            <Text style={[styles.sub, subSize !== 15 && { fontSize: subSize }]} numberOfLines={1}>
+            <Text style={[styles.sub, subSize !== 15 && { fontSize: subSize }, line && hasIndic(line) && { letterSpacing: 0 }]} numberOfLines={1}>
               {parts ? <>{parts[0]}{accent}{parts[1]}</> : line}
             </Text>
             <Animated.View style={[styles.underline, lineA]}>
@@ -341,7 +342,7 @@ export function Banner({ minPrice, freeCount, freeKind, pointsRule, onOrderNow, 
         <PressScale style={styles.ctaWrap} haptic onPress={link ? () => openPromoDestination(link) : onOrderNow}>
           <View style={styles.ctaSlab} />
           <View style={styles.cta}>
-            <Text style={styles.ctaTxt}>{ctaText}</Text>
+            <Text style={[styles.ctaTxt, hasIndic(ctaText) && { letterSpacing: 0 }]}>{ctaText}</Text>
             <Animated.View style={arrowA}>
               <ArrowRight size={13} color={V.ctaText} />
             </Animated.View>

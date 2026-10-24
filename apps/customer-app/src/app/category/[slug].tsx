@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Category } from '@/blynk/api/types';
 import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
+import { CATEGORY_SCREEN } from '@/blynk/catalog/browseWords';
 import { categoryRail, productsInView, resolveCategory, type RailRow } from '@/blynk/catalog/tree';
 import { categoryOfferActive } from '@/blynk/lib/categories';
 import { CATEGORIES } from '@/blynk/ui/strings';
@@ -62,7 +63,7 @@ export default function CategoryScreen() {
     if (y + h > visible) railRef.current?.scrollTo({ y: Math.max(0, y - visible / 2 + h / 2), animated: false });
   };
   const search = () => view && router.push({ pathname: '/search', params: { c: view.root.slug, name: view.root.name } });
-  const offer = view && categoryOfferActive(view.root) ? `${view.root.offer_percent}% off everything here` : null;
+  const offer = view && categoryOfferActive(view.root) ? CATEGORY_SCREEN.offerLine(view.root.offer_percent as number) : null;
 
   return (
     <View style={styles.root}>
@@ -71,12 +72,12 @@ export default function CategoryScreen() {
         {/* Back always lands on the categories list (owner, 2026-10-24: "when I click back it takes me to
             home, but I want it to take us to the category section"): back to it when it is under this
             screen, else it replaces this screen */}
-        <PressScale onPress={() => router.dismissTo('/categories')} style={{ padding: 4 }} accessibilityLabel="Back" accessibilityRole="button">
+        <PressScale onPress={() => router.dismissTo('/categories')} style={{ padding: 4 }} accessibilityLabel={CATEGORY_SCREEN.back} accessibilityRole="button">
           <BackIcon size={20} color={C.text} stroke={1.8} />
         </PressScale>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1} accessibilityRole="header">{view?.root.name ?? CATEGORIES.title}</Text>
-          {!!view && <Text style={styles.count}>{CATEGORIES.itemCount(products.length)}{view.selected ? ` in ${view.selected.name}` : ''}</Text>}
+          {!!view && <Text style={styles.count}>{view.selected ? CATEGORY_SCREEN.countIn(products.length, view.selected.name) : CATEGORIES.itemCount(products.length)}</Text>}
         </View>
         {!!view && (
           <PressScale onPress={search} style={styles.searchBtn} accessibilityLabel={CATEGORIES.search} accessibilityRole="button">

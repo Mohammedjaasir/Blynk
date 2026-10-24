@@ -1,3 +1,5 @@
+import { API_WORDS } from './words';
+
 /** Blynk API base. Expo inlines EXPO_PUBLIC_* at build time, so read it as a plain property. */
 export const API_BASE_URL: string = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1';
 export const REQUEST_TIMEOUT_MS = 15_000;
@@ -53,7 +55,7 @@ export async function apiRequest<T>(path: string, opts: Options = {}): Promise<T
     const timedOut = ctrl.signal.aborted && !opts.signal?.aborted;
     const cancelled = !!opts.signal?.aborted;
     const error = new ApiError(
-      timedOut ? 'This is taking too long. Check your connection and try again.' : "We couldn't reach Blynk. Check your connection and try again.",
+      timedOut ? API_WORDS.timeout : API_WORDS.network,
       timedOut ? 408 : 0,
       timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
     );
@@ -69,8 +71,8 @@ export async function apiRequest<T>(path: string, opts: Options = {}): Promise<T
   try { payload = text ? JSON.parse(text) : {}; } catch { /* non-JSON body */ }
   if (res.ok && payload.success !== false) return payload.data as T;
   // 502 OTP_DELIVERY_FAILED is a 5xx the customer must understand; keep its code, not the server text
-  if (res.status >= 500) throw new ApiError('Something went wrong on our side. Please try again.', res.status, payload.error?.code, payload.error?.details);
-  throw new ApiError(payload.error?.message ?? 'Request failed.', res.status, payload.error?.code, payload.error?.details);
+  if (res.status >= 500) throw new ApiError(API_WORDS.server, res.status, payload.error?.code, payload.error?.details);
+  throw new ApiError(payload.error?.message ?? API_WORDS.failed, res.status, payload.error?.code, payload.error?.details);
 }
 
 export const apiPost = <T>(path: string, body: unknown, token?: string | null, signal?: AbortSignal) =>

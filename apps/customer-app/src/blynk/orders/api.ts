@@ -1,4 +1,5 @@
 import { apiGet, apiPost, ApiError } from '@/blynk/api/client';
+import { pick } from '@/blynk/i18n/localized';
 import { authed } from '@/blynk/auth/session';
 import { parseSlots, type DeliverySlots } from '@/blynk/checkout/slots';
 import { checkoutWalletOf, parseOrderWallet } from '@/blynk/wallet/models';
@@ -98,7 +99,7 @@ export async function getDeliverySlots(signal?: AbortSignal, productIds?: readon
   const ids = productIdsQuery(productIds);
   const raw = await authed((t) => apiGet<unknown>(`/orders/slots${ids ? `?${ids}` : ''}`, t, signal));
   const parsed = parseSlots(raw);
-  if (!parsed) throw new ApiError("We couldn't load delivery times.", 500, 'BAD_SLOTS');
+  if (!parsed) throw new ApiError(pick("We couldn't load delivery times.", 'බෙදාහැරීමේ වේලාවන් ලබාගන්න බැරි වුණා.', 'டெலிவரி நேரங்களை ஏற்ற முடியவில்லை.'), 500, 'BAD_SLOTS');
   return parsed;
 }
 

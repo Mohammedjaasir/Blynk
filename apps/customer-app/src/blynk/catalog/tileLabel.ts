@@ -4,9 +4,15 @@
  * is the "Sold out" chip on its photo; an offer whose struck regular price is showing needs no
  * caption (the struck price says it), so the lead time may show there. Pure.
  */
+import { localized } from '@/blynk/i18n/localized';
+
 export type TileLabel = { kind: 'offer' | 'lead'; text: string } | null;
 
-export const TILE_COPY = { offer: 'Offer price' } as const;
+export const TILE_COPY = localized(
+  { offer: 'Offer price' } as const,
+  { si: { offer: 'දීමනා මිල' }, ta: { offer: 'ஆஃபர் விலை' } },
+  'catalog.TILE_COPY',
+);
 
 export function tileLabel(t: {
   available: boolean;

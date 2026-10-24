@@ -4,6 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { PressScale } from '@/components/ui';
 import { C, F } from '@/lib/theme';
 import { TrackingMap } from './TrackingMap';
+import { TRACKING_WORDS } from './words';
 import { useLiveTracking } from './useLiveTracking';
 
 /*
@@ -16,8 +17,6 @@ import { useLiveTracking } from './useLiveTracking';
  * closes the stream. It needs the order's delivery point (order.delivery_latitude/longitude,
  * sent by GET /orders/:id); without one it renders nothing.
  */
-
-export const MAP_SECTION_TITLE = 'Live tracking';
 
 export type LatLngLike = { lat: number | string | null | undefined; lng: number | string | null | undefined };
 
@@ -35,7 +34,7 @@ export function destinationOf(d: LatLngLike | null | undefined): { lat: number; 
 export const isTrackable = (o: { order_status?: string | null } | null | undefined) => o?.order_status === 'OUT_FOR_DELIVERY';
 
 /** "Kamal is on the way" / "Your rider is on the way". */
-export const onTheWayText = (name?: string | null) => `${(name ?? '').trim() || 'Your rider'} is on the way`;
+export const onTheWayText = (name?: string | null) => TRACKING_WORDS.onTheWay((name ?? '').trim() || TRACKING_WORDS.yourRider);
 
 export function LiveTracking({
   orderId, destination, riderName, mapHeight = 220, full = false, onOpenFull,
@@ -60,9 +59,9 @@ export function LiveTracking({
     <Animated.View entering={FadeIn.duration(200)} style={full ? styles.fullWrap : styles.card}>
       {!full && (
         <View style={styles.head}>
-          <Text style={styles.title}>{MAP_SECTION_TITLE}</Text>
+          <Text style={styles.title}>{TRACKING_WORDS.sectionTitle}</Text>
           <PressScale onPress={open} style={styles.fullBtn} scaleTo={0.94}>
-            <Text style={styles.fullTxt}>Full map</Text>
+            <Text style={styles.fullTxt}>{TRACKING_WORDS.fullMap}</Text>
           </PressScale>
         </View>
       )}
@@ -85,7 +84,7 @@ export function LiveTracking({
           <Text style={styles.onWay}>{onTheWayText(riderName)}</Text>
         )}
         {!!t.eta && <Text style={styles.eta}>{t.eta}</Text>}
-        {t.closed && <Text style={styles.capTxt}>Your order is no longer on the road.</Text>}
+        {t.closed && <Text style={styles.capTxt}>{TRACKING_WORDS.closed}</Text>}
       </View>
     </Animated.View>
   );

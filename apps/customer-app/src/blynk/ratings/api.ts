@@ -2,6 +2,7 @@ import { ApiError, apiGet, apiPost } from '@/blynk/api/client';
 import { authed } from '@/blynk/auth/session';
 import { noteNotReady } from '@/blynk/lib/featureGate';
 import { parseRatingAnswer, ratingBody, type RatingAnswer, type RatingTag } from './model';
+import { RATING_WORDS } from './words';
 
 /*
  * Signed-in rating and tip calls (migration 055). Every call notes a 503 RATINGS_NOT_READY (the
@@ -24,7 +25,7 @@ export async function fetchRating(orderId: string, signal?: AbortSignal): Promis
 /** POST /orders/:id/rating (a new rating, or a change within 24 h). */
 export async function sendRating(orderId: string, input: { stars: number; tags?: RatingTag[]; comment?: string | null }): Promise<RatingAnswer> {
   const body = ratingBody(input);
-  if (!body) throw new ApiError('Pick how many stars first.', 400, 'VALIDATION_ERROR');
+  if (!body) throw new ApiError(RATING_WORDS.pickStars, 400, 'VALIDATION_ERROR');
   try {
     const answer = parseRatingAnswer(await authed((t) => apiPost<unknown>(path(orderId, 'rating'), body, t)));
     // an answer without the row still means it was saved: show what was sent

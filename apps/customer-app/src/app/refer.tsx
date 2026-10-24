@@ -4,6 +4,7 @@ import { trackShare } from '@/blynk/analytics/track';
 import { useSession } from '@/blynk/auth/session';
 import { applyReferralCode, fetchReferral } from '@/blynk/rewards/api';
 import { creditLabel, referredByText, rewardDescription, type ReferralInfo } from '@/blynk/rewards/models';
+import { REWARD_WORDS as W } from '@/blynk/rewards/words';
 import { referralShareText } from '@/blynk/share/links';
 import { copyText, shareText } from '@/blynk/share/share';
 import { Body, Button, Card, Field, ListSkeleton, Page, SectionTitle, StateView, useToast } from '@/blynk/ui/kit';
@@ -26,17 +27,17 @@ export default function Refer() {
   const failed = !!load.error;
 
   let body: React.ReactNode;
-  if (DEMO) body = <StateView title="Refer a friend" message="Referral codes show here once the shop is live." />;
-  else if (!session) body = <StateView title="Log in to refer a friend" message="Your referral code is part of your account." action="Log in" onAction={openSignIn} />;
+  if (DEMO) body = <StateView title={W.referTitle} message={W.referDemo} />;
+  else if (!session) body = <StateView title={W.referLogIn} message={W.referLogInSub} action={W.logIn} onAction={openSignIn} />;
   else if (!info) body = failed
-    ? <StateView title="Couldn't load your referral code" message="Check your connection and try again." action="Try again" onAction={load.reload} />
+    ? <StateView title={W.referLoadFailed} message={W.loadFailedSub} action={W.tryAgain} onAction={load.reload} />
     : <ListSkeleton rows={3} h={110} />;
-  else if (!info.enabled) body = <StateView title="Not available right now" message="Refer a friend isn't running at the moment. Check back later." />;
+  else if (!info.enabled) body = <StateView title={W.notAvailable} message={W.referOff} />;
   else body = <Details info={info} onApplied={(text) => { showToast(text); load.reload(); }} toast={showToast} />;
 
   return (
     <View style={{ flex: 1 }}>
-      <Page title="Refer a friend">{body}</Page>
+      <Page title={W.referTitle}>{body}</Page>
       {toast}
     </View>
   );
@@ -44,36 +45,36 @@ export default function Refer() {
 
 function Details({ info, onApplied, toast }: { info: ReferralInfo; onApplied: (text: string) => void; toast: (m: string) => void }) {
   const share = async () => {
-    const r = await shareText(referralShareText(info.code), 'Join me on Blynk');
+    const r = await shareText(referralShareText(info.code), W.shareTitle);
     trackShare(r, 'referral');
-    if (r === 'copied') toast('Code copied');
+    if (r === 'copied') toast(W.codeCopied);
   };
-  const copy = async () => toast((await copyText(info.code)) ? 'Code copied' : "Couldn't copy the code");
+  const copy = async () => toast((await copyText(info.code)) ? W.codeCopied : W.copyFailed);
   return (
     <View>
       {info.reward && (
         <View style={{ marginBottom: 18 }}>
-          <Text style={s.title}>Give a reward, get a reward</Text>
+          <Text style={s.title}>{W.giveGet}</Text>
           <Body sub style={{ marginTop: 6 }}>{rewardDescription(info.reward)}</Body>
         </View>
       )}
       {!!info.code && (
         <Card>
-          <Text style={s.label}>Your code</Text>
-          <Text style={s.code} selectable accessibilityLabel={`Your code ${info.code.split('').join(' ')}`}>{info.code}</Text>
-          <Button label="Share your code" onPress={() => void share()} style={{ marginTop: 14 }} />
-          <Button label="Copy code" kind="quiet" onPress={() => void copy()} style={{ marginTop: 4 }} />
+          <Text style={s.label}>{W.yourCode}</Text>
+          <Text style={s.code} selectable accessibilityLabel={W.yourCodeA11y(info.code.split('').join(' '))}>{info.code}</Text>
+          <Button label={W.shareCode} onPress={() => void share()} style={{ marginTop: 14 }} />
+          <Button label={W.copyCode} kind="quiet" onPress={() => void copy()} style={{ marginTop: 4 }} />
         </Card>
       )}
       <View style={{ flexDirection: 'row', gap: 12 }}>
-        <Stat value={info.invitedCount} label="Friends joined" />
-        <Stat value={info.rewardedCount} label="Rewards earned" />
+        <Stat value={info.invitedCount} label={W.friendsJoined} />
+        <Stat value={info.rewardedCount} label={W.rewardsEarned} />
       </View>
       {info.credits.length > 0 && (
         <View style={{ marginTop: 22 }}>
-          <SectionTitle>Waiting for your next order</SectionTitle>
+          <SectionTitle>{W.waiting}</SectionTitle>
           {info.credits.map((c, i) => <Body key={i} style={{ marginBottom: 4 }}>•  {creditLabel(c)}</Body>)}
-          <Body sub>Taken off automatically when it is your biggest saving.</Body>
+          <Body sub>{W.waitingNote}</Body>
         </View>
       )}
       {info.referredBy && <Body sub style={{ marginTop: 22 }}>{referredByText(info.referredBy)}</Body>}
@@ -105,9 +106,9 @@ function ApplyField({ onApplied }: { onApplied: (text: string) => void }) {
   };
   return (
     <Card style={{ marginTop: 22 }}>
-      <Text style={s.rowLabel}>Have a friend&apos;s code?</Text>
+      <Text style={s.rowLabel}>{W.haveCode}</Text>
       <Field
-        label="Referral code"
+        label={W.codeLabel}
         value={code}
         onChange={(t) => { setCode(t.toUpperCase()); setError(null); }}
         autoCapitalize="characters"
@@ -118,7 +119,7 @@ function ApplyField({ onApplied }: { onApplied: (text: string) => void }) {
         returnKeyType="done"
         onSubmitEditing={() => void apply()}
       />
-      <Button label="Apply" kind="secondary" busy={busy} onPress={() => void apply()} style={{ marginTop: 12 }} />
+      <Button label={W.apply} kind="secondary" busy={busy} onPress={() => void apply()} style={{ marginTop: 12 }} />
     </Card>
   );
 }

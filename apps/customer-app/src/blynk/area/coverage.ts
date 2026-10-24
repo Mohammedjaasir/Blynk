@@ -1,5 +1,6 @@
 import type { StoreInfo } from '@/blynk/api/types';
 import { townFromHub } from '@/blynk/address/forms';
+import { localized } from '@/blynk/i18n/localized';
 import { CENTRE_PLACE_ID, CLOCK_TOWER, FALLBACK_RADIUS_KM, PLACES, type LatLng, type Place } from './places';
 
 /*
@@ -62,8 +63,18 @@ export function coverageOf(store: Pick<StoreInfo, 'radius_km' | 'store_location'
   };
 }
 
+/** The landmark's name as people say it in each language (Coverage.landmark itself stays the English key). */
+const LANDMARKS = localized(
+  { 'Clock Tower': 'Clock Tower' } as Record<string, string>,
+  { si: { 'Clock Tower': 'ඔරලෝසු කණුව' }, ta: { 'Clock Tower': 'கடிகார கோபுரம்' } },
+  'area.LANDMARKS',
+);
+
+/** "Clock Tower", or the town when the store is elsewhere. */
+export const placeName = (c: Pick<Coverage, 'landmark' | 'town'>) => (c.landmark ? (LANDMARKS[c.landmark] ?? c.landmark) : c.town);
+
 /** "Clock Tower, Dharga Town", or just the town when the store is elsewhere. */
-export const centreName = (c: Coverage) => (c.landmark ? `${c.landmark}, ${c.town}` : c.town);
+export const centreName = (c: Coverage) => (c.landmark ? `${placeName(c)}, ${c.town}` : c.town);
 
 /** "1.4 km" under 10 km, "11 km" from 10 km. */
 export function kmText(km: number): string {

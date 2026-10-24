@@ -5,6 +5,7 @@ import {
   type Appointment, type AppointmentRating, type Clinic, type ClinicDoctor, type DayAvailability, type Doctor,
 } from './types';
 import { isoDate } from './format';
+import { DOCTOR_FORMAT as W } from './words';
 
 /*
  * Channel doctors (Flutter DentalProvider). Discovery (clinics, doctors, slots) is public only
@@ -18,7 +19,8 @@ function read<T>(path: string, signal?: AbortSignal): Promise<T> {
   return getSession() ? authed((t) => apiGet<T>(path, t, signal)) : apiGet<T>(path, null, signal);
 }
 
-const missing = (what: string) => new ApiError(`${what} was not returned by the server.`, 500);
+const NOT_RETURNED = { Clinic: () => W.notReturnedClinic, Doctor: () => W.notReturnedDoctor, Hold: () => W.notReturnedHold, Appointment: () => W.notReturnedAppointment, Rating: () => W.notReturnedRating };
+const missing = (what: keyof typeof NOT_RETURNED) => new ApiError(NOT_RETURNED[what](), 500);
 
 /** The guest must sign in first (Doctors need sign-in is on). */
 export const isSignInRequired = (e: unknown) =>
@@ -79,7 +81,7 @@ export const isSlotConflict = (e: ApiError | null) => e?.code === 'SLOT_HELD' ||
 /** 422 SLOT_IN_PAST: the time elapsed on the way to the server. */
 export const isSlotInPast = (e: ApiError | null) => e?.code === 'SLOT_IN_PAST';
 
-const asApiError = (e: unknown) => (e instanceof ApiError ? e : new ApiError('Something went wrong. Please try again.', 0));
+const asApiError = (e: unknown) => (e instanceof ApiError ? e : new ApiError(W.generic, 0));
 
 export const newIdempotencyKey = () => `app_dental_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 

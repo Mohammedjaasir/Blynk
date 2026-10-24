@@ -1,5 +1,6 @@
 import type { StoreInfo } from '@/blynk/api/types';
 import type { BasketStatus, Frequency } from './models';
+import { SCHEDULE_WORDS as W } from './words';
 
 /*
  * Repeat basket schedules in words, and the times a customer may pick. Everything is Sri Lanka
@@ -12,9 +13,9 @@ const OFFSET_MIN = 330;
 const DAY_MS = 86_400_000;
 const STEP = 15;
 
-export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
-export const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+/** 0 = Sunday ... 6 = Saturday, in the customer's language (read while rendering). */
+export const weekdayName = (wd: number): string => W.weekdays[wd];
+export const weekdayShort = (wd: number): string => W.weekdaysShort[wd];
 /** GET /store `hours.days` keys by weekday (0 = Sunday, as the API's `weekday`). */
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
@@ -52,18 +53,18 @@ export function timeLabel(hhmm: string): string {
   if (n === null) return hhmm;
   const h = Math.floor(n / 60) % 24, m = n % 60;
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+  return `${h12}:${String(m).padStart(2, '0')} ${h < 12 ? W.am : W.pm}`;
 }
 
 /** '8 am' for an hour chip. */
-export const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h % 24 < 12 ? 'am' : 'pm'}`;
+export const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h % 24 < 12 ? W.am : W.pm}`;
 
 /** "Every day at 8:00 am", "Every Monday at 8:00 am", "Every 2 weeks on Monday at 8:00 am". */
 export function scheduleText(frequency: Frequency, weekday: number | null, placeAt: string): string {
   const at = timeLabel(placeAt);
-  const day = weekday !== null && weekday >= 0 && weekday <= 6 ? WEEKDAYS[weekday] : null;
-  if (frequency === 'DAILY' || !day) return `Every day at ${at}`;
-  return frequency === 'WEEKLY' ? `Every ${day} at ${at}` : `Every 2 weeks on ${day} at ${at}`;
+  const day = weekday !== null && weekday >= 0 && weekday <= 6 ? weekdayName(weekday) : null;
+  if (frequency === 'DAILY' || !day) return W.everyDay(at);
+  return frequency === 'WEEKLY' ? W.everyWeekday(day, at) : W.everyTwoWeeks(day, at);
 }
 
 /** "Today 8:00 am", "Tomorrow 8:00 am", "Mon 8:00 am" (this week), "Mon 3 Nov, 8:00 am" (later). */
@@ -71,16 +72,16 @@ export function whenText(at: Date, now: Date = new Date()): string {
   const a = colombo(at), n = colombo(now);
   const clock = timeLabel(fromMinutes(a.minutes));
   const days = Math.round((Date.UTC(a.y, a.m - 1, a.day) - Date.UTC(n.y, n.m - 1, n.day)) / DAY_MS);
-  if (days === 0) return `Today ${clock}`;
-  if (days === 1) return `Tomorrow ${clock}`;
-  if (days > 1 && days < 7) return `${WEEKDAYS_SHORT[a.weekday]} ${clock}`;
-  return `${WEEKDAYS_SHORT[a.weekday]} ${a.day} ${MONTHS[a.m - 1]}, ${clock}`;
+  if (days === 0) return W.today(clock);
+  if (days === 1) return W.tomorrow(clock);
+  if (days > 1 && days < 7) return W.weekdayClock(weekdayShort(a.weekday), clock);
+  return W.later(weekdayShort(a.weekday), a.day, W.months[a.m - 1], clock);
 }
 
 /** "Next: Mon 8:00 am"; null when there is no next run. */
 export function nextRunText(iso: string | null | undefined, now: Date = new Date()): string | null {
   const at = iso ? new Date(iso) : null;
-  return at && !Number.isNaN(at.getTime()) ? `Next: ${whenText(at, now)}` : null;
+  return at && !Number.isNaN(at.getTime()) ? W.next(whenText(at, now)) : null;
 }
 
 /** "in 25 min", "in 5 h", "in 3 days"; null once the time has come. */
@@ -89,11 +90,11 @@ export function countdownText(iso: string | null | undefined, now: Date = new Da
   if (Number.isNaN(at)) return null;
   const min = Math.ceil((at - now.getTime()) / 60_000);
   if (min <= 0) return null;
-  if (min < 60) return `in ${min} min`;
+  if (min < 60) return W.inMinutes(min);
   const h = Math.floor(min / 60);
-  if (h < 24) return `in ${h} h`;
+  if (h < 24) return W.inHours(h);
   const d = Math.round(h / 24);
-  return d === 1 ? 'in 1 day' : `in ${d} days`;
+  return d === 1 ? W.inOneDay : W.inDays(d);
 }
 
 const PERIOD_DAYS: Record<Frequency, number> = { DAILY: 1, WEEKLY: 7, BIWEEKLY: 14 };
@@ -111,13 +112,13 @@ export function nextLine(
   b: { status: BasketStatus; skipNext: boolean; nextRunAt: string | null; frequency: Frequency },
   now: Date = new Date(),
 ): { title: string; sub: string | null; tone: 'active' | 'paused' | 'skip' } {
-  if (b.status === 'PAUSED') return { title: 'Paused', sub: 'Resume to get it again', tone: 'paused' };
-  if (!b.nextRunAt) return { title: 'Scheduling…', sub: null, tone: 'active' };
+  if (b.status === 'PAUSED') return { title: W.paused, sub: W.pausedSub, tone: 'paused' };
+  if (!b.nextRunAt) return { title: W.scheduling, sub: null, tone: 'active' };
   if (b.skipNext) {
     const after = runAfter(b.nextRunAt, b.frequency);
-    return { title: `Next: ${whenText(after, now)}`, sub: `Skipping ${whenText(new Date(b.nextRunAt), now)}`, tone: 'skip' };
+    return { title: W.next(whenText(after, now)), sub: W.skipping(whenText(new Date(b.nextRunAt), now)), tone: 'skip' };
   }
-  return { title: nextRunText(b.nextRunAt, now) ?? 'Next: soon', sub: countdownText(b.nextRunAt, now), tone: 'active' };
+  return { title: nextRunText(b.nextRunAt, now) ?? W.nextSoon, sub: countdownText(b.nextRunAt, now), tone: 'active' };
 }
 
 /* ---------------------------------------------------------------- times from the opening hours */
@@ -183,7 +184,7 @@ export function defaultTime(options: string[], preferred?: string | null): strin
 export function startDates(now: Date = new Date(), count = 7): { ymd: string; label: string }[] {
   return Array.from({ length: count }, (_, i) => {
     const c = colombo(new Date(now.getTime() + i * DAY_MS));
-    return { ymd: c.ymd, label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : `${WEEKDAYS_SHORT[c.weekday]} ${c.day}` };
+    return { ymd: c.ymd, label: i === 0 ? W.startToday : i === 1 ? W.startTomorrow : W.startDay(weekdayShort(c.weekday), c.day) };
   });
 }
 
@@ -205,6 +206,6 @@ export function firstRun(args: { frequency: Frequency; weekday: number | null; p
 
 /** A short name for a new basket so the cards tell them apart ("Daily basket", "Monday basket"). */
 export function suggestName(frequency: Frequency, weekday: number | null): string {
-  if (frequency === 'DAILY' || weekday === null) return 'Daily basket';
-  return frequency === 'WEEKLY' ? `${WEEKDAYS[weekday]} basket` : `Every other ${WEEKDAYS[weekday]}`;
+  if (frequency === 'DAILY' || weekday === null) return W.dailyBasket;
+  return frequency === 'WEEKLY' ? W.weeklyBasket(weekdayName(weekday)) : W.everyOther(weekdayName(weekday));
 }

@@ -15,6 +15,7 @@ import { useRepeatBaskets } from './hooks';
 import { canRepeatOrder, itemsFromCart, itemsFromOrder } from './payload';
 import { RepeatCreateSheet, type RepeatSource } from './RepeatSheet';
 import { nextRunText } from './schedule';
+import { REPEAT_WORDS } from './words';
 
 /*
  * Where repeat baskets are started and found, each mounted with one line by its screen: the
@@ -45,9 +46,9 @@ export function RepeatFromOrder({ order, style }: { order: Order; style?: StyleP
     <Animated.View entering={FadeIn.duration(220)} style={style}>
       <PressScale onPress={() => setOpen(true)} haptic scaleTo={0.97} style={st.orderBtn} accessibilityRole="button">
         <LoopIcon size={17} />
-        <Text style={st.orderTxt}>Repeat this basket</Text>
+        <Text style={st.orderTxt}>{REPEAT_WORDS.entries.orderBtn}</Text>
       </PressScale>
-      <Text style={st.orderSub}>Get these every day, week or 2 weeks - placed for you.</Text>
+      <Text style={st.orderSub}>{REPEAT_WORDS.entries.orderSub}</Text>
       {open && <RepeatCreateSheet source={source} onClose={() => setOpen(false)} />}
     </Animated.View>
   );
@@ -66,11 +67,11 @@ export function RepeatFromCart({ style }: { style?: StyleProp<ViewStyle> }) {
   if (!on || items.length === 0) return null;
   return (
     <Animated.View entering={FadeIn.duration(220)} style={style}>
-      <PressScale onPress={() => setOpen(true)} scaleTo={0.98} style={st.cartCard} accessibilityRole="button" accessibilityLabel="Repeat this basket">
+      <PressScale onPress={() => setOpen(true)} scaleTo={0.98} style={st.cartCard} accessibilityRole="button" accessibilityLabel={REPEAT_WORDS.entries.orderBtn}>
         <View style={st.cartIcon}><LoopIcon size={18} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={st.cartTitle}>Repeat this basket</Text>
-          <Text style={st.cartSub} numberOfLines={1}>Every day, week or 2 weeks - we place it for you</Text>
+          <Text style={st.cartTitle}>{REPEAT_WORDS.entries.orderBtn}</Text>
+          <Text style={st.cartSub} numberOfLines={1}>{REPEAT_WORDS.entries.cartSub}</Text>
         </View>
         <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={14} color={C.sub} stroke={2.2} /></View>
       </PressScale>
@@ -85,10 +86,11 @@ export function RepeatBasketsRow({ last }: { last?: boolean }) {
   if (!on) return null;
   const active = (list ?? []).filter((b) => b.status === 'ACTIVE');
   const soonest = active.map((b) => b.nextRunAt).filter((x): x is string => !!x).sort()[0];
-  const sub = list === null ? 'Groceries on a schedule'
-    : list.length === 0 ? 'Get your basket every day or week'
-      : soonest ? nextRunText(soonest) : `${list.length} paused`;
-  return <Row icon="🔁" title="Repeat baskets" sub={sub} onPress={() => router.push('/repeat-baskets')} last={last} />;
+  const w = REPEAT_WORDS.entries;
+  const sub = list === null ? w.rowSubLoading
+    : list.length === 0 ? w.rowSubEmpty
+      : soonest ? nextRunText(soonest) : w.pausedCount(list.length);
+  return <Row icon="🔁" title={w.rowTitle} sub={sub} onPress={() => router.push('/repeat-baskets')} last={last} />;
 }
 
 const st = StyleSheet.create({

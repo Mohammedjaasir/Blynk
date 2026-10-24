@@ -1,5 +1,31 @@
 import type { Product } from '@/blynk/api/types';
+import { localized } from '@/blynk/i18n/localized';
 import { VARIANT_COPY } from './variants';
+
+/** The words around a product's ordering hours. `time` is "6" or "6:30"; `pm` picks am / pm. */
+const HOURS_WORDS = localized(
+  {
+    clock: (time: string, pm: boolean) => `${time} ${pm ? 'pm' : 'am'}`,
+    only: (range: string) => `Only ${range}`,
+    until: (clock: string) => `Until ${clock}`,
+    available: (range: string) => `Available ${range}`,
+  } as const,
+  {
+    si: {
+      clock: (time: string, pm: boolean) => `${pm ? 'ප.ව.' : 'පෙ.ව.'} ${time}`,
+      only: (range: string) => `${range} පමණයි`,
+      until: (clock: string) => `${clock} දක්වා`,
+      available: (range: string) => `${range} අතර ලබාගත හැක`,
+    },
+    ta: {
+      clock: (time: string, pm: boolean) => `${time} ${pm ? 'பி.ப.' : 'மு.ப.'}`,
+      only: (range: string) => `${range} மட்டும்`,
+      until: (clock: string) => `${clock} வரை`,
+      available: (range: string) => `${range} கிடைக்கும்`,
+    },
+  },
+  'catalog.HOURS_WORDS',
+);
 
 /*
  * Time-limited products (owner, 2026-10-23: "juice from the morning till 6 ... product-wise,
@@ -14,7 +40,7 @@ export function clockText(t: string): string {
   const h = Number(t.slice(0, 2));
   const m = t.slice(3, 5);
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}${m === '00' ? '' : `:${m}`} ${h < 12 ? 'am' : 'pm'}`;
+  return HOURS_WORDS.clock(`${h12}${m === '00' ? '' : `:${m}`}`, h >= 12);
 }
 
 /** "6 am – 6 pm", or null when the product can be ordered any time. */
@@ -31,12 +57,12 @@ export const unavailableText = (p: Windowed): string => (closedByHours(p) ? (hou
 
 /** The product page's badge: "Until 6 pm" while open inside a window, "Only 6 am – 6 pm" while shut. */
 export function hoursBadge(p: Windowed): string | null {
-  if (closedByHours(p)) return `Only ${hoursText(p)}`;
-  return p.available_window && p.is_available ? `Until ${clockText(p.available_window.until)}` : null;
+  if (closedByHours(p)) return HOURS_WORDS.only(hoursText(p) as string);
+  return p.available_window && p.is_available ? HOURS_WORDS.until(clockText(p.available_window.until)) : null;
 }
 
 /** The product page's disabled button while shut by hours. */
-export const hoursButton = (p: Pick<Product, 'window_closed' | 'available_window'>): string | null => (closedByHours(p) ? `Available ${hoursText(p)}` : null);
+export const hoursButton = (p: Pick<Product, 'window_closed' | 'available_window'>): string | null => (closedByHours(p) ? HOURS_WORDS.available(hoursText(p) as string) : null);
 
 /**
  * The product card's quiet tag while the product is open inside its hours: "Until 6 pm" (owner's
@@ -46,5 +72,5 @@ export const hoursButton = (p: Pick<Product, 'window_closed' | 'available_window
 export function hoursTag(p: Windowed): string | null {
   const w = p.available_window;
   if (!w || hoursText(p) === null || !p.is_available || p.window_closed === true) return null;
-  return `Until ${clockText(w.until)}`;
+  return HOURS_WORDS.until(clockText(w.until));
 }

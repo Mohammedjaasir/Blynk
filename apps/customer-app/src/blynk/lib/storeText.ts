@@ -1,4 +1,51 @@
 import type { Product, StoreInfo } from '../api/types';
+import { localized } from '../i18n/localized';
+
+/** The words the store-hours and delivery-fee lines are built from. */
+export const STORE_TEXT = localized(
+  {
+    am: 'AM',
+    pm: 'PM',
+    daysShort: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as string[],
+    hoursVary: (today: string) => `${today} today (hours vary by day)`,
+    everyDay: (range: string) => `${range}, every day`,
+    radius: (km: number) => `Groceries delivered within ${km} km`,
+    from: (amount: string) => `From ${amount}`,
+    calculated: 'Calculated at checkout',
+    today: 'today',
+    reopens: (when: string, time: string) => `Reopens ${when}, ${time}`,
+  },
+  {
+    si: {
+      am: 'පෙ.ව.',
+      pm: 'ප.ව.',
+      daysShort: ['සඳු', 'අඟහ', 'බදා', 'බ්‍රහ', 'සිකු', 'සෙන', 'ඉරි'],
+      hoursVary: (today: string) => `අද ${today} (දින අනුව වේලාවන් වෙනස් වේ)`,
+      everyDay: (range: string) => `${range}, සෑම දිනකම`,
+      radius: (km: number) => `කි.මී. ${km} ක් ඇතුළත සිල්ලර බඩු බෙදාහරිනවා`,
+      from: (amount: string) => `${amount} සිට`,
+      calculated: 'ඇණවුම් කරන විට ගණනය වේ',
+      today: 'අද',
+      reopens: (when: string, time: string) => `${when} ${time} ට නැවත විවෘත වේ`,
+    },
+    ta: {
+      am: 'AM',
+      pm: 'PM',
+      daysShort: ['திங்', 'செவ்', 'புத', 'வியா', 'வெள்', 'சனி', 'ஞாயி'],
+      hoursVary: (today: string) => `இன்று ${today} (நாளுக்கு ஏற்ப நேரம் மாறும்)`,
+      everyDay: (range: string) => `${range}, தினமும்`,
+      radius: (km: number) => `${km} கி.மீ.க்குள் மளிகைப் பொருட்கள் டெலிவரி`,
+      from: (amount: string) => `${amount} முதல்`,
+      calculated: 'ஆர்டர் செய்யும்போது கணக்கிடப்படும்',
+      today: 'இன்று',
+      reopens: (when: string, time: string) => `${when} ${time} க்கு மீண்டும் திறக்கும்`,
+    },
+  },
+  'lib.STORE_TEXT',
+);
+
+/** "8 AM" / "9:30 PM" with the language's own AM and PM. */
+const withMeridiem = (time: string) => time.replace(/AM$/, STORE_TEXT.am).replace(/PM$/, STORE_TEXT.pm);
 
 /** "08:00" -> "8 AM", "21:30" -> "9:30 PM". Returns null for anything that is not HH:MM. */
 export function formatClock(hhmm: string | undefined | null): string | null {
@@ -7,7 +54,7 @@ export function formatClock(hhmm: string | undefined | null): string | null {
   const h = Number(m[1]), min = Number(m[2]);
   if (h > 23 || min > 59) return null;
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}${min ? `:${m[2]}` : ''} ${h < 12 ? 'AM' : 'PM'}`;
+  return `${h12}${min ? `:${m[2]}` : ''} ${h < 12 ? STORE_TEXT.am : STORE_TEXT.pm}`;
 }
 
 /** "8 AM – 9 PM" from the store's delivery hours, or null when the store has not loaded. */
@@ -17,7 +64,7 @@ export function formatHours(store: StoreInfo | null): string | null {
 }
 
 const WEEK = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
-const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const EN_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /**
  * The opening hours with their days, from the weekly schedule Admin / Ops set (owner,
@@ -37,6 +84,7 @@ export function hoursSummary(store: StoreInfo | null): string | null {
   if (open.length === 7) return `${range}, every day`;
   const idx = open.map((x) => x.i);
   const run = idx.every((v, n) => n === 0 || v === idx[n - 1]! + 1);
+  const DAY_SHORT = STORE_TEXT.daysShort;
   const dayText = run && idx.length > 2 ? `${DAY_SHORT[idx[0]!]}–${DAY_SHORT[idx[idx.length - 1]!]}` : idx.map((v) => DAY_SHORT[v]).join(', ');
   return `${range}, ${dayText}`;
 }
@@ -44,7 +92,7 @@ export function hoursSummary(store: StoreInfo | null): string | null {
 /** "Groceries delivered within 4 km", or null when the radius is not known. */
 export function radiusText(store: StoreInfo | null): string | null {
   const r = store?.radius_km;
-  return typeof r === 'number' && Number.isFinite(r) && r > 0 ? `Groceries delivered within ${r} km` : null;
+  return typeof r === 'number' && Number.isFinite(r) && r > 0 ? STORE_TEXT.radius(r) : null;
 }
 
 export const formatOfferEnd = (iso: string) =>
@@ -86,7 +134,7 @@ export function deliveryFeeText(store: StoreInfo | null, format: (n: number) => 
   // per-km fees: the lowest one until the address is known (owner, 2026-10-19: "we have to show
   // case the delivery amount" instead of "Calculated at checkout")
   const from = store?.delivery_fee_from_lkr;
-  return typeof from === 'number' && Number.isFinite(from) && from > 0 ? `From ${format(from)}` : 'Calculated at checkout';
+  return typeof from === 'number' && Number.isFinite(from) && from > 0 ? STORE_TEXT.from(format(from)) : STORE_TEXT.calculated;
 }
 
 /** "Reopens Tue, 8 AM" from next_open_at / reopens_at (shown in Sri Lanka time); null when unknown. */
@@ -97,8 +145,9 @@ export function reopensText(store: StoreInfo | null, now: Date = new Date()): st
   if (Number.isNaN(at.getTime())) return null;
   const tz = 'Asia/Colombo';
   const day = (d: Date) => d.toLocaleDateString('en-GB', { timeZone: tz });
-  const time = at.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+  const time = withMeridiem(at.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).replace(':00', ''));
   const sameDay = day(at) === day(now);
-  const weekday = at.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'short' });
-  return `Reopens ${sameDay ? 'today' : weekday}, ${time}`;
+  const enDay = at.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'short' });
+  const weekday = STORE_TEXT.daysShort[EN_DAYS.indexOf(enDay)] ?? enDay;
+  return STORE_TEXT.reopens(sameDay ? STORE_TEXT.today : weekday, time);
 }

@@ -7,6 +7,7 @@ import { openSignIn } from '@/blynk/ui/signIn';
 import { DEMO } from '@/demo/mode';
 import { DOCTORS_OFF } from '@/blynk/ui/strings';
 import { doctorsGate, doctorsVisible, DOCTORS_SIGN_IN } from './access';
+import { DOCTOR_UI as W } from './words';
 
 /** The sign-in prompt, inside any doctors screen (also for a server SIGN_IN_REQUIRED). */
 export const DoctorsSignInPrompt = ({ title = DOCTORS_SIGN_IN.title }: { title?: string }) => (
@@ -22,12 +23,12 @@ export function DoctorsGate({ children }: { children: ReactNode }) {
   const signedIn = !!useSession();
   const store = useStore();
   if (DEMO) {
-    return <Page title="Channel doctors"><StateView title="Channel doctors" message="Book a doctor here once the shop is live. This is a preview." /></Page>;
+    return <Page title={W.title}><StateView title={W.title} message={W.preview} /></Page>;
   }
   // switched off in Admin / Ops (GET /store doctors_enabled false): a deep link lands here, not on a 404
   if (store && !doctorsVisible(store)) {
     return (
-      <Page title="Channel doctors">
+      <Page title={W.title}>
         <StateView
           title={DOCTORS_OFF.title}
           message={signedIn ? DOCTORS_OFF.message : null}
@@ -38,7 +39,7 @@ export function DoctorsGate({ children }: { children: ReactNode }) {
     );
   }
   if (doctorsGate(signedIn, store) === 'sign-in') {
-    return <Page title="Channel doctors"><DoctorsSignInPrompt /></Page>;
+    return <Page title={W.title}><DoctorsSignInPrompt /></Page>;
   }
   return <>{children}</>;
 }

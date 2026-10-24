@@ -18,9 +18,9 @@ import {
 import { useSession } from '@/blynk/auth/session';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import {
-  combosWith, detailRows, fetchProductDetail, isProductGone, NOTIFY_ME_LABEL, NOTIFY_ME_ON_HINT, NOTIFY_ME_ON_LABEL,
-  notifyMeAction, setNotifyMe, unitLine,
+  combosWith, detailRows, fetchProductDetail, isProductGone, notifyMeAction, setNotifyMe, unitLine,
 } from '@/blynk/catalog/product';
+import { BROWSE_ERRORS, NOTIFY_ME, PRODUCT_PAGE } from '@/blynk/catalog/browseWords';
 import { recallProduct } from '@/blynk/catalog/productCache';
 import { soldByText } from '@/blynk/catalog/soldBy';
 import { ComboAdd } from '@/blynk/combos/ComboViews';
@@ -86,7 +86,7 @@ export default function ProductPage() {
       .catch((e) => {
         if (n !== seq.current) return;
         if (isProductGone(e)) setGone(true);
-        else setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.');
+        else setError(e instanceof ApiError ? e.message : BROWSE_ERRORS.generic);
       });
   }, [id]);
 
@@ -125,7 +125,7 @@ export default function ProductPage() {
     if (!product) return;
     const r = await shareText(productShareText(product.name, product.id), product.name);
     trackShare(r, 'product', product.id);
-    if (r === 'copied') showToast('Link copied');
+    if (r === 'copied') showToast(PRODUCT_PAGE.linkCopied);
   };
 
   const toggleNotify = async () => {
@@ -140,7 +140,7 @@ export default function ProductPage() {
       // switched on: the moment a push is useful (Flutter notify_me_button)
       if (r === 'on') void requestPushPermission();
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.');
+      showToast(e instanceof ApiError ? e.message : BROWSE_ERRORS.generic);
     } finally {
       setNotifyBusy(false);
     }
@@ -155,20 +155,20 @@ export default function ProductPage() {
         <PressScale onPress={goBack} style={styles.round}><BackIcon size={18} color={C.ink} stroke={2} /></PressScale>
         {product && (
           <PressScale onPress={() => void share()} style={styles.round}>
-            <View accessible accessibilityRole="button" accessibilityLabel="Share this product"><ShareIcon size={16} color={C.ink} /></View>
+            <View accessible accessibilityRole="button" accessibilityLabel={PRODUCT_PAGE.shareA11y}><ShareIcon size={16} color={C.ink} /></View>
           </PressScale>
         )}
       </View>
 
       {gone ? (
-        <StateView title="Product no longer available" message="This item has been removed from the store." action="Go back" onAction={goBack} />
+        <StateView title={PRODUCT_PAGE.goneTitle} message={PRODUCT_PAGE.goneMessage} action={PRODUCT_PAGE.goBack} onAction={goBack} />
       ) : !product ? (
         error ? (
-          <StateView title="Couldn't load this product" message={error} action="Try again" onAction={() => { setError(null); load(); }} />
+          <StateView title={PRODUCT_PAGE.couldntLoad} message={error} action={PRODUCT_PAGE.tryAgain} onAction={() => { setError(null); load(); }} />
         ) : DEMO ? (
-          <StateView title="Product preview" message="Products open here once the shop is live." action="Go back" onAction={goBack} />
+          <StateView title={PRODUCT_PAGE.previewTitle} message={PRODUCT_PAGE.previewMessage} action={PRODUCT_PAGE.goBack} onAction={goBack} />
         ) : (
-          <View style={{ padding: 15, alignItems: 'center' }} accessibilityLabel="Loading product">
+          <View style={{ padding: 15, alignItems: 'center' }} accessibilityLabel={PRODUCT_PAGE.loading}>
             <Skeleton w={hero} h={hero} r={18} />
             <View style={{ alignSelf: 'stretch', marginTop: 24, gap: 10 }}>
               <Skeleton w={90} h={12} /><Skeleton h={26} /><Skeleton w={160} h={14} /><Skeleton w={140} h={30} />
@@ -197,12 +197,12 @@ export default function ProductPage() {
                   {variant ? formatLkr(variantPrice(variant)) : sized ? priceText(product) : formatLkr(effectivePrice(product))}
                 </Text>
                 {shown?.struck && <StruckPrice struck={shown.struck} money={formatLkr} style={styles.mrp} />}
-                {saved > 0 && <Text style={styles.save}>Save {formatLkr(saved)}</Text>}
+                {saved > 0 && <Text style={styles.save}>{PRODUCT_PAGE.save(formatLkr(saved))}</Text>}
                 {flashEnd !== null && orderable && <FlashPill endsAtMs={flashEnd} size="page" />}
-                <Badge tone={orderable ? 'positive' : 'neutral'} label={hoursBadge(product) ?? (orderable ? 'Available' : VARIANT_COPY.soldOut)} />
+                <Badge tone={orderable ? 'positive' : 'neutral'} label={hoursBadge(product) ?? (orderable ? PRODUCT_PAGE.available : VARIANT_COPY.soldOut)} />
               </View>
               {onOffer && !!priced?.offer_ends_at && (
-                <Text style={styles.ends}>Offer ends {orderTime(priced.offer_ends_at)}</Text>
+                <Text style={styles.ends}>{PRODUCT_PAGE.offerEnds(orderTime(priced.offer_ends_at))}</Text>
               )}
               {!!lead && <Text style={styles.lead}>{lead}</Text>}
               {!!bundle && product.is_available && <BundleBadgeLine offer={bundle} />}
@@ -211,21 +211,21 @@ export default function ProductPage() {
                 <View style={{ marginTop: 16 }}>
                   <Button
                     kind="secondary"
-                    label={signedIn && notify ? NOTIFY_ME_ON_LABEL : NOTIFY_ME_LABEL}
+                    label={signedIn && notify ? NOTIFY_ME.onLabel : NOTIFY_ME.label}
                     busy={notifyBusy}
                     onPress={() => void toggleNotify()}
                   />
-                  {signedIn && notify && <Text style={styles.hint}>{NOTIFY_ME_ON_HINT}</Text>}
+                  {signedIn && notify && <Text style={styles.hint}>{NOTIFY_ME.onHint}</Text>}
                 </View>
               )}
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(100).duration(300)}>
               {!!product.description?.trim() && (
-                <Section title="About this product"><Text style={styles.body}>{product.description.trim()}</Text></Section>
+                <Section title={PRODUCT_PAGE.about}><Text style={styles.body}>{product.description.trim()}</Text></Section>
               )}
               {detailRows(product).length > 0 && (
-                <Section title="Product details">
+                <Section title={PRODUCT_PAGE.details}>
                   {detailRows(product).map(([k, v]) => (
                     <View key={k} style={{ marginBottom: 14 }}>
                       <Text style={styles.attrKey}>{k}</Text>
@@ -235,7 +235,7 @@ export default function ProductPage() {
                 </Section>
               )}
               {combos.length > 0 && (
-                <Section title="Combo packs with this item">
+                <Section title={PRODUCT_PAGE.combos}>
                   {combos.map((c) => <ComboRow key={c.id} combo={c} showSavings={showSavings} />)}
                 </Section>
               )}
@@ -312,11 +312,11 @@ function ComboRow({ combo: c, showSavings }: { combo: Combo; showSavings: boolea
       <View style={{ flex: 1 }}>
         <Text style={styles.comboName}>{c.name}</Text>
         <Text style={styles.comboInside} numberOfLines={2}>{inside}</Text>
-        {!!c.ends_at && <Text style={styles.ends}>Offer ends {orderTime(c.ends_at)}</Text>}
+        {!!c.ends_at && <Text style={styles.ends}>{PRODUCT_PAGE.offerEnds(orderTime(c.ends_at))}</Text>}
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
         <Text style={styles.comboPrice}>{formatLkr(c.price)}</Text>
-        {showSavings && c.saving > 0 && <Text style={styles.save}>Save {formatLkr(c.saving)}</Text>}
+        {showSavings && c.saving > 0 && <Text style={styles.save}>{PRODUCT_PAGE.save(formatLkr(c.saving))}</Text>}
         <ComboAdd combo={c} compact />
       </View>
     </View>
@@ -327,7 +327,7 @@ function ComboRow({ combo: c, showSavings }: { combo: Combo; showSavings: boolea
 function SizeChips({ variants, selected, onPick }: { variants: ProductVariant[]; selected: string | null; onPick: (id: string) => void }) {
   if (!variants.length) {
     return (
-      <View style={[styles.chips, { marginTop: 16 }]} accessibilityLabel="Loading sizes">
+      <View style={[styles.chips, { marginTop: 16 }]} accessibilityLabel={PRODUCT_PAGE.loadingSizes}>
         <Skeleton w={64} h={36} r={18} /><Skeleton w={64} h={36} r={18} /><Skeleton w={64} h={36} r={18} />
       </View>
     );
@@ -371,7 +371,7 @@ function CtaBar({ product, sized, variant, bottom }: { product: Product; sized: 
   const soldOut = !product.is_available || (!!variant && !variant.is_available);
   return (
     <View style={[styles.bar, { paddingBottom: bottom + 12 }]}>
-      {q > 0 && <Animated.Text entering={FadeIn.duration(160)} style={styles.inCart}>✓ {variant ? `${q} × ${variant.label}` : q} in cart</Animated.Text>}
+      {q > 0 && <Animated.Text entering={FadeIn.duration(160)} style={styles.inCart}>{PRODUCT_PAGE.inCart(variant ? `${q} × ${variant.label}` : q)}</Animated.Text>}
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1 }}>
           {soldOut ? (
@@ -383,18 +383,18 @@ function CtaBar({ product, sized, variant, bottom }: { product: Product; sized: 
           ) : (
             <View style={styles.stepper}>
               <PressScale onPress={() => cartActions.remove(key)} style={styles.stepBtn} haptic>
-                <Text style={styles.stepTxt} accessibilityLabel="Remove one">−</Text>
+                <Text style={styles.stepTxt} accessibilityLabel={PRODUCT_PAGE.removeOne}>−</Text>
               </PressScale>
               <Text style={styles.stepQty}>{q}</Text>
               <PressScale onPress={() => cartActions.add(product, variant)} style={styles.stepBtn} haptic>
-                <Text style={styles.stepTxt} accessibilityLabel="Add one">+</Text>
+                <Text style={styles.stepTxt} accessibilityLabel={PRODUCT_PAGE.addOne}>+</Text>
               </PressScale>
             </View>
           )}
         </View>
         {hasCart && (
           <View style={{ flex: 1 }}>
-            <Button kind="secondary" label="View cart" onPress={() => router.push('/cart')} />
+            <Button kind="secondary" label={PRODUCT_PAGE.viewCart} onPress={() => router.push('/cart')} />
           </View>
         )}
       </View>

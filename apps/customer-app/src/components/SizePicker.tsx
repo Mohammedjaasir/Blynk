@@ -1,3 +1,4 @@
+import { COMPONENT_WORDS } from '@/blynk/ui/componentWords';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
@@ -58,7 +59,7 @@ function SizePickerSheet({ product }: { product: Product }) {
 
   return (
     <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(150)} style={styles.backdrop} accessibilityViewIsModal>
-      <Pressable style={StyleSheet.absoluteFill} onPress={closeSizePicker} accessibilityLabel="Close" />
+      <Pressable style={StyleSheet.absoluteFill} onPress={closeSizePicker} accessibilityLabel={COMPONENT_WORDS.close} />
       <Animated.View entering={SlideInDown.duration(260)} exiting={SlideOutDown.duration(180)} style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
         <View style={styles.grab} />
         <View style={styles.head}>
@@ -79,7 +80,7 @@ function SizePickerSheet({ product }: { product: Product }) {
               <Pressable onPress={retry} hitSlop={8}><Text style={styles.link}>{VARIANT_COPY.retry}</Text></Pressable>
             </View>
           ) : (
-            <View style={{ gap: 10, paddingVertical: 6 }} accessibilityLabel="Loading sizes">
+            <View style={{ gap: 10, paddingVertical: 6 }} accessibilityLabel={COMPONENT_WORDS.loadingSizes}>
               <Skeleton h={48} r={12} /><Skeleton h={48} r={12} /><Skeleton h={48} r={12} />
             </View>
           )}
@@ -121,19 +122,19 @@ export function VariantStepper({ product, variant, large }: { product: Product; 
   if (q === 0) {
     return (
       <PressScale onPress={() => cartActions.add(product, variant)} haptic scaleTo={0.92}>
-        <View style={[styles.add, large && styles.addLarge]} accessibilityRole="button" accessibilityLabel={`Add ${variant.label}`}>
-          <Text style={styles.addTxt}>ADD</Text>
+        <View style={[styles.add, large && styles.addLarge]} accessibilityRole="button" accessibilityLabel={COMPONENT_WORDS.addLabel(variant.label)}>
+          <Text style={styles.addTxt}>{COMPONENT_WORDS.add}</Text>
         </View>
       </PressScale>
     );
   }
   return (
     <View style={[styles.step, large && styles.addLarge]}>
-      <Pressable hitSlop={6} onPress={() => cartActions.remove(key)} style={styles.stepBtn} accessibilityLabel={`One less ${variant.label}`}>
+      <Pressable hitSlop={6} onPress={() => cartActions.remove(key)} style={styles.stepBtn} accessibilityLabel={COMPONENT_WORDS.oneLess(variant.label)}>
         <Text style={styles.stepTxt}>−</Text>
       </Pressable>
       <Text style={styles.stepQty}>{q}</Text>
-      <Pressable hitSlop={6} onPress={() => cartActions.add(product, variant)} style={styles.stepBtn} accessibilityLabel={`One more ${variant.label}`}>
+      <Pressable hitSlop={6} onPress={() => cartActions.add(product, variant)} style={styles.stepBtn} accessibilityLabel={COMPONENT_WORDS.oneMore(variant.label)}>
         <Text style={styles.stepTxt}>+</Text>
       </Pressable>
     </View>

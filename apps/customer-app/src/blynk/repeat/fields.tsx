@@ -9,7 +9,8 @@ import { PressScale } from '@/components/ui';
 import { withSpring } from '@/lib/motion';
 import { C, F } from '@/lib/theme';
 import type { Frequency } from './models';
-import { dayHours, defaultTime, hourGroups, hourLabel, startDates, timeOptions, WEEKDAYS, WEEKDAYS_SHORT } from './schedule';
+import { dayHours, defaultTime, hourGroups, hourLabel, startDates, timeOptions, weekdayName, weekdayShort } from './schedule';
+import { REPEAT_WORDS } from './words';
 
 /*
  * The schedule part of the repeat basket sheets: how often, which weekday, the order time (only
@@ -42,11 +43,12 @@ export function openWeekday(store: StoreInfo | null, from: number): number {
   return from;
 }
 
-const FREQS: { id: Frequency; label: string }[] = [
-  { id: 'DAILY', label: 'Every day' },
-  { id: 'WEEKLY', label: 'Every week' },
-  { id: 'BIWEEKLY', label: 'Every 2 weeks' },
-];
+const FREQ_IDS: Frequency[] = ['DAILY', 'WEEKLY', 'BIWEEKLY'];
+/** The three choices in the customer's language (read while rendering). */
+const freqs = (): { id: Frequency; label: string }[] => {
+  const w = REPEAT_WORDS.fields;
+  return [{ id: 'DAILY', label: w.everyDay }, { id: 'WEEKLY', label: w.everyWeek }, { id: 'BIWEEKLY', label: w.everyTwoWeeks }];
+};
 /** Monday first, as a Sri Lankan calendar reads. */
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
@@ -57,7 +59,8 @@ export function Label({ children }: { children: string }) {
 /** Three choices with a yellow pill that springs to the chosen one. */
 function Segmented({ value, onChange }: { value: Frequency; onChange: (f: Frequency) => void }) {
   const [w, setW] = useState(0);
-  const idx = Math.max(0, FREQS.findIndex((f) => f.id === value));
+  const FREQS = freqs();
+  const idx = Math.max(0, FREQ_IDS.indexOf(value));
   const x = useSharedValue(0);
   const segW = w > 0 ? (w - 8) / FREQS.length : 0;
   useEffect(() => { x.value = withSpring(idx * segW, { damping: 18, stiffness: 220 }); }, [idx, segW, x]);
@@ -123,12 +126,12 @@ export function ScheduleFields({ draft, onChange, store, addresses, showStart = 
 
   return (
     <View>
-      <Label>How often</Label>
+      <Label>{REPEAT_WORDS.fields.howOften}</Label>
       <Segmented value={draft.frequency} onChange={(f) => set({ frequency: f })} />
 
       {weekly && (
         <>
-          <Label>On</Label>
+          <Label>{REPEAT_WORDS.fields.on}</Label>
           <View style={st.week}>
             {WEEK_ORDER.map((wd) => {
               const closed = !dayHours(store, wd);
@@ -140,10 +143,10 @@ export function ScheduleFields({ draft, onChange, store, addresses, showStart = 
                   disabled={closed}
                   scaleTo={0.9}
                   accessibilityRole="button"
-                  accessibilityLabel={closed ? `${WEEKDAYS[wd]}, closed` : WEEKDAYS[wd]}
+                  accessibilityLabel={closed ? REPEAT_WORDS.fields.weekdayClosed(weekdayName(wd)) : weekdayName(wd)}
                   style={[st.day, on && st.chipOn, closed && st.chipOff]}
                 >
-                  <Text style={[st.dayTxt, on && st.chipTxtOn, closed && { color: C.faint, textDecorationLine: 'line-through' }]}>{WEEKDAYS_SHORT[wd]}</Text>
+                  <Text style={[st.dayTxt, on && st.chipTxtOn, closed && { color: C.faint, textDecorationLine: 'line-through' }]}>{weekdayShort(wd)}</Text>
                 </PressScale>
               );
             })}
@@ -151,9 +154,9 @@ export function ScheduleFields({ draft, onChange, store, addresses, showStart = 
         </>
       )}
 
-      <Label>Order time</Label>
+      <Label>{REPEAT_WORDS.fields.orderTime}</Label>
       {options.length === 0 ? (
-        <Text style={st.note}>{store ? `We're closed on ${weekly ? `${WEEKDAYS[draft.weekday]}s` : 'every day'} - pick another day.` : 'Loading our opening hours…'}</Text>
+        <Text style={st.note}>{store ? (weekly ? REPEAT_WORDS.fields.closedOnDay(weekdayName(draft.weekday)) : REPEAT_WORDS.fields.closedEveryDay) : REPEAT_WORDS.fields.loadingHours}</Text>
       ) : (
         <>
           <ScrollView ref={hoursRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.row}>
@@ -171,7 +174,7 @@ export function ScheduleFields({ draft, onChange, store, addresses, showStart = 
               <Chip
                 key={m}
                 label={`:${m}`}
-                a11y={`${m} minutes past`}
+                a11y={REPEAT_WORDS.fields.minutesPast(m)}
                 on={draft.time?.slice(3, 5) === m}
                 disabled={!minutes.includes(m)}
                 onPress={() => hour !== null && set({ time: `${String(hour).padStart(2, '0')}:${m}` })}
@@ -179,17 +182,17 @@ export function ScheduleFields({ draft, onChange, store, addresses, showStart = 
               />
             ))}
           </View>
-          {!!hoursLine && <Text style={[st.note, { marginTop: 8 }]}>We place it at this time, inside our hours ({hoursLine}).</Text>}
+          {!!hoursLine && <Text style={[st.note, { marginTop: 8 }]}>{REPEAT_WORDS.fields.placeInside(hoursLine)}</Text>}
         </>
       )}
 
-      <Label>Deliver to</Label>
+      <Label>{REPEAT_WORDS.fields.deliverTo}</Label>
       {!!addressNote && <Text style={[st.note, { marginBottom: 8 }]}>{addressNote}</Text>}
       {addresses === null ? (
-        <Text style={st.note}>Loading your addresses…</Text>
+        <Text style={st.note}>{REPEAT_WORDS.fields.loadingAddresses}</Text>
       ) : addresses.length === 0 ? (
         <Pressable onPress={() => router.push('/address')} accessibilityRole="link" style={st.addAddr}>
-          <Text style={st.link}>Add a delivery address first</Text>
+          <Text style={st.link}>{REPEAT_WORDS.fields.addAddressFirst}</Text>
         </Pressable>
       ) : (
         <View style={st.addrBox}>
@@ -216,7 +219,7 @@ export function ScheduleFields({ draft, onChange, store, addresses, showStart = 
 
       {showStart && (
         <>
-          <Label>Starting</Label>
+          <Label>{REPEAT_WORDS.fields.starting}</Label>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.row}>
             {dates.map((d) => (
               <Chip key={d.ymd} label={d.label} on={draft.startDate === d.ymd} onPress={() => set({ startDate: d.ymd })} wide />

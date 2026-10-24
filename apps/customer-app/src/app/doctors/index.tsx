@@ -6,6 +6,7 @@ import { fetchClinics } from '@/blynk/doctors/api';
 import { DoctorsGate } from '@/blynk/doctors/Gate';
 import { GlyphTile } from '@/blynk/doctors/glyphs';
 import { LoadFailure, s } from '@/blynk/doctors/ui';
+import { DOCTOR_SCREENS as W } from '@/blynk/doctors/words';
 import { Card, Chevron, Field, ListSkeleton, Page, StateView } from '@/blynk/ui/kit';
 import { useLoad } from '@/blynk/ui/useLoad';
 import { PressScale } from '@/components/ui';
@@ -27,19 +28,19 @@ function ClinicList() {
 
   return (
     <Page
-      title="Channel doctors"
+      title={W.channelDoctors}
       right={(
         <PressScale onPress={() => router.push('/doctors/appointments')} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
-          <Text style={{ fontFamily: F.semi, fontSize: 13.5, color: C.brandText }} accessibilityRole="button">My appointments</Text>
+          <Text style={{ fontFamily: F.semi, fontSize: 13.5, color: C.brandText }} accessibilityRole="button">{W.myAppointments}</Text>
         </PressScale>
       )}
     >
       <View style={{ marginTop: -16, marginBottom: 14 }}>
         <Field
-          label="Search clinics"
+          label={W.searchLabel}
           value={q}
           onChange={setQ}
-          placeholder="Clinic or city"
+          placeholder={W.searchPlaceholder}
           returnKeyType="search"
           autoCorrect={false}
           onSubmitEditing={() => setTerm(q.trim())}
@@ -48,9 +49,9 @@ function ClinicList() {
       {clinics.loading && !clinics.data ? (
         <ListSkeleton rows={5} />
       ) : clinics.error ? (
-        <LoadFailure error={clinics.error} title="We couldn't load clinics" onRetry={clinics.reload} />
+        <LoadFailure error={clinics.error} title={W.clinicsFailed} onRetry={clinics.reload} />
       ) : !clinics.data?.length ? (
-        <StateView title="No doctors available yet" />
+        <StateView title={W.noDoctorsYet} />
       ) : (
         clinics.data.map((c, i) => (
           <Animated.View key={c.id} entering={FadeInDown.delay(Math.min(i, 6) * 40).duration(220)}>

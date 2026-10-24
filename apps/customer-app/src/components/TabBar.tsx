@@ -42,11 +42,12 @@ const ProfileIcon = ({ color, active }: IconProps) => (
   </Svg>
 );
 
-const TAB_META: Record<string, { label: string; Icon: (p: IconProps) => React.ReactElement }> = {
-  home: { label: TABS.shop, Icon: ShopIcon },
-  orders: { label: TABS.orders, Icon: OrdersIcon },
-  help: { label: TABS.help, Icon: HelpIcon },
-  account: { label: TABS.profile, Icon: ProfileIcon },
+// the labels are read while rendering (a function), so they follow the chosen language
+const TAB_META: Record<string, { label: () => string; Icon: (p: IconProps) => React.ReactElement }> = {
+  home: { label: () => TABS.shop, Icon: ShopIcon },
+  orders: { label: () => TABS.orders, Icon: OrdersIcon },
+  help: { label: () => TABS.help, Icon: HelpIcon },
+  account: { label: () => TABS.profile, Icon: ProfileIcon },
 };
 
 export const TAB_BAR_H = 58;
@@ -68,7 +69,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
           }
         };
         return (
-          <Tab key={route.key} label={meta.label} Icon={meta.Icon} focused={focused} badge={badge} onPress={onPress} />
+          <Tab key={route.key} label={meta.label()} Icon={meta.Icon} focused={focused} badge={badge} onPress={onPress} />
         );
       })}
     </View>

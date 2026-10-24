@@ -9,6 +9,7 @@ import { useSecondClock } from '@/blynk/promo/clock';
 import {
   countdownUrgent, endsInText, homeSectionViews, nextEndDelay, type HomeSectionView,
 } from '@/blynk/promo/homeSections';
+import { COUNTDOWN_WORDS } from '@/blynk/promo/homeSections';
 import { useStore } from '@/blynk/store/StoreContext';
 import { DEMO } from '@/demo/mode';
 import { openAisle } from '@/lib/nav';
@@ -75,10 +76,10 @@ function SectionRail({ view }: { view: HomeSectionView }) {
               onPress={() => openAisle(seeAll)}
               hitSlop={8}
               accessibilityRole="link"
-              accessibilityLabel={`See all ${view.title}`}
+              accessibilityLabel={COUNTDOWN_WORDS.seeAllOf(view.title)}
               style={s.seeAll}
             >
-              <Text style={T.seeAll}>See all</Text>
+              <Text style={T.seeAll}>{COUNTDOWN_WORDS.seeAll}</Text>
               <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={13} color={C.sub} stroke={2.2} /></View>
             </Pressable>
           )}

@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showNotice } from '@/blynk/account/notice';
-import { faqsWithHours, SUPPORT } from '@/blynk/account/support';
+import { HELP_SCREEN as W } from '@/blynk/account/screenWords';
+import { faqsWithHours, SUPPORT, SUPPORT_WORDS } from '@/blynk/account/support';
 import { openStatus } from '@/blynk/account/tabHeroes';
 import { accountStyles as A, Card, Enter, Row, SectionLabel } from '@/blynk/account/ui';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
@@ -31,7 +32,7 @@ export default function Help() {
   const session = useSession();
   const signedIn = !!session && !needsRegistration(session);
   // The hours and days Admin / Ops set; nothing typed in here (owner, 2026-10-21).
-  const hoursLabel = hoursSummary(store) ?? 'during our opening hours';
+  const hoursLabel = hoursSummary(store) ?? SUPPORT_WORDS.hoursFallback;
   const faqs = faqsWithHours(hoursLabel);
   const [open, setOpen] = useState<number | null>(null);
   const status = openStatus(store);
@@ -77,10 +78,10 @@ export default function Help() {
         </Card>
 
         <Enter slot={faqs.length + 3}>
-          <SectionLabel>Our store</SectionLabel>
-          <Text style={A.body}>Deliveries go out {hoursLabel}.</Text>
+          <SectionLabel>{W.store}</SectionLabel>
+          <Text style={A.body}>{W.deliveries(hoursLabel)}</Text>
           {!!radiusText(store) && <Text style={[A.body, { marginTop: 4 }]}>{radiusText(store)}.</Text>}
-          <Text style={[A.body, { marginTop: 4 }]}>📍 {SUPPORT.hubName}, {SUPPORT.country}</Text>
+          <Text style={[A.body, { marginTop: 4 }]}>📍 {SUPPORT_WORDS.place(SUPPORT_WORDS.hubName, SUPPORT_WORDS.country)}</Text>
         </Enter>
       </ScrollView>
     </View>

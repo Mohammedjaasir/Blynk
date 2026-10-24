@@ -77,8 +77,8 @@ export function PaymentResult({ from }: { from: 'return' | 'cancel' }) {
   }, [phase, id]);
 
   const title = PAY.payTitle;
-  if (!signedIn) return <Page title={title}><StateView title={PAY.signIn} message={PAY.signInSub} action="Log in" onAction={openSignIn} /></Page>;
-  if (!id) return <Page title={title}><StateView title="Order not found" message="This link has no order." action={PAY.home} onAction={() => router.dismissTo('/home')} /></Page>;
+  if (!signedIn) return <Page title={title}><StateView title={PAY.signIn} message={PAY.signInSub} action={PAY.login} onAction={openSignIn} /></Page>;
+  if (!id) return <Page title={title}><StateView title={PAY.orderNotFoundTitle} message={PAY.noOrderInLink} action={PAY.home} onAction={() => router.dismissTo('/home')} /></Page>;
 
   const by = clockTime(order?.payment_expires_at);
   const payAgain = () => router.replace({ pathname: '/payment/pay', params: { order: id } } as never);

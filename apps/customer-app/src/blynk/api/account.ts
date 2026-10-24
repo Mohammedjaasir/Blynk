@@ -1,3 +1,4 @@
+import { API_WORDS } from '@/blynk/api/words';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/blynk/api/client';
 import { authed, endSession, updateUser, type SessionUser } from '@/blynk/auth/session';
 
@@ -141,9 +142,9 @@ export function feedbackBody(
 ): { ok: true; body: FeedbackBody } | { ok: false; category?: string; message?: string } {
   const message = input.message.trim();
   const errs: { category?: string; message?: string } = {};
-  if (!input.category) errs.category = 'Choose what your feedback is about.';
-  if (!message) errs.message = 'Write a message first.';
-  else if (message.length > FEEDBACK_MAX) errs.message = `Keep it to ${FEEDBACK_MAX} characters.`;
+  if (!input.category) errs.category = API_WORDS.feedbackCategory;
+  if (!message) errs.message = API_WORDS.feedbackEmpty;
+  else if (message.length > FEEDBACK_MAX) errs.message = API_WORDS.feedbackLong(FEEDBACK_MAX);
   if (errs.category || errs.message) return { ok: false, ...errs };
   const body: FeedbackBody = { category: input.category as FeedbackCategory, message };
   if (input.rating && input.rating >= 1 && input.rating <= 5) body.rating = Math.round(input.rating);

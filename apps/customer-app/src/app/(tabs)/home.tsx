@@ -21,6 +21,7 @@ import { aisleColor, appColor, appText, underAmount, withAlpha } from '@/blynk/l
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice } from '@/blynk/lib/pricing';
 import { aisleArt, aislePhase, aisleTint } from '@/blynk/lib/aisleArt';
+import { HOME } from '@/blynk/ui/homeWords';
 import { useFreeClaim } from '@/blynk/store/useFreeClaim';
 import { AisleStamp } from '@/components/AisleStamp';
 import { runAisleBeat } from '@/lib/clock';
@@ -396,9 +397,9 @@ export default function Home() {
                 {meals.length > 0 && (
                   <>
                     <View style={styles.sectionHead}>
-                      <Text style={styles.h2}>{DEMO ? 'Meals under ₹99' : `Under ${formatLkr(under)}`}</Text>
+                      <Text style={styles.h2}>{DEMO ? 'Meals under ₹99' : HOME.under(formatLkr(under))}</Text>
                       <Pressable onPress={toExplore} hitSlop={8} style={styles.seeAll}>
-                        <Text style={styles.seeAllTxt}>See all</Text>
+                        <Text style={styles.seeAllTxt}>{HOME.seeAll}</Text>
                         <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={13} color={C.sub} stroke={2.2} /></View>
                       </Pressable>
                     </View>
@@ -422,7 +423,7 @@ export default function Home() {
                   <FilterChips items={chips} on={filters} onToggle={toggleFilter} />
                 </View>
                 <Text onLayout={(e) => exploreY.set(e.nativeEvent.layout.y)} style={styles.explore}>
-                  {DEMO ? 'Explore all restaurants' : appText(store, 'home_explore_title', 'Explore all aisles')}
+                  {DEMO ? 'Explore all restaurants' : appText(store, 'home_explore_title', HOME.exploreAisles)}
                 </Text>
 
                 {DEMO ? (
@@ -435,7 +436,7 @@ export default function Home() {
                 ) : (
                   <>
                     {live && live.aisles.length === 0 && (
-                      <Text style={styles.empty}>{filters.length ? 'Nothing matches these filters right now.' : "We're stocking the shelves. Check back shortly."}</Text>
+                      <Text style={styles.empty}>{filters.length ? HOME.noMatch : HOME.stocking}</Text>
                     )}
                     {/* The promo band follows the 3rd aisle, or the last one when the store has fewer
                         (owner, 2026-10-13: the live store has two categories and the band never showed). */}
@@ -474,7 +475,7 @@ export default function Home() {
       <Animated.View pointerEvents="box-none" style={[styles.pillWrap, { bottom: bottomInset + 17 + (count > 0 ? CART_BAR.h + CART_BAR.bottom : 0) }, pillA]}>
         <PressScale onPress={() => router.push('/search')} style={styles.pill} haptic>
           <SearchIcon size={14} color="#fff" stroke={2.4} />
-          <Text style={styles.pillTxt}>Search</Text>
+          <Text style={styles.pillTxt}>{HOME.search}</Text>
         </PressScale>
       </Animated.View>
 
@@ -511,7 +512,7 @@ export default function Home() {
               <Text style={styles.grantTxt}>{!DEMO && here.asking ? here.sheet.asking : sheet.cta}</Text>
             </PressScale>
             {!DEMO && (
-              <Pressable onPress={closeSheet} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close" style={styles.locClose}>
+              <Pressable onPress={closeSheet} hitSlop={12} accessibilityRole="button" accessibilityLabel={HOME.close} style={styles.locClose}>
                 <CloseIcon size={14} color="#fff" />
               </Pressable>
             )}
@@ -560,7 +561,7 @@ function LocationRow({ locating, dark, name, address, onPress }: {
       </Animated.View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-          <RollingText text={locating ? 'Locating ...' : name} style={[styles.locName, { color: fg }]} />
+          <RollingText text={locating ? HOME.locating : name} style={[styles.locName, { color: fg }]} />
           <ChevronIcon size={13} color={dark ? '#D9D6E8' : '#55555C'} stroke={2.2} />
         </View>
         {!locating && !!address && (
@@ -589,7 +590,7 @@ function SearchBar({ phase, hints }: { phase: Phase; hints: string[] }) {
     >
       <SearchIcon size={18} color="#55555C" stroke={2} />
       <View style={{ flexDirection: 'row', flexShrink: 1, alignItems: 'center' }}>
-        <Text style={[styles.searchTxt, { lineHeight: HINT_LH }]}>{'Search for '}</Text>
+        <Text style={[styles.searchTxt, { lineHeight: HINT_LH }]}>{HOME.searchFor}</Text>
         <SlideUpHints hints={hints} />
       </View>
     </PressScale>
@@ -902,7 +903,7 @@ function ErrorBox({ message, onRetry }: { message: string; onRetry: () => void }
   return (
     <Animated.View entering={FadeIn.duration(250)} style={styles.errorBox}>
       <Text style={[styles.h2, { textAlign: 'center' }]}>{message}</Text>
-      <PressScale onPress={onRetry} style={styles.retry} haptic><Text style={styles.retryTxt}>Try again</Text></PressScale>
+      <PressScale onPress={onRetry} style={styles.retry} haptic><Text style={styles.retryTxt}>{HOME.tryAgain}</Text></PressScale>
     </Animated.View>
   );
 }

@@ -9,12 +9,10 @@ import { saveProfile } from '@/blynk/auth/api';
 import { finishSignIn } from '@/blynk/auth/flow';
 import { isFromGate } from '@/blynk/auth/gate';
 import { authErrorText, parseBirthday } from '@/blynk/auth/forms';
+import { BIRTHDAY_WORDS as B, DATE_PARTS } from '@/blynk/auth/words';
 import { PressScale } from '@/components/ui';
-import { LIVE } from '@/demo/cartLive';
 import { DEMO } from '@/demo/mode';
 import { C, F } from '@/lib/theme';
-
-const B = LIVE.birthday;
 
 /*
  * The optional birthday prompt, shown once, right after registration. Same visual language as
@@ -86,13 +84,13 @@ export default function Birthday() {
         <Text style={styles.body}>{B.body}</Text>
 
         <View style={styles.row}>
-          <Part label={B.day} value={d} width={45} autoFocus
+          <Part label={DATE_PARTS.day} value={d} width={45} autoFocus
             onChange={(t) => { const v = digits(t, 2); setD(v); setError(null); if (v.length === 2) mRef.current?.focus(); }} />
           <Text style={styles.slash}>/</Text>
-          <Part inputRef={mRef} label={B.month} value={m} width={45}
+          <Part inputRef={mRef} label={DATE_PARTS.month} value={m} width={45}
             onChange={(t) => { const v = digits(t, 2); setM(v); setError(null); if (v.length === 2) yRef.current?.focus(); }} />
           <Text style={styles.slash}>/</Text>
-          <Part inputRef={yRef} label={B.year} value={y} width={78} onSubmit={() => void save()}
+          <Part inputRef={yRef} label={DATE_PARTS.year} value={y} width={78} onSubmit={() => void save()}
             onChange={(t) => { setY(digits(t, 4)); setError(null); }} />
         </View>
 

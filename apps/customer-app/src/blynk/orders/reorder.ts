@@ -1,6 +1,7 @@
 import { ApiError } from '@/blynk/api/client';
 import type { Combo, Product, ProductVariant } from '@/blynk/api/types';
 import type { Order, OrderStatus } from './types';
+import { ORDER_NOTE_WORDS } from './words';
 
 /*
  * "Order again" (Flutter Services/reorder.dart, 2026-09-30): a past order's products back in the
@@ -98,8 +99,8 @@ export async function reorderInto(order: Pick<Order, 'items' | 'combos'>, deps: 
 
 /** The toast after "Order again" (Flutter OrderAgainButton). */
 export function reorderMessage(r: ReorderResult): { text: string; ok: boolean } {
-  if (r.offline) return { text: "You're offline. Nothing was added. Try again when you have signal.", ok: false };
-  if (r.addedUnits === 0) return { text: "These items aren't available right now.", ok: false };
-  const units = r.addedUnits === 1 ? '1 item' : `${r.addedUnits} items`;
-  return { text: r.unavailable.length ? `Added ${units}. Not available now: ${r.unavailable.join(', ')}.` : `Added ${units} to your cart.`, ok: true };
+  const w = ORDER_NOTE_WORDS.reorder;
+  if (r.offline) return { text: w.offline, ok: false };
+  if (r.addedUnits === 0) return { text: w.none, ok: false };
+  return { text: r.unavailable.length ? w.addedSome(r.addedUnits, r.unavailable.join(', ')) : w.added(r.addedUnits), ok: true };
 }

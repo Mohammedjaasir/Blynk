@@ -15,6 +15,7 @@ import { applyFilters, FILTERS, type FilterId } from '@/blynk/lib/filters';
 import { formatLkr } from '@/blynk/lib/money';
 import { effectivePrice, isOfferActive } from '@/blynk/lib/pricing';
 import { hasVariants, priceText } from '@/blynk/catalog/variants';
+import { AISLE } from '@/blynk/catalog/browseWords';
 import { categoryHref } from '@/blynk/catalog/tree';
 import { useFreeDeliveryUnlocked } from '@/blynk/store/freeDelivery';
 import { useStore } from '@/blynk/store/StoreContext';
@@ -208,7 +209,7 @@ function StoreScreen() {
   const toggleFilter = (f: Filter) => setFilters((s) => toggleIn(s, f));
   const name = DEMO ? STORE.name : (live?.cat.name ?? '');
   const search = () => router.push({ pathname: '/search', params: DEMO ? { name } : { c: live?.cat.slug ?? '', name } });
-  const share = () => Share.share({ message: `${name} on Blynk` }).catch(() => {});
+  const share = () => Share.share({ message: AISLE.shareMessage(name) }).catch(() => {});
   const syncTops = () => {
     secTops.value = sections.map((s) => listY.current + (sectionY.current[s.id] ?? 0));
   };
@@ -220,7 +221,7 @@ function StoreScreen() {
   };
   const cur = sections[Math.min(current, sections.length - 1)];
   const pairPool = (forId: string) => (DEMO ? STORE.pairs.filter((p) => p.id !== forId) : pairPicks(all, forId));
-  const pairTitle = DEMO ? STORE.pairTitle : `More from ${name}`;
+  const pairTitle = DEMO ? STORE.pairTitle : AISLE.moreFrom(name);
 
   if (!DEMO && !live) {
     return (
@@ -229,13 +230,13 @@ function StoreScreen() {
         <PressScale onPress={goBack} style={[styles.round, styles.missingBack]}><ArrowLeft size={16} color="#222" /></PressScale>
         {data ? (
           <View style={styles.missing}>
-            <Text style={[styles.name, { marginRight: 0 }]}>This aisle isn&apos;t available</Text>
-            <PressScale onPress={() => router.replace('/home')} style={styles.missingBtn} haptic><Text style={styles.missingTxt}>Go to shop</Text></PressScale>
+            <Text style={[styles.name, { marginRight: 0 }]}>{AISLE.notAvailable}</Text>
+            <PressScale onPress={() => router.replace('/home')} style={styles.missingBtn} haptic><Text style={styles.missingTxt}>{AISLE.goToShop}</Text></PressScale>
           </View>
         ) : error ? (
           <View style={styles.missing}>
             <Text style={[styles.name, { textAlign: 'center', marginRight: 0 }]}>{error.message}</Text>
-            <PressScale onPress={() => void refresh()} style={styles.missingBtn} haptic><Text style={styles.missingTxt}>Try again</Text></PressScale>
+            <PressScale onPress={() => void refresh()} style={styles.missingBtn} haptic><Text style={styles.missingTxt}>{AISLE.tryAgain}</Text></PressScale>
           </View>
         ) : (
           <View style={{ padding: PAD, gap: 14 }}>
@@ -315,7 +316,7 @@ function StoreScreen() {
           {!DEMO && <ClosedBanner style={{ marginTop: 15 }} />}
           <PressScale onPress={search} scaleTo={0.98} style={styles.search}>
             <SearchGlyph size={20} color="#555" />
-            <Text style={styles.searchTxt} numberOfLines={1}>{DEMO ? STORE.search : 'Search for products'}</Text>
+            <Text style={styles.searchTxt} numberOfLines={1}>{DEMO ? STORE.search : AISLE.searchProducts}</Text>
           </PressScale>
         </View>
 
@@ -325,7 +326,7 @@ function StoreScreen() {
         <View onLayout={(e) => { listY.current = e.nativeEvent.layout.y; syncTops(); }}>
           {sections.length === 0 && (
             <Text style={styles.emptyTxt}>
-              {DEMO || filters.length ? 'Nothing here matches these filters.' : "We're stocking this aisle. Check back shortly."}
+              {DEMO || filters.length ? AISLE.noMatch : AISLE.stocking}
             </Text>
           )}
           {sections.map((sec) => (
@@ -364,7 +365,7 @@ function StoreScreen() {
           <Animated.View style={[StyleSheet.absoluteFill, pillA]}>
             <Pressable onPress={search} style={styles.pill}>
               <PressScale onPress={goBack} style={styles.pillBack}><ChevronLeft size={18} color="#555" /></PressScale>
-              <Text style={styles.pillTxt} numberOfLines={1}>{DEMO ? STORE.stuckSearch : `Search in ${name}`}</Text>
+              <Text style={styles.pillTxt} numberOfLines={1}>{DEMO ? STORE.stuckSearch : AISLE.searchIn(name)}</Text>
               <SearchGlyph size={20} color="#555" />
             </Pressable>
           </Animated.View>

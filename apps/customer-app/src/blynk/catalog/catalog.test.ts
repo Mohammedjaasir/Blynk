@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Combo } from '@/blynk/api/types';
 import { MemoryStorage, milk } from '../test/fixtures';
-import { combosWith, detailRows, notifyMeAction, NOTIFY_ME_LABEL, NOTIFY_ME_ON_LABEL, unitLine } from './product';
+import { combosWith, detailRows, notifyMeAction, NOTIFY_ME, unitLine } from './product';
 import { addRecentSearch, loadRecentSearches, normalizeSearch, saveRecentSearches, clearRecentSearches } from './recentSearches';
 
 function json(status: number, body: unknown) {
@@ -86,8 +86,8 @@ describe('notify me', () => {
     expect(notifyMeAction(false, true)).toBe('sign-in');
     expect(notifyMeAction(true, false)).toBe('subscribe');
     expect(notifyMeAction(true, true)).toBe('unsubscribe');
-    expect(NOTIFY_ME_LABEL).toBe("Notify me when it's back");
-    expect(NOTIFY_ME_ON_LABEL).toBe("We'll tell you when it's back");
+    expect(NOTIFY_ME.label).toBe("Notify me when it's back");
+    expect(NOTIFY_ME.onLabel).toBe("We'll tell you when it's back");
   });
 });
 

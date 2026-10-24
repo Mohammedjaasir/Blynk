@@ -7,6 +7,7 @@ import { PressScale } from '@/components/ui';
 import { C, F } from '@/lib/theme';
 import { doctorsVisible } from './access';
 import { ToothGlyph } from './glyphs';
+import { DOCTOR_UI as W } from './words';
 
 /** Home's "Channel doctors" row (Flutter DentalHomeEntry): opens the clinic list. Hidden while GET /store says doctors_enabled false. */
 export function DoctorsHomeEntry({ style }: { style?: StyleProp<ViewStyle> }) {
@@ -19,12 +20,12 @@ export function DoctorsHomeEntry({ style }: { style?: StyleProp<ViewStyle> }) {
         style={s.row}
         accessible
         accessibilityRole="button"
-        accessibilityLabel={`Channel doctors in ${town}. Book an appointment with a doctor near you.`}
+        accessibilityLabel={W.homeA11y(town)}
       >
         <View style={s.icon}><ToothGlyph size={22} color={C.brandInk} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={s.title}>Channel doctors</Text>
-          <Text style={s.sub} numberOfLines={1}>Book a doctor in {town}</Text>
+          <Text style={s.title}>{W.title}</Text>
+          <Text style={s.sub} numberOfLines={1}>{W.homeSub(town)}</Text>
         </View>
         <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={14} color={C.sub} stroke={2.2} /></View>
       </View>

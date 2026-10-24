@@ -15,11 +15,13 @@ import { appHidden, onVisible } from '@/blynk/lib/visibility';
 import { cancelOrder, getOrder } from '@/blynk/orders/api';
 import { cancelErrorText, placeErrorCopy } from '@/blynk/orders/errors';
 import {
-  awaitingPayment, CODE_COMING, discountRows, payByLine, isOpenOrder, itemCaption, itemTitle, mayCancel, orderTime, paymentLine, progressOf, PROGRESS_STEPS,
+  awaitingPayment, discountRows, payByLine, isOpenOrder, itemCaption, itemTitle, mayCancel, orderTime, paymentLine, progressOf, progressSteps,
   riderArrived, showsDeliveryCode, showsDeliveryCodeComing, slotWindowText, statusLabel, statusSentence, statusTone,
   timelineLabel, type OrderTone,
 } from '@/blynk/orders/status';
 import { canReorder, reorderInto, reorderMessage } from '@/blynk/orders/reorder';
+import { ORDER_SCREEN as W } from '@/blynk/orders/screenWords';
+import { ORDER_WORDS } from '@/blynk/orders/words';
 import { PAY } from '@/blynk/payments/copy';
 import type { Order } from '@/blynk/orders/types';
 import { LiveTracking, isTrackable } from '@/blynk/tracking';
@@ -66,7 +68,7 @@ export default function OrderStatus() {
       .then((o) => { setOrder(o); setError(null); })
       .catch((e) => {
         const missing = e instanceof ApiError && (e.status === 404 || e.status === 400);
-        setError({ text: missing ? 'This order could not be found.' : placeErrorCopy(e).message, missing });
+        setError({ text: missing ? W.notFound : placeErrorCopy(e).message, missing });
       })
       .finally(() => { busy.current = false; });
   }, [id, signedIn]);
@@ -128,7 +130,7 @@ export default function OrderStatus() {
     }
   };
 
-  const title = order?.order_number ?? 'Order';
+  const title = order?.order_number ?? W.title;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <StatusBar style="dark" />
@@ -141,17 +143,17 @@ export default function OrderStatus() {
           {!!order && <Text style={styles.headSub}>{orderTime(order.placed_at ?? order.created_at)}</Text>}
         </View>
         {!DEMO && signedIn && (
-          <Pressable onPress={() => router.push('/orders')} hitSlop={8}><Text style={styles.link}>My orders</Text></Pressable>
+          <Pressable onPress={() => router.push('/orders')} hitSlop={8}><Text style={styles.link}>{W.myOrders}</Text></Pressable>
         )}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 40 }}>
         {DEMO ? (
-          <Note title="Order status appears here" sub="Ordering opens soon. This is a preview." />
+          <Note title={W.previewTitle} sub={W.previewSub} />
         ) : !signedIn ? (
-          <Note title="Log in to see this order" sub="Your orders appear here once you are signed in." cta="Log in" onPress={openSignIn} />
+          <Note title={W.loginTitle} sub={W.loginSub} cta={W.login} onPress={openSignIn} />
         ) : !order && error ? (
-          <Note title={error.missing ? 'Order not found' : "Couldn't load this order"} sub={error.text} cta={error.missing ? undefined : 'Try again'} onPress={load} />
+          <Note title={error.missing ? W.notFoundTitle : W.loadFailedTitle} sub={error.text} cta={error.missing ? undefined : W.tryAgain} onPress={load} />
         ) : !order ? (
           <>
             <Skeleton h={150} r={16} style={{ marginBottom: 12 }} />
@@ -174,24 +176,24 @@ export default function OrderStatus() {
               </View>
             )}
             {showsDeliveryCode(order) ? (
-              <View style={[styles.card, styles.codeCard]} accessible accessibilityLabel={`Your delivery code: ${order.delivery_code}. Show this to your rider.`}>
-                <Text style={styles.codeLabel}>Your delivery code</Text>
+              <View style={[styles.card, styles.codeCard]} accessible accessibilityLabel={W.deliveryCodeLabel(order.delivery_code ?? '')}>
+                <Text style={styles.codeLabel}>{W.deliveryCode}</Text>
                 <Text style={styles.code}>{order.delivery_code}</Text>
-                <Text style={styles.codeSub}>Show this to your rider.</Text>
+                <Text style={styles.codeSub}>{W.showRider}</Text>
               </View>
             ) : showsDeliveryCodeComing(order) ? (
               <View style={[styles.card, styles.comingCard]}>
-                <Text style={styles.small}>{CODE_COMING}</Text>
+                <Text style={styles.small}>{ORDER_WORDS.codeComing}</Text>
               </View>
             ) : null}
             {!!order.rider_contact && (
               <View style={[styles.card, styles.riderRow]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.small}>{riderArrived(order) ? 'At your door' : 'Your rider'}</Text>
-                  <Text style={styles.strong}>{(order.rider_contact.first_name ?? 'Your rider') + (riderArrived(order) ? ' has arrived' : '')}</Text>
+                  <Text style={styles.small}>{riderArrived(order) ? W.atDoor : W.yourRider}</Text>
+                  <Text style={styles.strong}>{W.riderLine(order.rider_contact.first_name ?? W.yourRider, riderArrived(order))}</Text>
                 </View>
                 <PressScale onPress={() => Linking.openURL(`tel:${order.rider_contact!.phone}`)} style={styles.callBtn} haptic>
-                  <Text style={styles.callTxt}>Call rider</Text>
+                  <Text style={styles.callTxt}>{W.callRider}</Text>
                 </PressScale>
               </View>
             )}
@@ -206,7 +208,7 @@ export default function OrderStatus() {
 
             {!!order.history?.length && (
               <View style={styles.card}>
-                <Text style={styles.section}>What happened</Text>
+                <Text style={styles.section}>{W.whatHappened}</Text>
                 {order.history.map((h, i) => (
                   <View key={h.id} style={styles.tlRow}>
                     <View style={styles.tlRail}>
@@ -223,7 +225,7 @@ export default function OrderStatus() {
             )}
 
             <View style={styles.card}>
-              <Text style={styles.section}>Items</Text>
+              <Text style={styles.section}>{W.items}</Text>
               {/* combo packs first, each with its products under it (Flutter order summary); then loose items */}
               {(order.combos ?? []).map((c) => (
                 <View key={c.id} style={styles.comboBlock}>
@@ -233,7 +235,7 @@ export default function OrderStatus() {
                     </Text>
                     <Text style={styles.price}>{formatLkr(c.subtotal)}</Text>
                   </View>
-                  <Text style={[styles.small, { marginTop: -4, marginBottom: 2 }]}>Combo pack</Text>
+                  <Text style={[styles.small, { marginTop: -4, marginBottom: 2 }]}>{W.comboPack}</Text>
                   {order.items.filter((it) => it.order_combo_id === c.id).map((it) => (
                     <View key={it.id} style={[styles.itemRow, { paddingVertical: 3 }]}>
                       <Text style={[styles.itemName, styles.comboItem, itemCaption(it.item_status)?.struck && styles.struck]} numberOfLines={2}>
@@ -260,7 +262,7 @@ export default function OrderStatus() {
                     </View>
                     <Text style={styles.qty}>× {it.quantity}</Text>
                     {bundleTag ? (
-                      <Text style={[styles.price, { color: C.green }]}>{it.bundle_kind === 'GIFT' ? 'Gift' : 'Free'}</Text>
+                      <Text style={[styles.price, { color: C.green }]}>{it.bundle_kind === 'GIFT' ? W.gift : W.free}</Text>
                     ) : (
                       <Text style={[styles.price, cap?.struck && styles.struck]}>{formatLkr(it.subtotal)}</Text>
                     )}
@@ -270,14 +272,14 @@ export default function OrderStatus() {
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.section}>Bill</Text>
-              <BillLine l="Item total" r={formatLkr(order.subtotal_amount)} />
-              {orderBundleSavings(order) > 0 && <BillLine l="Saved with bundle offers" r={formatLkr(orderBundleSavings(order))} accent />}
-              <BillLine l="Delivery fee" r={order.delivery_fee === 0 ? 'FREE' : formatLkr(order.delivery_fee)} accent={order.delivery_fee === 0} />
+              <Text style={styles.section}>{W.bill}</Text>
+              <BillLine l={W.itemTotal} r={formatLkr(order.subtotal_amount)} />
+              {orderBundleSavings(order) > 0 && <BillLine l={W.bundleSaved} r={formatLkr(orderBundleSavings(order))} accent />}
+              <BillLine l={W.deliveryFee} r={order.delivery_fee === 0 ? W.freeFee : formatLkr(order.delivery_fee)} accent={order.delivery_fee === 0} />
               {discountRows(order).map((d) => <BillLine key={d.label} l={d.label} r={`−${formatLkr(d.amount)}`} accent />)}
               {order.wallet_amount_used > 0 && <BillLine l={WALLET_COPY.orderBillLine} r={`−${formatLkr(order.wallet_amount_used)}`} accent />}
               <View style={styles.sep} />
-              <BillLine l="Total" r={formatLkr(order.total_amount)} bold />
+              <BillLine l={W.total} r={formatLkr(order.total_amount)} bold />
               <Text style={[styles.small, { marginTop: 6 }]}>{paymentLine(order)}</Text>
               {/* refunds credited to the Blynk Wallet for this order, newest first */}
               {!!order.wallet?.entries.length && (
@@ -297,22 +299,22 @@ export default function OrderStatus() {
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.section}>Delivering to</Text>
+              <Text style={styles.section}>{W.deliveringTo}</Text>
               {!!slotWindowText(order.scheduled_for, order.scheduled_until) && (
-                <Text style={[styles.body, { marginTop: 0, marginBottom: 6 }]}>Delivery time: <Text style={{ fontFamily: F.semi }}>{slotWindowText(order.scheduled_for, order.scheduled_until)}</Text></Text>
+                <Text style={[styles.body, { marginTop: 0, marginBottom: 6 }]}>{W.deliveryTime}{' '}<Text style={{ fontFamily: F.semi }}>{slotWindowText(order.scheduled_for, order.scheduled_until)}</Text></Text>
               )}
-              {order.ordered_for_someone_else === true && <Text style={[styles.small, { marginBottom: 2 }]}>For someone else</Text>}
+              {order.ordered_for_someone_else === true && <Text style={[styles.small, { marginBottom: 2 }]}>{W.forSomeoneElse}</Text>}
               {!!order.delivery_recipient_name && (
                 <Text style={styles.strong}>{order.delivery_recipient_name}{order.delivery_recipient_phone ? `  ·  ${order.delivery_recipient_phone}` : ''}</Text>
               )}
               <Text style={styles.body}>{[order.delivery_address_line1, order.delivery_address_line2, order.delivery_city].filter(Boolean).join(', ')}</Text>
-              {!!order.delivery_instructions && <Text style={[styles.small, { marginTop: 4 }]}>Note: {order.delivery_instructions}</Text>}
-              {order.delivery_needs_help === true && <Text style={[styles.small, { marginTop: 4 }]}>Needs help at the door</Text>}
+              {!!order.delivery_instructions && <Text style={[styles.small, { marginTop: 4 }]}>{W.note(order.delivery_instructions)}</Text>}
+              {order.delivery_needs_help === true && <Text style={[styles.small, { marginTop: 4 }]}>{W.needsHelp}</Text>}
             </View>
 
             {canReorder(order) && (
               <PressScale onPress={() => void orderAgain()} disabled={reordering} style={[styles.keepBtn, { marginBottom: 12 }]} haptic>
-                <Text style={styles.keepTxt}>{reordering ? 'Adding…' : 'Order again'}</Text>
+                <Text style={styles.keepTxt}>{reordering ? W.adding : W.orderAgain}</Text>
               </PressScale>
             )}
             {/* delivered: "Repeat this basket" (migration 054; hidden while off) */}
@@ -323,9 +325,9 @@ export default function OrderStatus() {
                 {!!cancelMsg && <Text style={[styles.stale, { marginTop: 0, marginBottom: 8 }]}>{cancelMsg}</Text>}
                 {mayCancel(order) && (
                   <>
-                    <Text style={styles.small}>You can cancel until your order is out for delivery.</Text>
+                    <Text style={styles.small}>{W.cancelHint}</Text>
                     <PressScale onPress={() => setConfirm(true)} style={styles.cancelBtn}>
-                      <Text style={styles.cancelTxt}>Cancel order</Text>
+                      <Text style={styles.cancelTxt}>{W.cancelOrder}</Text>
                     </PressScale>
                   </>
                 )}
@@ -339,13 +341,13 @@ export default function OrderStatus() {
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(140)} style={styles.backdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => !cancelling && setConfirm(false)} />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]} accessibilityRole="alert">
-            <Text style={styles.sheetTitle}>Cancel this order?</Text>
-            <Text style={styles.body}>{"This can't be undone."}</Text>
+            <Text style={styles.sheetTitle}>{W.cancelTitle}</Text>
+            <Text style={styles.body}>{W.cantUndo}</Text>
             <PressScale onPress={() => setConfirm(false)} disabled={cancelling} style={[styles.keepBtn, { marginTop: 18 }]}>
-              <Text style={styles.keepTxt}>Keep order</Text>
+              <Text style={styles.keepTxt}>{W.keep}</Text>
             </PressScale>
             <PressScale onPress={doCancel} disabled={cancelling} style={[styles.cancelBtn, { alignSelf: 'stretch', marginTop: 10 }]}>
-              <Text style={styles.cancelTxt}>{cancelling ? 'Cancelling…' : 'Cancel order'}</Text>
+              <Text style={styles.cancelTxt}>{cancelling ? W.cancelling : W.cancelOrder}</Text>
             </PressScale>
           </View>
         </Animated.View>
@@ -357,20 +359,21 @@ export default function OrderStatus() {
 function StatusCard({ order }: { order: Order }) {
   const tone = TONE[statusTone(order.order_status)];
   const { step, stopped } = progressOf(order.order_status);
+  const steps = progressSteps();
   return (
     <View style={styles.card}>
       <Text style={[styles.statusTitle, { color: tone }]}>{statusLabel(order.order_status)}</Text>
       <Text style={styles.body}>{statusSentence(order)}</Text>
       {!(stopped && order.order_status === 'CANCELLED') && (
-        <View style={styles.track} accessibilityLabel={`Order progress: ${PROGRESS_STEPS[step]}${stopped ? ', stopped' : ''}`}>
-          {PROGRESS_STEPS.map((label, i) => {
+        <View style={styles.track} accessibilityLabel={W.progress(steps[step], stopped)}>
+          {steps.map((label, i) => {
             const done = i <= step;
             return (
               <View key={label} style={{ flex: 1, alignItems: 'center' }}>
                 <View style={styles.trackRow}>
                   <View style={[styles.trackBar, { opacity: i === 0 ? 0 : 1 }, i <= step && styles.trackOn]} />
                   <View style={[styles.trackDot, done && styles.trackDotOn, stopped && i === step && { backgroundColor: C.problem, borderColor: C.problem }]} />
-                  <View style={[styles.trackBar, { opacity: i === PROGRESS_STEPS.length - 1 ? 0 : 1 }, i < step && styles.trackOn]} />
+                  <View style={[styles.trackBar, { opacity: i === steps.length - 1 ? 0 : 1 }, i < step && styles.trackOn]} />
                 </View>
                 <Text style={[styles.trackLabel, done && { color: C.ink, fontFamily: F.semi }]} numberOfLines={1}>{label}</Text>
               </View>

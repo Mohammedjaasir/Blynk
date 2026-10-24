@@ -1,5 +1,6 @@
 import { lineAvailable, type CartLine, type ComboLine } from '@/blynk/cart/cartStore';
 import { dayLabel, earliestDeliveryDate, leadDaysOf, colomboDayPlus } from '@/blynk/catalog/variants';
+import { localized } from '@/blynk/i18n/localized';
 import type { CheckoutInfo } from '@/blynk/orders/types';
 import { availableSlot, canOrderNow, type DeliverySlots } from './slots';
 
@@ -11,17 +12,42 @@ import { availableSlot, canOrderNow, type DeliverySlots } from './slots';
  * decides again at POST /orders (LEAD_TIME_REQUIRES_SLOT / SLOT_BEFORE_LEAD_TIME).
  */
 
-export const LEAD_COPY = {
-  title: 'Delivery date',
-  /** "Ribbon Cake needs 2 days. The earliest delivery is Fri 17 Oct." */
-  needs: (name: string | null, days: number, date: string | null) =>
-    `${name ?? 'An item in your cart'} needs ${days} ${days === 1 ? 'day' : 'days'}.${date ? ` The earliest delivery is ${date}.` : ''}`,
-  pickSlot: (date: string | null) => (date ? `Pick a delivery time from ${date}.` : 'Pick a delivery time.'),
-  slotsOff: 'Scheduled delivery is not available right now, so this cart cannot be delivered. Remove the item to order now.',
-  slotNote: (date: string | null) => (date ? `Delivered from ${date}. Pick a time below.` : 'Pick a delivery time below.'),
-  pickCta: 'Pick a delivery time',
-  blockedCta: 'Remove the item to order now',
-} as const;
+export const LEAD_COPY = localized(
+  {
+    title: 'Delivery date',
+    /** "Ribbon Cake needs 2 days. The earliest delivery is Fri 17 Oct." */
+    needs: (name: string | null, days: number, date: string | null) =>
+      `${name ?? 'An item in your cart'} needs ${days} ${days === 1 ? 'day' : 'days'}.${date ? ` The earliest delivery is ${date}.` : ''}`,
+    pickSlot: (date: string | null) => (date ? `Pick a delivery time from ${date}.` : 'Pick a delivery time.'),
+    slotsOff: 'Scheduled delivery is not available right now, so this cart cannot be delivered. Remove the item to order now.',
+    slotNote: (date: string | null) => (date ? `Delivered from ${date}. Pick a time below.` : 'Pick a delivery time below.'),
+    pickCta: 'Pick a delivery time',
+    blockedCta: 'Remove the item to order now',
+  } as const,
+  {
+    si: {
+      title: 'බෙදාහැරීමේ දිනය',
+      needs: (name: string | null, days: number, date: string | null) =>
+        `${name ?? 'ඔබේ කරත්තයේ ඇති භාණ්ඩයක්'} සඳහා දින ${days}ක් ගත වේ.${date ? ` ඉක්මනින්ම බෙදාහැරිය හැක්කේ ${date} දිනටයි.` : ''}`,
+      pickSlot: (date: string | null) => (date ? `${date} සිට බෙදාහැරීමේ වේලාවක් තෝරන්න.` : 'බෙදාහැරීමේ වේලාවක් තෝරන්න.'),
+      slotsOff: 'නියමිත වේලාවකට බෙදාහැරීම දැනට නැති නිසා මෙම කරත්තය බෙදාහැරිය නොහැක. දැන් ඇණවුම් කිරීමට අදාළ භාණ්ඩය ඉවත් කරන්න.',
+      slotNote: (date: string | null) => (date ? `${date} සිට බෙදාහරිනු ලැබේ. පහතින් වේලාවක් තෝරන්න.` : 'පහතින් බෙදාහැරීමේ වේලාවක් තෝරන්න.'),
+      pickCta: 'බෙදාහැරීමේ වේලාවක් තෝරන්න',
+      blockedCta: 'දැන් ඇණවුම් කිරීමට භාණ්ඩය ඉවත් කරන්න',
+    },
+    ta: {
+      title: 'டெலிவரி தேதி',
+      needs: (name: string | null, days: number, date: string | null) =>
+        `${name ? `${name}-க்கு` : 'உங்கள் கார்ட்டில் உள்ள ஒரு பொருளுக்கு'} ${days} நாட்கள் ஆகும்.${date ? ` விரைவான டெலிவரி ${date}.` : ''}`,
+      pickSlot: (date: string | null) => (date ? `${date} முதல் டெலிவரி நேரத்தைத் தேர்ந்தெடுங்கள்.` : 'டெலிவரி நேரத்தைத் தேர்ந்தெடுங்கள்.'),
+      slotsOff: 'திட்டமிட்ட டெலிவரி இப்போது இல்லை, அதனால் இந்த கார்ட்டை டெலிவரி செய்ய முடியாது. இப்போது ஆர்டர் செய்ய அந்தப் பொருளை நீக்குங்கள்.',
+      slotNote: (date: string | null) => (date ? `${date} முதல் டெலிவரி. கீழே ஒரு நேரத்தைத் தேர்ந்தெடுங்கள்.` : 'கீழே டெலிவரி நேரத்தைத் தேர்ந்தெடுங்கள்.'),
+      pickCta: 'டெலிவரி நேரத்தைத் தேர்ந்தெடுங்கள்',
+      blockedCta: 'இப்போது ஆர்டர் செய்ய பொருளை நீக்குங்கள்',
+    },
+  },
+  'checkout.LEAD_COPY',
+);
 
 /** What the cart's lead time is, from the cart itself (items and combo packs). */
 export interface CartLead {

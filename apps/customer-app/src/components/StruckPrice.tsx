@@ -1,3 +1,4 @@
+import { PRICE_ROLL } from '@/blynk/ui/strings';
 import { Text, type StyleProp, type TextStyle } from 'react-native';
 import { struckLabel, type StruckPrice as Struck } from '@/blynk/lib/pricing';
 
@@ -12,7 +13,7 @@ export function StruckPrice({ struck, money, style }: { struck: Struck; money: (
     <Text
       style={[style, { textDecorationLine: 'none' }]}
       numberOfLines={1}
-      accessibilityLabel={prefix ? `MRP ${amount}` : `Regular price ${amount}`}
+      accessibilityLabel={prefix ? PRICE_ROLL.mrp(amount) : PRICE_ROLL.regular(amount)}
     >
       {prefix ? `${prefix} ` : ''}
       <Text style={{ textDecorationLine: 'line-through' }}>{amount}</Text>

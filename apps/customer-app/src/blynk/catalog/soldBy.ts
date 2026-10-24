@@ -1,4 +1,5 @@
 import type { Product } from '@/blynk/api/types';
+import { SOLD_BY } from './browseWords';
 
 /**
  * The quiet "Sold by <shop>" line (seller portal, 2026-10-24). The API sends `sold_by` (the seller's
@@ -7,5 +8,5 @@ import type { Product } from '@/blynk/api/types';
  */
 export function soldByText(p: Pick<Product, 'sold_by'>): string | null {
   const shop = typeof p.sold_by === 'string' ? p.sold_by.trim() : '';
-  return shop ? `Sold by ${shop}` : null;
+  return shop ? SOLD_BY.by(shop) : null;
 }

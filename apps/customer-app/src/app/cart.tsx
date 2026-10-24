@@ -55,6 +55,8 @@ import { openPolicy } from '@/blynk/legal/open';
 import { PolicyRow } from '@/blynk/legal/PolicyLinks';
 import { formatLkr } from '@/blynk/lib/money';
 import { PAY } from '@/blynk/payments/copy';
+import { CART } from '@/blynk/checkout/words';
+import { labelText } from '@/blynk/address/words';
 import { effectiveMethod, methodBody, onlineInfo, onlineOffered, type PayMethod } from '@/blynk/payments/method';
 import { PaymentChoice } from '@/blynk/payments/PaymentChoice';
 import { requestPushPermission } from '@/blynk/push';
@@ -279,7 +281,7 @@ export default function Cart() {
     const problem = detailsProblem(details, allowForOthers);
     if (problem) {
       setShowDetailErrors(true);
-      setPlaceErr({ title: 'Check the delivery details', message: problem, action: null });
+      setPlaceErr({ title: CART.checkDetails, message: problem, action: null });
       return;
     }
     const more = detailsBody(details, allowForOthers);
@@ -341,7 +343,7 @@ export default function Cart() {
         const sigAfter = checkoutSignature({ items: orderItems(after.lines), combos: orderCombos(after.combos), addressId: '' });
         setPlaceErrState({ copy: { ...copy, message: `${copy.message} ${stockRefusalNote(refusal)}` }, for: `${addrId}|${sigAfter}` });
       } else {
-        setPlaceErr(gone?.name ? { ...copy, message: `${gone.name} isn't available right now. Remove it and try again.` } : copy);
+        setPlaceErr(gone?.name ? { ...copy, message: CART.itemGone(gone.name) } : copy);
       }
       if (copy.action === 'stock') { void refresh(); refreshCombos(); }
       // fresh prices and availability: the catalogue reconciles the cart lines
@@ -416,9 +418,9 @@ export default function Cart() {
     return (
       <View style={[styles.empty, { paddingTop: insets.top }]}>
         <EmptyCartArt />
-        <Text style={styles.emptyTitle}>Your cart is empty</Text>
+        <Text style={styles.emptyTitle}>{CART.emptyTitle}</Text>
         <PressScale onPress={() => router.replace('/home')} style={[styles.cta, { paddingHorizontal: 30, marginTop: 20 }]}>
-          <Text style={styles.ctaTxt}>Browse</Text>
+          <Text style={styles.ctaTxt}>{CART.browse}</Text>
         </PressScale>
       </View>
     );
@@ -436,7 +438,7 @@ export default function Cart() {
       >
         {!DEMO && <OfflineBanner onRetry={() => void refresh()} style={{ marginHorizontal: 15, marginBottom: 15 }} />}
         {!DEMO && <ClosedBanner style={{ marginHorizontal: 15, marginBottom: 15 }} />}
-        {!DEMO && refreshFailed && <Text style={styles.warn}>{LIVE.refreshFailed}</Text>}
+        {!DEMO && refreshFailed && <Text style={styles.warn}>{CART.refreshFailed}</Text>}
         {/* the birthday gift, while the server says it applies (signed in, with an address) */}
         {!DEMO && checkout && <BirthdayBanner birthday={birthdayOf(quoteFor)} />}
 
@@ -639,8 +641,8 @@ export default function Cart() {
           />
         )}
 
-        <Text style={styles.policyTitle}>{COPY.policyTitle}</Text>
-        <Text style={styles.policy}>{DEMO ? COPY.policy : LIVE.policy}</Text>
+        <Text style={styles.policyTitle}>{CART.policyTitle}</Text>
+        <Text style={styles.policy}>{DEMO ? COPY.policy : CART.policy}</Text>
         {!DEMO && !(checkout && onlineOffered(payInfo)) && <PolicyRow style={{ marginHorizontal: 23, marginTop: 8 }} />}
       </Animated.ScrollView>
 
@@ -663,10 +665,10 @@ export default function Cart() {
       <View style={[styles.bottom, { paddingBottom: bottomPad }]}>
         {!phone ? (
           <Animated.View key="login" exiting={FadeOut.duration(150)}>
-            <Text style={styles.bottomTitle}>{COPY.almost}</Text>
-            <Text style={styles.bottomSub}>{COPY.almostSub}</Text>
+            <Text style={styles.bottomTitle}>{CART.almost}</Text>
+            <Text style={styles.bottomSub}>{CART.almostSub}</Text>
             <PressScale onPress={() => (midRegistration ? router.push('/register') : setLogin(true))} haptic style={{ marginTop: 24 }} scaleTo={0.95}>
-              <View style={styles.cta}><Text style={styles.ctaTxt}>{COPY.proceedPhone}</Text></View>
+              <View style={styles.cta}><Text style={styles.ctaTxt}>{CART.proceedPhone}</Text></View>
             </PressScale>
           </Animated.View>
         ) : !DEMO ? (
@@ -690,10 +692,10 @@ export default function Cart() {
           <Animated.View key="addr" entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
             <View style={styles.whereRow}>
               <View style={{ marginTop: 3 }}><NavIcon size={16} color={C.brandInk} /></View>
-              <Text style={styles.whereTxt}>{COPY.whereTitle}</Text>
+              <Text style={styles.whereTxt}>{CART.whereTitle}</Text>
             </View>
             <PressScale onPress={() => router.push('/address')} haptic style={{ marginTop: 21 }} scaleTo={0.95}>
-              <View style={styles.cta}><Text style={styles.ctaTxt}>{COPY.addAddress}</Text></View>
+              <View style={styles.cta}><Text style={styles.ctaTxt}>{CART.addAddress}</Text></View>
             </PressScale>
           </Animated.View>
         ) : (
@@ -718,7 +720,7 @@ export default function Cart() {
 
       {!!notice && (
         <Animated.View key={notice} entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[styles.toast, { bottom: bottomPad + 150 }]} accessibilityRole="alert">
-          <Text style={styles.toastTxt}>{DEMO ? 'Ordering opens soon. This is a preview.' : LIVE.notice}</Text>
+          <Text style={styles.toastTxt}>{DEMO ? 'Ordering opens soon. This is a preview.' : CART.notice}</Text>
         </Animated.View>
       )}
 
@@ -918,7 +920,7 @@ function LiveLine({ line, showSavings }: { line: CartLine; showSavings: boolean 
   // the struck reference (the regular price on an offer, or "MRP LKR 300" when the price is under
   // the MRP - migration 048), always on (owner, 2026-10-18)
   const struck = priceDisplay(priced, { showStruck: showSavings && ok }).struck;
-  const why = needsVariant(line) ? VARIANT_COPY.pickSizeAgain : variant || p.is_available === false ? unavailableText(p) : LIVE.unavailable;
+  const why = needsVariant(line) ? VARIANT_COPY.pickSizeAgain : variant || p.is_available === false ? unavailableText(p) : CART.unavailable;
   return (
     <Animated.View exiting={FadeOut.duration(160)} layout={LinearTransition.duration(220)} style={[styles.itemRow, variant && { height: undefined, minHeight: 50, paddingVertical: 6 }]}>
       <ProductImage product={p} size={30} radius={6} style={!ok && { opacity: 0.45 }} />
@@ -930,7 +932,7 @@ function LiveLine({ line, showSavings }: { line: CartLine; showSavings: boolean 
       {ok ? (
         <Stepper product={p} qty={qty} variant={variant} />
       ) : (
-        <PressScale onPress={() => cartActions.setQty(p, 0, variant)} style={styles.removeBtn}><Text style={styles.removeTxt}>{LIVE.remove}</Text></PressScale>
+        <PressScale onPress={() => cartActions.setQty(p, 0, variant)} style={styles.removeBtn}><Text style={styles.removeTxt}>{CART.remove}</Text></PressScale>
       )}
       <View style={[styles.priceCol, { width: 78 }]}>
         {struck && <StruckPrice struck={{ ...struck, amount: round2(struck.amount * qty) }} money={formatLkr} style={styles.itemStrike} />}
@@ -963,13 +965,13 @@ function ComboCartLine({ line }: { line: ComboLine }) {
       <View style={!c.is_available && { opacity: 0.45 }}><ComboThumb combo={c} size={30} radius={6} /></View>
       <View style={{ flex: 1, marginLeft: 6, marginRight: 6 }}>
         <Text style={[styles.itemName, { marginLeft: 0 }, !c.is_available && { color: '#8A8A90' }]} numberOfLines={1}>{c.name}</Text>
-        <Text style={styles.comboInside} numberOfLines={2}>Combo pack · {comboSummary(c)}</Text>
-        {!c.is_available && <Text style={styles.unavail}>{LIVE.unavailable}</Text>}
+        <Text style={styles.comboInside} numberOfLines={2}>{CART.comboPack(comboSummary(c))}</Text>
+        {!c.is_available && <Text style={styles.unavail}>{CART.unavailable}</Text>}
       </View>
       {c.is_available ? (
         <ComboAdd combo={c} compact />
       ) : (
-        <PressScale onPress={() => cartActions.setComboQty(c, 0)} style={styles.removeBtn}><Text style={styles.removeTxt}>{LIVE.remove}</Text></PressScale>
+        <PressScale onPress={() => cartActions.setComboQty(c, 0)} style={styles.removeBtn}><Text style={styles.removeTxt}>{CART.remove}</Text></PressScale>
       )}
       <View style={[styles.priceCol, { width: 78 }]}>
         {c.is_available && comboHasSaving(c) && <Text style={styles.itemStrike}>{formatLkr(round2(c.items_total * line.quantity))}</Text>}
@@ -995,7 +997,7 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
   if (!picks.length) return null;
   return (
     <View style={[styles.card, { paddingTop: 17, paddingBottom: 12 }]}>
-      <Text style={styles.mealTitle}>{appText(store, 'cart_basket_title', LIVE.mealTitle)}</Text>
+      <Text style={styles.mealTitle}>{appText(store, 'cart_basket_title', CART.basketTitle)}</Text>
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 13 }}>
         {picks.map((p, i) => (
           <View key={p.id} style={{ width: 69 }}>
@@ -1056,7 +1058,7 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
   const feeRight = !checkout ? (
     <Text style={styles.billR}>{bill.feeText}</Text>
   ) : !quoted ? (
-    <Text style={[styles.billR, { color: '#8A8A90' }]}>Calculating…</Text>
+    <Text style={[styles.billR, { color: '#8A8A90' }]}>{CART.calculating}</Text>
   ) : (
     <Text style={styles.billR}>{formatLkr(checkout.deliveryFee as number)}</Text>
   );
@@ -1070,16 +1072,16 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
         <View style={styles.sq}><ReceiptGlyph /></View>
         <View>
           <Text style={styles.payLine}>
-            To Pay {head.show && <Text style={styles.payStrike}>{formatLkr(head.before)} </Text>}{formatLkr(toPay)}
+            {CART.toPay} {head.show && <Text style={styles.payStrike}>{formatLkr(head.before)} </Text>}{formatLkr(toPay)}
           </Text>
           <Text style={[styles.savedTxt, !head.show && { color: '#6E6E76' }]}>
-            {head.show ? `${formatLkr(head.saved)} saved on the total!` : feeKnown ? 'Includes the delivery fee' : 'Delivery fee confirmed at checkout'}
+            {head.show ? CART.savedOnTotal(formatLkr(head.saved)) : feeKnown ? CART.includesFee : CART.feeAtCheckout}
           </Text>
         </View>
       </View>
       <View style={[styles.sep, { marginHorizontal: 0 }]} />
       <View style={{ paddingHorizontal: 15, paddingTop: 12 }}>
-        <BillRow l="Item Total" r={(
+        <BillRow l={CART.itemTotal} r={(
           <Text style={styles.billR}>
             {bill.showSaved && <Text style={styles.billStrike}>{formatLkr(mrpTotal)} </Text>}
             <Text style={bill.showSaved ? { color: C.brandText } : undefined}>{formatLkr(itemTotal)}</Text>
@@ -1088,11 +1090,11 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
         {bundleSaved > 0 && (
           <>
             <Dashed style={{ marginVertical: 11 }} />
-            <BillRow l="Bundle savings" r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(bundleSaved)}</Text>} />
+            <BillRow l={CART.bundleSavings} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(bundleSaved)}</Text>} />
           </>
         )}
         <Dashed style={{ marginVertical: 11 }} />
-        <BillRow dashed l={`Delivery Fee${distance}`} r={feeRight} />
+        <BillRow dashed l={CART.deliveryFee(distance)} r={feeRight} />
         {!!freeNote && <Text style={styles.freeNote}>{freeNote}</Text>}
         {!!checkout && checkout.discount > 0 && (
           <>
@@ -1103,7 +1105,7 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
         {!!checkout && checkout.points.value > 0 && (
           <>
             <Dashed style={{ marginVertical: 11 }} />
-            <BillRow l={`Blynk Points (${checkout.points.points})`} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(checkout.points.value)}</Text>} />
+            <BillRow l={CART.pointsLine(checkout.points.points)} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(checkout.points.value)}</Text>} />
           </>
         )}
         {walletPaid > 0 && (
@@ -1119,7 +1121,7 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
           </>
         )}
         {!!checkout && (estimated || checkout.points.value > 0 || walletPaid > 0) && (
-          <Text style={styles.freeNote}>Estimated. The final amount is confirmed when you place the order.</Text>
+          <Text style={styles.freeNote}>{CART.estimated}</Text>
         )}
         {!!pointsLine && (
           <Animated.View entering={FadeIn.duration(220)} style={styles.pointsRow}>
@@ -1130,15 +1132,15 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
       </View>
       <Animated.View entering={FadeIn.duration(250)} style={styles.thatsIt}>
         <LinearGradient colors={[C.brandTint, 'rgba(255,248,214,0)']} start={{ x: 0.55, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
-        <Text style={styles.thatsItTxt}>{appText(store, 'cart_bill_note', LIVE.thatsIt)}</Text>
+        <Text style={styles.thatsItTxt}>{appText(store, 'cart_bill_note', CART.thatsIt)}</Text>
       </Animated.View>
       <View style={[styles.billRow, { paddingHorizontal: 15, height: 46 }]}>
-        <Text style={styles.payTotal}>To Pay</Text>
-        <Text style={styles.payTotal}>{formatLkr(toPay)}{feeKnown ? '' : ' + delivery'}</Text>
+        <Text style={styles.payTotal}>{CART.toPay}</Text>
+        <Text style={styles.payTotal}>{formatLkr(toPay)}{feeKnown ? '' : CART.plusDelivery}</Text>
       </View>
       {!!checkout && (
         <View style={[styles.billRow, { paddingHorizontal: 15, paddingBottom: 14, marginTop: -6 }]}>
-          <Text style={[styles.billL, { lineHeight: 18 }]}>Payment</Text>
+          <Text style={[styles.billL, { lineHeight: 18 }]}>{CART.payment}</Text>
           <Text style={[styles.billR, { fontFamily: F.medium }]}>{allByWallet ? WALLET_COPY.paidByWallet : payMethod === 'ONLINE' ? PAY.online : PAY.cod}</Text>
         </View>
       )}
@@ -1165,14 +1167,14 @@ function CouponCard({ coupon, error, onApply, onRemove }: {
     <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0 }]}>
       {coupon ? (
         <View>
-          <Row icon={<TagGlyph />} label={`${coupon.code} applied`} right={(
-            <Pressable onPress={onRemove} hitSlop={8} accessibilityLabel={`Remove coupon ${coupon.code}`}><Text style={styles.change}>Remove</Text></Pressable>
+          <Row icon={<TagGlyph />} label={CART.couponApplied(coupon.code)} right={(
+            <Pressable onPress={onRemove} hitSlop={8} accessibilityLabel={CART.removeCouponLabel(coupon.code)}><Text style={styles.change}>{CART.remove}</Text></Pressable>
           )} />
           <Text style={[styles.couponNote, couponAppliedNote(coupon).muted && { color: '#6E6E76' }]}>{couponAppliedNote(coupon).text}</Text>
         </View>
       ) : (
         <Pressable onPress={() => setOpen((v) => !v)}>
-          <Row icon={<TagGlyph />} label="Have a coupon code?" right={<ChevronIcon size={16} color={INK} stroke={2.2} />} />
+          <Row icon={<TagGlyph />} label={CART.haveCoupon} right={<ChevronIcon size={16} color={INK} stroke={2.2} />} />
         </Pressable>
       )}
       <Collapsible open={open && !coupon}>
@@ -1182,13 +1184,13 @@ function CouponCard({ coupon, error, onApply, onRemove }: {
             onChangeText={(t) => setCode(t.replace(/[^A-Za-z0-9]/g, '').slice(0, 20))}
             onSubmitEditing={apply}
             autoCapitalize="characters"
-            placeholder="Enter coupon code"
+            placeholder={CART.couponPlaceholder}
             placeholderTextColor="#9A9AA2"
-            accessibilityLabel="Coupon code"
+            accessibilityLabel={CART.couponLabel}
             style={styles.couponInput}
           />
           <PressScale disabled={!valid || busy} onPress={apply} style={[styles.couponBtn, (!valid || busy) && { backgroundColor: C.brandSoft }]}>
-            <Text style={styles.couponBtnTxt}>{busy ? 'Checking…' : 'Apply'}</Text>
+            <Text style={styles.couponBtnTxt}>{busy ? CART.checking : CART.apply}</Text>
           </PressScale>
         </View>
       </Collapsible>
@@ -1217,9 +1219,9 @@ function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow
       <Animated.View key="saving" entering={FadeIn.duration(200)} style={{ paddingBottom: 6 }}>
         <View style={styles.whereRow}>
           <View style={{ marginTop: 3 }}><NavIcon size={16} color={C.brandInk} /></View>
-          <Text style={styles.whereTxt}>{loc.syncing ? 'Saving your address…' : 'Loading your addresses…'}</Text>
+          <Text style={styles.whereTxt}>{loc.syncing ? CART.savingAddress : CART.loadingAddresses}</Text>
         </View>
-        <View style={[styles.cta, { marginTop: 21, backgroundColor: C.brandSoft }]}><Text style={styles.ctaTxt}>Please wait…</Text></View>
+        <View style={[styles.cta, { marginTop: 21, backgroundColor: C.brandSoft }]}><Text style={styles.ctaTxt}>{CART.pleaseWait}</Text></View>
       </Animated.View>
     );
   }
@@ -1229,44 +1231,44 @@ function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow
       <Animated.View key="addr" entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
         {sync && (
           <ErrorBox
-            title={sync.outOfArea ? OUTSIDE_AREA.title : "We couldn't save your address"}
+            title={sync.outOfArea ? OUTSIDE_AREA.title : CART.saveAddressFailed}
             message={sync.outOfArea ? OUTSIDE_AREA.message : sync.message}
           />
         )}
         <View style={styles.whereRow}>
           <View style={{ marginTop: 3 }}><NavIcon size={16} color={C.brandInk} /></View>
-          <Text style={styles.whereTxt}>{COPY.whereTitle}</Text>
+          <Text style={styles.whereTxt}>{CART.whereTitle}</Text>
         </View>
         <PressScale onPress={() => router.push('/address?return=/cart')} haptic style={{ marginTop: 21 }} scaleTo={0.95}>
-          <View style={styles.cta}><Text style={styles.ctaTxt}>{COPY.addAddress}</Text></View>
+          <View style={styles.cta}><Text style={styles.ctaTxt}>{CART.addAddress}</Text></View>
         </PressScale>
       </Animated.View>
     );
   }
   const toPay = checkout?.toPay ?? null;
   const disabled = !canOrder || !orderable || placing || toPay === null;
-  const label = !orderable ? (blockedLabel ?? (closedNow && closedHint ? 'Pick a delivery time' : LIVE.closedCta))
-    : placing ? 'Placing your order…'
-      : toPay === null ? (quoteFailed ? 'Delivery fee unavailable' : 'Getting the delivery fee…')
+  const label = !orderable ? (blockedLabel ?? (closedNow && closedHint ? CART.pickTime : CART.closedCta))
+    : placing ? CART.placing
+      : toPay === null ? (quoteFailed ? CART.feeUnavailable : CART.gettingFee)
         : payMethod === 'ONLINE' ? PAY.placeOnline(formatLkr(toPay)) : PAY.placeCod(formatLkr(toPay));
   return (
     <Animated.View key="place" entering={FadeIn.duration(200)}>
       {error && (
         <ErrorBox title={error.title} message={error.message} action={error.action === 'address' ? (
-          <Pressable onPress={() => router.push('/addresses?return=/cart')} hitSlop={8}><Text style={styles.change}>Choose another address</Text></Pressable>
+          <Pressable onPress={() => router.push('/addresses?return=/cart')} hitSlop={8}><Text style={styles.change}>{CART.chooseAnother}</Text></Pressable>
         ) : undefined} />
       )}
       <View style={styles.whereRow}>
         <View style={{ marginTop: 3 }}><NavIcon size={16} color={C.brandInk} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.whereTxt, { marginLeft: 0 }]} numberOfLines={1}>Deliver to {a.label}</Text>
+          <Text style={[styles.whereTxt, { marginLeft: 0 }]} numberOfLines={1}>{CART.deliverTo(labelText(a.label))}</Text>
           <Text style={styles.bottomSub} numberOfLines={1}>{addressSummary(a)}</Text>
         </View>
-        <Pressable onPress={() => router.push('/addresses?return=/cart')} hitSlop={8}><Text style={styles.change}>Change</Text></Pressable>
+        <Pressable onPress={() => router.push('/addresses?return=/cart')} hitSlop={8}><Text style={styles.change}>{CART.change}</Text></Pressable>
       </View>
       {quoteFailed && toPay === null && (
         <Pressable onPress={onRetryQuote} hitSlop={6}>
-          <Text style={[styles.warn, { marginHorizontal: 0, marginTop: 10, marginBottom: 0 }]}>{"Couldn't get the delivery fee. Tap to try again."}</Text>
+          <Text style={[styles.warn, { marginHorizontal: 0, marginTop: 10, marginBottom: 0 }]}>{CART.feeRetry}</Text>
         </Pressable>
       )}
       {!!closedHint && <Text style={[styles.bottomSub, { marginTop: 10, color: C.brandText, fontFamily: F.medium }]}>{closedHint}</Text>}
@@ -1341,8 +1343,8 @@ function LoginSheet({ onClose }: { onClose: () => void }) {
     <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(150)} style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       <Animated.View style={[styles.sheet, sheet]}>
-        <Text style={styles.sheetTitle}>{COPY.login}</Text>
-        <Text style={styles.sheetSub}>{COPY.loginSub}</Text>
+        <Text style={styles.sheetTitle}>{CART.login}</Text>
+        <Text style={styles.sheetSub}>{CART.loginSub}</Text>
         <Pressable onPress={() => input.current?.focus()} style={styles.phoneRow}>
           <View style={styles.ccBox}>
             <Text style={styles.flag}>{DEMO ? COPY.countryFlag : LIVE.countryFlag}</Text>
@@ -1350,7 +1352,7 @@ function LoginSheet({ onClose }: { onClose: () => void }) {
             <ChevronIcon size={15} color="#555" stroke={1.8} />
           </View>
           <View style={styles.numBox}>
-            <Animated.Text style={[styles.floatLabel, label]}>{COPY.mobileLabel}</Animated.Text>
+            <Animated.Text style={[styles.floatLabel, label]}>{CART.mobileLabel}</Animated.Text>
             <TextInput
               ref={input}
               autoFocus
@@ -1363,16 +1365,16 @@ function LoginSheet({ onClose }: { onClose: () => void }) {
               keyboardType="number-pad"
               style={styles.phoneInput}
               maxLength={10}
-              accessibilityLabel={COPY.mobileLabel}
+              accessibilityLabel={CART.mobileLabel}
             />
           </View>
         </Pressable>
         {!!error && <Text style={styles.sheetErr} accessibilityRole="alert">{error}</Text>}
         <PressScale disabled={!ready || sending} onPress={submit} haptic scaleTo={0.96}>
-          <Animated.View style={[styles.cta, btn]}><Text style={[styles.ctaTxt, { fontSize: 14.5 }]}>{sending ? LIVE.sending : COPY.continue}</Text></Animated.View>
+          <Animated.View style={[styles.cta, btn]}><Text style={[styles.ctaTxt, { fontSize: 14.5 }]}>{sending ? CART.sending : CART.continue}</Text></Animated.View>
         </PressScale>
         <Text style={styles.terms}>
-          By clicking, I accept the <Text style={styles.link} onPress={DEMO ? undefined : () => openPolicy('privacy')} accessibilityRole="link">privacy policy</Text> and <Text style={styles.link} onPress={DEMO ? undefined : () => openPolicy('terms')} accessibilityRole="link">terms of use</Text>
+          {CART.legal.before}<Text style={styles.link} onPress={DEMO ? undefined : () => openPolicy('privacy')} accessibilityRole="link">{CART.legal.privacy}</Text>{CART.legal.between}<Text style={styles.link} onPress={DEMO ? undefined : () => openPolicy('terms')} accessibilityRole="link">{CART.legal.terms}</Text>{CART.legal.after}
         </Text>
       </Animated.View>
     </Animated.View>

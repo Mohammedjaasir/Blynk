@@ -1,9 +1,10 @@
 import { ApiError } from '@/blynk/api/client';
+import { localized } from '@/blynk/i18n/localized';
+import { AUTH_ERRORS } from './words';
 
 /* Pure rules and copy for the sign-in, registration and birthday screens. */
 
 export const NAME_MAX = 60;
-export const NAME_ERROR = 'Enter your name (at least 2 letters).';
 
 /** The trimmed name when it is acceptable (2+ characters with at least one letter), else null. */
 export function validName(raw: string): string | null {
@@ -39,12 +40,29 @@ export function parseBirthday(d: string, m: string, y: string, today = new Date(
 const serverText = (e: ApiError, fallback: string) => (e.message && e.message !== 'Request failed.' ? e.message : fallback);
 
 /** Fallback copy for sign-in refusals (the server's message wins). Kept as the backend words them. */
-export const REFUSED_FALLBACK: Record<string, string> = {
-  EMAIL_SIGN_IN_REQUIRED: 'This account signs in with email and password.',
-  RIDER_PENDING_APPROVAL: 'Your application is waiting for approval.',
-  RIDER_APPLICATION_REJECTED: "Your application wasn't approved.",
-  INVALID_CREDENTIALS: 'Sign-in failed. Check your details or ask your store admin.',
-};
+export const REFUSED_FALLBACK: Record<string, string> = localized<Record<string, string>>(
+  {
+    EMAIL_SIGN_IN_REQUIRED: 'This account signs in with email and password.',
+    RIDER_PENDING_APPROVAL: 'Your application is waiting for approval.',
+    RIDER_APPLICATION_REJECTED: "Your application wasn't approved.",
+    INVALID_CREDENTIALS: 'Sign-in failed. Check your details or ask your store admin.',
+  },
+  {
+    si: {
+      EMAIL_SIGN_IN_REQUIRED: 'මෙම ගිණුමට ඇතුල් වන්නේ ඊමේල් සහ මුරපදය මඟිනි.',
+      RIDER_PENDING_APPROVAL: 'ඔබේ අයදුම්පත අනුමැතිය බලා සිටී.',
+      RIDER_APPLICATION_REJECTED: 'ඔබේ අයදුම්පත අනුමත කළේ නැහැ.',
+      INVALID_CREDENTIALS: 'ඇතුල් වීමට නොහැකි වුණා. ඔබේ විස්තර පරීක්ෂා කරන්න, නැත්නම් සාප්පුවේ පරිපාලකගෙන් අසන්න.',
+    },
+    ta: {
+      EMAIL_SIGN_IN_REQUIRED: 'இந்தக் கணக்கு மின்னஞ்சல் மற்றும் கடவுச்சொல் மூலம் உள்நுழைகிறது.',
+      RIDER_PENDING_APPROVAL: 'உங்கள் விண்ணப்பம் ஒப்புதலுக்காகக் காத்திருக்கிறது.',
+      RIDER_APPLICATION_REJECTED: 'உங்கள் விண்ணப்பம் ஏற்றுக்கொள்ளப்படவில்லை.',
+      INVALID_CREDENTIALS: 'உள்நுழைய முடியவில்லை. உங்கள் விவரங்களைச் சரிபார்க்கவும் அல்லது கடை நிர்வாகியிடம் கேளுங்கள்.',
+    },
+  },
+  'auth.REFUSED_FALLBACK',
+);
 
 /** A sign-in the server refused for this account (not a wrong code): no new code will help. */
 export function isAccountRefusal(e: unknown): boolean {
@@ -57,14 +75,14 @@ type Details = { retry_after_seconds?: number; remaining_attempts?: number };
 
 /** What to tell the customer when a sign-in or registration call fails. */
 export function authErrorText(e: unknown): string {
-  if (!(e instanceof ApiError)) return 'Something went wrong. Please try again.';
+  if (!(e instanceof ApiError)) return AUTH_ERRORS.generic;
   const details = (e.details ?? {}) as Details;
   switch (e.code) {
-    case 'VALIDATION_ERROR': return 'Enter a valid Sri Lankan mobile number.';
+    case 'VALIDATION_ERROR': return AUTH_ERRORS.invalidPhone;
     case 'TOO_MANY_REQUESTS':
       return typeof details.retry_after_seconds === 'number'
-        ? `Too many codes requested. Try again in ${mins(details.retry_after_seconds)} min.`
-        : 'Too many codes requested. Please try again later.';
+        ? AUTH_ERRORS.tooManyCodesIn(mins(details.retry_after_seconds))
+        : AUTH_ERRORS.tooManyCodes;
     // Accounts this app may not sign in (Flutter shows the server's own words): Admin and
     // Inventory sign in with email only, a rider still waiting for approval, a rejected rider,
     // a disabled staff account. Riders and Operations otherwise shop like any customer.
@@ -73,21 +91,21 @@ export function authErrorText(e: unknown): string {
     case 'RIDER_APPLICATION_REJECTED':
     case 'INVALID_CREDENTIALS':
       return serverText(e, REFUSED_FALLBACK[e.code]);
-    case 'OTP_DELIVERY_FAILED': return 'We could not send the code by SMS. Please try again.';
+    case 'OTP_DELIVERY_FAILED': return AUTH_ERRORS.smsFailed;
     case 'INVALID_OTP':
       return typeof details.remaining_attempts === 'number'
-        ? `Wrong code. ${details.remaining_attempts} attempt${details.remaining_attempts === 1 ? '' : 's'} left.`
-        : 'This code is no longer valid. Tap Resend OTP for a new one.';
-    case 'OTP_EXPIRED': return 'This code has expired. Tap Resend OTP for a new one.';
-    case 'OTP_MAX_ATTEMPTS_EXCEEDED': return 'Too many wrong codes. Tap Resend OTP for a new one.';
-    case 'ACCOUNT_DEACTIVATED': return serverText(e, 'This account has been deactivated. Please contact Blynk support.');
-    case 'UNAUTHENTICATED': return 'Your sign-in has expired. Please sign in again.';
-    case 'REFERRAL_DISABLED': return 'Referral codes are not available right now.';
-    case 'REFERRAL_CODE_NOT_FOUND': return 'We could not find that referral code.';
-    case 'REFERRAL_SELF': return 'You cannot use your own referral code.';
-    case 'REFERRAL_ALREADY_APPLIED': return 'A referral code is already on your account.';
-    case 'REFERRAL_NOT_NEW_CUSTOMER': return 'Referral codes are for new customers only.';
-    default: return e.message || 'Something went wrong. Please try again.';
+        ? AUTH_ERRORS.wrongCode(details.remaining_attempts)
+        : AUTH_ERRORS.codeInvalid;
+    case 'OTP_EXPIRED': return AUTH_ERRORS.codeExpired;
+    case 'OTP_MAX_ATTEMPTS_EXCEEDED': return AUTH_ERRORS.codeMaxAttempts;
+    case 'ACCOUNT_DEACTIVATED': return serverText(e, AUTH_ERRORS.deactivated);
+    case 'UNAUTHENTICATED': return AUTH_ERRORS.signInExpired;
+    case 'REFERRAL_DISABLED': return AUTH_ERRORS.referralDisabled;
+    case 'REFERRAL_CODE_NOT_FOUND': return AUTH_ERRORS.referralNotFound;
+    case 'REFERRAL_SELF': return AUTH_ERRORS.referralSelf;
+    case 'REFERRAL_ALREADY_APPLIED': return AUTH_ERRORS.referralApplied;
+    case 'REFERRAL_NOT_NEW_CUSTOMER': return AUTH_ERRORS.referralNotNew;
+    default: return e.message || AUTH_ERRORS.generic;
   }
 }
 

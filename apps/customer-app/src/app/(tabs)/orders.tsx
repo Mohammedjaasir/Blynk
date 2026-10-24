@@ -10,6 +10,7 @@ import { listOrders } from '@/blynk/orders/api';
 import { setKnownOrders } from '@/blynk/orders/openOrders';
 import { placeErrorCopy } from '@/blynk/orders/errors';
 import { itemCountText, orderTime, statusLabel, statusTone, type OrderTone } from '@/blynk/orders/status';
+import { ORDERS_LIST as W } from '@/blynk/orders/screenWords';
 import type { Order } from '@/blynk/orders/types';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { ChevronIcon } from '@/components/icons';
@@ -75,27 +76,27 @@ export default function Orders() {
       <StatusBar style="dark" />
       {/* a tab of the shell: no back button */}
       <View style={[styles.head, { paddingTop: insets.top + 8 }]}>
-        <Text style={styles.title} accessibilityRole="header">My orders</Text>
+        <Text style={styles.title} accessibilityRole="header">{W.title}</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 40 }}>
         {signedIn && !DEMO && <OfflineBanner onRetry={load} style={{ marginBottom: 12 }} />}
         {DEMO ? (
-          <Empty title="Your orders appear here" sub="Ordering opens soon. This is a preview." />
+          <Empty title={W.previewTitle} sub={W.previewSub} />
         ) : !signedIn ? (
-          <Empty title="Log in to see your orders" sub="Your past and current orders appear here." cta="Log in" onPress={openSignIn} />
+          <Empty title={W.loginTitle} sub={W.loginSub} cta={W.login} onPress={openSignIn} />
         ) : error && !orders ? (
-          <Empty title="Couldn't load your orders" sub={error} cta="Try again" onPress={load} />
+          <Empty title={W.failTitle} sub={error} cta={W.tryAgain} onPress={load} />
         ) : !orders ? (
           [0, 1, 2].map((i) => <Skeleton key={i} h={92} r={16} style={{ marginBottom: 12 }} />)
         ) : orders.length === 0 ? (
-          <Empty title="No orders yet" sub="Everything you order appears here, with its status." cta="Start shopping" to="/home" />
+          <Empty title={W.emptyTitle} sub={W.emptySub} cta={W.startShopping} to="/home" />
         ) : (
           <>
             {orders.map((o, i) => <OrderRow key={o.id} order={o} index={i} />)}
             {!!error && <Text style={styles.err}>{error}</Text>}
             {page < pages && (
               <PressScale onPress={loadMore} disabled={more} style={styles.more}>
-                <Text style={styles.moreTxt}>{more ? 'Loading…' : 'Show older orders'}</Text>
+                <Text style={styles.moreTxt}>{more ? W.loading : W.older}</Text>
               </PressScale>
             )}
           </>

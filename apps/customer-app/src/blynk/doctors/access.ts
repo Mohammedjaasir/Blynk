@@ -1,3 +1,5 @@
+import { localized } from '@/blynk/i18n/localized';
+
 /**
  * "Doctors need sign-in" (owner, 2026-10-10; GET /store `doctors_require_sign_in`). Unknown (the
  * store has not answered yet, or an older backend) means ON, like the Flutter shop and the server.
@@ -9,12 +11,29 @@ export function doctorsGate(signedIn: boolean, store: { doctors_require_sign_in?
   return required ? 'sign-in' : 'open';
 }
 
-export const DOCTORS_SIGN_IN = {
-  title: 'Sign in to see doctors',
-  message: 'Use your phone number to log in or create an account.',
-  action: 'Log in / Sign up',
-  bookTitle: 'Sign in to book',
-} as const;
+export const DOCTORS_SIGN_IN = localized(
+  {
+    title: 'Sign in to see doctors',
+    message: 'Use your phone number to log in or create an account.',
+    action: 'Log in / Sign up',
+    bookTitle: 'Sign in to book',
+  } as const,
+  {
+    si: {
+      title: 'වෛද්‍යවරුන් බැලීමට ඇතුල් වන්න',
+      message: 'ඇතුල් වීමට හෝ ගිණුමක් සෑදීමට ඔබේ දුරකථන අංකය භාවිත කරන්න.',
+      action: 'ඇතුල් වන්න / ලියාපදිංචි වන්න',
+      bookTitle: 'වේලාවක් වෙන් කිරීමට ඇතුල් වන්න',
+    },
+    ta: {
+      title: 'டாக்டர்களைப் பார்க்க உள்நுழையுங்கள்',
+      message: 'உள்நுழைய அல்லது கணக்கு உருவாக்க உங்கள் தொலைபேசி எண்ணைப் பயன்படுத்துங்கள்.',
+      action: 'உள்நுழை / பதிவு செய்',
+      bookTitle: 'முன்பதிவு செய்ய உள்நுழையுங்கள்',
+    },
+  },
+  'doctors.DOCTORS_SIGN_IN',
+);
 
 /**
  * Doctor channelling shown to customers (owner, 2026-10-14; GET /store `doctors_enabled`).

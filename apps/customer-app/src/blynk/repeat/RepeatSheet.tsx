@@ -19,6 +19,7 @@ import type { BasketItem, RepeatBasket } from './models';
 import { createBody, estimate, matchAddress, repeatErrorText } from './payload';
 import { colombo, firstRun, nextRunText, scheduleText, suggestName, timeLabel, whenText } from './schedule';
 import { SheetModal, useSheetClose } from './sheet';
+import { REPEAT_WORDS } from './words';
 
 /*
  * "Repeat this basket" (from a delivered order or the cart): how often, the weekday, the time
@@ -41,7 +42,7 @@ export interface RepeatSource {
 export function RepeatCreateSheet({ source, onClose }: { source: RepeatSource; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   return (
-    <SheetModal onClose={onClose} label="Repeat this basket" busy={busy}>
+    <SheetModal onClose={onClose} label={REPEAT_WORDS.create.title} busy={busy}>
       <Body source={source} busy={busy} setBusy={setBusy} />
     </SheetModal>
   );
@@ -119,20 +120,20 @@ function Body({ source, busy, setBusy }: { source: RepeatSource; busy: boolean; 
   };
 
   if (done) {
-    const next = nextRunText(done.nextRunAt) ?? (first ? `First order: ${whenText(first)}` : null);
+    const next = nextRunText(done.nextRunAt) ?? (first ? REPEAT_WORDS.create.firstOrderLine(whenText(first)) : null);
     return (
       <View style={st.done}>
         <Confetti burstKey={burst} x={width / 2 - 24} y={150} count={30} />
         <SuccessTick />
-        <Animated.Text entering={reduced ? undefined : FadeInDown.delay(180).duration(260)} style={st.doneTitle}>Your basket is on repeat</Animated.Text>
+        <Animated.Text entering={reduced ? undefined : FadeInDown.delay(180).duration(260)} style={st.doneTitle}>{REPEAT_WORDS.create.doneTitle}</Animated.Text>
         <Animated.View entering={reduced ? undefined : FadeIn.delay(300).duration(260)} style={{ alignItems: 'center' }}>
           <Text style={st.doneSub}>{scheduleText(done.frequency, done.weekday, done.placeAt)}</Text>
           {!!next && <Text style={st.doneNext}>{next}</Text>}
-          <Text style={[st.small, { textAlign: 'center', marginTop: 8 }]}>{"We'll text you each time it's ordered. Skip or pause it any time."}</Text>
+          <Text style={[st.small, { textAlign: 'center', marginTop: 8 }]}>{REPEAT_WORDS.create.doneSmall}</Text>
         </Animated.View>
         <View style={st.pair}>
-          <Button label="See my baskets" kind="secondary" onPress={() => { close(); setTimeout(() => router.push('/repeat-baskets'), 220); }} style={{ flex: 1 }} />
-          <Button label="Done" onPress={close} style={{ flex: 1 }} />
+          <Button label={REPEAT_WORDS.create.seeBaskets} kind="secondary" onPress={() => { close(); setTimeout(() => router.push('/repeat-baskets'), 220); }} style={{ flex: 1 }} />
+          <Button label={REPEAT_WORDS.create.done} onPress={close} style={{ flex: 1 }} />
         </View>
       </View>
     );
@@ -140,36 +141,36 @@ function Body({ source, busy, setBusy }: { source: RepeatSource; busy: boolean; 
 
   return (
     <View>
-      <Text style={st.title}>Repeat this basket</Text>
-      <Text style={st.small}>We place this order for you on your schedule. Cash on delivery, change or skip it any time.</Text>
+      <Text style={st.title}>{REPEAT_WORDS.create.title}</Text>
+      <Text style={st.small}>{REPEAT_WORDS.create.sub}</Text>
       <ItemStrip items={source.items} products={products} />
-      {source.hadCombos && <Text style={[st.small, { marginTop: 6 }]}>Combo packs are not repeated.</Text>}
+      {source.hadCombos && <Text style={[st.small, { marginTop: 6 }]}>{REPEAT_WORDS.create.combosNot}</Text>}
 
       <ScheduleFields
         draft={draft}
         onChange={setDraft}
         store={store}
         addresses={addresses}
-        addressNote={source.order?.line1 ? `This order went to ${[source.order.line1, source.order.city].filter(Boolean).join(', ')}.` : null}
+        addressNote={source.order?.line1 ? REPEAT_WORDS.create.addressWent([source.order.line1, source.order.city].filter(Boolean).join(', ')) : null}
       />
 
       <View style={st.summary}>
-        <Text style={st.sumTitle}>{draft.time ? scheduleText(draft.frequency, draft.weekday, draft.time) : 'Pick a time'}</Text>
-        {!!first && <Text style={st.sumLine}>First order: <Text style={st.sumStrong}>{whenText(first)}</Text></Text>}
+        <Text style={st.sumTitle}>{draft.time ? scheduleText(draft.frequency, draft.weekday, draft.time) : REPEAT_WORDS.create.pickTime}</Text>
+        {!!first && <Text style={st.sumLine}>{REPEAT_WORDS.create.firstOrder}{' '}<Text style={st.sumStrong}>{whenText(first)}</Text></Text>}
         <Text style={st.sumLine}>
-          {est.units} {est.units === 1 ? 'item' : 'items'} · about <Text style={st.sumStrong}>{formatLkr(est.total)}</Text> at today&apos;s prices
+          {REPEAT_WORDS.create.sum(est.units).before}<Text style={st.sumStrong}>{formatLkr(est.total)}</Text>{REPEAT_WORDS.create.sum(est.units).after}
         </Text>
         {est.unavailable > 0 && (
           <Text style={[st.sumLine, { color: C.brandText }]}>
-            {est.unavailable === 1 ? '1 item is' : `${est.unavailable} items are`} not available now - left out until back in stock.
+            {REPEAT_WORDS.create.leftOut(est.unavailable)}
           </Text>
         )}
-        <Text style={st.sumNote}>Delivery fee and offers as on any order. Prices may change.</Text>
+        <Text style={st.sumNote}>{REPEAT_WORDS.create.sumNote}</Text>
       </View>
 
       <ErrorText>{error}</ErrorText>
       <Button
-        label={draft.time ? `Repeat at ${timeLabel(draft.time)}` : 'Repeat this basket'}
+        label={draft.time ? REPEAT_WORDS.create.repeatAt(timeLabel(draft.time)) : REPEAT_WORDS.create.title}
         onPress={() => void send()}
         busy={busy}
         disabled={!canSend}
@@ -185,7 +186,7 @@ export function ItemStrip({ items, products, size = 40 }: { items: BasketItem[];
   const shown = items.slice(0, 6);
   const more = items.length - shown.length;
   return (
-    <View style={st.strip} accessibilityLabel={`${items.length} products`}>
+    <View style={st.strip} accessibilityLabel={REPEAT_WORDS.card.products(items.length)}>
       {shown.map((it) => {
         const p = byId.get(it.product_id);
         return (

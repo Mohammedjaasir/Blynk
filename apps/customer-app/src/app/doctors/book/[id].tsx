@@ -8,7 +8,7 @@ import {
 } from '@/blynk/doctors/api';
 import { startBooking } from '@/blynk/doctors/booking';
 import {
-  dayHasAvailability, dayStrip, formatAppointmentDate, formatDayStripLabel, formatSlotTime, isoDate, sameDay, SLOT_PASSED, SLOT_TAKEN,
+  dayHasAvailability, dayStrip, formatAppointmentDate, formatDayStripLabel, formatSlotTime, isoDate, sameDay, slotPassedText, slotTakenText,
 } from '@/blynk/doctors/format';
 import { DoctorsGate, DoctorsSignInPrompt } from '@/blynk/doctors/Gate';
 import { pairingFor } from '@/blynk/doctors/types';
@@ -17,6 +17,8 @@ import { ListSkeleton, Notice, Page, SectionTitle, StateView, useToast } from '@
 import { useLoad } from '@/blynk/ui/useLoad';
 import { PressScale, Skeleton } from '@/components/ui';
 import { C, F } from '@/lib/theme';
+import { DOCTOR_SCREENS as W } from '@/blynk/doctors/words';
+import { DOCTOR_UI } from '@/blynk/doctors/words';
 
 /**
  * Step 1 of booking (Flutter DentalSlotPickerScreen): pick a day in the next two weeks, then a
@@ -79,7 +81,7 @@ function SlotPicker({ doctorId, clinicId }: { doctorId: string; clinicId: string
     }
     if (isSlotConflict(out.error) || isSlotInPast(out.error)) {
       // never a silent retry, never an auto-picked nearby slot: say so and refresh
-      setMessage(isSlotConflict(out.error) ? SLOT_TAKEN : SLOT_PASSED);
+      setMessage(isSlotConflict(out.error) ? slotTakenText() : slotPassedText());
       loadSlots();
     } else {
       showToast(errorText(out.error));
@@ -89,18 +91,18 @@ function SlotPicker({ doctorId, clinicId }: { doctorId: string; clinicId: string
   const data = base.data;
   return (
     <View style={{ flex: 1 }}>
-      <Page title={data?.doctor.fullName || 'Book appointment'}>
+      <Page title={data?.doctor.fullName || W.bookTitle}>
         {askSignIn && !signedIn ? (
           <DoctorsSignInPrompt title={DOCTORS_SIGN_IN.bookTitle} />
         ) : base.loading && !data ? (
           <ListSkeleton rows={3} h={64} />
         ) : base.error || !data ? (
-          <LoadFailure error={base.error} title="We couldn't load booking details" onRetry={base.reload} />
+          <LoadFailure error={base.error} title={W.bookFailed} onRetry={base.reload} />
         ) : !data.pairing ? (
-          <StateView title="Doctor not available" message="This doctor isn't taking bookings at this clinic anymore." action="Go back" onAction={() => router.back()} />
+          <StateView title={W.doctorUnavailable} message={W.doctorUnavailableSub} action={DOCTOR_UI.goBack} onAction={() => router.back()} />
         ) : (
           <View>
-            <SectionTitle>Pick a day</SectionTitle>
+            <SectionTitle>{W.pickDay}</SectionTitle>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }} style={{ marginHorizontal: -15, paddingHorizontal: 15 }}>
               {days.map((d) => {
                 const open = dayHasAvailability(d, data.availability);
@@ -112,10 +114,10 @@ function SlotPicker({ doctorId, clinicId }: { doctorId: string; clinicId: string
                       accessible
                       accessibilityRole="button"
                       accessibilityState={{ selected: on, disabled: !open }}
-                      accessibilityLabel={open ? formatDayStripLabel(d) : `${formatDayStripLabel(d)}, no times available`}
+                      accessibilityLabel={open ? formatDayStripLabel(d) : W.noTimesA11y(formatDayStripLabel(d))}
                     >
                       <Text style={[st.dayTxt, on && { color: C.brandInk }, !open && { color: C.faint }]}>{formatDayStripLabel(d)}</Text>
-                      {!open && <Text style={st.noTimes}>No times</Text>}
+                      {!open && <Text style={st.noTimes}>{W.noTimes}</Text>}
                     </View>
                   </PressScale>
                 );
@@ -126,14 +128,14 @@ function SlotPicker({ doctorId, clinicId }: { doctorId: string; clinicId: string
 
             <View style={{ marginTop: 14 }}>
               {slotsError ? (
-                <LoadFailure error={slotsError} title="We couldn't load times for this day" onRetry={loadSlots} />
+                <LoadFailure error={slotsError} title={W.timesFailed} onRetry={loadSlots} />
               ) : !slots ? (
                 <View style={st.wrap}>{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} w={92} h={48} r={12} />)}</View>
               ) : slots.length === 0 ? (
-                <StateView title="Fully booked" message="Try another day." />
+                <StateView title={W.fullyBooked} message={W.tryAnotherDay} />
               ) : (
                 <>
-                  <SectionTitle>Times on {formatAppointmentDate(day)}</SectionTitle>
+                  <SectionTitle>{W.timesOn(formatAppointmentDate(day))}</SectionTitle>
                   <View style={st.wrap}>
                     {slots.map((t) => {
                       const mine = holding === t.getTime();
@@ -144,7 +146,7 @@ function SlotPicker({ doctorId, clinicId }: { doctorId: string; clinicId: string
                             style={[st.slot, mine && st.dayOn, off && st.dayOff]}
                             accessible
                             accessibilityRole="button"
-                            accessibilityLabel={mine ? `${formatSlotTime(t)}, reserving` : off ? `${formatSlotTime(t)}, unavailable while another time is being reserved` : formatSlotTime(t)}
+                            accessibilityLabel={mine ? W.reserving(formatSlotTime(t)) : off ? W.unavailableWhile(formatSlotTime(t)) : formatSlotTime(t)}
                           >
                             {mine ? <ActivityIndicator color={C.brandInk} /> : <Text style={[st.slotTxt, off && { color: C.faint }]}>{formatSlotTime(t)}</Text>}
                           </View>

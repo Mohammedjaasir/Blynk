@@ -14,6 +14,7 @@ import { useKeyboardInset } from '@/lib/keyboard';
 import { fetchRating } from './api';
 import { PROMPT_KEY, promptCandidate, readPrompted, withPrompted, type RatingAnswer } from './model';
 import { OrderRatingCard } from './RatingCard';
+import { RATING_WORDS } from './words';
 
 /*
  * The one-time "How was your order?" sheet: the next time the customer opens the app (or brings it
@@ -65,7 +66,7 @@ export function RatingPromptHost() {
 function PromptSheet({ order, answer, onClose }: { order: Order; answer: RatingAnswer; onClose: () => void }) {
   const kb = useKeyboardInset();
   return (
-    <Sheet label="Rate your order" onClose={onClose}>
+    <Sheet label={RATING_WORDS.promptLabel} onClose={onClose}>
       <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 620 }} contentContainerStyle={{ paddingBottom: kb }}>
         <View>
           <OrderRatingCard order={order} initial={answer} look="bare" onClose={onClose} />

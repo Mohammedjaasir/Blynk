@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { NOT_FOUND_WORDS as W } from '@/blynk/account/screenWords';
 import { Page, StateView } from '@/blynk/ui/kit';
 
 /*
@@ -8,8 +9,8 @@ import { Page, StateView } from '@/blynk/ui/kit';
 export default function NotFound() {
   const toShop = () => router.replace('/home');
   return (
-    <Page title="Not found" onBack={toShop} scroll={false}>
-      <StateView title="This page isn't available" message="It may have moved or no longer exists." action="Go to the shop" onAction={toShop} />
+    <Page title={W.title} onBack={toShop} scroll={false}>
+      <StateView title={W.heading} message={W.message} action={W.action} onAction={toShop} />
     </Page>
   );
 }

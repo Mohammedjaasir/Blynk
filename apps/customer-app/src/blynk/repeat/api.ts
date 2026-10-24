@@ -1,4 +1,5 @@
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '@/blynk/api/client';
+import { pick } from '@/blynk/i18n/localized';
 import { authed } from '@/blynk/auth/session';
 import { parseBasket, parseBasketList, parseBuyAgain, type BuyAgainEntry, type RepeatBasket } from './models';
 import { isNotReady } from './payload';
@@ -24,7 +25,7 @@ async function guard<T>(p: Promise<T>): Promise<T> {
 
 const one = (raw: { basket?: unknown } | null | undefined): RepeatBasket => {
   const b = parseBasket(raw?.basket);
-  if (!b) throw new ApiError('The repeat basket came back incomplete. Please try again.', 500, 'BAD_BASKET');
+  if (!b) throw new ApiError(pick('The repeat basket came back incomplete. Please try again.', 'නැවත කරන කූඩය සම්පූර්ණව ආවේ නැහැ. නැවත උත්සාහ කරන්න.', 'மீண்டும் வரும் கூடை முழுமையாக வரவில்லை. மீண்டும் முயற்சிக்கவும்.'), 500, 'BAD_BASKET');
   return b;
 };
 

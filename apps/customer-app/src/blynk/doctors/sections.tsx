@@ -8,6 +8,7 @@ import { C, F } from '@/lib/theme';
 import { cancelAppointment, rateAppointment, RATING_COMMENT_MAX } from './api';
 import { cancelRefusalMessage, ratingErrorMessage } from './format';
 import { withRating, type Appointment } from './types';
+import { DOCTOR_UI as W } from './words';
 
 /*
  * The appointment's cancel and rating sections (Flutter dental_cancel_section.dart and
@@ -38,27 +39,27 @@ export function CancelSection({ appointment, onChanged, onMessage }: {
 
   return (
     <View style={{ marginTop: 18 }}>
-      <SectionTitle>Cancel appointment</SectionTitle>
+      <SectionTitle>{W.cancelTitle}</SectionTitle>
       <View style={{ marginTop: -16 }}>
         <Field
-          label="Reason (optional)"
+          label={W.reasonLabel}
           value={reason}
           onChange={setReason}
-          placeholder="Let the clinic know why, if you can"
+          placeholder={W.reasonPlaceholder}
           multiline
           maxLength={255}
           editable={!busy}
         />
       </View>
-      <Button label="Cancel appointment" kind="destructive" busy={busy} onPress={() => setAsking(true)} style={{ marginTop: 14 }} />
+      <Button label={W.cancelTitle} kind="destructive" busy={busy} onPress={() => setAsking(true)} style={{ marginTop: 14 }} />
 
       <Modal visible={asking} transparent animationType="fade" onRequestClose={() => setAsking(false)}>
-        <Pressable style={st.scrim} onPress={() => setAsking(false)} accessibilityLabel="Close">
+        <Pressable style={st.scrim} onPress={() => setAsking(false)} accessibilityLabel={W.close}>
           <Pressable style={[st.sheet, { paddingBottom: insets.bottom + 20 }]} onPress={() => {}} accessibilityViewIsModal>
-            <Text style={st.sheetTitle} accessibilityRole="header">Cancel this appointment?</Text>
-            <Body sub style={{ marginTop: 6 }}>This can&apos;t be undone.</Body>
-            <Button label="Keep appointment" onPress={() => setAsking(false)} style={{ marginTop: 22 }} />
-            <Button label="Cancel appointment" kind="destructive" onPress={() => void cancel()} style={{ marginTop: 10 }} />
+            <Text style={st.sheetTitle} accessibilityRole="header">{W.cancelThis}</Text>
+            <Body sub style={{ marginTop: 6 }}>{W.cannotUndo}</Body>
+            <Button label={W.keep} onPress={() => setAsking(false)} style={{ marginTop: 22 }} />
+            <Button label={W.cancelTitle} kind="destructive" onPress={() => void cancel()} style={{ marginTop: 10 }} />
           </Pressable>
         </Pressable>
       </Modal>
@@ -76,7 +77,7 @@ export function RatingCard({ appointment, onRated, compact }: { appointment: App
   if (r) {
     return (
       <Card>
-        <Text style={st.h}>Your rating</Text>
+        <Text style={st.h}>{W.yourRating}</Text>
         <View style={{ marginTop: 6 }}><Stars stars={r.stars} /></View>
         {!!r.comment && <Body sub style={{ marginTop: 6 }}>{r.comment}</Body>}
       </Card>
@@ -87,15 +88,15 @@ export function RatingCard({ appointment, onRated, compact }: { appointment: App
     return (
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={[st.h, { flex: 1 }]}>How was your visit?</Text>
-          <Button label="Rate your visit" kind="secondary" small onPress={() => setOpen(true)} />
+          <Text style={[st.h, { flex: 1 }]}>{W.howWas}</Text>
+          <Button label={W.rateVisit} kind="secondary" small onPress={() => setOpen(true)} />
         </View>
       </Card>
     );
   }
   return (
     <Card>
-      <SectionTitle>Rate your visit</SectionTitle>
+      <SectionTitle>{W.rateVisit}</SectionTitle>
       <RatingForm appointment={appointment} onRated={onRated} />
     </Card>
   );
@@ -120,24 +121,24 @@ function RatingForm({ appointment, onRated }: { appointment: Appointment; onRate
       <View style={{ flexDirection: 'row', gap: 4 }}>
         {[1, 2, 3, 4, 5].map((n) => (
           <PressScale key={n} onPress={() => !busy && setStars(n)} scaleTo={0.85} style={st.star}>
-            <View accessible accessibilityRole="button" accessibilityLabel={n === 1 ? '1 star' : `${n} stars`} accessibilityState={{ selected: stars === n }}>
+            <View accessible accessibilityRole="button" accessibilityLabel={W.stars(n)} accessibilityState={{ selected: stars === n }}>
               <StarIcon size={28} color={stars != null && n <= stars ? C.ink : '#D5D5DC'} />
             </View>
           </PressScale>
         ))}
       </View>
       <Field
-        label="Comment (optional)"
+        label={W.commentLabel}
         value={comment}
         onChange={setComment}
-        placeholder="What went well, or what could be better"
+        placeholder={W.commentPlaceholder}
         multiline
         maxLength={RATING_COMMENT_MAX}
         counter
         editable={!busy}
       />
       {!!error && <Text style={st.err} accessibilityRole="alert">{error}</Text>}
-      <Button label="Submit rating" busy={busy} disabled={stars == null} onPress={() => void submit()} style={{ marginTop: 12 }} />
+      <Button label={W.submitRating} busy={busy} disabled={stars == null} onPress={() => void submit()} style={{ marginTop: 12 }} />
     </View>
   );
 }

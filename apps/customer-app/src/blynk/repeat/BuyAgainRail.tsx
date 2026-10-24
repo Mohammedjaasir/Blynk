@@ -13,6 +13,7 @@ import { C, F, SPACE, T } from '@/lib/theme';
 import { BasketPopArt, LoopIcon } from './art';
 import { boughtText, buyAgainView } from './buyAgain';
 import { useBuyAgain, useRepeatBaskets } from './hooks';
+import { REPEAT_WORDS } from './words';
 
 /*
  * Home's "Buy again" (owner, 2026-10-24): the signed-in customer's delivered favourites, best
@@ -41,10 +42,10 @@ export function BuyAgainRail({ style }: { style?: StyleProp<ViewStyle> }) {
       onPress={() => router.push('/repeat-baskets')}
       hitSlop={8}
       accessibilityRole="link"
-      accessibilityLabel={count ? `Repeat baskets, ${count}` : 'Repeat baskets'}
+      accessibilityLabel={count ? REPEAT_WORDS.buyAgain.repeatA11y(count) : REPEAT_WORDS.buyAgain.repeatLink}
       style={st.repeatLink}
     >
-      <Text style={T.seeAll}>{count ? `Repeat (${count})` : 'Repeat baskets'}</Text>
+      <Text style={T.seeAll}>{count ? REPEAT_WORDS.buyAgain.repeatCount(count) : REPEAT_WORDS.buyAgain.repeatLink}</Text>
       <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronIcon size={13} color={C.sub} stroke={2.2} /></View>
     </Pressable>
   ) : null;
@@ -54,13 +55,13 @@ export function BuyAgainRail({ style }: { style?: StyleProp<ViewStyle> }) {
       <View style={st.head}>
         <View style={st.titleRow}>
           <View style={st.badge}><LoopIcon size={14} /></View>
-          <Text style={T.section} accessibilityRole="header">Buy again</Text>
+          <Text style={T.section} accessibilityRole="header">{REPEAT_WORDS.buyAgain.title}</Text>
         </View>
         {repeatLink}
       </View>
       {view.kind === 'cards' ? (
         <>
-          <Text style={st.sub}>Your favourites, ready to add</Text>
+          <Text style={st.sub}>{REPEAT_WORDS.buyAgain.sub}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.rail}>
             {view.cards.map((c, i) => (
               <ProductCard key={c.product.id} product={c.product} index={i} width={CARD_W} sub={boughtText(c.timesBought)} />
@@ -81,10 +82,10 @@ function EmptyCard() {
       <LinearGradient colors={[C.brandTint, '#FFFDF3']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.empty}>
         <BasketPopArt scale={0.86} style={{ marginLeft: -6, marginRight: 2 }} />
         <View style={{ flex: 1 }}>
-          <Text style={st.emptyTitle}>Your favourites will appear here</Text>
-          <Text style={st.emptySub}>After your first order, re-add them in one tap.</Text>
+          <Text style={st.emptyTitle}>{REPEAT_WORDS.buyAgain.emptyTitle}</Text>
+          <Text style={st.emptySub}>{REPEAT_WORDS.buyAgain.emptySub}</Text>
           <PressScale onPress={() => router.push('/categories')} haptic scaleTo={0.95} style={st.cta} accessibilityRole="button">
-            <Text style={st.ctaTxt}>Start shopping</Text>
+            <Text style={st.ctaTxt}>{REPEAT_WORDS.buyAgain.startShopping}</Text>
           </PressScale>
         </View>
       </LinearGradient>

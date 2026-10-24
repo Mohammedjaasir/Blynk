@@ -6,6 +6,7 @@ import { pairingFor } from '@/blynk/doctors/types';
 import { DoctorHead, FeeCard, LoadFailure } from '@/blynk/doctors/ui';
 import { Body, Button, Card, ListSkeleton, Page, SectionTitle } from '@/blynk/ui/kit';
 import { useLoad } from '@/blynk/ui/useLoad';
+import { DOCTOR_SCREENS as W } from '@/blynk/doctors/words';
 
 /**
  * A doctor at one clinic (Flutter DentalDoctorProfileScreen): photo, specialty, rating, About,
@@ -25,9 +26,9 @@ function DoctorProfile({ id, clinicId }: { id: string; clinicId: string }) {
 
   return (
     <Page
-      title={doctor?.fullName || 'Doctor'}
+      title={doctor?.fullName || W.doctor}
       footer={canBook ? (
-        <Button label="Book appointment" onPress={() => router.push({ pathname: '/doctors/book/[id]', params: { id, clinic: clinicId } })} />
+        <Button label={W.bookAppointment} onPress={() => router.push({ pathname: '/doctors/book/[id]', params: { id, clinic: clinicId } })} />
       ) : undefined}
     >
       {load.loading && !doctor ? (
@@ -35,8 +36,8 @@ function DoctorProfile({ id, clinicId }: { id: string; clinicId: string }) {
       ) : load.error || !doctor ? (
         <LoadFailure
           error={load.error}
-          title="We couldn't load this doctor"
-          notFound={{ title: 'Doctor not found', message: 'This profile may have been removed or is no longer listed.' }}
+          title={W.doctorFailed}
+          notFound={{ title: W.doctorNotFound, message: W.doctorNotFoundSub }}
           onRetry={load.reload}
         />
       ) : (
@@ -46,11 +47,11 @@ function DoctorProfile({ id, clinicId }: { id: string; clinicId: string }) {
           </Card>
           {!!doctor.bio?.trim() && (
             <View style={{ marginTop: 10, marginBottom: 12 }}>
-              <SectionTitle>About</SectionTitle>
+              <SectionTitle>{W.about}</SectionTitle>
               <Body>{doctor.bio.trim()}</Body>
             </View>
           )}
-          <FeeCard label="Consultation fee at this clinic" note="Payable at the clinic, in person" fee={pairing?.consultationFee ?? null} />
+          <FeeCard label={W.feeAtClinic} note={W.payAtClinic} fee={pairing?.consultationFee ?? null} />
         </View>
       )}
     </Page>

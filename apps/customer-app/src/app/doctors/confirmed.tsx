@@ -9,6 +9,7 @@ import { formatAppointmentDateTime } from '@/blynk/doctors/format';
 import { formatLkr } from '@/blynk/lib/money';
 import { Badge, Button, Card } from '@/blynk/ui/kit';
 import { C, F } from '@/lib/theme';
+import { DOCTOR_SCREENS as W } from '@/blynk/doctors/words';
 
 /**
  * The booking is confirmed (Flutter DentalBookingConfirmationScreen): the doctor, clinic, time
@@ -29,8 +30,8 @@ export default function Confirmed() {
       <Animated.View entering={ZoomIn.springify().damping(12)} style={st.mark}>
         <Svg width={40} height={40} viewBox="0 0 24 24"><Path d="M5 12.5l4.2 4.2L19 7" stroke="#fff" strokeWidth={2.6} fill="none" strokeLinecap="round" strokeLinejoin="round" /></Svg>
       </Animated.View>
-      <Text style={st.title} accessibilityRole="header">Appointment confirmed</Text>
-      <View style={{ alignItems: 'center', marginTop: 8 }}><Badge tone="positive" label="Confirmed" /></View>
+      <Text style={st.title} accessibilityRole="header">{W.confirmedTitle}</Text>
+      <View style={{ alignItems: 'center', marginTop: 8 }}><Badge tone="positive" label={W.confirmed} /></View>
       {a && (
         <Card style={{ marginTop: 24, alignSelf: 'stretch' }}>
           {a.doctor && <Text style={st.doc}>{a.doctor.fullName}</Text>}
@@ -42,16 +43,16 @@ export default function Confirmed() {
           )}
           {a.startAt && <Text style={st.when}>{formatAppointmentDateTime(a.startAt)}</Text>}
           <View style={{ flexDirection: 'row', marginTop: 14, alignItems: 'center' }}>
-            <Text style={[st.sub, { flex: 1 }]}>Pay at the clinic, in person</Text>
+            <Text style={[st.sub, { flex: 1 }]}>{W.payAtClinicShort}</Text>
             <Text style={a.consultationFeeSnapshot != null ? st.fee : st.sub}>
-              {a.consultationFeeSnapshot != null ? formatLkr(a.consultationFeeSnapshot) : 'Not available'}
+              {a.consultationFeeSnapshot != null ? formatLkr(a.consultationFeeSnapshot) : W.notAvailable}
             </Text>
           </View>
         </Card>
       )}
       <View style={{ alignSelf: 'stretch', marginTop: 24, gap: 10 }}>
-        <Button label="View appointment" onPress={view} />
-        <Button label="Back to home" kind="secondary" onPress={home} />
+        <Button label={W.viewAppointment} onPress={view} />
+        <Button label={W.backToHome} kind="secondary" onPress={home} />
       </View>
     </View>
   );

@@ -1,4 +1,9 @@
 import { ApiError } from '@/blynk/api/client';
+import { getLang } from '@/blynk/i18n/lang';
+import { ORDER_WORDS } from '@/blynk/orders/words';
+import { ASK_COPY, REQUEST_ERRORS, STATUS_WORDS } from './words';
+
+export { ASK_COPY };
 
 /*
  * "Can't find it? Ask us" (migration 056; docs/superpowers/plans/2026-10-24-groups-ratings-requests.md §C):
@@ -23,10 +28,10 @@ export type RequestCheck =
 
 export function validateRequest(input: { name: string; note?: string | null; categoryId?: string | null }): RequestCheck {
   const name = normalizeName(input.name ?? '');
-  if (name.length < NAME_MIN) return { ok: false, field: 'name', error: 'Tell us the product name.' };
-  if (name.length > NAME_MAX) return { ok: false, field: 'name', error: `Keep the name under ${NAME_MAX} characters.` };
+  if (name.length < NAME_MIN) return { ok: false, field: 'name', error: REQUEST_ERRORS.nameRequired };
+  if (name.length > NAME_MAX) return { ok: false, field: 'name', error: REQUEST_ERRORS.nameTooLong(NAME_MAX) };
   const note = (input.note ?? '').trim();
-  if (note.length > NOTE_MAX) return { ok: false, field: 'note', error: `Keep the note under ${NOTE_MAX} characters.` };
+  if (note.length > NOTE_MAX) return { ok: false, field: 'note', error: REQUEST_ERRORS.noteTooLong(NOTE_MAX) };
   const cat = (input.categoryId ?? '').trim();
   return { ok: true, body: { name, ...(note ? { note } : {}), ...(cat ? { category_id: cat } : {}) } };
 }
@@ -37,11 +42,17 @@ export const prefillName = (term: string | null | undefined): string => normaliz
 export type RequestStatus = 'NEW' | 'PLANNED' | 'ADDED' | 'DECLINED';
 export type ChipTone = 'neutral' | 'notice' | 'positive' | 'problem';
 
+/** The chip of each status; the words follow the language (read `.label` / `.sub` while rendering). */
+const chip = (k: RequestStatus, tone: ChipTone) => ({
+  tone,
+  get label(): string { return STATUS_WORDS[k].label; },
+  get sub(): string { return STATUS_WORDS[k].sub; },
+});
 export const STATUS_CHIP: Record<RequestStatus, { label: string; tone: ChipTone; sub: string }> = {
-  NEW: { label: 'New', tone: 'neutral', sub: 'We have your request.' },
-  PLANNED: { label: 'Planned', tone: 'notice', sub: "Good news: we're planning to stock it." },
-  ADDED: { label: 'Added', tone: 'positive', sub: "It's in the shop now." },
-  DECLINED: { label: 'Not stocking', tone: 'problem', sub: "We can't stock this one for now." },
+  NEW: chip('NEW', 'neutral'),
+  PLANNED: chip('PLANNED', 'notice'),
+  ADDED: chip('ADDED', 'positive'),
+  DECLINED: chip('DECLINED', 'problem'),
 };
 
 const isStatus = (s: unknown): s is RequestStatus => s === 'NEW' || s === 'PLANNED' || s === 'ADDED' || s === 'DECLINED';
@@ -86,35 +97,17 @@ export function parseMyRequests(raw: unknown): MyRequest[] {
 /** What the sheet says when sending fails. */
 export function requestErrorText(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 429) return "You've sent a lot of requests today. Please try again tomorrow.";
+    if (e.status === 429) return REQUEST_ERRORS.tooMany;
     if (e.status === 0 || e.status === 408) return e.message;
-    if (e.status === 400 || e.status === 422) return e.message && e.message !== 'Request failed.' ? e.message : 'Check the product name and try again.';
-    if (e.status >= 500) return 'Something went wrong on our side. Please try again.';
-    return e.message || "We couldn't send your request. Please try again.";
+    if (e.status === 400 || e.status === 422) return e.message && e.message !== 'Request failed.' ? e.message : REQUEST_ERRORS.checkName;
+    if (e.status >= 500) return REQUEST_ERRORS.server;
+    return e.message || REQUEST_ERRORS.sendFailed;
   }
-  return "We couldn't send your request. Please try again.";
+  return REQUEST_ERRORS.sendFailed;
 }
 
-export const ASK_COPY = {
-  title: "Can't find it? Ask us",
-  sub: "Tell us what you'd like and we'll try to stock it.",
-  inline: "Can't find what you need?",
-  inlineSub: 'Ask us and we will try to stock it.',
-  cta: 'Ask us',
-  nameLabel: 'Product name',
-  namePlaceholder: 'e.g. Anchor Butter 200g',
-  noteLabel: 'Anything else? (optional)',
-  notePlaceholder: 'Brand, size or how often you buy it',
-  categoryLabel: 'Category (optional)',
-  send: 'Send request',
-  thanksTitle: 'Thanks! Request sent',
-  thanksSignedIn: "We'll let you know if we add it. Follow it in My requests.",
-  thanksGuest: 'We read every request. Sign in next time to follow it.',
-  done: 'Done',
-  myRequests: 'My requests',
-  rowSub: 'Tell us what to stock',
-  myRowSub: 'Products you asked us to stock',
-  empty: 'No requests yet',
-  emptySub: "Missing something you buy? Ask us and we'll try to stock it.",
-  viewProduct: 'View product',
-} as const;
+/** "13 Oct": the day a request was made, in the customer's language. */
+export function requestDate(d: Date): string {
+  if (getLang() === 'en') return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${d.getDate()} ${ORDER_WORDS.months[d.getMonth()]}`;
+}

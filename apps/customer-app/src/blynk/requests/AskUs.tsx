@@ -75,7 +75,7 @@ function AskUsSheet({ opts }: { opts: AskOpts }) {
       await sendProductRequest(check.body);
       setDone(true);
     } catch (e) {
-      if (isNotReady(e, 'requests')) { closeAskUs(); showNotice("Requests aren't open yet. Please try again later."); return; }
+      if (isNotReady(e, 'requests')) { closeAskUs(); showNotice(ASK_COPY.notOpen); return; }
       setError({ field: 'form', text: requestErrorText(e) });
     } finally {
       sending.current = false;
@@ -227,7 +227,7 @@ export function ProductRequestsCard({ stagger }: { stagger?: number }) {
   if (!on) return null;
   return (
     <Card tone={C.greenTint} stagger={stagger}>
-      <Row icon="🙋" title="Can't find something? Ask us" sub={ASK_COPY.rowSub} onPress={() => openAskUs()} last={!signedIn} />
+      <Row icon="🙋" title={ASK_COPY.rowTitle} sub={ASK_COPY.rowSub} onPress={() => openAskUs()} last={!signedIn} />
       {signedIn && <Row icon="📝" title={ASK_COPY.myRequests} sub={ASK_COPY.myRowSub} onPress={() => router.push('/requests' as never)} last />}
     </Card>
   );

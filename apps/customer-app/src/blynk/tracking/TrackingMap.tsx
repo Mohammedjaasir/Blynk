@@ -4,6 +4,7 @@ import { loadMapLibre, MAP_ATTRIBUTION, MAP_STYLE } from '@/blynk/address/maplib
 import { PressScale } from '@/components/ui';
 import { C, F } from '@/lib/theme';
 import type { RiderPoint } from './model';
+import { TRACKING_WORDS } from './words';
 
 /*
  * The tracking map (web only): MapLibre GL from the CDN with the OpenFreeMap style, exactly the
@@ -104,7 +105,7 @@ export function TrackingMap({
         m.keyboard.disableRotation();
         m.on('dragstart', () => { userMoved.current = true; });
         m.on('zoomstart', (e) => { if ((e as { originalEvent?: unknown } | undefined)?.originalEvent) userMoved.current = true; });
-        new ml.Marker({ element: el(DOOR_SVG, 'Delivery address'), anchor: 'bottom' })
+        new ml.Marker({ element: el(DOOR_SVG, TRACKING_WORDS.doorLabel), anchor: 'bottom' })
           .setLngLat([destination.lng, destination.lat])
           .addTo(m);
         m.once('load', () => {
@@ -150,7 +151,7 @@ export function TrackingMap({
       return;
     }
     if (!riderMarker.current) {
-      riderMarker.current = new ml.Marker({ element: el(riderSvg(stale), 'Your rider'), rotationAlignment: 'map' })
+      riderMarker.current = new ml.Marker({ element: el(riderSvg(stale), TRACKING_WORDS.riderLabel), rotationAlignment: 'map' })
         .setLngLat([rider.lng, rider.lat])
         .addTo(m);
       shown.current = { lat: rider.lat, lng: rider.lng };
@@ -204,7 +205,7 @@ export function TrackingMap({
   if (!web) {
     return (
       <View style={[styles.box, { height }, styles.center]}>
-        <Text style={styles.note}>The live map opens in the Blynk web app.</Text>
+        <Text style={styles.note}>{TRACKING_WORDS.mapOnWeb}</Text>
       </View>
     );
   }
@@ -217,14 +218,14 @@ export function TrackingMap({
       )}
       {state === 'failed' && (
         <View style={[StyleSheet.absoluteFill, styles.center]}>
-          <Text style={styles.note}>The map could not load.</Text>
+          <Text style={styles.note}>{TRACKING_WORDS.mapFailed}</Text>
           <PressScale onPress={() => { setState('loading'); setAttempt((n) => n + 1); }} style={styles.retry}>
-            <Text style={styles.retryTxt}>Try again</Text>
+            <Text style={styles.retryTxt}>{TRACKING_WORDS.tryAgain}</Text>
           </PressScale>
         </View>
       )}
       {state === 'ready' && (
-        <Pressable onPress={recenter} style={styles.recenter} accessibilityRole="button" accessibilityLabel="Show the rider and your address">
+        <Pressable onPress={recenter} style={styles.recenter} accessibilityRole="button" accessibilityLabel={TRACKING_WORDS.recenter}>
           <Text style={styles.recenterTxt}>⌖</Text>
         </Pressable>
       )}

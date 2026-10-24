@@ -1,4 +1,5 @@
 import { ApiError } from '@/blynk/api/client';
+import { PAY } from './copy';
 
 /*
  * The PayHere checkout form (docs/api/payhere.md §3): POST /payments/payhere/checkout answers
@@ -88,7 +89,7 @@ export function formEntries(f: CheckoutForm, email?: string | null): [string, st
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
 
 /** A self-submitting page for the native in-app browser (WebView). */
-export function formHtml(action: string, entries: [string, string][], label = 'Taking you to PayHere…'): string {
+export function formHtml(action: string, entries: [string, string][], label: string = PAY.redirecting): string {
   const inputs = entries.map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join('');
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     + `<title>PayHere</title></head><body style="font-family:sans-serif;text-align:center;padding-top:40vh;color:#1A1D2E">${esc(label)}`

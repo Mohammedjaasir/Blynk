@@ -16,8 +16,9 @@ import { withSpring } from '@/lib/motion';
 import { C, F, T } from '@/lib/theme';
 import { fetchRating, isAlreadyTipped, isWalletLow, sendRating, sendWalletTip } from './api';
 import { TipChip } from './CheckoutTip';
+import { RATING_WORDS as W, TIP_COPY } from './words';
 import {
-  COMMENT_MAX, keepTags, ratingStage, riderTipOf, starWord, TAG_COPY, tagsFor, TIP_COPY, toggleTag, walletTipChoices,
+  COMMENT_MAX, keepTags, ratingStage, riderTipOf, starWord, TAG_COPY, tagsFor, toggleTag, walletTipChoices,
   type OrderRating, type RatingAnswer, type RatingTag,
 } from './model';
 
@@ -96,7 +97,7 @@ function RatingBody({ order, answer, setAnswer, look, onClose }: {
       // a celebration for a happy rating only; a low one gets a quiet "sorry"
       if (stars >= 4) setBurst(Date.now());
     } catch (e) {
-      setError(e instanceof ApiError && e.status < 500 && e.status !== 0 ? e.message : e instanceof ApiError ? e.message : "We couldn't send your rating. Please try again.");
+      setError(e instanceof ApiError ? e.message : W.sendFailed);
     } finally {
       setBusy(false);
     }
@@ -110,17 +111,17 @@ function RatingBody({ order, answer, setAnswer, look, onClose }: {
     <Animated.View layout={LinearTransition.duration(220)} style={wrap} onLayout={(e) => setSize({ w: e.nativeEvent.layout.width })}>
       {editing ? (
         <View>
-          <Text style={s.title} accessibilityRole="header">{answer.rating ? 'Change your rating' : 'How was your order?'}</Text>
-          <Text style={s.sub}>{answer.rating ? 'You can change it for 24 hours.' : `Order ${order.order_number} · tap a star`}</Text>
-          <View style={s.starRow} accessibilityRole="radiogroup" accessibilityLabel="Rate this order from 1 to 5 stars">
+          <Text style={s.title} accessibilityRole="header">{answer.rating ? W.changeTitle : W.askTitle}</Text>
+          <Text style={s.sub}>{answer.rating ? W.changeSub : W.askSub(order.order_number)}</Text>
+          <View style={s.starRow} accessibilityRole="radiogroup" accessibilityLabel={W.starsGroup}>
             {[1, 2, 3, 4, 5].map((n) => (
-              <PopStar key={n} index={n - 1} filled={n <= stars} pop={n <= stars ? pop : 0} onPress={() => pick(n)} label={`${n} star${n > 1 ? 's' : ''}`} selected={stars === n} />
+              <PopStar key={n} index={n - 1} filled={n <= stars} pop={n <= stars ? pop : 0} onPress={() => pick(n)} label={W.starLabel(n)} selected={stars === n} />
             ))}
           </View>
           <Animated.Text key={stars} entering={FadeIn.duration(180)} style={[s.word, stars > 0 && { color: C.ink, fontFamily: F.semi }]}>{starWord(stars)}</Animated.Text>
           {stars > 0 && (
             <Animated.View entering={FadeIn.duration(200)}>
-              <Text style={s.label}>{stars >= 4 ? 'What did you like?' : stars <= 2 ? 'What went wrong?' : 'Tell us more'}</Text>
+              <Text style={s.label}>{stars >= 4 ? W.likedWhat : stars <= 2 ? W.wentWrong : W.tellMore}</Text>
               <View style={s.chips} key={offered.join()}>
                 {offered.map((t, i) => (
                   <Animated.View key={t} entering={FadeInDown.delay(i * 30).duration(220)}>
@@ -131,28 +132,28 @@ function RatingBody({ order, answer, setAnswer, look, onClose }: {
               <TextInput
                 value={comment}
                 onChangeText={(v) => setComment(v.slice(0, COMMENT_MAX))}
-                placeholder="Anything else? (optional)"
+                placeholder={W.commentPlaceholder}
                 placeholderTextColor="#9A9AA2"
                 multiline
                 maxLength={COMMENT_MAX}
-                accessibilityLabel="Comment (optional)"
+                accessibilityLabel={W.commentLabel}
                 style={[s.comment, Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null]}
               />
               {!!error && <Text style={s.err} accessibilityRole="alert">{error}</Text>}
               <View style={s.actions}>
                 {answer.rating && (
                   <Pressable onPress={() => { setEditing(false); setStars(answer.rating!.stars); setTags(answer.rating!.tags); setComment(answer.rating!.comment ?? ''); }} hitSlop={8}>
-                    <Text style={s.link}>Cancel</Text>
+                    <Text style={s.link}>{W.cancel}</Text>
                   </Pressable>
                 )}
                 <PressScale onPress={() => void submit()} disabled={busy} haptic scaleTo={0.96} style={[s.send, busy && { backgroundColor: C.brandSoft }]}>
-                  {busy ? <ActivityIndicator color={C.brandInk} /> : <Text style={s.sendTxt}>{answer.rating ? 'Save rating' : 'Send rating'}</Text>}
+                  {busy ? <ActivityIndicator color={C.brandInk} /> : <Text style={s.sendTxt}>{answer.rating ? W.save : W.send}</Text>}
                 </PressScale>
               </View>
             </Animated.View>
           )}
           {!stars && !!onClose && (
-            <Pressable onPress={onClose} hitSlop={8} style={{ alignSelf: 'center', marginTop: 14 }}><Text style={s.quiet}>Not now</Text></Pressable>
+            <Pressable onPress={onClose} hitSlop={8} style={{ alignSelf: 'center', marginTop: 14 }}><Text style={s.quiet}>{W.notNow}</Text></Pressable>
           )}
         </View>
       ) : (
@@ -174,7 +175,7 @@ function RatingBody({ order, answer, setAnswer, look, onClose }: {
 
       {!editing && !!onClose && (
         <PressScale onPress={onClose} haptic scaleTo={0.96} style={[s.send, { alignSelf: 'stretch', marginTop: 16 }]}>
-          <Text style={s.sendTxt}>Done</Text>
+          <Text style={s.sendTxt}>{W.done}</Text>
         </PressScale>
       )}
 
@@ -194,17 +195,17 @@ function Rated({ rating, justSent, editable, onEdit }: { rating: OrderRating; ju
         ) : null}
         <View style={{ flex: 1 }}>
           <Text style={s.title} accessibilityRole="header">
-            {justSent ? (happy ? 'Thanks for rating!' : 'Thanks for telling us') : 'Your rating'}
+            {justSent ? (happy ? W.thanksRating : W.thanksTelling) : W.yourRating}
           </Text>
-          {justSent && !happy && <Text style={s.sub}>{"Sorry it wasn't great. We'll look into it."}</Text>}
+          {justSent && !happy && <Text style={s.sub}>{W.sorry}</Text>}
         </View>
         {editable && (
-          <Pressable onPress={onEdit} hitSlop={8} accessibilityRole="button" accessibilityLabel="Change your rating">
-            <Text style={s.link}>Change</Text>
+          <Pressable onPress={onEdit} hitSlop={8} accessibilityRole="button" accessibilityLabel={W.changeTitle}>
+            <Text style={s.link}>{W.change}</Text>
           </Pressable>
         )}
       </View>
-      <View style={[s.miniStars]} accessible accessibilityLabel={`You rated ${rating.stars} out of 5 stars`}>
+      <View style={[s.miniStars]} accessible accessibilityLabel={W.rated(rating.stars)}>
         {[1, 2, 3, 4, 5].map((n) => <StarIcon key={n} size={20} color={n <= rating.stars ? C.brandDeep : '#E3E3E8'} />)}
         <Text style={s.miniWord}>{starWord(rating.stars)}</Text>
       </View>
@@ -266,7 +267,7 @@ function WalletTip({ orderId, tipped, onTipped }: { orderId: string; tipped: num
     } catch (e) {
       if (isWalletLow(e)) { setHidden(true); return; }
       if (isAlreadyTipped(e)) { setHidden(true); return; }
-      setError(e instanceof ApiError ? e.message : "We couldn't send the tip. Please try again.");
+      setError(e instanceof ApiError ? e.message : W.tipFailed);
     } finally {
       sending.current = false;
       setBusy(false);
@@ -288,7 +289,7 @@ function WalletTip({ orderId, tipped, onTipped }: { orderId: string; tipped: num
         </Animated.View>
       )}
       {!!error && <Text style={s.err} accessibilityRole="alert">{error}</Text>}
-      <Text style={[s.small, { marginTop: 8 }]}>100% goes to your rider.</Text>
+      <Text style={[s.small, { marginTop: 8 }]}>{W.allToRider}</Text>
     </Animated.View>
   );
 }
@@ -362,12 +363,12 @@ export function DeliveredRating({ order, fallback, onViewOrder, top = 0 }: { ord
     <ScrollView contentContainerStyle={{ padding: 15, paddingTop: top + 70, paddingBottom: 40 }} style={{ backgroundColor: C.bg }} keyboardShouldPersistTaps="handled">
       <Animated.View entering={FadeIn.duration(220)} style={{ alignItems: 'center', marginBottom: 18 }}>
         <Animated.Text entering={ZoomIn.springify().damping(10)} style={{ fontSize: 46 }}>📦</Animated.Text>
-        <Text style={[s.title, { fontSize: 20, marginTop: 6 }]}>Delivered</Text>
-        <Text style={[s.sub, { textAlign: 'center' }]}>Your order {order.order_number} has arrived.</Text>
+        <Text style={[s.title, { fontSize: 20, marginTop: 6 }]}>{W.delivered}</Text>
+        <Text style={[s.sub, { textAlign: 'center' }]}>{W.arrived(order.order_number)}</Text>
       </Animated.View>
       <OrderRatingCard order={order} />
       <PressScale onPress={onViewOrder} scaleTo={0.97} style={[s.send, { alignSelf: 'stretch', backgroundColor: '#fff', borderWidth: 1, borderColor: C.line }]}>
-        <Text style={s.sendTxt}>View order</Text>
+        <Text style={s.sendTxt}>{W.viewOrder}</Text>
       </PressScale>
     </ScrollView>
   );

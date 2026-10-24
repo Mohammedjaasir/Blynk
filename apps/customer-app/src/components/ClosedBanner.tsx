@@ -1,3 +1,4 @@
+import { COMPONENT_WORDS } from '@/blynk/ui/componentWords';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { reopensText } from '@/blynk/lib/storeText';
@@ -13,8 +14,8 @@ export function ClosedBanner({ style }: { style?: StyleProp<ViewStyle> }) {
     <Animated.View entering={FadeInDown.duration(300)} style={[styles.box, style]} accessibilityRole="alert">
       <View style={styles.dot} />
       <View style={{ flex: 1 }}>
-        <Text style={styles.title}>{store.closed_reason?.trim() || 'The store is closed right now'}</Text>
-        <Text style={styles.sub}>{reopens ? `${reopens}. ` : ''}You can still browse and fill your cart.</Text>
+        <Text style={styles.title}>{store.closed_reason?.trim() || COMPONENT_WORDS.storeClosed}</Text>
+        <Text style={styles.sub}>{COMPONENT_WORDS.closedSub(reopens)}</Text>
       </View>
     </Animated.View>
   );

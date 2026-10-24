@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { accountErrorText, needsLogin } from '@/blynk/account/errors';
 import { showNotice } from '@/blynk/account/notice';
+import { FEEDBACK_SCREEN as W } from '@/blynk/account/screenWords';
 import { accountStyles as A, Button, ErrorText, ScreenHeader } from '@/blynk/account/ui';
 import { FEEDBACK_CATEGORIES, FEEDBACK_MAX, feedbackBody, sendFeedback, type FeedbackCategory } from '@/blynk/api/account';
 import { useSession } from '@/blynk/auth/session';
@@ -32,12 +33,18 @@ export default function Feedback() {
   const send = () => {
     if (sending) return;
     const r = feedbackBody({ category, message, rating });
-    if (!r.ok) { setErrs({ category: r.category, message: r.message }); return; }
+    if (!r.ok) {
+      setErrs({
+        category: r.category ? W.chooseCategory : undefined,
+        message: r.message ? (message.trim() ? W.tooLong(FEEDBACK_MAX) : W.writeFirst) : undefined,
+      });
+      return;
+    }
     setErrs({});
-    if (DEMO) { showNotice('Thanks - your feedback was sent'); goBack(); return; }
+    if (DEMO) { showNotice(W.thanks); goBack(); return; }
     setSending(true);
     sendFeedback(r.body)
-      .then(() => { showNotice('Thanks - your feedback was sent'); goBack(); })
+      .then(() => { showNotice(W.thanks); goBack(); })
       .catch((e) => {
         if (needsLogin(e)) { router.replace('/login'); return; }
         setErrs({ send: accountErrorText(e) });
@@ -48,11 +55,11 @@ export default function Feedback() {
   return (
     <View style={A.screen}>
       <StatusBar style="dark" />
-      <ScreenHeader title="Send feedback" top={insets.top} />
+      <ScreenHeader title={W.title} top={insets.top} />
       <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 40 }} keyboardShouldPersistTaps="handled">
-        <Text style={A.body}>Tell us what went well or what we can do better. The Blynk team reads every message.</Text>
+        <Text style={A.body}>{W.intro}</Text>
 
-        <Text style={[A.label, styles.gap]}>How was your experience? (optional)</Text>
+        <Text style={[A.label, styles.gap]}>{W.experience}</Text>
         <View style={styles.stars} accessibilityRole="radiogroup">
           {[1, 2, 3, 4, 5].map((n) => (
             <Pressable
@@ -61,7 +68,7 @@ export default function Feedback() {
               hitSlop={6}
               accessibilityRole="radio"
               accessibilityState={{ checked: rating === n }}
-              accessibilityLabel={`${n} star${n > 1 ? 's' : ''}`}
+              accessibilityLabel={W.star(n)}
               style={styles.star}
             >
               <StarIcon size={28} color={rating !== null && n <= rating ? C.brandDeep : C.line} />
@@ -69,7 +76,7 @@ export default function Feedback() {
           ))}
         </View>
 
-        <Text style={[A.label, styles.gap]}>What is it about?</Text>
+        <Text style={[A.label, styles.gap]}>{W.about}</Text>
         <View style={styles.chips}>
           {FEEDBACK_CATEGORIES.map((c) => {
             const on = category === c.wire;
@@ -81,27 +88,27 @@ export default function Feedback() {
                 accessibilityRole="radio"
                 accessibilityState={{ checked: on }}
               >
-                <Text style={[styles.chipTxt, on && { color: '#fff' }]}>{c.label}</Text>
+                <Text style={[styles.chipTxt, on && { color: '#fff' }]}>{W.categories[c.wire] ?? c.label}</Text>
               </Pressable>
             );
           })}
         </View>
         <ErrorText>{errs.category}</ErrorText>
 
-        <Text style={[A.label, styles.gap]}>Your message</Text>
+        <Text style={[A.label, styles.gap]}>{W.messageLabel}</Text>
         <TextInput
           value={message}
           onChangeText={(t) => { setMessage(t.slice(0, FEEDBACK_MAX)); setErrs((e) => ({ ...e, message: undefined })); }}
-          placeholder="Write your feedback here"
+          placeholder={W.placeholder}
           placeholderTextColor={C.faint}
           multiline
           style={[A.input, styles.area]}
-          accessibilityLabel="Your message"
+          accessibilityLabel={W.messageLabel}
         />
         <Text style={styles.count}>{message.length}/{FEEDBACK_MAX}</Text>
         <ErrorText>{errs.message}</ErrorText>
         <ErrorText>{errs.send}</ErrorText>
-        <Button label="Send feedback" onPress={send} busy={sending} style={{ marginTop: 14 }} />
+        <Button label={W.send} onPress={send} busy={sending} style={{ marginTop: 14 }} />
       </ScrollView>
     </View>
   );

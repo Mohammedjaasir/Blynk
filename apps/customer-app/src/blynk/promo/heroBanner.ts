@@ -1,7 +1,8 @@
 import type { PublicHeroBanner } from '../api/types';
 import { promoDestination, type PromoDestination } from '../catalog/promoTarget';
+import { localized } from '../i18n/localized';
+import { graphemes } from '../lib/graphemes';
 import { formatLkr } from '../lib/money';
-import { NEUTRAL_COPY, POINTS_COPY } from '../store/pointsPromo';
 
 /*
  * The Home hero banner's render model (docs/promo-surfaces.md §3). Pure, so it is tested in
@@ -24,20 +25,39 @@ import { NEUTRAL_COPY, POINTS_COPY } from '../store/pointsPromo';
  * that rule (a line using it is skipped while points are off). CUSTOM keeps Admin / Ops' words.
  */
 
-/** Customer-facing words (kept together for the Sinhala / Tamil phase). */
-export const HERO_COPY = {
-  titleFresh: NEUTRAL_COPY.heroTitle,
-  titlePoints: POINTS_COPY.heroTitle,
-  /**
-   * AUTO, no points: two catchy lines that roll, no free-delivery claim (owner, 2026-10-15)
-   * and no price line any more (owner, 2026-10-16: "i don't need this line, instead change
-   * some other catchy").
-   */
-  catchy: ['Quality groceries, delivered with care', 'Fresh picks, every day'],
-  /** AUTO, points on: the live rule, then a second catchy line (owner, 2026-10-16). */
-  catchyPoints: 'Shop smart, earn more',
-  cta: 'ORDER NOW',
-};
+/** Customer-facing words (Sinhala / Tamil are read while rendering; the title words are the banner's big letters). */
+export const HERO_COPY = localized(
+  {
+    titleFresh: ['FRESH', 'GROCERIES'] as [string, string],
+    titlePoints: ['EARN', 'POINTS'] as [string, string],
+    /**
+     * AUTO, no points: two catchy lines that roll, no free-delivery claim (owner, 2026-10-15)
+     * and no price line any more (owner, 2026-10-16: "i don't need this line, instead change
+     * some other catchy").
+     */
+    catchy: ['Quality groceries, delivered with care', 'Fresh picks, every day'] as string[],
+    /** AUTO, points on: the live rule, then a second catchy line (owner, 2026-10-16). */
+    catchyPoints: 'Shop smart, earn more',
+    cta: 'ORDER NOW',
+  },
+  {
+    si: {
+      titleFresh: ['නැවුම්', 'බඩු'],
+      titlePoints: ['උපයන්න', 'ලකුණු'],
+      catchy: ['ගුණාත්මක සිල්ලර බඩු, සැලකිල්ලෙන් බෙදාහරිනවා', 'සෑම දිනකම නැවුම් තේරීම්'],
+      catchyPoints: 'ඉක්මනින් සාප්පු යන්න, වැඩියෙන් උපයන්න',
+      cta: 'දැන් ඇණවුම් කරන්න',
+    },
+    ta: {
+      titleFresh: ['புதிய', 'மளிகை'],
+      titlePoints: ['பெறுங்கள்', 'புள்ளிகள்'],
+      catchy: ['தரமான மளிகைப் பொருட்கள், அக்கறையுடன் டெலிவரி', 'தினமும் புதியவை'],
+      catchyPoints: 'புத்திசாலித்தனமாக வாங்குங்கள், அதிகம் பெறுங்கள்',
+      cta: 'இப்போதே ஆர்டர் செய்',
+    },
+  },
+  'promo.HERO_COPY',
+);
 
 /**
  * The illustrated items the saucer's beam can lift (the same keys Admin and Ops offer). Owner,
@@ -181,7 +201,7 @@ export function resolveHero(config: PublicHeroBanner | null | undefined, facts: 
 
 /** Title word size: Bowlby One averages ~0.82 em per capital; fit the word into the left column. */
 export function heroWordSize(w: string): number {
-  return Math.min(36, Math.floor(HERO_LAYOUT.textW / (Math.max(1, w.length) * 0.82)));
+  return Math.min(36, Math.floor(HERO_LAYOUT.textW / (Math.max(1, graphemes(w).length) * 0.82)));
 }
 
 /**
@@ -190,7 +210,7 @@ export function heroWordSize(w: string): number {
  * letters finish their jump instead of stopping mid-air.
  */
 export function heroWaveSpan(title: [string, string]): number {
-  const last = title[0].length + 0.6 + Math.max(0, title[1].length - 1);
+  const last = graphemes(title[0]).length + 0.6 + Math.max(0, graphemes(title[1]).length - 1);
   return Math.max(1, (last * 0.9 + 1) / 12);
 }
 

@@ -9,17 +9,15 @@ import { trackSignUp } from '@/blynk/analytics/track';
 import { applyReferral, getReferral, saveProfile } from '@/blynk/auth/api';
 import { demoFlow, leaveSignIn } from '@/blynk/auth/flow';
 import { GATE_PARAMS, isFromGate } from '@/blynk/auth/gate';
-import { authErrorText, cleanReferral, NAME_ERROR, NAME_MAX, referralOk, validName } from '@/blynk/auth/forms';
+import { authErrorText, cleanReferral, NAME_MAX, referralOk, validName } from '@/blynk/auth/forms';
 import { formatPhone } from '@/blynk/auth/phone';
 import { getSession, needsRegistration } from '@/blynk/auth/session';
+import { AUTH_ERRORS, REGISTER_WORDS as R } from '@/blynk/auth/words';
 import { AgreeLine } from '@/blynk/legal/PolicyLinks';
 import { PressScale } from '@/components/ui';
-import { LIVE } from '@/demo/cartLive';
 import { DEMO } from '@/demo/mode';
 import { cartActions } from '@/lib/cart';
 import { C, F } from '@/lib/theme';
-
-const R = LIVE.register;
 
 /*
  * First sign-in: the account was created by the OTP verify and has no name yet. Same visual
@@ -71,7 +69,7 @@ export default function Register() {
   const submit = async () => {
     if (busy) return;
     const full = validName(name);
-    if (!full) { setNameError(NAME_ERROR); return; }
+    if (!full) { setNameError(AUTH_ERRORS.nameError); return; }
     if (code && !referralOk(code)) { setError(R.referralBad); return; }
     Keyboard.dismiss();
     setNameError(null);
@@ -99,7 +97,7 @@ export default function Register() {
       const c = e instanceof ApiError ? e.code : undefined;
       if (c === 'UNAUTHENTICATED') leaveSignIn(gate);
       else if (c === 'VALIDATION_ERROR' && stage === 'referral') setError(R.referralBad);
-      else if (c === 'VALIDATION_ERROR') setNameError(NAME_ERROR);
+      else if (c === 'VALIDATION_ERROR') setNameError(AUTH_ERRORS.nameError);
       else setError(authErrorText(e));
     } finally {
       if (mounted.current) setBusy(false);

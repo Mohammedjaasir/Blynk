@@ -7,6 +7,7 @@ import { DoctorHead, LoadFailure, MapLink, s } from '@/blynk/doctors/ui';
 import { formatLkr } from '@/blynk/lib/money';
 import { Badge, Body, Card, Chevron, ListSkeleton, Page, SectionTitle, StateView } from '@/blynk/ui/kit';
 import { useLoad } from '@/blynk/ui/useLoad';
+import { DOCTOR_SCREENS as W } from '@/blynk/doctors/words';
 
 const hhmm = (raw: string) => (raw.length >= 5 ? raw.slice(0, 5) : raw);
 
@@ -24,14 +25,14 @@ function ClinicDetail({ id }: { id: string }) {
   const clinic = load.data?.clinic;
 
   return (
-    <Page title={clinic?.name || 'Clinic'}>
+    <Page title={clinic?.name || W.clinic}>
       {load.loading && !load.data ? (
         <ListSkeleton rows={4} h={90} />
       ) : load.error || !load.data || !clinic ? (
         <LoadFailure
           error={load.error}
-          title="We couldn't load this clinic"
-          notFound={{ title: 'Clinic not found', message: 'This clinic may have been removed or is no longer listed.' }}
+          title={W.clinicFailed}
+          notFound={{ title: W.clinicNotFound, message: W.clinicNotFoundSub }}
           onRetry={load.reload}
         />
       ) : (
@@ -41,14 +42,14 @@ function ClinicDetail({ id }: { id: string }) {
             <Body sub style={{ marginTop: 6 }}>{clinic.addressLine}</Body>
             <Body sub>{clinic.city}</Body>
             {!!(clinic.operatingStartTime && clinic.operatingEndTime) && (
-              <View style={{ marginTop: 10 }}><Badge tone="neutral" label={`Open ${hhmm(clinic.operatingStartTime)} – ${hhmm(clinic.operatingEndTime)}`} /></View>
+              <View style={{ marginTop: 10 }}><Badge tone="neutral" label={W.openHours(hhmm(clinic.operatingStartTime), hhmm(clinic.operatingEndTime))} /></View>
             )}
             <MapLink lat={clinic.latitude} lng={clinic.longitude} label={clinic.name} />
           </Card>
 
-          <SectionTitle style={{ marginTop: 14 }}>Doctors</SectionTitle>
+          <SectionTitle style={{ marginTop: 14 }}>{W.doctors}</SectionTitle>
           {load.data.doctors.length === 0 ? (
-            <StateView title="No doctors listed at this clinic yet" />
+            <StateView title={W.noDoctorsAtClinic} />
           ) : load.data.doctors.map((d, i) => (
             <Animated.View key={d.clinicDoctorId} entering={FadeInDown.delay(Math.min(i, 6) * 40).duration(220)}>
               <Card

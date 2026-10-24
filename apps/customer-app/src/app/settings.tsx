@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, Vie
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { accountErrorText, needsLogin } from '@/blynk/account/errors';
 import { showNotice } from '@/blynk/account/notice';
+import { ACCOUNT_COMMON, SMS_SCREEN as W } from '@/blynk/account/screenWords';
 import { accountStyles as A, Button, Card, ScreenHeader } from '@/blynk/account/ui';
 import {
   getProfile, SMS_LANGUAGES, smsLanguagePatch, smsOffersPatch, updateProfile, type AccountProfile, type SmsLanguage,
@@ -19,9 +20,6 @@ import { C, F } from '@/lib/theme';
  * (PATCH /me sms_language: si / ta / en), and "Offers by SMS" (PATCH /me sms_offers). Each saves
  * the moment it changes; a failed save puts the old value back and says why.
  */
-export const SMS_LANGUAGE_NOTE = 'Order updates, sign-in codes and offers by SMS come in this language when Blynk sends them in yours.';
-export const SMS_LANGUAGE_HINT = 'Pick a language for your SMS';
-
 export default function SmsSettings() {
   const insets = useSafeAreaInsets();
   const session = useSession();
@@ -70,24 +68,24 @@ export default function SmsSettings() {
   return (
     <View style={A.screen}>
       <StatusBar style="dark" />
-      <ScreenHeader title="SMS & offers" top={insets.top} />
+      <ScreenHeader title={W.title} top={insets.top} />
       {DEMO ? (
-        <Text style={[A.body, { padding: 20 }]}>SMS settings open with ordering. This is a preview.</Text>
+        <Text style={[A.body, { padding: 20 }]}>{W.preview}</Text>
       ) : !profile ? (
         <View style={styles.center}>
           {loadError ? (
             <>
-              <Text style={[A.body, { textAlign: 'center' }]}>{"We couldn't load your SMS settings."}{'\n'}{loadError}</Text>
-              <Button label="Try again" onPress={() => { setLoadError(null); load(); }} style={{ marginTop: 14 }} />
+              <Text style={[A.body, { textAlign: 'center' }]}>{W.loadFailed}{'\n'}{loadError}</Text>
+              <Button label={ACCOUNT_COMMON.tryAgain} onPress={() => { setLoadError(null); load(); }} style={{ marginTop: 14 }} />
             </>
           ) : <ActivityIndicator color={C.brandInk} />}
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: insets.bottom + 40 }}>
           <Card style={{ padding: 15 }}>
-            <Text style={A.heading}>SMS language</Text>
-            <Text style={[A.body, { marginTop: 4 }]}>{SMS_LANGUAGE_NOTE}</Text>
-            {!profile.sms_language && <Text style={styles.hint}>ⓘ {SMS_LANGUAGE_HINT}</Text>}
+            <Text style={A.heading}>{W.languageTitle}</Text>
+            <Text style={[A.body, { marginTop: 4 }]}>{W.languageNote}</Text>
+            {!profile.sms_language && <Text style={styles.hint}>ⓘ {W.languageHint}</Text>}
             <View style={{ marginTop: 8 }} accessibilityRole="radiogroup">
               {SMS_LANGUAGES.map((l) => {
                 const on = profile.sms_language === l.wire;
@@ -113,8 +111,8 @@ export default function SmsSettings() {
           <Card style={{ padding: 15 }}>
             <View style={styles.offerRow}>
               <View style={{ flex: 1 }}>
-                <Text style={A.heading}>Offers by SMS</Text>
-                <Text style={[A.body, { marginTop: 4 }]}>Get Blynk offers and discounts by SMS. Order updates still arrive.</Text>
+                <Text style={A.heading}>{W.offersTitle}</Text>
+                <Text style={[A.body, { marginTop: 4 }]}>{W.offersNote}</Text>
               </View>
               <Switch
                 value={profile.sms_offers}
@@ -124,7 +122,7 @@ export default function SmsSettings() {
                 thumbColor="#fff"
                 // react-native-web colours the "on" thumb with this (teal by default)
                 {...({ activeThumbColor: '#fff', activeTrackColor: C.ink } as object)}
-                accessibilityLabel="Offers by SMS"
+                accessibilityLabel={W.offersTitle}
               />
             </View>
           </Card>

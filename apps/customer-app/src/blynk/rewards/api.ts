@@ -3,10 +3,11 @@ import { authed, getSession } from '@/blynk/auth/session';
 import { normaliseReferralCode, REFERRAL_CODE_PATTERN } from '@/blynk/share/links';
 import { storage } from '@/blynk/lib/storage';
 import {
-  parseBirthdayOffer, parsePoints, parseReferral, REFERRAL_NOT_A_CODE, referralAppliedText,
+  parseBirthdayOffer, parsePoints, parseReferral, referralAppliedText,
   type BirthdayOffer, type PointsInfo, type ReferralInfo,
 } from './models';
 import { parseUsuals, type Usuals } from './usuals';
+import { REWARD_WORDS as W } from './words';
 
 /* Signed-in reward calls (Bearer; authed() refreshes once on a 401). */
 
@@ -39,15 +40,15 @@ export type ApplyOutcome = {
 
 /** The customer's words for a refused code. */
 export function referralRefusalMessage(e: unknown): string {
-  if (e instanceof ApiError && e.code === 'VALIDATION_ERROR') return REFERRAL_NOT_A_CODE;
-  return e instanceof ApiError ? e.message : 'Something went wrong. Please try again.';
+  if (e instanceof ApiError && e.code === 'VALIDATION_ERROR') return W.notACode;
+  return e instanceof ApiError ? e.message : W.generic;
 }
 
 /** POST /me/referral/apply. Never throws. */
 export async function applyReferralCode(rawCode: string): Promise<ApplyOutcome> {
   const code = normaliseReferralCode(rawCode);
   if (!REFERRAL_CODE_PATTERN.test(code)) {
-    return { ok: false, invalidCode: true, text: code ? REFERRAL_NOT_A_CODE : 'Enter a code.' };
+    return { ok: false, invalidCode: true, text: code ? W.notACode : W.enterCode };
   }
   try {
     const data = await authed((t) => apiPost<{ inviter_first_name?: unknown } | null>('/me/referral/apply', { code }, t));
