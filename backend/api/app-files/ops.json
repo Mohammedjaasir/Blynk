@@ -1,8 +1,8 @@
 {
   "app": "ops",
-  "version_code": 361,
-  "version_name": "2.5",
-  "sha256": "0253957a390a4c9e85e134588c58c5f49da1a6531642ed5682c5607df139f9bf",
-  "size": 6383831,
-  "released_at": "2026-10-24T07:13:48.537Z"
+  "version_code": 371,
+  "version_name": "2.6",
+  "sha256": "7b70960d999ec89eebf6d839d3d1678ac7dbe52e99aa4853c61553d1f6960fcb",
+  "size": 6422076,
+  "released_at": "2026-10-24T09:53:42.676Z"
 }
