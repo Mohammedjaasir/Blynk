@@ -37,20 +37,69 @@ export function EmptyState({
   message,
   action,
   icon,
+  art,
+  className,
 }: {
   title: string;
   message?: string;
   action?: ReactNode;
   icon?: ReactNode;
+  /** A drawn illustration in place of the small icon tile. */
+  art?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="empty">
-      <span className="empty__icon" aria-hidden="true">
-        {icon ?? <IconBox size={26} />}
-      </span>
+    <div className={`empty${art ? ' empty--art' : ''}${className ? ` ${className}` : ''}`}>
+      {art ? (
+        <div className="empty__art">{art}</div>
+      ) : (
+        <span className="empty__icon" aria-hidden="true">
+          {icon ?? <IconBox size={26} />}
+        </span>
+      )}
       <h2>{title}</h2>
       {message ? <p>{message}</p> : null}
       {action}
+    </div>
+  );
+}
+
+/** A large number tile (the home screen's shop numbers). */
+export function Kpi({
+  label,
+  value,
+  hint,
+  icon,
+  tone = 'plain',
+  index = 0,
+  meter,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon?: ReactNode;
+  tone?: 'plain' | 'ink';
+  index?: number;
+  /** 0-100: a thin bar under the value (how much of the earnings Blynk has paid). */
+  meter?: number;
+}) {
+  return (
+    <div className={`kpi kpi--${tone} rise`} style={{ ['--i' as string]: index }}>
+      <dt className="kpi__label">
+        {icon ? (
+          <span className="kpi__icon" aria-hidden="true">
+            {icon}
+          </span>
+        ) : null}
+        {label}
+      </dt>
+      <dd className="kpi__value">{value}</dd>
+      {meter !== undefined ? (
+        <dd className="kpi__meter" aria-hidden="true">
+          <span style={{ ['--meter' as string]: `${Math.max(0, Math.min(100, meter))}%` }} />
+        </dd>
+      ) : null}
+      {hint ? <dd className="kpi__hint">{hint}</dd> : null}
     </div>
   );
 }

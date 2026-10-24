@@ -12,6 +12,38 @@ export interface Seller {
   rejection_reason: string | null;
   commission_percent: number;
   created_at: string;
+  /*
+   * The shop's location on the map. Blynk works out customers' delivery
+   * charges for this seller's products from the APPROVED point; a new pin
+   * waits (pending_*) until Admin approves it. All optional: an API without
+   * the location change simply leaves them out.
+   */
+  /** The approved point (used for delivery charges). */
+  latitude?: number | null;
+  longitude?: number | null;
+  location_note?: string | null;
+  /** A pin the seller sent that Admin has not approved yet. */
+  pending_latitude?: number | null;
+  pending_longitude?: number | null;
+  pending_location_note?: string | null;
+  location_status?: LocationStatus;
+  location_reject_reason?: string | null;
+  /** Road-free distance from the Blynk store to the approved point. */
+  distance_km_from_store?: number | null;
+  pending_distance_km_from_store?: number | null;
+}
+
+export type LocationStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+/** The public store info (GET /store); only the part the seller portal uses. */
+export interface StoreInfo {
+  store_location?: LatLng | null;
+  hub_name?: string | null;
 }
 
 export interface SellerMe {
@@ -117,4 +149,18 @@ export interface ProfileInput {
   contact_name?: string;
   address?: string;
   note?: string;
+}
+
+/**
+ * Sending a shop pin: PUT /seller/profile with the (required) shop name and the point; the
+ * other profile fields are left out, so they stay as they are. The pin then waits for Admin.
+ * latitude + longitude null withdraws a waiting pin (the approved one stays).
+ * Only the location card sends these: the details form must never include them, because
+ * sending the approved point back cancels a waiting request and null + null withdraws it.
+ */
+export interface LocationInput {
+  shop_name: string;
+  latitude: number | null;
+  longitude: number | null;
+  location_note?: string | null;
 }

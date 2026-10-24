@@ -2,12 +2,14 @@ import { apiRequest, tokenStore } from './client';
 import type {
   AuthUser,
   Category,
+  LocationInput,
   ProductInput,
   ProfileInput,
   Seller,
   SellerMe,
   SellerProduct,
   Statement,
+  StoreInfo,
   Submission,
 } from './types';
 
@@ -65,6 +67,13 @@ export const sellerApi = {
 
   updateProfile: (input: ProfileInput) =>
     apiRequest<{ seller: Seller }>('/seller/profile', { method: 'PUT', body: { ...input } }),
+
+  /** Send the shop pin; it waits for Admin (the approved point stays in use until then). */
+  sendLocation: (input: LocationInput) =>
+    apiRequest<{ seller: Seller }>('/seller/profile', { method: 'PUT', body: { ...input } }),
+
+  /** Public store info: where the Blynk store is (to start the map and measure distance). */
+  store: () => apiRequest<StoreInfo>('/store', { auth: false }),
 
   categories: () => apiRequest<{ categories: Category[] }>('/seller/categories').then((r) => r.categories),
 

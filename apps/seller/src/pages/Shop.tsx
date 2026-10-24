@@ -1,33 +1,22 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import { sellerApi } from '../api/resources';
 import { useAuth } from '../auth/AuthContext';
 import { useSeller } from '../auth/SellerContext';
-import type { SellerStatus } from '../api/types';
-import { IconCalendar, IconMail, IconPhone } from '../components/icons';
+import { IconCalendar, IconMail, IconPhone, IconStore } from '../components/icons';
+import { LocationCard } from '../components/LocationCard';
 import { Eyebrow, Field, describedBy } from '../components/ui';
 import { errorMessage, fieldErrors } from '../lib/apiErrors';
-import { formatDate } from '../lib/format';
-import type { ChipTone } from '../lib/products';
+import { formatDate, formatNumber } from '../lib/format';
+import { STATUS_CHIP, initials } from '../lib/status';
 
 type Errors = Partial<Record<'shop_name' | 'contact_name' | 'address' | 'note', string>>;
 
-const STATUS_CHIP: Record<SellerStatus, { label: string; tone: ChipTone }> = {
-  APPROVED: { label: 'Approved', tone: 'ok' },
-  PENDING: { label: 'Waiting for approval', tone: 'wait' },
-  REJECTED: { label: 'Not approved', tone: 'bad' },
-  SUSPENDED: { label: 'Switched off', tone: 'off' },
-};
-
-/** "Nimal Farm" -> "NF", for the round badge beside the shop name. */
-function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  return (words.length > 1 ? words[0]![0]! + words[1]![0]! : (words[0] ?? '?').slice(0, 2)).toUpperCase();
-}
-
-/** The shop profile (PUT /seller/profile). Allowed in any status except SUSPENDED. */
+/** The shop profile (PUT /seller/profile) and its location. Allowed in any status except SUSPENDED. */
 export function Shop() {
   const { user } = useAuth();
   const { seller, setSeller, reload } = useSeller();
+  const routeLocation = useLocation();
   const [shopName, setShopName] = useState(seller?.shop_name ?? '');
   const [contactName, setContactName] = useState(seller?.contact_name ?? '');
   const [address, setAddress] = useState(seller?.address ?? '');
@@ -47,9 +36,17 @@ export function Shop() {
     setNote(seller.note ?? '');
   }, [sellerId]);
 
+  // "Pin your shop" on the home screen links to /shop#location.
+  useEffect(() => {
+    if (routeLocation.hash !== '#location') return;
+    const el = document.getElementById('location');
+    el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [routeLocation.hash, sellerId]);
+
   if (!seller) return null;
   const locked = seller.status === 'SUSPENDED';
   const signedInWith = user?.phone ?? user?.email ?? null;
+  const chip = STATUS_CHIP[seller.status];
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -96,7 +93,7 @@ export function Shop() {
   }
 
   return (
-    <section aria-labelledby="shop-title">
+    <section aria-labelledby="shop-title" className="shop">
       <div className="page__head">
         <div className="page__titles">
           <Eyebrow>Your profile</Eyebrow>
@@ -104,108 +101,131 @@ export function Shop() {
         </div>
       </div>
 
-      <div className="profile">
-        <span className="profile__avatar" aria-hidden="true">
-          {initials(seller.shop_name)}
-        </span>
-        <div className="profile__main">
-          <p className="profile__name">{seller.shop_name}</p>
-          <p className="profile__meta">
-            {signedInWith ? (
+      <div className="profile rise">
+        <div className="profile__cover" aria-hidden="true" />
+        <div className="profile__row">
+          <span className="profile__avatar" aria-hidden="true">
+            {initials(seller.shop_name)}
+          </span>
+          <div className="profile__main">
+            <p className="profile__name">{seller.shop_name}</p>
+            <p className="profile__meta">
+              {signedInWith ? (
+                <span className="profile__line">
+                  {user?.phone ? <IconPhone size={16} /> : <IconMail size={16} />} Signed in with {signedInWith}.
+                </span>
+              ) : null}
               <span className="profile__line">
-                {user?.phone ? <IconPhone size={16} /> : <IconMail size={16} />} Signed in with {signedInWith}.
+                <IconCalendar size={16} /> Shop opened with Blynk on {formatDate(seller.created_at)}.
               </span>
-            ) : null}
-            <span className="profile__line">
-              <IconCalendar size={16} /> Shop opened with Blynk on {formatDate(seller.created_at)}.
+            </p>
+          </div>
+          <div className="profile__side">
+            <span className={`chip chip--${chip.tone} profile__chip`}>
+              <span className="chip__dot" aria-hidden="true" />
+              {chip.label}
             </span>
-          </p>
+            <span className="profile__commission">Blynk commission {formatNumber(seller.commission_percent)}%</span>
+          </div>
         </div>
-        <span className={`chip chip--${STATUS_CHIP[seller.status].tone} profile__chip`}>
-          <span className="chip__dot" aria-hidden="true" />
-          {STATUS_CHIP[seller.status].label}
-        </span>
       </div>
 
       {locked ? (
         <p className="notice notice--bad" role="status">
           Your shop is switched off, so the details cannot be changed. Please contact Blynk.
         </p>
-      ) : (
-        <p className="muted">Blynk uses these details to know who you are and how to reach you.</p>
-      )}
+      ) : null}
 
-      <form onSubmit={save} noValidate className="form">
-        <Field id="s-name" label="Shop name" required error={errors.shop_name}>
-          <input
-            id="s-name"
-            type="text"
-            maxLength={80}
-            autoComplete="organization"
-            value={shopName}
-            disabled={locked}
-            onChange={(e) => setShopName(e.target.value)}
-            aria-invalid={Boolean(errors.shop_name)}
-            aria-describedby={describedBy('s-name', false, errors.shop_name)}
-          />
-        </Field>
-        <Field id="s-contact" label="Contact person" error={errors.contact_name}>
-          <input
-            id="s-contact"
-            type="text"
-            maxLength={80}
-            autoComplete="name"
-            value={contactName}
-            disabled={locked}
-            onChange={(e) => setContactName(e.target.value)}
-            aria-invalid={Boolean(errors.contact_name)}
-            aria-describedby={describedBy('s-contact', false, errors.contact_name)}
-          />
-        </Field>
-        <Field id="s-address" label="Address" error={errors.address} hint="Where Blynk collects your goods from.">
-          <input
-            id="s-address"
-            type="text"
-            maxLength={255}
-            autoComplete="street-address"
-            value={address}
-            disabled={locked}
-            onChange={(e) => setAddress(e.target.value)}
-            aria-invalid={Boolean(errors.address)}
-            aria-describedby={describedBy('s-address', true, errors.address)}
-          />
-        </Field>
-        <Field id="s-note" label="About your shop" error={errors.note} hint="What you sell, where it is made. Blynk reads this when approving you.">
-          <textarea
-            id="s-note"
-            rows={4}
-            maxLength={500}
-            value={note}
-            disabled={locked}
-            onChange={(e) => setNote(e.target.value)}
-            aria-invalid={Boolean(errors.note)}
-            aria-describedby={describedBy('s-note', true, errors.note)}
-          />
-        </Field>
+      <div className="shop__grid">
+        <LocationCard
+          seller={seller}
+          locked={locked}
+          onSaved={async (next) => {
+            setSeller(next);
+            await reload();
+          }}
+        />
 
-        {formError ? (
-          <p className="notice notice--bad" role="alert">
-            {formError}
-          </p>
-        ) : null}
-        {saved ? (
-          <p className="notice notice--ok" role="status">
-            Saved.
-          </p>
-        ) : null}
+        <form onSubmit={save} noValidate className="form form--details rise" style={{ ['--i' as string]: 2 }}>
+          <div className="form__head">
+            <span className="form__badge" aria-hidden="true">
+              <IconStore size={20} />
+            </span>
+            <div>
+              <h2 className="form__title">Shop details</h2>
+              <p className="muted form__lede">Blynk uses these details to know who you are and how to reach you.</p>
+            </div>
+          </div>
+          <Field id="s-name" label="Shop name" required error={errors.shop_name}>
+            <input
+              id="s-name"
+              type="text"
+              maxLength={80}
+              autoComplete="organization"
+              value={shopName}
+              disabled={locked}
+              onChange={(e) => setShopName(e.target.value)}
+              aria-invalid={Boolean(errors.shop_name)}
+              aria-describedby={describedBy('s-name', false, errors.shop_name)}
+            />
+          </Field>
+          <Field id="s-contact" label="Contact person" error={errors.contact_name}>
+            <input
+              id="s-contact"
+              type="text"
+              maxLength={80}
+              autoComplete="name"
+              value={contactName}
+              disabled={locked}
+              onChange={(e) => setContactName(e.target.value)}
+              aria-invalid={Boolean(errors.contact_name)}
+              aria-describedby={describedBy('s-contact', false, errors.contact_name)}
+            />
+          </Field>
+          <Field id="s-address" label="Address" error={errors.address} hint="Where Blynk collects your goods from.">
+            <input
+              id="s-address"
+              type="text"
+              maxLength={255}
+              autoComplete="street-address"
+              value={address}
+              disabled={locked}
+              onChange={(e) => setAddress(e.target.value)}
+              aria-invalid={Boolean(errors.address)}
+              aria-describedby={describedBy('s-address', true, errors.address)}
+            />
+          </Field>
+          <Field id="s-note" label="About your shop" error={errors.note} hint="What you sell, where it is made. Blynk reads this when approving you.">
+            <textarea
+              id="s-note"
+              rows={4}
+              maxLength={500}
+              value={note}
+              disabled={locked}
+              onChange={(e) => setNote(e.target.value)}
+              aria-invalid={Boolean(errors.note)}
+              aria-describedby={describedBy('s-note', true, errors.note)}
+            />
+          </Field>
 
-        <div className="form__actions">
-          <button type="submit" className="button button--primary" disabled={saving || locked}>
-            {saving ? 'Saving...' : 'Save my shop details'}
-          </button>
-        </div>
-      </form>
+          {formError ? (
+            <p className="notice notice--bad" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          {saved ? (
+            <p className="notice notice--ok" role="status">
+              Saved.
+            </p>
+          ) : null}
 
+          <div className="form__actions">
+            <button type="submit" className="button button--primary" disabled={saving || locked}>
+              {saving ? 'Saving...' : 'Save my shop details'}
+            </button>
+          </div>
+        </form>
+      </div>
     </section>
   );
 }

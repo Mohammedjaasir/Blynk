@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { sellerApi } from '../api/resources';
 import type { Statement as StatementData } from '../api/types';
 import { IconBox, IconCalendar, IconWallet } from '../components/icons';
+import { Illustration } from '../components/Illustration';
 import { EmptyState, ErrorState, Eyebrow, PageLoading } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 import { formatDate, formatNumber, lkr, todayColombo } from '../lib/format';
@@ -19,6 +20,16 @@ function daysAgo(today: string, days: number): string {
   const d = new Date(`${today}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
+}
+
+/** Share of the whole, 0-100, for the bars. */
+function share(part: number, whole: number): number {
+  if (!whole || whole <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((part / whole) * 100)));
+}
+
+function paidShare(data: StatementData): number {
+  return share(data.paid, data.earned);
 }
 
 /** What the seller earned from delivered orders, what was paid, and what is still due. */
@@ -130,6 +141,12 @@ export function Statement() {
             <div className="total total--due">
               <dt>Blynk still owes you</dt>
               <dd>{lkr(data.due)}</dd>
+              <dd className="due__bar" aria-hidden="true">
+                <span style={{ ['--paid' as string]: `${paidShare(data)}%` }} />
+              </dd>
+              <dd className="due__caption">
+                {data.earned > 0 ? `Blynk has paid ${paidShare(data)}% of what you earned` : 'Your earnings show here once orders are delivered'}
+              </dd>
             </div>
             <div className="total">
               <dt>Sold</dt>
@@ -155,11 +172,22 @@ export function Statement() {
                 <IconBox size={20} /> What sold
               </h2>
               {data.lines.length === 0 ? (
-                <EmptyState title="Nothing sold in these dates" message="Delivered orders with your products will show up here." />
+                <EmptyState
+                  art={<Illustration name="receipt" />}
+                  title="Nothing sold in these dates"
+                  message="Delivered orders with your products will show up here."
+                />
               ) : (
-                <ul className="lines">
-                  {data.lines.map((line) => (
-                    <li key={line.product_id} className="line">
+                <ul className="lines lines--sold">
+                  {data.lines.map((line, index) => (
+                    <li
+                      key={line.product_id}
+                      className="line line--sold"
+                      style={{ ['--share' as string]: `${share(line.gross, data.gross)}%` }}
+                    >
+                      <span className="line__rank" aria-hidden="true">
+                        {index + 1}
+                      </span>
                       <span className="line__name">{line.name}</span>
                       <span className="line__units">{formatNumber(line.units)} sold</span>
                       <span className="line__amount">{lkr(line.gross)}</span>
@@ -177,12 +205,12 @@ export function Statement() {
                 <EmptyState
                   title="No payments yet"
                   message="When Blynk pays you, it will be listed here."
-                  icon={<IconWallet size={26} />}
+                  art={<Illustration name="wallet" />}
                 />
               ) : (
-                <ul className="lines">
+                <ul className="lines lines--paid">
                   {data.payouts.map((payout) => (
-                    <li key={payout.id} className="line">
+                    <li key={payout.id} className="line line--paid">
                       <span className="line__name">
                         {formatDate(payout.paid_on)}
                         {payout.note ? <span className="muted"> - {payout.note}</span> : null}
