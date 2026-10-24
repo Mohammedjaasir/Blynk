@@ -3,6 +3,14 @@ import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
 import type { AvailabilityWindow, AvailabilitySetting } from '../lib/availability';
 import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
 import type {
+  AdminSeller,
+  AdminSubmission,
+  SellerPayout,
+  SellerStatement,
+  SellerStatus,
+  SubmissionStatus,
+} from '../lib/sellers';
+import type {
   AppShareLinks,
   AppUpdatePolicySetting,
   AppUpdatesSetting,
@@ -939,4 +947,41 @@ export const dentalDoctors = {
     apiRequest<{ doctor: DentalDoctor }>(`/admin/dental/doctors/${id}`, { method: 'PATCH', body: { ...input } }).then(
       (d) => d.doctor
     ),
+};
+
+// ------------------------------------------------------------ sellers
+/** Sellers and their product submissions (seller portal, 2026-10-24). Admin approves sellers, products and prices; payouts are a manual ledger. */
+export const sellers = {
+  list: (params: { status?: SellerStatus; search?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    if (params.search) query.set('search', params.search);
+    const qs = query.toString();
+    return apiRequest<{ sellers: AdminSeller[] }>(`/admin/sellers${qs ? `?${qs}` : ''}`).then((d) => d.sellers);
+  },
+  get: (id: string) => apiRequest<{ seller: AdminSeller; statement: SellerStatement }>(`/admin/sellers/${id}`),
+  /** Approve / reject (reason needed) / suspend, and/or set the commission percent. */
+  update: (id: string, body: { status?: 'APPROVED' | 'REJECTED' | 'SUSPENDED'; rejection_reason?: string; commission_percent?: number }) =>
+    apiRequest<{ seller: AdminSeller }>(`/admin/sellers/${id}`, { method: 'PATCH', body: { ...body } }).then((d) => d.seller),
+  recordPayout: (id: string, body: { amount: number; note?: string; paid_on?: string }) =>
+    apiRequest<{ payout: SellerPayout; statement: SellerStatement }>(`/admin/sellers/${id}/payouts`, { method: 'POST', body: { ...body } }),
+  deletePayout: (id: string, payoutId: string) =>
+    apiRequest<{ statement: SellerStatement }>(`/admin/sellers/${id}/payouts/${payoutId}`, { method: 'DELETE' }).then((d) => d.statement),
+};
+
+export const sellerSubmissions = {
+  /** Oldest first. The API defaults to PENDING. */
+  list: (params: { status?: SubmissionStatus; seller_id?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    if (params.seller_id) query.set('seller_id', params.seller_id);
+    const qs = query.toString();
+    return apiRequest<{ submissions: AdminSubmission[] }>(`/admin/seller-submissions${qs ? `?${qs}` : ''}`).then((d) => d.submissions ?? []);
+  },
+  /** Waiting submissions, for the nav badge. */
+  pendingCount: () => sellerSubmissions.list({ status: 'PENDING' }).then((rows) => rows.length),
+  approve: (id: string, body: { selling_price?: number; category_id?: string }) =>
+    apiRequest<{ submission: AdminSubmission; product: AdminProduct }>(`/admin/seller-submissions/${id}/approve`, { method: 'POST', body: { ...body } }),
+  reject: (id: string, reason: string) =>
+    apiRequest<{ submission: AdminSubmission }>(`/admin/seller-submissions/${id}/reject`, { method: 'POST', body: { reason } }).then((d) => d.submission),
 };

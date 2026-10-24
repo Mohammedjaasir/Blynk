@@ -85,7 +85,7 @@ export class MediaController {
 }
 
 /** Magic-number sniffing for the three formats we accept. */
-function detectImageType(buffer: Buffer): string | null {
+export function detectImageType(buffer: Buffer): string | null {
   if (buffer.length < 12) return null;
   if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
   if (

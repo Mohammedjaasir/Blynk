@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { activeOfferWhere } from './catalog.offers.js';
+import type { DBConnection } from '../orders/order.repository.js';
 
 export interface ProductQueryParams {
   category_id?: string;
@@ -55,6 +56,27 @@ const showOfferCut = (ok: boolean) =>
     : sql<boolean>`true`.as('show_offer_cut');
 const staffShowOfferCut = (ok: boolean) =>
   ok ? sql<boolean>`products.show_offer_cut`.as('show_offer_cut') : sql<boolean>`true`.as('show_offer_cut');
+
+/**
+ * Migration 052 (seller portal): "Sold by <shop>" on a customer product - the shop name while the
+ * seller is APPROVED, else null. A correlated subquery on the page's own query (no round trip per
+ * product). Migrations run by hand in Coolify, so until `sellers` exists every product reads null;
+ * checked once a minute until found, then cached.
+ */
+let sellersTable: { ok: boolean; at: number } | null = null;
+export async function hasSellersTable(): Promise<boolean> {
+  if (sellersTable && (sellersTable.ok || Date.now() - sellersTable.at < 60_000)) return sellersTable.ok;
+  const r = await sql<{ n: number }>`
+    SELECT count(*)::int AS n FROM information_schema.columns
+    WHERE table_name = 'products' AND column_name = 'seller_id'`.execute(db);
+  sellersTable = { ok: (r.rows[0]?.n ?? 0) > 0, at: Date.now() };
+  return sellersTable.ok;
+}
+const soldBy = (ok: boolean) =>
+  ok
+    ? sql<string | null>`(SELECT s.shop_name FROM products sp JOIN sellers s ON s.id = sp.seller_id
+        WHERE sp.id = v_product_catalog.id AND s.status = 'APPROVED')`.as('sold_by')
+    : sql<string | null>`NULL`.as('sold_by');
 
 function categoryIdsForId(id: string) {
   return db
@@ -246,6 +268,7 @@ export class CatalogRepository {
    */
   async findActiveProducts(params: ProductQueryParams) {
     const cut = await hasOfferCutColumn();
+    const sellers = await hasSellersTable();
     let query = db
       .selectFrom('v_product_catalog')
       .select([
@@ -281,6 +304,8 @@ export class CatalogRepository {
         'mrp',
         // Migration 050: show the struck price / saving for this product.
         showOfferCut(cut),
+        // Migration 052: the approved seller's shop ("Sold by"), else null.
+        soldBy(sellers),
       ])
       .where('is_active', '=', true);
 
@@ -373,6 +398,7 @@ export class CatalogRepository {
   async findActiveProductById(idOrSlug: string) {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
     const cut = await hasOfferCutColumn();
+    const sellers = await hasSellersTable();
 
     let query = db
       .selectFrom('v_product_catalog')
@@ -409,6 +435,8 @@ export class CatalogRepository {
         'mrp',
         // Migration 050: show the struck price / saving for this product.
         showOfferCut(cut),
+        // Migration 052: the approved seller's shop ("Sold by"), else null.
+        soldBy(sellers),
       ])
       .where('is_active', '=', true);
 
@@ -543,9 +571,11 @@ export class CatalogRepository {
     offer_ends_at?: string | null;
     /** Migration 050: show the struck price / saving (default on). */
     show_offer_cut?: boolean;
-  }) {
+    /** Migration 052: the seller who supplies it (seller portal approvals); omitted = Blynk's own. */
+    seller_id?: string | null;
+  }, executor: DBConnection = db) {
     const cut = await hasOfferCutColumn();
-    const [record] = await db
+    const [record] = await executor
       .insertInto('products')
       .values({
         category_id: data.category_id,
@@ -572,6 +602,7 @@ export class CatalogRepository {
         offer_price: data.offer_price ?? null,
         offer_ends_at: data.offer_ends_at ?? null,
         ...(cut ? { show_offer_cut: data.show_offer_cut ?? true } : {}),
+        ...(data.seller_id ? { seller_id: data.seller_id } : {}),
       })
       .returningAll()
       .execute();
@@ -607,12 +638,13 @@ export class CatalogRepository {
       offer_price?: number | null;
       offer_ends_at?: string | null;
       show_offer_cut?: boolean;
-    }
+    },
+    executor: DBConnection = db
   ) {
     // before migration 050 has run there is no column to write the switch to
     const { show_offer_cut: showCut, ...rest } = data;
     const cut = showCut !== undefined && (await hasOfferCutColumn());
-    const [record] = await db
+    const [record] = await executor
       .updateTable('products')
       .set({
         ...rest,

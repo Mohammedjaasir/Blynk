@@ -40,7 +40,12 @@ export const verifyOtpSchema = z
     create_account: z.boolean().optional().default(true),
     // The Rider app sends 'rider': a customer whose rider application is
     // waiting or was rejected is told so instead of being signed in there.
-    app: z.enum(['rider']).optional(),
+    // The Seller portal sends 'seller': a number with no account becomes a
+    // PENDING seller (seller.service.ts), a number used for any other kind of
+    // account is refused (PHONE_IN_USE).
+    app: z.enum(['rider', 'seller']).optional(),
+    // Seller portal first sign-in: the shop's name (else the phone number).
+    shop_name: z.string().trim().min(2, 'Shop name must be at least 2 characters.').max(80, 'Shop name is too long.').optional(),
   })
   .refine((data) => Boolean(data.phone || data.phone_number), {
     message: 'Phone number is required.',
@@ -54,6 +59,7 @@ export const verifyOtpSchema = z
         otp: data.otp,
         create_account: data.create_account,
         app: data.app,
+        shop_name: data.shop_name,
       };
     } catch (err: unknown) {
       ctx.addIssue({

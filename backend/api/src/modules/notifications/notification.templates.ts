@@ -248,6 +248,11 @@ export class NotificationTemplates {
       // Rider applications (migration 029): the text is complete when queued.
       case 'RIDER_APPROVED':
       case 'RIDER_REJECTED':
+      // Seller portal (modules/sellers/admin-sellers.service.ts): the seller / product decisions, complete when queued.
+      case 'SELLER_APPROVED':
+      case 'SELLER_REJECTED':
+      case 'SELLER_PRODUCT_APPROVED':
+      case 'SELLER_PRODUCT_REJECTED':
       // Birthday SMS (migration 034, birthday/birthday.sms.ts): complete when queued.
       case 'BIRTHDAY_OFFER':
       case 'SMS_OFFER': {

@@ -34,6 +34,9 @@ import { RiderRequests } from './pages/RiderRequests';
 import { SmsOffers } from './pages/SmsOffers';
 import { Notifications } from './pages/Notifications';
 import { Staff } from './pages/Staff';
+import { Sellers } from './pages/Sellers';
+import { SellerDetail } from './pages/SellerDetail';
+import { SellerProducts } from './pages/SellerProducts';
 
 /**
  * Route protection here is for the operator's benefit only. Every admin
@@ -93,6 +96,10 @@ export function AppRoutes() {
         <Route path="categories/import" element={<AdminOnly><CategoryImport /></AdminOnly>} />
         {/* Arrange (owner, 2026-10-10): a category's product order. */}
         <Route path="categories/:id/arrange" element={<AdminOnly><ArrangeProducts /></AdminOnly>} />
+        {/* Seller portal (2026-10-24): approve sellers, their products and prices, record payouts. */}
+        <Route path="sellers" element={<AdminOnly><Sellers /></AdminOnly>} />
+        <Route path="sellers/:id" element={<AdminOnly><SellerDetail /></AdminOnly>} />
+        <Route path="seller-products" element={<AdminOnly><SellerProducts /></AdminOnly>} />
         <Route path="category-groups" element={<AdminOnly><CategoryGroups /></AdminOnly>} />
         <Route path="combos" element={<AdminOnly><Combos /></AdminOnly>} />
         <Route path="promotions" element={<AdminOnly><Promotions /></AdminOnly>} />

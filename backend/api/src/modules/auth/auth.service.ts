@@ -144,6 +144,17 @@ async function refuseCustomerInRiderApp(trx: Transaction<Database>, userId: stri
   throw new AppError("This number hasn't applied to deliver with Blynk yet.", 404, 'ACCOUNT_NOT_FOUND');
 }
 
+/**
+ * Sellers (migration 051) sign in to the Seller portal only (app: 'seller'); the
+ * customer, rider and staff sign-ins refuse a SELLER number. In the other
+ * direction a number that already belongs to a customer, rider or staff
+ * account cannot become a seller (one number = one account).
+ */
+export const sellerSignInRequired = () =>
+  new AppError('This number is a Blynk seller account. Sign in on the seller site.', 403, 'SELLER_SIGN_IN_REQUIRED');
+export const phoneInUse = () =>
+  new AppError('This number is already used for a Blynk account.', 403, 'PHONE_IN_USE');
+
 /** The sign-in code SMS: "123456 is your Blynk code. Valid 2 min. Do not share it." */
 export const otpSmsText = (otp: string, minutes: number, lang: SmsLanguage = 'en') =>
   // Sinhala / Tamil (owner, 2026-10-12; "Customer SMS language"): still only
@@ -355,7 +366,7 @@ export class AuthService {
   async verifyOtp(
     phone: string,
     submittedOtp: string,
-    meta: { ipAddress?: string; deviceInfo?: string; createAccount?: boolean; app?: 'rider' }
+    meta: { ipAddress?: string; deviceInfo?: string; createAccount?: boolean; app?: 'rider' | 'seller'; shopName?: string }
   ): Promise<AuthTokensResult> {
     // Edge limit on code guessing (security audit 2026-10): max 10 verifies
     // per phone and 30 per IP per 15 minutes, on top of the per-code attempt
@@ -397,6 +408,10 @@ export class AuthService {
             'ACCOUNT_DEACTIVATED'
           );
         }
+        // Seller portal (migration 051): sellers only sign in there, and only
+        // sellers do. Thrown inside the transaction, so nothing is consumed.
+        if (meta.app === 'seller' && existingUser.role !== 'SELLER') throw phoneInUse();
+        if (meta.app !== 'seller' && existingUser.role === 'SELLER') throw sellerSignInRequired();
         // A disabled staff account (migration 014) cannot fall back to an SMS
         // code either. Thrown inside the transaction, so nothing is consumed.
         if (existingUser.staff_disabled_at) throw staffSignInRefused();
@@ -413,6 +428,10 @@ export class AuthService {
         // refused instead of becoming a customer. Thrown inside the
         // transaction, so the code is not consumed and nothing is written.
         throw new AppError('No Blynk account uses this number.', 404, 'ACCOUNT_NOT_FOUND');
+      } else if (meta.app === 'seller') {
+        // First sign-in on the Seller portal: a SELLER user and a PENDING shop
+        // profile that Admin approves before anything can be listed.
+        user = await authRepository.createSeller(trx, phone, meta.shopName?.trim() || phone);
       } else {
         // First-time login: auto-register as CUSTOMER strictly
         user = await authRepository.createOrGetCustomer(trx, phone);

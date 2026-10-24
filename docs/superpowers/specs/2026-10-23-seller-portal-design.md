@@ -61,11 +61,11 @@ typing them in, while Admin keeps full control of what goes live and at what pri
 4. Payouts are a manual ledger in v1; commission % is one setting per seller (default 0).
 5. A phone number belongs to one account (existing rule): a number already used as a customer cannot
    also be a seller. (Alternative: let one number hold both roles - needs your call.)
-6. The portal lives on its own address; I suggest `seller.blynk.lk`.
+6. The portal lives on its own address; I suggest `blynk-seller.valgrowlabs.com`.
 
 ## Open questions for the owner
 
 - Commission: charge sellers a % per sale, or is Blynk's gain only the markup on their price?
-- Seller domain: `seller.blynk.lk` ok?
+- Seller domain: `blynk-seller.valgrowlabs.com` ok?
 - Same phone number as a customer and a seller: allowed or not?
 - Do sellers get notified (SMS) when a product is approved or rejected? (suggested: yes)

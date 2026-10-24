@@ -22,6 +22,7 @@ import {
   notifyMeAction, setNotifyMe, unitLine,
 } from '@/blynk/catalog/product';
 import { recallProduct } from '@/blynk/catalog/productCache';
+import { soldByText } from '@/blynk/catalog/soldBy';
 import { ComboAdd } from '@/blynk/combos/ComboViews';
 import { requestPushPermission } from '@/blynk/push';
 import { formatLkr } from '@/blynk/lib/money';
@@ -179,6 +180,7 @@ export default function ProductPage() {
               {!!product.category_name && <Text style={styles.cat}>{product.category_name}</Text>}
               <Text style={styles.name} accessibilityRole="header">{product.name}</Text>
               {!!unitLine(product) && <Text style={styles.unit}>{unitLine(product)}</Text>}
+              {!DEMO && !!soldByText(product) && <Text style={styles.soldBy}>{soldByText(product)}</Text>}
 
               {sized && (
                 <SizeChips variants={variants} selected={variant?.id ?? null} onPick={setPickedId} />
@@ -400,6 +402,7 @@ const styles = StyleSheet.create({
   cat: { fontFamily: F.regular, fontSize: 12.5, color: C.sub, marginTop: 22 },
   name: { fontFamily: F.bold, fontSize: 24, color: C.ink, lineHeight: 30, marginTop: 6 },
   unit: { fontFamily: F.regular, fontSize: 14, color: C.sub, marginTop: 4 },
+  soldBy: { fontFamily: F.regular, fontSize: 13, color: C.sub, marginTop: 2 },
   priceRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 18 },
   price: { fontFamily: F.black, fontSize: 26, color: C.ink },
   mrp: { fontFamily: F.regular, fontSize: 15, color: '#9A9AA0', textDecorationLine: 'line-through' },

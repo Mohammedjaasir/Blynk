@@ -118,6 +118,11 @@ export interface CustomerProductDto {
    * MRP) and the saving for this product. Display only; prices are the same.
    */
   show_offer_cut: boolean;
+  /**
+   * Migration 052 (seller portal): the shop name while the product's seller is APPROVED ("Sold by
+   * <shop>"), null for Blynk's own products and for a seller who is not approved.
+   */
+  sold_by: string | null;
   /** Product page only: the active variants, sold-out ones marked is_available false. */
   variants?: CustomerVariantDto[];
 }
@@ -169,6 +174,7 @@ function toCustomerProduct(
     delivery_lead_days: lead,
     earliest_delivery_date: lead > 0 ? earliestDeliveryDay(orderingClock.now(), lead).date : null,
     show_offer_cut: p.show_offer_cut !== false,
+    sold_by: p.sold_by ?? null,
     ...(withVariants ? { variants: variants ?? [] } : {}),
   };
 }

@@ -37,6 +37,11 @@ export interface Product {
    */
   available_window?: { from: string; until: string } | null;
   window_closed?: boolean;
+  /**
+   * Seller portal (2026-10-24): the shop name of the approved seller who supplies this product;
+   * null / absent for Blynk's own products (and on an older server). Shown as "Sold by <shop>".
+   */
+  sold_by?: string | null;
 }
 /** One size/pack of a product ("50 g", "3 pack"), as GET /catalog/products/:id lists it. */
 export interface ProductVariant {

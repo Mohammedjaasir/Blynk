@@ -1,7 +1,7 @@
 import { Generated, ColumnType } from 'kysely';
 
 /** OPERATIONS added by migration 014 (Operations-app-only staff). */
-export type UserRole = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN' | 'OPERATIONS';
+export type UserRole = 'CUSTOMER' | 'RIDER' | 'PACKING_STAFF' | 'ADMIN' | 'OPERATIONS' | 'SELLER';
 export type InventoryTrackingMode = 'UNTRACKED' | 'TRACKED';
 export type InventoryAdjustmentType =
   | 'PURCHASE_RESTOCK'
@@ -310,6 +310,8 @@ export interface ProductsTable {
    * struck "was" price and the saving for this product. Default true.
    */
   show_offer_cut: ColumnType<boolean, boolean | undefined, boolean>;
+  /** Migration 052: the seller who supplies it (NULL = Blynk's own). */
+  seller_id: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 /**
@@ -1101,7 +1103,57 @@ export interface CashHandinsTable {
   created_at: Generated<Date>;
 }
 
+/** Migration 052 (seller portal; docs/superpowers/specs/2026-10-23-seller-portal-design.md). */
+export type SellerStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+export interface SellersTable {
+  id: Generated<string>;
+  user_id: string;
+  shop_name: string;
+  contact_name: string | null;
+  address: string | null;
+  note: string | null;
+  status: Generated<SellerStatus>;
+  commission_percent: ColumnType<string, number | string | undefined, number | string>;
+  rejection_reason: ColumnType<string | null, string | null | undefined, string | null>;
+  reviewed_by: ColumnType<string | null, string | null | undefined, string | null>;
+  reviewed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  created_at: Generated<Date>;
+  updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
+}
+
+export type SellerSubmissionKind = 'NEW' | 'EDIT';
+export type SellerSubmissionStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
+export interface SellerSubmissionsTable {
+  id: Generated<string>;
+  seller_id: string;
+  product_id: ColumnType<string | null, string | null | undefined, string | null>;
+  kind: SellerSubmissionKind;
+  status: Generated<SellerSubmissionStatus>;
+  /** name, category_id, unit, pack_size, description, image_url, barcode */
+  payload: ColumnType<Record<string, unknown>, string | Record<string, unknown>, string | Record<string, unknown>>;
+  seller_price: ColumnType<string, number | string, number | string>;
+  approved_selling_price: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  reject_reason: ColumnType<string | null, string | null | undefined, string | null>;
+  reviewed_by: ColumnType<string | null, string | null | undefined, string | null>;
+  reviewed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  created_at: Generated<Date>;
+  updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
+}
+
+export interface SellerPayoutsTable {
+  id: Generated<string>;
+  seller_id: string;
+  amount: ColumnType<string, number | string, number | string>;
+  note: string | null;
+  paid_on: ColumnType<Date, Date | string | undefined, Date | string>;
+  created_by: ColumnType<string | null, string | null | undefined, string | null>;
+  created_at: Generated<Date>;
+}
+
 export interface Database {
+  sellers: SellersTable;
+  seller_submissions: SellerSubmissionsTable;
+  seller_payouts: SellerPayoutsTable;
   system_configurations: SystemConfigurationsTable;
   dark_stores: DarkStoresTable;
   service_areas: ServiceAreasTable;

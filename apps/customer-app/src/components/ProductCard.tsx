@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
 import type { Product } from '@/blynk/api/types';
 import { openProduct } from '@/blynk/catalog/openProduct';
+import { soldByText } from '@/blynk/catalog/soldBy';
 import { tileLabel } from '@/blynk/catalog/tileLabel';
 import { deliveredFromText, hasVariants, priceRange, priceText, VARIANT_COPY } from '@/blynk/catalog/variants';
 import { formatLkr } from '@/blynk/lib/money';
@@ -129,6 +130,7 @@ export const ProductCard = memo(function ProductCard({
         <Text style={styles.name} numberOfLines={2}>{x?.veg != null ? '     ' : ''}{p.name}</Text>
       </View>
       {!x && !!unitText(p) && <Text style={styles.unit} numberOfLines={1}>{unitText(p)}</Text>}
+      {!x && !!soldByText(p) && <Text style={styles.soldBy} numberOfLines={1}>{soldByText(p)}</Text>}
       {/*
         Offer (owner, 2026-10-09 / 2026-10-14): the offer price first and prominent, then the regular
         price struck through. Live, the struck price always shows (owner, 2026-10-18; as in the
@@ -178,6 +180,7 @@ const styles = StyleSheet.create({
   mark: { position: 'absolute', left: 0, top: 3 },
   name: { fontSize: 13.5, fontFamily: F.medium, color: '#1E1E24', lineHeight: 17 },
   unit: { fontSize: 10, color: C.sub, fontFamily: F.regular, marginTop: 1 },
+  soldBy: { fontSize: 10, color: C.sub, fontFamily: F.regular, marginTop: 1 },
   priceRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, rowGap: 1, marginTop: 4, minHeight: 20 },
   mrp: { fontSize: 12, lineHeight: 17, color: C.faint, textDecorationLine: 'line-through', fontFamily: F.regular, flexShrink: 0 },
   price: { fontSize: 14, lineHeight: 19, color: C.ink, fontFamily: F.semi, flexShrink: 0 },

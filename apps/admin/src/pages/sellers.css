@@ -1,0 +1,42 @@
+/* Sellers and Seller products (seller portal, 2026-10-24). */
+.sellers__bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.sellers__bar .segmented { flex-wrap: wrap; }
+.sellers__search { width: min(280px, 100%); }
+.sellers__waiting { display: inline-flex; min-width: 22px; justify-content: center; padding: 1px 7px; border-radius: 999px; background: var(--yellow); color: #111; font-weight: 700; text-decoration: none; }
+
+.seller-card { display: grid; gap: 14px; margin-bottom: 18px; padding: 16px; max-width: 980px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.seller-card__head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.seller-card__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 0; }
+.seller-card__facts div, .seller-stats div, .submission__facts div { padding: 8px 10px; background: var(--canvas); border-radius: var(--radius); min-width: 0; }
+.seller-card__facts dt, .seller-stats dt, .submission__facts dt { margin: 0 0 2px; color: var(--ink-3); font-size: 12px; }
+.seller-card__facts dd, .seller-stats dd, .submission__facts dd { margin: 0; overflow-wrap: anywhere; }
+.seller-commission { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.seller-commission__input { max-width: 140px; }
+.seller-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0; }
+.seller-stats dd { font-size: 16px; font-weight: 700; }
+.seller-stats .seller-stats__due { background: #fff4d6; }
+.seller-payout-form { display: grid; grid-template-columns: 160px 200px minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+
+.submission-list { display: grid; gap: 16px; max-width: 980px; }
+.submission { display: grid; gap: 14px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.submission__kind { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e6f4ea; color: #1b5e20; font-size: 12px; font-weight: 700; }
+.submission__kind--edit { background: #e8f0fe; color: #1a3d8f; }
+.submission__title { margin: 6px 0 2px; font-size: 18px; font-weight: 800; }
+.submission__body { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; }
+.submission__photo { width: 120px; height: 120px; display: grid; place-items: center; background: var(--canvas); border-radius: var(--radius); overflow: hidden; color: var(--ink-3); font-size: 12px; }
+.submission__photo img { width: 100%; height: 100%; object-fit: cover; }
+.submission__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0; align-content: start; }
+.submission__wide { grid-column: 1 / -1; }
+.submission__changes { display: grid; gap: 8px; }
+.submission__was { background: #fdecea; }
+.submission__now { background: #e6f4ea; font-weight: 600; }
+.submission__thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; }
+.submission__price { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.submission__margin { margin: 0; font-size: 13px; color: var(--ink-2); }
+.submission__warn { margin: 0; padding: 8px 12px; border-left: 3px solid #b26a00; background: #fff4d6; color: #7a4a00; font-size: 13px; font-weight: 600; }
+.submission__actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+@media (max-width: 720px) {
+  .seller-payout-form { grid-template-columns: 1fr; }
+  .submission__body { grid-template-columns: 1fr; }
+}

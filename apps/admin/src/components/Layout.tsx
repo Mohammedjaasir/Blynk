@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { riderApplications } from '../api/resources';
+import { riderApplications, sellerSubmissions } from '../api/resources';
 import { useAuth } from '../auth/AuthContext';
 import blynkMark from '../assets/blynk-mark.png';
 import blynkWordmark from '../assets/blynk-wordmark-light.png';
@@ -20,6 +20,7 @@ export function Layout() {
   const isAdmin = user?.role === 'ADMIN';
   const { pathname } = useLocation();
   const [pendingRiders, setPendingRiders] = useState(0);
+  const [pendingSellerProducts, setPendingSellerProducts] = useState(0);
 
   // Waiting rider applications, refreshed on every page change.
   useEffect(() => {
@@ -28,6 +29,19 @@ export function Layout() {
     riderApplications
       .pendingCount()
       .then((n) => live && setPendingRiders(n))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [isAdmin, pathname]);
+
+  // Seller products waiting for approval (seller portal, 2026-10-24).
+  useEffect(() => {
+    if (!isAdmin) return;
+    let live = true;
+    sellerSubmissions
+      .pendingCount()
+      .then((n) => live && setPendingSellerProducts(n))
       .catch(() => undefined);
     return () => {
       live = false;
@@ -104,6 +118,20 @@ export function Layout() {
               {/* Purchase list from low stock (owner, 2026-10-10). */}
               <NavLink to="/purchase-list" className="nav__item">
                 Purchase list
+              </NavLink>
+
+              {/* Seller portal (2026-10-24): sellers, and their products waiting for approval. */}
+              <p className="nav__group">Sellers</p>
+              <NavLink to="/sellers" className="nav__item">
+                Sellers
+              </NavLink>
+              <NavLink to="/seller-products" className="nav__item">
+                Seller products
+                {pendingSellerProducts > 0 ? (
+                  <span className="nav__badge" aria-label={`${pendingSellerProducts} waiting`}>
+                    {pendingSellerProducts}
+                  </span>
+                ) : null}
               </NavLink>
 
               <p className="nav__group">Home</p>

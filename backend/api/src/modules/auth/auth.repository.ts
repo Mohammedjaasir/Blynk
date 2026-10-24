@@ -1,6 +1,7 @@
 import { sql, Transaction } from 'kysely';
 import { db } from '../../database/connection.js';
 import { Database } from '../../database/types.js';
+import { AppError } from '../../middleware/error.middleware.js';
 import { phoneHash } from '../users/phone-identity.js';
 
 export type DBConnection = Transaction<Database> | typeof db;
@@ -176,6 +177,31 @@ export class AuthRepository {
       .returningAll()
       .execute();
 
+    return user;
+  }
+
+  /**
+   * Seller portal first sign-in (migration 051/052): a SELLER user plus its
+   * sellers row, status PENDING (the column default). A number that became
+   * an account in the meantime is PHONE_IN_USE, never a second row.
+   */
+  async createSeller(executor: DBConnection, phone: string, shopName: string) {
+    const now = new Date();
+    const user = await executor
+      .insertInto('users')
+      .values({
+        phone,
+        role: 'SELLER',
+        is_active: true,
+        phone_verified_at: now,
+        last_login_at: now,
+        phone_hash: phoneHash(phone),
+      })
+      .onConflict((oc) => oc.column('phone').doNothing())
+      .returningAll()
+      .executeTakeFirst();
+    if (!user) throw new AppError('This number is already used for a Blynk account.', 403, 'PHONE_IN_USE');
+    await executor.insertInto('sellers').values({ user_id: user.id, shop_name: shopName }).execute();
     return user;
   }
 

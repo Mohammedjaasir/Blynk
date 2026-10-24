@@ -1,3 +1,5 @@
+import { sellerRouter } from './modules/sellers/seller.routes.js';
+import { adminSellersRouter } from './modules/sellers/admin-sellers.routes.js';
 import { trustProxySetting } from './utils/client-ip.js';
 import express, { Express } from 'express';
 import helmet from 'helmet';
@@ -148,6 +150,8 @@ export function createApp(): Express {
   apiRouter.use('/rider', ridersRouter);
   apiRouter.use('/riders', ridersRouter);
   apiRouter.use('/notifications', notificationsRouter);
+  apiRouter.use('/seller', sellerRouter);
+  apiRouter.use('/admin', adminSellersRouter);
   apiRouter.use('/admin', adminRouter);
   apiRouter.use('/audit', auditRouter);
   apiRouter.use('/configuration', configurationRouter);

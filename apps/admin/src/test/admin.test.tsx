@@ -440,8 +440,11 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Bulk upload (Excel)' })).toBeInTheDocument();
     // App texts (owner, 2026-10-18) brings it to 25; Notifications (2026-10-19) to 26.
     expect(screen.getByRole('link', { name: 'Notifications' })).toBeInTheDocument();
-    // QR links (2026-10-22) and Available hours (2026-10-23) bring it to 28.
-    expect(screen.getAllByRole('link')).toHaveLength(28);
+    // Seller portal (2026-10-24): Sellers and Seller products.
+    expect(screen.getByRole('link', { name: 'Sellers' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Seller products' })).toBeInTheDocument();
+    // QR links (2026-10-22) and Available hours (2026-10-23) bring it to 28; the seller portal to 30.
+    expect(screen.getAllByRole('link')).toHaveLength(30);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.
