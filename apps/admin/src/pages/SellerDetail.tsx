@@ -12,7 +12,7 @@ import {
   lkr,
   parseCommission,
   parseMoney,
-  readablePhone,
+  sellerContact,
   reasonProblem,
   sellerActions,
   sellerStatusTone,
@@ -158,7 +158,7 @@ export function SellerDetail() {
     <>
       <PageHeader
         title={seller.shop_name}
-        description={`${readablePhone(seller.phone)} · joined ${stamp.format(new Date(seller.created_at))}`}
+        description={`${sellerContact(seller)} · joined ${stamp.format(new Date(seller.created_at))}`}
         actions={
           <>
             <Link className="button button--ghost" to="/sellers">
@@ -205,8 +205,8 @@ export function SellerDetail() {
         </div>
         <dl className="seller-card__facts">
           <div>
-            <dt>Phone</dt>
-            <dd className="mono">{readablePhone(seller.phone)}</dd>
+            <dt>{seller.phone || !seller.email ? 'Phone' : 'Email'}</dt>
+            <dd className="mono">{sellerContact(seller)}</dd>
           </div>
           <div>
             <dt>Contact</dt>

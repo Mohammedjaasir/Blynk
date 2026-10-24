@@ -22,7 +22,10 @@ export interface AdminSeller {
   rejection_reason: string | null;
   commission_percent: number;
   created_at: string;
+  /** null for a seller who signed up with an email address. */
   phone: string | null;
+  /** The seller's sign-in email (sellers who signed up with email + password), else null. */
+  email: string | null;
   full_name: string | null;
   products_live: number;
   submissions_pending: number;
@@ -72,7 +75,7 @@ export interface AdminSubmission {
   reject_reason: string | null;
   created_at: string;
   reviewed_at: string | null;
-  seller: { id: string; shop_name: string; phone: string | null; status: SellerStatus };
+  seller: { id: string; shop_name: string; phone: string | null; email?: string | null; status: SellerStatus };
   product: { id: string; name: string; selling_price: number | null; purchase_cost: number | null } | null;
   category_name: string | null;
 }
@@ -161,6 +164,12 @@ export function readablePhone(phone: string | null | undefined): string {
   if (!phone) return '—';
   const local = phone.startsWith('+94') ? `0${phone.slice(3)}` : phone;
   return local.length === 10 ? `${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}` : local;
+}
+
+/** How to reach the seller: their phone, or their email when they signed up without a phone. */
+export function sellerContact(s: { phone: string | null; email?: string | null }): string {
+  if (s.phone) return readablePhone(s.phone);
+  return s.email || '—';
 }
 
 // ---------------------------------------------------------------- approval

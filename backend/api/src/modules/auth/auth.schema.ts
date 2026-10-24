@@ -99,3 +99,19 @@ export const staffLoginSchema = z.object({
     .min(8, 'Password must be at least 8 characters.')
     .max(128, 'Password must be at most 128 characters.'),
 });
+
+/**
+ * Seller portal email sign-in (owner, 2026-10-24): a seller may use an email
+ * and a password they choose instead of a phone number. There is no email
+ * provider, so the address is never verified - it is only a sign-in name.
+ * Same email / password rules as staff sign-in.
+ */
+export const sellerLoginEmailSchema = staffLoginSchema;
+
+export const sellerRegisterEmailSchema = staffLoginSchema.extend({
+  shop_name: z
+    .string({ required_error: 'Shop name is required.' })
+    .trim()
+    .min(2, 'Shop name must be at least 2 characters.')
+    .max(80, 'Shop name is too long.'),
+});

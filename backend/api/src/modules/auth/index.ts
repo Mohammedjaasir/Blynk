@@ -7,6 +7,8 @@ import {
   refreshTokenSchema,
   logoutSchema,
   staffLoginSchema,
+  sellerRegisterEmailSchema,
+  sellerLoginEmailSchema,
 } from './auth.schema.js';
 import {
   requestOtpController,
@@ -15,6 +17,8 @@ import {
   logoutController,
   getCurrentUserController,
   staffLoginController,
+  sellerRegisterEmailController,
+  sellerLoginEmailController,
 } from './auth.controller.js';
 
 export const authRouter = Router();
@@ -29,6 +33,9 @@ authRouter.post('/otp/request', validate({ body: requestOtpSchema }), requestOtp
 authRouter.post('/otp/verify', validate({ body: verifyOtpSchema }), verifyOtpController);
 // Staff email + password sign-in (migration 012): ADMIN / PACKING_STAFF / OPERATIONS only.
 authRouter.post('/staff/login', validate({ body: staffLoginSchema }), staffLoginController);
+// Seller portal email + password (owner, 2026-10-24): SELLER accounts only.
+authRouter.post('/seller/register-email', validate({ body: sellerRegisterEmailSchema }), sellerRegisterEmailController);
+authRouter.post('/seller/login-email', validate({ body: sellerLoginEmailSchema }), sellerLoginEmailController);
 authRouter.post('/refresh', validate({ body: refreshTokenSchema }), refreshTokensController);
 authRouter.post('/logout', validate({ body: logoutSchema }), logoutController);
 

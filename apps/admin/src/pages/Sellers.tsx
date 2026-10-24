@@ -8,7 +8,7 @@ import {
   SELLER_STATUSES,
   SELLER_STATUS_LABEL,
   lkr,
-  readablePhone,
+  sellerContact,
   sellerStatusTone,
   statusCounts,
   type AdminSeller,
@@ -17,7 +17,8 @@ import {
 import './sellers.css';
 
 /**
- * Sellers (seller portal, 2026-10-24). Shops sign up in the seller site with their phone number and
+ * Sellers (seller portal, 2026-10-24). Shops sign up in the seller site with their phone number (or an
+ * email and password) and
  * wait here to be approved. Open one to approve, reject or suspend them, set their commission, see
  * what Blynk owes them and record payouts. Their product submissions wait under Seller products.
  */
@@ -87,7 +88,7 @@ export function Sellers() {
           className="input sellers__search"
           type="search"
           aria-label="Search sellers"
-          placeholder="Search shop or phone"
+          placeholder="Search shop, phone or email"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -114,7 +115,7 @@ export function Sellers() {
             <thead>
               <tr>
                 <th scope="col">Shop</th>
-                <th scope="col">Phone</th>
+                <th scope="col">Phone / email</th>
                 <th scope="col">Status</th>
                 <th scope="col" className="num">
                   Live products
@@ -140,7 +141,7 @@ export function Sellers() {
                     </Link>
                     {s.full_name || s.contact_name ? <span className="cell__secondary">{s.contact_name ?? s.full_name}</span> : null}
                   </td>
-                  <td className="mono">{readablePhone(s.phone)}</td>
+                  <td className="mono">{sellerContact(s)}</td>
                   <td>
                     <Badge tone={sellerStatusTone(s.status)}>{SELLER_STATUS_LABEL[s.status]}</Badge>
                   </td>

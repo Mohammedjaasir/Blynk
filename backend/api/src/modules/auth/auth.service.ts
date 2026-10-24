@@ -12,7 +12,7 @@ import { SmsProvider } from '../notifications/providers/sms.provider.js';
 import { localizedTexts } from '../notifications/sms-i18n.js';
 import { smsLanguageForPhone } from '../notifications/sms-language.js';
 import { generateAccessToken, generateRefreshToken, hashToken } from './token.service.js';
-import { isEmailOnlyRole, publicPhone } from '../../utils/phone.js';
+import { generatePlaceholderPhone, isEmailOnlyRole, publicPhone } from '../../utils/phone.js';
 
 
 const otpSms = new SmsProvider();
@@ -503,20 +503,112 @@ export class AuthService {
     password: string,
     meta: { ipAddress?: string; deviceInfo?: string }
   ): Promise<AuthTokensResult> {
+    // SELLER is not in STAFF_PASSWORD_ROLES: a seller's email + password is
+    // refused here exactly like an unknown email (they use /auth/seller/login-email).
+    return this.passwordSignIn(email, password, meta, { roles: STAFF_PASSWORD_ROLES, kind: 'staff' });
+  }
+
+  /**
+   * Seller portal email + password sign-in (owner, 2026-10-24). The same
+   * checks, lockout (LOGIN_MAX_ATTEMPTS / LOGIN_LOCK_MINUTES, users columns)
+   * and hashing as staff sign-in, for SELLER accounts only: any other account,
+   * an unknown email and a wrong password all get the same 401
+   * INVALID_CREDENTIALS. A seller in any status signs in (like the SMS code
+   * sign-in); the seller routes decide what a PENDING seller may do.
+   */
+  async loginSellerWithEmail(
+    email: string,
+    password: string,
+    meta: { ipAddress?: string; deviceInfo?: string }
+  ): Promise<AuthTokensResult> {
+    return this.passwordSignIn(email, password, meta, { roles: ['SELLER'], kind: 'seller' });
+  }
+
+  /**
+   * Seller portal sign-up with email + password (owner, 2026-10-24; no email
+   * provider, so nothing is sent and the address is not verified). Creates a
+   * SELLER user - no phone, so users.phone holds a 'nophone:' placeholder like
+   * Admin / Inventory accounts (never texted, shown as null) - with the
+   * password hashed like staff passwords (pgcrypto bcrypt), plus a PENDING
+   * sellers row, and signs it in. An email any account already uses (any
+   * role, ignoring case) is 409 EMAIL_IN_USE.
+   */
+  async registerSellerWithEmail(
+    email: string,
+    password: string,
+    shopName: string,
+    meta: { ipAddress?: string; deviceInfo?: string }
+  ): Promise<AuthTokensResult> {
     authRateLimiter.checkLimit(
-      `staff_login_ip:${meta.ipAddress ?? 'unknown'}`,
+      `seller_register_ip:${meta.ipAddress ?? 'unknown'}`,
+      10,
+      60 * 60 * 1000,
+      'Too many sign-ups from this device. Please wait before retrying.'
+    );
+    const emailInUse = () =>
+      new AppError('This email is already used for a Blynk account.', 409, 'EMAIL_IN_USE');
+    const address = email.trim().toLowerCase();
+
+    try {
+      return await db.transaction().execute(async (trx) => {
+        const clash = await trx
+          .selectFrom('users')
+          .select('id')
+          .where(sql`lower(email)`, '=', address)
+          .executeTakeFirst();
+        if (clash) throw emailInUse();
+
+        const now = new Date();
+        const user = await trx
+          .insertInto('users')
+          .values({
+            phone: generatePlaceholderPhone(),
+            email: address,
+            role: 'SELLER',
+            is_active: true,
+            last_login_at: now,
+            staff_password_hash: sql<string>`crypt(${password}, gen_salt('bf', 10))`,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        await trx.insertInto('sellers').values({ user_id: user.id, shop_name: shopName.trim() }).execute();
+        logger.info({ userId: user.id }, 'Seller signed up with email and password');
+        return this.issueTokens(trx, user, meta);
+      });
+    } catch (err) {
+      // Two sign-ups with one email at once meet at users_email_lower_key.
+      const pg = err as { code?: string; constraint?: string };
+      if (pg.code === '23505' && pg.constraint?.includes('email')) throw emailInUse();
+      throw err;
+    }
+  }
+
+  /** Email + password sign-in shared by staff and sellers (see loginWithPassword). */
+  private async passwordSignIn(
+    email: string,
+    password: string,
+    meta: { ipAddress?: string; deviceInfo?: string },
+    opts: { roles: string[]; kind: 'staff' | 'seller' }
+  ): Promise<AuthTokensResult> {
+    authRateLimiter.checkLimit(
+      `${opts.kind}_login_ip:${meta.ipAddress ?? 'unknown'}`,
       30,
       15 * 60 * 1000,
       'Too many sign-in attempts from this device. Please wait before retrying.'
     );
 
     const wrong = () => new AppError('Wrong email or password.', 401, 'INVALID_CREDENTIALS');
-    // Admin / Inventory have no SMS code to fall back to (migration 028).
-    const lockedFor = (minutes: number, role: string) =>
+    // Admin / Inventory have no SMS code to fall back to (migration 028), nor
+    // does a seller who signed up with an email (no phone).
+    const lockedFor = (minutes: number, role: string, phone: string | null) =>
       new AppError(
-        !isEmailOnlyRole(role)
-          ? `Too many wrong passwords. Try again in ${minutes} minute(s), or sign in with an SMS code.`
-          : `Too many wrong passwords. Try again in ${minutes} minute(s), or ask an admin to reset your password.`,
+        role === 'SELLER'
+          ? publicPhone(phone)
+            ? `Too many wrong passwords. Try again in ${minutes} minute(s), or sign in with an SMS code.`
+            : `Too many wrong passwords. Try again in ${minutes} minute(s).`
+          : !isEmailOnlyRole(role)
+            ? `Too many wrong passwords. Try again in ${minutes} minute(s), or sign in with an SMS code.`
+            : `Too many wrong passwords. Try again in ${minutes} minute(s), or ask an admin to reset your password.`,
         429,
         'LOGIN_LOCKED',
         { retry_after_minutes: minutes }
@@ -547,15 +639,16 @@ export class AuthService {
         .forUpdate()
         .executeTakeFirst();
 
-      // Riders sign in with phone + SMS code only (owner, 2026-10-07).
-      if (row?.role === 'RIDER') throw phoneSignInRequired();
-      if (!row || !row.has_password || !STAFF_PASSWORD_ROLES.includes(row.role as string)) throw wrong();
+      // Riders sign in with phone + SMS code only (owner, 2026-10-07). Staff
+      // sign-in only: the seller sign-in never says which other accounts exist.
+      if (opts.kind === 'staff' && row?.role === 'RIDER') throw phoneSignInRequired();
+      if (!row || !row.has_password || !opts.roles.includes(row.role as string)) throw wrong();
       if (!row.is_active) {
         throw new AppError('Your account has been deactivated. Please contact support.', 403, 'ACCOUNT_DEACTIVATED');
       }
       if (row.login_locked_until && row.login_locked_until > new Date()) {
         const minutes = Math.max(1, Math.ceil((row.login_locked_until.getTime() - Date.now()) / 60000));
-        throw lockedFor(minutes, row.role);
+        throw lockedFor(minutes, row.role, row.phone);
       }
 
       if (!row.password_ok) {
@@ -569,8 +662,8 @@ export class AuthService {
           })
           .where('id', '=', row.id)
           .execute();
-        logger.warn({ userId: row.id, attempts, locked: lock }, 'Wrong staff password');
-        return { failed: true as const, locked: lock, role: row.role as string };
+        logger.warn({ userId: row.id, attempts, locked: lock }, `Wrong ${opts.kind} password`);
+        return { failed: true as const, locked: lock, role: row.role as string, phone: row.phone };
       }
 
       // Disabled (migration 014): checked only once the password is right, so
@@ -583,11 +676,11 @@ export class AuthService {
         .where('id', '=', row.id)
         .execute();
       const user = await authRepository.updateLastLogin(trx, row.id);
-      logger.info({ userId: row.id }, 'Staff signed in with email and password');
+      logger.info({ userId: row.id }, `${opts.kind === 'seller' ? 'Seller' : 'Staff'} signed in with email and password`);
       return { failed: false as const, tokens: await this.issueTokens(trx, user, meta) };
     });
 
-    if (outcome.failed) throw outcome.locked ? lockedFor(LOGIN_LOCK_MINUTES, outcome.role) : wrong();
+    if (outcome.failed) throw outcome.locked ? lockedFor(LOGIN_LOCK_MINUTES, outcome.role, outcome.phone) : wrong();
     return outcome.tokens;
   }
 

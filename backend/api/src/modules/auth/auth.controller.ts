@@ -91,6 +91,32 @@ export async function getCurrentUserController(req: Request, res: Response, next
   }
 }
 
+/** POST /auth/seller/register-email: a new SELLER (PENDING shop) signed in with email + password. */
+export async function sellerRegisterEmailController(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await authService.registerSellerWithEmail(req.body.email, req.body.password, req.body.shop_name, {
+      ipAddress: clientIpOf(req) ?? undefined,
+      deviceInfo: req.headers['user-agent'] || undefined,
+    });
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** POST /auth/seller/login-email: a SELLER with a password signs in. */
+export async function sellerLoginEmailController(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await authService.loginSellerWithEmail(req.body.email, req.body.password, {
+      ipAddress: clientIpOf(req) ?? undefined,
+      deviceInfo: req.headers['user-agent'] || undefined,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function staffLoginController(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const clientIp = clientIpOf(req) ?? undefined;

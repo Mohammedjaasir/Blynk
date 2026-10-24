@@ -14,7 +14,7 @@ import {
   lkr,
   margin,
   parseMoney,
-  readablePhone,
+  sellerContact,
   reasonProblem,
   sellingPriceRequired,
   type AdminSubmission,
@@ -200,7 +200,7 @@ function SubmissionCard({
           <span className={`submission__kind${isEdit ? ' submission__kind--edit' : ''}`}>{isEdit ? 'Change to a live product' : 'New product'}</span>
           <h2 className="submission__title">{name}</h2>
           <p className="cell__secondary">
-            <Link to={`/sellers/${sub.seller.id}`}>{sub.seller.shop_name}</Link> · {readablePhone(sub.seller.phone)} · sent {stamp.format(new Date(sub.created_at))}
+            <Link to={`/sellers/${sub.seller.id}`}>{sub.seller.shop_name}</Link> · {sellerContact(sub.seller)} · sent {stamp.format(new Date(sub.created_at))}
           </p>
         </div>
       </header>

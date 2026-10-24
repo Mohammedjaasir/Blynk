@@ -3,6 +3,7 @@ import { db } from '../../database/connection.js';
 import type { Database } from '../../database/types.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
+import { publicPhone } from '../../utils/phone.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { catalogRepository } from '../catalog/catalog.repository.js';
 import { catalogService } from '../catalog/catalog.service.js';
@@ -69,6 +70,7 @@ interface SellerRow {
   created_at: Date;
   user_id: string;
   phone: string;
+  email: string | null;
   full_name: string | null;
   products_live: number;
   submissions_pending: number;
@@ -90,7 +92,9 @@ function presentSeller(r: SellerRow) {
     rejection_reason: r.rejection_reason,
     commission_percent: pct,
     created_at: r.created_at,
-    phone: r.phone,
+    // null for a seller who signed up with an email (users.phone holds a 'nophone:' placeholder)
+    phone: publicPhone(r.phone),
+    email: r.email,
     full_name: r.full_name,
     products_live: Number(r.products_live),
     submissions_pending: Number(r.submissions_pending),
@@ -103,7 +107,7 @@ async function sellerRows(executor: typeof db | Trx, where: ReturnType<typeof sq
   const cond = where.length ? sql`WHERE ${sql.join(where, sql` AND `)}` : sql``;
   const r = await sql<SellerRow>`
     SELECT s.id, s.shop_name, s.contact_name, s.address, s.note, s.status, s.rejection_reason,
-           s.commission_percent::text AS commission_percent, s.created_at, s.user_id, u.phone, u.full_name,
+           s.commission_percent::text AS commission_percent, s.created_at, s.user_id, u.phone, u.email, u.full_name,
            (SELECT count(*)::int FROM products p WHERE p.seller_id = s.id AND p.deleted_at IS NULL AND p.is_active) AS products_live,
            (SELECT count(*)::int FROM seller_submissions x WHERE x.seller_id = s.id AND x.status = 'PENDING') AS submissions_pending,
            (SELECT COALESCE(SUM(oi.quantity * oi.estimated_unit_cost), 0)::text
@@ -174,12 +178,19 @@ async function textSeller(
   text: string,
   key: string
 ) {
+  // A seller who signed up with an email has no phone: nothing to text (they
+  // see the change when they next open the seller site).
+  const phone = publicPhone(user.phone);
+  if (!phone) {
+    logger.info({ type, userId: user.id }, 'Seller SMS skipped: the seller has no phone number');
+    return;
+  }
   try {
     await notificationService.enqueue({
       user_id: user.id,
       channel: 'SMS',
       notification_type: type,
-      recipient: user.phone,
+      recipient: phone,
       idempotency_key: key,
       payload: { text },
     });
@@ -197,7 +208,7 @@ export async function listSellers(query: ListSellersQuery) {
   if (query.status) where.push(sql`s.status = ${query.status}`);
   if (query.search) {
     const like = `%${query.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    where.push(sql`(s.shop_name ILIKE ${like} OR u.phone ILIKE ${like} OR s.contact_name ILIKE ${like} OR u.full_name ILIKE ${like})`);
+    where.push(sql`(s.shop_name ILIKE ${like} OR (u.phone NOT LIKE 'nophone:%' AND u.phone ILIKE ${like}) OR u.email ILIKE ${like} OR s.contact_name ILIKE ${like} OR u.full_name ILIKE ${like})`);
   }
   return { sellers: (await sellerRows(db, where)).map(presentSeller) };
 }
@@ -315,6 +326,7 @@ export async function listSubmissions(query: ListSubmissionsQuery) {
     s_id: string;
     s_shop_name: string;
     s_phone: string;
+    s_email: string | null;
     s_status: string;
     p_id: string | null;
     p_name: string | null;
@@ -333,7 +345,7 @@ export async function listSubmissions(query: ListSubmissionsQuery) {
     await sql<Row>`
       SELECT x.id, x.seller_id, x.product_id, x.kind, x.status, x.payload, x.seller_price::text AS seller_price,
              x.approved_selling_price::text AS approved_selling_price, x.reject_reason, x.created_at, x.reviewed_at,
-             s.id AS s_id, s.shop_name AS s_shop_name, u.phone AS s_phone, s.status AS s_status,
+             s.id AS s_id, s.shop_name AS s_shop_name, u.phone AS s_phone, u.email AS s_email, s.status AS s_status,
              p.id AS p_id, p.name AS p_name, vp.calculated_selling_price::text AS p_selling_price,
              p.purchase_cost::text AS p_purchase_cost, p.category_id AS p_category_id, p.unit AS p_unit,
              p.pack_size AS p_pack_size, p.description AS p_description, p.image_url AS p_image_url,
@@ -356,7 +368,7 @@ export async function listSubmissions(query: ListSubmissionsQuery) {
   return {
     submissions: rows.map((r) => ({
       ...presentSubmission(r),
-      seller: { id: r.s_id, shop_name: r.s_shop_name, phone: r.s_phone, status: r.s_status },
+      seller: { id: r.s_id, shop_name: r.s_shop_name, phone: publicPhone(r.s_phone), email: r.s_email, status: r.s_status },
       product: r.p_id
         ? {
             id: r.p_id,
