@@ -6,6 +6,7 @@ import type { AdminProduct, Category, PricingMode, SetStockInput, StaffStock, St
 import { CENTRE_FOCAL, ImageUploader, type FocalPoint } from '../../components/ImageUploader';
 import { PageHeader } from '../../components/Layout';
 import { ProductAdLinks } from '../../components/ProductAdLinks';
+import { ProductHoursSection, useProductHours } from '../../components/ProductHours';
 import { Field, Spinner } from '../../components/ui';
 import {
   catalogErrorMessage,
@@ -182,6 +183,8 @@ export function ProductForm() {
   const { id } = useParams();
   const isEditing = Boolean(id);
   const navigate = useNavigate();
+  // the product's own available hours (edit only): saved after the product, in their own call
+  const hours = useProductHours(id);
 
   const [form, setForm] = useState<FormState>(EMPTY);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -465,6 +468,10 @@ export function ProductForm() {
     event.preventDefault();
     setServerError(null);
     if (!validate()) return;
+    if (hours.problem) {
+      setServerError(`Available hours: ${hours.problem}`);
+      return;
+    }
 
     const payload: Record<string, unknown> = {
       category_id: form.category_id,
@@ -521,15 +528,23 @@ export function ProductForm() {
       // for a new product right after it exists.
       const stockBody = stockChange();
       const productId = isEditing && id ? id : saved?.id;
+      // Available hours (edit only): their own call, so a failure never loses the product save.
+      const hoursError = await hours.save();
+      const hoursMessage = hoursError ? `${form.name.trim()} was saved, but its available hours were not: ${hoursError}` : null;
       if (stockBody && productId) {
         try {
           const result = await inventoryApi.stock.setStock(productId, stockBody);
           setSavedStock(result.stock);
         } catch (err) {
-          setServerError(`${form.name.trim()} was saved, but its stock was not: ${catalogErrorMessage(err)}`);
+          const message = `${form.name.trim()} was saved, but its stock was not: ${catalogErrorMessage(err)}`;
+          setServerError(hoursMessage ? `${message} ${hoursMessage}` : message);
           if (!isEditing) navigate(`/catalog/products/${productId}`, { replace: true });
           return;
         }
+      }
+      if (hoursMessage) {
+        setServerError(hoursMessage);
+        return;
       }
       // A fixed price below cost saves (owner rule), and the list says so.
       const warning = saved?.price_warning?.message;
@@ -803,6 +818,8 @@ export function ProductForm() {
             <StockFields form={form} setForm={setForm} errors={errors} stock={isEditing ? savedStock : null} />
           )}
         </section>
+
+        {isEditing && id ? <ProductHoursSection hours={hours} /> : null}
 
         {isEditing && id ? <ProductAdLinks productId={id} productName={form.name} /> : null}
 

@@ -1,6 +1,7 @@
 import { apiRequest, tokenStore } from './client';
 import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
 import type { AvailabilityWindow, AvailabilitySetting } from '../lib/availability';
+import type { HomeSection, HomeSectionsSetting } from '../lib/homeSections';
 import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
 import type {
   AdminSeller,
@@ -621,6 +622,14 @@ export const availabilityWindows = {
   get: () => apiRequest<AvailabilitySetting>('/admin/settings/availability-windows'),
   update: (body: { windows: AvailabilityWindow[] }) =>
     apiRequest<AvailabilitySetting>('/admin/settings/availability-windows', { method: 'PUT', body: { ...body } }),
+};
+
+// ------------------------------------------------------------ home sections
+/** Home sections (owner's brother, 2026-10-24): staff-made product rails on the app's Home; PUT replaces the whole list, in order. */
+export const homeSections = {
+  get: () => apiRequest<HomeSectionsSetting>('/admin/settings/home-sections'),
+  update: (body: { sections: HomeSection[] }) =>
+    apiRequest<HomeSectionsSetting>('/admin/settings/home-sections', { method: 'PUT', body: { ...body } }),
 };
 
 // ------------------------------------------------------------ QR links

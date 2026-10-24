@@ -37,3 +37,14 @@ export function hoursBadge(p: Windowed): string | null {
 
 /** The product page's disabled button while shut by hours. */
 export const hoursButton = (p: Pick<Product, 'window_closed' | 'available_window'>): string | null => (closedByHours(p) ? `Available ${hoursText(p)}` : null);
+
+/**
+ * The product card's quiet tag while the product is open inside its hours: "Until 6 pm" (owner's
+ * brother, 2026-10-24: "if some product is no sale after a specific time we need to show that").
+ * Null with no hours, and while shut (the card then shows the hours instead of "Sold out") or sold out.
+ */
+export function hoursTag(p: Windowed): string | null {
+  const w = p.available_window;
+  if (!w || hoursText(p) === null || !p.is_available || p.window_closed === true) return null;
+  return `Until ${clockText(w.until)}`;
+}

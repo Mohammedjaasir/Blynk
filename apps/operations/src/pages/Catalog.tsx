@@ -136,6 +136,13 @@ export function Catalog() {
             <span className="cat-hub__count">Edit</span>
           </Link>
         </li>
+        {/* Home sections (2026-10-24): staff-made product rails on Home, optionally timed with a countdown. */}
+        <li>
+          <Link className="cat-hub__card" to="/catalog/home-sections">
+            <span className="cat-hub__title">Home sections</span>
+            <span className="cat-hub__count">Edit</span>
+          </Link>
+        </li>
         {/* QR links (owner, 2026-10-22): the dynamic QR on a jersey or poster. */}
         <li>
           <Link className="cat-hub__card" to="/catalog/qr-links">

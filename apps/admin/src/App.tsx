@@ -25,6 +25,7 @@ import { HeroBanner } from './pages/HeroBanner';
 import { AppTexts } from './pages/AppTexts';
 import { QrLinks } from './pages/QrLinks';
 import { AvailableHours } from './pages/AvailableHours';
+import { HomeSections } from './pages/HomeSections';
 import { Sales } from './pages/Sales';
 import { OrderMap } from './pages/OrderMap';
 import { PurchaseList } from './pages/PurchaseList';
@@ -112,6 +113,8 @@ export function AppRoutes() {
         {/* QR links (owner, 2026-10-22): the dynamic QR on a jersey or poster. */}
         <Route path="qr-links" element={<AdminOnly><QrLinks /></AdminOnly>} />
         <Route path="available-hours" element={<AdminOnly><AvailableHours /></AdminOnly>} />
+        {/* Home sections (2026-10-24): staff-made product rails on Home, optionally timed with a countdown. */}
+        <Route path="home-sections" element={<AdminOnly><HomeSections /></AdminOnly>} />
         <Route path="sales" element={<AdminOnly><Sales /></AdminOnly>} />
         {/* Delivery heat map and purchase list (owner, 2026-10-10). */}
         <Route path="order-map" element={<AdminOnly><OrderMap /></AdminOnly>} />

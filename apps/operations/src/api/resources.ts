@@ -2,6 +2,7 @@ import { UPLOAD_TIMEOUT_MS, apiRequest, tokenStore, type Query } from './client'
 import { isNativeApp, nativeApiRequest } from './native-client';
 import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
 import type { AvailabilityWindow, AvailabilitySetting } from '../lib/availability';
+import type { HomeSection, HomeSectionsSetting } from '../lib/homeSections';
 import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
 import type {
   AppShareLinks,
@@ -1256,6 +1257,12 @@ export const settings = {
     get: () => apiRequest<AvailabilitySetting>('/admin/settings/availability-windows'),
     update: (body: { windows: AvailabilityWindow[] }) =>
       apiRequest<AvailabilitySetting>('/admin/settings/availability-windows', { method: 'PUT', body: { ...body } }),
+  },
+  /** Home sections (owner's brother, 2026-10-24): staff-made product rails on the app's Home; PUT replaces the whole list, in order. Audited. */
+  homeSections: {
+    get: () => apiRequest<HomeSectionsSetting>('/admin/settings/home-sections'),
+    update: (body: { sections: HomeSection[] }) =>
+      apiRequest<HomeSectionsSetting>('/admin/settings/home-sections', { method: 'PUT', body: { ...body } }),
   },
   heroBanner: {
     get: () => apiRequest<HeroBannerSetting>('/admin/settings/hero-banner'),

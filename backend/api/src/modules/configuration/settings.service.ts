@@ -9,6 +9,7 @@ import { doctorsAccess, doctorsShown } from './doctors-access.js';
 import { promoBandService } from './promo-band.js';
 import { heroBannerService } from './hero-banner.js';
 import { appTextsService } from './app-texts.js';
+import { homeSectionsService } from './home-sections.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { publicOnlinePayment } from '../payments/gateway-settings.js';
@@ -840,6 +841,9 @@ export class SettingsService {
       // Owner, 2026-10-18: the app's other words and aisle colours as set in
       // Admin / Ops; only the fields that are set (app-texts.ts).
       app_texts: await appTextsService.readPublic(),
+      // Owner's brother, 2026-10-24: staff-made product rails on Home; only the LIVE ones, in
+      // order ([] = none) (home-sections.ts).
+      home_sections: await homeSectionsService.readPublic(now),
     };
   }
 }

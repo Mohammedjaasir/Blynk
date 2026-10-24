@@ -146,6 +146,10 @@ export function Layout() {
               <NavLink to="/home-banner" className="nav__item">
                 Home banner
               </NavLink>
+              {/* Home sections (2026-10-24): staff-made product rails, optionally timed with a countdown. */}
+              <NavLink to="/home-sections" className="nav__item">
+                Home sections
+              </NavLink>
               {/* App texts (owner, 2026-10-18): the app's other words and aisle colours. */}
               <NavLink to="/app-texts" className="nav__item">
                 App texts

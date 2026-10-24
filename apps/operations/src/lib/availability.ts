@@ -76,3 +76,30 @@ export function windowProblem(w: Pick<AvailabilityWindow, 'from' | 'until'>): st
 export function windowsPayload(list: ReadonlyArray<AvailabilityWindow>): { windows: AvailabilityWindow[] } {
   return { windows: list.map((w) => ({ kind: w.kind, id: w.id, from: w.from, until: w.until })) };
 }
+
+/** This product's own hours in the list, or null. */
+export const productWindow = <T extends AvailabilityWindow>(list: ReadonlyArray<T>, productId: string): T | null =>
+  list.find((w) => w.kind === 'PRODUCT' && w.id === productId) ?? null;
+
+/** What is wrong with a product's From / Until as typed on its form ('' and '' = any time); null = fine. */
+export function productHoursProblem(from: string, until: string): string | null {
+  if (!from && !until) return null;
+  if (!from || !until) return 'Fill in both times, or leave both empty for any time.';
+  return windowProblem({ from, until });
+}
+
+/**
+ * The whole list with only this product's entry set (changed in place, else added) or, when both
+ * times are empty, removed. Every other entry (other products, categories) is kept as it is: the
+ * PUT replaces the whole list.
+ */
+export function withProductWindow(list: ReadonlyArray<AvailabilityWindow>, productId: string, from: string, until: string): AvailabilityWindow[] {
+  const rest = list.filter((w) => !(w.kind === 'PRODUCT' && w.id === productId));
+  if (!from && !until) return rest;
+  const entry: AvailabilityWindow = { kind: 'PRODUCT', id: productId, from, until };
+  const at = list.findIndex((w) => w.kind === 'PRODUCT' && w.id === productId);
+  if (at < 0) return [...rest, entry];
+  const out = [...rest];
+  out.splice(at, 0, entry);
+  return out;
+}

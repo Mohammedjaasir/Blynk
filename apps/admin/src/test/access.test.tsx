@@ -95,6 +95,7 @@ describe('Admin app access', () => {
       'Promotions',
       'Promo band',
       'Home banner',
+      'Home sections',
       'App texts',
       'QR links',
       'Coupons',

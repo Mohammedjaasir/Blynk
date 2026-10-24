@@ -4240,3 +4240,60 @@ a.button {
   .qr-card__row .field__label { grid-column: 1 / -1; }
   .qr-add { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---- Categories: Arrange bar, big move buttons, pinned save bar, hours (2026-10-24) ---- */
+.arrange-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.arrange-bar__text {
+  margin: 0;
+  flex: 1 1 220px;
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+}
+
+.arrange-bar .button {
+  min-height: 44px;
+  min-width: 120px;
+}
+
+/* Arranging: each row is one compact line with big thumb-sized buttons. */
+.cat-row--arranging .cat-row__actions {
+  justify-content: stretch;
+}
+
+.cat-row--arranging .order-cell {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+
+.cat-row--arranging .order-cell .button {
+  flex: 1 1 0;
+  min-height: 48px;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.cat-row--moved {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.cat-row__hours {
+  font-weight: 700;
+}
+
+.arrange-save-bar .button {
+  min-height: 48px;
+  min-width: 120px;
+}

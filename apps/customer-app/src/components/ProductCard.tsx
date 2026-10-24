@@ -1,4 +1,4 @@
-import { unavailableText } from '@/blynk/catalog/hours';
+import { hoursTag, unavailableText } from '@/blynk/catalog/hours';
 import { memo, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
@@ -76,6 +76,8 @@ export const ProductCard = memo(function ProductCard({
   });
   const lead = DEMO ? null : deliveredFromText(p);
   const struck = struckPrice !== null;
+  // open inside its hours: a quiet "Until 6 pm" chip on the photo (an overlay, so the card keeps its size)
+  const untilTag = DEMO ? null : hoursTag(p);
   const label = DEMO ? null : tileLabel({ available: p.is_available, offer, struckShown: struck, lead });
   const x = extraOf(p.id);
   const h = height ?? width;
@@ -107,6 +109,9 @@ export const ProductCard = memo(function ProductCard({
         </Animated.View>
         {x?.popular && (
           <View style={styles.popular}><Text style={styles.popularTxt}>Popular</Text></View>
+        )}
+        {!!untilTag && (
+          <View style={styles.untilTag} pointerEvents="none"><Text style={styles.untilTagTxt} numberOfLines={1}>{untilTag}</Text></View>
         )}
         {showRating && x?.rating != null && (
           <View style={styles.rating}>
@@ -174,6 +179,8 @@ const styles = StyleSheet.create({
   ratingTxt: { fontFamily: F.semi, fontSize: 11.5, color: C.text },
   addWrap: { position: 'absolute', right: 8, bottom: 8 },
   soldOut: { backgroundColor: C.white, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, borderWidth: 1, borderColor: C.line },
+  untilTag: { position: 'absolute', left: 6, top: 6, backgroundColor: C.white, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: C.line },
+  untilTagTxt: { fontSize: 9.5, color: C.sub, fontFamily: F.semi },
   soldOutTxt: { fontSize: 9.5, color: C.sub, fontFamily: F.semi },
   sub: { fontSize: 11.5, color: '#8A8A90', fontFamily: F.regular, marginTop: 8 },
   nameRow: { marginTop: 1 },

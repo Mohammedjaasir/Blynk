@@ -18,6 +18,8 @@ import {
 } from '../../lib/catalog';
 import { replacedImages } from '../../lib/image';
 import { inheritedMarkup, markupProductCountText, parseMarkupPercent, percentText } from '../../lib/pricing';
+import { hoursById, hoursRowText, type CategoryHours } from '../../lib/categoryHours';
+import { CategoryHoursDialog } from './CategoryHoursDialog';
 
 /**
  * Categories: create, edit and activate/deactivate (task F5). Ported from
@@ -46,6 +48,17 @@ import { inheritedMarkup, markupProductCountText, parseMarkupPercent, percentTex
  * sibling set that changed (the server writes display_order 10, 20, 30...),
  * "Cancel" drops it. "Arrange products" on a category opens its product
  * order screen.
+ *
+ * Arrange on a phone (owner's brother, 2026-10-24: "I can't arrange the category
+ * order"): the button was the first of three small ones in the page header and
+ * Save order scrolled away with it. Arrange now has its own bar above the list;
+ * arranging shows compact rows with big Up / Down / Top buttons (no dragging)
+ * and a Save order / Cancel bar pinned to the bottom of the screen. The row
+ * that just moved is highlighted and kept in view.
+ *
+ * Available hours (2026-10-24): each row has an "Available hours" action - a
+ * From / Until dialog (empty = any time) over GET/PUT
+ * /admin/settings/availability-windows - and shows the hours when set.
  *
  * Phone layout (2026-10-13): the actions sit on their own wrapping line under
  * the category's details instead of a tall column beside them, so the name,
@@ -80,6 +93,11 @@ export function Categories() {
   const [moving, setMoving] = useState(false);
   /** The global default markup, for rows with no markup of their own; null = unknown. */
   const [globalMarkup, setGlobalMarkup] = useState<number | null>(null);
+  /** Available hours by category id (GET /admin/settings/availability-windows); empty when unknown. */
+  const [hours, setHours] = useState<Map<string, CategoryHours>>(new Map());
+  const [hoursFor, setHoursFor] = useState<Category | null>(null);
+  /** Arrange: the row that was just moved, highlighted and kept in view. */
+  const [justMoved, setJustMoved] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -101,7 +119,16 @@ export function Categories() {
       .get()
       .then((s) => setGlobalMarkup(Number(s.markup_percent)))
       .catch(() => setGlobalMarkup(null));
+    void settings.availabilityWindows
+      .get()
+      .then((s) => setHours(hoursById(s.windows)))
+      .catch(() => setHours(new Map()));
   }, [load]);
+
+  useEffect(() => {
+    if (!justMoved) return;
+    document.getElementById(`cat-row-${justMoved}`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [justMoved, draft]);
 
   async function toggleActive(category: Category) {
     try {
@@ -116,6 +143,7 @@ export function Categories() {
   /** Moves `category` to position `target` among its siblings, in the draft only. */
   function moveCategory(category: Category, target: number) {
     setDraft((current) => (current ? moveAmongSiblings(current, category, target) : current));
+    setJustMoved(category.id);
   }
 
   /** "Save order": one PUT /admin/categories/order per sibling set that changed. */
@@ -154,49 +182,51 @@ export function Categories() {
         title="Categories"
         description="Used by the customer Home, Categories and Search screens."
         actions={
-          arranging ? (
+          arranging ? undefined : (
             <>
-              <button type="button" className="button button--ghost" disabled={moving} onClick={() => setDraft(null)}>
-                Cancel
-              </button>
-              <button type="button" className="button" disabled={moving || !dirty} onClick={() => void saveOrder()}>
-                {moving ? 'Saving...' : 'Save order'}
+              <Link className="button button--ghost" to="/catalog/categories/import">
+                Import categories
+              </Link>
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  setNewParentId(null);
+                  setEditing('new');
+                }}
+              >
+                Add category
               </button>
             </>
-          ) : (
-          <>
-            <button
-              type="button"
-              className="button button--ghost"
-              aria-pressed={false}
-              disabled={!rows || rows.length < 2}
-              onClick={() => setDraft(rows ? [...rows] : [])}
-            >
-              Arrange
-            </button>
-            <Link className="button button--ghost" to="/catalog/categories/import">
-              Import categories
-            </Link>
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                setNewParentId(null);
-                setEditing('new');
-              }}
-            >
-              Add category
-            </button>
-          </>
           )
         }
       />
 
       {arranging ? (
         <p className="page__note" role="status">
-          Customers see categories in this order. Move a category up or down, or to the top; sub-categories move
-          within their category. Tap Save order when you are done.
+          Customers see categories in this order. Tap Up or Down on a category, or Top to put it first;
+          sub-categories move within their category. Tap Save order when you are done.
         </p>
+      ) : rows === null || rows.length > 0 ? (
+        <div className="arrange-bar">
+          <p className="arrange-bar__text">
+            <strong>Category order.</strong> Customers see categories in the order set here. Change it with big Up / Down
+            buttons.
+          </p>
+          <button
+            type="button"
+            className="button"
+            disabled={!rows || rows.length < 2}
+            onClick={() => {
+              if (!rows) return;
+              setNotice(null);
+              setJustMoved(null);
+              setDraft([...rows]);
+            }}
+          >
+            Arrange
+          </button>
+        </div>
       ) : null}
 
       {notice ? (
@@ -219,7 +249,8 @@ export function Categories() {
             return (
             <li
               key={category.id}
-              className={`cat-row cat-row--flat cat-row--stacked${parent ? ' cat-row--child' : ''}${arranging ? ' cat-row--arranging' : ''}`}
+              id={`cat-row-${category.id}`}
+              className={`cat-row cat-row--flat cat-row--stacked${parent ? ' cat-row--child' : ''}${arranging ? ' cat-row--arranging' : ''}${arranging && justMoved === category.id ? ' cat-row--moved' : ''}`}
             >
               {/* The customer app draws this in a CIRCLE, so the row shows it
                   as one too: a picture that looks right in a square preview
@@ -235,13 +266,20 @@ export function Categories() {
               <div className="cat-row__main">
                 <p className="cat-row__title">{category.name}</p>
                 {parent ? <p className="cat-row__parent">{`In ${parent.name}`}</p> : null}
-                <p className="cat-row__meta">{category.slug}</p>
-                {category.description ? <p className="cat-row__meta cat-row__desc">{category.description}</p> : null}
-                <p className="cat-row__meta">{markupRowText(category, shown ?? [], globalMarkup)}</p>
-                {markupProductCountText(category.markup_product_count, category.markup_percent != null) ? (
-                  <p className="cat-row__meta">
-                    {markupProductCountText(category.markup_product_count, category.markup_percent != null)}
-                  </p>
+                {arranging ? null : (
+                  <>
+                    <p className="cat-row__meta">{category.slug}</p>
+                    {category.description ? <p className="cat-row__meta cat-row__desc">{category.description}</p> : null}
+                    <p className="cat-row__meta">{markupRowText(category, shown ?? [], globalMarkup)}</p>
+                    {markupProductCountText(category.markup_product_count, category.markup_percent != null) ? (
+                      <p className="cat-row__meta">
+                        {markupProductCountText(category.markup_product_count, category.markup_percent != null)}
+                      </p>
+                    ) : null}
+                  </>
+                )}
+                {hoursRowText(category, hours, shown ?? []) ? (
+                  <p className="cat-row__meta cat-row__hours">{hoursRowText(category, hours, shown ?? [])}</p>
                 ) : null}
                 <div className="cat-row__badges">
                   <Badge tone={category.is_active ? 'active' : 'inactive'}>{category.is_active ? 'Active' : 'Inactive'}</Badge>
@@ -271,7 +309,7 @@ export function Categories() {
                       disabled={moving || index <= 0}
                       onClick={() => moveCategory(category, index - 1)}
                     >
-                      ↑
+                      ↑ Up
                     </button>
                     <button
                       type="button"
@@ -280,7 +318,7 @@ export function Categories() {
                       disabled={moving || index < 0 || index >= siblings.length - 1}
                       onClick={() => moveCategory(category, index + 1)}
                     >
-                      ↓
+                      ↓ Down
                     </button>
                   </div>
                 </div>
@@ -288,6 +326,14 @@ export function Categories() {
               <div className="cat-row__actions">
                 <button type="button" className="button button--ghost button--sm" onClick={() => setEditing(category)}>
                   Edit
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost button--sm"
+                  aria-label={`Available hours for ${category.name}`}
+                  onClick={() => setHoursFor(category)}
+                >
+                  Available hours
                 </button>
                 <button type="button" className="button button--ghost button--sm" onClick={() => void toggleActive(category)}>
                   {category.is_active ? 'Deactivate' : 'Activate'}
@@ -330,6 +376,17 @@ export function Categories() {
         </ul>
       )}
 
+      {arranging ? (
+        <div className="form__actions arrange-save-bar">
+          <button type="button" className="button button--ghost" disabled={moving} onClick={() => setDraft(null)}>
+            Cancel
+          </button>
+          <button type="button" className="button" disabled={moving || !dirty} onClick={() => void saveOrder()}>
+            {moving ? 'Saving...' : 'Save order'}
+          </button>
+        </div>
+      ) : null}
+
       <p className="page__note">Deactivate a category to hide it for a while; delete it to retire it for good.</p>
       <p className="page__note">
         A category with no markup uses its parent category&apos;s, else the{' '}
@@ -348,6 +405,19 @@ export function Categories() {
             await load();
           }}
           onOfferChanged={() => void load()}
+        />
+      ) : null}
+
+      {hoursFor ? (
+        <CategoryHoursDialog
+          category={hoursFor}
+          categories={rows ?? []}
+          onClose={() => setHoursFor(null)}
+          onSaved={(windows) => {
+            setHours(hoursById(windows));
+            setNotice(`Available hours saved for ${hoursFor.name}.`);
+            setHoursFor(null);
+          }}
         />
       ) : null}
 

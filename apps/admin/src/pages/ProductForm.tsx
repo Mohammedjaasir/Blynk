@@ -13,6 +13,7 @@ import { ProductVariants, StockFigures, type VariantPricingContext } from '../co
 import { Switch } from '../components/Switch';
 import { PageHeader } from '../components/Layout';
 import { ProductAdLinks } from '../components/ProductAdLinks';
+import { ProductHoursSection, useProductHours } from '../components/ProductHours';
 import { ApiError } from '../api/client';
 import { Field, Spinner, useToast } from '../components/ui';
 import { errorMessage, splitServerErrors } from '../lib/apiErrors';
@@ -210,6 +211,8 @@ export function ProductForm() {
   const isEditing = Boolean(id);
   const navigate = useNavigate();
   const toast = useToast();
+  // the product's own available hours (edit only): saved after the product, in their own call
+  const hours = useProductHours(id);
 
   const [form, setForm] = useState<FormState>(EMPTY);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -574,6 +577,10 @@ export function ProductForm() {
     event.preventDefault();
     setServerError(null);
     if (!validate()) return;
+    if (hours.problem) {
+      setServerError(`Available hours: ${hours.problem}`);
+      return;
+    }
 
     const payload: Record<string, unknown> = {
       category_id: form.category_id,
@@ -633,6 +640,9 @@ export function ProductForm() {
       await images.afterSave([form.image_url]);
       // The Stock section, right after the product (migration 045).
       const productId = saved?.id ?? id;
+      // Available hours (edit only): their own call, so a failure never loses the product save.
+      const hoursError = await hours.save();
+      const hoursMessage = hoursError ? `The product is saved, but its available hours are not: ${hoursError}` : null;
       if (stock && productId) {
         try {
           const result = await inventoryApi.setStock(productId, stock);
@@ -641,12 +651,17 @@ export function ProductForm() {
           const message = `The product is saved, but the stock is not: ${errorMessage(err, 'Could not set the stock.')}`;
           toast.error(message);
           if (isEditing) {
-            setServerError(message);
+            setServerError(hoursMessage ? `${message} ${hoursMessage}` : message);
           } else {
             navigate(`/products/${productId}`);
           }
           return;
         }
+      }
+      if (hoursMessage) {
+        toast.error(hoursMessage);
+        setServerError(hoursMessage);
+        return;
       }
       navigate('/products');
     } catch (err) {
@@ -1028,6 +1043,8 @@ export function ProductForm() {
             </p>
           </section>
         )}
+
+        {isEditing && id ? <ProductHoursSection hours={hours} /> : null}
 
         {isEditing && id ? <ProductAdLinks productId={id} productName={form.name} /> : null}
 

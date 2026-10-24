@@ -15,6 +15,7 @@ import { Products } from './pages/Catalog/Products';
 import { Promotions } from './pages/Catalog/Promotions';
 import { PromoBand } from './pages/Catalog/PromoBand';
 import { AvailableHours } from './pages/Catalog/AvailableHours';
+import { HomeSections } from './pages/Catalog/HomeSections';
 import { HeroBanner } from './pages/Catalog/HeroBanner';
 import { AppTexts } from './pages/Catalog/AppTexts';
 import { QrLinks } from './pages/Catalog/QrLinks';
@@ -166,6 +167,7 @@ export function AppRoutes() {
         {/* QR links (owner, 2026-10-22): the dynamic QR on a jersey or poster. */}
         <Route path="catalog/qr-links" element={<QrLinks />} />
         <Route path="catalog/available-hours" element={<AvailableHours />} />
+        <Route path="catalog/home-sections" element={<HomeSections />} />
         <Route path="catalog/combos" element={<Combos />} />
         <Route path="catalog/inventory" element={<InventoryOverview />} />
         <Route path="catalog/inventory/stock" element={<InventoryStock />} />

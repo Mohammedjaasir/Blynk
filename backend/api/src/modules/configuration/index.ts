@@ -23,6 +23,7 @@ import { heroBannerService, updateHeroBannerSchema } from './hero-banner.js';
 import { appTextsService, updateAppTextsSchema } from './app-texts.js';
 import { qrLinksService, updateQrLinksSchema } from './qr-links.js';
 import { availabilityService, updateAvailabilitySchema } from './availability-windows.js';
+import { homeSectionsService, updateHomeSectionsSchema } from './home-sections.js';
 import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
@@ -550,6 +551,27 @@ adminSettingsRouter.put('/settings/availability-windows', requireAuth, requireRo
   try {
     const input = updateAvailabilitySchema.parse(req.body);
     res.json({ success: true, data: await availabilityService.set(input, actorOf(req)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Home sections (owner's brother, 2026-10-24): staff-made product rails on the customer app's
+// Home (a category or picked products, optionally timed with a countdown). PUT replaces the whole
+// list. Audited (HOME_SECTIONS_UPDATED). Customers get the LIVE ones in GET /store
+// `home_sections`. See modules/configuration/home-sections.ts.
+adminSettingsRouter.get('/settings/home-sections', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await homeSectionsService.get() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminSettingsRouter.put('/settings/home-sections', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (req, res, next) => {
+  try {
+    const input = updateHomeSectionsSchema.parse(req.body);
+    res.json({ success: true, data: await homeSectionsService.set(input, actorOf(req)) });
   } catch (err) {
     next(err);
   }

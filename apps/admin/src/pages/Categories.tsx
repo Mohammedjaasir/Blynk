@@ -2,10 +2,17 @@ import { errorMessage } from '../lib/apiErrors';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { categories as categoriesApi, categoryGroups as groupsApi, settings as settingsApi } from '../api/resources';
+import {
+  availabilityWindows,
+  categories as categoriesApi,
+  categoryGroups as groupsApi,
+  settings as settingsApi,
+} from '../api/resources';
 import type { Category, CategoryGroup } from '../api/types';
+import { CategoryHoursDialog } from '../components/CategoryHoursDialog';
 import { PageHeader } from '../components/Layout';
 import { Badge, Field, Spinner, useToast } from '../components/ui';
+import { hoursById, hoursRowText, type CategoryHours } from '../lib/categoryHours';
 import { endOfDay, validateCategoryOffer } from '../lib/combos';
 import { colomboDate, formatDay } from '../lib/coupons';
 import { formatPercent, inheritedMarkup, parseMarkupInput } from '../lib/pricing';
@@ -38,6 +45,11 @@ import { formatPercent, inheritedMarkup, parseMarkupInput } from '../lib/pricing
  * Bakery's sidebar items (Bread, Cakes...) take one tap each. Sub-categories
  * are one level only, so sub-category rows don't get the button.
  *
+ * Available hours (2026-10-24): each row has an "Available hours" action - a
+ * From / Until dialog (empty = any time) over GET/PUT
+ * /admin/settings/availability-windows - and shows the hours under the name
+ * when set (a sub-category without its own shows its main category's).
+ *
  * Markup % (migration 044; owner, 2026-10-13): the markup for MARKUP
  * products in the category without their own; blank = the parent
  * category's, else the global default (Settings). Saving reprices every
@@ -63,6 +75,9 @@ export function Categories() {
   const [moving, setMoving] = useState(false);
   // The global default markup, for "Global 20%" on rows without a markup.
   const [globalMarkup, setGlobalMarkup] = useState<number | null>(null);
+  // Available hours by category id; empty when they cannot be read.
+  const [hours, setHours] = useState<Map<string, CategoryHours>>(new Map());
+  const [hoursFor, setHoursFor] = useState<Category | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +99,10 @@ export function Categories() {
       .getDefaultMarkup()
       .then((setting) => setGlobalMarkup(Number(setting.markup_percent)))
       .catch(() => setGlobalMarkup(null));
+    availabilityWindows
+      .get()
+      .then((s) => setHours(hoursById(s.windows)))
+      .catch(() => setHours(new Map()));
   }, [load]);
 
   async function toggleActive(category: Category) {
@@ -232,6 +251,9 @@ export function Categories() {
                       </span>
                       <span className="cell__secondary mono">{category.slug}</span>
                       {parent ? <span className="cell__note">{`in ${parent.name}`}</span> : null}
+                      {hoursRowText(category, hours, shown ?? []) ? (
+                        <span className="cell__note">{hoursRowText(category, hours, shown ?? [])}</span>
+                      ) : null}
                     </td>
                     <td>
                       <span className="cell__secondary cell__clamp">{category.description || '—'}</span>
@@ -299,6 +321,14 @@ export function Categories() {
                           <button
                             type="button"
                             className="button button--ghost button--sm"
+                            onClick={() => setHoursFor(category)}
+                            aria-label={`Available hours for ${category.name}`}
+                          >
+                            Available hours
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
                             onClick={() => void toggleActive(category)}
                           >
                             {category.is_active ? 'Deactivate' : 'Activate'}
@@ -362,6 +392,19 @@ export function Categories() {
           onDeleted={async () => {
             setDeleting(null);
             await load();
+          }}
+        />
+      ) : null}
+
+      {hoursFor ? (
+        <CategoryHoursDialog
+          category={hoursFor}
+          categories={rows ?? []}
+          onClose={() => setHoursFor(null)}
+          onSaved={(windows) => {
+            setHours(hoursById(windows));
+            toast.success(`Available hours saved for ${hoursFor.name}.`);
+            setHoursFor(null);
           }}
         />
       ) : null}
