@@ -170,9 +170,9 @@ describe('application scope', () => {
     renderAs(ADMIN, '/');
     const nav = await screen.findByRole('navigation', { name: 'Inventory' });
     const links = within(nav).getAllByRole('link').map((a) => a.textContent);
-    expect(links).toEqual(['Overview', 'Inventory', 'Running low', 'Ledger', 'Sourcing queue', 'Suppliers']);
+    expect(links).toEqual(['Overview', 'Inventory', 'Running low', 'Ledger', 'Deliveries', 'Sourcing queue', 'Suppliers']);
     const shell = document.body.textContent ?? '';
-    for (const word of ['Products', 'Categories', 'Promotions', 'Riders', 'Customers', 'Deliver']) {
+    for (const word of ['Products', 'Categories', 'Promotions', 'Riders', 'Customers']) {
       expect(within(nav).queryByText(new RegExp(word, 'i'))).toBeNull();
     }
     expect(shell).not.toMatch(/promotion/i);
@@ -191,6 +191,7 @@ describe('role permissions mirror the backend guards', () => {
     'markUnavailable',
     'markPacked',
     'adjustStock',
+    'receiveDeliveries', // supplier deliveries without prices (owner, 2026-10-25)
   ];
 
   it('ADMIN can do everything', () => {

@@ -16,7 +16,8 @@ export type Action =
   | 'adjustStock' // POST /admin/inventory/:productId/adjust (restock, write-off, audit count)
   | 'changeTrackingMode' // PATCH /admin/inventory/:productId/mode
   | 'editThreshold' // PATCH /admin/inventory/:productId/threshold (backend also allows OPERATIONS, who can't sign in here)
-  | 'manageSuppliers'; // POST/PATCH /admin/suppliers
+  | 'manageSuppliers'
+  | 'receiveDeliveries'; // GET /admin/purchase-orders(/:id), POST /admin/purchase-orders/:id/receive (no costs) // POST/PATCH /admin/suppliers
 
 const RULES: Record<Action, Role[]> = {
   viewStock: ['ADMIN', 'PACKING_STAFF'],
@@ -31,6 +32,8 @@ const RULES: Record<Action, Role[]> = {
   changeTrackingMode: ['ADMIN'],
   editThreshold: ['ADMIN'],
   manageSuppliers: ['ADMIN'],
+  // Owner decision (2026-10-25): packing staff receive supplier deliveries, without prices.
+  receiveDeliveries: ['ADMIN', 'PACKING_STAFF'],
 };
 
 /**

@@ -1615,3 +1615,57 @@ td.cell__secondary {
 .threshold-form__input {
   max-width: 140px;
 }
+
+/* ---------------------------------------------------------------- deliveries */
+
+.notice--ok {
+  border-left-color: var(--green);
+  background: var(--green-soft);
+}
+
+.delivery-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 0 10px;
+}
+
+.delivery-notes {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+}
+
+.delivery-qty {
+  width: 92px;
+  min-height: 44px;
+  text-align: right;
+  font-family: var(--mono);
+}
+
+.delivery-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.delivery-help {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.delivery-actions .button {
+  min-height: 44px;
+}
+
+@media (max-width: 640px) {
+  .delivery-qty {
+    width: 76px;
+  }
+  .delivery-actions .button {
+    width: 100%;
+  }
+}

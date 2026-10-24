@@ -1,6 +1,9 @@
 import { apiRequest, tokenStore } from './client';
 import type {
   AuthUser,
+  Delivery,
+  DeliveryReceipt,
+  DeliverySummary,
   LedgerEntry,
   LowStockReport,
   ManualAdjustmentType,
@@ -203,4 +206,16 @@ export const suppliersApi = {
     apiRequest<{ supplier: Supplier }>(`/admin/suppliers/${id}`, { method: 'PATCH', body: { ...body } }).then(
       (d) => d.supplier
     ),
+};
+
+export const deliveriesApi = {
+  /** Orders that can be received (sent, or partly received), the same for every role that may open them. */
+  list: () =>
+    apiRequest<{ purchase_orders: DeliverySummary[]; total: number }>('/admin/purchase-orders', {
+      query: { status: 'RECEIVABLE', limit: MAX_PAGE_SIZE },
+    }),
+  detail: (id: string) => apiRequest<{ purchase_order: Delivery }>(`/admin/purchase-orders/${id}`).then((d) => d.purchase_order),
+  /** What arrived in this delivery, per line. Never a cost: packing staff cannot change costs. */
+  receive: (id: string, body: { lines: Array<{ item_id: string; received_qty: number }>; close_short?: boolean }) =>
+    apiRequest<DeliveryReceipt>(`/admin/purchase-orders/${id}/receive`, { method: 'POST', body }),
 };

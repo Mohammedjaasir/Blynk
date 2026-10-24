@@ -206,3 +206,53 @@ export interface SupplierInput {
   notes?: string;
   is_active?: boolean;
 }
+
+/**
+ * Supplier deliveries: purchase orders as packing staff see them (GET /admin/purchase-orders and
+ * /:id). The API sends packing staff no costs, totals, supplier phone or share text, and this app
+ * never reads or sends any.
+ */
+export type DeliveryStatus = 'DRAFT' | 'SENT' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED';
+
+export interface DeliverySummary {
+  id: string;
+  po_number: string;
+  supplier_name: string | null;
+  status: DeliveryStatus;
+  notes: string | null;
+  expected_on: string | null;
+  line_count: number;
+  units_ordered: number;
+  units_received: number;
+}
+
+export interface DeliveryLine {
+  id: string;
+  product_id: string;
+  name: string;
+  unit: string | null;
+  ordered_qty: number;
+  received_qty: number;
+  remaining_qty: number;
+  note: string | null;
+  /** False: the product is not counted, so receiving it adds no stock. */
+  stock_counted: boolean;
+}
+
+export interface Delivery {
+  id: string;
+  po_number: string;
+  supplier_name: string | null;
+  status: DeliveryStatus;
+  notes: string | null;
+  expected_on: string | null;
+  received_at: string | null;
+  lines: DeliveryLine[];
+}
+
+export interface DeliveryReceipt {
+  purchase_order: Delivery;
+  received: Array<{ item_id: string; name: string; received_qty: number; stock_added: boolean }>;
+  /** Received lines that added no stock (the product is not counted). */
+  skipped: Array<{ item_id: string; name: string }>;
+}

@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
 import { Spinner, ToastProvider } from './components/ui';
+import { DeliveryDetail, Deliveries } from './pages/Deliveries';
 import { Ledger } from './pages/Ledger';
 import { Login } from './pages/Login';
 import { LowStock } from './pages/LowStock';
@@ -42,6 +43,8 @@ export function AppRoutes() {
         <Route path="stock" element={<Stock />} />
         <Route path="low-stock" element={<LowStock />} />
         <Route path="ledger" element={<Ledger />} />
+        <Route path="deliveries" element={<Deliveries />} />
+        <Route path="deliveries/:id" element={<DeliveryDetail />} />
         <Route path="sourcing" element={<SourcingQueue />} />
         <Route path="suppliers" element={<Suppliers />} />
       </Route>

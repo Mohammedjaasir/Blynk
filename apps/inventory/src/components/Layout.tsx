@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { stockApi } from '../api/resources';
 import { useAuth } from '../auth/AuthContext';
-import { ROLE_LABEL } from '../auth/can';
+import { ROLE_LABEL, can } from '../auth/can';
 import blynkMark from '../assets/blynk-mark.png';
 import blynkWordmark from '../assets/blynk-wordmark-light.png';
 import { STOCK_CHANGED_EVENT } from '../lib/stock';
@@ -62,6 +62,14 @@ export function Layout() {
           <NavLink to="/ledger" className="nav__item">
             Ledger
           </NavLink>
+          {can(user?.role, 'receiveDeliveries') ? (
+            <>
+              <p className="nav__group">Receiving</p>
+              <NavLink to="/deliveries" className="nav__item">
+                Deliveries
+              </NavLink>
+            </>
+          ) : null}
           <p className="nav__group">Sourcing</p>
           <NavLink to="/sourcing" className="nav__item">
             Sourcing queue
