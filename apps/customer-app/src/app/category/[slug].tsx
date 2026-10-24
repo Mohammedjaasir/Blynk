@@ -17,7 +17,6 @@ import { BackIcon, SearchIcon } from '@/components/icons';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { ProductCard } from '@/components/ProductCard';
 import { PressScale, Skeleton } from '@/components/ui';
-import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 
 /*
@@ -68,7 +67,10 @@ export default function CategoryScreen() {
     <View style={styles.root}>
       <StatusBar style="dark" />
       <View style={[styles.head, { paddingTop: insets.top + 8 }]}>
-        <PressScale onPress={goBack} style={{ padding: 4 }} accessibilityLabel="Back" accessibilityRole="button">
+        {/* Back always lands on the categories list (owner, 2026-10-24: "when I click back it takes me to
+            home, but I want it to take us to the category section"): back to it when it is under this
+            screen, else it replaces this screen */}
+        <PressScale onPress={() => router.dismissTo('/categories')} style={{ padding: 4 }} accessibilityLabel="Back" accessibilityRole="button">
           <BackIcon size={20} color={C.text} stroke={1.8} />
         </PressScale>
         <View style={{ flex: 1 }}>
