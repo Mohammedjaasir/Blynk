@@ -976,6 +976,11 @@ export const sellers = {
     apiRequest<{ payout: SellerPayout; statement: SellerStatement }>(`/admin/sellers/${id}/payouts`, { method: 'POST', body: { ...body } }),
   deletePayout: (id: string, payoutId: string) =>
     apiRequest<{ statement: SellerStatement }>(`/admin/sellers/${id}/payouts/${payoutId}`, { method: 'DELETE' }).then((d) => d.statement),
+  /** The seller's waiting shop pin becomes the one in use (migration 053). */
+  approveLocation: (id: string) =>
+    apiRequest<{ seller: AdminSeller }>(`/admin/sellers/${id}/location/approve`, { method: 'POST', body: {} }).then((d) => d.seller),
+  rejectLocation: (id: string, reason: string) =>
+    apiRequest<{ seller: AdminSeller }>(`/admin/sellers/${id}/location/reject`, { method: 'POST', body: { reason } }).then((d) => d.seller),
 };
 
 export const sellerSubmissions = {

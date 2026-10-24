@@ -98,6 +98,17 @@ export type ApproveSubmissionInput = z.infer<typeof approveSubmissionSchema>;
 /** POST /admin/seller-submissions/:id/reject */
 export const rejectSubmissionSchema = z.object({ reason: reason('The reason') }).strict();
 
+/** POST /admin/sellers/:id/location/reject (migration 053; the column holds 200). */
+export const rejectLocationSchema = z
+  .object({
+    reason: z
+      .string({ required_error: 'The reason is required', invalid_type_error: 'The reason must be text' })
+      .trim()
+      .min(3, 'The reason must be at least 3 characters')
+      .max(200, 'The reason must be at most 200 characters'),
+  })
+  .strict();
+
 /** POST /admin/sellers/:id/payouts */
 export const recordPayoutSchema = z
   .object({

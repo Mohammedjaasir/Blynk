@@ -13,6 +13,7 @@ import type { DBConnection } from '../orders/order.repository.js';
 import type { DeliveryRow, OrderRow } from '../orders/lifecycle/types.js';
 import { haversineM, roadDistanceM } from '../routing/index.js';
 import { kmTiersFrom, kmTiersSchema, priceByKmTiers, type KmTier } from '../pricing/km-tiers.js';
+import { farthestPickupDistance, orderPickups, type PickupPoint } from '../orders/pickup-points.js';
 
 /*
  * Rider pay controls (migration 038; owner, 2026-10-10): "give the option in
@@ -26,6 +27,8 @@ import { kmTiersFrom, kmTiersSchema, priceByKmTiers, type KmTier } from '../pric
  *     PERCENT  : standard_delivery_fee x percent / 100
  *     FIXED    : fixed_lkr
  *     DISTANCE : base_lkr + per_km_lkr x road km (store -> drop-off, OSRM;
+ *                since 2026-10-24 the farthest pickup point -> drop-off, as
+ *                the delivery fee: a seller's approved shop for their goods;
  *                when OSRM is unavailable: straight line x 1.3, marked
  *                estimated) - distance_mode LINEAR
  *                or, distance_mode TIERS (migration 040; owner, 2026-10-10):
@@ -578,7 +581,7 @@ export interface PaySnapshot {
 export async function computePaySnapshot(
   executor: DBConnection,
   delivery: Pick<DeliveryRow, 'rider_id'>,
-  order: Pick<OrderRow, 'standard_delivery_fee' | 'delivery_fee' | 'dark_store_id' | 'delivery_latitude' | 'delivery_longitude'>,
+  order: Pick<OrderRow, 'id' | 'standard_delivery_fee' | 'delivery_fee' | 'dark_store_id' | 'delivery_latitude' | 'delivery_longitude'>,
   at: Date
 ): Promise<PaySnapshot> {
   const rider = await executor
@@ -603,13 +606,21 @@ export async function computePaySnapshot(
   const fee = Number(order.standard_delivery_fee ?? order.delivery_fee ?? 0);
 
   let distance: { km: number; estimated: boolean } | null = null;
+  let farthest: PickupPoint | null = null;
   if (params?.model === 'DISTANCE' || (applies && rules.long_distance.enabled)) {
-    const hub = await executor.selectFrom('dark_stores').select(['latitude', 'longitude']).where('id', '=', order.dark_store_id).executeTakeFirst();
-    if (hub) {
-      distance = await measureDistance(
-        { lat: Number(hub.latitude), lng: Number(hub.longitude) },
-        { lat: Number(order.delivery_latitude), lng: Number(order.delivery_longitude) }
-      );
+    // Owner, 2026-10-24: the same distance as the delivery fee - the LONGEST
+    // road distance from any of the order's pickup points (the store for
+    // Blynk's products, a seller's approved shop for theirs) to the drop-off.
+    // A Blynk-only order: store -> drop-off, as before.
+    const points = await orderPickups({ id: order.id, dark_store_id: order.dark_store_id }, executor);
+    const far = await farthestPickupDistance(
+      points,
+      { lat: Number(order.delivery_latitude), lng: Number(order.delivery_longitude) },
+      measureDistance
+    );
+    if (far) {
+      distance = { km: far.km, estimated: far.estimated };
+      farthest = far.from;
     }
   }
   const km = distance?.km ?? null;
@@ -630,6 +641,10 @@ export async function computePaySnapshot(
         km_counted: km === null ? null : priceByKmTiers(params.km_tiers, km).km_counted,
       });
     } else if (params.model === 'DISTANCE') Object.assign(inputs, { base_lkr: params.base_lkr, per_km_lkr: params.per_km_lkr });
+    // Owner, 2026-10-24: when the farthest leg started at a seller's shop, say which.
+    if (km !== null && farthest?.kind === 'SELLER') {
+      inputs.distance_from = { kind: 'SELLER', seller_id: farthest.seller_id, shop_name: farthest.shop_name };
+    }
   }
   return {
     columns: {

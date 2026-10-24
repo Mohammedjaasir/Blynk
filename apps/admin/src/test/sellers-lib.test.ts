@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
   approvalBody,
+  approvedPoint,
   changedFields,
+  distanceText,
   effectiveSelling,
+  googleMapsUrl,
+  locationReasonProblem,
+  locationWaiting,
+  osmEmbedUrl,
+  pendingPoint,
+  pointText,
   lkr,
   margin,
   parseCommission,
@@ -140,5 +148,38 @@ describe('what an edit changes', () => {
 
   it('a field the payload leaves out keeps the live value', () => {
     expect(changedFields({ ...edit, seller_price: 80, payload: { unit: 'kg' } }, { name: 'x', unit: 'kg' }, names)).toEqual([]);
+  });
+});
+
+describe('shop location helpers (migration 053)', () => {
+  it('reads the approved and the waiting point, tolerating an API without them', () => {
+    expect(approvedPoint({ latitude: 7.29, longitude: 80.63 })).toEqual({ lat: 7.29, lng: 80.63 });
+    expect(approvedPoint({ latitude: 7.29, longitude: null })).toBeNull();
+    expect(approvedPoint({})).toBeNull();
+    expect(pendingPoint({ pending_latitude: 6.03, pending_longitude: 80.21 })).toEqual({ lat: 6.03, lng: 80.21 });
+    expect(locationWaiting({ location_status: 'PENDING', pending_latitude: 6.03, pending_longitude: 80.21 })).toBe(true);
+    expect(locationWaiting({ location_status: 'REJECTED', pending_latitude: 6.03, pending_longitude: 80.21 })).toBe(false);
+    expect(locationWaiting({})).toBe(false);
+  });
+
+  it('builds the map links and texts', () => {
+    const p = { lat: 7.290572, lng: 80.633728 };
+    expect(googleMapsUrl(p)).toBe('https://www.google.com/maps?q=7.290572,80.633728');
+    const embed = new URL(osmEmbedUrl(p));
+    expect(embed.origin + embed.pathname).toBe('https://www.openstreetmap.org/export/embed.html');
+    expect(embed.searchParams.get('marker')).toBe('7.290572,80.633728');
+    const [minLng, minLat, maxLng, maxLat] = embed.searchParams.get('bbox')!.split(',').map(Number);
+    expect(minLng! < p.lng && p.lng < maxLng! && minLat! < p.lat && p.lat < maxLat!).toBe(true);
+    expect(pointText(p)).toBe('7.290572, 80.633728');
+    expect(distanceText(3.2)).toBe('3.2 km from the Blynk store');
+    expect(distanceText(12)).toBe('12.0 km from the Blynk store');
+    expect(distanceText(null)).toBeNull();
+    expect(distanceText(undefined)).toBeNull();
+  });
+
+  it('a rejection reason is 3 to 200 characters', () => {
+    expect(locationReasonProblem(' ab ')).toMatch(/at least 3/);
+    expect(locationReasonProblem('x'.repeat(201))).toBe('At most 200 characters.');
+    expect(locationReasonProblem('Pin is in the sea')).toBeNull();
   });
 });

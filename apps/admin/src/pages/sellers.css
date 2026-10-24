@@ -36,6 +36,18 @@
 .submission__warn { margin: 0; padding: 8px 12px; border-left: 3px solid #b26a00; background: #fff4d6; color: #7a4a00; font-size: 13px; font-weight: 600; }
 .submission__actions { display: flex; justify-content: flex-end; gap: 10px; }
 
+/* Shop location (migration 053) */
+.seller-location { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
+.seller-location__point { display: grid; gap: 10px; align-content: start; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+.seller-location__point--waiting { border-color: #e0b100; background: #fffbea; }
+.seller-location__point--rejected { border-color: #e6b8b3; background: #fdf3f2; }
+.seller-location__point > .button { justify-self: start; }
+.seller-location__title { margin: 0; font-size: 14px; font-weight: 800; }
+.seller-location__map { width: 100%; height: 200px; border: 0; border-radius: var(--radius); background: var(--canvas); }
+.seller-location__empty { margin: 0; padding: 10px 12px; background: var(--canvas); border-radius: var(--radius); color: var(--ink-3); }
+.sellers__chip { display: block; width: fit-content; margin-top: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--canvas); color: var(--ink-3); }
+.sellers__chip--waiting { background: #fff4d6; color: #7a4a00; }
+
 @media (max-width: 720px) {
   .seller-payout-form { grid-template-columns: 1fr; }
   .submission__body { grid-template-columns: 1fr; }

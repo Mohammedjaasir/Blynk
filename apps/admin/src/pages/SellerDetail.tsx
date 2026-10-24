@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { sellers as sellersApi } from '../api/resources';
 import { DatePicker } from '../components/DatePicker';
@@ -7,8 +7,18 @@ import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../componen
 import { errorMessage } from '../lib/apiErrors';
 import { colomboDateKey } from '../lib/schedule';
 import {
+  LOCATION_REASON_MAX,
   REASON_LIMITS,
   SELLER_STATUS_LABEL,
+  approvedPoint,
+  distanceText,
+  googleMapsUrl,
+  locationReasonProblem,
+  locationWaiting,
+  osmEmbedUrl,
+  pendingPoint,
+  pointText,
+  type MapPoint,
   lkr,
   parseCommission,
   parseMoney,
@@ -260,6 +270,8 @@ export function SellerDetail() {
         </form>
       </section>
 
+      <LocationSection seller={seller} onChanged={(s) => adopt({ ...seller, ...s })} />
+
       <StatementSection statement={statement} />
 
       <PayoutsSection
@@ -270,19 +282,38 @@ export function SellerDetail() {
       />
 
       {deciding === 'approve' ? (
-        <ConfirmDialog
-          title={`Approve ${seller.shop_name}?`}
-          message={
-            seller.status === 'SUSPENDED'
-              ? 'They can add products again and get an SMS. Products that were switched off when they were suspended stay off until you switch them on in Products.'
-              : 'They can add products from now on and get an SMS.'
-          }
-          confirmLabel={busy ? 'Approving…' : 'Approve'}
-          onConfirm={() => {
-            if (!busy) void decide('approve');
-          }}
-          onCancel={() => setDeciding(null)}
-        />
+        <div className="modal" role="dialog" aria-modal="true" aria-label={`Approve ${seller.shop_name}?`}>
+          <div className="modal__panel">
+            <h2 className="modal__title">Approve {seller.shop_name}?</h2>
+            <p className="modal__message">
+              {seller.status === 'SUSPENDED'
+                ? 'They can add products again and get an SMS. Products that were switched off when they were suspended stay off until you switch them on in Products.'
+                : 'They can add products from now on and get an SMS.'}
+            </p>
+            {/* A warning, not a block (lead, 2026-10-24): the seller can pin the shop later. */}
+            {approvedPoint(seller) ? null : (
+              <p className="submission__warn" role="note">
+                {locationWaiting(seller)
+                  ? 'Their shop location is still waiting for your approval (see Shop location), so riders do not know yet where to collect their goods.'
+                  : 'They have no approved shop location yet, so riders do not know where to collect their goods. You can still approve them.'}
+              </p>
+            )}
+            <div className="modal__actions">
+              <button type="button" className="button button--ghost" onClick={() => setDeciding(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  if (!busy) void decide('approve');
+                }}
+              >
+                {busy ? 'Approving…' : 'Approve'}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {deciding === 'suspend' ? (
@@ -348,6 +379,204 @@ export function SellerDetail() {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Where the seller's shop is (migration 053): the approved point (riders collect there and delivery
+ * is measured from it) next to the one the seller asked for, which waits for Approve / Reject.
+ */
+function LocationSection({ seller, onChanged }: { seller: AdminSeller; onChanged(s: AdminSeller): void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState<string | null>(null);
+
+  const approved = approvedPoint(seller);
+  const pending = pendingPoint(seller);
+  const waiting = locationWaiting(seller);
+  const rejected = seller.location_status === 'REJECTED' && pending !== null;
+
+  async function approve() {
+    setBusy(true);
+    try {
+      onChanged(await sellersApi.approveLocation(seller.id));
+      toast.success(`${seller.shop_name}'s shop location is approved.`);
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not approve the shop location.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reject() {
+    const problem = locationReasonProblem(reason);
+    if (problem) {
+      setReasonError(problem);
+      return;
+    }
+    setBusy(true);
+    try {
+      onChanged(await sellersApi.rejectLocation(seller.id, reason.trim()));
+      toast.success(`${seller.shop_name}'s shop location was rejected.`);
+      setRejecting(false);
+      setReason('');
+    } catch (err) {
+      setReasonError(errorMessage(err, 'Could not reject the shop location.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="seller-card" aria-label="Shop location">
+      <h2 className="form__section-title">Shop location</h2>
+      <p className="form__note">Where riders collect this seller's goods. Only the approved point is used for delivery.</p>
+      {!approved && !pending ? (
+        <p className="seller-location__empty">No location set yet</p>
+      ) : (
+        <div className="seller-location">
+          <LocationPoint
+            label="Approved location"
+            title="Approved (in use)"
+            point={approved}
+            note={seller.location_note ?? null}
+            distance={seller.distance_km_from_store}
+            emptyText="No approved location yet"
+          />
+          {pending ? (
+            <LocationPoint
+              label={rejected ? 'Rejected location' : 'Waiting location'}
+              title={rejected ? 'Rejected request' : 'Waiting for your approval'}
+              point={pending}
+              note={seller.pending_location_note ?? null}
+              distance={seller.pending_distance_km_from_store}
+              tone={rejected ? 'rejected' : 'waiting'}
+            >
+              {rejected && seller.location_reject_reason ? (
+                <p className="form__note">Rejected because: {seller.location_reject_reason}</p>
+              ) : null}
+              {waiting ? (
+                <div className="row-actions">
+                  <button type="button" className="button" disabled={busy} onClick={() => void approve()}>
+                    {busy ? 'Saving…' : 'Approve location'}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--ghost"
+                    disabled={busy}
+                    onClick={() => {
+                      setReason('');
+                      setReasonError(null);
+                      setRejecting(true);
+                    }}
+                  >
+                    Reject location
+                  </button>
+                </div>
+              ) : null}
+            </LocationPoint>
+          ) : null}
+        </div>
+      )}
+
+      {rejecting ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-label="Reject shop location">
+          <form
+            className="modal__panel"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!busy) void reject();
+            }}
+          >
+            <h2 className="modal__title">Reject this shop location?</h2>
+            <p className="modal__message">The seller sees the reason and can pin the shop again. {approved ? 'The approved location stays in use.' : ''}</p>
+            <label className="field">
+              <span className="field__label">Reason (shown to the seller)</span>
+              <textarea
+                className="input"
+                rows={3}
+                maxLength={LOCATION_REASON_MAX}
+                value={reason}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  setReasonError(null);
+                }}
+              />
+              {reasonError ? <span className="field__error">{reasonError}</span> : null}
+            </label>
+            <div className="modal__actions">
+              <button type="button" className="button button--ghost" onClick={() => setRejecting(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="button button--danger" disabled={busy || !reason.trim()}>
+                {busy ? 'Rejecting…' : 'Reject'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function LocationPoint({
+  label,
+  title,
+  point,
+  note,
+  distance,
+  emptyText,
+  tone,
+  children,
+}: {
+  label: string;
+  title: string;
+  point: MapPoint | null;
+  note: string | null;
+  distance: number | null | undefined;
+  emptyText?: string;
+  tone?: 'waiting' | 'rejected';
+  children?: ReactNode;
+}) {
+  const far = distanceText(distance);
+  return (
+    <div role="group" aria-label={label} className={tone ? `seller-location__point seller-location__point--${tone}` : 'seller-location__point'}>
+      <h3 className="seller-location__title">{title}</h3>
+      {point ? (
+        <>
+          <iframe
+            className="seller-location__map"
+            title={`Map: ${label.toLowerCase()}`}
+            src={osmEmbedUrl(point)}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+          <dl className="seller-card__facts">
+            <div>
+              <dt>Coordinates</dt>
+              <dd className="mono">{pointText(point)}</dd>
+            </div>
+            <div>
+              <dt>How to find it</dt>
+              <dd>{note || '—'}</dd>
+            </div>
+            <div>
+              <dt>Distance</dt>
+              <dd>{far ?? 'Unknown (no store location)'}</dd>
+            </div>
+          </dl>
+          <a className="button button--ghost button--sm" href={googleMapsUrl(point)} target="_blank" rel="noopener noreferrer">
+            Open in Google Maps
+          </a>
+        </>
+      ) : (
+        <p className="form__note">{emptyText ?? 'No location'}</p>
+      )}
+      {children}
+    </div>
   );
 }
 

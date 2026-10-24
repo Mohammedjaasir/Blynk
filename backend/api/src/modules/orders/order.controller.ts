@@ -71,8 +71,13 @@ export class OrderController {
       // Per-km tiers (owner, 2026-10-10): the fee for the cart's chosen address.
       const { address_id, subtotal } = checkoutInfoQuerySchema.parse(req.query);
       // Migration 045: ?product_ids=a,b (or ?lead_days=N) -> delivery_lead.
-      const lead = await leadFromQuery(leadQuerySchema.parse(req.query));
-      res.status(200).json({ success: true, data: await orderService.getCheckoutInfo(req.user!.id, address_id, subtotal, lead) });
+      const leadQuery = leadQuerySchema.parse(req.query);
+      const lead = await leadFromQuery(leadQuery);
+      // Owner, 2026-10-24: the same product ids give the cart's pickup points for the fee.
+      res.status(200).json({
+        success: true,
+        data: await orderService.getCheckoutInfo(req.user!.id, address_id, subtotal, lead, leadQuery.product_ids),
+      });
     } catch (err) {
       next(err);
     }

@@ -1,0 +1,15 @@
+DROP INDEX IF EXISTS idx_sellers_location_pending;
+ALTER TABLE sellers DROP CONSTRAINT IF EXISTS chk_sellers_location_pending;
+ALTER TABLE sellers DROP CONSTRAINT IF EXISTS chk_sellers_location_range;
+ALTER TABLE sellers DROP CONSTRAINT IF EXISTS chk_sellers_location_pair;
+ALTER TABLE sellers DROP CONSTRAINT IF EXISTS chk_sellers_location_status;
+ALTER TABLE sellers DROP COLUMN IF EXISTS location_reviewed_by;
+ALTER TABLE sellers DROP COLUMN IF EXISTS location_reviewed_at;
+ALTER TABLE sellers DROP COLUMN IF EXISTS location_reject_reason;
+ALTER TABLE sellers DROP COLUMN IF EXISTS location_status;
+ALTER TABLE sellers DROP COLUMN IF EXISTS pending_location_note;
+ALTER TABLE sellers DROP COLUMN IF EXISTS pending_longitude;
+ALTER TABLE sellers DROP COLUMN IF EXISTS pending_latitude;
+ALTER TABLE sellers DROP COLUMN IF EXISTS location_note;
+ALTER TABLE sellers DROP COLUMN IF EXISTS longitude;
+ALTER TABLE sellers DROP COLUMN IF EXISTS latitude;

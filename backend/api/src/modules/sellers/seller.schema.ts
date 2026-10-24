@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { mediaStorage } from '../../utils/storage.js';
+import { LOCATION_NOTE_MAX, SRI_LANKA_BOUNDS } from './seller.location.js';
 
 /** Largest price a seller may ask, LKR (plan: seller_price > 0 and <= 1,000,000). */
 export const MAX_SELLER_PRICE = 1_000_000;
@@ -16,16 +17,40 @@ const optionalText = (max: number) =>
 
 const uuid = (what: string) => z.string({ required_error: `${what} is required.` }).uuid(`${what} must be a valid id.`);
 
-export const profileSchema = z.object({
-  shop_name: z
-    .string({ required_error: 'Shop name is required.' })
-    .trim()
-    .min(2, 'Shop name must be at least 2 characters.')
-    .max(80, 'Shop name must be at most 80 characters.'),
-  contact_name: optionalText(80),
-  address: optionalText(255),
-  note: optionalText(500),
-});
+/** A map coordinate inside Sri Lanka (seller.location.ts); null clears. */
+const coordinate = (what: 'Latitude' | 'Longitude', min: number, max: number) =>
+  z
+    .number({ invalid_type_error: `${what} must be a number.` })
+    .finite(`${what} must be a number.`)
+    .min(min, 'Pin a place in Sri Lanka.')
+    .max(max, 'Pin a place in Sri Lanka.')
+    .nullable()
+    .optional();
+
+export const profileSchema = z
+  .object({
+    shop_name: z
+      .string({ required_error: 'Shop name is required.' })
+      .trim()
+      .min(2, 'Shop name must be at least 2 characters.')
+      .max(80, 'Shop name must be at most 80 characters.'),
+    contact_name: optionalText(80),
+    address: optionalText(255),
+    note: optionalText(500),
+    // Migration 053: the shop pin (waits for Admin) and how to find the shop.
+    latitude: coordinate('Latitude', SRI_LANKA_BOUNDS.minLat, SRI_LANKA_BOUNDS.maxLat),
+    longitude: coordinate('Longitude', SRI_LANKA_BOUNDS.minLng, SRI_LANKA_BOUNDS.maxLng),
+    location_note: optionalText(LOCATION_NOTE_MAX),
+  })
+  .superRefine((v, ctx) => {
+    // Both or neither: a pin is one point, and clearing clears both.
+    const latSent = v.latitude !== undefined;
+    const lngSent = v.longitude !== undefined;
+    if (latSent !== lngSent || (latSent && (v.latitude === null) !== (v.longitude === null))) {
+      const missing = !latSent ? 'latitude' : !lngSent ? 'longitude' : v.latitude === null ? 'latitude' : 'longitude';
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [missing], message: 'Send the latitude and the longitude together.' });
+    }
+  });
 export type ProfileInput = z.infer<typeof profileSchema>;
 
 const sellerPrice = z

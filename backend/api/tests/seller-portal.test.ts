@@ -79,6 +79,17 @@ describe('GET /seller/me and PUT /seller/profile', () => {
       rejection_reason: null,
       commission_percent: 0,
       created_at: expect.any(String),
+      // the shop location (migration 053; tests/seller-location.test.ts)
+      latitude: null,
+      longitude: null,
+      location_note: null,
+      pending_latitude: null,
+      pending_longitude: null,
+      pending_location_note: null,
+      location_status: 'NONE',
+      location_reject_reason: null,
+      distance_km_from_store: null,
+      pending_distance_km_from_store: null,
     });
     expect(res.body.data.counts).toEqual({ products: 1, pending: 1 });
   });

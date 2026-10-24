@@ -7,6 +7,8 @@ import { errorMessage } from '../lib/apiErrors';
 import {
   SELLER_STATUSES,
   SELLER_STATUS_LABEL,
+  approvedPoint,
+  locationWaiting,
   lkr,
   sellerContact,
   sellerStatusTone,
@@ -140,6 +142,11 @@ export function Sellers() {
                       {s.shop_name}
                     </Link>
                     {s.full_name || s.contact_name ? <span className="cell__secondary">{s.contact_name ?? s.full_name}</span> : null}
+                    {locationWaiting(s) ? (
+                      <span className="sellers__chip sellers__chip--waiting">Location waiting</span>
+                    ) : !approvedPoint(s) ? (
+                      <span className="sellers__chip">No location</span>
+                    ) : null}
                   </td>
                   <td className="mono">{sellerContact(s)}</td>
                   <td>

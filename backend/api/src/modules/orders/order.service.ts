@@ -30,6 +30,8 @@ import { applyBirthday, birthdayBeatsCoupon, birthdayOfferStatus, publicBirthday
 import { basketFreeDeliveryApplies, basketFreeDeliveryStatus, freeDeliveryStatus } from './free-delivery.js';
 // Per-km tier delivery fee (owner, 2026-10-10): the one place the fee is worked out.
 import { quoteDeliveryFee, type DeliveryFeeQuote } from './delivery-fee.js';
+// Pickup points (owner, 2026-10-24): the store and/or sellers' approved shops.
+import { orderPickups } from './pickup-points.js';
 import { effectivePrice } from '../catalog/catalog.offers.js';
 import { looseQuantities, priceComboLines } from '../catalog/catalog.combos.js';
 // Refer a friend and Blynk Points (owner, 2026-10-10; migration 037).
@@ -430,9 +432,11 @@ export class OrderService {
     const { items: orderItemsData, combos: orderCombos, subtotal: subtotalAmount } = await priceCart(input.items, input.combos ?? []);
     // The fee for THIS address (owner, 2026-10-10): flat, or per-km tiers on
     // the road distance from the hub. Server authoritative; snapshotted below.
+    // Owner, 2026-10-24: from the farthest pickup point of the cart's items
+    // (combo items included) - a seller's approved shop for their products.
     const feeQuote = await quoteDeliveryFee(
       { lat: Number(address.latitude), lng: Number(address.longitude) },
-      { hub: store }
+      { hub: store, productIds: orderItemsData.map((it) => it.product_id) }
     );
     const deliveryFee = feeQuote.fee_lkr;
     // With coupons off a code is ignored, not refused, so an older app that
@@ -499,16 +503,16 @@ export class OrderService {
     if (!settings.coupons_enabled) {
       throw new AppError('Coupon codes are not available right now.', 422, 'COUPONS_DISABLED');
     }
-    const subtotal =
-      input.items?.length || input.combos?.length
-        ? (await priceCart(input.items ?? [], input.combos ?? [])).subtotal
-        : Number(input.subtotal!.toFixed(2));
+    const priced = input.items?.length || input.combos?.length ? await priceCart(input.items ?? [], input.combos ?? []) : null;
+    const subtotal = priced ? priced.subtotal : Number(input.subtotal!.toFixed(2));
+    // Owner, 2026-10-24: the cart's products give its pickup points (a bare subtotal = from the store).
+    const productIds = priced ? priced.items.map((it) => it.product_id) : [];
     // The basket amount first (owner, 2026-10-12), then the free deliveries.
     const basketFree = basketFreeDeliveryApplies(basketFreeDeliveryOf(settings), subtotal);
     const free = basketFree ? null : await freeDeliveryStatus(db, customerId, settings.new_customer_free_deliveries);
     // Owner, 2026-10-10: the fee for the chosen address (address_id), as the order will charge it.
     const deliveryFee =
-      basketFree || free?.applies ? 0 : (await this.quoteForCustomer(customerId, input.address_id)).quote.fee_lkr;
+      basketFree || free?.applies ? 0 : (await this.quoteForCustomer(customerId, input.address_id, productIds)).quote.fee_lkr;
     const applied = await evaluateCoupon(db, { code: input.code, customerId, subtotal, deliveryFee });
     // Birthday gift (owner, 2026-10-09): never stacked with a coupon - the
     // larger is used (a tie keeps the coupon). discount_amount stays the
@@ -562,10 +566,20 @@ export class OrderService {
     );
   }
 
-  /** The standard fee for this customer's address (see feeAddress). */
-  async quoteForCustomer(customerId: string, addressId?: string): Promise<{ quote: DeliveryFeeQuote; address_id: string | null }> {
+  /**
+   * The standard fee for this customer's address (see feeAddress). With the
+   * cart's product ids (owner, 2026-10-24) it is measured from the cart's
+   * farthest pickup point, as order placement will charge it.
+   */
+  async quoteForCustomer(
+    customerId: string,
+    addressId?: string,
+    productIds: readonly string[] = []
+  ): Promise<{ quote: DeliveryFeeQuote; address_id: string | null }> {
     const address = await this.feeAddress(customerId, addressId);
-    const quote = await quoteDeliveryFee(address ? { lat: Number(address.latitude), lng: Number(address.longitude) } : null);
+    const quote = await quoteDeliveryFee(address ? { lat: Number(address.latitude), lng: Number(address.longitude) } : null, {
+      productIds,
+    });
     return { quote, address_id: address?.id ?? null };
   }
 
@@ -576,11 +590,19 @@ export class OrderService {
    *
    * Per-km tiers (owner, 2026-10-10): ?address_id= gives the fee for that
    * address (the cart's chosen one); without it, the default address's.
+   * ?product_ids= (owner, 2026-10-24): the fee is measured from the cart's
+   * farthest pickup point (a seller's approved shop for their products).
    */
-  async getCheckoutInfo(customerId: string, addressId?: string, subtotal?: number, lead: CartLead = { lead_days: 0, product_name: null }) {
+  async getCheckoutInfo(
+    customerId: string,
+    addressId?: string,
+    subtotal?: number,
+    lead: CartLead = { lead_days: 0, product_name: null },
+    productIds: readonly string[] = []
+  ) {
     const [settings, fee, birthdaySetting] = await Promise.all([
       checkoutSettings.read(),
-      this.quoteForCustomer(customerId, addressId),
+      this.quoteForCustomer(customerId, addressId, productIds),
       birthdayOfferSettings.read(),
     ]);
     const standardFee = fee.quote.fee_lkr;
@@ -716,7 +738,13 @@ export class OrderService {
       throw new AppError('Order not found.', 404, 'ORDER_NOT_FOUND');
     }
     // "Make delivery free" (owner, 2026-10-21): who waived the fee, what it was, why.
-    return { ...order, delivery_fee_waiver: await deliveryFeeWaiver(order.id) };
+    // Pickups (owner, 2026-10-24): where the goods are collected - the store
+    // and/or each seller's approved shop (pickup-points.ts), worked out on read.
+    return {
+      ...order,
+      delivery_fee_waiver: await deliveryFeeWaiver(order.id),
+      pickups: await orderPickups({ id: order.id, dark_store_id: order.dark_store_id }),
+    };
   }
 
   /** POST /admin/orders/:id/waive-delivery-fee (Admin and Operations): see waive-delivery-fee.ts. */

@@ -11,11 +11,14 @@ import {
   patchSellerSchema,
   payoutParamSchema,
   recordPayoutSchema,
+  rejectLocationSchema,
   rejectSubmissionSchema,
   sellerDetailQuerySchema,
 } from './admin-sellers.schema.js';
 import {
+  approveLocation,
   approveSubmission,
+  rejectLocation,
   deletePayout,
   getSeller,
   listSellers,
@@ -33,6 +36,8 @@ import {
  *   GET    /admin/sellers                              ?status=&search=
  *   GET    /admin/sellers/:id                          seller + statement (?from=&to=)
  *   PATCH  /admin/sellers/:id                          approve / reject / suspend, commission
+ *   POST   /admin/sellers/:id/location/approve         the seller's waiting shop pin becomes the one in use
+ *   POST   /admin/sellers/:id/location/reject          { reason }
  *   GET    /admin/seller-submissions                   ?status=PENDING (default)&seller_id=
  *   POST   /admin/seller-submissions/:id/approve       { selling_price?, category_id? }
  *   POST   /admin/seller-submissions/:id/reject        { reason }
@@ -86,6 +91,24 @@ adminSellersRouter.patch(
   validate({ params: idParamSchema, body: patchSellerSchema }),
   handle(async (req, res) => {
     res.status(200).json({ success: true, data: await updateSeller(req.params.id as string, req.body, actorOf(req)) });
+  })
+);
+
+adminSellersRouter.post(
+  '/sellers/:id/location/approve',
+  ...staff,
+  validate({ params: idParamSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await approveLocation(req.params.id as string, actorOf(req)) });
+  })
+);
+
+adminSellersRouter.post(
+  '/sellers/:id/location/reject',
+  ...staff,
+  validate({ params: idParamSchema, body: rejectLocationSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await rejectLocation(req.params.id as string, req.body.reason, actorOf(req)) });
   })
 );
 

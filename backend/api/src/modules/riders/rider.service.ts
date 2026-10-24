@@ -6,6 +6,7 @@ import { runTransition } from '../orders/lifecycle/engine.js';
 import type { ActionName } from '../orders/lifecycle/catalogue.js';
 import type { CodSettlement } from '../orders/lifecycle/settlement.js';
 import type { Actor } from '../orders/lifecycle/types.js';
+import { orderPickups } from '../orders/pickup-points.js';
 
 const RIDER_STEP: Record<RiderDeliveryStatus, ActionName> = {
   PICKED_UP: 'RIDER_PICKUP',
@@ -80,7 +81,9 @@ export class RiderService {
     if (!delivery) {
       throw new AppError('Delivery assignment not found.', 404, 'DELIVERY_NOT_FOUND');
     }
-    return delivery;
+    // Where to collect the goods (owner, 2026-10-24): the Blynk store and/or
+    // each seller's approved shop (orders/pickup-points.ts), worked out on read.
+    return { ...delivery, pickups: await orderPickups({ id: delivery.order_id }) };
   }
 
   /**

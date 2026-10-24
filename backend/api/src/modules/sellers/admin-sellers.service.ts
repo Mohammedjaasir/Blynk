@@ -15,6 +15,14 @@ import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { notificationService } from '../notifications/notification.service.js';
 import { sellerStatement } from './seller.statement.js';
 import {
+  hasSellerLocationColumns,
+  locationContext,
+  locationNotReady,
+  locationSelect,
+  presentLocation,
+  type LocationContext,
+} from './seller.location.js';
+import {
   submissionPayloadSchema,
   type ApproveSubmissionInput,
   type ListSellersQuery,
@@ -76,9 +84,18 @@ interface SellerRow {
   submissions_pending: number;
   gross: string;
   paid: string;
+  // migration 053 (NULL / 'NONE' until it has run: locationSelect)
+  latitude: number | null;
+  longitude: number | null;
+  location_note: string | null;
+  pending_latitude: number | null;
+  pending_longitude: number | null;
+  pending_location_note: string | null;
+  location_status: string;
+  location_reject_reason: string | null;
 }
 
-function presentSeller(r: SellerRow) {
+function presentSeller(r: SellerRow, ctx: LocationContext) {
   const pct = Number(r.commission_percent);
   const gross = round2(Number(r.gross));
   const earned = round2(gross - round2((gross * pct) / 100));
@@ -99,15 +116,18 @@ function presentSeller(r: SellerRow) {
     products_live: Number(r.products_live),
     submissions_pending: Number(r.submissions_pending),
     due: round2(earned - round2(Number(r.paid))),
+    // the shop pin: approved (used for delivery) and waiting (seller.location.ts)
+    ...presentLocation(r as unknown as Record<string, unknown>, ctx),
   };
 }
 
 /** AdminSeller rows (one query for any number of sellers; `due` follows seller.statement's rules). */
-async function sellerRows(executor: typeof db | Trx, where: ReturnType<typeof sql>[]): Promise<SellerRow[]> {
+async function sellerRows(executor: typeof db | Trx, where: ReturnType<typeof sql>[], located: boolean): Promise<SellerRow[]> {
   const cond = where.length ? sql`WHERE ${sql.join(where, sql` AND `)}` : sql``;
   const r = await sql<SellerRow>`
     SELECT s.id, s.shop_name, s.contact_name, s.address, s.note, s.status, s.rejection_reason,
            s.commission_percent::text AS commission_percent, s.created_at, s.user_id, u.phone, u.email, u.full_name,
+           ${locationSelect(located)},
            (SELECT count(*)::int FROM products p WHERE p.seller_id = s.id AND p.deleted_at IS NULL AND p.is_active) AS products_live,
            (SELECT count(*)::int FROM seller_submissions x WHERE x.seller_id = s.id AND x.status = 'PENDING') AS submissions_pending,
            (SELECT COALESCE(SUM(oi.quantity * oi.estimated_unit_cost), 0)::text
@@ -125,9 +145,10 @@ async function sellerRows(executor: typeof db | Trx, where: ReturnType<typeof sq
 }
 
 async function oneSeller(executor: typeof db | Trx, id: string) {
-  const [row] = await sellerRows(executor, [sql`s.id = ${id}`]);
+  const ctx = await locationContext();
+  const [row] = await sellerRows(executor, [sql`s.id = ${id}`], ctx.columns);
   if (!row) throw new AppError('Seller not found.', 404, 'SELLER_NOT_FOUND');
-  return presentSeller(row);
+  return presentSeller(row, ctx);
 }
 
 interface SubmissionRow {
@@ -210,7 +231,8 @@ export async function listSellers(query: ListSellersQuery) {
     const like = `%${query.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     where.push(sql`(s.shop_name ILIKE ${like} OR (u.phone NOT LIKE 'nophone:%' AND u.phone ILIKE ${like}) OR u.email ILIKE ${like} OR s.contact_name ILIKE ${like} OR u.full_name ILIKE ${like})`);
   }
-  return { sellers: (await sellerRows(db, where)).map(presentSeller) };
+  const ctx = await locationContext();
+  return { sellers: (await sellerRows(db, where, ctx.columns)).map((r) => presentSeller(r, ctx)) };
 }
 
 export async function getSeller(id: string, period: { from?: string; to?: string } = {}) {
@@ -310,6 +332,102 @@ export async function updateSeller(id: string, input: PatchSellerInput, actor: A
   }
   logger.info({ sellerId: id, by: actor.actorId, status: input.status }, 'Seller updated by staff');
   return { seller: out.seller };
+}
+
+// ----------------------------------------------------------------------------
+// Shop location (migration 053; seller.location.ts)
+// ----------------------------------------------------------------------------
+
+/** The seller's waiting row, locked; 503 before migration 053, 404 / 409 when there is nothing to review. */
+async function lockPendingLocation(trx: Trx, id: string) {
+  if (!(await hasSellerLocationColumns())) throw locationNotReady();
+  const current = await trx.selectFrom('sellers').selectAll().where('id', '=', id).forUpdate().executeTakeFirst();
+  if (!current) throw new AppError('Seller not found.', 404, 'SELLER_NOT_FOUND');
+  if (current.location_status !== 'PENDING' || current.pending_latitude === null || current.pending_longitude === null) {
+    throw new AppError('This seller has no shop location waiting for review.', 409, 'LOCATION_NOT_PENDING', {
+      location_status: current.location_status,
+    });
+  }
+  return current;
+}
+
+const coordOf = (v: string | number | null) => (v === null ? null : Number(v));
+
+/** The waiting pin becomes the one in use (riders collect there; delivery is measured from it). */
+export async function approveLocation(id: string, actor: AuditActor) {
+  const seller = await db.transaction().execute(async (trx) => {
+    const current = await lockPendingLocation(trx, id);
+    await trx
+      .updateTable('sellers')
+      .set({
+        latitude: current.pending_latitude,
+        longitude: current.pending_longitude,
+        location_note: current.pending_location_note,
+        pending_latitude: null,
+        pending_longitude: null,
+        pending_location_note: null,
+        location_status: 'APPROVED',
+        location_reject_reason: null,
+        location_reviewed_by: actor.actorId,
+        location_reviewed_at: sql`now()`,
+        updated_at: sql`now()`,
+      })
+      .where('id', '=', id)
+      .execute();
+    await writeAudit(trx, actor, {
+      action: 'SELLER_LOCATION_APPROVED',
+      entityType: 'SELLER',
+      entityId: id,
+      oldValues: {
+        latitude: coordOf(current.latitude),
+        longitude: coordOf(current.longitude),
+        location_note: current.location_note,
+      },
+      newValues: {
+        latitude: coordOf(current.pending_latitude),
+        longitude: coordOf(current.pending_longitude),
+        location_note: current.pending_location_note,
+        shop_name: current.shop_name,
+      },
+    });
+    return oneSeller(trx, id);
+  });
+  logger.info({ sellerId: id, by: actor.actorId }, 'Seller shop location approved');
+  return { seller };
+}
+
+/** The waiting pin is refused; it stays visible (with the reason) and the approved one, if any, stays in use. */
+export async function rejectLocation(id: string, reason: string, actor: AuditActor) {
+  const seller = await db.transaction().execute(async (trx) => {
+    const current = await lockPendingLocation(trx, id);
+    await trx
+      .updateTable('sellers')
+      .set({
+        location_status: 'REJECTED',
+        location_reject_reason: reason,
+        location_reviewed_by: actor.actorId,
+        location_reviewed_at: sql`now()`,
+        updated_at: sql`now()`,
+      })
+      .where('id', '=', id)
+      .execute();
+    await writeAudit(trx, actor, {
+      action: 'SELLER_LOCATION_REJECTED',
+      entityType: 'SELLER',
+      entityId: id,
+      oldValues: { location_status: 'PENDING' },
+      newValues: {
+        location_status: 'REJECTED',
+        reason,
+        pending_latitude: coordOf(current.pending_latitude),
+        pending_longitude: coordOf(current.pending_longitude),
+        shop_name: current.shop_name,
+      },
+    });
+    return oneSeller(trx, id);
+  });
+  logger.info({ sellerId: id, by: actor.actorId }, 'Seller shop location rejected');
+  return { seller };
 }
 
 // ----------------------------------------------------------------------------

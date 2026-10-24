@@ -1,6 +1,13 @@
-import { sql, type Selectable } from 'kysely';
+import { sql, type Selectable, type Updateable } from 'kysely';
 import { db } from '../../database/connection.js';
 import type { SellersTable, SellerSubmissionsTable } from '../../database/types.js';
+import {
+  locationContext,
+  locationNotReady,
+  presentLocation,
+  type LocationContext,
+  type SellerLocation,
+} from './seller.location.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { priceForProduct } from '../catalog/catalog.pricing.js';
 import type { CreateProductInput, EditProductInput, ProfileInput } from './seller.schema.js';
@@ -16,7 +23,8 @@ import { sellerStatement, type Statement } from './seller.statement.js';
 type SellerRow = Selectable<SellersTable>;
 type SubmissionRow = Selectable<SellerSubmissionsTable>;
 
-export interface SellerDto {
+/** The seller's own row, plus the shop location (seller.location.ts; nulls / NONE before migration 053). */
+export interface SellerDto extends SellerLocation {
   id: string;
   shop_name: string;
   contact_name: string | null;
@@ -73,7 +81,7 @@ export interface SellerProductDto {
   last_rejected: SubmissionDto | null;
 }
 
-export const toSellerDto = (s: SellerRow): SellerDto => ({
+export const toSellerDto = (s: SellerRow, ctx: LocationContext): SellerDto => ({
   id: s.id,
   shop_name: s.shop_name,
   contact_name: s.contact_name,
@@ -83,7 +91,57 @@ export const toSellerDto = (s: SellerRow): SellerDto => ({
   rejection_reason: s.rejection_reason,
   commission_percent: Number(s.commission_percent),
   created_at: s.created_at,
+  ...presentLocation(s as unknown as Record<string, unknown>, ctx),
 });
+
+const coord = (v: unknown): number | null => (v === null || v === undefined || v === '' ? null : Number(v));
+const samePoint = (a: number | null, b: number | null) => a !== null && b !== null && Math.round(a * 1e6) === Math.round(b * 1e6);
+
+/**
+ * What a profile save does to the shop location (migration 053). The seller's pin always waits for
+ * Admin: it goes to the pending_* columns and location_status PENDING, and the approved point stays
+ * in force until Admin approves it.
+ *   - latitude + longitude: a new waiting point (its note: the one sent, else the waiting / approved
+ *     one). The approved point sent back unchanged just cancels any waiting change.
+ *   - latitude: null + longitude: null: withdraws the waiting change (the approved point stays; only
+ *     Admin's approval moves the point delivery uses).
+ *   - location_note alone: rewrites the waiting note; with only an approved point, a changed note
+ *     waits for Admin like a moved pin; with no point yet it is kept for when the seller pins one.
+ */
+function locationChange(current: SellerRow, input: ProfileInput): Updateable<SellersTable> {
+  const lat = coord(current.latitude);
+  const lng = coord(current.longitude);
+  const hasApproved = lat !== null && lng !== null;
+  const approvedNote = current.location_note ?? null;
+  const clearPending = { pending_latitude: null, pending_longitude: null, pending_location_note: null, location_reject_reason: null };
+
+  if (input.latitude != null && input.longitude != null) {
+    const note = input.location_note !== undefined ? input.location_note : current.pending_location_note ?? approvedNote;
+    if (hasApproved && samePoint(input.latitude, lat) && samePoint(input.longitude, lng) && (note ?? null) === approvedNote) {
+      return { ...clearPending, location_status: 'APPROVED' };
+    }
+    return {
+      pending_latitude: input.latitude,
+      pending_longitude: input.longitude,
+      pending_location_note: note ?? null,
+      location_status: 'PENDING',
+      location_reject_reason: null,
+    };
+  }
+  if (input.latitude === null) {
+    return { ...clearPending, location_status: hasApproved ? 'APPROVED' : 'NONE' };
+  }
+  if (input.location_note !== undefined) {
+    const note = input.location_note ?? null;
+    if (current.location_status === 'PENDING') return { pending_location_note: note };
+    if (hasApproved) {
+      if (note === approvedNote) return {};
+      return { pending_latitude: lat, pending_longitude: lng, pending_location_note: note, location_status: 'PENDING', location_reject_reason: null };
+    }
+    return { pending_location_note: note };
+  }
+  return {};
+}
 
 export const toSubmissionDto = (s: SubmissionRow): SubmissionDto => ({
   id: s.id,
@@ -137,7 +195,7 @@ export class SellerService {
 
   async me(userId: string) {
     const seller = await this.sellerOf(userId);
-    const [products, pending] = await Promise.all([
+    const [products, pending, ctx] = await Promise.all([
       db
         .selectFrom('products')
         .select(sql<string>`count(*)`.as('n'))
@@ -150,8 +208,9 @@ export class SellerService {
         .where('seller_id', '=', seller.id)
         .where('status', '=', 'PENDING')
         .executeTakeFirstOrThrow(),
+      locationContext(),
     ]);
-    return { seller: toSellerDto(seller), counts: { products: Number(products.n), pending: Number(pending.n) } };
+    return { seller: toSellerDto(seller, ctx), counts: { products: Number(products.n), pending: Number(pending.n) } };
   }
 
   async updateProfile(userId: string, input: ProfileInput) {
@@ -159,20 +218,31 @@ export class SellerService {
     if (seller.status === 'SUSPENDED') {
       throw new AppError('Your seller account is suspended.', 403, 'SELLER_SUSPENDED');
     }
-    const updated = await db
-      .updateTable('sellers')
-      .set({
-        shop_name: input.shop_name,
-        // Left out = unchanged; blank or null = cleared.
-        ...(input.contact_name !== undefined ? { contact_name: input.contact_name } : {}),
-        ...(input.address !== undefined ? { address: input.address } : {}),
-        ...(input.note !== undefined ? { note: input.note } : {}),
-        updated_at: new Date(),
-      })
-      .where('id', '=', seller.id)
-      .returningAll()
-      .executeTakeFirstOrThrow();
-    return { seller: toSellerDto(updated) };
+    const ctx = await locationContext();
+    // Before migration 053 a pin or a note cannot be kept: refuse (nothing saved) rather than drop
+    // it silently. Nulls (nothing to keep) are ignored, so the rest of the profile still saves.
+    if (!ctx.columns && (input.latitude != null || input.longitude != null || input.location_note != null)) {
+      throw locationNotReady();
+    }
+    const updated = await db.transaction().execute(async (trx) => {
+      // Locked so a location change is worked out from the row as Admin last left it.
+      const current = await trx.selectFrom('sellers').selectAll().where('id', '=', seller.id).forUpdate().executeTakeFirstOrThrow();
+      return trx
+        .updateTable('sellers')
+        .set({
+          shop_name: input.shop_name,
+          // Left out = unchanged; blank or null = cleared.
+          ...(input.contact_name !== undefined ? { contact_name: input.contact_name } : {}),
+          ...(input.address !== undefined ? { address: input.address } : {}),
+          ...(input.note !== undefined ? { note: input.note } : {}),
+          ...(ctx.columns ? locationChange(current, input) : {}),
+          updated_at: new Date(),
+        })
+        .where('id', '=', seller.id)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    });
+    return { seller: toSellerDto(updated, ctx) };
   }
 
   async categories() {

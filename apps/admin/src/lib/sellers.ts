@@ -30,6 +30,72 @@ export interface AdminSeller {
   products_live: number;
   submissions_pending: number;
   due: number;
+  /*
+   * The shop pin (migration 053). Optional: an API from before it leaves them out, and until the
+   * migration runs they are null / 'NONE'. latitude / longitude / location_note are the APPROVED
+   * point (riders collect there, delivery is measured from it); pending_* wait for Admin.
+   */
+  latitude?: number | null;
+  longitude?: number | null;
+  location_note?: string | null;
+  pending_latitude?: number | null;
+  pending_longitude?: number | null;
+  pending_location_note?: string | null;
+  location_status?: LocationStatus;
+  location_reject_reason?: string | null;
+  distance_km_from_store?: number | null;
+  pending_distance_km_from_store?: number | null;
+}
+
+// ---------------------------------------------------------------- shop location
+
+export type LocationStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface MapPoint {
+  lat: number;
+  lng: number;
+}
+
+const point = (lat: number | null | undefined, lng: number | null | undefined): MapPoint | null =>
+  typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+
+/** The approved shop point (what delivery uses), or null. */
+export const approvedPoint = (s: Pick<AdminSeller, 'latitude' | 'longitude'>): MapPoint | null => point(s.latitude, s.longitude);
+
+/** The point waiting for review (or the one that was rejected), or null. */
+export const pendingPoint = (s: Pick<AdminSeller, 'pending_latitude' | 'pending_longitude'>): MapPoint | null =>
+  point(s.pending_latitude, s.pending_longitude);
+
+/** A pin waiting for Admin. */
+export const locationWaiting = (s: Pick<AdminSeller, 'location_status' | 'pending_latitude' | 'pending_longitude'>): boolean =>
+  s.location_status === 'PENDING' && pendingPoint(s) !== null;
+
+export const googleMapsUrl = (p: MapPoint): string => `https://www.google.com/maps?q=${p.lat},${p.lng}`;
+
+/** A small OpenStreetMap embed around the pin (about 1 km across). */
+export function osmEmbedUrl(p: MapPoint, span = 0.006): string {
+  const f = (n: number) => n.toFixed(6);
+  const bbox = [p.lng - span, p.lat - span / 2, p.lng + span, p.lat + span / 2].map(f).join(',');
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${f(p.lat)},${f(p.lng)}`;
+}
+
+/** "7.290572, 80.633728" */
+export const pointText = (p: MapPoint): string => `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
+
+/** "3.2 km from the Blynk store", or null when the distance is unknown. */
+export function distanceText(km: number | null | undefined): string | null {
+  if (typeof km !== 'number' || !Number.isFinite(km)) return null;
+  return `${km.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km from the Blynk store`;
+}
+
+export const LOCATION_REASON_MAX = 200;
+
+/** Why a location rejection reason cannot be sent (null = fine). */
+export function locationReasonProblem(reason: string): string | null {
+  const r = reason.trim();
+  if (r.length < REASON_LIMITS.min) return `Write a reason (at least ${REASON_LIMITS.min} characters).`;
+  if (r.length > LOCATION_REASON_MAX) return `At most ${LOCATION_REASON_MAX} characters.`;
+  return null;
 }
 
 export interface StatementLine {

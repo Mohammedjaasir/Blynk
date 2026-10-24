@@ -4,6 +4,7 @@ import { haversineM, roadDistanceM } from '../routing/index.js';
 import { priceByKmTiers } from '../pricing/km-tiers.js';
 import { readDeliveryFeeSetting, type DeliveryFeeMode } from '../configuration/settings.service.js';
 import { orderRepository, type DBConnection } from './order.repository.js';
+import { farthestPickupDistance, pickupPointsFor } from './pickup-points.js';
 
 /*
  * THE delivery fee for one address (owner, 2026-10-10) - the only place it is
@@ -14,7 +15,11 @@ import { orderRepository, type DBConnection } from './order.repository.js';
  *   FLAT            fee = fee_lkr (as before; no distance is measured)
  *   DISTANCE_TIERS  distance = road km active hub -> address (OSRM route
  *                   service, 2.5 s timeout; straight line x 1.3 marked
- *                   estimated when OSRM cannot answer)
+ *                   estimated when OSRM cannot answer). With the cart's
+ *                   products (owner, 2026-10-24): the LONGEST such distance
+ *                   from any of the cart's pickup points - the hub for Blynk's
+ *                   products, a seller's approved shop point for theirs
+ *                   (pickup-points.ts); a Blynk-only cart = the hub, as before
  *                   fee = per-km tiers (pricing/km-tiers.ts): every started
  *                   km counts, the last row repeats, then the optional cap
  *                   max_fee_lkr. Without an address: the km-1 amount.
@@ -34,7 +39,7 @@ export interface DeliveryFeeQuote {
   /** The standard fee for this address, before any free delivery. */
   fee_lkr: number;
   fee_mode: DeliveryFeeMode;
-  /** Road km hub -> address (2 decimals); null in FLAT mode or without an address. */
+  /** Road km farthest pickup point (the hub for a Blynk-only cart) -> address (2 decimals); null in FLAT mode or without an address. */
   distance_km: number | null;
   /** true = OSRM was unavailable and the distance is straight line x 1.3. */
   distance_estimated: boolean | null;
@@ -78,10 +83,16 @@ export async function measureFeeDistance(from: Point, to: Point): Promise<{ km: 
 /**
  * The fee for delivering to `to` (null = no address known yet). `hub` saves a
  * lookup when the caller already has the active dark store.
+ *
+ * `productIds` (owner, 2026-10-24): the cart's products. The distance is then
+ * measured from the FARTHEST pickup point of the cart - the Blynk store for
+ * Blynk's products, a seller's approved shop point for that seller's products
+ * (pickup-points.ts). Without it (or with only Blynk products) the distance
+ * is from the store, as before.
  */
 export async function quoteDeliveryFee(
   to: Point | null,
-  opts: { executor?: DBConnection; hub?: { latitude: unknown; longitude: unknown } | null } = {}
+  opts: { executor?: DBConnection; hub?: { latitude: unknown; longitude: unknown } | null; productIds?: readonly string[] } = {}
 ): Promise<DeliveryFeeQuote> {
   const executor = opts.executor ?? db;
   const setting = await readDeliveryFeeSetting(executor);
@@ -89,11 +100,13 @@ export async function quoteDeliveryFee(
     return { fee_lkr: setting.fee_lkr, fee_mode: 'FLAT', distance_km: null, distance_estimated: null, km_counted: null };
   }
   const hub = opts.hub ?? (to ? await orderRepository.findActiveDarkStore(executor) : null);
-  if (!to || !hub) {
+  const points = to ? await pickupPointsFor(opts.productIds ?? [], hub ?? null) : [];
+  // The fee's own measurement (cached OSRM, straight line x 1.3 fallback) for every leg; the longest wins.
+  const distance = to ? await farthestPickupDistance(points, to, measureFeeDistance) : null;
+  if (!to || !distance) {
     const price = priceByKmTiers(setting.tiers, 0, setting.max_fee_lkr);
     return { fee_lkr: price.total, fee_mode: 'DISTANCE_TIERS', distance_km: null, distance_estimated: null, km_counted: null };
   }
-  const distance = await measureFeeDistance({ lat: Number(hub.latitude), lng: Number(hub.longitude) }, to);
   const price = priceByKmTiers(setting.tiers, distance.km, setting.max_fee_lkr);
   return {
     fee_lkr: price.total,

@@ -131,6 +131,26 @@ describe('Sellers list', () => {
     await waitFor(() => expect(api.find('GET', '/admin/sellers').some((c) => c.query.get('search') === 'galle')).toBe(true));
   });
 
+  it('marks sellers with no approved shop location, and a location waiting for review', async () => {
+    renderAt('/sellers', (c) =>
+      c.method === 'GET' && c.path === '/admin/sellers'
+        ? ok({
+            sellers: [
+              seller(),
+              seller({ id: 's2', shop_name: 'Galle Sweets', latitude: 6.03, longitude: 80.21, location_status: 'APPROVED' }),
+              seller({ id: 's3', shop_name: 'Kandy Tea', location_status: 'PENDING', pending_latitude: 7.29, pending_longitude: 80.63 }),
+            ],
+          })
+        : undefined
+    );
+    const table = await screen.findByRole('table', { name: 'Sellers' });
+    const rowOf = (name: string) => within(table).getByText(name).closest('tr') as HTMLElement;
+    expect(within(rowOf('Jaffna Spice House')).getByText('No location')).toBeInTheDocument();
+    expect(within(rowOf('Galle Sweets')).queryByText('No location')).toBeNull();
+    expect(within(rowOf('Galle Sweets')).queryByText('Location waiting')).toBeNull();
+    expect(within(rowOf('Kandy Tea')).getByText('Location waiting')).toBeInTheDocument();
+  });
+
   it('says so when there are none', async () => {
     renderAt('/sellers', (c) => (c.method === 'GET' && c.path === '/admin/sellers' ? ok({ sellers: [] }) : undefined));
     expect(await screen.findByText('No sellers yet')).toBeInTheDocument();
@@ -163,9 +183,103 @@ describe('Seller detail', () => {
         stmt = { ...stmt, paid: 0, due: 900, payouts: [] };
         return ok({ statement: stmt });
       }
+      if (c.method === 'POST' && c.path === '/admin/sellers/s1/location/approve') {
+        current = {
+          ...current,
+          latitude: current.pending_latitude,
+          longitude: current.pending_longitude,
+          location_note: current.pending_location_note,
+          distance_km_from_store: current.pending_distance_km_from_store,
+          pending_latitude: null,
+          pending_longitude: null,
+          pending_location_note: null,
+          pending_distance_km_from_store: null,
+          location_status: 'APPROVED',
+        };
+        return ok({ seller: current });
+      }
+      if (c.method === 'POST' && c.path === '/admin/sellers/s1/location/reject') {
+        current = { ...current, location_status: 'REJECTED', location_reject_reason: (c.body as { reason: string }).reason };
+        return ok({ seller: current });
+      }
       return undefined;
     });
   }
+
+  const waitingLocation = {
+    latitude: null,
+    longitude: null,
+    location_note: null,
+    distance_km_from_store: null,
+    pending_latitude: 9.661498,
+    pending_longitude: 80.025543,
+    pending_location_note: 'Opposite the Nallur temple car park',
+    pending_distance_km_from_store: 312.4,
+    location_status: 'PENDING',
+    location_reject_reason: null,
+  };
+
+  it('says "No location set yet" and the Approve dialog warns (but still approves)', async () => {
+    const user = userEvent.setup();
+    const api = open();
+    await screen.findByRole('heading', { name: 'Jaffna Spice House' });
+    expect(within(screen.getByRole('region', { name: 'Shop location' })).getByText('No location set yet')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/no approved shop location yet/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(api.find('PATCH', '/admin/sellers/s1')).toHaveLength(1));
+  });
+
+  it('shows the waiting pin with its map, distance and Google Maps link, and approves it', async () => {
+    const user = userEvent.setup();
+    const api = open(seller(waitingLocation));
+    await screen.findByRole('heading', { name: 'Jaffna Spice House' });
+    const panel = screen.getByRole('region', { name: 'Shop location' });
+    expect(within(within(panel).getByRole('group', { name: 'Approved location' })).getByText('No approved location yet')).toBeInTheDocument();
+    const waiting = within(panel).getByRole('group', { name: 'Waiting location' });
+    expect(within(waiting).getByText('9.661498, 80.025543')).toBeInTheDocument();
+    expect(within(waiting).getByText('Opposite the Nallur temple car park')).toBeInTheDocument();
+    expect(within(waiting).getByText('312.4 km from the Blynk store')).toBeInTheDocument();
+    expect(within(waiting).getByRole('link', { name: 'Open in Google Maps' })).toHaveAttribute('href', 'https://www.google.com/maps?q=9.661498,80.025543');
+    expect(within(waiting).getByTitle('Map: waiting location').getAttribute('src')).toContain('marker=9.661498,80.025543');
+
+    // approving the seller warns that the location still waits
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(within(screen.getByRole('dialog')).getByText(/still waiting for your approval/)).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+    await user.click(within(waiting).getByRole('button', { name: 'Approve location' }));
+    await waitFor(() => expect(api.find('POST', '/admin/sellers/s1/location/approve')).toHaveLength(1));
+    expect(await screen.findByText("Jaffna Spice House's shop location is approved.")).toBeInTheDocument();
+    const approved = within(screen.getByRole('region', { name: 'Shop location' })).getByRole('group', { name: 'Approved location' });
+    expect(within(approved).getByText('9.661498, 80.025543')).toBeInTheDocument();
+    expect(within(approved).getByText('312.4 km from the Blynk store')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Waiting location' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Approve location' })).toBeNull();
+  });
+
+  it('rejects a waiting pin only with a reason, and shows it as rejected', async () => {
+    const user = userEvent.setup();
+    const api = open(seller({ ...waitingLocation, latitude: 9.66, longitude: 80.02, distance_km_from_store: 311.9, location_note: 'Old shop' }));
+    await screen.findByRole('heading', { name: 'Jaffna Spice House' });
+    const panel = screen.getByRole('region', { name: 'Shop location' });
+    expect(within(within(panel).getByRole('group', { name: 'Approved location' })).getByText('311.9 km from the Blynk store')).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'Reject location' }));
+    const dialog = screen.getByRole('dialog', { name: 'Reject shop location' });
+    expect(within(dialog).getByText(/approved location stays in use/)).toBeInTheDocument();
+    await user.type(within(dialog).getByRole('textbox'), 'ab');
+    await user.click(within(dialog).getByRole('button', { name: 'Reject' }));
+    expect(within(dialog).getByText(/at least 3 characters/)).toBeInTheDocument();
+    expect(api.find('POST', '/admin/sellers/s1/location/reject')).toHaveLength(0);
+    await user.type(within(dialog).getByRole('textbox'), 'c - the pin is in the lagoon');
+    await user.click(within(dialog).getByRole('button', { name: 'Reject' }));
+    await waitFor(() => expect(api.find('POST', '/admin/sellers/s1/location/reject')).toHaveLength(1));
+    expect(api.find('POST', '/admin/sellers/s1/location/reject')[0]!.body).toEqual({ reason: 'abc - the pin is in the lagoon' });
+    const rejected = await screen.findByRole('group', { name: 'Rejected location' });
+    expect(within(rejected).getByText('Rejected because: abc - the pin is in the lagoon')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve location' })).toBeNull();
+  });
 
   it('shows the profile and the statement with its per-product lines', async () => {
     open();

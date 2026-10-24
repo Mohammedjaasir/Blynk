@@ -1105,6 +1105,8 @@ export interface CashHandinsTable {
 
 /** Migration 052 (seller portal; docs/superpowers/specs/2026-10-23-seller-portal-design.md). */
 export type SellerStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+/** Migration 053: the latest shop-location request. */
+export type SellerLocationStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
 export interface SellersTable {
   id: Generated<string>;
   user_id: string;
@@ -1117,6 +1119,19 @@ export interface SellersTable {
   rejection_reason: ColumnType<string | null, string | null | undefined, string | null>;
   reviewed_by: ColumnType<string | null, string | null | undefined, string | null>;
   reviewed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  // Migration 053 (shop pin that Admin approves). Only touched through seller.location.ts guards:
+  // the API runs before the migration does, so a row may come back without them (pg returns
+  // NUMERIC as a string).
+  latitude: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  longitude: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  location_note: ColumnType<string | null, string | null | undefined, string | null>;
+  pending_latitude: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  pending_longitude: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  pending_location_note: ColumnType<string | null, string | null | undefined, string | null>;
+  location_status: ColumnType<SellerLocationStatus, SellerLocationStatus | undefined, SellerLocationStatus>;
+  location_reject_reason: ColumnType<string | null, string | null | undefined, string | null>;
+  location_reviewed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  location_reviewed_by: ColumnType<string | null, string | null | undefined, string | null>;
   created_at: Generated<Date>;
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 }
