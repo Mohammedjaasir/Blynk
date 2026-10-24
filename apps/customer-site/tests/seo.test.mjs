@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process';
 const site = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pagesDir = join(site, 'pages');
 const SITE = 'https://blynk.lk';
-const LEGAL = ['/privacy', '/terms', '/refunds'];
+const LEGAL = ['/privacy', '/terms', '/refunds', '/delete-account'];
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {

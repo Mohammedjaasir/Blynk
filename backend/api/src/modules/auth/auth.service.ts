@@ -25,6 +25,15 @@ const otpSms = new SmsProvider();
  * in production. A server started without NODE_ENV is "development", so the
  * code is not exposed by accident.
  */
+/**
+ * The fixed sign-in code for the Google Play review number (REVIEW_LOGIN_PHONE /
+ * REVIEW_LOGIN_OTP), or null for every other number or when it is not configured. The usual
+ * rate limits, expiry and attempt limits still apply; only the code and the SMS differ.
+ */
+export function reviewLoginCode(phone: string, e: { REVIEW_LOGIN_PHONE: string; REVIEW_LOGIN_OTP: string } = env): string | null {
+  return e.REVIEW_LOGIN_PHONE && e.REVIEW_LOGIN_OTP && phone === e.REVIEW_LOGIN_PHONE ? e.REVIEW_LOGIN_OTP : null;
+}
+
 export function shouldExposeDevOtp(e: { NODE_ENV: string; EXPOSE_DEV_OTP: boolean }): boolean {
   if (e.NODE_ENV === 'test') return true;
   return e.NODE_ENV === 'development' && e.EXPOSE_DEV_OTP === true;
@@ -207,7 +216,9 @@ export class AuthService {
       },
     ]);
 
-    const otp = generateOtp();
+    // Google Play review sign-in: the one configured number gets the fixed code and no SMS.
+    const review = reviewLoginCode(phone);
+    const otp = review ?? generateOtp();
     const otpHash = await hashOtp(otp);
     const expiresAt = new Date(Date.now() + env.OTP_EXPIRY_MINUTES * 60 * 1000);
 
@@ -231,7 +242,9 @@ export class AuthService {
     // stored and, outside production, returned as dev_otp - no SMS was ever
     // sent. With dev_ placeholder credentials the provider simulates the
     // send, so local development without a key still works.
-    const sms = await otpSms.send({
+    const sms = review
+      ? ({ success: true, providerName: 'review-login' } as Awaited<ReturnType<typeof otpSms.send>>)
+      : await otpSms.send({
       // Unique per send: it is also the gateway's Idempotency-Key, and two
       // codes requested in the same millisecond must both go out.
       notificationId: `otp_${crypto.randomUUID()}`,

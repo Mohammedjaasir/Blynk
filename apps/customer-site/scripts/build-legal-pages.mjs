@@ -49,6 +49,13 @@ export const LEGAL_PAGES = [
     description: 'How to report missing, damaged or wrong items from a Blynk order, what can be returned, how refunds to your Blynk Wallet work and how to cancel.',
     footer: 'Return, Refund and Cancellation Policy',
   },
+  {
+    // Google Play (2026-10-24): an app with accounts must offer deletion inside the app AND on the web.
+    name: 'delete-account',
+    title: 'Delete your Blynk account',
+    description: 'How to delete your Blynk account and personal data - in the app, or by asking us - and what we keep and for how long.',
+    footer: 'Delete your account',
+  },
 ];
 
 // ---------------------------------------------------------------- helpers
@@ -250,7 +257,7 @@ ${body}
         ${tok.whatsappUs}</p>
       <small>© ${c.lastUpdated.slice(0, 4)} Blynk · Dharga Town &amp; Aluthgama, Sri Lanka</small>
       <nav class="footer__legal" aria-label="Legal">
-        ${[LEGAL_PAGES[1], LEGAL_PAGES[0], LEGAL_PAGES[2]].map(footerLink).join('\n        ')}
+        ${[LEGAL_PAGES[1], LEGAL_PAGES[0], LEGAL_PAGES[2], LEGAL_PAGES[3]].map(footerLink).join('\n        ')}
       </nav>
     </div>
   </footer>

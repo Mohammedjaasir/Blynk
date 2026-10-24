@@ -41,7 +41,7 @@ COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-s
      apps/customer-site/store-hours.js apps/customer-site/q.html apps/customer-site/q.js \
      apps/customer-site/manifest.webmanifest apps/customer-site/firebase-messaging-sw.js \
      apps/customer-site/walkthrough.js apps/customer-site/analytics.js \
-     apps/customer-site/privacy.html apps/customer-site/terms.html apps/customer-site/refunds.html /usr/share/nginx/html/
+     apps/customer-site/privacy.html apps/customer-site/terms.html apps/customer-site/refunds.html apps/customer-site/delete-account.html /usr/share/nginx/html/
 COPY apps/customer-site/assets /usr/share/nginx/html/assets
 # SEO pages (owner's SEO brief, 2026-10-15): pages/ goes to the site root as it
 # is - the area and category pages (<name>/index.html), the Sinhala and Tamil

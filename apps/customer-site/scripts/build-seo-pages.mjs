@@ -846,6 +846,7 @@ export const STATIC_PAGES = [
   { path: '/privacy', lastmod: LEGAL_UPDATED },
   { path: '/terms', lastmod: LEGAL_UPDATED },
   { path: '/refunds', lastmod: LEGAL_UPDATED },
+  { path: '/delete-account', lastmod: LEGAL_UPDATED },
 ];
 
 function sitemap(entries) {

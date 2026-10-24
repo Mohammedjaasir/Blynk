@@ -41,6 +41,15 @@ const envSchema = z.object({
   EXPOSE_DEV_OTP: z
     .preprocess((val) => (val === 'true' ? true : val === 'false' || val === undefined || val === '' ? false : val), z.boolean())
     .default(false),
+  // Google Play review sign-in (2026-10-24): Play's reviewers cannot receive our SMS, so ONE
+  // number may use a fixed 6-digit code instead (no SMS is sent for it). Both empty = off.
+  // Use a number nobody owns, e.g. +94700000001, and a code that is not easy to guess.
+  REVIEW_LOGIN_PHONE: z
+    .string()
+    .trim()
+    .regex(/^(\+94\d{9})?$/, 'REVIEW_LOGIN_PHONE must look like +94700000001')
+    .default(''),
+  REVIEW_LOGIN_OTP: z.string().trim().regex(/^(\d{6})?$/, 'REVIEW_LOGIN_OTP must be 6 digits').default(''),
 
   // Media storage (admin-uploaded product / promotion images).
   // MEDIA_ROOT is a directory on the API host; PUBLIC_BASE_URL is the

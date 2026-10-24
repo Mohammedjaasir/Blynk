@@ -62,7 +62,7 @@ Under the PDPA you can ask us to:
 
 - Give you a copy of your personal data
 - Correct inaccurate or incomplete data
-- Delete your data, where we no longer need it by law
+- Delete your data, where we no longer need it by law. To delete your Blynk account, use **Profile -> Delete account** in the app, or follow the steps at https://blynk.lk/delete-account
 - Stop or limit certain uses, including marketing
 - Withdraw consent you gave earlier
 

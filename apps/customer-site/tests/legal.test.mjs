@@ -193,12 +193,13 @@ test('each page: owner title, Last updated date, a contents list that matches it
   const css = read('styles.css');
   assert.match(css, /\.legal-table\s*\{/);
   assert.match(css, /\.legal-table td::before \{ content: attr\(data-label\)/);
-  assert.equal(LEGAL_PAGES.map((p) => p.name).join(), NAMES.join());
+  // + the web account-deletion page Google Play asks for (2026-10-24); short, so not in NAMES' policy checks
+  assert.equal(LEGAL_PAGES.map((p) => p.name).join(), [...NAMES, 'delete-account'].join());
 });
 
 test('the Dockerfile ships the legal pages and the customer app still links to /terms, /privacy and /refunds', () => {
   const docker = read('Dockerfile');
-  assert.match(docker, /apps\/customer-site\/privacy\.html apps\/customer-site\/terms\.html apps\/customer-site\/refunds\.html \/usr\/share\/nginx\/html\//);
+  assert.match(docker, /apps\/customer-site\/privacy\.html apps\/customer-site\/terms\.html apps\/customer-site\/refunds\.html apps\/customer-site\/delete-account\.html \/usr\/share\/nginx\/html\//);
   const policies = readFileSync(join(site, '..', 'customer-app', 'src', 'blynk', 'legal', 'policies.ts'), 'utf8');
   for (const n of NAMES) assert.match(policies, new RegExp(`path: '/${n}'`));
   assert.match(policies, /SITE = 'https:\/\/blynk\.lk'/);
