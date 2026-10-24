@@ -140,6 +140,28 @@ export interface StoreInfo {
    * anything missing keeps the app's own (src/blynk/lib/appTexts.ts).
    */
   app_texts?: PublicAppTexts;
+  /**
+   * Staff-made product rails on Home (Admin / Ops "Home sections", 2026-10-24; docs/superpowers/plans/
+   * 2026-10-24-home-sections.md): only the LIVE ones, in order. Missing (an older API) or [] = none.
+   */
+  home_sections?: PublicHomeSection[];
+}
+
+/** One live Home section in GET /store `home_sections`: a category's products, or hand-picked ones. */
+export interface PublicHomeSection {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  /** ISO datetime; the section is gone after it. */
+  ends_at: string | null;
+  /** true (with ends_at): the header shows "Ends in 02:14:09" counting down. */
+  show_countdown: boolean;
+  /** 4-12: how many products a CATEGORY rail shows. */
+  max_items: number;
+  /** CATEGORY source: the category; null for hand-picked products. */
+  category: { id: string; slug: string } | null;
+  /** PRODUCTS source: the products in staff order; null for a category. */
+  product_ids: string[] | null;
 }
 
 export interface PublicAppTexts {

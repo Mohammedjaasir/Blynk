@@ -33,6 +33,7 @@ import {
   BagBadge, ChevronIcon, CloseIcon, HeartsIcon, LocateIcon, MenuIcon, NavIcon, OfferBadge, SearchIcon, SlidersIcon, StarBadge,
 } from '@/components/icons';
 import { HomeFooter } from '@/components/HomeFooter';
+import { HomeSections } from '@/components/HomeSections';
 import { ProductCard } from '@/components/ProductCard';
 import { PromoBand } from '@/components/PromoBand';
 import { DoctorsHomeEntry } from '@/blynk/doctors/DoctorsHomeEntry';
@@ -404,6 +405,9 @@ export default function Home() {
                     </ScrollView>
                   </>
                 )}
+
+                {/* staff-made rails (Admin / Ops "Home sections"), after Under LKR 300 */}
+                {!DEMO && <HomeSections />}
 
                 {/* live: Combo packs (Flutter home combo rail; GET /combos, nothing until one is live) */}
                 {!DEMO && <ComboRail style={{ marginTop: SPACE.section }} />}
