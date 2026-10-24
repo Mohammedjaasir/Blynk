@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest } from '../api/client';
+import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
 import { Field, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
@@ -11,7 +12,7 @@ import { errorMessage } from '../lib/apiErrors';
  * notifications in the app. Blynk Ops has the same page.
  */
 export interface BroadcastAudience { push_enabled: boolean; customers: number; devices: number }
-export interface SentBroadcast { id: string; title: string; body: string; queued: number; sent_at: string; sent_by: string | null }
+export interface SentBroadcast { id: string; title: string; body: string; image_url?: string | null; queued: number; sent_at: string; sent_by: string | null }
 
 export const BROADCAST_LIMITS = { title: 60, body: 180 } as const;
 /** One tap fills the store-open message. */
@@ -20,7 +21,7 @@ export const STORE_OPEN_TEMPLATE = { title: 'Blynk is open now!', body: 'Fresh g
 export const pushBroadcasts = {
   audience: () => apiRequest<BroadcastAudience>('/admin/push-broadcasts/audience'),
   list: () => apiRequest<{ broadcasts: SentBroadcast[] }>('/admin/push-broadcasts').then((d) => d.broadcasts),
-  send: (body: { title: string; body: string }) =>
+  send: (body: { title: string; body: string; image_url?: string }) =>
     apiRequest<{ id: string; queued: number }>('/admin/push-broadcasts', { method: 'POST', body }),
 };
 
@@ -30,6 +31,7 @@ export function Notifications() {
   const [history, setHistory] = useState<SentBroadcast[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,11 +52,12 @@ export function Notifications() {
     setError(null);
     setSending(true);
     try {
-      const r = await pushBroadcasts.send({ title: t, body: b });
+      const r = await pushBroadcasts.send({ title: t, body: b, ...(imageUrl ? { image_url: imageUrl } : {}) });
       toast.success(`Sent to ${r.queued} customer${r.queued === 1 ? '' : 's'}.`);
       setConfirming(false);
       setTitle('');
       setBody('');
+      setImageUrl(null);
       load();
     } catch (err) {
       setError(errorMessage(err, 'Could not send the notification.'));
@@ -116,10 +119,18 @@ export function Notifications() {
           <Field label="Message" hint={`${b.length}/${BROADCAST_LIMITS.body}`}>
             <textarea className="input" aria-label="Message" rows={3} value={body} maxLength={BROADCAST_LIMITS.body} onChange={(e) => setBody(e.target.value)} />
           </Field>
+          <ImageUploader
+            value={imageUrl}
+            folder="promotions"
+            label="Picture (optional)"
+            onChange={(url) => setImageUrl(url)}
+          />
+          <p className="field__hint">A wide picture (2 to 1, e.g. 1200 x 600) works best. It shows under the message on the customer's phone.</p>
           {t || b ? (
             <div className="form__note" aria-label="Preview" style={{ border: '1px solid #e5e5ea', borderRadius: 12, padding: 12, maxWidth: 360 }}>
               <strong>{t || 'Title'}</strong>
               <div>{b || 'Message'}</div>
+              {imageUrl ? <img src={imageUrl} alt="" style={{ display: 'block', width: '100%', borderRadius: 8, marginTop: 8 }} /> : null}
             </div>
           ) : null}
         </section>
@@ -158,6 +169,7 @@ export function Notifications() {
           {history.map((h) => (
             <li key={h.id || h.sent_at} style={{ padding: '8px 0', borderBottom: '1px solid #eee' }}>
               <strong>{h.title}</strong> - {h.body}
+              {h.image_url ? <img src={h.image_url} alt="" style={{ display: 'block', height: 48, borderRadius: 6, marginTop: 4 }} /> : null}
               <div className="field__hint">
                 {new Date(h.sent_at).toLocaleString('en-GB', { timeZone: 'Asia/Colombo', dateStyle: 'medium', timeStyle: 'short' })} · {h.queued} customer
                 {h.queued === 1 ? '' : 's'}

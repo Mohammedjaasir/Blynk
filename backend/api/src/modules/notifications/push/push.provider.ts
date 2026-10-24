@@ -33,7 +33,12 @@ export class PushProvider implements NotificationProvider {
 
     let outcomes;
     try {
-      outcomes = await sender.send(tokens, { title: payload.title, body: payload.body, data });
+      outcomes = await sender.send(tokens, {
+        title: payload.title,
+        body: payload.body,
+        ...(typeof payload.image === 'string' && payload.image ? { image: payload.image } : {}),
+        data,
+      });
     } catch (err) {
       return {
         success: false,

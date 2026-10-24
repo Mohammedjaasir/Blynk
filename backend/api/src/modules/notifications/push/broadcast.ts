@@ -20,14 +20,18 @@ import { isPushEnabled } from './push.sender.js';
  * notifications while signed in have a device; guests are not reachable by push.
  *
  * Staff:  GET  /admin/push-broadcasts/audience  -> { push_enabled, customers, devices }
- *         POST /admin/push-broadcasts           -> { title, body } queues the push (audited
+ *         POST /admin/push-broadcasts           -> { title, body, image_url? } queues the push (audited
  *                                                  PUSH_BROADCAST_SENT); refused for 2 minutes
  *                                                  after another one (a double tap).
  *         GET  /admin/push-broadcasts           -> the last 20 sent
  * ADMIN and OPERATIONS.
+ *
+ * A picture (owner, 2026-10-24: a big-picture notification like PickMe's): `image_url`, an https
+ * address the phone can load (Admin / Ops upload one), is shown under the text - Android's big
+ * picture, and the image of a web push.
  */
 export const PUSH_BROADCAST_TYPE = 'PUSH_BROADCAST';
-export const BROADCAST_LIMITS = { titleChars: 60, bodyChars: 180, cooldownMs: 2 * 60 * 1000 } as const;
+export const BROADCAST_LIMITS = { titleChars: 60, bodyChars: 180, imageChars: 500, cooldownMs: 2 * 60 * 1000 } as const;
 
 const oneLine = /^[^\r\n\t]*$/;
 export const broadcastSchema = z
@@ -43,6 +47,13 @@ export const broadcastSchema = z
       .trim()
       .min(2, 'The message needs at least 2 characters')
       .max(BROADCAST_LIMITS.bodyChars, `The message can be at most ${BROADCAST_LIMITS.bodyChars} characters`),
+    image_url: z
+      .string({ invalid_type_error: 'The picture must be a web address' })
+      .trim()
+      .max(BROADCAST_LIMITS.imageChars, 'The picture address is too long')
+      .refine((v) => /^https:\/\/[^\s]+$/i.test(v), 'The picture must be an https:// address')
+      .nullish()
+      .transform((v) => v || null),
   })
   .strict();
 
@@ -82,7 +93,12 @@ export async function sendBroadcast(input: z.infer<typeof broadcastSchema>, acto
     if (last && Date.now() - new Date(last.created_at).getTime() < BROADCAST_LIMITS.cooldownMs) {
       throw new AppError('A notification was sent less than 2 minutes ago. Wait a moment before sending another.', 409, 'BROADCAST_TOO_SOON');
     }
-    const payload = JSON.stringify({ title: input.title, body: input.body, data: { kind: 'broadcast', broadcast_id: id } });
+    const payload = JSON.stringify({
+      title: input.title,
+      body: input.body,
+      ...(input.image_url ? { image: input.image_url } : {}),
+      data: { kind: 'broadcast', broadcast_id: id },
+    });
     const res = await sql<{ n: number }>`
       WITH ins AS (
         INSERT INTO notifications (user_id, channel, notification_type, recipient, payload, status, max_attempts, idempotency_key)
@@ -99,7 +115,7 @@ export async function sendBroadcast(input: z.infer<typeof broadcastSchema>, acto
       action: 'PUSH_BROADCAST_SENT',
       entityType: 'PUSH_BROADCAST',
       entityId: SETTINGS_ENTITY_ID,
-      newValues: { broadcast_id: id, title: input.title, body: input.body, queued },
+      newValues: { broadcast_id: id, title: input.title, body: input.body, image_url: input.image_url, queued },
     });
     logger.info({ actorId: actor.actorId, broadcastId: id, queued }, 'Push broadcast queued');
     return { id, queued };
@@ -121,6 +137,7 @@ export async function recentBroadcasts() {
       id: String(v.broadcast_id ?? ''),
       title: String(v.title ?? ''),
       body: String(v.body ?? ''),
+      image_url: typeof v.image_url === 'string' && v.image_url ? v.image_url : null,
       queued: Number(v.queued ?? 0),
       sent_at: r.created_at,
       sent_by: r.full_name ?? r.email ?? null,

@@ -8,6 +8,8 @@ export const ORDERS_CHANNEL_ID = 'orders';
 export interface PushMessage {
   title: string;
   body: string;
+  /** A picture shown under the text (https address); Android's big picture / the web push image. */
+  image?: string;
   /** FCM data values are strings. */
   data: Record<string, string>;
 }
@@ -79,13 +81,13 @@ class FirebasePushSender implements PushSender {
     const messaging = await this.client();
     const res = await messaging.sendEachForMulticast({
       tokens,
-      notification: { title: message.title, body: message.body },
+      notification: { title: message.title, body: message.body, ...(message.image ? { imageUrl: message.image } : {}) },
       data: message.data,
-      android: { priority: 'high', notification: { channelId: ORDERS_CHANNEL_ID } },
+      android: { priority: 'high', notification: { channelId: ORDERS_CHANNEL_ID, ...(message.image ? { imageUrl: message.image } : {}) } },
       apns: { payload: { aps: { sound: 'default' } } },
       // The PWA (2026-10-08): the browser shows it; a tap opens the web app.
       webpush: {
-        notification: { icon: webPushIcon() },
+        notification: { icon: webPushIcon(), ...(message.image ? { image: message.image } : {}) },
         fcmOptions: { link: env.WEB_APP_URL },
       },
     });

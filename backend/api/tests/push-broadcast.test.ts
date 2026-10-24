@@ -78,6 +78,33 @@ describe('push broadcast', () => {
     await pool.query(`DELETE FROM notifications WHERE notification_type = 'PUSH_BROADCAST' AND created_at >= $1`, [testStart]);
   });
 
+  it('a picture rides along (owner, 2026-10-24: a big-picture notification): queued, listed, and handed to the sender', async () => {
+    const seen: Array<{ title: string; image?: string }> = [];
+    setPushSenderForTests({ send: async (ts, m) => { seen.push({ title: m.title, image: m.image }); return ts.map((token) => ({ token, ok: true as const })); } });
+    const url = 'https://blynk-api.valgrowlabs.com/uploads/promotions/juice.webp';
+    await pool.query(`DELETE FROM audit_logs WHERE action = 'PUSH_BROADCAST_SENT' AND created_at > now() - interval '5 minutes'`);
+    const res = await send({ title: 'Fresh juices', body: 'Cold and ready until 6 pm', image_url: url }, opsToken);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const row = (await pool.query(`SELECT payload FROM notifications WHERE notification_type = 'PUSH_BROADCAST' AND recipient = $1 AND created_at >= $2`, [users.customer.id, testStart])).rows[0];
+    expect(row.payload).toMatchObject({ title: 'Fresh juices', image: url });
+    const list = await request(app).get('/api/v1/admin/push-broadcasts').set(auth(tokens.admin));
+    expect(list.body.data.broadcasts[0]).toMatchObject({ id: res.body.data.id, image_url: url });
+
+    // the provider hands the picture on to the sender
+    const { PushProvider } = await import('../src/modules/notifications/push/push.provider.js');
+    await new PushProvider().send({ notificationId: 'n1', recipient: users.customer.id, metadata: row.payload } as never);
+    expect(seen).toEqual([{ title: 'Fresh juices', image: url }]);
+    await pool.query(`DELETE FROM notifications WHERE notification_type = 'PUSH_BROADCAST' AND created_at >= $1`, [testStart]);
+    await pool.query(`DELETE FROM audit_logs WHERE action = 'PUSH_BROADCAST_SENT' AND created_at >= $1`, [testStart]);
+  });
+
+  it('refuses a picture that is not an https address', async () => {
+    setPushSenderForTests(fake);
+    expect((await send({ title: 'Hi there', body: 'Hello there', image_url: 'http://example.com/a.png' })).status).toBe(400);
+    expect((await send({ title: 'Hi there', body: 'Hello there', image_url: 'not a url' })).status).toBe(400);
+    expect((await send({ title: 'Hi there', body: 'Hello there', image_url: `https://x.lk/${'a'.repeat(500)}` })).status).toBe(400);
+  });
+
   it('refuses bad input and other roles', async () => {
     setPushSenderForTests(fake);
     expect((await send({ title: '', body: 'x y' })).status).toBe(400);

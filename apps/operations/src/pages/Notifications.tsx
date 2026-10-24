@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest } from '../api/client';
+import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
 import { Field, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
@@ -12,7 +13,7 @@ import { errorMessage } from '../lib/errors';
  * apps/admin/src/pages/Notifications.tsx (same wording and limits).
  */
 interface BroadcastAudience { push_enabled: boolean; customers: number; devices: number }
-interface SentBroadcast { id: string; title: string; body: string; queued: number; sent_at: string; sent_by: string | null }
+interface SentBroadcast { id: string; title: string; body: string; image_url?: string | null; queued: number; sent_at: string; sent_by: string | null }
 
 const LIMITS = { title: 60, body: 180 } as const;
 const STORE_OPEN = { title: 'Blynk is open now!', body: 'Fresh groceries are ready. Start ordering now and we will deliver to your door.' };
@@ -20,7 +21,7 @@ const STORE_OPEN = { title: 'Blynk is open now!', body: 'Fresh groceries are rea
 const api = {
   audience: () => apiRequest<BroadcastAudience>('/admin/push-broadcasts/audience'),
   list: () => apiRequest<{ broadcasts: SentBroadcast[] }>('/admin/push-broadcasts').then((d) => d.broadcasts),
-  send: (body: { title: string; body: string }) => apiRequest<{ id: string; queued: number }>('/admin/push-broadcasts', { method: 'POST', body }),
+  send: (body: { title: string; body: string; image_url?: string }) => apiRequest<{ id: string; queued: number }>('/admin/push-broadcasts', { method: 'POST', body }),
 };
 
 export function Notifications() {
@@ -28,6 +29,7 @@ export function Notifications() {
   const [history, setHistory] = useState<SentBroadcast[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,11 +51,12 @@ export function Notifications() {
     setNotice(null);
     setSending(true);
     try {
-      const r = await api.send({ title: t, body: b });
+      const r = await api.send({ title: t, body: b, ...(imageUrl ? { image_url: imageUrl } : {}) });
       setNotice(`Sent to ${r.queued} customer${r.queued === 1 ? '' : 's'}.`);
       setConfirming(false);
       setTitle('');
       setBody('');
+      setImageUrl(null);
       load();
     } catch (err) {
       setError(errorMessage(err, 'Could not send the notification.'));
@@ -118,6 +121,14 @@ export function Notifications() {
           <Field label="Message" hint={`${b.length}/${LIMITS.body}`}>
             <textarea className="input" aria-label="Message" rows={3} value={body} maxLength={LIMITS.body} onChange={(e) => setBody(e.target.value)} />
           </Field>
+          <ImageUploader
+            value={imageUrl}
+            folder="promotions"
+            label="Picture (optional)"
+            onChange={(url) => setImageUrl(url)}
+          />
+          <p className="field__hint">A wide picture (2 to 1, e.g. 1200 x 600) works best. It shows under the message on the customer's phone.</p>
+          {imageUrl ? <img src={imageUrl} alt="Picture preview" style={{ display: 'block', width: '100%', maxWidth: 360, borderRadius: 8 }} /> : null}
         </section>
 
         {error ? (
@@ -154,6 +165,7 @@ export function Notifications() {
           {history.map((h) => (
             <li key={h.id || h.sent_at} style={{ padding: '8px 0', borderBottom: '1px solid #eee' }}>
               <strong>{h.title}</strong> - {h.body}
+              {h.image_url ? <img src={h.image_url} alt="" style={{ display: 'block', height: 48, borderRadius: 6, marginTop: 4 }} /> : null}
               <div className="field__hint">
                 {new Date(h.sent_at).toLocaleString('en-GB', { timeZone: 'Asia/Colombo', dateStyle: 'medium', timeStyle: 'short' })} · {h.queued} customer
                 {h.queued === 1 ? '' : 's'}
