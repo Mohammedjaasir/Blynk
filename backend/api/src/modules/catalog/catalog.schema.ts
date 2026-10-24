@@ -221,6 +221,13 @@ const productBaseSchema = z.object({
   // Migration 050 (owner, 2026-10-18): show the struck "was" price and the
   // saving in the app for this product. Omitted on create = on.
   show_offer_cut: z.boolean({ invalid_type_error: 'show_offer_cut must be true or false' }).optional(),
+  // Migration 060 (owner, 2026-10-25): the product is also listed in these categories (never its
+  // main one, active ones only - checked by the service). On update the list IS the new set.
+  extra_category_ids: z
+    .array(z.string().uuid('Each extra category must be a category id'))
+    .max(5, 'A product can be shown in at most 5 extra categories')
+    .refine((ids) => new Set(ids).size === ids.length, 'Each extra category can be chosen once')
+    .optional(),
 });
 
 /**

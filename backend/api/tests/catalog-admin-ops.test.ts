@@ -227,9 +227,12 @@ describe('Delivery fee setting and GET /store', () => {
     // its own contract is tests/referrals-and-points.test.ts.
     // App texts (owner, 2026-10-18): only the words/colours staff set - its own contract is tests/app-texts.test.ts.
     // Home sections (owner's brother, 2026-10-24): the LIVE staff-made rails, [] while none - tests/home-sections.test.ts.
-    const { promo_band: promoBand, hero_banner: heroBanner, points_program: pointsProgram, app_texts: appTexts, home_sections: homeSections, ...facts } = res.body.data;
+    const { promo_band: promoBand, hero_banner: heroBanner, points_program: pointsProgram, app_texts: appTexts, home_sections: homeSections, bundle_offers: bundleOffers, product_requests_enabled: requestsOn, ratings_enabled: ratingsOn, repeat_baskets_enabled: repeatOn, ...facts } = res.body.data;
     expect(typeof appTexts).toBe('object');
     expect(Array.isArray(homeSections)).toBe(true);
+    // Bundle offers + the three migration-guarded switches: their own contracts are bundle-offers / product-requests / order-ratings-tips / repeat-baskets tests.
+    expect(Array.isArray(bundleOffers)).toBe(true);
+    for (const flag of [requestsOn, ratingsOn, repeatOn]) expect(typeof flag).toBe('boolean');
     expect(promoBand === null || typeof promoBand === 'object').toBe(true);
     expect('points_program' in res.body.data).toBe(true);
     if (pointsProgram !== null) {

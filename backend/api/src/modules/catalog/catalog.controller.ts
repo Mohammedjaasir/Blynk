@@ -164,7 +164,7 @@ export class CatalogController {
   async createProductAdmin(req: Request, res: Response, next: NextFunction) {
     try {
       const input = createProductSchema.parse(req.body);
-      const product = await catalogService.createProductAdmin(input);
+      const product = await catalogService.createProductAdmin(input, actorOf(req));
       res.status(201).json({
         success: true,
         data: { product },
@@ -177,7 +177,7 @@ export class CatalogController {
   async updateProductAdmin(req: Request, res: Response, next: NextFunction) {
     try {
       const input = updateProductSchema.parse(req.body);
-      const product = await catalogService.updateProductAdmin(req.params.id as string, input);
+      const product = await catalogService.updateProductAdmin(req.params.id as string, input, actorOf(req));
       res.status(200).json({
         success: true,
         data: { product },

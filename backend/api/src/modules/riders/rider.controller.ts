@@ -5,6 +5,7 @@ import { updateDeliveryStatusSchema, collectCodSchema, deliveryParamsSchema } fr
 import { updateLocationSchema } from './rider.location.schema.js';
 import { riderLocationService } from './rider.location.service.js';
 import { suggestRidersForOrder } from './rider.suggestions.service.js';
+import { getLiveRiderMap } from './rider.live.service.js';
 import { z } from 'zod';
 
 export class RiderController {
@@ -133,6 +134,19 @@ export async function listRiderSuggestions(req: Request, res: Response, next: Ne
   try {
     const { order_id } = suggestionsQuerySchema.parse(req.query);
     res.status(200).json({ success: true, data: await suggestRidersForOrder(order_id) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Staff-facing: GET /admin/riders/live (ADMIN, OPERATIONS) - the Rider map's data: active riders with
+ * their last reported position and load, and the packed orders still waiting for a rider.
+ */
+export async function getLiveRiders(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.status(200).json({ success: true, data: await getLiveRiderMap() });
   } catch (err) {
     next(err);
   }

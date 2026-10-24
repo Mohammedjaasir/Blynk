@@ -4,6 +4,7 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import { mediaStorage } from '../../utils/storage.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
+import { productCategoriesReady } from './catalog.extra-categories.js';
 
 /**
  * Deleting products and categories (migration 017).
@@ -124,6 +125,8 @@ async function removeUnusedImage(url: string) {
 }
 
 export async function deleteCategory(categoryId: string, moveToCategoryId: string | undefined, actor: AuditActor) {
+  // Migration 060: products listed here through an extra category just stop being (their main category is untouched).
+  const extras = await productCategoriesReady();
   return await db.transaction().execute(async (trx) => {
     const category = await trx
       .selectFrom('categories')
@@ -185,12 +188,23 @@ export async function deleteCategory(categoryId: string, moveToCategoryId: strin
       .execute();
 
     let mode: DeleteMode;
+    if (extras) {
+      await trx.deleteFrom('product_categories').where('category_id', '=', categoryId).execute();
+    }
     if (moveToCategoryId !== undefined && total > 0) {
       await trx
         .updateTable('products')
         .set({ category_id: moveToCategoryId, updated_at: new Date() })
         .where('category_id', '=', categoryId)
         .execute();
+      if (extras) {
+        // a moved product that was already listed in the target through an extra category: that is now its main one
+        await trx
+          .deleteFrom('product_categories')
+          .where('category_id', '=', moveToCategoryId)
+          .where('product_id', 'in', trx.selectFrom('products').select('id').where('category_id', '=', moveToCategoryId))
+          .execute();
+      }
     }
 
     if (moveToCategoryId === undefined && total > 0) {

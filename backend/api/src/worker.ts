@@ -6,6 +6,9 @@ import { appointmentReminderJob } from './modules/dental/appointment-reminders.j
 import { paymentExpiryJob } from './modules/payments/expiry-job.js';
 import { walletExpiryJob } from './modules/wallet/expiry-job.js';
 import { repeatBasketJob } from './modules/repeat-baskets/repeat.runner.js';
+import { riderAutoAssignJob } from './modules/riders/rider.auto-assign.js';
+import { expiryPushJob } from './modules/expiry/expiry.job.js';
+import { dailyReportJob } from './modules/daily-report/daily-report.sender.js';
 
 async function bootstrapWorker() {
   logger.info(
@@ -44,6 +47,12 @@ async function bootstrapWorker() {
     walletExpiryJob.start();
     // Repeat baskets (migration 054): due baskets are ordered as the customer, every minute.
     repeatBasketJob.start();
+    // Automatic rider assignment (owner, 2026-10-25; OFF until staff switch it on): every 20 s.
+    riderAutoAssignJob.start();
+    // Expiry dates (migration 059): one staff push a day at 8 am Colombo when stock is expired or expiring.
+    expiryPushJob.start();
+    // Daily report (owner, 2026-10-25): one SMS a day to the saved numbers once send_at has passed, every minute check.
+    dailyReportJob.start();
   } else {
     logger.warn('NOTIFICATION_WORKER_ENABLED is set to false. Worker process will remain idle.');
   }
@@ -60,6 +69,9 @@ async function bootstrapWorker() {
       await paymentExpiryJob.stop();
       await walletExpiryJob.stop();
       await repeatBasketJob.stop();
+      await riderAutoAssignJob.stop();
+      await expiryPushJob.stop();
+      await dailyReportJob.stop();
       await notificationWorker.stop();
       logger.info('Notification worker stopped cleanly.');
     } catch (workerErr) {

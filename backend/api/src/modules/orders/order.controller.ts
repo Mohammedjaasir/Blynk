@@ -10,6 +10,7 @@ import {
   resolveItemSchema,
   orderItemParamsSchema,
   waiveDeliveryFeeSchema,
+  bundleQuoteSchema,
 } from './order.schema.js';
 import { validateCouponSchema } from '../coupons/coupon.schema.js';
 import { z } from 'zod';
@@ -61,6 +62,16 @@ export class OrderController {
       const input = validateCouponSchema.parse(req.body);
       const preview = await orderService.previewCoupon(req.user!.id, input);
       res.status(200).json({ success: true, data: { coupon: preview } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /orders/bundle-quote (owner, 2026-10-25): what the live bundle offers do to this cart, and the nearest one to unlock. */
+  async bundleQuote(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = bundleQuoteSchema.parse(req.body);
+      res.status(200).json({ success: true, data: await orderService.quoteBundles(input) });
     } catch (err) {
       next(err);
     }

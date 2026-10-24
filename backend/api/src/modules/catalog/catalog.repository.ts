@@ -2,6 +2,7 @@ import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { activeOfferWhere } from './catalog.offers.js';
 import type { DBConnection } from '../orders/order.repository.js';
+import { categoryListOrder, inCategoryScope, productCategoriesReady } from './catalog.extra-categories.js';
 
 export interface ProductQueryParams {
   category_id?: string;
@@ -78,6 +79,17 @@ const soldBy = (ok: boolean) =>
         WHERE sp.id = v_product_catalog.id AND s.status = 'APPROVED')`.as('sold_by')
     : sql<string | null>`NULL`.as('sold_by');
 
+/**
+ * Migration 060: the extra categories a customer product is also listed in (never its primary,
+ * never a deleted one), as a uuid text[]; empty before the migration.
+ */
+const extraCategoryIds = (ok: boolean) =>
+  ok
+    ? sql<string[]>`COALESCE((SELECT array_agg(pc.category_id::text ORDER BY pc.created_at, pc.category_id)
+        FROM product_categories pc JOIN categories xc ON xc.id = pc.category_id AND xc.deleted_at IS NULL
+        WHERE pc.product_id = v_product_catalog.id AND pc.category_id <> v_product_catalog.category_id), '{}'::text[])`.as('extra_category_ids')
+    : sql<string[]>`'{}'::text[]`.as('extra_category_ids');
+
 function categoryIdsForId(id: string) {
   return db
     .selectFrom('categories')
@@ -145,7 +157,27 @@ export class CatalogRepository {
     }
 
     const rows = await query.execute();
-    return rows.map((row) => ({ ...row, product_count: Number(row.product_count ?? 0) }));
+    // Migration 060: products that are listed here only through an extra category. product_count
+    // stays the primary-category count (what a delete must move).
+    const extra = new Map<string, number>();
+    const extraReady = await productCategoriesReady();
+    if (extraReady) {
+      const r = await db
+        .selectFrom('product_categories as pc')
+        .innerJoin('products as p', 'p.id', 'pc.product_id')
+        .select(['pc.category_id', sql<number>`count(*)::int`.as('n')])
+        .where('p.deleted_at', 'is', null)
+        .whereRef('pc.category_id', '<>', 'p.category_id')
+        .groupBy('pc.category_id')
+        .execute();
+      for (const x of r) extra.set(x.category_id, Number(x.n));
+    }
+    return rows.map((row) => ({
+      ...row,
+      product_count: Number(row.product_count ?? 0),
+      // null = migration 060 has not run: the staff forms hide "Also show in"
+      extra_product_count: extraReady ? (extra.get(row.id) ?? 0) : null,
+    }));
   }
 
   /**
@@ -269,6 +301,7 @@ export class CatalogRepository {
   async findActiveProducts(params: ProductQueryParams) {
     const cut = await hasOfferCutColumn();
     const sellers = await hasSellersTable();
+    const extras = await productCategoriesReady();
     let query = db
       .selectFrom('v_product_catalog')
       .select([
@@ -306,15 +339,20 @@ export class CatalogRepository {
         showOfferCut(cut),
         // Migration 052: the approved seller's shop ("Sold by"), else null.
         soldBy(sellers),
+        // Migration 060: the extra categories it is also listed in.
+        extraCategoryIds(extras),
       ])
       .where('is_active', '=', true);
 
+    // Migration 060: a product whose EXTRA category matches is listed too.
     if (params.category_id) {
-      query = query.where('category_id', 'in', categoryIdsForId(params.category_id));
+      const id = params.category_id;
+      query = query.where(inCategoryScope(extras, () => categoryIdsForId(id)));
     }
 
     if (params.category_slug) {
-      query = query.where('category_id', 'in', categoryIdsForSlug(params.category_slug));
+      const slug = params.category_slug;
+      query = query.where(inCategoryScope(extras, () => categoryIdsForSlug(slug)));
     }
 
     // Migration 045: "available" means orderable now - switched on, and in
@@ -341,8 +379,22 @@ export class CatalogRepository {
 
     // Migration 035 (owner, 2026-10-10): the staff-arranged order first
     // (Arrange products), then the rest A-Z.
+    // Migration 060: inside a category the arranged primary products come first, then the
+    // products that are only listed there through an extra category (A-Z).
+    const scope = !extras
+      ? null
+      : params.category_id
+        ? () => categoryIdsForId(params.category_id as string)
+        : params.category_slug
+          ? () => categoryIdsForSlug(params.category_slug as string)
+          : null;
+    if (scope) {
+      const o = categoryListOrder(scope);
+      query = query.orderBy(o.primaryFirst).orderBy(o.arranged, sql`asc nulls last`);
+    } else {
+      query = query.orderBy(sql`display_order`, sql`asc nulls last`);
+    }
     return await query
-      .orderBy(sql`display_order`, sql`asc nulls last`)
       .orderBy('name', 'asc')
       .limit(params.limit)
       .offset(params.offset)
@@ -353,17 +405,21 @@ export class CatalogRepository {
    * Customer: Counts total active products matching filters for pagination metadata.
    */
   async countActiveProducts(params: Omit<ProductQueryParams, 'limit' | 'offset'>): Promise<number> {
+    const extras = await productCategoriesReady();
     let query = db
       .selectFrom('v_product_catalog')
       .select(sql<string>`count(*)`.as('count'))
       .where('is_active', '=', true);
 
+    // Migration 060: a product whose EXTRA category matches is listed too.
     if (params.category_id) {
-      query = query.where('category_id', 'in', categoryIdsForId(params.category_id));
+      const id = params.category_id;
+      query = query.where(inCategoryScope(extras, () => categoryIdsForId(id)));
     }
 
     if (params.category_slug) {
-      query = query.where('category_id', 'in', categoryIdsForSlug(params.category_slug));
+      const slug = params.category_slug;
+      query = query.where(inCategoryScope(extras, () => categoryIdsForSlug(slug)));
     }
 
     // Migration 045: "available" means orderable now - switched on, and in
@@ -399,6 +455,7 @@ export class CatalogRepository {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
     const cut = await hasOfferCutColumn();
     const sellers = await hasSellersTable();
+    const extras = await productCategoriesReady();
 
     let query = db
       .selectFrom('v_product_catalog')
@@ -437,6 +494,8 @@ export class CatalogRepository {
         showOfferCut(cut),
         // Migration 052: the approved seller's shop ("Sold by"), else null.
         soldBy(sellers),
+        // Migration 060: the extra categories it is also listed in.
+        extraCategoryIds(extras),
       ])
       .where('is_active', '=', true);
 

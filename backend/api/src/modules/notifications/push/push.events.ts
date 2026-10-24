@@ -135,6 +135,42 @@ export async function enqueueLowRatingStaffPush(
   );
 }
 
+/**
+ * "No rider for order X" on every Admin / Operations staff device (owner, 2026-10-25): automatic
+ * assignment (riders/rider.auto-assign.ts) waited for an order and no rider is close enough, free
+ * enough and recently seen, so staff must assign it by hand. Sent once per order (idempotent per
+ * order and staff member). Best effort: never blocks anything.
+ */
+export async function enqueueAutoAssignNoRiderStaffPush(trx: Trx, order: { id: string; order_number: string }): Promise<void> {
+  if (!isPushEnabled()) return;
+  await bestEffort(
+    trx,
+    async () => {
+      const staff = await trx
+        .selectFrom('users as u')
+        .select('u.id')
+        .where('u.role', 'in', ['ADMIN', 'OPERATIONS'])
+        .where('u.is_active', '=', true)
+        .where((eb) => eb.exists(eb.selectFrom('device_tokens as d').select('d.id').whereRef('d.user_id', '=', 'u.id')))
+        .execute();
+      for (const s of staff) {
+        await enqueuePush(trx, {
+          userId: s.id,
+          orderId: order.id,
+          type: PUSH_TYPES.AUTO_ASSIGN_NO_RIDER,
+          idempotencyKey: `auto-assign-none:${order.id}:${s.id}`,
+          payload: {
+            title: 'No rider for an order',
+            body: `Order ${order.order_number} is waiting and no rider is close enough. Assign one by hand.`,
+            data: { type: 'staff_order', order_id: order.id },
+          },
+        });
+      }
+    },
+    (err) => logger.error({ err, orderId: order.id }, 'Could not queue the no-rider staff push')
+  );
+}
+
 /** "1st", "2nd", "100th", "1,000th". */
 export function ordinal(n: number): string {
   const tens = n % 100;

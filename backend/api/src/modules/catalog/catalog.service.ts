@@ -17,6 +17,14 @@ import { db } from '../../database/connection.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { resolveGroupPlacement } from './catalog.groups.js';
 import {
+  assertExtraCategories,
+  dropExtraEqualToPrimary,
+  extraCategoriesFor,
+  productCategoriesReady,
+  replaceExtraCategories,
+  staffExtraFields,
+} from './catalog.extra-categories.js';
+import {
   activeCategoryOffer,
   activeOfferPrice,
   assertCategoryOfferAllowed,
@@ -123,6 +131,12 @@ export interface CustomerProductDto {
    * <shop>"), null for Blynk's own products and for a seller who is not approved.
    */
   sold_by: string | null;
+  /**
+   * Migration 060 (owner, 2026-10-25): the other categories this product is also listed in (its
+   * category_id stays the main one: offers, hours and the name on the card follow that). The app
+   * shows it in each of these categories' lists. [] before the migration.
+   */
+  extra_category_ids: string[];
   /** Product page only: the active variants, sold-out ones marked is_available false. */
   variants?: CustomerVariantDto[];
 }
@@ -175,6 +189,7 @@ function toCustomerProduct(
     earliest_delivery_date: lead > 0 ? earliestDeliveryDay(orderingClock.now(), lead).date : null,
     show_offer_cut: p.show_offer_cut !== false,
     sold_by: p.sold_by ?? null,
+    extra_category_ids: p.extra_category_ids ?? [],
     ...(withVariants ? { variants: variants ?? [] } : {}),
   };
 }
@@ -615,9 +630,11 @@ export class CatalogService {
 
     // Migration 045: variant count + price range, and the product's stock.
     const ids = rows.map((r) => r.id);
-    const [variants, stock] = await Promise.all([
+    const [variants, stock, extras, extrasReady] = await Promise.all([
       staffVariantsFor(db, rows.filter((r) => r.has_variants).map((r) => r.id)),
       staffStockFor(db, { productIds: ids }),
+      extraCategoriesFor(ids),
+      productCategoriesReady(),
     ]);
     return {
       products: rows.map((product) => ({
@@ -628,6 +645,8 @@ export class CatalogService {
         ...staffPricing(product),
         ...adminOffer(product),
         ...staffExtras(product, stock.get(product.id), variants.get(product.id)),
+        // Migration 060: the extra categories (ids + names) and whether the field exists yet.
+        ...staffExtraFields(extras.get(product.id), extrasReady),
       })),
       pagination: { page, limit },
     };
@@ -639,7 +658,12 @@ export class CatalogService {
       throw new AppError('Product not found.', 404, 'PRODUCT_NOT_FOUND');
     }
 
-    const [variants, stock] = await Promise.all([staffVariantsFor(db, [id]), staffStockFor(db, { productIds: [id] })]);
+    const [variants, stock, extras, extrasReady] = await Promise.all([
+      staffVariantsFor(db, [id]),
+      staffStockFor(db, { productIds: [id] }),
+      extraCategoriesFor([id]),
+      productCategoriesReady(),
+    ]);
     const list = variants.get(id) ?? [];
     return {
       ...product,
@@ -649,17 +673,22 @@ export class CatalogService {
       ...staffPricing(product),
       ...adminOffer(product),
       ...staffExtras(product, stock.get(id), list),
+      // Migration 060: the extra categories (ids + names) and whether the field exists yet.
+      ...staffExtraFields(extras.get(id), extrasReady),
       // Migration 045: every live variant (inactive ones too) with cost, pricing and stock.
       variants: list,
     };
   }
 
-  async createProductAdmin(input: CreateProductInput) {
+  async createProductAdmin(input: CreateProductInput, actor?: AuditActor) {
     // 1. Verify category exists
     const category = await catalogRepository.findCategoryById(input.category_id);
     if (!category) {
       throw new AppError('Specified category does not exist.', 400, 'CATEGORY_NOT_FOUND');
     }
+
+    // 1b. Migration 060: the extra categories (validated before anything is written)
+    const extraIds = await assertExtraCategories(input.extra_category_ids ?? [], input.category_id);
 
     // 2. Verify SKU uniqueness (migration 045: variant SKUs too)
     const skuConflict = (await catalogRepository.findProductBySku(input.sku)) ?? (await catalogRepository.findVariantBySku(input.sku));
@@ -741,13 +770,15 @@ export class CatalogService {
       show_offer_cut: input.show_offer_cut ?? true,
     });
 
+    if (extraIds.length) await replaceExtraCategories(created.id, extraIds, actor);
+
     logger.info({ productId: created.id, sku: created.sku }, 'Product created by admin');
 
     // Return complete view with calculated pricing
     return await this.getProductByIdAdmin(created.id);
   }
 
-  async updateProductAdmin(id: string, input: UpdateProductInput) {
+  async updateProductAdmin(id: string, input: UpdateProductInput, actor?: AuditActor) {
     // 1. Verify product exists
     const existing = await catalogRepository.findProductByIdAdmin(id);
     if (!existing) {
@@ -761,6 +792,12 @@ export class CatalogService {
         throw new AppError('Specified category does not exist.', 400, 'CATEGORY_NOT_FOUND');
       }
     }
+
+    // 2b. Migration 060: the extra categories - the request is the new set, never the (new) main category
+    const extraIds =
+      input.extra_category_ids !== undefined
+        ? await assertExtraCategories(input.extra_category_ids, input.category_id ?? existing.category_id)
+        : null;
 
     // 3. If SKU changed, verify uniqueness
     if (input.sku && input.sku !== existing.sku) {
@@ -878,6 +915,10 @@ export class CatalogService {
       ...(offerChanged ? { offer_price: offerPrice, offer_ends_at: offerEnds } : {}),
       ...(input.show_offer_cut !== undefined ? { show_offer_cut: input.show_offer_cut } : {}),
     });
+
+    // Migration 060: replace the extra set; a new main category that was an extra one stops being one.
+    if (extraIds !== null) await replaceExtraCategories(id, extraIds, actor);
+    else if (input.category_id && input.category_id !== existing.category_id) await dropExtraEqualToPrimary(id, input.category_id);
 
     logger.info({ productId: id }, 'Product updated by admin');
 

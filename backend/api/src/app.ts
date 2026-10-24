@@ -39,10 +39,16 @@ import { rewardsMeRouter } from './modules/loyalty/index.js';
 import { walletMeRouter } from './modules/wallet/index.js';
 // Buy again + repeat baskets (owner, 2026-10-24; migration 054).
 import { adminRepeatRouter, repeatMeRouter } from './modules/repeat-baskets/repeat.routes.js';
+// Expiry dates (owner, 2026-10-25; migration 059).
+import { adminExpiryRouter } from './modules/expiry/expiry.routes.js';
 // "Can't find it? Ask us" (owner, 2026-10-24; migration 056).
 import { adminProductRequestsRouter, productRequestsMeRouter, productRequestsRouter } from './modules/catalog/product-requests.js';
 // Order ratings + rider tips (owner, 2026-10-24; migration 055).
 import { adminRatingsRouter, orderRatingsRouter } from './modules/ratings/index.js';
+// Reorder suggestions + supplier purchase orders (owner, 2026-10-25; migration 058).
+import { adminPurchasingRouter } from './modules/purchasing/purchasing.routes.js';
+// The 9 pm daily report SMS (owner, 2026-10-25; no migration).
+import { adminDailyReportRouter } from './modules/daily-report/daily-report.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -163,8 +169,11 @@ export function createApp(): Express {
   apiRouter.use('/seller', sellerRouter);
   apiRouter.use('/admin', adminSellersRouter);
   apiRouter.use('/admin', adminRepeatRouter);
+  apiRouter.use('/admin', adminExpiryRouter);
   apiRouter.use('/admin', adminProductRequestsRouter);
   apiRouter.use('/admin', adminRatingsRouter);
+  apiRouter.use('/admin', adminPurchasingRouter);
+  apiRouter.use('/admin', adminDailyReportRouter);
   apiRouter.use('/admin', adminRouter);
   apiRouter.use('/audit', auditRouter);
   apiRouter.use('/configuration', configurationRouter);

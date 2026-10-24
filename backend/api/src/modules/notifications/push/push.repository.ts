@@ -18,6 +18,8 @@ export const PUSH_TYPES = {
   ORDER_MILESTONE: 'PUSH_ORDER_MILESTONE',
   /** Staff: a customer rated an order 1 or 2 stars (owner, 2026-10-24; migration 055). */
   LOW_RATING: 'PUSH_LOW_RATING',
+  /** Staff: automatic assignment found no rider for an order (owner, 2026-10-25). */
+  AUTO_ASSIGN_NO_RIDER: 'PUSH_AUTO_ASSIGN_NO_RIDER',
 } as const;
 
 /** What a PUSH outbox row carries; the worker sends exactly this. */

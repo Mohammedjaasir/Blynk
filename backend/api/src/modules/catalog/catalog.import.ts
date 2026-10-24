@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger.js';
 import { lockInventoryRow, recordStockMovement } from '../inventory/stock-ledger.js';
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { COST_REQUIRED_FOR_MARKUP, markupWithoutCost, slugify } from './catalog.schema.js';
+import { MAX_EXTRA_CATEGORIES, extraSetDiffers, productCategoriesReady, replaceExtraCategories } from './catalog.extra-categories.js';
 import { generateUniqueSlug } from './catalog.slugs.js';
 import { resolveSellingPrice, resolveVariantPrice, type PricingMode, type PricingSource, type VariantPricingSource } from '../pricing/index.js';
 import { getGlobalMarkup } from './catalog.pricing.js';
@@ -80,6 +81,12 @@ import { getGlobalMarkup } from './catalog.pricing.js';
  *   gives is above the MRP, the customer pays the MRP: the row's pricing says
  *   mrp_capped with the price before the cap, a warning names it, and the
  *   summary counts the capped rows.
+ * - extra_categories (migration 060; owner, 2026-10-25): optional, product
+ *   rows. Up to 5 category names ("Name", "Parent > Child" or slug) separated
+ *   by ';': the product is also listed in them (its category stays the main
+ *   one). Blank = unchanged; filled = replaces the product's extra categories.
+ *   The main category in the list is ignored. Before migration 060 a filled
+ *   cell is a row error.
  */
 
 export const MAX_IMPORT_ROWS = 1000;
@@ -136,6 +143,8 @@ interface CleanRow {
   category: string;
   /** Optional: a sub-category of `category` (matched within it). */
   sub_category?: string;
+  /** Migration 060: optional extra categories (names / "Parent > Child" / slugs separated by ';'); blank = unchanged. */
+  extra_categories?: string[];
   unit: string;
   pack_size?: string;
   /** Blank (only with a selling_price) = 0 for a new product, unchanged for an existing one. */
@@ -208,6 +217,8 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
   const name = text(raw.name);
   const category = text(raw.category);
   const subCategory = text(raw.sub_category) ?? text(raw.subcategory);
+  const extraCell = text(raw.extra_categories) ?? text(raw.extra_category);
+  const extraCategories = extraCell ? extraCell.split(';').map((v) => v.trim()).filter(Boolean) : undefined;
   const unit = text(raw.unit);
   const packSize = text(raw.pack_size);
   const sku = text(raw.sku);
@@ -301,6 +312,7 @@ export function validateImportRow(raw: Record<string, unknown>, index: number): 
       name: name!,
       category: category!,
       sub_category: subCategory,
+      ...(extraCategories?.length ? { extra_categories: extraCategories } : {}),
       unit: unit!,
       pack_size: packSize,
       cost_price: cost,
@@ -560,10 +572,16 @@ export async function importProducts(input: ImportProductsInput, actorId: string
     const row = checked.row;
 
     let categoryId: string | undefined;
+    let extraIds: string[] | undefined;
     if (row) {
       const resolved = resolveCategory(row.category, row.sub_category);
       if ('error' in resolved) errors.push(resolved.error);
       else categoryId = resolved.id;
+      if (row.extra_categories?.length) {
+        const extra = await resolveExtraCategories(row.extra_categories, resolveCategory, categoryId);
+        if ('error' in extra) errors.push(extra.error);
+        else extraIds = extra.ids;
+      }
       const firstRow = seenSkus.get(row.sku);
       if (firstRow !== undefined) {
         errors.push({ field: 'sku', message: `SKU ${row.sku} is already used on row ${firstRow} of this file` });
@@ -578,8 +596,8 @@ export async function importProducts(input: ImportProductsInput, actorId: string
 
     try {
       const outcome = dryRun
-        ? await planRow(row, categoryId, slugsUsed)
-        : await db.transaction().execute((trx) => applyRow(trx, row, categoryId!, slugsUsed, actorId));
+        ? await planRow(row, categoryId, slugsUsed, extraIds)
+        : await db.transaction().execute((trx) => applyRow(trx, row, categoryId!, slugsUsed, actorId, extraIds));
       const { existingPricing, existingMrp, ...result } = outcome as typeof outcome & {
         existingPricing?: RowPricing;
         existingMrp?: number | string | null;
@@ -619,6 +637,27 @@ export async function importProducts(input: ImportProductsInput, actorId: string
   }
   logger.info({ ...summary, mrpCapped, dryRun, actorId, rows: input.rows.length }, 'Product import processed');
   return { dry_run: dryRun, summary, mrp_capped: mrpCapped, results };
+}
+
+/** Migration 060: the row's extra categories as ids (the main category and repeats are ignored; at most 5). */
+async function resolveExtraCategories(
+  names: string[],
+  resolve: (cell: string) => { id: string } | { error: { field: string; message: string } },
+  primaryId: string | undefined
+): Promise<{ ids: string[] } | { error: { field: string; message: string } }> {
+  if (!(await productCategoriesReady())) {
+    return { error: { field: 'extra_categories', message: 'Extra categories will be available shortly. Leave that column empty for now.' } };
+  }
+  const ids: string[] = [];
+  for (const name of names) {
+    const r = resolve(name);
+    if ('error' in r) return { error: { field: 'extra_categories', message: r.error.message } };
+    if (r.id !== primaryId && !ids.includes(r.id)) ids.push(r.id);
+  }
+  if (ids.length > MAX_EXTRA_CATEGORIES) {
+    return { error: { field: 'extra_categories', message: `At most ${MAX_EXTRA_CATEGORIES} extra categories per product` } };
+  }
+  return { ids };
 }
 
 type CategoryRef = { id: string; name: string; slug: string; parent_id: string | null };
@@ -684,7 +723,7 @@ function assertRowPriced(want: RowPricing, cost: number | undefined) {
   if (markupWithoutCost(want.mode, cost)) throw new AppError(COST_REQUIRED_FOR_MARKUP, 400, 'PURCHASE_COST_REQUIRED');
 }
 
-async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>) {
+async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>, extraIds?: string[]) {
   const existing = await findExisting(db, row.sku, false);
   const stored = existing ? storedPricing(existing) : undefined;
   assertRowPriced(pricingFor(row, stored), row.cost_price ?? stored?.cost);
@@ -693,7 +732,10 @@ async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>
     slugsUsed.add(await pickSlug(db, row, slugsUsed));
     return { status: 'created' as const };
   }
-  const changed = Object.keys(changesFor(row, categoryId, existing)).length > 0 || trackingChange(row, existing) !== null;
+  const changed =
+    Object.keys(changesFor(row, categoryId, existing)).length > 0 ||
+    trackingChange(row, existing) !== null ||
+    (extraIds !== undefined && (await extraSetDiffers(existing.id, extraIds)));
   return {
     status: changed ? ('updated' as const) : ('skipped' as const),
     product_id: existing.id,
@@ -703,7 +745,7 @@ async function planRow(row: CleanRow, categoryId: string, slugsUsed: Set<string>
   };
 }
 
-async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: string, slugsUsed: Set<string>, actorId: string) {
+async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: string, slugsUsed: Set<string>, actorId: string, extraIds?: string[]) {
   const existing = await findExisting(trx, row.sku, true);
   const stored = existing ? storedPricing(existing) : undefined;
   assertRowPriced(pricingFor(row, stored), row.cost_price ?? stored?.cost);
@@ -736,6 +778,7 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
       .returning('id')
       .executeTakeFirstOrThrow();
     slugsUsed.add(slug);
+    if (extraIds?.length) await replaceExtraCategories(created.id, extraIds, undefined, trx);
 
     if (row.tracked) {
       await setTracking(trx, created.id, 'TRACKED');
@@ -756,7 +799,12 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
 
   const changes = changesFor(row, categoryId, existing);
   const tracking = trackingChange(row, existing);
-  if (Object.keys(changes).length === 0 && tracking === null) {
+  // Migration 060: a new main category that was an extra one stops being one; a filled cell replaces the set.
+  const extraChanged =
+    extraIds !== undefined
+      ? await extraSetDiffers(existing.id, extraIds, trx)
+      : changes.category_id !== undefined && (await extraSetDiffers(existing.id, [], trx));
+  if (Object.keys(changes).length === 0 && tracking === null && !extraChanged) {
     return { status: 'skipped' as const, product_id: existing.id, existingPricing: storedPricing(existing), existingMrp: existing.mrp };
   }
   if (Object.keys(changes).length > 0) {
@@ -767,6 +815,10 @@ async function applyRow(trx: Transaction<Database>, row: CleanRow, categoryId: s
       .execute();
   }
   if (tracking) await setTracking(trx, existing.id, tracking);
+  if (extraChanged) {
+    if (extraIds !== undefined) await replaceExtraCategories(existing.id, extraIds, undefined, trx);
+    else await trx.deleteFrom('product_categories').where('product_id', '=', existing.id).where('category_id', '=', categoryId).execute();
+  }
   return {
     status: 'updated' as const,
     product_id: existing.id,

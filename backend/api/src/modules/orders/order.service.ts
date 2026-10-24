@@ -43,6 +43,10 @@ import { isReady, paymentGateway, publicOnlinePayment } from '../payments/gatewa
 import { checkoutWalletInfo, customerOrderWallet } from '../wallet/wallet.service.js';
 // Ratings + rider tips (owner, 2026-10-24; migration 055).
 import { checkoutRiderTip, checkoutTipInfo, staffOrderRating } from '../ratings/ratings.service.js';
+// Bundle offers (owner, 2026-10-25; migration 062): buy X get Y free, spend X get a gift.
+import { applyBundles, noBundles } from './bundle-apply.js';
+import { bundleSummary, withBundleFields, withBundleSummary } from './bundle-view.js';
+import { bundleOffersReady } from './bundle-offers.ready.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -73,7 +77,8 @@ async function createWithUniqueNumber(data: CreateOrderData) {
 export function sanitizeCustomerOrderItem(it: any) {
   if (!it) return it;
   const { estimated_unit_cost, actual_unit_cost, markup_percentage_applied, ...safeItem } = it;
-  return safeItem;
+  // Bundle offers (migration 062): is_bundle_free / bundle_kind / bundle_title / bundle_value; never the rule snapshot.
+  return withBundleFields(safeItem);
 }
 
 /**
@@ -128,6 +133,8 @@ export function sanitizeCustomerOrder(order: any) {
   const { internal_notes, ...safeOrder } = order;
   return {
     ...safeOrder,
+    // Bundle offers (migration 062): bundle_savings, bundle_applied, gift_items; 0 / [] before 062.
+    ...bundleSummary(order.items),
     can_cancel: customerCanCancel(order.order_status),
     // Repeat baskets (migration 054): the basket this order came from; null before 054.
     repeat_basket_id: order.repeat_basket_id ?? null,
@@ -302,16 +309,44 @@ export async function priceCart(items: CreateOrderInput['items'], comboLines: No
     } as CreateOrderData['items'][number];
   });
 
+  const looseLines = orderItemsData.slice();
   const combos = await priceComboLines(comboLines, looseQuantities(items));
   combos.forEach((combo, comboIndex) => {
     subtotalAmount += combo.subtotal;
     for (const it of combo.items) orderItemsData.push({ ...it, combo_index: comboIndex });
   });
 
+  // Bundle offers (owner, 2026-10-25; migration 062): free units split off their line, gifts added.
+  // Everything that prices a cart goes through here, so quote, preview and order agree.
+  const bundles = await applyBundles({
+    looseLines,
+    comboItems: orderItemsData.slice(looseLines.length),
+    subtotalBefore: Number(subtotalAmount.toFixed(2)),
+    categoryOf: (productId) => productMap.get(productId)!.category_id,
+    availability,
+  });
+
   return {
-    items: orderItemsData,
+    items: bundles.items,
     combos: combos.map(({ items: _items, ...line }) => line),
-    subtotal: Number(subtotalAmount.toFixed(2)),
+    subtotal: bundles.subtotal,
+    bundle: bundles.summary,
+  };
+}
+
+/** A staff order DTO with the bundle fields on its items and bundle_savings / bundle_applied / gift_items (migration 062). */
+function staffOrderView<T extends { items: any[] }>(order: T) {
+  return withBundleSummary({ ...order, items: order.items.map(withBundleFields) });
+}
+
+/** The bundle fields of a quote / coupon preview (pricing is in bundle-apply.ts). */
+function bundlePreview(b: Awaited<ReturnType<typeof priceCart>>['bundle']) {
+  return {
+    subtotal_before_bundles: b.subtotal_before_bundles,
+    bundle_savings: b.bundle_savings,
+    bundle_applied: b.bundle_applied,
+    gift_items: b.gift_items,
+    bundle_progress: b.bundle_progress,
   };
 }
 
@@ -550,6 +585,22 @@ export class OrderService {
       referral_discount_amount: referral?.discount_amount ?? 0,
       applied_discount: referralWins ? ('REFERRAL' as const) : birthdayWins ? ('BIRTHDAY' as const) : ('COUPON' as const),
       total: Number((subtotal + deliveryFee - charged).toFixed(2)),
+      // Bundle offers (owner, 2026-10-25): `subtotal` is already after them; what they did to this cart.
+      ...bundlePreview(priced?.bundle ?? noBundles(subtotal)),
+    };
+  }
+
+  /**
+   * POST /orders/bundle-quote (owner, 2026-10-25): what the live bundle offers do to this cart - the
+   * same priceCart the order uses - and the nearest offer still to unlock (`bundle_progress`).
+   */
+  async quoteBundles(input: { items?: CreateOrderInput['items']; combos?: CreateOrderInput['combos'] }) {
+    const priced = await priceCart(input.items ?? [], input.combos ?? []);
+    return {
+      ready: await bundleOffersReady(),
+      subtotal: priced.subtotal,
+      ...bundlePreview(priced.bundle),
+      lines: priced.bundle.lines,
     };
   }
 
@@ -756,7 +807,7 @@ export class OrderService {
     // Pickups (owner, 2026-10-24): where the goods are collected - the store
     // and/or each seller's approved shop (pickup-points.ts), worked out on read.
     return {
-      ...order,
+      ...staffOrderView(order),
       // Repeat baskets (migration 054): the "Repeat" tag; null before 054.
       repeat_basket_id: order.repeat_basket_id ?? null,
       delivery_fee_waiver: await deliveryFeeWaiver(order.id),
@@ -801,7 +852,8 @@ export class OrderService {
       orderId,
       input: { notes, ...(action === 'ADMIN_MARK_DELIVERED' && deliveryCode ? { delivery_code: deliveryCode } : {}) },
     });
-    return await orderRepository.findOrderById(orderId);
+    const updated = await orderRepository.findOrderById(orderId);
+    return updated ? staffOrderView(updated) : updated;
   }
 
   /** Lifecycle #2 RESOLVE_ITEM. */
@@ -812,7 +864,8 @@ export class OrderService {
     }
 
     await runTransition('RESOLVE_ITEM', { actor, orderId, itemId, input: { item_status: itemStatus } });
-    return await orderRepository.findOrderById(orderId);
+    const updated = await orderRepository.findOrderById(orderId);
+    return updated ? staffOrderView(updated) : updated;
   }
 
   /** Lifecycle #4 ASSIGN_RIDER. */

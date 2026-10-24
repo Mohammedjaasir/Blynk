@@ -25,6 +25,8 @@ import type { DeliveryFeeQuote } from './delivery-fee.js';
 import { orderRewardColumns, pointsForOrder, recordOrderRewards, referralForOrder } from '../loyalty/order-rewards.js';
 import { AppError } from '../../middleware/error.middleware.js';
 import { assertCartStock } from '../inventory/sellable.js';
+// Bundle offers (owner, 2026-10-25; migration 062): gifts are real items that must not fail the order.
+import { giftsThatFit } from './bundle-stock.js';
 // Blynk Wallet (owner, 2026-10-15; migration 049).
 import { decideWalletUse, recordWalletPayment } from '../wallet/wallet.service.js';
 
@@ -129,6 +131,11 @@ export interface CreateOrderData {
     subtotal: number;
     /** Migration 033: index into `combos` when this item was ordered as part of a combo pack. */
     combo_index?: number;
+    /**
+     * Migration 062 (owner, 2026-10-25): set on a free-unit line or a gift (price 0) made by a
+     * bundle offer; absent on ordinary items (so the columns are only written when it exists).
+     */
+    bundle?: { offer_id: string; kind: 'FREE_UNITS' | 'GIFT'; title: string; value: number; rule: Record<string, unknown> };
   }>;
   /** Migration 033 (owner, 2026-10-09): combo packs, each charged its combo price. */
   combos?: Array<{
@@ -321,16 +328,19 @@ export class OrderRepository {
       //     The rows are locked, so racing checkouts for the last units
       //     serialise; the later one sees the earlier one's items as "in
       //     open orders" and is refused with OUT_OF_STOCK / INSUFFICIENT_STOCK.
-      await assertCartStock(
-        trx,
-        data.dark_store_id,
-        data.items.map((it) => ({
-          product_id: it.product_id,
-          variant_id: it.variant_id ?? null,
-          quantity: it.quantity,
-          name: it.variant_label_snapshot ? `${it.product_name_snapshot} ${it.variant_label_snapshot}` : it.product_name_snapshot,
-        }))
-      );
+      const stockLine = (it: CreateOrderData['items'][number]) => ({
+        product_id: it.product_id,
+        variant_id: it.variant_id ?? null,
+        quantity: it.quantity,
+        name: it.variant_label_snapshot ? `${it.product_name_snapshot} ${it.variant_label_snapshot}` : it.product_name_snapshot,
+      });
+      // Bundle gifts (migration 062) are extra items: checked after the cart's own lines, and
+      // dropped (never an error) when their last units went to someone else meanwhile.
+      const giftRows = data.items.filter((it) => it.bundle?.kind === 'GIFT');
+      const cartRows = data.items.filter((it) => it.bundle?.kind !== 'GIFT');
+      await assertCartStock(trx, data.dark_store_id, cartRows.map(stockLine));
+      const keptGifts = await giftsThatFit(trx, data.dark_store_id, cartRows.map(stockLine), giftRows.map((g) => ({ ...stockLine(g), row: g })));
+      const orderItems = [...cartRows, ...keptGifts.map((g) => g.row)];
 
       // 0. Delivery slot (owner, 2026-10-10): one transaction-scoped advisory
       //    lock per slot start, then count the non-cancelled orders in it.
@@ -483,7 +493,7 @@ export class OrderRepository {
         : [];
 
       // 2. Insert order items
-      const itemInserts = data.items.map((item) => ({
+      const itemInserts = orderItems.map((item) => ({
         order_id: order.id,
         product_id: item.product_id,
         product_name_snapshot: item.product_name_snapshot,
@@ -500,6 +510,16 @@ export class OrderRepository {
         ...(item.variant_id ? { variant_id: item.variant_id, variant_label_snapshot: item.variant_label_snapshot ?? null } : {}),
         // Migration 048: written only when the line had an MRP (NULL default otherwise).
         ...(item.mrp_snapshot != null ? { mrp_snapshot: item.mrp_snapshot } : {}),
+        // Migration 062: written only for a free unit / gift line (NULL defaults otherwise).
+        ...(item.bundle
+          ? {
+              bundle_offer_id: item.bundle.offer_id,
+              bundle_kind: item.bundle.kind,
+              bundle_title: item.bundle.title,
+              bundle_value: item.bundle.value,
+              bundle_rule: JSON.stringify(item.bundle.rule),
+            }
+          : {}),
       }));
 
       const items = await trx

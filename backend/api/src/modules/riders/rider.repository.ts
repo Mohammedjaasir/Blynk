@@ -95,6 +95,8 @@ export class RiderRepository {
         'orders.order_number',
         'orders.order_status',
         'orders.total_amount',
+        // The customer's cash tip for this rider (migration 055), read as JSON so the query still works before 055 has run.
+        sql<string>`coalesce((to_jsonb(orders)->>'rider_tip')::numeric, 0)`.as('rider_tip'),
         // Blynk Wallet (migration 049): total_amount is the cash to collect; this is what the wallet paid.
         'orders.wallet_amount_used',
         'orders.payment_method',
@@ -144,6 +146,7 @@ export class RiderRepository {
       ...row,
       total_amount: Number(Number(row.total_amount).toFixed(2)),
       wallet_amount_used: Number(Number(row.wallet_amount_used ?? 0).toFixed(2)),
+      rider_tip: Number(Number(row.rider_tip ?? 0).toFixed(2)),
       delivery_latitude: Number(row.delivery_latitude),
       delivery_longitude: Number(row.delivery_longitude),
     }));
@@ -171,6 +174,8 @@ export class RiderRepository {
         'orders.order_number',
         'orders.order_status',
         'orders.total_amount',
+        // The customer's cash tip for this rider (migration 055), read as JSON so the query still works before 055 has run.
+        sql<string>`coalesce((to_jsonb(orders)->>'rider_tip')::numeric, 0)`.as('rider_tip'),
         // Blynk Wallet (migration 049): total_amount is the cash to collect; this is what the wallet paid.
         'orders.wallet_amount_used',
         'orders.payment_method',
@@ -232,6 +237,7 @@ export class RiderRepository {
       items,
       total_amount: Number(Number(row.total_amount).toFixed(2)),
       wallet_amount_used: Number(Number(row.wallet_amount_used ?? 0).toFixed(2)),
+      rider_tip: Number(Number(row.rider_tip ?? 0).toFixed(2)),
       cod_collected_amount: Number(Number(row.cod_collected_amount).toFixed(2)),
       delivery_latitude: Number(row.delivery_latitude),
       delivery_longitude: Number(row.delivery_longitude),
@@ -335,7 +341,7 @@ export class RiderRepository {
     if (riderIds.length === 0) return [];
     return await executor
       .selectFrom('deliveries')
-      .select(['rider_id', 'current_latitude', 'current_longitude', 'location_captured_at'])
+      .select(['rider_id', 'current_latitude', 'current_longitude', 'location_accuracy_m', 'location_captured_at'])
       .distinctOn('rider_id')
       .where('rider_id', 'in', riderIds)
       .where('location_captured_at', 'is not', null)

@@ -8,6 +8,7 @@ import { recomputeBirthdayDiscount } from '../../../birthday/birthday.offer.js';
 import { recomputeOrderRewards } from '../../../loyalty/order-rewards.js';
 import { settleWalletAfterItemChange } from '../../../wallet/wallet.service.js';
 import { setOrderStatus, updateOrderFields } from '../status-writer.js';
+import { recomputeBundleFreeUnits } from '../../bundle-recompute.js';
 import type { ActionImpl, Actor, DeliveryRow, ItemRow, LockedState, OrderRow, Trx } from '../types.js';
 import { dispatch, invalidTransition } from './shared.js';
 
@@ -44,6 +45,8 @@ export const resolveItem: ActionImpl<OrderRow> = {
   async apply(trx, { order, item }, req) {
     const itemStatus = req.input?.item_status ?? 'UNAVAILABLE';
     await trx.updateTable('order_items').set({ item_status: itemStatus }).where('id', '=', item!.id).execute();
+    // Bundle offers (migration 062): free units the removed paid units no longer earn are removed too.
+    await recomputeBundleFreeUnits(trx, order.id);
 
     // Totals over what is still on the order (§K Scenario A).
     const remaining = await trx

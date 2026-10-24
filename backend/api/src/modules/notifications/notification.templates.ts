@@ -263,6 +263,8 @@ export class NotificationTemplates {
       case 'REPEAT_BASKET':
       // A requested product is here (migration 056, catalog/product-requests.ts): complete when queued.
       case 'PRODUCT_REQUEST_ADDED':
+      // The evening report to the owner's numbers (daily-report/daily-report.sender.ts): complete when queued.
+      case 'DAILY_REPORT':
       case 'SMS_OFFER': {
         // Migration 027: the text is complete when queued (the customer's
         // language, opt-out line included), so it is sent exactly as written.

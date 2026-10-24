@@ -486,6 +486,14 @@ export interface OrderItemsTable {
   variant_label_snapshot: ColumnType<string | null, string | null | undefined, string | null>;
   /** Migration 048: the product's / size's MRP when ordered (NULL = none). Reporting only. */
   mrp_snapshot: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  /** Migration 062 (owner, 2026-10-25): the bundle offer that made this row (a free unit or a gift, price 0); NULL = an ordinary item. */
+  bundle_offer_id: ColumnType<string | null, string | null | undefined, string | null>;
+  bundle_kind: ColumnType<'FREE_UNITS' | 'GIFT' | null, 'FREE_UNITS' | 'GIFT' | null | undefined, 'FREE_UNITS' | 'GIFT' | null>;
+  bundle_title: ColumnType<string | null, string | null | undefined, string | null>;
+  /** What the row would have cost (the savings), LKR. */
+  bundle_value: ColumnType<string | null, number | string | null | undefined, number | string | null>;
+  /** The rule as it applied, so a removed item can recompute the free units (JSON text on write). */
+  bundle_rule: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
 /** Migration 033 (owner, 2026-10-09): a combo pack - several products at one price. */
@@ -1233,7 +1241,15 @@ export interface ProductRequestsTable {
   updated_at: Generated<Date>;
 }
 
+/** Migration 060 (owner, 2026-10-25): extra categories a product is also listed in (never its primary). */
+export interface ProductCategoriesTable {
+  product_id: string;
+  category_id: string;
+  created_at: Generated<Date>;
+}
+
 export interface Database {
+  product_categories: ProductCategoriesTable;
   product_requests: ProductRequestsTable;
   sellers: SellersTable;
   seller_submissions: SellerSubmissionsTable;
@@ -1301,6 +1317,8 @@ export interface Database {
   repeat_basket_runs: RepeatBasketRunsTable;
   /** Migration 055 (owner, 2026-10-24). */
   order_ratings: OrderRatingsTable;
+  /** Migration 059 (owner, 2026-10-25): expiry dates. */
+  stock_batches: StockBatchesTable;
 }
 
 /** Migration 055 (owner, 2026-10-24): a customer's rating of a delivered order (one per order). */
@@ -1419,4 +1437,26 @@ export interface WalletEntriesTable {
   created_by: string | null;
   created_at: Generated<Date>;
   expires_at: Date | null;
+}
+
+/** Migration 059 (owner, 2026-10-25): a received batch and when it expires (a register, not a stock engine). */
+export type StockBatchStatus = 'ACTIVE' | 'SOLD_OUT' | 'DISCARDED';
+export interface StockBatchesTable {
+  id: Generated<string>;
+  product_id: string;
+  variant_id: ColumnType<string | null, string | null | undefined, string | null>;
+  batch_code: ColumnType<string | null, string | null | undefined, string | null>;
+  quantity: ColumnType<number, number, number>;
+  /** 'YYYY-MM-DD' (Colombo calendar date); read it through to_char so no time zone shifts it. */
+  expires_on: ColumnType<string, string, string>;
+  status: ColumnType<StockBatchStatus, StockBatchStatus | undefined, StockBatchStatus>;
+  note: ColumnType<string | null, string | null | undefined, string | null>;
+  received_at: Generated<Date>;
+  created_by: ColumnType<string | null, string | null | undefined, string | null>;
+  sold_out_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  discarded_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  discarded_by: ColumnType<string | null, string | null | undefined, string | null>;
+  discard_reason: ColumnType<'EXPIRED' | 'WASTE' | null, 'EXPIRED' | 'WASTE' | null | undefined, 'EXPIRED' | 'WASTE' | null>;
+  discard_stock_removed: ColumnType<number | null, number | null | undefined, number | null>;
+  updated_at: Generated<Date>;
 }

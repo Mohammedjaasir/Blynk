@@ -20,7 +20,7 @@ import { adminPushBroadcastRouter } from '../notifications/push/broadcast.js';
 import { orderController } from '../orders/order.controller.js';
 import { inventoryController } from '../inventory/index.js';
 import { purchaseList } from '../inventory/purchase-list.js';
-import { listRiderSuggestions, listRidersForAssignment } from '../riders/rider.controller.js';
+import { getLiveRiders, listRiderSuggestions, listRidersForAssignment } from '../riders/rider.controller.js';
 import { adminRiderApplicationsRouter } from '../riders/rider.applications.js';
 import { adminRiderDocumentsRouter } from '../riders/rider.documents.js';
 import { adminRiderDocumentSettingsRouter } from '../riders/rider.documents.settings.js';
@@ -177,6 +177,8 @@ adminRouter.get(
 adminRouter.get('/riders', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), listRidersForAssignment);
 // The same riders, best first for one order (assign dialog): load, distance to the store, trip.
 adminRouter.get('/riders/suggestions', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), listRiderSuggestions);
+// The Rider map (owner, 2026-10-25): riders' last positions and load, and the orders waiting for a rider.
+adminRouter.get('/riders/live', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), getLiveRiders);
 
 // Manual Rider Assignment (Guarded by ADMIN)
 adminRouter.post(

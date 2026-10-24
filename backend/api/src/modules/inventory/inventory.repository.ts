@@ -49,6 +49,8 @@ export interface AdjustStockParams {
   notes?: string;
   referenceOrderId?: string;
   userId?: string;
+  /** Runs in the same transaction right after the stock moved (expiry batch of a restock, migration 059). */
+  afterMove?: (trx: Transaction<Database>) => Promise<void>;
 }
 
 /** PUT /admin/inventory/:productId/stock (migration 045). */
@@ -758,6 +760,7 @@ export class InventoryRepository {
         actorId: params.userId ?? null,
         notes: params.notes ?? null,
       });
+      if (params.afterMove) await params.afterMove(trx);
 
       return {
         inventory: {

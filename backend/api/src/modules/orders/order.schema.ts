@@ -124,6 +124,14 @@ export const createOrderSchema = z.object({
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
+/** POST /orders/bundle-quote (owner, 2026-10-25): the cart's lines (priced by the server), as in POST /orders. */
+export const bundleQuoteSchema = z
+  .object({
+    items: z.array(orderItemInputSchema).max(50, 'Cannot exceed 50 distinct items per order').default([]),
+    combos: z.array(orderComboLineSchema).max(20, 'Cannot exceed 20 combo packs per order').optional(),
+  })
+  .refine((v) => v.items.length + (v.combos?.length ?? 0) > 0, { message: 'At least one item is required', path: ['items'] });
+
 export const cancelOrderSchema = z.object({
   reason: z.string().trim().min(3, 'Cancellation reason must be at least 3 characters').max(500).optional(),
 });

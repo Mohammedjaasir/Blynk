@@ -192,6 +192,10 @@ describe('Free deliveries for every customer', () => {
       // Owner, 2026-10-12: free delivery above a basket amount (off), and ordering for someone else (on).
       basket_free_delivery: { enabled: false, min_subtotal_lkr: 3000, applies: false, remaining_lkr: null },
       order_for_someone_else: { enabled: true, send_code_to_receiver: true },
+      // Rider tip choices (migration 055, owner 2026-10-24): on once the migration has run.
+      tips_enabled: true,
+      tip_options: [50, 100, 200],
+      tip_max_lkr: 1000,
       // Migration 034 (owner, 2026-10-09): no date of birth saved, so no gift.
       birthday_offer: expect.objectContaining({ has_birthday: false, eligible: false }),
       // Migration 037 (owner, 2026-10-10): refer a friend and Blynk Points, both off by default.

@@ -78,8 +78,7 @@ export async function orderMap(range: OrderMapRange, status: 'delivered' | 'all'
       sql<number>`floor(delivery_latitude / ${CELL_DEG})::int`.as('cy'),
       sql<number>`floor(delivery_longitude / ${CELL_DEG})::int`.as('cx'),
       'order_status',
-      'total_amount',
-      'wallet_amount_used',
+      revenueOf().as('net_amount'),
       'delivery_city',
       'delivery_address_line1',
       'customer_id',
@@ -97,7 +96,7 @@ export async function orderMap(range: OrderMapRange, status: 'delivered' | 'all'
       'cx',
       sql<number>`count(*)::int`.as('orders'),
       sql<number>`(count(*) FILTER (WHERE order_status = 'DELIVERED'))::int`.as('delivered'),
-      sql<string>`coalesce(sum(${revenueOf()}) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('revenue'),
+      sql<string>`coalesce(sum(net_amount) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('revenue'),
       // The town most of the cell's orders name (a place, not a person).
       sql<string | null>`mode() WITHIN GROUP (ORDER BY delivery_city)`.as('area'),
       // The address line most of the cell's orders name - what tells one
@@ -109,7 +108,7 @@ export async function orderMap(range: OrderMapRange, status: 'delivered' | 'all'
     ])
     .groupBy(['cy', 'cx'])
     .orderBy(sql`count(*)`, 'desc')
-    .orderBy(sql`coalesce(sum(${revenueOf()}) FILTER (WHERE order_status = 'DELIVERED'), 0)`, 'desc')
+    .orderBy(sql`coalesce(sum(net_amount) FILTER (WHERE order_status = 'DELIVERED'), 0)`, 'desc')
     .orderBy('cy')
     .orderBy('cx')
     .execute();
@@ -118,7 +117,7 @@ export async function orderMap(range: OrderMapRange, status: 'delivered' | 'all'
     .selectFrom(base.as('o'))
     .select([
       sql<number>`count(*)::int`.as('orders'),
-      sql<string>`coalesce(sum(${revenueOf()}) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('revenue'),
+      sql<string>`coalesce(sum(net_amount) FILTER (WHERE order_status = 'DELIVERED'), 0)`.as('revenue'),
       sql<number>`(count(*) FILTER (WHERE distance_km <= ${radiusKm - EDGE_KM}))::int`.as('inside'),
       sql<number>`(count(*) FILTER (WHERE distance_km > ${radiusKm - EDGE_KM} AND distance_km <= ${radiusKm}))::int`.as('near_edge'),
       sql<number>`(count(*) FILTER (WHERE distance_km > ${radiusKm}))::int`.as('outside'),

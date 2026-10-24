@@ -16,6 +16,8 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { logger } from '../../utils/logger.js';
 import { db } from '../../database/connection.js';
 import type { UserRole } from '../../database/types.js';
+import { assertExpiryReady } from '../expiry/expiry.ready.js';
+import { addBatchInTrx } from '../expiry/expiry.service.js';
 
 // Default Central Dharga Town Hub fallback ID
 export const DEFAULT_DARK_STORE_ID = '018dc3f0-4a82-789a-8b1b-947f61ad8821';
@@ -184,6 +186,10 @@ export class InventoryService {
 
     const storeId = input.dark_store_id ?? DEFAULT_DARK_STORE_ID;
     if (input.variant_id) await assertVariantOf(productId, input.variant_id);
+    // Expiry dates (migration 059): a restock that names an expiry date also records the batch, in the
+    // same transaction; before the migration it is refused (503) rather than silently dropped.
+    const expiresOn = input.expires_on;
+    if (expiresOn) await assertExpiryReady();
     const result = await inventoryRepository.adjustStockAtomic({
       productId,
       variantId: input.variant_id ?? null,
@@ -192,6 +198,21 @@ export class InventoryService {
       adjustmentType: input.adjustment_type,
       notes: input.notes,
       userId,
+      afterMove: expiresOn
+        ? async (trx) => {
+            await addBatchInTrx(
+              trx,
+              {
+                product_id: productId,
+                variant_id: input.variant_id ?? null,
+                batch_code: input.batch_code ?? null,
+                quantity: input.quantity_delta,
+                expires_on: expiresOn,
+              },
+              userId ? { actorId: userId } : null
+            );
+          }
+        : undefined,
     });
 
     logger.info(

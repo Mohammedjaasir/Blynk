@@ -10,6 +10,7 @@ import { promoBandService } from './promo-band.js';
 import { heroBannerService } from './hero-banner.js';
 import { appTextsService } from './app-texts.js';
 import { homeSectionsService } from './home-sections.js';
+import { bundleOffersService } from './bundle-offers.js';
 import { logger } from '../../utils/logger.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { publicOnlinePayment } from '../payments/gateway-settings.js';
@@ -847,6 +848,9 @@ export class SettingsService {
       // Owner's brother, 2026-10-24: staff-made product rails on Home; only the LIVE ones, in
       // order ([] = none) (home-sections.ts).
       home_sections: await homeSectionsService.readPublic(now),
+      // Bundle offers (owner, 2026-10-25): "buy 2 get 1 free" / "spend X, get a gift"; only the LIVE
+      // ones, in order; [] until migration 062 has run (bundle-offers.ts).
+      bundle_offers: await bundleOffersService.readPublic(now),
       // "Can't find it? Ask us" (owner, 2026-10-24): false until migration 056 has run
       // (never an error; catalog/product-requests.ready.ts).
       product_requests_enabled: await hasProductRequestsTable(),

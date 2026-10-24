@@ -24,6 +24,8 @@ import { appTextsService, updateAppTextsSchema } from './app-texts.js';
 import { qrLinksService, updateQrLinksSchema } from './qr-links.js';
 import { availabilityService, updateAvailabilitySchema } from './availability-windows.js';
 import { homeSectionsService, updateHomeSectionsSchema } from './home-sections.js';
+import { bundleOffersService, updateBundleOffersSchema } from './bundle-offers.js';
+import { riderAutoAssignService, updateRiderAutoAssignSchema } from './rider-auto-assign.js';
 import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
@@ -572,6 +574,48 @@ adminSettingsRouter.put('/settings/home-sections', requireAuth, requireRoles(['A
   try {
     const input = updateHomeSectionsSchema.parse(req.body);
     res.json({ success: true, data: await homeSectionsService.set(input, actorOf(req)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Automatic rider assignment (owner, 2026-10-25): OFF by default. When on, the worker gives an order
+// that waited `wait_seconds` and was never assigned by staff to the best nearby rider. PUT takes any
+// of enabled / wait_seconds / max_distance_km. Audited (RIDER_AUTO_ASSIGN_UPDATED). See
+// modules/configuration/rider-auto-assign.ts and modules/riders/rider.auto-assign.ts.
+adminSettingsRouter.get('/settings/rider-auto-assign', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await riderAutoAssignService.get() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminSettingsRouter.put('/settings/rider-auto-assign', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (req, res, next) => {
+  try {
+    const input = updateRiderAutoAssignSchema.parse(req.body);
+    res.json({ success: true, data: await riderAutoAssignService.set(input, actorOf(req)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Bundle offers (owner, 2026-10-25): "buy 2 get 1 free" and "spend X, get a gift". PUT replaces the whole
+// list (max 10, order = the order they apply in). Audited (BUNDLE_OFFERS_UPDATED). The real order pricing
+// applies them (orders/bundle-pricing.ts); customers get the LIVE ones in GET /store `bundle_offers`.
+// See modules/configuration/bundle-offers.ts.
+adminSettingsRouter.get('/settings/bundle-offers', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await bundleOffersService.get() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminSettingsRouter.put('/settings/bundle-offers', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (req, res, next) => {
+  try {
+    const input = updateBundleOffersSchema.parse(req.body);
+    res.json({ success: true, data: await bundleOffersService.set(input, actorOf(req)) });
   } catch (err) {
     next(err);
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { restockBatchFields } from '../expiry/expiry.rules.js';
 
 export const sourceOrderItemSchema = z.object({
   quantity: z.number().int().positive('Quantity must be greater than 0').optional(),
@@ -36,8 +37,18 @@ export const adjustStockSchema = z
     /** Migration 045: a variant's own stock row; omitted = the product-level row. */
     variant_id: z.string().uuid('Invalid variant ID').optional(),
     notes: z.string().max(500, 'Notes cannot exceed 500 characters').optional(),
+    // Expiry dates (migration 059; owner, 2026-10-25): an optional expiry date (and batch code) on a
+    // restock records the received quantity as a batch in the same transaction. Additive: omitted = as before.
+    ...restockBatchFields.shape,
   })
   .superRefine((input, ctx) => {
+    if (input.expires_on !== undefined && input.adjustment_type !== 'PURCHASE_RESTOCK') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expires_on'],
+        message: 'An expiry date can only be given when receiving stock (PURCHASE_RESTOCK)',
+      });
+    }
     if (input.adjustment_type === 'PURCHASE_RESTOCK' && input.quantity_delta < 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
