@@ -2,6 +2,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { apiRequest } from '../api/client';
 import { isNativeApp } from '../api/native-client';
+import { pushOpenPath } from './growth';
 
 /** The new-order push title; the in-app alert (NewOrderAlert) already covers those while open. */
 const NEW_ORDER_TITLE = 'New order received';
@@ -18,8 +19,12 @@ const TOKEN_KEY = 'blynk.ops.pushToken';
 /** The channel the server's pushes name (backend push.sender.ts ORDERS_CHANNEL_ID). */
 export const ORDERS_CHANNEL = 'orders';
 
-/** Starts push on this phone; returns a stop function for the listeners. */
-export async function startStaffPush(onOpenOrders: () => void): Promise<() => void> {
+/**
+ * Starts push on this phone; returns a stop function for the listeners. Tapping a push
+ * calls `onOpen` with where to go (lib/growth pushOpenPath): the Orders board for a new
+ * order, as before; that order's screen for a low-rating alert (2026-10-24).
+ */
+export async function startStaffPush(onOpen: (path: string) => void): Promise<() => void> {
   if (!isNativeApp()) return () => {};
   const handles: { remove: () => Promise<void> }[] = [];
   try {
@@ -51,11 +56,13 @@ export async function startStaffPush(onOpenOrders: () => void): Promise<() => vo
       await PushNotifications.addListener('pushNotificationReceived', (n) => {
         if (!n.title || n.title === NEW_ORDER_TITLE) return;
         void LocalNotifications.schedule({
-          notifications: [{ id: foregroundId++, title: n.title, body: n.body ?? '', extra: { to: '/orders' } }],
+          notifications: [{ id: foregroundId++, title: n.title, body: n.body ?? '', extra: { to: pushOpenPath(n.data) } }],
         }).catch(() => {});
       }),
     );
-    handles.push(await PushNotifications.addListener('pushNotificationActionPerformed', () => onOpenOrders()));
+    handles.push(
+      await PushNotifications.addListener('pushNotificationActionPerformed', (a) => onOpen(pushOpenPath(a.notification?.data))),
+    );
     await PushNotifications.register();
   } catch {
     // push unavailable on this build or phone: the in-app alert still rings while the app runs

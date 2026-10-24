@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '../api/client';
 import { smsOffers } from '../api/resources';
-import type { SmsLanguage, SmsOffer, SmsOfferAudience, SmsOfferEstimate, SmsOfferInput } from '../api/types';
+import type { SmsLanguage, SmsOffer, SmsOfferEstimate, SmsOfferInput, SmsOfferTarget } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { CustomerGroupPicker } from '../components/CustomerGroupPicker';
 import { PageHeader } from '../components/Layout';
 import { ConfirmDialog, EmptyState, Spinner } from '../components/ui';
+import { audienceFromDraft, audienceLabel, blankAudienceDraft } from '../lib/customerGroups';
 import { errorMessage } from '../lib/errors';
 import { formatDateTime } from '../lib/inventory';
 import {
@@ -31,7 +33,12 @@ import {
  * choice appears only when there is more than one.
  */
 
-const AUDIENCES: SmsOfferAudience[] = ['ALL', 'ORDERED_30D', 'ORDERED_90D', 'NEVER_ORDERED'];
+/** Kept from before customer groups (2026-10-24): picked beside the five groups. */
+const LEGACY_AUDIENCES = [
+  { id: 'ORDERED_30D', label: AUDIENCE_LABEL.ORDERED_30D },
+  { id: 'ORDERED_90D', label: AUDIENCE_LABEL.ORDERED_90D },
+] as const;
+type LegacyAudience = (typeof LEGACY_AUDIENCES)[number]['id'];
 const ESTIMATE_DELAY_MS = 400;
 const HISTORY_PREVIEW = 80;
 
@@ -70,7 +77,19 @@ export function SmsOffers() {
   // account has one) and, left blank, the API falls back to that phone.
   const [testPhone, setTestPhone] = useState(user?.phone ?? '');
   const testPhoneId = useId();
-  const [audience, setAudience] = useState<SmsOfferAudience>('ALL');
+  // "Send to" (customer groups, 2026-10-24): one of the five groups, or an older choice.
+  const [groupDraft, setGroupDraft] = useState(blankAudienceDraft);
+  const [legacy, setLegacy] = useState<LegacyAudience | null>(null);
+  const built = audienceFromDraft(groupDraft);
+  // A word for every customer / never ordered (any API takes it); a group object for the
+  // groups with numbers. null while a group's numbers are wrong: nothing is counted or sent.
+  const audience: SmsOfferTarget | null = legacy
+    ? legacy
+    : !built.audience
+      ? null
+      : built.audience.group === 'ALL' || built.audience.group === 'NEVER_ORDERED'
+        ? built.audience.group
+        : built.audience;
   const [chosenFallback, setFallback] = useState<SmsLanguage>('en');
   const [languages, setLanguages] = useState<SmsLanguage[]>(DEFAULT_LANGUAGES);
   const [texts, setTexts] = useState<Record<SmsLanguage, string>>(EMPTY_TEXTS);
@@ -92,18 +111,25 @@ export function SmsOffers() {
   const fallback: SmsLanguage = enabled.includes(chosenFallback) ? chosenFallback : enabled[0] ?? 'en';
 
   const input: SmsOfferInput = {
-    audience,
+    audience: audience ?? 'ALL',
     fallback_language: fallback,
     messages: Object.fromEntries(
       enabled.filter((l) => texts[l].trim()).map((l) => [l, texts[l].trim()])
     ) as SmsOfferInput['messages'],
   };
-  const inputKey = JSON.stringify(input);
+  // Empty while the group's numbers are wrong: no estimate, no send.
+  const inputKey = audience ? JSON.stringify(input) : '';
 
   // A fresh estimate shortly after the operator stops typing; only the
   // newest answer is kept.
   useEffect(() => {
     const id = ++latestEstimate.current;
+    if (!inputKey) {
+      setEstimate(null);
+      setEstimateError(null);
+      setEstimating(false);
+      return;
+    }
     setEstimating(true);
     const timer = setTimeout(() => {
       smsOffers
@@ -149,7 +175,7 @@ export function SmsOffers() {
   const tooLong = enabled.some((l) => texts[l].length > MAX_OFFER_TEXT);
   const missing = estimate?.missing_languages ?? [];
   const canSend =
-    !!estimate && !estimating && !sending && !tooLong && missing.length === 0 && estimate.recipients > 0;
+    !!audience && !!estimate && !estimating && !sending && !tooLong && missing.length === 0 && estimate.recipients > 0;
 
   async function send() {
     setConfirming(false);
@@ -182,23 +208,21 @@ export function SmsOffers() {
       ) : null}
 
       <section className="card">
-        <fieldset className="choice">
-          <legend className="field__label">Send to</legend>
-          {AUDIENCES.map((a) => (
-            <label key={a} className={`choice__option sms-choice${audience === a ? ' is-selected' : ''}`}>
-              <input
-                type="radio"
-                name="sms-offer-audience"
-                value={a}
-                checked={audience === a}
-                onChange={() => setAudience(a)}
-              />
-              <span>
-                <strong>{AUDIENCE_LABEL[a]}</strong>
-              </span>
-            </label>
-          ))}
-        </fieldset>
+        {/* Customer groups (2026-10-24): the five groups, plus the two older choices. */}
+        <CustomerGroupPicker
+          name="sms-offer-audience"
+          draft={groupDraft}
+          onChange={(next) => {
+            setLegacy(null);
+            setGroupDraft(next);
+          }}
+          extras={LEGACY_AUDIENCES}
+          extraSelected={legacy}
+          onExtra={(id) => setLegacy(id as LegacyAudience)}
+          countText={
+            !audience ? null : estimating ? 'Counting customers…' : estimate ? `${estimate.recipients} customer${estimate.recipients === 1 ? '' : 's'} can get it` : null
+          }
+        />
 
         {multilingual ? (
           <div className="field">
@@ -345,7 +369,7 @@ export function SmsOffers() {
             {history.map((offer) => (
               <li key={offer.id} className="cat-row cat-row--flat">
                 <div className="cat-row__main">
-                  <p className="cat-row__title">{AUDIENCE_LABEL[offer.audience] ?? offer.audience}</p>
+                  <p className="cat-row__title">{audienceLabel(offer.audience)}</p>
                   <p className="cat-row__meta">
                     {formatDateTime(offer.created_at)} · {offer.sent_by_name ?? offer.sent_by_role ?? 'Unknown'}
                   </p>

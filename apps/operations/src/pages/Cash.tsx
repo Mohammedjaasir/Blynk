@@ -7,6 +7,7 @@ import { ConfirmDialog, EmptyState, Spinner } from '../components/ui';
 import { errorMessage } from '../lib/errors';
 import { formatMoney } from '../lib/orders';
 import { signedMoney } from '../lib/riderPay';
+import { tipsOf } from '../lib/growth';
 import '../components/rider-pay.css';
 
 /**
@@ -149,6 +150,12 @@ export function Cash() {
                         )}
                       </p>
                     ) : null}
+                    {/* Rider tips (2026-10-24, migration 055): the rider's, part of the cash collected. */}
+                    {(tipsOf(r) ?? 0) > 0 ? (
+                      <p className="cat-row__meta">
+                        Tips <span className="mono">{formatMoney(tipsOf(r) ?? 0)}</span>
+                      </p>
+                    ) : null}
                     {(r.payable_to_rider ?? 0) > 0 ? (
                       <p className="cat-row__meta rpay-owed">
                         Blynk owes rider <span className="mono">{formatMoney(r.payable_to_rider ?? 0)}</span>
@@ -198,6 +205,12 @@ export function Cash() {
                 <p className="card__row">
                   <span className="card__label">Adjustments</span>
                   <span className="card__value mono">{signedMoney(data.totals.adjustments ?? 0)}</span>
+                </p>
+              ) : null}
+              {(tipsOf(data.totals) ?? 0) > 0 ? (
+                <p className="card__row">
+                  <span className="card__label">Tips</span>
+                  <span className="card__value mono">{formatMoney(tipsOf(data.totals) ?? 0)}</span>
                 </p>
               ) : null}
               {(data.totals.payable_to_rider ?? 0) > 0 ? (

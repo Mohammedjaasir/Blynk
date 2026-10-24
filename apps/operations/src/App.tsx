@@ -61,6 +61,9 @@ import { CustomerAddressBook, CustomerAddressDetail } from './pages/CustomerAddr
 import { RiderRequests } from './pages/RiderRequests';
 import { RiderDocumentSettings } from './pages/RiderDocumentSettings';
 import { StaffAccounts } from './pages/StaffAccounts';
+import { RepeatBaskets } from './pages/RepeatBaskets';
+import { Ratings } from './pages/Ratings';
+import { ProductRequests } from './pages/Catalog/ProductRequests';
 import { LaunchScreen } from './components/LaunchScreen';
 import { AndroidBackButton } from './components/AndroidBackButton';
 
@@ -166,6 +169,8 @@ export function AppRoutes() {
         <Route path="catalog/app-texts" element={<AppTexts />} />
         {/* QR links (owner, 2026-10-22): the dynamic QR on a jersey or poster. */}
         <Route path="catalog/qr-links" element={<QrLinks />} />
+        {/* Product requests (2026-10-24): "Can't find it? Ask us", grouped by name. */}
+        <Route path="catalog/product-requests" element={<ProductRequests />} />
         <Route path="catalog/available-hours" element={<AvailableHours />} />
         <Route path="catalog/home-sections" element={<HomeSections />} />
         <Route path="catalog/combos" element={<Combos />} />
@@ -211,6 +216,9 @@ export function AppRoutes() {
         <Route path="more/rider-requests" element={<RiderRequests />} />
         {/* Which documents riders upload and must have verified (owner, 2026-10-10). */}
         <Route path="more/rider-documents" element={<RiderDocumentSettings />} />
+        {/* Repeat baskets and order ratings (2026-10-24). */}
+        <Route path="more/repeat-baskets" element={<RepeatBaskets />} />
+        <Route path="more/ratings" element={<Ratings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -198,6 +198,18 @@ export function More() {
             <span className="cat-hub__title">Blynk Wallet</span>
           </Link>
         </li>
+        <li>
+          {/* Customers' "deliver this basket every Monday" subscriptions (2026-10-24). */}
+          <Link className="cat-hub__card" to="/more/repeat-baskets">
+            <span className="cat-hub__title">Repeat baskets</span>
+          </Link>
+        </li>
+        <li>
+          {/* Order ratings and rider tips (2026-10-24). */}
+          <Link className="cat-hub__card" to="/more/ratings">
+            <span className="cat-hub__title">Ratings</span>
+          </Link>
+        </li>
       </ul>
 
       <DeliveryFeeCard />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { catalog, dental, inventory as inventoryApi, settings } from '../api/resources';
+import { productRequests } from '../api/growth';
 import { PageHeader } from '../components/Layout';
 import { isOrderableButOut, stockState } from '../lib/inventory';
 
@@ -52,8 +53,14 @@ export function Catalog() {
   const [bandStatus, setBandStatus] = useState<string | null>(null);
   // Home hero banner: automatic or custom.
   const [heroStatus, setHeroStatus] = useState<string | null>(null);
+  // Product requests (2026-10-24): names still marked New (before migration 056: no number).
+  const [newRequestCount, setNewRequestCount] = useState<number | null>(null);
 
   useEffect(() => {
+    void productRequests
+      .list({ status: 'NEW' })
+      .then((groups) => setNewRequestCount(groups.filter((g) => g.status === 'NEW').length))
+      .catch(() => setNewRequestCount(null));
     // `GET /admin/products` has no count and no `total`, so this reads every
     // page the Products screen itself reads (`products.listAll`) and counts
     // the rows - a real number, not a guess. If the read stopped at its cap,
@@ -127,6 +134,15 @@ export function Catalog() {
           <Link className="cat-hub__card" to="/catalog/app-texts">
             <span className="cat-hub__title">App texts</span>
             <span className="cat-hub__count">Edit</span>
+          </Link>
+        </li>
+        {/* Product requests (2026-10-24): what customers asked for that we don't stock. */}
+        <li>
+          <Link className="cat-hub__card" to="/catalog/product-requests">
+            <span className="cat-hub__title">Product requests</span>
+            <span className="cat-hub__count" aria-label={newRequestCount ? `${newRequestCount} new` : undefined}>
+              {newRequestCount === null ? '—' : newRequestCount}
+            </span>
           </Link>
         </li>
         {/* Time-limited products (owner, 2026-10-23): juices only 6 am to 6 pm, etc. */}

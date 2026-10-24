@@ -23,6 +23,7 @@ import {
 } from '../lib/orders';
 import { asapThenBySlot, formatSlot, scheduledLabel } from '../lib/slots';
 import { cashToCollectText } from '../lib/wallet';
+import '../components/growth.css';
 
 /**
  * The Orders board (plan §10), replacing F1's placeholder. Reuses Admin's
@@ -421,6 +422,8 @@ function OrderRow({
         <span className="ticket__top">
           <span className="ticket__number mono">#{number}</span>
           {exception ? <span className="ticket__flag">{STATUS_LABEL[order.order_status]}</span> : null}
+          {/* Placed by a repeat basket (2026-10-24). */}
+          {order.repeat_basket_id ? <span className="repeat-tag">Repeat</span> : null}
           <span className="ticket__age">{formatAge(order.placed_at)}</span>
         </span>
         <span className="ticket__where">

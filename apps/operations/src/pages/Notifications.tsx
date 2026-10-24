@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest } from '../api/client';
+import { CustomerGroupPicker } from '../components/CustomerGroupPicker';
 import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
 import { Field, Spinner } from '../components/ui';
+import { audienceFromDraft, audienceLabel, audienceQuery, blankAudienceDraft, type CustomerAudience } from '../lib/customerGroups';
 import { errorMessage } from '../lib/errors';
 
 /**
@@ -13,19 +15,30 @@ import { errorMessage } from '../lib/errors';
  * apps/admin/src/pages/Notifications.tsx (same wording and limits).
  */
 interface BroadcastAudience { push_enabled: boolean; customers: number; devices: number }
-interface SentBroadcast { id: string; title: string; body: string; image_url?: string | null; queued: number; sent_at: string; sent_by: string | null }
+/** `audience` (customer groups, 2026-10-24): who it went to; absent/null on older rows = every customer. */
+interface SentBroadcast { id: string; title: string; body: string; image_url?: string | null; queued: number; sent_at: string; sent_by: string | null; audience?: CustomerAudience | null }
 
 const LIMITS = { title: 60, body: 180 } as const;
 const STORE_OPEN = { title: 'Blynk is open now!', body: 'Fresh groceries are ready. Start ordering now and we will deliver to your door.' };
+/** Count again this long after the last change to the group's numbers. */
+const COUNT_DELAY_MS = 300;
 
 const api = {
-  audience: () => apiRequest<BroadcastAudience>('/admin/push-broadcasts/audience'),
+  /** Every customer when left out or ALL (unchanged); else the group's counts. */
+  audience: (audience?: CustomerAudience) =>
+    apiRequest<BroadcastAudience>(`/admin/push-broadcasts/audience${audience && audience.group !== 'ALL' ? `?${audienceQuery(audience)}` : ''}`),
   list: () => apiRequest<{ broadcasts: SentBroadcast[] }>('/admin/push-broadcasts').then((d) => d.broadcasts),
-  send: (body: { title: string; body: string; image_url?: string }) => apiRequest<{ id: string; queued: number }>('/admin/push-broadcasts', { method: 'POST', body }),
+  send: (body: { title: string; body: string; image_url?: string; audience?: CustomerAudience }) =>
+    apiRequest<{ id: string; queued: number }>('/admin/push-broadcasts', { method: 'POST', body }),
 };
 
 export function Notifications() {
-  const [audience, setAudience] = useState<BroadcastAudience | null>(null);
+  // "Send to" (customer groups, 2026-10-24): the live count is tagged with the group it counted.
+  const [groupDraft, setGroupDraft] = useState(blankAudienceDraft);
+  const built = audienceFromDraft(groupDraft);
+  const groupKey = built.audience ? audienceQuery(built.audience) : '';
+  const [counted, setCounted] = useState<{ key: string; data: BroadcastAudience } | null>(null);
+  const firstCount = useRef(true);
   const [history, setHistory] = useState<SentBroadcast[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -35,29 +48,68 @@ export function Notifications() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    void api.audience().then(setAudience).catch((err) => setError(errorMessage(err, 'Could not load who will get it.')));
+  // Bumped after a send so the count is read again.
+  const [recount, setRecount] = useState(0);
+  const loadHistory = useCallback(() => {
     void api.list().then(setHistory).catch(() => setHistory([]));
   }, []);
-  useEffect(load, [load]);
+  useEffect(loadHistory, [loadHistory]);
+
+  // Count the chosen group: at once on open, then shortly after the last change.
+  useEffect(() => {
+    const target = audienceFromDraft(groupDraft).audience;
+    if (!target) return undefined;
+    let live = true;
+    const timer = setTimeout(
+      () => {
+        api
+          .audience(target)
+          .then((data) => {
+            if (!live) return;
+            setCounted({ key: groupKey, data });
+            setError(null);
+          })
+          .catch((err) => live && setError(errorMessage(err, 'Could not load who will get it.')));
+      },
+      firstCount.current ? 0 : COUNT_DELAY_MS
+    );
+    firstCount.current = false;
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+    // groupKey stands for the draft's audience.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKey, recount]);
+
+  const audience = counted?.data ?? null;
+  const countIsCurrent = !!counted && !!built.audience && counted.key === groupKey;
 
   const t = title.trim();
   const b = body.trim();
   const problem = t.length < 2 || b.length < 2 || t.length > LIMITS.title || b.length > LIMITS.body;
-  const canSend = !!audience?.push_enabled && audience.customers > 0 && !problem && !sending;
+  const canSend = !!audience?.push_enabled && countIsCurrent && audience.customers > 0 && !problem && !sending;
 
   async function send() {
     setError(null);
     setNotice(null);
     setSending(true);
     try {
-      const r = await api.send({ title: t, body: b, ...(imageUrl ? { image_url: imageUrl } : {}) });
+      const target = built.audience;
+      const r = await api.send({
+        title: t,
+        body: b,
+        ...(imageUrl ? { image_url: imageUrl } : {}),
+        // Every customer: no `audience` at all, the request an older API also takes.
+        ...(target && target.group !== 'ALL' ? { audience: target } : {}),
+      });
       setNotice(`Sent to ${r.queued} customer${r.queued === 1 ? '' : 's'}.`);
       setConfirming(false);
       setTitle('');
       setBody('');
       setImageUrl(null);
-      load();
+      setRecount((n) => n + 1);
+      loadHistory();
     } catch (err) {
       setError(errorMessage(err, 'Could not send the notification.'));
     } finally {
@@ -67,7 +119,7 @@ export function Notifications() {
 
   return (
     <div className="page">
-      <PageHeader title="Notifications" description="Send a notification to every customer who allowed notifications in the Blynk app, e.g. when the store opens." />
+      <PageHeader title="Notifications" description="Send a notification to customers who allowed notifications in the Blynk app - everyone or a group - e.g. when the store opens." />
       {notice ? (
         <p className="form__note" role="status">
           {notice}
@@ -76,16 +128,18 @@ export function Notifications() {
 
       <section className="form__section" aria-label="Who gets it">
         <h2 className="form__section-title">Who gets it</h2>
-        {!audience ? (
-          <Spinner label="Loading" />
+        {/* Customer groups (2026-10-24): all, lapsed, new, big spenders, never ordered. */}
+        <CustomerGroupPicker name="push-audience" draft={groupDraft} onChange={setGroupDraft} />
+        {!built.audience ? null : !audience || !countIsCurrent ? (
+          <Spinner label="Counting customers" />
         ) : !audience.push_enabled ? (
           <p className="field__error" role="alert">
             Push notifications are not set up on the server yet (FIREBASE_SERVICE_ACCOUNT_JSON in Coolify), so nothing can be sent.
           </p>
         ) : (
-          <p className="form__note" data-testid="audience">
-            {audience.customers} customer{audience.customers === 1 ? '' : 's'} ({audience.devices} device{audience.devices === 1 ? '' : 's'}) allowed
-            notifications.
+          <p className="form__note group-picker__count" data-testid="audience" aria-live="polite">
+            {audience.customers} customer{audience.customers === 1 ? '' : 's'} ({audience.devices} device{audience.devices === 1 ? '' : 's'})
+            {built.audience.group === 'ALL' ? '' : ` in "${audienceLabel(built.audience)}"`} allowed notifications.
           </p>
         )}
         <p className="field__hint">
@@ -140,7 +194,8 @@ export function Notifications() {
         {confirming ? (
           <div className="form__actions" role="alertdialog" aria-label="Confirm sending">
             <span>
-              Send this to {audience?.customers ?? 0} customer{audience?.customers === 1 ? '' : 's'} now? It cannot be undone.
+              Send this to {audience?.customers ?? 0} customer{audience?.customers === 1 ? '' : 's'}
+              {built.audience && built.audience.group !== 'ALL' ? ` (${audienceLabel(built.audience)})` : ''} now? It cannot be undone.
             </span>
             <button type="button" className="button button--ghost" disabled={sending} onClick={() => setConfirming(false)}>
               Cancel
@@ -169,6 +224,7 @@ export function Notifications() {
               <div className="field__hint">
                 {new Date(h.sent_at).toLocaleString('en-GB', { timeZone: 'Asia/Colombo', dateStyle: 'medium', timeStyle: 'short' })} · {h.queued} customer
                 {h.queued === 1 ? '' : 's'}
+                {h.audience && h.audience.group !== 'ALL' ? ` · ${audienceLabel(h.audience)}` : ''}
                 {h.sent_by ? ` · by ${h.sent_by}` : ''}
               </div>
             </li>

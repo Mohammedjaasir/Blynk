@@ -20,6 +20,7 @@ import {
   signedMoney,
 } from '../lib/riderPay';
 import { colomboToday } from './Cash';
+import { tipsOf } from '../lib/growth';
 
 /**
  * Rider earnings (More -> Rider earnings, Riders -> Earnings;
@@ -199,6 +200,15 @@ function Totals({ totals }: { totals: RiderEarningsFigures }) {
           <dt className="figure__label">Customers paid for delivery</dt>
           <dd className="figure__value">{formatMoney(totals.customer_delivery_fees)}</dd>
         </div>
+        {/* Rider tips (2026-10-24, migration 055): all of it is the riders'. Only from an API that sends it. */}
+        {tipsOf(totals) !== undefined ? (
+          <div className="figure">
+            <dt className="figure__label">Tips</dt>
+            <dd className="figure__value" data-testid="earnings-tips-total">
+              {formatMoney(tipsOf(totals) ?? 0)}
+            </dd>
+          </div>
+        ) : null}
         {/* Rider pay controls (owner, 2026-10-10) - only from an API that sends them. */}
         {totals.total_earnings !== undefined ? (
           <>
@@ -272,6 +282,12 @@ function RiderCard({ row, onAdjust }: { row: RiderEarningsRow; onAdjust(): void 
         <span className="card__label">Product margin</span>
         <span className="card__value mono">{formatMoney(row.product_margin)}</span>
       </p>
+      {(tipsOf(row) ?? 0) > 0 ? (
+        <p className="card__row">
+          <span className="card__label">Tips</span>
+          <span className="card__value mono rpay-plus">{formatMoney(tipsOf(row) ?? 0)}</span>
+        </p>
+      ) : null}
       {row.total_earnings !== undefined ? (
         <div className="rpay-card-pay" aria-label={`Pay for ${name}`}>
           <p className="card__row">

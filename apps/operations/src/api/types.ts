@@ -110,6 +110,8 @@ export interface BoardOrder {
   payment_status?: PaymentStatus;
   /** PayHere (migration 047): only for ONLINE orders. */
   payment_expires_at?: string | null;
+  /** Repeat baskets (migration 054): the basket this order came from; shows a "Repeat" tag. */
+  repeat_basket_id?: string | null;
 }
 
 export type PaymentMethod = 'COD' | 'ONLINE';
@@ -247,6 +249,12 @@ export interface OrderDetail {
   combos?: OrderCombo[];
   history: OrderHistoryRow[];
   delivery: { id: string; rider_id: string; assignment_status: string; rider_name?: string | null } | null;
+  /** Repeat baskets (migration 054): the basket this order came from; shows a "Repeat" tag. */
+  repeat_basket_id?: string | null;
+  /** Rider tip (migration 055), LKR; 0 / absent when none. All of it goes to the rider. */
+  rider_tip?: number | string | null;
+  /** The customer's rating (migration 055) when the API sends it; null = not rated. */
+  rating?: { stars: number; tags?: string[]; comment?: string | null; created_at?: string } | null;
 }
 
 // ------------------------------------------------------------------ riders
@@ -1936,6 +1944,8 @@ export interface RiderEarningsFigures {
   bonus_breakdown?: Record<BonusKind, number>;
   /** What Blynk still owes (earnings + extras the day's cash could not cover). */
   payable_to_rider?: number;
+  /** Rider tips (migration 055), 100% the rider's. Absent on older APIs (read via lib/growth tipsOf). */
+  tips?: number;
 }
 
 export interface RiderEarningsRow extends RiderEarningsFigures {
@@ -2017,17 +2027,20 @@ export interface MyEarnings {
 /** Offer SMS to registered customers (backend migration 027). ADMIN and OPERATIONS. */
 export type SmsLanguage = 'si' | 'ta' | 'en';
 export type SmsOfferAudience = 'ALL' | 'ORDERED_30D' | 'ORDERED_90D' | 'NEVER_ORDERED';
+/** Customer groups (2026-10-24, plan groups-ratings-requests §A): a word as before, or a group
+ * with its numbers ({ group: 'LAPSED', days: 14 }, ...). */
+export type SmsOfferTarget = SmsOfferAudience | { group: string; days?: number; min_spend_lkr?: number };
 
 /** Body of `POST /admin/sms-offers/estimate` and `POST /admin/sms-offers`. */
 export interface SmsOfferInput {
-  audience: SmsOfferAudience;
+  audience: SmsOfferTarget;
   fallback_language: SmsLanguage;
   messages: Partial<Record<SmsLanguage, string>>;
 }
 
 /** `POST /admin/sms-offers/estimate` -> `data.estimate`. */
 export interface SmsOfferEstimate {
-  audience: SmsOfferAudience;
+  audience: SmsOfferTarget;
   recipients: number;
   /** Recipients per language they will be sent, after the fallback. */
   by_language: Record<SmsLanguage, number>;
@@ -2059,7 +2072,7 @@ export interface SmsOfferTestResult {
 /** A row of `GET /admin/sms-offers` (newest first). */
 export interface SmsOffer {
   id: string;
-  audience: SmsOfferAudience;
+  audience: SmsOfferTarget;
   fallback_language: SmsLanguage;
   message_si: string | null;
   message_ta: string | null;

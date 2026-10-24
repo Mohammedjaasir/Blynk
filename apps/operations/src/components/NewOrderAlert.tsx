@@ -21,11 +21,15 @@ export function NewOrderAlert() {
   useEffect(() => {
     if (!isNativeApp()) return undefined;
     void LocalNotifications.requestPermissions().catch(() => {});
-    const sub = LocalNotifications.addListener('localNotificationActionPerformed', () => navigate('/orders'));
+    // A notification names where it opens in `extra.to` (a low-rating alert opens its order, 2026-10-24).
+    const sub = LocalNotifications.addListener('localNotificationActionPerformed', (a) => {
+      const to = (a.notification?.extra as { to?: unknown } | undefined)?.to;
+      navigate(typeof to === 'string' && to.startsWith('/orders') ? to : '/orders');
+    });
     // Firebase push: the server's "New order received" reaches the phone with the app closed
     let stopPush: (() => void) | null = null;
     let alive = true;
-    void startStaffPush(() => navigate('/orders')).then((stop) => {
+    void startStaffPush((path) => navigate(path)).then((stop) => {
       if (alive) stopPush = stop;
       else stop();
     });

@@ -31,6 +31,7 @@ import {
   orderItemName,
 } from '../lib/orders';
 import { scheduledLabel } from '../lib/slots';
+import { OrderRating } from '../components/OrderRating';
 
 const STATUS_FOR: Partial<Record<OrderAction, string>> = {
   pack: 'PACKED',
@@ -209,6 +210,12 @@ export function OrderDetail() {
         <div>
           <p className="order-detail__number mono">#{number}</p>
           <p className="order-detail__status">{STATUS_LABEL[detail.order_status]}</p>
+          {/* Placed by a repeat basket (2026-10-24). */}
+          {detail.repeat_basket_id ? (
+            <span className="repeat-tag" data-testid="order-repeat-tag">
+              Repeat
+            </span>
+          ) : null}
         </div>
         <Link className="button button--ghost button--sm" to={`/orders/${detail.id}/slip`}>
           Print packing slip
@@ -321,6 +328,9 @@ export function OrderDetail() {
           <p className="order-detail__strong">{detail.delivery.rider_name ?? 'Assigned rider'}</p>
         </section>
       ) : null}
+
+      {/* The customer's rating and rider tip (2026-10-24, migration 055). */}
+      <OrderRating orderId={detail.id} status={detail.order_status} rating={detail.rating} riderTip={detail.rider_tip} />
 
       <section className="order-detail__section" aria-label="History">
         <h2 className="order-detail__label">History</h2>

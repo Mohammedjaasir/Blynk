@@ -8,6 +8,7 @@ import { deliveryErrorMessage } from '../../lib/delivery';
 import { errorCode } from '../../lib/errors';
 import { formatClock, formatMoney, shortNumber } from '../../lib/orders';
 import { boostText, colomboClock, describePay, formatPercent, signedMoney } from '../../lib/riderPay';
+import { tipsOf } from '../../lib/growth';
 
 const OUTCOME: Record<RiderDayDelivery['outcome'], { label: string; tone: string }> = {
   DELIVERED: { label: 'Delivered', tone: 'done' },
@@ -205,6 +206,8 @@ function EarningsLine({ label, period }: { label: string; period: MyEarningsPeri
             .join(' · ')}
         </p>
       ) : null}
+      {/* Rider tips (2026-10-24, migration 055): only from an API that sends them. */}
+      {(tipsOf(period) ?? 0) > 0 ? <p className="quiet">Tips {formatMoney(tipsOf(period) ?? 0)}</p> : null}
       {(period.payable_to_rider ?? 0) > 0 ? (
         <p className="quiet">Blynk owes you {formatMoney(period.payable_to_rider ?? 0)}</p>
       ) : null}
