@@ -106,3 +106,14 @@ export function carouselOrder<T extends Pick<Promotion, 'display_order'>>(rows: 
 export const nextSlide = (i: number, n: number) => (n <= 0 ? 0 : (i + 1) % n);
 /** Auto-advance only with 2+ slides and motion allowed. */
 export const autoAdvances = (n: number, reducedMotion: boolean) => n > 1 && !reducedMotion;
+
+/**
+ * The card is as tall as the banner photo needs (owner, 2026-10-24: "the promotion banner is in a
+ * rectangular fixed shape, it should fit to it"): width / the photo's own shape, between these
+ * heights, instead of one fixed 2:1 box with bars above and below the picture. Slides without a
+ * photo keep the standard height.
+ */
+export const BANNER_MIN_H = 96;
+export const BANNER_MAX_H = 300;
+export const bannerHeight = (width: number, ratio: number | null, standard: number = CAROUSEL.height): number =>
+  ratio && ratio > 0 ? Math.round(Math.min(BANNER_MAX_H, Math.max(BANNER_MIN_H, width / ratio))) : standard;

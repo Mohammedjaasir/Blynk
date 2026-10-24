@@ -6,7 +6,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { Promotion } from '@/blynk/api/types';
 import type { PromoDestination } from '@/blynk/catalog/promoTarget';
-import { autoAdvances, CAROUSEL as K, carouselSlides, nextSlide, slideLook, type SlideLook } from '@/blynk/promo/carousel';
+import { autoAdvances, bannerHeight, CAROUSEL as K, carouselSlides, nextSlide, slideLook, type SlideLook } from '@/blynk/promo/carousel';
 import { PROMO } from '@/blynk/ui/strings';
 import { openPromoDestination } from '@/lib/nav';
 import { F } from '@/lib/theme';
@@ -22,6 +22,24 @@ import { F } from '@/lib/theme';
  */
 
 const EASE = Easing.bezier(0.65, 0, 0.35, 1);
+
+/** The card follows the photo's own shape (bannerHeight): the shown photo's width / height, remembered per address. */
+const ratios = new Map<string, number>();
+function usePhotoRatio(uri: string | null): number | null {
+  const [ratio, setRatio] = useState<number | null>(uri ? ratios.get(uri) ?? null : null);
+  useEffect(() => {
+    if (!uri) { setRatio(null); return; }
+    const known = ratios.get(uri);
+    if (known) { setRatio(known); return; }
+    setRatio(null);
+    let alive = true;
+    Image.getSize(uri, (iw, ih) => {
+      if (iw > 0 && ih > 0) { ratios.set(uri, iw / ih); if (alive) setRatio(iw / ih); }
+    }, () => {});
+    return () => { alive = false; };
+  }, [uri]);
+  return ratio;
+}
 
 export function PromoCarousel({ promotions, onOpen = openPromoDestination, style }: {
   promotions: Promotion[]; onOpen?: (to: PromoDestination) => void; style?: StyleProp<ViewStyle>;
@@ -75,19 +93,22 @@ export function PromoCarousel({ promotions, onOpen = openPromoDestination, style
   const curA = useAnimatedStyle(() => ({ transform: [{ translateX: dir.value * (1 - p.value) * W }] }));
   const prevA = useAnimatedStyle(() => ({ transform: [{ translateX: -dir.value * p.value * W }], opacity: p.value >= 1 ? 0 : 1 }));
 
-  if (n === 0) return null;
-  const cur = slides[Math.min(idx, n - 1)]!;
+  const cur = slides[Math.min(idx, n - 1)] ?? null;
+  const curBg = cur?.look.background;
+  const photoRatio = usePhotoRatio(curBg && (curBg.kind === 'image' || curBg.kind === 'artwork') ? curBg.uri : null);
+  const H = bannerHeight(W, photoRatio);
+  if (n === 0 || !cur) return null;
   const old = prev != null && prev !== idx ? slides[prev] : undefined;
   return (
     <View style={style} accessibilityLabel={PROMO.carousel}>
-      <View style={[styles.card, { width: W, height: K.height }]} {...pan.panHandlers}>
+      <View style={[styles.card, { width: W, height: H }]} {...pan.panHandlers}>
         {old && (
           <Animated.View key={`p${old.id}`} style={[StyleSheet.absoluteFill, prevA]}>
-            <Slide look={old.look} w={W} animate={false} onOpen={onOpen} />
+            <Slide look={old.look} w={W} h={H} animate={false} onOpen={onOpen} />
           </Animated.View>
         )}
         <Animated.View key={`c${cur.id}-${idx}`} style={[StyleSheet.absoluteFill, curA]}>
-          <Slide look={cur.look} w={W} animate={!reduced && prev != null} onOpen={onOpen} />
+          <Slide look={cur.look} w={W} h={H} animate={!reduced && prev != null} onOpen={onOpen} />
         </Animated.View>
       </View>
       {n > 1 && (
@@ -110,7 +131,7 @@ export function PromoCarousel({ promotions, onOpen = openPromoDestination, style
 }
 
 /** One slide, drawn from its look; `animate` plays the entrance. */
-function Slide({ look, w, animate, onOpen }: { look: SlideLook; w: number; animate: boolean; onOpen: (to: PromoDestination) => void }) {
+function Slide({ look, w, h, animate, onOpen }: { look: SlideLook; w: number; h: number; animate: boolean; onOpen: (to: PromoDestination) => void }) {
   const t = useSharedValue(animate ? 0 : 1);
   const f = useSharedValue(animate ? 0 : 1);
   const c = useSharedValue(animate ? 0 : 1);
@@ -137,7 +158,7 @@ function Slide({ look, w, animate, onOpen }: { look: SlideLook; w: number; anima
     >
       {bg.kind === 'solid' && <View style={[StyleSheet.absoluteFill, { backgroundColor: bg.color }]} />}
       {bg.kind === 'gradient' && <LinearGradient colors={[bg.from, bg.to]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
-      {(bg.kind === 'image' || bg.kind === 'artwork') && <FocalImage uri={bg.uri} w={w} h={K.height} />}
+      {(bg.kind === 'image' || bg.kind === 'artwork') && <FocalImage uri={bg.uri} w={w} h={h} />}
       {bg.kind === 'image' && <View style={[StyleSheet.absoluteFill, { backgroundColor: bg.scrim }]} />}
 
       {look.foreground && (
