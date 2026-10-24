@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { sellerApi } from '../api/resources';
 import { errorMessage } from '../lib/apiErrors';
 import { prepareImageForUpload, validateImageFile, validatePreparedFile } from '../lib/image';
+import { IconCamera, IconImage } from './icons';
 import { Spinner } from './ui';
 
 const ACCEPT = 'image/jpeg,image/png,image/webp';
@@ -77,11 +78,23 @@ export function ImagePicker({
 
   return (
     <div className="photo">
-      <div className="photo__frame">
+      <div className={`photo__frame${shown ? ' photo__frame--filled' : ''}`}>
         {shown ? (
           <img src={shown} alt="Product photo preview" className="photo__img" />
         ) : (
-          <span className="photo__none">No photo yet</span>
+          <button
+            type="button"
+            className="photo__none"
+            disabled={busy}
+            onClick={() => galleryRef.current?.click()}
+            aria-describedby="photo-hint"
+          >
+            <span className="photo__none-icon" aria-hidden="true">
+              <IconImage size={28} />
+            </span>
+            <span className="photo__none-title">No photo yet</span>
+            <span className="photo__none-sub">Tap to add one</span>
+          </button>
         )}
         {busy ? (
           <span className="photo__busy">
@@ -90,11 +103,21 @@ export function ImagePicker({
         ) : null}
       </div>
       <div className="photo__actions">
-        <button type="button" className="button button--ghost" disabled={busy} onClick={() => cameraRef.current?.click()}>
-          Take a photo
+        <button
+          type="button"
+          className="button button--ghost button--small"
+          disabled={busy}
+          onClick={() => cameraRef.current?.click()}
+        >
+          <IconCamera size={18} /> Take a photo
         </button>
-        <button type="button" className="button button--ghost" disabled={busy} onClick={() => galleryRef.current?.click()}>
-          {shown ? 'Choose another photo' : 'Choose from gallery'}
+        <button
+          type="button"
+          className="button button--ghost button--small"
+          disabled={busy}
+          onClick={() => galleryRef.current?.click()}
+        >
+          <IconImage size={18} /> {shown ? 'Choose another photo' : 'Choose from gallery'}
         </button>
         {shown && !busy ? (
           <button
@@ -116,7 +139,9 @@ export function ImagePicker({
           {error}
         </p>
       ) : (
-        <p className="field__hint">A clear photo on a plain background sells best. JPEG, PNG or WebP.</p>
+        <p className="field__hint" id="photo-hint">
+          A clear photo on a plain background sells best. JPEG, PNG or WebP.
+        </p>
       )}
     </div>
   );

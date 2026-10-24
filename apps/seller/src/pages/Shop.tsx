@@ -2,11 +2,27 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { sellerApi } from '../api/resources';
 import { useAuth } from '../auth/AuthContext';
 import { useSeller } from '../auth/SellerContext';
-import { Field, describedBy } from '../components/ui';
+import type { SellerStatus } from '../api/types';
+import { IconCalendar, IconMail, IconPhone } from '../components/icons';
+import { Eyebrow, Field, describedBy } from '../components/ui';
 import { errorMessage, fieldErrors } from '../lib/apiErrors';
 import { formatDate } from '../lib/format';
+import type { ChipTone } from '../lib/products';
 
 type Errors = Partial<Record<'shop_name' | 'contact_name' | 'address' | 'note', string>>;
+
+const STATUS_CHIP: Record<SellerStatus, { label: string; tone: ChipTone }> = {
+  APPROVED: { label: 'Approved', tone: 'ok' },
+  PENDING: { label: 'Waiting for approval', tone: 'wait' },
+  REJECTED: { label: 'Not approved', tone: 'bad' },
+  SUSPENDED: { label: 'Switched off', tone: 'off' },
+};
+
+/** "Nimal Farm" -> "NF", for the round badge beside the shop name. */
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? words[0]![0]! + words[1]![0]! : (words[0] ?? '?').slice(0, 2)).toUpperCase();
+}
 
 /** The shop profile (PUT /seller/profile). Allowed in any status except SUSPENDED. */
 export function Shop() {
@@ -33,6 +49,7 @@ export function Shop() {
 
   if (!seller) return null;
   const locked = seller.status === 'SUSPENDED';
+  const signedInWith = user?.phone ?? user?.email ?? null;
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -80,10 +97,35 @@ export function Shop() {
 
   return (
     <section aria-labelledby="shop-title">
-      <h1 id="shop-title">My shop</h1>
-      <p className="muted">
-        {user?.phone ? `Signed in with ${user.phone}. ` : ''}Shop opened with Blynk on {formatDate(seller.created_at)}.
-      </p>
+      <div className="page__head">
+        <div className="page__titles">
+          <Eyebrow>Your profile</Eyebrow>
+          <h1 id="shop-title">My shop</h1>
+        </div>
+      </div>
+
+      <div className="profile">
+        <span className="profile__avatar" aria-hidden="true">
+          {initials(seller.shop_name)}
+        </span>
+        <div className="profile__main">
+          <p className="profile__name">{seller.shop_name}</p>
+          <p className="profile__meta">
+            {signedInWith ? (
+              <span className="profile__line">
+                {user?.phone ? <IconPhone size={16} /> : <IconMail size={16} />} Signed in with {signedInWith}.
+              </span>
+            ) : null}
+            <span className="profile__line">
+              <IconCalendar size={16} /> Shop opened with Blynk on {formatDate(seller.created_at)}.
+            </span>
+          </p>
+        </div>
+        <span className={`chip chip--${STATUS_CHIP[seller.status].tone} profile__chip`}>
+          <span className="chip__dot" aria-hidden="true" />
+          {STATUS_CHIP[seller.status].label}
+        </span>
+      </div>
 
       {locked ? (
         <p className="notice notice--bad" role="status">

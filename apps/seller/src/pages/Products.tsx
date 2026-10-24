@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { sellerApi } from '../api/resources';
 import type { SellerProduct } from '../api/types';
 import { useSeller } from '../auth/SellerContext';
-import { EmptyState, ErrorState, PageLoading } from '../components/ui';
+import { IconCheckCircle, IconClock, IconImage, IconPencil, IconPlus, IconRefresh } from '../components/icons';
+import { EmptyState, ErrorState, Eyebrow, PageLoading } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 import { formatDate, formatNumber, lkr } from '../lib/format';
 import { isSubmissionOnly, productState } from '../lib/products';
@@ -40,17 +41,28 @@ export function Products() {
     await Promise.all([load(), reload()]);
   }
 
+  const live = products?.filter((p) => p.live && p.is_active).length ?? 0;
+  const waiting = products?.filter((p) => p.pending).length ?? 0;
+
   return (
     <section aria-labelledby="products-title">
       <div className="page__head">
-        <h1 id="products-title">My products</h1>
+        <div className="page__titles">
+          <Eyebrow>Your catalogue</Eyebrow>
+          <h1 id="products-title">My products</h1>
+          {products && products.length > 0 ? (
+            <p className="muted page__sub">
+              {`${live} live on Blynk${waiting ? `, ${waiting} waiting for Blynk to check` : ''}`}
+            </p>
+          ) : null}
+        </div>
         {canSell ? (
-          <Link to="/products/new" className="button button--primary">
-            Add a product
+          <Link to="/products/new" className="button button--primary button--cta">
+            <IconPlus size={20} /> Add a product
           </Link>
         ) : (
           <button type="button" className="button button--primary" disabled aria-describedby="add-blocked">
-            Add a product
+            <IconPlus size={20} /> Add a product
           </button>
         )}
       </div>
@@ -61,8 +73,11 @@ export function Products() {
       ) : null}
 
       {notice ? (
-        <p className="notice notice--ok" role="status">
-          {notice}
+        <p className="notice notice--ok notice--row" role="status">
+          <span className="notice__icon" aria-hidden="true">
+            <IconCheckCircle size={20} />
+          </span>
+          <span className="notice__body">{notice}</span>
         </p>
       ) : null}
 
@@ -80,16 +95,16 @@ export function Products() {
           }
           action={
             canSell ? (
-              <Link to="/products/new" className="button button--primary">
-                Add your first product
+              <Link to="/products/new" className="button button--primary button--cta">
+                <IconPlus size={20} /> Add your first product
               </Link>
             ) : undefined
           }
         />
       ) : (
         <ul className="plist">
-          {products.map((product) => (
-            <li key={product.id}>
+          {products.map((product, index) => (
+            <li key={product.id} className="rise" style={{ ['--i' as string]: Math.min(index, 8) }}>
               <ProductCard product={product} canSell={canSell} onWithdrawn={afterWithdraw} onError={setError} />
             </li>
           ))}
@@ -139,7 +154,8 @@ function ProductCard({
           <img className="pcard__img" src={product.image_url} alt="" loading="lazy" />
         ) : (
           <span className="pcard__img pcard__img--none" aria-hidden="true">
-            No photo
+            <IconImage size={24} />
+            <span>No photo</span>
           </span>
         )}
         <div className="pcard__main">
@@ -148,8 +164,16 @@ function ProductCard({
             {[product.category_name, product.pack_size ?? product.unit].filter(Boolean).join(' - ')}
           </p>
           <div className="chips">
-            <span className={`chip chip--${state.chip.tone}`}>{state.chip.label}</span>
-            {state.extra ? <span className={`chip chip--${state.extra.tone}`}>{state.extra.label}</span> : null}
+            <span className={`chip chip--${state.chip.tone}`}>
+              <span className="chip__dot" aria-hidden="true" />
+              {state.chip.label}
+            </span>
+            {state.extra ? (
+              <span className={`chip chip--${state.extra.tone}`}>
+                <span className="chip__dot" aria-hidden="true" />
+                {state.extra.label}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -175,43 +199,48 @@ function ProductCard({
 
       {product.pending ? (
         <p className="note note--wait">
-          {product.pending.kind === 'EDIT'
-            ? `You asked for a change on ${formatDate(product.pending.created_at)} (your new price: ${lkr(priceNow)}). The live product stays as it is until Blynk approves it.`
-            : `Sent to Blynk on ${formatDate(product.pending.created_at)}. Blynk will check it and set the customer price.`}
+          <IconClock size={18} />
+          <span>
+            {product.pending.kind === 'EDIT'
+              ? `You asked for a change on ${formatDate(product.pending.created_at)} (your new price: ${lkr(priceNow)}). The live product stays as it is until Blynk approves it.`
+              : `Sent to Blynk on ${formatDate(product.pending.created_at)}. Blynk will check it and set the customer price.`}
+          </span>
         </p>
       ) : null}
       {rejected ? (
         <p className="note note--bad">
-          {rejected.kind === 'EDIT' ? 'Your last change was not approved' : 'Not approved'}
-          {rejected.reject_reason ? `: ${rejected.reject_reason}` : '.'}
-          {rejected.kind === 'EDIT' ? ' The live product is unchanged.' : ''}
+          <span>
+            {rejected.kind === 'EDIT' ? 'Your last change was not approved' : 'Not approved'}
+            {rejected.reject_reason ? `: ${rejected.reject_reason}` : '.'}
+            {rejected.kind === 'EDIT' ? ' The live product is unchanged.' : ''}
+          </span>
         </p>
       ) : null}
 
       <div className="pcard__actions">
         {!submissionOnly ? (
           canSell ? (
-            <Link to={`/products/${encodeURIComponent(product.id)}/edit`} className="button button--ghost">
-              Edit
+            <Link to={`/products/${encodeURIComponent(product.id)}/edit`} className="button button--ghost button--small">
+              <IconPencil size={17} /> Edit
             </Link>
           ) : (
-            <button type="button" className="button button--ghost" disabled>
-              Edit
+            <button type="button" className="button button--ghost button--small" disabled>
+              <IconPencil size={17} /> Edit
             </button>
           )
         ) : rejected && canSell ? (
           <button
             type="button"
-            className="button button--ghost"
+            className="button button--ghost button--small"
             onClick={() => navigate('/products/new', { state: { prefill: product } })}
           >
-            Fix and send again
+            <IconRefresh size={17} /> Fix and send again
           </button>
         ) : null}
         {product.pending ? (
           confirming ? (
             <span className="confirm">
-              <button type="button" className="button button--danger" disabled={busy} onClick={() => void withdraw()}>
+              <button type="button" className="button button--danger button--small" disabled={busy} onClick={() => void withdraw()}>
                 Yes, withdraw it
               </button>
               <button type="button" className="button button--link" disabled={busy} onClick={() => setConfirming(false)}>

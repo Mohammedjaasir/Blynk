@@ -4,7 +4,8 @@ import { sellerApi } from '../api/resources';
 import type { Category, ProductInput, SellerProduct } from '../api/types';
 import { useSeller } from '../auth/SellerContext';
 import { ImagePicker } from '../components/ImagePicker';
-import { Field, describedBy, ErrorState, PageLoading } from '../components/ui';
+import { IconArrowLeft } from '../components/icons';
+import { ButtonArrow, Field, describedBy, ErrorState, Eyebrow, PageLoading } from '../components/ui';
 import { errorMessage, fieldErrors } from '../lib/apiErrors';
 import { formatDate, lkr, parsePrice } from '../lib/format';
 import { groupCategories } from '../lib/products';
@@ -254,10 +255,15 @@ export function ProductForm({ mode }: { mode: 'new' | 'edit' }) {
 
   return (
     <section aria-labelledby="form-title">
-      <p>
-        <Link to="/products">&larr; My products</Link>
-      </p>
-      <h1 id="form-title">{title}</h1>
+      <Link to="/products" className="back-link">
+        <IconArrowLeft size={18} /> My products
+      </Link>
+      <div className="page__head page__head--form">
+        <div className="page__titles">
+          <Eyebrow>{mode === 'new' ? 'New product' : 'Change request'}</Eyebrow>
+          <h1 id="form-title">{title}</h1>
+        </div>
+      </div>
 
       {mode === 'edit' && product ? (
         <div className="notice notice--wait" role="note">
@@ -282,139 +288,154 @@ export function ProductForm({ mode }: { mode: 'new' | 'edit' }) {
         </div>
       )}
 
-      <form onSubmit={submit} noValidate className="form">
-        <Field id="p-name" label="Product name" required error={errors.name}>
-          <input
-            id="p-name"
-            type="text"
-            autoComplete="off"
-            maxLength={120}
-            value={form.name}
-            onChange={(e) => set('name', e.target.value)}
-            aria-invalid={Boolean(errors.name)}
-            aria-describedby={describedBy('p-name', false, errors.name)}
-          />
-        </Field>
+      <form onSubmit={submit} noValidate className="pform">
+        <div className="pform__grid">
+          <div className="panel pform__details">
+            <h2 className="panel__title">Product details</h2>
+            <Field id="p-name" label="Product name" required error={errors.name}>
+              <input
+                id="p-name"
+                type="text"
+                autoComplete="off"
+                maxLength={120}
+                value={form.name}
+                onChange={(e) => set('name', e.target.value)}
+                aria-invalid={Boolean(errors.name)}
+                aria-describedby={describedBy('p-name', false, errors.name)}
+              />
+            </Field>
 
-        <Field id="p-category" label="Category" required error={errors.category_id}>
-          <select
-            id="p-category"
-            value={form.category_id}
-            onChange={(e) => set('category_id', e.target.value)}
-            aria-invalid={Boolean(errors.category_id)}
-            aria-describedby={describedBy('p-category', false, errors.category_id)}
-          >
-            <option value="">Choose a category</option>
-            {groups.map(({ main, children }) =>
-              children.length > 0 ? (
-                <optgroup key={main.id} label={main.name}>
-                  {children.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
+            <Field id="p-category" label="Category" required error={errors.category_id}>
+              <select
+                id="p-category"
+                value={form.category_id}
+                onChange={(e) => set('category_id', e.target.value)}
+                aria-invalid={Boolean(errors.category_id)}
+                aria-describedby={describedBy('p-category', false, errors.category_id)}
+              >
+                <option value="">Choose a category</option>
+                {groups.map(({ main, children }) =>
+                  children.length > 0 ? (
+                    <optgroup key={main.id} label={main.name}>
+                      {children.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : (
+                    <option key={main.id} value={main.id}>
+                      {main.name}
                     </option>
+                  )
+                )}
+              </select>
+            </Field>
+
+            <div className="form__row">
+              <Field id="p-unit" label="Unit" required error={errors.unit} hint="How it is sold, for example 1 kg or 500 ml.">
+                <input
+                  id="p-unit"
+                  type="text"
+                  list="unit-suggestions"
+                  autoComplete="off"
+                  maxLength={32}
+                  value={form.unit}
+                  onChange={(e) => set('unit', e.target.value)}
+                  aria-invalid={Boolean(errors.unit)}
+                  aria-describedby={describedBy('p-unit', true, errors.unit)}
+                />
+                <datalist id="unit-suggestions">
+                  {UNIT_SUGGESTIONS.map((u) => (
+                    <option key={u} value={u} />
                   ))}
-                </optgroup>
-              ) : (
-                <option key={main.id} value={main.id}>
-                  {main.name}
-                </option>
-              )
-            )}
-          </select>
-        </Field>
+                </datalist>
+              </Field>
+              <Field id="p-pack" label="Pack size" error={errors.pack_size} hint="For example pack of 6.">
+                <input
+                  id="p-pack"
+                  type="text"
+                  autoComplete="off"
+                  maxLength={64}
+                  value={form.pack_size}
+                  onChange={(e) => set('pack_size', e.target.value)}
+                  aria-invalid={Boolean(errors.pack_size)}
+                  aria-describedby={describedBy('p-pack', true, errors.pack_size)}
+                />
+              </Field>
+            </div>
 
-        <div className="form__row">
-          <Field id="p-unit" label="Unit" required error={errors.unit} hint="How it is sold, for example 1 kg or 500 ml.">
-            <input
-              id="p-unit"
-              type="text"
-              list="unit-suggestions"
-              autoComplete="off"
-              maxLength={32}
-              value={form.unit}
-              onChange={(e) => set('unit', e.target.value)}
-              aria-invalid={Boolean(errors.unit)}
-              aria-describedby={describedBy('p-unit', true, errors.unit)}
-            />
-            <datalist id="unit-suggestions">
-              {UNIT_SUGGESTIONS.map((u) => (
-                <option key={u} value={u} />
-              ))}
-            </datalist>
-          </Field>
-          <Field id="p-pack" label="Pack size" error={errors.pack_size} hint="For example pack of 6.">
-            <input
-              id="p-pack"
-              type="text"
-              autoComplete="off"
-              maxLength={64}
-              value={form.pack_size}
-              onChange={(e) => set('pack_size', e.target.value)}
-              aria-invalid={Boolean(errors.pack_size)}
-              aria-describedby={describedBy('p-pack', true, errors.pack_size)}
-            />
-          </Field>
-        </div>
+            <Field id="p-desc" label="Description" error={errors.description} hint="What it is, what is in it, how fresh it is.">
+              <textarea
+                id="p-desc"
+                rows={4}
+                maxLength={2000}
+                value={form.description}
+                onChange={(e) => set('description', e.target.value)}
+                aria-invalid={Boolean(errors.description)}
+                aria-describedby={describedBy('p-desc', true, errors.description)}
+              />
+            </Field>
 
-        <Field id="p-desc" label="Description" error={errors.description} hint="What it is, what is in it, how fresh it is.">
-          <textarea
-            id="p-desc"
-            rows={4}
-            maxLength={2000}
-            value={form.description}
-            onChange={(e) => set('description', e.target.value)}
-            aria-invalid={Boolean(errors.description)}
-            aria-describedby={describedBy('p-desc', true, errors.description)}
-          />
-        </Field>
+            <Field id="p-barcode" label="Barcode" error={errors.barcode} hint="The number under the barcode on the pack, if it has one.">
+              <input
+                id="p-barcode"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={64}
+                value={form.barcode}
+                onChange={(e) => set('barcode', e.target.value)}
+                aria-invalid={Boolean(errors.barcode)}
+                aria-describedby={describedBy('p-barcode', true, errors.barcode)}
+              />
+            </Field>
+          </div>
 
-        <Field id="p-barcode" label="Barcode" error={errors.barcode} hint="The number under the barcode on the pack, if it has one.">
-          <input
-            id="p-barcode"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            maxLength={64}
-            value={form.barcode}
-            onChange={(e) => set('barcode', e.target.value)}
-            aria-invalid={Boolean(errors.barcode)}
-            aria-describedby={describedBy('p-barcode', true, errors.barcode)}
-          />
-        </Field>
+          <div className="pform__side">
+            <div className="panel">
+              <h2 className="panel__title" id="p-photo-label">
+                Photo <span className="field__opt">(optional)</span>
+              </h2>
+              <ImagePicker value={form.image_url} onChange={(url) => set('image_url', url)} onBusyChange={setUploading} />
+              {errors.image_url ? (
+                <p className="field__error" role="alert">
+                  {errors.image_url}
+                </p>
+              ) : null}
+            </div>
 
-        <Field
-          id="p-price"
-          label="Your price (LKR)"
-          required
-          error={errors.price}
-          hint="What you want to receive for each one sold. Blynk sets the price customers pay."
-        >
-          <input
-            id="p-price"
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="250.00"
-            value={form.price}
-            onChange={(e) => set('price', e.target.value)}
-            aria-invalid={Boolean(errors.price)}
-            aria-describedby={describedBy('p-price', true, errors.price)}
-          />
-        </Field>
-        {mode === 'edit' && product && product.live && product.selling_price !== null ? (
-          <p className="muted">Customers currently pay {lkr(product.selling_price)}.</p>
-        ) : null}
-
-        <div className="field">
-          <span className="field__label" id="p-photo-label">
-            Photo <span className="field__opt">(optional)</span>
-          </span>
-          <ImagePicker value={form.image_url} onChange={(url) => set('image_url', url)} onBusyChange={setUploading} />
-          {errors.image_url ? (
-            <p className="field__error" role="alert">
-              {errors.image_url}
-            </p>
-          ) : null}
+            <div className="panel panel--price">
+              <h2 className="panel__title">Price</h2>
+              <Field
+                id="p-price"
+                label="Your price (LKR)"
+                required
+                error={errors.price}
+                hint="What you want to receive for each one sold. Blynk sets the price customers pay."
+              >
+                <div className="input-affix input-affix--text">
+                  <span className="input-affix__prefix" aria-hidden="true">
+                    LKR
+                  </span>
+                  <input
+                    id="p-price"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="250.00"
+                    value={form.price}
+                    onChange={(e) => set('price', e.target.value)}
+                    aria-invalid={Boolean(errors.price)}
+                    aria-describedby={describedBy('p-price', true, errors.price)}
+                  />
+                </div>
+              </Field>
+              {mode === 'edit' && product && product.live && product.selling_price !== null ? (
+                <p className="muted price-now">Customers currently pay {lkr(product.selling_price)}.</p>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         {formError ? (
@@ -424,12 +445,13 @@ export function ProductForm({ mode }: { mode: 'new' | 'edit' }) {
         ) : null}
 
         <div className="form__actions">
-          <button type="submit" className="button button--primary" disabled={saving || uploading || !dirty}>
+          <button type="submit" className="button button--primary button--cta" disabled={saving || uploading || !dirty}>
             {saving
               ? 'Sending...'
               : mode === 'new'
                 ? 'Send to Blynk for approval'
                 : 'Send change to Blynk for approval'}
+            {saving ? null : <ButtonArrow />}
           </button>
           <Link to="/products" className="button button--ghost">
             Cancel

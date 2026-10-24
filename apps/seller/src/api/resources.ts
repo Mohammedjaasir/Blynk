@@ -12,6 +12,13 @@ import type {
 } from './types';
 
 // ---------------------------------------------------------------- auth
+/** What every sign-in route returns (phone code, email sign-in and email sign-up alike). */
+export interface SessionPayload {
+  access_token: string;
+  refresh_token: string;
+  user: AuthUser;
+}
+
 export const auth = {
   requestOtp: (phone: string) =>
     apiRequest<{ dev_otp?: string; expires_in_minutes?: number }>('/auth/otp/request', {
@@ -22,9 +29,25 @@ export const auth = {
 
   /** `shop_name` is only used the first time a number signs in (it creates the shop). */
   verifyOtp: (phone: string, otp: string, shopName?: string) =>
-    apiRequest<{ access_token: string; refresh_token: string; user: AuthUser }>('/auth/otp/verify', {
+    apiRequest<SessionPayload>('/auth/otp/verify', {
       method: 'POST',
       body: { phone, otp, app: 'seller', ...(shopName ? { shop_name: shopName } : {}) },
+      auth: false,
+    }),
+
+  /** A new seller account with an email and password (creates the shop, which Blynk then approves). */
+  registerEmail: (email: string, password: string, shopName: string) =>
+    apiRequest<SessionPayload>('/auth/seller/register-email', {
+      method: 'POST',
+      body: { email, password, shop_name: shopName },
+      auth: false,
+    }),
+
+  /** Sign in to an existing seller account with its email and password. */
+  loginEmail: (email: string, password: string) =>
+    apiRequest<SessionPayload>('/auth/seller/login-email', {
+      method: 'POST',
+      body: { email, password },
       auth: false,
     }),
 

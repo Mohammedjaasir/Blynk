@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { sellerApi } from '../api/resources';
 import type { Statement as StatementData } from '../api/types';
-import { EmptyState, ErrorState, PageLoading } from '../components/ui';
+import { IconBox, IconCalendar, IconWallet } from '../components/icons';
+import { EmptyState, ErrorState, Eyebrow, PageLoading } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 import { formatDate, formatNumber, lkr, todayColombo } from '../lib/format';
 
@@ -63,11 +64,16 @@ export function Statement() {
 
   return (
     <section aria-labelledby="statement-title">
-      <h1 id="statement-title">Statement</h1>
-      <p className="muted">
-        Counts delivered orders only. Blynk collects the cash from customers and pays you by hand; each payment is
-        listed below.
-      </p>
+      <div className="page__head">
+        <div className="page__titles">
+          <Eyebrow>Your money</Eyebrow>
+          <h1 id="statement-title">Statement</h1>
+          <p className="muted page__sub">
+            Counts delivered orders only. Blynk collects the cash from customers and pays you by hand; each payment is
+            listed below.
+          </p>
+        </div>
+      </div>
 
       <form
         className="range"
@@ -92,18 +98,20 @@ export function Statement() {
           </p>
         ) : null}
         <div className="range__actions">
-          <button type="submit" className="button button--primary">
-            Show these dates
+          <button type="submit" className="button button--primary button--small">
+            <IconCalendar size={17} /> Show these dates
           </button>
-          <button type="button" className="button button--ghost" onClick={() => preset('month')}>
-            This month
-          </button>
-          <button type="button" className="button button--ghost" onClick={() => preset('30')}>
-            Last 30 days
-          </button>
-          <button type="button" className="button button--ghost" onClick={() => preset('all')}>
-            All time
-          </button>
+          <span className="range__presets">
+            <button type="button" className="pill" onClick={() => preset('month')}>
+              This month
+            </button>
+            <button type="button" className="pill" onClick={() => preset('30')}>
+              Last 30 days
+            </button>
+            <button type="button" className="pill" onClick={() => preset('all')}>
+              All time
+            </button>
+          </span>
         </div>
       </form>
 
@@ -119,6 +127,10 @@ export function Statement() {
               : 'Showing all time'}
           </p>
           <dl className="totals">
+            <div className="total total--due">
+              <dt>Blynk still owes you</dt>
+              <dd>{lkr(data.due)}</dd>
+            </div>
             <div className="total">
               <dt>Sold</dt>
               <dd>{lkr(data.gross)}</dd>
@@ -135,43 +147,53 @@ export function Statement() {
               <dt>Paid to you</dt>
               <dd>{lkr(data.paid)}</dd>
             </div>
-            <div className="total total--due">
-              <dt>Blynk still owes you</dt>
-              <dd>{lkr(data.due)}</dd>
-            </div>
           </dl>
 
-          <h2>What sold</h2>
-          {data.lines.length === 0 ? (
-            <EmptyState title="Nothing sold in these dates" message="Delivered orders with your products will show up here." />
-          ) : (
-            <ul className="lines">
-              {data.lines.map((line) => (
-                <li key={line.product_id} className="line">
-                  <span className="line__name">{line.name}</span>
-                  <span className="line__units">{formatNumber(line.units)} sold</span>
-                  <span className="line__amount">{lkr(line.gross)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="ledger-grid">
+            <div className="ledger">
+              <h2 className="ledger__title">
+                <IconBox size={20} /> What sold
+              </h2>
+              {data.lines.length === 0 ? (
+                <EmptyState title="Nothing sold in these dates" message="Delivered orders with your products will show up here." />
+              ) : (
+                <ul className="lines">
+                  {data.lines.map((line) => (
+                    <li key={line.product_id} className="line">
+                      <span className="line__name">{line.name}</span>
+                      <span className="line__units">{formatNumber(line.units)} sold</span>
+                      <span className="line__amount">{lkr(line.gross)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
-          <h2>Payments from Blynk</h2>
-          {data.payouts.length === 0 ? (
-            <EmptyState title="No payments yet" message="When Blynk pays you, it will be listed here." />
-          ) : (
-            <ul className="lines">
-              {data.payouts.map((payout) => (
-                <li key={payout.id} className="line">
-                  <span className="line__name">
-                    {formatDate(payout.paid_on)}
-                    {payout.note ? <span className="muted"> - {payout.note}</span> : null}
-                  </span>
-                  <span className="line__amount">{lkr(payout.amount)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+            <div className="ledger">
+              <h2 className="ledger__title">
+                <IconWallet size={20} /> Payments from Blynk
+              </h2>
+              {data.payouts.length === 0 ? (
+                <EmptyState
+                  title="No payments yet"
+                  message="When Blynk pays you, it will be listed here."
+                  icon={<IconWallet size={26} />}
+                />
+              ) : (
+                <ul className="lines">
+                  {data.payouts.map((payout) => (
+                    <li key={payout.id} className="line">
+                      <span className="line__name">
+                        {formatDate(payout.paid_on)}
+                        {payout.note ? <span className="muted"> - {payout.note}</span> : null}
+                      </span>
+                      <span className="line__amount">{lkr(payout.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </>
       )}
     </section>

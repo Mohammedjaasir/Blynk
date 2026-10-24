@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { IconAlert, IconArrowRight, IconBox, IconRefresh } from './icons';
 
 export function Spinner({ label = 'Loading' }: { label?: string }) {
   return (
@@ -17,9 +18,36 @@ export function PageLoading({ label = 'Loading' }: { label?: string }) {
   );
 }
 
-export function EmptyState({ title, message, action }: { title: string; message?: string; action?: ReactNode }) {
+/** The round arrow that sits inside a main button ("button in a button"). */
+export function ButtonArrow() {
+  return (
+    <span className="button__badge" aria-hidden="true">
+      <IconArrowRight size={18} />
+    </span>
+  );
+}
+
+/** The small pill above a page title. */
+export function Eyebrow({ children }: { children: ReactNode }) {
+  return <p className="eyebrow">{children}</p>;
+}
+
+export function EmptyState({
+  title,
+  message,
+  action,
+  icon,
+}: {
+  title: string;
+  message?: string;
+  action?: ReactNode;
+  icon?: ReactNode;
+}) {
   return (
     <div className="empty">
+      <span className="empty__icon" aria-hidden="true">
+        {icon ?? <IconBox size={26} />}
+      </span>
       <h2>{title}</h2>
       {message ? <p>{message}</p> : null}
       {action}
@@ -29,13 +57,18 @@ export function EmptyState({ title, message, action }: { title: string; message?
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="notice notice--bad" role="alert">
-      <p>{message}</p>
-      {onRetry ? (
-        <button type="button" className="button button--ghost" onClick={onRetry}>
-          Try again
-        </button>
-      ) : null}
+    <div className="notice notice--bad notice--row" role="alert">
+      <span className="notice__icon" aria-hidden="true">
+        <IconAlert size={20} />
+      </span>
+      <div className="notice__body">
+        <p>{message}</p>
+        {onRetry ? (
+          <button type="button" className="button button--ghost button--small" onClick={onRetry}>
+            <IconRefresh size={16} /> Try again
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -47,6 +80,7 @@ export function Field({
   hint,
   error,
   required,
+  hideOptional,
   children,
 }: {
   id: string;
@@ -54,13 +88,19 @@ export function Field({
   hint?: string;
   error?: string | null;
   required?: boolean;
+  /** Leave out the "(optional)" note (for screens where every box is needed). */
+  hideOptional?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className={`field${error ? ' field--error' : ''}`}>
       <label htmlFor={id}>
         {label}
-        {required ? <span className="field__req"> (required)</span> : <span className="field__opt"> (optional)</span>}
+        {required ? (
+          <span className="field__req"> (required)</span>
+        ) : hideOptional ? null : (
+          <span className="field__opt"> (optional)</span>
+        )}
       </label>
       {hint ? (
         <p className="field__hint" id={`${id}-hint`}>

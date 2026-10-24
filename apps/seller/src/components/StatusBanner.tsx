@@ -1,5 +1,28 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Seller } from '../api/types';
+import { IconAlert, IconCheckCircle, IconClock, IconPause } from './icons';
+
+function Banner({
+  tone,
+  status,
+  icon,
+  children,
+}: {
+  tone: 'wait' | 'bad' | 'ok';
+  status: Seller['status'];
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`banner banner--${tone}`} role="status" data-status={status}>
+      <span className="banner__icon" aria-hidden="true">
+        {icon}
+      </span>
+      <div className="banner__text">{children}</div>
+    </div>
+  );
+}
 
 /**
  * Where the shop stands with Blynk, shown on every screen. Only an APPROVED
@@ -9,37 +32,37 @@ export function StatusBanner({ seller }: { seller: Seller }) {
   switch (seller.status) {
     case 'PENDING':
       return (
-        <div className="banner banner--wait" role="status" data-status="PENDING">
+        <Banner tone="wait" status="PENDING" icon={<IconClock size={22} />}>
           <strong>Waiting for Blynk to approve your shop.</strong>
           <span>
             You can look around and fill in your <Link to="/shop">shop details</Link>. You can add products once Blynk
             approves you.
           </span>
-        </div>
+        </Banner>
       );
     case 'REJECTED':
       return (
-        <div className="banner banner--bad" role="status" data-status="REJECTED">
+        <Banner tone="bad" status="REJECTED" icon={<IconAlert size={22} />}>
           <strong>Blynk could not approve your shop.</strong>
           {seller.rejection_reason ? <span>Reason: {seller.rejection_reason}</span> : null}
           <span>
             You can update your <Link to="/shop">shop details</Link>. You cannot add products until you are approved.
           </span>
-        </div>
+        </Banner>
       );
     case 'SUSPENDED':
       return (
-        <div className="banner banner--bad" role="status" data-status="SUSPENDED">
+        <Banner tone="bad" status="SUSPENDED" icon={<IconPause size={22} />}>
           <strong>Your shop is switched off by Blynk.</strong>
           <span>Your products are hidden from customers and you cannot add or change products. Please contact Blynk.</span>
-        </div>
+        </Banner>
       );
     case 'APPROVED':
       return (
-        <div className="banner banner--ok" role="status" data-status="APPROVED">
+        <Banner tone="ok" status="APPROVED" icon={<IconCheckCircle size={22} />}>
           <strong>Your shop is approved.</strong>
           <span>Add products below. Blynk checks each one and sets the customer price before it goes live.</span>
-        </div>
+        </Banner>
       );
   }
 }
