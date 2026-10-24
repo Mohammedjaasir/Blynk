@@ -73,7 +73,11 @@ export const stockApi = {
   detail: (productId: string) => apiRequest<StockDetail>(`/admin/inventory/${productId}`),
   setMode: (productId: string, tracking_mode: TrackingMode) =>
     apiRequest(`/admin/inventory/${productId}/mode`, { method: 'PATCH', body: { tracking_mode } }),
-  adjust: (productId: string, body: { adjustment_type: ManualAdjustmentType; quantity_delta: number; notes: string }) =>
+  adjust: (
+    productId: string,
+    // expires_on (migration 059): the received units are also noted as a batch with this expiry date.
+    body: { adjustment_type: ManualAdjustmentType; quantity_delta: number; notes: string; expires_on?: string }
+  ) =>
     apiRequest<{ inventory: { quantity_on_hand: number; quantity_available: number } }>(
       `/admin/inventory/${productId}/adjust`,
       { method: 'POST', body }

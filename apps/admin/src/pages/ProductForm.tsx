@@ -6,14 +6,19 @@ import {
   products as productsApi,
   settings as settingsApi,
 } from '../api/resources';
-import type { Category, PricingMode, PricingSource, SetStockInput, StaffStock, StaffVariant } from '../api/types';
+import type { AdminProduct, Category, PricingMode, PricingSource, SetStockInput, StaffStock, StaffVariant } from '../api/types';
 import { categoryOptions } from '../lib/categoryTree';
 import { ImageUploader } from '../components/ImageUploader';
 import { ProductVariants, StockFigures, type VariantPricingContext } from '../components/ProductVariants';
 import { Switch } from '../components/Switch';
+import { FlashDealDialog } from '../components/FlashDealDialog';
+import { ExtraCategories } from '../components/ExtraCategories';
+import { extraCategoriesReady, sameSet, withoutPrimary } from '../lib/extraCategories';
+import { canStartFlash, flashRowText } from '../lib/flashDeal';
 import { PageHeader } from '../components/Layout';
 import { ProductAdLinks } from '../components/ProductAdLinks';
 import { ProductHoursSection, useProductHours } from '../components/ProductHours';
+import { ProductExpirySection } from '../components/ProductExpiry';
 import { ApiError } from '../api/client';
 import { Field, Spinner, useToast } from '../components/ui';
 import { errorMessage, splitServerErrors } from '../lib/apiErrors';
@@ -45,6 +50,7 @@ export const MAX_PURCHASE_COST = 99_999_999.99;
 /** Fields with an inline error slot; a server error on one shows there. */
 const INLINE_FIELDS = [
   'category_id',
+  'extra_category_ids',
   'name',
   'sku',
   'unit',
@@ -96,6 +102,8 @@ interface StoredOffer {
 
 interface FormState {
   category_id: string;
+  /** "Also show in" (migration 060): extra categories the product is listed in; never the main one. */
+  extra_category_ids: string[];
   name: string;
   sku: string;
   unit: string;
@@ -134,6 +142,7 @@ interface FormState {
 
 const EMPTY: FormState = {
   category_id: '',
+  extra_category_ids: [],
   name: '',
   sku: '',
   unit: '',
@@ -227,6 +236,11 @@ export function ProductForm() {
   const [globalMarkup, setGlobalMarkup] = useState<number | null>(null);
   const [productGlobalMarkup, setProductGlobalMarkup] = useState<number | null>(null);
   const [storedOffer, setStoredOffer] = useState<StoredOffer>({ price: null, endsAt: null });
+  // The saved "Also show in" set, so only a changed set is sent (migration 060)
+  const [storedExtra, setStoredExtra] = useState<string[]>([]);
+  // Flash deals (wave 2, 2026-10-25): the saved product the quick "Start flash deal" dialog works on
+  const [flashProduct, setFlashProduct] = useState<AdminProduct | null>(null);
+  const [flashOpen, setFlashOpen] = useState(false);
   // The image the saved product points at; replaced files are deleted only
   // after a successful save.
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -273,8 +287,10 @@ export function ProductForm() {
             ? ''
             : String(product.fixed_selling_price);
         const mrpText = product.mrp === null || product.mrp === undefined ? '' : String(product.mrp);
+        setStoredExtra(product.extra_category_ids ?? []);
         setForm({
           category_id: product.category_id,
+          extra_category_ids: product.extra_category_ids ?? [],
           name: product.name,
           sku: product.sku,
           unit: product.unit,
@@ -326,6 +342,7 @@ export function ProductForm() {
         });
         setProductGlobalMarkup(product.global_markup_percent ?? null);
         setStoredOffer({ price: product.offer_price ?? null, endsAt: product.offer_ends_at ?? null });
+        setFlashProduct(product);
         setOriginalImage(product.image_url ?? null);
       })
       .catch((err) =>
@@ -609,6 +626,10 @@ export function ProductForm() {
       payload.custom_markup_percent =
         form.custom_markup_percent.trim() === '' ? null : Number(form.custom_markup_percent);
     }
+    // Also show in (migration 060): a new product sends its set when it has one, an edit only a changed set.
+    if (isEditing ? !sameSet(form.extra_category_ids, storedExtra) : form.extra_category_ids.length > 0) {
+      payload.extra_category_ids = form.extra_category_ids;
+    }
     // MRP (migration 048): sent only when it changed (blank clears it).
     if (form.mrp.trim() !== (storedPricing?.mrp ?? '')) payload.mrp = form.mrp.trim() === '' ? null : Number(form.mrp.trim());
     // Offer fields go only when they changed (owner, 2026-10-09): a cleared
@@ -684,7 +705,29 @@ export function ProductForm() {
     }
   }
 
+  /** A flash deal was started or ended from the dialog: read the offer back so the form shows what is saved. */
+  async function flashDone(message: string) {
+    setFlashOpen(false);
+    toast.success(message);
+    if (!id) return;
+    try {
+      const product = await productsApi.getAdmin(id);
+      setFlashProduct(product);
+      setStoredOffer({ price: product.offer_price ?? null, endsAt: product.offer_ends_at ?? null });
+      setForm((f) => ({
+        ...f,
+        offer_mode: 'price',
+        offer_off: '',
+        offer_price: product.offer_price === null || product.offer_price === undefined ? '' : String(product.offer_price),
+        offer_ends_on: product.offer_ends_at ? colomboDate(product.offer_ends_at) : '',
+      }));
+    } catch {
+      /* the deal itself went through; the next load shows it */
+    }
+  }
+
   if (loading) return <Spinner label="Loading product" />;
+
 
   return (
     <>
@@ -707,7 +750,9 @@ export function ProductForm() {
             <select
               className="input"
               value={form.category_id}
-              onChange={(event) => setForm({ ...form, category_id: event.target.value })}
+              onChange={(event) =>
+                setForm({ ...form, category_id: event.target.value, extra_category_ids: withoutPrimary(form.extra_category_ids, event.target.value) })
+              }
             >
               <option value="">Select a category</option>
               {/* Each category followed by its sub-categories ("Rice & Flour › Rice"). */}
@@ -719,6 +764,16 @@ export function ProductForm() {
               ))}
             </select>
           </Field>
+          {/* Migration 060: hidden until the API says the table exists */}
+          {extraCategoriesReady(categories) ? (
+            <ExtraCategories
+              categories={categories}
+              primaryId={form.category_id}
+              value={form.extra_category_ids}
+              onChange={(ids) => setForm({ ...form, extra_category_ids: ids })}
+              error={errors.extra_category_ids}
+            />
+          ) : null}
           <div className="form__row">
             <Field label="SKU" error={errors.sku}>
               <input
@@ -934,6 +989,15 @@ export function ProductForm() {
               </button>
             </div>
           ) : null}
+          {isEditing && flashProduct && canStartFlash(flashProduct) ? (
+            <div className="form__row" style={{ alignItems: 'center', gap: 10 }}>
+              <button type="button" className="button button--ghost button--sm" onClick={() => setFlashOpen(true)}>
+                Start flash deal
+              </button>
+              {flashRowText(flashProduct) ? <span className="flash-tag">{flashRowText(flashProduct)}</span> : null}
+              <span className="form__note">A short offer with a live countdown in the customer app (1 hour to 24 hours).</span>
+            </div>
+          ) : null}
           <label className="toggle">
             <input
               type="checkbox"
@@ -1045,6 +1109,7 @@ export function ProductForm() {
         )}
 
         {isEditing && id ? <ProductHoursSection hours={hours} /> : null}
+        {isEditing && id ? <ProductExpirySection productId={id} /> : null}
 
         {isEditing && id ? <ProductAdLinks productId={id} productName={form.name} /> : null}
 
@@ -1092,6 +1157,9 @@ export function ProductForm() {
           </button>
         </div>
       </form>
+      {flashOpen && flashProduct ? (
+        <FlashDealDialog product={flashProduct} onClose={() => setFlashOpen(false)} onDone={(m) => void flashDone(m)} />
+      ) : null}
     </>
   );
 }

@@ -1,0 +1,111 @@
+/* Flash deals (wave 2, 2026-10-25): the "Start flash deal" dialog and the running-deal tag. */
+.flash-dialog__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.flash-chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 40px;
+}
+
+.flash-chip.is-selected {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.flash-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.flash-dialog__custom {
+  margin-top: 8px;
+}
+
+.flash-dialog__running {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff6c4;
+  color: #1a1d2e;
+  font-size: 13px;
+}
+
+.flash-preview {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+
+.flash-preview__label {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.flash-preview__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.flash-preview__price {
+  font-size: 18px;
+  color: #0a6b19;
+}
+
+.flash-preview__was {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.flash-preview__off {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0a6b19;
+}
+
+.flash-preview__pill {
+  justify-self: start;
+  background: #ffe141;
+  color: #1a1d2e;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.flash-preview__until {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.flash-tag {
+  display: inline-block;
+  background: #ffe141;
+  color: #1a1d2e;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.flash-chip-filter.is-selected {
+  background: #ffe141;
+  color: #1a1d2e;
+  border-color: #ffe141;
+}

@@ -451,7 +451,8 @@ describe('admin scope', () => {
     expect(screen.getByRole('link', { name: 'Product requests' })).toBeInTheDocument();
     // QR links (2026-10-22) and Available hours (2026-10-23) bring it to 28; the seller portal to 30; Home sections to 31;
     // Repeat baskets, Ratings and Product requests to 34.
-    expect(screen.getAllByRole('link')).toHaveLength(34);
+    // Wave 2 (2026-10-25): Rider map, Reorder suggestions, Purchase orders, Expiry, Bundle offers and Daily report bring it to 40.
+    expect(screen.getAllByRole('link')).toHaveLength(40);
 
     // Inventory and the Rider app are separate applications against the
     // same backend - they must not appear here in any form, not even disabled.

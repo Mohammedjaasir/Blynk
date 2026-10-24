@@ -86,6 +86,10 @@ export function Layout() {
               <NavLink to="/order-map" className="nav__item">
                 Delivery map
               </NavLink>
+              {/* Where the riders are and which orders wait for one (owner, 2026-10-25). */}
+              <NavLink to="/rider-map" className="nav__item">
+                Rider map
+              </NavLink>
               <NavLink to="/cash" className="nav__item">
                 Rider cash
               </NavLink>
@@ -119,9 +123,20 @@ export function Layout() {
               <NavLink to="/purchase-list" className="nav__item">
                 Purchase list
               </NavLink>
+              {/* Reorder suggestions and supplier purchase orders (2026-10-25). */}
+              <NavLink to="/reorder-suggestions" className="nav__item">
+                Reorder suggestions
+              </NavLink>
+              <NavLink to="/purchase-orders" className="nav__item">
+                Purchase orders
+              </NavLink>
               {/* "Can't find it? Ask us" requests (2026-10-24). */}
               <NavLink to="/product-requests" className="nav__item">
                 Product requests
+              </NavLink>
+              {/* Expiry dates (2026-10-25): what is expired or expiring, from the batches staff note. */}
+              <NavLink to="/expiry" className="nav__item">
+                Expiry
               </NavLink>
 
               {/* Seller portal (2026-10-24): sellers, and their products waiting for approval. */}
@@ -153,6 +168,10 @@ export function Layout() {
               {/* Home sections (2026-10-24): staff-made product rails, optionally timed with a countdown. */}
               <NavLink to="/home-sections" className="nav__item">
                 Home sections
+              </NavLink>
+              {/* Bundle offers (2026-10-25): "buy 2 get 1" and "spend X, get a gift". */}
+              <NavLink to="/bundle-offers" className="nav__item">
+                Bundle offers
               </NavLink>
               {/* App texts (owner, 2026-10-18): the app's other words and aisle colours. */}
               <NavLink to="/app-texts" className="nav__item">
@@ -213,6 +232,10 @@ export function Layout() {
               <p className="nav__group">Store settings</p>
               <NavLink to="/settings" className="nav__item">
                 Settings
+              </NavLink>
+              {/* Daily report (owner, 2026-10-25): the evening SMS with the day's numbers. */}
+              <NavLink to="/daily-report" className="nav__item">
+                Daily report
               </NavLink>
             </>
           ) : null}

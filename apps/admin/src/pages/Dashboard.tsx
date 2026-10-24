@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/apiErrors';
 import { PageHeader } from '../components/Layout';
 import { Spinner } from '../components/ui';
 import { SalesPanel } from '../components/SalesPanel';
+import { ExpiryChips } from '../components/ExpiryChips';
 
 interface Summary {
   liveProducts: number;
@@ -144,6 +145,9 @@ export function Dashboard() {
           to="/promotions"
         />
       </div>
+
+      {/* Expired / expiring this week / this month (2026-10-25); nothing before migration 059. */}
+      <ExpiryChips />
 
       <section className="attention">
         <h2 className="section-label">Needs a look</h2>

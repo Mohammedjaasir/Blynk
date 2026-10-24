@@ -24,6 +24,7 @@ import { PointsSettingsCard } from '../components/PointsSettingsCard';
 import { WalletSettingsCard } from '../components/WalletSettingsCard';
 import { PaymentGatewayCard } from '../components/PaymentGatewayCard';
 import { RiderDocumentsSettingsCard } from '../components/RiderDocumentsSettingsCard';
+import { RiderAutoAssignCard } from '../components/RiderAutoAssignCard';
 import { RiderPaySettings } from '../components/RiderPaySettings';
 import { AppUpdatesPanel } from '../components/AppUpdatesPanel';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
@@ -87,6 +88,8 @@ export function Settings() {
           only shows against an API without the pay controls. */}
       <RiderPaySettings fallback={<RiderCommissionPanel />} />
       <RiderTripsPanel />
+      {/* Automatic rider assignment (owner, 2026-10-25): off by default. */}
+      <RiderAutoAssignCard />
       {/* Rider documents riders upload at sign-up (owner, 2026-10-10). */}
       <RiderDocumentsSettingsCard />
       <BirthdayOfferPanel />

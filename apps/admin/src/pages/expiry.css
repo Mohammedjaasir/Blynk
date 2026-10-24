@@ -1,0 +1,75 @@
+/* Expiry dates (wave 2, 2026-10-25; migration 059). */
+
+.expiry-tabs {
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.expiry-tabs__count {
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.expiry-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.expiry-dialog {
+  width: min(560px, 100%);
+}
+
+/* red = expired or within 7 days, amber = within 30 days */
+.expiry-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.expiry-chip--expired {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.expiry-chip--red {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: #fdecea;
+}
+.expiry-chip--amber {
+  border-color: #b26a00;
+  color: #7a4a00;
+  background: #fff3d6;
+}
+.expiry-chip--ok {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.expiry-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.expiry-chips a {
+  text-decoration: none;
+}
+
+.product-expiry__list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.product-expiry__list li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}

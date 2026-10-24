@@ -23,8 +23,9 @@ export type TemplateColumn = (typeof TEMPLATE_COLUMNS)[number];
  * Flour > Rice" in the category cell works too) and the older cost_price
  * (= purchase_cost).
  */
-export type ImportColumn = TemplateColumn | 'cost_price';
-const READ_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, 'cost_price'];
+export type ImportColumn = TemplateColumn | 'cost_price' | 'extra_categories';
+// extra_categories (migration 060, owner 2026-10-25): optional, not part of the template - names separated by ';'.
+const READ_COLUMNS: readonly string[] = [...TEMPLATE_COLUMNS, 'cost_price', 'extra_categories'];
 
 /** Header spellings read as sub_category ("Sub-category", "Subcategory", "Sidebar"). */
 const HEADER_ALIASES: Record<string, string> = {
@@ -32,11 +33,13 @@ const HEADER_ALIASES: Record<string, string> = {
   subcategory: 'sub_category',
   sub_categories: 'sub_category',
   sidebar: 'sub_category',
+  'extra-categories': 'extra_categories',
+  extra_category: 'extra_categories',
 };
 
 /** Help text for the category cell (the import screen). */
 export const CATEGORY_HELP =
-  'category: an existing category name or slug. For a sub-category (sidebar item) write "Category > Sub-category" (e.g. Rice & Flour > Rice), or put the parent in category and the sub-category in an optional sub_category column. A name that exists under two categories needs its parent or its slug.';
+  'category: an existing category name or slug. For a sub-category (sidebar item) write "Category > Sub-category" (e.g. Rice & Flour > Rice), or put the parent in category and the sub-category in an optional sub_category column. A name that exists under two categories needs its parent or its slug. Optional extra column "Extra categories" (up to 5 names or slugs separated by ;) also lists the product in those categories; leave it empty to change nothing.';
 
 /** Required columns; purchase_cost may be the older cost_price instead. */
 const REQUIRED_COLUMNS: TemplateColumn[] = ['name', 'category', 'unit', 'purchase_cost', 'sku'];
@@ -204,6 +207,8 @@ export function validateRow(record: Partial<Record<ImportColumn, unknown>>, row:
     category,
     // A variant row takes its category from the product.
     ...(!isVariant && optional('sub_category') ? { sub_category: text('sub_category') } : {}),
+    // Migration 060: also listed in these categories (names / slugs separated by ';'); blank = unchanged.
+    ...(!isVariant && optional('extra_categories') ? { extra_categories: text('extra_categories') } : {}),
     unit,
     pack_size: optional('pack_size'),
     // Blank = null (allowed with a selling_price): the server keeps an existing product's cost.

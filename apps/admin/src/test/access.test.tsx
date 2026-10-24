@@ -81,6 +81,7 @@ describe('Admin app access', () => {
       'Orders',
       'Sales',
       'Delivery map',
+      'Rider map',
       'Rider cash',
       'Rider earnings',
       'Products',
@@ -90,13 +91,17 @@ describe('Admin app access', () => {
       'Category groups',
       'Combo packs',
       'Purchase list',
+      'Reorder suggestions',
+      'Purchase orders',
       'Product requests',
+      'Expiry',
       'Sellers',
       'Seller products',
       'Promotions',
       'Promo band',
       'Home banner',
       'Home sections',
+      'Bundle offers',
       'App texts',
       'QR links',
       'Coupons',
@@ -111,6 +116,7 @@ describe('Admin app access', () => {
       'Staff accounts',
       'Rider requests',
       'Settings',
+      'Daily report',
     ]);
   });
 

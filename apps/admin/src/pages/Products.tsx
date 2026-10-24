@@ -6,6 +6,8 @@ import { useSignedInUser } from '../auth/AuthContext';
 import { PageHeader } from '../components/Layout';
 import { RemoveProductImagesDialog } from '../components/RemoveProductImagesDialog';
 import { RemoveAllProductsDialog } from '../components/RemoveAllProductsDialog';
+import { FlashDealDialog } from '../components/FlashDealDialog';
+import { canStartFlash, flashRowText, runningFlashDeals } from '../lib/flashDeal';
 import { categoryOptions } from '../lib/categoryTree';
 import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
@@ -51,6 +53,9 @@ export function Products() {
   const [complete, setComplete] = useState(true);
   const [pendingToggle, setPendingToggle] = useState<AdminProduct | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AdminProduct | null>(null);
+  // Flash deals (wave 2, 2026-10-25): the quick "Start flash deal" dialog, and the running-deals filter
+  const [flashFor, setFlashFor] = useState<AdminProduct | null>(null);
+  const [flashOnly, setFlashOnly] = useState(false);
   // Remove all product images (owner, 2026-10-14): destructive, ADMIN only.
   const isAdmin = useSignedInUser()?.role === 'ADMIN';
   const [removingImages, setRemovingImages] = useState(false);
@@ -87,7 +92,14 @@ export function Products() {
     return (id: string) => map.get(id) ?? '-';
   }, [categories]);
 
-  const shown = useMemo(() => (rows ?? []).filter((p) => priceFilter === 'all' || priceOf(p) <= 1), [rows, priceFilter]);
+  // flash deals running now (an offer ending within 24 h), worked out here from the loaded list
+  const flashNow = new Date();
+  const flashRunning = useMemo(() => runningFlashDeals(rows ?? []), [rows]);
+  const flashIds = useMemo(() => new Set(flashRunning.map((p) => p.id)), [flashRunning]);
+  const shown = useMemo(
+    () => (rows ?? []).filter((p) => (priceFilter === 'all' || priceOf(p) <= 1) && (!flashOnly || flashIds.has(p.id))),
+    [rows, priceFilter, flashOnly, flashIds]
+  );
   const shownIds = shown.map((p) => p.id);
   const chosen = shownIds.filter((id) => selected.has(id));
   const allChosen = shownIds.length > 0 && chosen.length === shownIds.length;
@@ -211,6 +223,15 @@ export function Products() {
           <option value="all">Any price</option>
           <option value="placeholder">LKR 1 or less (placeholder)</option>
         </select>
+        <button
+          type="button"
+          className={flashOnly ? 'button button--sm flash-chip-filter is-selected' : 'button button--ghost button--sm flash-chip-filter'}
+          aria-pressed={flashOnly}
+          disabled={flashRunning.length === 0 && !flashOnly}
+          onClick={() => setFlashOnly((on) => !on)}
+        >
+          {`Flash deals running (${flashRunning.length})`}
+        </button>
       </div>
 
       {chosen.length > 0 ? (
@@ -325,6 +346,11 @@ export function Products() {
                       <Badge tone="offer">Offer {formatMoney(product.offer_price)}</Badge>
                     </span>
                   ) : null}
+                  {flashIds.has(product.id) ? (
+                    <span className="cell__secondary">
+                      <span className="flash-tag">{flashRowText(product, flashNow)}</span>
+                    </span>
+                  ) : null}
                 </td>
                 <td className="num">
                   {product.has_variants ? (
@@ -357,6 +383,16 @@ export function Products() {
                     >
                       Edit
                     </button>
+                    {canStartFlash(product) ? (
+                      <button
+                        type="button"
+                        className="button button--ghost button--sm"
+                        onClick={() => setFlashFor(product)}
+                        aria-label={`Flash deal for ${product.name}`}
+                      >
+                        {flashIds.has(product.id) ? 'Flash deal' : 'Start flash deal'}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="button button--ghost button--sm"
@@ -415,6 +451,17 @@ export function Products() {
           destructive
           onConfirm={() => void deleteProduct(pendingDelete)}
           onCancel={() => setPendingDelete(null)}
+        />
+      ) : null}
+      {flashFor ? (
+        <FlashDealDialog
+          product={flashFor}
+          onClose={() => setFlashFor(null)}
+          onDone={(message) => {
+            setFlashFor(null);
+            toast.success(message);
+            void load();
+          }}
         />
       ) : null}
       {removingImages ? (

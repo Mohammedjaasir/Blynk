@@ -2,7 +2,10 @@ import { apiRequest, tokenStore } from './client';
 import type { AppTextsFields, AppTextsSetting } from '../lib/appTexts';
 import type { AvailabilityWindow, AvailabilitySetting } from '../lib/availability';
 import type { HomeSection, HomeSectionsSetting } from '../lib/homeSections';
+import type { BundleOffer, BundleOffersSetting } from '../lib/bundleOffers';
 import type { QrLink, QrLinksSetting } from '../lib/qrLinks';
+import type { DailyReportDraft, DailyReportPreview, DailyReportSendResult, DailyReportSetting } from '../lib/dailyReport';
+import type { LiveRiderMap, RiderAutoAssignSetting } from './types';
 import type {
   AdminSeller,
   AdminSubmission,
@@ -499,6 +502,12 @@ export const settings = {
    * the max km between drop-offs. PATCH sends only what changed. */
   getRiderTrips: () => apiRequest<RiderTripsSetting>('/admin/settings/rider-trips'),
 
+  /** Automatic rider assignment (owner, 2026-10-25), off by default. PUT sends only what changed. */
+  getRiderAutoAssign: () => apiRequest<RiderAutoAssignSetting>('/admin/settings/rider-auto-assign'),
+
+  setRiderAutoAssign: (body: { enabled?: boolean; wait_seconds?: number; max_distance_km?: number }) =>
+    apiRequest<RiderAutoAssignSetting>('/admin/settings/rider-auto-assign', { method: 'PUT', body: { ...body } }),
+
   setRiderTrips: (body: { max_active_deliveries?: number; max_dropoff_distance_km?: number }) =>
     apiRequest<RiderTripsSetting>('/admin/settings/rider-trips', { method: 'PATCH', body: { ...body } }),
 
@@ -638,6 +647,14 @@ export const homeSections = {
     apiRequest<HomeSectionsSetting>('/admin/settings/home-sections', { method: 'PUT', body: { ...body } }),
 };
 
+// ------------------------------------------------------------ bundle offers
+/** Bundle offers (owner, 2026-10-25): "buy 2 get 1" / "spend X, get a gift" run inside the order pricing; PUT replaces the whole list. */
+export const bundleOffers = {
+  get: () => apiRequest<BundleOffersSetting>('/admin/settings/bundle-offers'),
+  update: (body: { offers: BundleOffer[] }) =>
+    apiRequest<BundleOffersSetting>('/admin/settings/bundle-offers', { method: 'PUT', body: { ...body } }),
+};
+
 // ------------------------------------------------------------ QR links
 /** QR links (owner, 2026-10-22): the printed code's short address and where it leads; PUT replaces the whole list. */
 export const qrLinks = {
@@ -764,6 +781,8 @@ export const riders = {
   /** The same riders, best first for one order (load, distance to the store, trip). */
   suggestions: (orderId: string) =>
     apiRequest<RiderSuggestions>(`/admin/riders/suggestions?order_id=${encodeURIComponent(orderId)}`),
+  /** The Rider map (owner, 2026-10-25): riders' last positions and load, and the orders waiting for a rider. */
+  live: () => apiRequest<LiveRiderMap>('/admin/riders/live'),
   /** Company or commission rider, and the rider's own % (owner, 2026-10-09). */
   getPay: (riderId: string) => apiRequest<{ pay: RiderPay }>(`/admin/riders/${riderId}/pay`).then((d) => d.pay),
   setPay: (riderId: string, input: RiderPayInput) =>
@@ -1066,4 +1085,13 @@ export const sellerCommission = {
   get: () => apiRequest<CommissionSettings>('/admin/settings/seller-commission'),
   save: (body: { default_percent: number; categories: { category_id: string; percent: number | null }[] }) =>
     apiRequest<CommissionSettings>('/admin/settings/seller-commission', { method: 'PUT', body: { ...body } }),
+};
+
+// ------------------------------------------------------------ daily report
+/** The evening report SMS (owner, 2026-10-25): setting, today-so-far preview and Send now (2-minute cooldown). */
+export const dailyReport = {
+  get: () => apiRequest<DailyReportSetting>('/admin/settings/daily-report'),
+  update: (body: Partial<DailyReportDraft>) => apiRequest<DailyReportSetting>('/admin/settings/daily-report', { method: 'PUT', body: { ...body } }),
+  preview: () => apiRequest<DailyReportPreview>('/admin/daily-report/preview', { method: 'POST', body: {} }),
+  sendNow: () => apiRequest<DailyReportSendResult>('/admin/daily-report/send-now', { method: 'POST', body: {} }),
 };

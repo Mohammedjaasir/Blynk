@@ -21,6 +21,17 @@ const TYPES: Array<{ id: ManualAdjustmentType; hint: string; quantityLabel: stri
   },
 ];
 
+/** What is wrong with a typed expiry date ('YYYY-MM-DD'), or null. The server checks again. */
+export function expiryDateProblem(date: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'Pick the expiry date.';
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== date) return 'That is not a real expiry date.';
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date());
+  const days = Math.round((d.getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86_400_000);
+  if (days < -365 || days > 3650) return 'The expiry date is too far in the past or future.';
+  return null;
+}
+
 export function AdjustDialog({
   detail,
   onClose,
@@ -34,6 +45,8 @@ export function AdjustDialog({
   const [type, setType] = useState<ManualAdjustmentType>('PURCHASE_RESTOCK');
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
+  // Optional expiry date of a restock (migration 059; owner, 2026-10-25): the received units are also noted as a batch.
+  const [expiresOn, setExpiresOn] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -67,6 +80,10 @@ export function AdjustDialog({
     }
     if (reason.trim().length === 0) return 'Give a reason - it is kept in the ledger.';
     if (reason.length > 500) return 'Keep the reason under 500 characters.';
+    if (type === 'PURCHASE_RESTOCK' && expiresOn) {
+      const problem = expiryDateProblem(expiresOn);
+      if (problem) return problem;
+    }
     return null;
   }
 
@@ -98,6 +115,7 @@ export function AdjustDialog({
         adjustment_type: type,
         quantity_delta: delta!,
         notes: reason.trim(),
+        ...(type === 'PURCHASE_RESTOCK' && expiresOn ? { expires_on: expiresOn } : {}),
       });
       toast.success(
         `${ADJUSTMENT_LABEL[type]} recorded: ${formatDelta(delta!)}. ${detail.product_name} now has ${result.inventory.quantity_on_hand} on hand.`
@@ -107,7 +125,9 @@ export function AdjustDialog({
       setError(
         isApiError(err, 'INSUFFICIENT_AVAILABLE_INVENTORY')
           ? 'That would leave less stock than is already reserved for orders.'
-          : errorMessage(err, 'The adjustment was not recorded.')
+          : isApiError(err, 'EXPIRY_NOT_READY')
+            ? 'Expiry dates are not switched on yet. Clear the expiry date to record the stock now.'
+            : errorMessage(err, 'The adjustment was not recorded.')
       );
     } finally {
       submitting.current = false;
@@ -156,6 +176,20 @@ export function AdjustDialog({
             data-autofocus
           />
         </Field>
+
+        {type === 'PURCHASE_RESTOCK' ? (
+          <Field label="Expiry date" hint="Optional - the date printed on the pack. The received units are noted with it.">
+            <input
+              className="input"
+              type="date"
+              value={expiresOn}
+              onChange={(event) => {
+                setExpiresOn(event.target.value);
+                setError(null);
+              }}
+            />
+          </Field>
+        ) : null}
 
         <Field label="Reason" hint="Kept in the ledger, e.g. “Received from Dharga Town Central Grocery”.">
           <textarea
