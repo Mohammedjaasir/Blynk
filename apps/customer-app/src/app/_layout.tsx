@@ -18,6 +18,8 @@ import { installConnectivity } from '@/blynk/lib/connectivity';
 // reads ?ref= and #/p/<id> from the page address before the router moves it on
 import { ShareStartup } from '@/blynk/share/ShareStartup';
 import { StoreProvider } from '@/blynk/store/StoreContext';
+import { RatingPromptHost } from '@/blynk/ratings/RatingPrompt';
+import { AskUsHost } from '@/blynk/requests/AskUs';
 import { SizePickerHost } from '@/components/SizePicker';
 import { ThemeColor } from '@/components/ThemeColor';
 import { SplashHandoverHost } from '@/components/SplashHandover';
@@ -88,6 +90,9 @@ function AppShell() {
               <ShareStartup />
               {/* the size picker for products sold in sizes (migration 045) */}
               <SizePickerHost />
+              {/* "Can't find it? Ask us" and the one-time "How was your order?" (migrations 055 / 056) */}
+              <AskUsHost />
+              <RatingPromptHost />
               {/* the launch intro's exit, over the whole window and everything in it (src/lib/splash.ts) */}
               <SplashHandoverHost />
             </CatalogProvider>

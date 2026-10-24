@@ -22,6 +22,8 @@ import { canReorder, reorderInto, reorderMessage } from '@/blynk/orders/reorder'
 import { PAY } from '@/blynk/payments/copy';
 import type { Order } from '@/blynk/orders/types';
 import { LiveTracking, isTrackable } from '@/blynk/tracking';
+import { OrderRatingCard } from '@/blynk/ratings/RatingCard';
+import { RepeatFromOrder } from '@/blynk/repeat/entries';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { WALLET_COPY } from '@/blynk/wallet/copy';
 import { refundNotice } from '@/blynk/wallet/models';
@@ -158,6 +160,8 @@ export default function OrderStatus() {
         ) : (
           <Animated.View entering={FadeIn.duration(200)}>
             <StatusCard order={order} />
+            {/* delivered: rate it and tip the rider (migration 055; hidden while off) */}
+            <OrderRatingCard order={order} />
             {/* an online order waiting for its PayHere payment: pay by the expiry time */}
             {awaitingPayment(order) && (
               <View style={[styles.card, styles.payCard]}>
@@ -302,6 +306,8 @@ export default function OrderStatus() {
                 <Text style={styles.keepTxt}>{reordering ? 'Adding…' : 'Order again'}</Text>
               </PressScale>
             )}
+            {/* delivered: "Repeat this basket" (migration 054; hidden while off) */}
+            <RepeatFromOrder order={order} />
 
             {(mayCancel(order) || cancelMsg) && (
               <Animated.View layout={LinearTransition.duration(200)} style={styles.card}>

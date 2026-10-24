@@ -18,6 +18,7 @@ import {
 import { CartBar } from '@/components/CartBar';
 import { BackIcon, CloseIcon, SearchIcon } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
+import { AskUsPrompt } from '@/blynk/requests/AskUs';
 import { PressScale, RollingText, Skeleton, useTicker } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
 import { goBack, openAisle } from '@/lib/nav';
@@ -216,6 +217,7 @@ export default function Search() {
             sub="Check the spelling or browse categories."
             cta="Browse categories"
             onPress={() => { setQ(''); setSlug(null); }}
+            extra={<AskUsPrompt name={term} categoryId={activeAisle && 'id' in activeAisle ? activeAisle.id : null} style={{ marginTop: 26, alignSelf: 'stretch' }} />}
           />
         ) : (
           <>
@@ -252,7 +254,7 @@ function Chip({ label, on, onPress }: { label: string; on?: boolean; onPress: ()
   );
 }
 
-function Empty({ title, sub, cta, onPress }: { title: string; sub: string; cta?: string; onPress?: () => void }) {
+function Empty({ title, sub, cta, onPress, extra }: { title: string; sub: string; cta?: string; onPress?: () => void; extra?: React.ReactNode }) {
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.empty}>
       <Text style={styles.emptyTitle}>{title}</Text>
@@ -260,6 +262,7 @@ function Empty({ title, sub, cta, onPress }: { title: string; sub: string; cta?:
       {cta && onPress && (
         <PressScale onPress={onPress} style={styles.cta}><Text style={styles.ctaTxt}>{cta}</Text></PressScale>
       )}
+      {extra}
     </Animated.View>
   );
 }

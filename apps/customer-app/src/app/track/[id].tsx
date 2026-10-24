@@ -9,6 +9,7 @@ import { getOrder } from '@/blynk/orders/api';
 import { statusLabel } from '@/blynk/orders/status';
 import type { Order } from '@/blynk/orders/types';
 import { isTrackable, LiveTracking } from '@/blynk/tracking';
+import { DeliveredRating } from '@/blynk/ratings/RatingCard';
 import { openSignIn } from '@/blynk/ui/signIn';
 import { BackIcon } from '@/components/icons';
 import { PressScale } from '@/components/ui';
@@ -57,12 +58,15 @@ export default function TrackOrder() {
   else if (error && !order) body = <Note text={error} onRetry={load} />;
   else if (!order) body = <View style={styles.center}><ActivityIndicator color={C.brandInk} /></View>;
   else if (!isTrackable(order)) {
+    // delivered: "Delivered" with the rating card (migration 055), else the note
     body = (
+      <DeliveredRating order={order} top={insets.top} onViewOrder={() => router.replace({ pathname: '/order/[id]', params: { id } })} fallback={(
       <Note
         text={`This order is ${statusLabel(order.order_status).toLowerCase()}. Live tracking shows while it is out for delivery.`}
         cta="View order"
         onRetry={() => router.replace({ pathname: '/order/[id]', params: { id } })}
       />
+      )} />
     );
   } else {
     body = (

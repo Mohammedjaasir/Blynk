@@ -16,6 +16,7 @@ import { ClosedBanner } from '@/components/ClosedBanner';
 import { BackIcon, SearchIcon } from '@/components/icons';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { ProductCard } from '@/components/ProductCard';
+import { AskUsPrompt } from '@/blynk/requests/AskUs';
 import { PressScale, Skeleton } from '@/components/ui';
 import { C, F } from '@/lib/theme';
 
@@ -143,6 +144,7 @@ export default function CategoryScreen() {
                 ))}
               </Animated.View>
             )}
+            <AskUsPrompt categoryId={view.selected?.id ?? view.root.id} style={{ marginTop: 24 }} />
           </ScrollView>
         </View>
       )}

@@ -145,6 +145,8 @@ export interface StoreInfo {
    * 2026-10-24-home-sections.md): only the LIVE ones, in order. Missing (an older API) or [] = none.
    */
   home_sections?: PublicHomeSection[];
+  /** Repeat baskets (migration 054; docs/superpowers/plans/2026-10-24-buy-again-repeat.md): false / absent = hidden. */
+  repeat_baskets_enabled?: boolean;
 }
 
 /** One live Home section in GET /store `home_sections`: a category's products, or hand-picked ones. */

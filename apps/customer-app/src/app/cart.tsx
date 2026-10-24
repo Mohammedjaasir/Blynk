@@ -56,6 +56,9 @@ import { PAY } from '@/blynk/payments/copy';
 import { effectiveMethod, methodBody, onlineInfo, onlineOffered, type PayMethod } from '@/blynk/payments/method';
 import { PaymentChoice } from '@/blynk/payments/PaymentChoice';
 import { requestPushPermission } from '@/blynk/push';
+import { CheckoutTipRow, useCheckoutTip } from '@/blynk/ratings/CheckoutTip';
+import { TIP_COPY } from '@/blynk/ratings/model';
+import { RepeatFromCart } from '@/blynk/repeat/entries';
 import { WALLET_COPY } from '@/blynk/wallet/copy';
 import { canUseWallet, checkoutWalletOf } from '@/blynk/wallet/models';
 import { effectivePrice, isOfferActive, priceDisplay } from '@/blynk/lib/pricing';
@@ -185,6 +188,8 @@ export default function Cart() {
   });
   const payInfo = onlineInfo(store?.online_payment, quoteFor?.online_payment);
   const payMethod = effectiveMethod(payChoice, payInfo, checkout?.toPay ?? null);
+  // "Tip your rider (optional)": cash with the order, on top of To Pay (migration 055; src/blynk/ratings/CheckoutTip.tsx)
+  const riderTip = useCheckoutTip({ quote: quoteFor, store, cash: payMethod === 'COD' });
   // "For someone else" only while staff allow it (checkout-info; absent = off)
   const forOthers = quoteFor?.order_for_someone_else;
   const allowForOthers = forOthers?.enabled === true;
@@ -280,6 +285,7 @@ export default function Cart() {
       ...(walletOn ? { use_wallet: true } : {}),
       ...(more.for_someone_else ? { for_someone_else: true, recipient: more.recipient } : {}),
       ...methodBody(payMethod),
+      ...riderTip.body,
     };
     const note = more.delivery_note ?? '';
     // one key per checkout: a double tap or a retry after a timeout replays the same order
@@ -338,6 +344,8 @@ export default function Cart() {
       if (copy.action === 'slot' || copy.action === 'closed') setSlotsTick((n) => n + 1);
       // "Pay online" was refused (switched off / nothing to pay): back to cash, fresh checkout-info
       if (copy.action === 'payment') { setPayChoice('COD'); setQuoteTick((n) => n + 1); }
+      // a refused rider tip comes off, so the order can go again without it
+      riderTip.onPlaceError(e);
     } finally {
       placingRef.current = false;
       setPlacing(false);
@@ -467,6 +475,9 @@ export default function Cart() {
           )}
         </View>
 
+        {/* signed in: "Repeat this basket" (migration 054; hidden while off) */}
+        {!DEMO && <RepeatFromCart style={{ marginHorizontal: 15, marginBottom: 15 }} />}
+
         {/* complete your meal (logged-in cart) */}
         <Collapsible open={after}>
           {DEMO ? <MealCard ready={after} /> : <LiveBasket ready={after} products={catalog?.products ?? []} inCart={lines.map((l) => l.product)} />}
@@ -555,7 +566,10 @@ export default function Cart() {
           />
         )}
 
-        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} payMethod={payMethod} pointsLine={pointsLine} /> : (
+        {/* tip your rider (optional, cash with the order; hidden while tips are off or paying online) */}
+        {!DEMO && checkout && <CheckoutTipRow ctl={riderTip} />}
+
+        {!DEMO ? <LiveBillCard bill={live} itemTotal={total} mrpTotal={mrpTotal} checkout={checkout} coupon={coupon} payMethod={payMethod} pointsLine={pointsLine} tip={riderTip.tip} /> : (
         <Animated.View layout={LinearTransition.duration(220)} style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
           <StampBadge size={78} style={{ position: 'absolute', right: -6, top: -4 }} />
           <View style={styles.billHead}>
@@ -638,7 +652,7 @@ export default function Cart() {
         ) : !DEMO ? (
           <LiveCheckoutPanel
             loc={loc}
-            checkout={checkout}
+            checkout={riderTip.withTip(checkout)}
             quoteFailed={quoteFailed}
             onRetryQuote={() => setQuoteTick((n) => n + 1)}
             closedNow={closedNow}
@@ -989,15 +1003,17 @@ function LiveBasket({ ready, products, inCart }: { ready: boolean; products: Pro
  * address (GET /orders/checkout-info: free deliveries, the basket amount, per-km distance);
  * otherwise it is what /store says. No taxes or invented savings.
  */
-function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, pointsLine }: {
+function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, pointsLine, tip = 0 }: {
   bill: LiveBill; itemTotal: number; mrpTotal: number; checkout: CheckoutBill | null; coupon: CouponPreview | null;
   payMethod: PayMethod;
   /** "You'll earn N Blynk Points on this order" (a guest: "Sign in to earn ..."), or null. */
   pointsLine: string | null;
+  /** The rider tip picked at checkout (cash with the order, migration 055): its own line and on top of To Pay. */
+  tip?: number;
 }) {
   const store = useStore();
   const quoted = !!checkout && checkout.deliveryFee !== null;
-  const toPay = quoted ? (checkout!.toPay as number) : bill.toPay;
+  const toPay = (quoted ? (checkout!.toPay as number) : bill.toPay) + tip;
   const feeKnown = quoted || bill.feeKnown;
   // the header counts every saving: offer prices (while shown), the coupon / birthday / referral discount and points
   const head = savingsHeader({
@@ -1065,6 +1081,12 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
           <>
             <Dashed style={{ marginVertical: 11 }} />
             <BillRow l={WALLET_COPY.billLine} r={<Text style={[styles.billR, { color: C.brandText }]}>−{formatLkr(walletPaid)}</Text>} />
+          </>
+        )}
+        {tip > 0 && (
+          <>
+            <Dashed style={{ marginVertical: 11 }} />
+            <BillRow l={TIP_COPY.billLine} r={<Text style={styles.billR}>{formatLkr(tip)}</Text>} />
           </>
         )}
         {!!checkout && (estimated || checkout.points.value > 0 || walletPaid > 0) && (

@@ -40,6 +40,7 @@ import { DoctorsHomeEntry } from '@/blynk/doctors/DoctorsHomeEntry';
 import { HomeCategoryGroups } from '@/blynk/catalog/HomeCategoryGroups';
 import { PromoCarousel } from '@/components/PromoCarousel';
 import { UsualsRow } from '@/blynk/rewards/UsualsRow';
+import { BuyAgainRail } from '@/blynk/repeat/BuyAgainRail';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { ComboRail } from '@/blynk/combos/ComboViews';
 import { BirthdayOfferBanner } from '@/blynk/rewards/BirthdayOfferBanner';
@@ -386,6 +387,7 @@ export default function Home() {
                 {!DEMO && <OfflineBanner onRetry={() => void refresh()} style={{ marginHorizontal: 15, marginTop: 12 }} />}
                 {!DEMO && <BirthdayOfferBanner style={{ marginHorizontal: 15, marginTop: 12 }} />}
                 {!DEMO && !!data && <PromoCarousel promotions={data.promotions} style={{ marginTop: 16 }} />}
+                {!DEMO && <BuyAgainRail />}
                 {!DEMO && <UsualsRow />}
                 {!DEMO && <DoctorsHomeEntry style={{ marginHorizontal: SPACE.gutter, marginTop: SPACE.section }} />}
                 {!DEMO && !!data && <HomeCategoryGroups tree={data.tree} width={screenW} />}

@@ -54,6 +54,8 @@ export interface CheckoutInfo {
   delivery_lead?: DeliveryLead;
   /** Blynk Wallet (docs/api/wallet.md): "Use wallet balance" while enabled and balance > 0 (absent on an older server = off). */
   wallet?: { enabled: boolean; balance: number; max_use_percent: number };
+  /** Migration 055: the rider tip chips ([50, 100, 200]); absent = tips not offered (src/blynk/ratings/model.ts). */
+  tip_options?: number[];
 }
 
 export interface DeliveryLead {
@@ -202,4 +204,6 @@ export interface PlaceOrderBody {
   needs_help?: boolean;
   /** Omitted = cash on delivery. ONLINE = PayHere (the order waits for payment). */
   payment_method?: 'COD' | 'ONLINE';
+  /** Migration 055: a tip for the rider (0-1000 LKR), collected in cash with the order. Omitted = none. */
+  rider_tip_lkr?: number;
 }

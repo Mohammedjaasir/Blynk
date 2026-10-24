@@ -16,6 +16,8 @@ import { needsRegistration, signOut, useSession } from '@/blynk/auth/session';
 import { requestPushPermission } from '@/blynk/push';
 import { fetchPoints, fetchReferral } from '@/blynk/rewards/api';
 import { pointsBalanceText } from '@/blynk/rewards/models';
+import { ProductRequestsCard } from '@/blynk/requests/AskUs';
+import { RepeatBasketsRow } from '@/blynk/repeat/entries';
 import { POINTS_COPY, pointsRuleOf } from '@/blynk/store/pointsPromo';
 import { PROFILE_HERO } from '@/blynk/ui/strings';
 import { type HeroChip, ProfileHero } from '@/components/TabHero';
@@ -164,6 +166,8 @@ export default function Account() {
           {!signedIn && !DEMO && !!pointsRule && <Row icon="⭐" title="Blynk Points" sub={POINTS_COPY.profileGuest(pointsRule)} onPress={() => router.push('/points')} />}
           {signedIn && referOn && <Row icon="🎁" title="Refer a friend" sub="Invite friends with your code" onPress={() => router.push('/refer')} />}
           <Row icon="🧾" title="Your orders" sub="Track, reorder or get help" onPress={() => router.push('/orders')} />
+          {/* repeat baskets (migration 054; hidden while off) */}
+          <RepeatBasketsRow />
           <Row icon="📍" title="Address book" sub="Home, work and anywhere else" onPress={() => router.push('/addresses')} />
           {/* a guest is sent to log in first (Flutter SmsPreferencesScreen.open) */}
           <Row icon="💬" title="SMS & offers" sub={smsSub} onPress={() => router.push(signedIn ? '/settings' : '/login')} last />
@@ -188,6 +192,9 @@ export default function Account() {
             />
           </Card>
         )}
+
+        {/* "Can't find something? Ask us" and My requests (migration 056; hidden while off) */}
+        <ProductRequestsCard stagger={8} />
 
         <Card tone={TONE.more} stagger={8}>
           <Row icon="🛟" title="Help & support" sub="Call or WhatsApp the store" onPress={() => router.push('/help')} />
