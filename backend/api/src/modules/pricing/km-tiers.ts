@@ -84,3 +84,50 @@ export function priceByKmTiers(tiers: KmTier[], distanceKm: number, maxLkr: numb
   const capped = maxLkr !== null && sum > maxLkr;
   return { km_counted: n, parts, sum, total: capped ? round2(maxLkr!) : sum, capped };
 }
+
+/*
+ * "Base + per km" pricing (owner's brother, 2026-10-25): LKR 120 covers the first 2 km, then LKR 40 for
+ * each STARTED km beyond that (fee mode BASE_PER_KM, orders/delivery-fee.ts). Set in Admin / Ops.
+ *   total = base_lkr                                          while distance <= base_km
+ *   total = base_lkr + per_km_lkr * ceil(distance - base_km)  beyond it, then the optional cap
+ *   120 / 2 km / 40:  1.5 -> 120 | 2.0 -> 120 | 2.1 -> 160 | 3.0 -> 160 | 3.4 -> 200 | 4.8 -> 240 | 5.6 -> 280
+ */
+export interface BasePerKm {
+  base_lkr: number;
+  base_km: number;
+  per_km_lkr: number;
+}
+
+export const DEFAULT_BASE_PER_KM: BasePerKm = { base_lkr: 120, base_km: 2, per_km_lkr: 40 };
+export const MAX_BASE_KM = 20;
+
+export interface BasePerKmPrice {
+  /** Started km beyond the covered ones (0 inside them). */
+  extra_km: number;
+  /** Before any cap. */
+  sum: number;
+  /** After the cap. */
+  total: number;
+  capped: boolean;
+}
+
+export function priceByBaseAndKm(rule: BasePerKm, distanceKm: number, maxLkr: number | null = null): BasePerKmPrice {
+  const km = Number.isFinite(distanceKm) && distanceKm > 0 ? round2(distanceKm) : 0;
+  // Distances are 2-decimal km; the epsilon keeps exactly base_km (2.00) inside the base.
+  const extra = Math.max(0, Math.ceil(round2(km - rule.base_km) - 1e-9));
+  const sum = round2(rule.base_lkr + rule.per_km_lkr * extra);
+  const capped = maxLkr !== null && sum > maxLkr;
+  return { extra_km: extra, sum, total: capped ? round2(maxLkr!) : sum, capped };
+}
+
+/** A stored rule (any missing or malformed number takes the default; never throws). */
+export function basePerKmFrom(value: unknown): BasePerKm {
+  const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const num = (x: unknown, min: number, max: number, fallback: number) =>
+    typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max ? x : fallback;
+  return {
+    base_lkr: num(v.base_lkr, 0, MAX_KM_TIER_LKR, DEFAULT_BASE_PER_KM.base_lkr),
+    base_km: num(v.base_km, 0.5, MAX_BASE_KM, DEFAULT_BASE_PER_KM.base_km),
+    per_km_lkr: num(v.per_km_lkr, 0, MAX_KM_TIER_LKR, DEFAULT_BASE_PER_KM.per_km_lkr),
+  };
+}

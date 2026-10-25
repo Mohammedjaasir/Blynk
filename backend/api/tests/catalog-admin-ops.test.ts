@@ -252,6 +252,9 @@ describe('Delivery fee setting and GET /store', () => {
       delivery_fee_mode: 'FLAT',
       delivery_fee_by_distance: false,
       delivery_fee_from_lkr: expect.any(Number),
+      // Owner's brother, 2026-10-25: the base + per km formula (null in the other modes) and the small-order fee (off).
+      delivery_fee_formula: null,
+      small_order_fee: { enabled: false, min_subtotal_lkr: 1000, fee_lkr: 50 },
       hub_name: expect.any(String),
       delivery_hours: { start: '08:00', end: '21:00', timezone: 'Asia/Colombo' },
       radius_km: expect.any(Number),
@@ -298,7 +301,7 @@ describe('Delivery fee setting and GET /store', () => {
       await pool.query("SELECT old_values, new_values FROM audit_logs WHERE action = 'DELIVERY_FEE_UPDATED' ORDER BY created_at DESC LIMIT 1")
     ).rows[0];
     // Owner, 2026-10-10: the audit also carries the fee mode, tiers and cap.
-    expect(audit.new_values).toEqual({ key: 'delivery_fee', fee_lkr: 150.5, fee_mode: 'FLAT', tiers: [], max_fee_lkr: null });
+    expect(audit.new_values).toEqual({ key: 'delivery_fee', fee_lkr: 150.5, fee_mode: 'FLAT', tiers: [], max_fee_lkr: null, base_lkr: 120, base_km: 2, per_km_lkr: 40 });
     expect(audit.old_values).toMatchObject({ key: 'delivery_fee', fee_lkr: before });
   });
 

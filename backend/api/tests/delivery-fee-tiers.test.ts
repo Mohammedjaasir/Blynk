@@ -122,8 +122,8 @@ describe('Delivery fee setting (Ops and Admin)', () => {
     const audit = (
       await pool.query("SELECT old_values, new_values FROM audit_logs WHERE action = 'DELIVERY_FEE_UPDATED' ORDER BY created_at DESC LIMIT 1")
     ).rows[0];
-    expect(audit.old_values).toEqual({ key: 'delivery_fee', fee_lkr: 100, fee_mode: 'FLAT', tiers: [], max_fee_lkr: null });
-    expect(audit.new_values).toEqual({ key: 'delivery_fee', fee_lkr: 100, fee_mode: 'DISTANCE_TIERS', tiers: TIERS, max_fee_lkr: 400 });
+    expect(audit.old_values).toEqual({ key: 'delivery_fee', fee_lkr: 100, fee_mode: 'FLAT', tiers: [], max_fee_lkr: null, base_lkr: 120, base_km: 2, per_km_lkr: 40 });
+    expect(audit.new_values).toEqual({ key: 'delivery_fee', fee_lkr: 100, fee_mode: 'DISTANCE_TIERS', tiers: TIERS, max_fee_lkr: 400, base_lkr: 120, base_km: 2, per_km_lkr: 40 });
 
     // An older Ops APK sends only the flat amount: tiers and mode stay.
     const old = await patchFee({ fee_lkr: 120 });

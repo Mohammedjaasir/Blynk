@@ -18,7 +18,7 @@ const app = createApp();
 const fx = stockFixtures(app, 'TST-CHK-');
 const people = customerFixtures(app, { idPrefix: 'c0c00029', phoneBase: '+947092900', name: 'Checkout Switch Customer' });
 const opsToken = generateAccessToken({ ...users.admin, role: 'OPERATIONS' });
-const KEYS = ['coupons_enabled', 'new_customer_free_deliveries', 'show_offer_savings', 'basket_free_delivery', 'order_for_someone_else'];
+const KEYS = ['coupons_enabled', 'new_customer_free_deliveries', 'show_offer_savings', 'basket_free_delivery', 'order_for_someone_else', 'small_order_fee'];
 const FEE = 100;
 // Owner, 2026-10-09: with no stored start, free deliveries count from Colombo midnight that day.
 const DEFAULT_SINCE = '2026-10-08T18:30:00.000Z';
@@ -86,6 +86,9 @@ describe('Checkout settings', () => {
       // Owner, 2026-10-12: basket free delivery off, ordering for someone else on.
       basket_free_delivery: { enabled: false, min_subtotal_lkr: 3000 },
       order_for_someone_else: { enabled: true, send_code_to_receiver: true },
+      // Owner's brother, 2026-10-25: the small-order fee is off until Admin / Ops switch it on; ready = migration 063 applied.
+      small_order_fee: { enabled: false, min_subtotal_lkr: 1000, fee_lkr: 50 },
+      small_order_fee_ready: true,
       updated_at: null,
     });
     const store = await request(app).get('/api/v1/store');
@@ -192,6 +195,8 @@ describe('Free deliveries for every customer', () => {
       // Owner, 2026-10-12: free delivery above a basket amount (off), and ordering for someone else (on).
       basket_free_delivery: { enabled: false, min_subtotal_lkr: 3000, applies: false, remaining_lkr: null },
       order_for_someone_else: { enabled: true, send_code_to_receiver: true },
+      // Owner's brother, 2026-10-25: the small-order fee, off by default (its own contract is tests/small-order-fee.test.ts).
+      small_order_fee: { enabled: false, min_subtotal_lkr: 1000, fee_lkr: 50, applies: false, charged_lkr: 0, remaining_lkr: null },
       // Rider tip choices (migration 055, owner 2026-10-24): on once the migration has run.
       tips_enabled: true,
       tip_options: [50, 100, 200],

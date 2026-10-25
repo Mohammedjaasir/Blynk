@@ -421,6 +421,11 @@ export interface OrdersTable {
   /** Migration 055: a tip paid after delivery from the Blynk Wallet (not part of total_amount) and when. */
   rider_tip_wallet: ColumnType<number, number | string | undefined, number | string>;
   rider_tip_wallet_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  /**
+   * Migration 063 (owner's brother, 2026-10-25): the small-order fee charged on this order, snapshotted
+   * separately from delivery_fee (total_amount includes it). Absent before 063 - read as 0.
+   */
+  small_order_fee: ColumnType<number, number | string | undefined, number | string>;
   scheduled_for: Date | null;
   /** Migration 036 (owner, 2026-10-10): end of the delivery slot the customer picked; scheduled_for is its start. */
   scheduled_until: ColumnType<Date | null, Date | null | undefined, Date | null>;

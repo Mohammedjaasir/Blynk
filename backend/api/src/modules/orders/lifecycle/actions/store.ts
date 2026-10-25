@@ -68,7 +68,8 @@ export const resolveItem: ActionImpl<OrderRow> = {
     // Referral reward and Blynk Points (owner, 2026-10-10; migration 037):
     // the reward follows the new subtotal; points never pay more than is due.
     const rewards = await recomputeOrderRewards(trx, order, subtotal, discount);
-    const due = Number((subtotal + Number(order.delivery_fee) - rewards.discount_amount).toFixed(2));
+    // The small-order fee (migration 063) stays as charged at placement, like the delivery fee.
+    const due = Number((subtotal + Number(order.delivery_fee) + Number(order.small_order_fee ?? 0) - rewards.discount_amount).toFixed(2));
     // Blynk Wallet (migration 049): the wallet never pays more than is now due
     // (its surplus goes back to the wallet), and on an order already paid
     // online the money held beyond the new amount is refunded to the wallet.

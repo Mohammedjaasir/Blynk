@@ -12,11 +12,28 @@ import { appTextsService } from './app-texts.js';
 import { homeSectionsService } from './home-sections.js';
 import { bundleOffersService } from './bundle-offers.js';
 import { logger } from '../../utils/logger.js';
+import { AppError } from '../../middleware/error.middleware.js';
 import { SETTINGS_ENTITY_ID, writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { publicOnlinePayment } from '../payments/gateway-settings.js';
 import { smsParts } from '../sms-offers/sms-offers.service.js';
 import { RIDER_BATCHING_KEY, getBatchingRules, type BatchingRules } from '../riders/batching.js';
-import { kmTiersFrom, kmTiersSchema, priceByKmTiers, type KmTier } from '../pricing/km-tiers.js';
+import {
+  MAX_BASE_KM,
+  MAX_KM_TIER_LKR,
+  basePerKmFrom,
+  kmTiersFrom,
+  kmTiersSchema,
+  priceByKmTiers,
+  type KmTier,
+} from '../pricing/km-tiers.js';
+import {
+  DEFAULT_SMALL_ORDER_FEE,
+  SMALL_ORDER_FEE_KEY,
+  smallOrderFeeFrom,
+  smallOrderFeeReady,
+  smallOrderFeeSchema,
+  type SmallOrderFeeSetting,
+} from '../orders/small-order-fee.js';
 import { pointsSettings } from '../loyalty/points.service.js';
 import { publicPointsProgram } from '../loyalty/points.rules.js';
 import { hasProductRequestsTable } from '../catalog/product-requests.ready.js';
@@ -44,9 +61,17 @@ export const DEFAULT_DELIVERY_FEE_LKR = 100;
  * optionally capped at max_fee_lkr. Same 'delivery_fee' row:
  * {"fee_lkr", "fee_mode", "tiers": [{"km", "lkr"}], "max_fee_lkr"}; a row
  * without fee_mode is FLAT.
+ *
+ * BASE_PER_KM (owner's brother, 2026-10-25): base_lkr covers the first base_km, then per_km_lkr for each
+ * STARTED km beyond (LKR 120 / 2 km / LKR 40). The same row also holds {"base_lkr", "base_km",
+ * "per_km_lkr"}. Customers and older apps only ever see the public mode below: an order snapshots
+ * DISTANCE_TIERS for it (orders.delivery_fee_mode has no third value), so no migration is needed.
  */
-export const DELIVERY_FEE_MODES = ['FLAT', 'DISTANCE_TIERS'] as const;
+export const DELIVERY_FEE_MODES = ['FLAT', 'DISTANCE_TIERS', 'BASE_PER_KM'] as const;
 export type DeliveryFeeMode = (typeof DELIVERY_FEE_MODES)[number];
+/** What customers, orders and older apps are told: BASE_PER_KM is a charge by distance too. */
+export type PublicDeliveryFeeMode = 'FLAT' | 'DISTANCE_TIERS';
+export const publicFeeMode = (mode: DeliveryFeeMode): PublicDeliveryFeeMode => (mode === 'FLAT' ? 'FLAT' : 'DISTANCE_TIERS');
 export const MAX_DELIVERY_FEE_CAP_LKR = 10_000;
 
 export interface DeliveryFeeSetting {
@@ -54,6 +79,10 @@ export interface DeliveryFeeSetting {
   fee_mode: DeliveryFeeMode;
   tiers: KmTier[];
   max_fee_lkr: number | null;
+  /** BASE_PER_KM (always present; the defaults until saved): base_lkr covers base_km, then per_km_lkr per started km. */
+  base_lkr: number;
+  base_km: number;
+  per_km_lkr: number;
 }
 
 /** An older client sends just {fee_lkr}; the mode, tiers and cap then stay as stored. */
@@ -66,8 +95,31 @@ export const updateDeliveryFeeSchema = z
       .max(1000, 'The delivery fee can be at most LKR 1000')
       .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'The delivery fee can have at most 2 decimals')
       .optional(),
-    fee_mode: z.enum(DELIVERY_FEE_MODES, { errorMap: () => ({ message: 'fee_mode must be FLAT or DISTANCE_TIERS' }) }).optional(),
+    fee_mode: z
+      .enum(DELIVERY_FEE_MODES, { errorMap: () => ({ message: 'fee_mode must be FLAT, DISTANCE_TIERS or BASE_PER_KM' }) })
+      .optional(),
     tiers: kmTiersSchema.optional(),
+    base_lkr: z
+      .number({ invalid_type_error: 'The base fee must be a number' })
+      .finite()
+      .min(0, 'The base fee cannot be negative')
+      .max(MAX_KM_TIER_LKR, `The base fee can be at most LKR ${MAX_KM_TIER_LKR}`)
+      .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'The base fee can have at most 2 decimals')
+      .optional(),
+    base_km: z
+      .number({ invalid_type_error: 'The covered distance must be a number' })
+      .finite()
+      .min(0.5, 'The covered distance must be at least 0.5 km')
+      .max(MAX_BASE_KM, `The covered distance can be at most ${MAX_BASE_KM} km`)
+      .refine((v) => Math.abs(Math.round(v * 10) - v * 10) < 1e-6, 'The covered distance can have at most 1 decimal')
+      .optional(),
+    per_km_lkr: z
+      .number({ invalid_type_error: 'The amount per km must be a number' })
+      .finite()
+      .min(0, 'The amount per km cannot be negative')
+      .max(MAX_KM_TIER_LKR, `The amount per km can be at most LKR ${MAX_KM_TIER_LKR}`)
+      .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, 'The amount per km can have at most 2 decimals')
+      .optional(),
     max_fee_lkr: z
       .number({ invalid_type_error: 'The maximum fee must be a number' })
       .finite()
@@ -161,7 +213,13 @@ export interface CheckoutSettings {
   basket_free_delivery?: BasketFreeDeliverySetting;
   /** Owner, 2026-10-12. Optional so a reader replaced in tests may leave it out (= the default). */
   order_for_someone_else?: OrderForSomeoneElseSetting;
+  /** Owner's brother, 2026-10-25 (orders/small-order-fee.ts). Optional like the two above (= the default, off). */
+  small_order_fee?: SmallOrderFeeSetting;
 }
+
+/** The small-order fee setting as applied: a reader without it means the default (off). */
+export const smallOrderFeeOf = (s: Pick<CheckoutSettings, 'small_order_fee'>): SmallOrderFeeSetting =>
+  s.small_order_fee ?? { ...DEFAULT_SMALL_ORDER_FEE };
 
 /** The basket setting as applied: a reader without it means the default (off). */
 export const basketFreeDeliveryOf = (s: Pick<CheckoutSettings, 'basket_free_delivery'>): BasketFreeDeliverySetting =>
@@ -204,6 +262,7 @@ export const updateCheckoutSettingsSchema = z
       })
       .strict()
       .optional(),
+    small_order_fee: smallOrderFeeSchema.optional(),
     order_for_someone_else: z
       .object({
         enabled: z.boolean({ invalid_type_error: 'enabled must be true or false' }).optional(),
@@ -279,6 +338,7 @@ const CHECKOUT_KEYS = [
   SHOW_OFFER_SAVINGS_KEY,
   BASKET_FREE_DELIVERY_KEY,
   ORDER_FOR_SOMEONE_ELSE_KEY,
+  SMALL_ORDER_FEE_KEY,
 ];
 
 export const checkoutSettings = {
@@ -450,11 +510,15 @@ export function deliveryFeeSettingFrom(value: unknown): DeliveryFeeSetting {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   const tiers = kmTiersFrom(v.tiers);
   const cap = v.max_fee_lkr;
+  // BASE_PER_KM needs no table: a missing number takes the default (120 / 2 km / 40).
+  const mode: DeliveryFeeMode =
+    v.fee_mode === 'BASE_PER_KM' ? 'BASE_PER_KM' : v.fee_mode === 'DISTANCE_TIERS' && tiers.length ? 'DISTANCE_TIERS' : 'FLAT';
   return {
     fee_lkr: feeFrom(value) ?? DEFAULT_DELIVERY_FEE_LKR,
-    fee_mode: v.fee_mode === 'DISTANCE_TIERS' && tiers.length ? 'DISTANCE_TIERS' : 'FLAT',
+    fee_mode: mode,
     tiers,
     max_fee_lkr: typeof cap === 'number' && Number.isFinite(cap) && cap >= 0 ? cap : null,
+    ...basePerKmFrom(v),
   };
 }
 
@@ -472,7 +536,15 @@ export async function readDeliveryFeeSetting(executor: DBConnection = db): Promi
 function feeAudit(value: unknown) {
   if (!value) return { fee_lkr: null };
   const s = deliveryFeeSettingFrom(value);
-  return { fee_lkr: feeFrom(value), fee_mode: s.fee_mode, tiers: s.tiers, max_fee_lkr: s.max_fee_lkr };
+  return {
+    fee_lkr: feeFrom(value),
+    fee_mode: s.fee_mode,
+    tiers: s.tiers,
+    max_fee_lkr: s.max_fee_lkr,
+    base_lkr: s.base_lkr,
+    base_km: s.base_km,
+    per_km_lkr: s.per_km_lkr,
+  };
 }
 
 export class SettingsService {
@@ -499,6 +571,9 @@ export class SettingsService {
       const next: DeliveryFeeSetting = {
         fee_lkr: input.fee_lkr !== undefined ? Math.round(input.fee_lkr * 100) / 100 : previous.fee_lkr,
         fee_mode: input.fee_mode ?? (storedMode === 'DISTANCE_TIERS' ? 'DISTANCE_TIERS' : previous.fee_mode),
+        base_lkr: input.base_lkr !== undefined ? Math.round(input.base_lkr * 100) / 100 : previous.base_lkr,
+        base_km: input.base_km !== undefined ? Math.round(input.base_km * 10) / 10 : previous.base_km,
+        per_km_lkr: input.per_km_lkr !== undefined ? Math.round(input.per_km_lkr * 100) / 100 : previous.per_km_lkr,
         tiers: input.tiers ?? previous.tiers,
         max_fee_lkr:
           input.max_fee_lkr === undefined ? previous.max_fee_lkr : input.max_fee_lkr === null ? null : Math.round(input.max_fee_lkr * 100) / 100,
@@ -537,6 +612,7 @@ export class SettingsService {
     const savings = rows.find((r) => r.key === SHOW_OFFER_SAVINGS_KEY);
     const basket = rows.find((r) => r.key === BASKET_FREE_DELIVERY_KEY);
     const forOthers = rows.find((r) => r.key === ORDER_FOR_SOMEONE_ELSE_KEY);
+    const smallFee = rows.find((r) => r.key === SMALL_ORDER_FEE_KEY);
     const stamps = rows.map((r) => r.updated_at).filter((d): d is Date => d instanceof Date);
     return {
       coupons_enabled: (coupons ? couponsEnabledFrom(coupons.value) : null) ?? DEFAULT_COUPONS_ENABLED,
@@ -544,6 +620,7 @@ export class SettingsService {
       show_offer_savings: (savings ? couponsEnabledFrom(savings.value) : null) ?? DEFAULT_SHOW_OFFER_SAVINGS,
       basket_free_delivery: (basket ? basketFreeDeliveryFrom(basket.value) : null) ?? { ...DEFAULT_BASKET_FREE_DELIVERY },
       order_for_someone_else: orderForSomeoneElseFrom(forOthers?.value),
+      small_order_fee: (smallFee ? smallOrderFeeFrom(smallFee.value) : null) ?? { ...DEFAULT_SMALL_ORDER_FEE },
       updated_at: stamps.length ? new Date(Math.max(...stamps.map((d) => d.getTime()))) : null,
     };
   }
@@ -572,6 +649,22 @@ export class SettingsService {
             min_subtotal_lkr: Math.round(input.basket_free_delivery.min_subtotal_lkr * 100) / 100,
           },
           description: 'Free delivery when the item subtotal (after item offers, before coupons) reaches min_subtotal_lkr',
+        });
+      }
+      if (input.small_order_fee !== undefined) {
+        // Owner's brother, 2026-10-25: orders/small-order-fee.ts. The fee column comes from migration 063: until it is
+        // there the switch cannot be turned on (an order could not store the fee).
+        if (input.small_order_fee.enabled && !(await smallOrderFeeReady())) {
+          throw new AppError('Run migration 063 in Coolify before switching the small-order fee on.', 409, 'SMALL_ORDER_FEE_NOT_READY');
+        }
+        writes.push({
+          key: SMALL_ORDER_FEE_KEY,
+          value: {
+            enabled: input.small_order_fee.enabled,
+            min_subtotal_lkr: Math.round(input.small_order_fee.min_subtotal_lkr * 100) / 100,
+            fee_lkr: Math.round(input.small_order_fee.fee_lkr * 100) / 100,
+          },
+          description: 'Small-order fee: an order whose item total is under min_subtotal_lkr pays fee_lkr on top of delivery',
         });
       }
       if (input.order_for_someone_else !== undefined) {
@@ -796,16 +889,31 @@ export class SettingsService {
     const status = storeStatusAt(schedule, now);
     const today = DateTime.fromJSDate(now).setZone(STORE_TIMEZONE).toISODate()!;
     const in30 = DateTime.fromJSDate(now).setZone(STORE_TIMEZONE).plus({ days: 30 }).toISODate()!;
-    const byDistance = fee.fee_mode === 'DISTANCE_TIERS';
+    const byDistance = fee.fee_mode !== 'FLAT';
+    const basePerKm = fee.fee_mode === 'BASE_PER_KM';
     return {
       // Per-km tiers (owner, 2026-10-10): the tier table is never public - the
       // app gets the fee for the customer's address from checkout-info.
       delivery_fee_lkr: byDistance ? null : fee.fee_lkr,
-      delivery_fee_mode: fee.fee_mode,
+      // BASE_PER_KM is told to customers as a charge by distance (older apps know FLAT and DISTANCE_TIERS only).
+      delivery_fee_mode: publicFeeMode(fee.fee_mode),
       delivery_fee_by_distance: byDistance,
       // Owner, 2026-10-19: "we have to show case the delivery amount" - per-km tiers: the
       // lowest fee (the first km's), so the app can say "From LKR 100" before it has an address.
-      delivery_fee_from_lkr: byDistance ? priceByKmTiers(fee.tiers, 0, fee.max_fee_lkr).total : fee.fee_lkr,
+      delivery_fee_from_lkr: basePerKm
+        ? Math.min(fee.base_lkr, fee.max_fee_lkr ?? Infinity)
+        : byDistance
+          ? priceByKmTiers(fee.tiers, 0, fee.max_fee_lkr).total
+          : fee.fee_lkr,
+      // Owner's brother, 2026-10-25: "LKR 120 up to 2 km, then LKR 40 for each extra km" (null for the other modes).
+      delivery_fee_formula: basePerKm
+        ? { base_lkr: fee.base_lkr, base_km: fee.base_km, per_km_lkr: fee.per_km_lkr, max_fee_lkr: fee.max_fee_lkr }
+        : null,
+      // The small-order fee (orders/small-order-fee.ts); off until migration 063 has been run.
+      small_order_fee: {
+        ...smallOrderFeeOf(checkout),
+        enabled: smallOrderFeeOf(checkout).enabled && (await smallOrderFeeReady()),
+      },
       hub_name: store?.name ?? null,
       // Today's hours, or the next open day's when today is closed.
       delivery_hours: { ...displayHours(schedule, now), timezone: STORE_TIMEZONE },

@@ -62,6 +62,12 @@ export interface CreateOrderData {
   /** The standard fee; 0 is charged instead when a free delivery applies. */
   delivery_fee: number;
   /**
+   * Small-order fee (migration 063; owner's brother, 2026-10-25), decided by the service from the
+   * server-priced subtotal; 0 / absent = none. Added to what is due after the discounts' base, never
+   * waived by free delivery, snapshotted in orders.small_order_fee.
+   */
+  small_order_fee?: number;
+  /**
    * How the standard fee was worked out (orders/delivery-fee.ts; owner,
    * 2026-10-10): snapshotted as delivery_fee_mode / delivery_distance_km /
    * delivery_distance_estimated (migration 040). Absent = not recorded.
@@ -356,6 +362,8 @@ export class OrderRepository {
       const free =
         !basketFree && data.free_delivery ? await freeDeliveryStatus(trx, data.customer_id, data.free_delivery, true) : null;
       const deliveryFee = basketFree || free?.applies ? 0 : data.delivery_fee;
+      // Migration 063: the small-order fee is not a delivery fee - no free delivery waives it.
+      const smallOrderFee = data.small_order_fee && data.small_order_fee > 0 ? Number(data.small_order_fee.toFixed(2)) : 0;
       // Migration 043: why the fee was waived (only written when it was, so a
       // charged order inserts exactly the columns it did before).
       const freeDeliveryReason = basketFree ? ('BASKET_THRESHOLD' as const) : free?.applies ? ('NEW_CUSTOMER' as const) : null;
@@ -396,13 +404,13 @@ export class OrderRepository {
       const rewardsNow = new Date();
       const points = await pointsForOrder(trx, {
         customerId: data.customer_id,
-        due: data.subtotal_amount + deliveryFee - offerDiscount,
+        due: data.subtotal_amount + deliveryFee + smallOrderFee - offerDiscount,
         use: data.use_points,
         now: rewardsNow,
       });
 
       const discountAmount = Number((offerDiscount + (points?.discount_amount ?? 0)).toFixed(2));
-      const dueAmount = Number((data.subtotal_amount + deliveryFee - discountAmount).toFixed(2));
+      const dueAmount = Number((data.subtotal_amount + deliveryFee + smallOrderFee - discountAmount).toFixed(2));
       // 0f. Blynk Wallet (migration 049): a payment after every discount and
       //     the points, towards the total INCLUDING the delivery fee. Not part
       //     of discount_amount: total_amount is what is still to pay.
@@ -455,6 +463,8 @@ export class OrderRepository {
           ...orderRewardColumns(referral, points),
           coupon_code: coupon?.code ?? null,
           ...(walletUsed > 0 ? { wallet_amount_used: walletUsed } : {}),
+          // Migration 063: written only when the fee was charged (the column defaults to 0).
+          ...(smallOrderFee > 0 ? { small_order_fee: smallOrderFee } : {}),
           // Migration 055: written only with a tip (the column defaults to 0).
           ...(riderTip > 0 ? { rider_tip: riderTip } : {}),
           // Migration 054: written only for a repeat basket's order.
@@ -558,6 +568,7 @@ export class OrderRepository {
         ...order,
         subtotal_amount: Number(Number(order.subtotal_amount).toFixed(2)),
         delivery_fee: Number(Number(order.delivery_fee).toFixed(2)),
+        small_order_fee: Number(Number(order.small_order_fee ?? 0).toFixed(2)),
         discount_amount: Number(Number(order.discount_amount).toFixed(2)),
         birthday_discount_amount: Number(Number(order.birthday_discount_amount ?? 0).toFixed(2)),
         referral_discount_amount: Number(Number(order.referral_discount_amount ?? 0).toFixed(2)),
@@ -641,6 +652,7 @@ export class OrderRepository {
       ...order,
       subtotal_amount: Number(Number(order.subtotal_amount).toFixed(2)),
       delivery_fee: Number(Number(order.delivery_fee).toFixed(2)),
+      small_order_fee: Number(Number(order.small_order_fee ?? 0).toFixed(2)),
       discount_amount: Number(Number(order.discount_amount).toFixed(2)),
       birthday_discount_amount: Number(Number(order.birthday_discount_amount ?? 0).toFixed(2)),
       referral_discount_amount: Number(Number(order.referral_discount_amount ?? 0).toFixed(2)),
@@ -718,6 +730,7 @@ export class OrderRepository {
       ...o,
       subtotal_amount: Number(Number(o.subtotal_amount).toFixed(2)),
       delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
+      small_order_fee: Number(Number(o.small_order_fee ?? 0).toFixed(2)),
       discount_amount: Number(Number(o.discount_amount).toFixed(2)),
       birthday_discount_amount: Number(Number(o.birthday_discount_amount ?? 0).toFixed(2)),
       referral_discount_amount: Number(Number(o.referral_discount_amount ?? 0).toFixed(2)),
@@ -823,6 +836,7 @@ export class OrderRepository {
         ...o,
         subtotal_amount: Number(Number(o.subtotal_amount).toFixed(2)),
         delivery_fee: Number(Number(o.delivery_fee).toFixed(2)),
+        small_order_fee: Number(Number(o.small_order_fee ?? 0).toFixed(2)),
         discount_amount: Number(Number(o.discount_amount).toFixed(2)),
         birthday_discount_amount: Number(Number(o.birthday_discount_amount ?? 0).toFixed(2)),
         referral_discount_amount: Number(Number(o.referral_discount_amount ?? 0).toFixed(2)),

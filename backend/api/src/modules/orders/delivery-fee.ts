@@ -1,8 +1,8 @@
 import { db } from '../../database/connection.js';
 import { logger } from '../../utils/logger.js';
 import { haversineM, roadDistanceM } from '../routing/index.js';
-import { priceByKmTiers } from '../pricing/km-tiers.js';
-import { readDeliveryFeeSetting, type DeliveryFeeMode } from '../configuration/settings.service.js';
+import { priceByBaseAndKm, priceByKmTiers } from '../pricing/km-tiers.js';
+import { readDeliveryFeeSetting, type PublicDeliveryFeeMode } from '../configuration/settings.service.js';
 import { orderRepository, type DBConnection } from './order.repository.js';
 import { farthestPickupDistance, pickupPointsFor } from './pickup-points.js';
 
@@ -23,6 +23,10 @@ import { farthestPickupDistance, pickupPointsFor } from './pickup-points.js';
  *                   fee = per-km tiers (pricing/km-tiers.ts): every started
  *                   km counts, the last row repeats, then the optional cap
  *                   max_fee_lkr. Without an address: the km-1 amount.
+ *   BASE_PER_KM     same distance; fee = base_lkr while within base_km, then per_km_lkr for each
+ *                   started km beyond it (owner's brother, 2026-10-25: 120 / 2 km / 40), then the
+ *                   optional cap. Without an address: the base fee. Told to customers and
+ *                   snapshotted on the order as DISTANCE_TIERS (publicFeeMode).
  *
  * This is the STANDARD fee. A free delivery (free-delivery.ts) still makes the
  * charged orders.delivery_fee 0 while orders.standard_delivery_fee keeps this
@@ -38,12 +42,12 @@ type Point = { lat: number; lng: number };
 export interface DeliveryFeeQuote {
   /** The standard fee for this address, before any free delivery. */
   fee_lkr: number;
-  fee_mode: DeliveryFeeMode;
+  fee_mode: PublicDeliveryFeeMode;
   /** Road km farthest pickup point (the hub for a Blynk-only cart) -> address (2 decimals); null in FLAT mode or without an address. */
   distance_km: number | null;
   /** true = OSRM was unavailable and the distance is straight line x 1.3. */
   distance_estimated: boolean | null;
-  /** DISTANCE_TIERS: how many km were charged (every started km). */
+  /** DISTANCE_TIERS: how many km were charged (every started km); BASE_PER_KM: the started km beyond the covered ones. */
   km_counted: number | null;
 }
 
@@ -96,13 +100,23 @@ export async function quoteDeliveryFee(
 ): Promise<DeliveryFeeQuote> {
   const executor = opts.executor ?? db;
   const setting = await readDeliveryFeeSetting(executor);
-  if (setting.fee_mode !== 'DISTANCE_TIERS') {
+  if (setting.fee_mode === 'FLAT') {
     return { fee_lkr: setting.fee_lkr, fee_mode: 'FLAT', distance_km: null, distance_estimated: null, km_counted: null };
   }
   const hub = opts.hub ?? (to ? await orderRepository.findActiveDarkStore(executor) : null);
   const points = to ? await pickupPointsFor(opts.productIds ?? [], hub ?? null) : [];
   // The fee's own measurement (cached OSRM, straight line x 1.3 fallback) for every leg; the longest wins.
   const distance = to ? await farthestPickupDistance(points, to, measureFeeDistance) : null;
+  if (setting.fee_mode === 'BASE_PER_KM') {
+    const price = priceByBaseAndKm(setting, distance?.km ?? 0, setting.max_fee_lkr);
+    return {
+      fee_lkr: price.total,
+      fee_mode: 'DISTANCE_TIERS',
+      distance_km: distance?.km ?? null,
+      distance_estimated: distance?.estimated ?? null,
+      km_counted: distance ? price.extra_km : null,
+    };
+  }
   if (!to || !distance) {
     const price = priceByKmTiers(setting.tiers, 0, setting.max_fee_lkr);
     return { fee_lkr: price.total, fee_mode: 'DISTANCE_TIERS', distance_km: null, distance_estimated: null, km_counted: null };

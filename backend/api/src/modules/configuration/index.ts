@@ -30,6 +30,8 @@ import { appUpdatesService, updateAppUpdatesSchema } from './app-updates.js';
 import { appShareLinksService, updateShareLinkSchema } from './app-downloads.js';
 import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../notifications/sms-language.js';
 import { smsLanguagePreview } from '../notifications/sms-language.preview.js';
+import { smallOrderFeeReady } from '../orders/small-order-fee.js';
+import { deliveryRadiusService, updateDeliveryRadiusSchema } from './delivery-radius.js';
 import { defaultMarkupSettings, updateDefaultMarkupSchema } from '../catalog/catalog.pricing.js';
 
 export const configurationRouter = Router();
@@ -94,6 +96,25 @@ adminSettingsRouter.patch(
   }
 );
 
+// Delivery radius (owner's brother, 2026-10-25): the active store's service radius in km. Audited
+// (DELIVERY_RADIUS_UPDATED); orders already placed are untouched.
+adminSettingsRouter.get('/settings/delivery-radius', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await deliveryRadiusService.get() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminSettingsRouter.patch('/settings/delivery-radius', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (req, res, next) => {
+  try {
+    const input = updateDeliveryRadiusSchema.parse(req.body);
+    res.json({ success: true, data: await deliveryRadiusService.set(input, actorOf(req)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Checkout switches (owner, 2026-10-08): coupon codes on/off and the free
 // deliveries for new customers. Audited (CHECKOUT_SETTINGS_UPDATED); they
 // apply to orders placed afterwards.
@@ -103,7 +124,7 @@ adminSettingsRouter.get(
   requireRoles(['ADMIN', 'OPERATIONS']),
   async (_req, res, next) => {
     try {
-      res.json({ success: true, data: await settingsService.getCheckoutSettings() });
+      res.json({ success: true, data: { ...(await settingsService.getCheckoutSettings()), small_order_fee_ready: await smallOrderFeeReady() } });
     } catch (err) {
       next(err);
     }
@@ -117,7 +138,7 @@ adminSettingsRouter.patch(
   async (req, res, next) => {
     try {
       const input = updateCheckoutSettingsSchema.parse(req.body);
-      res.json({ success: true, data: await settingsService.setCheckoutSettings(input, actorOf(req)) });
+      res.json({ success: true, data: { ...(await settingsService.setCheckoutSettings(input, actorOf(req))), small_order_fee_ready: await smallOrderFeeReady() } });
     } catch (err) {
       next(err);
     }

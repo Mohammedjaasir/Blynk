@@ -117,7 +117,7 @@ export async function recomputeOrderRewards(
     offer = 0;
   }
   if (hadPoints) {
-    const due = round2(Math.max(0, subtotal + fee - offer));
+    const due = round2(Math.max(0, subtotal + fee + Number(order.small_order_fee ?? 0) - offer));
     const kept = await trimPointsForOrder(trx, order, due);
     fields.points_redeemed = kept.points;
     fields.points_discount_amount = kept.discount_amount;

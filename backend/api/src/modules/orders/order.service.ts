@@ -22,6 +22,7 @@ import { evaluateCoupon } from '../coupons/coupon.service.js';
 import type { ValidateCouponInput } from '../coupons/coupon.schema.js';
 import {
   basketFreeDeliveryOf,
+  smallOrderFeeOf,
   birthdayOfferSettings,
   checkoutSettings,
   orderForSomeoneElseOf,
@@ -30,6 +31,7 @@ import { applyBirthday, birthdayBeatsCoupon, birthdayOfferStatus, publicBirthday
 import { basketFreeDeliveryApplies, basketFreeDeliveryStatus, freeDeliveryStatus } from './free-delivery.js';
 // Per-km tier delivery fee (owner, 2026-10-10): the one place the fee is worked out.
 import { quoteDeliveryFee, type DeliveryFeeQuote } from './delivery-fee.js';
+import { smallOrderFeeCharged, smallOrderFeeReady, smallOrderFeeStatus } from './small-order-fee.js';
 // Pickup points (owner, 2026-10-24): the store and/or sellers' approved shops.
 import { orderPickups } from './pickup-points.js';
 import { effectivePrice } from '../catalog/catalog.offers.js';
@@ -490,7 +492,10 @@ export class OrderService {
     if (input.coupon_code && !settings.coupons_enabled) {
       logger.info({ customerId }, 'Coupon code ignored: coupons are switched off');
     }
-    const totalAmount = Number((subtotalAmount + deliveryFee).toFixed(2));
+    // Small-order fee (migration 063; owner's brother, 2026-10-25): an item total under the minimum pays it
+    // on top; free delivery does not waive it. Treated as off until the migration has been run.
+    const smallOrderFee = (await smallOrderFeeReady()) ? smallOrderFeeCharged(smallOrderFeeOf(settings), subtotalAmount) : 0;
+    const totalAmount = Number((subtotalAmount + deliveryFee + smallOrderFee).toFixed(2));
     const orderNumber = generateOrderNumber();
 
     const orderData: CreateOrderData = {
@@ -500,6 +505,7 @@ export class OrderService {
       dark_store_id: store.id,
       subtotal_amount: subtotalAmount,
       delivery_fee: deliveryFee,
+      small_order_fee: smallOrderFee,
       delivery_fee_quote: feeQuote,
       free_delivery: settings.new_customer_free_deliveries,
       // Owner, 2026-10-12: decided on the server-priced subtotal in the transaction.
@@ -559,6 +565,8 @@ export class OrderService {
     // Owner, 2026-10-10: the fee for the chosen address (address_id), as the order will charge it.
     const deliveryFee =
       basketFree || free?.applies ? 0 : (await this.quoteForCustomer(customerId, input.address_id, productIds)).quote.fee_lkr;
+    // The small-order fee (owner's brother, 2026-10-25) rides on the total, never discounted.
+    const smallOrderFee = (await smallOrderFeeReady()) ? smallOrderFeeCharged(smallOrderFeeOf(settings), subtotal) : 0;
     const applied = await evaluateCoupon(db, { code: input.code, customerId, subtotal, deliveryFee });
     // Birthday gift (owner, 2026-10-09): never stacked with a coupon - the
     // larger is used (a tie keeps the coupon). discount_amount stays the
@@ -580,11 +588,12 @@ export class OrderService {
       description: applied.description,
       subtotal,
       delivery_fee: deliveryFee,
+      small_order_fee_lkr: smallOrderFee,
       discount_amount: applied.discount_amount,
       birthday_discount_amount: birthday?.discount_amount ?? 0,
       referral_discount_amount: referral?.discount_amount ?? 0,
       applied_discount: referralWins ? ('REFERRAL' as const) : birthdayWins ? ('BIRTHDAY' as const) : ('COUPON' as const),
-      total: Number((subtotal + deliveryFee - charged).toFixed(2)),
+      total: Number((subtotal + deliveryFee + smallOrderFee - charged).toFixed(2)),
       // Bundle offers (owner, 2026-10-25): `subtotal` is already after them; what they did to this cart.
       ...bundlePreview(priced?.bundle ?? noBundles(subtotal)),
     };
@@ -675,6 +684,11 @@ export class OrderService {
     // used up). The app shows "Add LKR X more for free delivery".
     const basket = basketFreeDeliveryStatus(basketFreeDeliveryOf(settings), subtotal);
     const forOthers = orderForSomeoneElseOf(settings);
+    const smallFeeSetting = smallOrderFeeOf(settings);
+    const smallFee = smallOrderFeeStatus(
+      { ...smallFeeSetting, enabled: smallFeeSetting.enabled && (await smallOrderFeeReady()) },
+      subtotal
+    );
     const charged = basket.applies === true || free.applies ? 0 : standardFee;
     return {
       delivery_fee_lkr: charged,
@@ -686,6 +700,8 @@ export class OrderService {
       coupons_enabled: settings.coupons_enabled,
       free_delivery: free,
       basket_free_delivery: basket,
+      // Owner's brother, 2026-10-25: an item total under the minimum pays this on top (off until migration 063).
+      small_order_fee: smallFee,
       // Owner, 2026-10-12: whether checkout offers "For someone else", and
       // whether the receiver's SMS carries the delivery code.
       order_for_someone_else: forOthers,
