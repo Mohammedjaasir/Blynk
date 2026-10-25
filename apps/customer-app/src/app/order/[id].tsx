@@ -20,6 +20,7 @@ import {
   timelineLabel, type OrderTone,
 } from '@/blynk/orders/status';
 import { canReorder, reorderInto, reorderMessage } from '@/blynk/orders/reorder';
+import { FEE_WORDS } from '@/blynk/checkout/feeWords';
 import { ORDER_SCREEN as W } from '@/blynk/orders/screenWords';
 import { ORDER_WORDS } from '@/blynk/orders/words';
 import { PAY } from '@/blynk/payments/copy';
@@ -276,6 +277,7 @@ export default function OrderStatus() {
               <BillLine l={W.itemTotal} r={formatLkr(order.subtotal_amount)} />
               {orderBundleSavings(order) > 0 && <BillLine l={W.bundleSaved} r={formatLkr(orderBundleSavings(order))} accent />}
               <BillLine l={W.deliveryFee} r={order.delivery_fee === 0 ? W.freeFee : formatLkr(order.delivery_fee)} accent={order.delivery_fee === 0} />
+              {(order.small_order_fee ?? 0) > 0 && <BillLine l={FEE_WORDS.smallOrderFee} r={formatLkr(order.small_order_fee as number)} />}
               {discountRows(order).map((d) => <BillLine key={d.label} l={d.label} r={`−${formatLkr(d.amount)}`} accent />)}
               {order.wallet_amount_used > 0 && <BillLine l={WALLET_COPY.orderBillLine} r={`−${formatLkr(order.wallet_amount_used)}`} accent />}
               <View style={styles.sep} />

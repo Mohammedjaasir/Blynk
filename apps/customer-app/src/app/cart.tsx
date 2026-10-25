@@ -33,6 +33,8 @@ import { CoverageCard } from '@/blynk/area/AreaSteps';
 import { coverageOf } from '@/blynk/area/coverage';
 import { ComboAdd, comboHasSaving, ComboThumb, comboSummary } from '@/blynk/combos/ComboViews';
 import { couponAppliedNote, couponErrorText, couponInputError, discountLabel, normalizeCoupon } from '@/blynk/checkout/coupon';
+import { deliveryFormulaText, smallFeeFor, smallFeeNote, smallFeeRule } from '@/blynk/checkout/fees';
+import { FEE_WORDS } from '@/blynk/checkout/feeWords';
 import { BirthdayBanner, DeliveryDetailsCard, RewardsCard, SlotPickerCard } from '@/blynk/checkout/CheckoutSections';
 import { detailsBody, detailsProblem, EMPTY_DETAILS, type CheckoutDetails } from '@/blynk/checkout/details';
 import { birthdayOf, canRedeem, pointsOf, referralOf } from '@/blynk/checkout/rewards';
@@ -1038,7 +1040,10 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
   const store = useStore();
   const quoted = !!checkout && checkout.deliveryFee !== null;
   // a quoted bill already starts from the charged subtotal (after bundles); before the quote the bundle saving comes off here
-  const toPay = (quoted ? (checkout!.toPay as number) : Math.max(0, Math.round((bill.toPay - bundleSaved) * 100) / 100)) + tip;
+  // the small-order fee (2026-10-25): the quote's once an address is chosen, the store's before that (a guest)
+  const smallFee = quoted ? checkout!.smallFee : smallFeeFor(smallFeeRule(store), itemTotal - bundleSaved);
+  const smallNote = smallFeeNote(smallFee);
+  const toPay = (quoted ? (checkout!.toPay as number) : Math.max(0, Math.round((bill.toPay - bundleSaved + smallFee.charged) * 100) / 100)) + tip;
   const feeKnown = quoted || bill.feeKnown;
   // the header counts every saving: offer prices (while shown), the coupon / birthday / referral discount and points
   const head = savingsHeader({
@@ -1062,7 +1067,8 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
   ) : (
     <Text style={styles.billR}>{formatLkr(checkout.deliveryFee as number)}</Text>
   );
-  const freeNote: string | null = null;
+  // "LKR 120 up to 2 km, then LKR 40 for each extra km" (the base + per-km fee), under the fee row
+  const feeNote: string | null = deliveryFormulaText(store);
   // the one discount used (coupon, birthday gift or referral reward), then the points
   const discountName = checkout ? discountLabel(checkout.discountKind, coupon?.code) : '';
   const estimated = !!checkout && !coupon && checkout.discount > 0;
@@ -1095,7 +1101,14 @@ function LiveBillCard({ bill, itemTotal, mrpTotal, checkout, coupon, payMethod, 
         )}
         <Dashed style={{ marginVertical: 11 }} />
         <BillRow dashed l={CART.deliveryFee(distance)} r={feeRight} />
-        {!!freeNote && <Text style={styles.freeNote}>{freeNote}</Text>}
+        {!!feeNote && <Text style={styles.freeNote}>{feeNote}</Text>}
+        {smallFee.applies && (
+          <>
+            <Dashed style={{ marginVertical: 11 }} />
+            <BillRow l={FEE_WORDS.smallOrderFee} r={<Text style={styles.billR}>{formatLkr(smallFee.charged)}</Text>} />
+            {!!smallNote && <Text style={styles.freeNote}>{smallNote}</Text>}
+          </>
+        )}
         {!!checkout && checkout.discount > 0 && (
           <>
             <Dashed style={{ marginVertical: 11 }} />

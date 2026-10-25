@@ -109,6 +109,14 @@ export interface StoreInfo {
   delivery_fee_lkr: number | null; delivery_fee_mode: 'FLAT' | 'DISTANCE_TIERS';
   /** The lowest delivery fee (per-km tiers: the first km's), for "From LKR 100" before an address is known. */
   delivery_fee_from_lkr?: number | null;
+  /**
+   * 2026-10-25 "base + per km" fee (the public mode stays 'DISTANCE_TIERS' for it): LKR base_lkr up to base_km,
+   * then per_km_lkr for every started km, never more than max_fee_lkr (when set). null for a flat or tiered
+   * fee; absent on an older server.
+   */
+  delivery_fee_formula?: { base_lkr: number; base_km: number; per_km_lkr: number; max_fee_lkr: number | null } | null;
+  /** 2026-10-25 small-order fee (off by default): charged while the item total is under min_subtotal_lkr. Absent on an older server = off. */
+  small_order_fee?: { enabled: boolean; min_subtotal_lkr: number; fee_lkr: number };
   /** Name of the active dark store, e.g. "Dharga Town Central Dark Store"; null when none is set up. */
   hub_name?: string | null;
   radius_km: number | null; coupons_enabled: boolean; show_offer_savings: boolean;

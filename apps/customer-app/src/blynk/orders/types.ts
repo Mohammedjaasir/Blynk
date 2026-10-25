@@ -34,6 +34,14 @@ export interface CheckoutInfo {
   delivery_distance_km: number | null;
   delivery_distance_estimated: boolean | null;
   delivery_fee_address_id: string | null;
+  /**
+   * 2026-10-25 small-order fee (absent on an older server = off). `applies` is null without ?subtotal=;
+   * `charged_lkr` is the fee when it applies else 0; `remaining_lkr` is what is still to add to avoid it.
+   */
+  small_order_fee?: {
+    enabled: boolean; min_subtotal_lkr: number; fee_lkr: number;
+    applies: boolean | null; charged_lkr: number; remaining_lkr: number | null;
+  };
   coupons_enabled: boolean;
   free_delivery: FreeDeliveryStatus;
   basket_free_delivery?: BasketFreeDeliveryStatus;
@@ -74,6 +82,8 @@ export interface CouponPreview {
   description: string | null;
   subtotal: number;
   delivery_fee: number;
+  /** 2026-10-25: the small-order fee the server added to `total` (0 / absent = none). */
+  small_order_fee_lkr?: number;
   discount_amount: number;
   birthday_discount_amount: number;
   referral_discount_amount: number;
@@ -132,6 +142,8 @@ export interface Order {
   payment?: { gateway?: string | null; gateway_method?: string | null; gateway_status_message?: string | null; failed_at?: string | null; [k: string]: unknown } | null;
   subtotal_amount: number;
   delivery_fee: number;
+  /** 2026-10-25: the small-order fee charged on this order (already inside total_amount; 0 / absent = none). */
+  small_order_fee?: number;
   discount_amount: number;
   birthday_discount_amount: number;
   referral_discount_amount: number;

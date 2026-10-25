@@ -1,5 +1,6 @@
 import { lineAvailable, type CartLine, type ComboLine } from '@/blynk/cart/cartStore';
 import { storage } from '@/blynk/lib/storage';
+import { smallFeeFor, type SmallFee } from '@/blynk/checkout/fees';
 import { rewardsSummary, type DiscountKind } from '@/blynk/checkout/rewards';
 import type { CheckoutInfo, CouponPreview, PlaceOrderBody } from './types';
 
@@ -92,6 +93,8 @@ export interface CheckoutBill {
   /** "Add LKR X more for free delivery" (basket amount switched on and not reached). */
   basketRemaining: number | null;
   basketMin: number | null;
+  /** The small-order fee (2026-10-25): off / applies / what is still to add. Already inside `toPay`. */
+  smallFee: SmallFee;
   /** The one discount (coupon, birthday gift or referral reward; estimated without a coupon). */
   discount: number;
   discountKind: DiscountKind;
@@ -117,7 +120,9 @@ export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coup
   const fee = quote ? quote.delivery_fee_lkr : null;
   // one discount only: the coupon preview carries the server's choice; without one the
   // larger of the birthday gift and the referral reward is assumed; points come on top, then the wallet
-  const r = rewardsSummary({ subtotal: itemTotal, deliveryFee: fee ?? 0, quote, coupon, usePoints, useWallet });
+  // the small-order fee follows the quote (same refresh as the delivery fee); worked out from this basket
+  const smallFee = smallFeeFor(quote?.small_order_fee, itemTotal);
+  const r = rewardsSummary({ subtotal: itemTotal, deliveryFee: fee ?? 0, quote, coupon, usePoints, useWallet, smallOrderFee: smallFee.charged });
   return {
     itemTotal: round2(itemTotal),
     deliveryFee: fee,
@@ -127,6 +132,7 @@ export function checkoutBill(itemTotal: number, quote: CheckoutInfo | null, coup
     // worked out from this basket (the quote may lag a quantity change by a moment)
     basketRemaining: basket?.enabled && !basketApplies && basket.min_subtotal_lkr > itemTotal ? round2(basket.min_subtotal_lkr - itemTotal) : null,
     basketMin: basket?.enabled ? basket.min_subtotal_lkr : null,
+    smallFee,
     discount: r.discount.amount,
     discountKind: r.discount.kind,
     points: r.points,

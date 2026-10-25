@@ -150,7 +150,7 @@ export interface RewardsSummary {
   earn: number;
   /** What the Blynk Wallet pays (when on): after the discount and points, capped by max_use_percent and the balance. */
   wallet: number;
-  /** What is due before the wallet (subtotal + fee - discount - points). */
+  /** What is due before the wallet (subtotal + fee + small-order fee - discount - points). */
   dueBeforeWallet: number;
   /** Estimated amount still to pay after the one discount, the points and the wallet (when on). */
   toPay: number;
@@ -160,10 +160,12 @@ export interface RewardsSummary {
 export function rewardsSummary(args: {
   subtotal: number; deliveryFee: number; quote: CheckoutInfo | null; coupon?: CouponPreview | null; usePoints: boolean;
   useWallet?: boolean;
+  /** The small-order fee charged on top (2026-10-25; not discounted, free delivery does not waive it). */
+  smallOrderFee?: number;
 }): RewardsSummary {
-  const { subtotal, deliveryFee, quote, coupon, usePoints, useWallet = false } = args;
+  const { subtotal, deliveryFee, quote, coupon, usePoints, useWallet = false, smallOrderFee = 0 } = args;
   const discount = estimateDiscount({ subtotal, deliveryFee, coupon, birthday: birthdayOf(quote), referral: referralOf(quote) });
-  const due = round2(Math.max(0, subtotal + deliveryFee - discount.amount));
+  const due = round2(Math.max(0, subtotal + deliveryFee + smallOrderFee - discount.amount));
   const points = usePoints ? pointsRedeem(pointsOf(quote), due) : { points: 0, value: 0 };
   const dueBeforeWallet = round2(Math.max(0, due - points.value));
   const wallet = useWallet ? walletPreview(checkoutWalletOf(quote?.wallet), dueBeforeWallet) : 0;
