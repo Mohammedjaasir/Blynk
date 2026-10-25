@@ -22,7 +22,8 @@ export const LOCATION_KEY = 'blynk.app.location.v1';
 export type GuestPin = { lat: number; lng: number; label?: string };
 
 /** A guest's chosen spot; `details` once the address form was filled in. */
-export type GuestLocation = GuestPin & { details?: AddressDetails; city?: string };
+/** `tag`: what the guest called the address (Home, Work or their own name); saved as its label once they sign in. */
+export type GuestLocation = GuestPin & { details?: AddressDetails; city?: string; tag?: string };
 
 type Persisted = {
   sheetDone: boolean;
@@ -57,6 +58,7 @@ function restore(): Persisted {
         lng: g.lng,
         ...(typeof g.label === 'string' ? { label: g.label } : {}),
         ...(typeof g.city === 'string' ? { city: g.city } : {}),
+        ...(typeof g.tag === 'string' && g.tag ? { tag: g.tag } : {}),
         ...(g.details && typeof g.details.address_line1 === 'string' && typeof g.details.recipient_phone === 'string'
           ? { details: g.details } : {}),
       } : null,
@@ -215,7 +217,7 @@ export function syncGuest(): Promise<SyncResult> {
         return 'matched';
       }
       await saveNewAddress({
-        label: DEFAULT_LABEL,
+        label: g.tag || DEFAULT_LABEL,
         ...d,
         city: g.city || DEFAULT_TOWN,
         latitude: g.lat,

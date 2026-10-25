@@ -24,6 +24,8 @@ describe('checkout, address and payment words in Sinhala and Tamil', () => {
     expect(PAY.cod).toBe('Cash on delivery');
     expect(couponInputError('')).toBe('Enter a code.');
     expect(labelText('Home')).toBe('Home');
+    expect(labelText('Work')).toBe('Work');
+    expect(labelText('Other')).toBe('Other');
     expect(ADDRESS_BOOK.title).toBe('Saved addresses');
   });
 
@@ -46,6 +48,8 @@ describe('checkout, address and payment words in Sinhala and Tamil', () => {
     expect(COPY.nameBad).toMatch(SINHALA);
     expect(addressErrorText(new ApiError('x', 404, 'ADDRESS_NOT_FOUND'))).toMatch(SINHALA);
     expect(labelText('Home')).toBe('ගෙදර');
+    expect(labelText('Work')).toBe('වැඩ');
+    expect(labelText('Other')).toBe('වෙනත්');
     expect(labelText('Aunty')).toBe('Aunty');
     expect(payOptions(null, 100)[0]!.title).toMatch(SINHALA);
   });
@@ -62,6 +66,8 @@ describe('checkout, address and payment words in Sinhala and Tamil', () => {
     expect(COPY.lineBad).toMatch(TAMIL);
     expect(addressErrorText(new ApiError('x', 401, 'UNAUTHENTICATED'))).toMatch(TAMIL);
     expect(labelText('Home')).toBe('வீடு');
+    expect(labelText('Work')).toBe('வேலை');
+    expect(labelText('Other')).toBe('மற்றவை');
     expect(payOptions(null, 100)[1]!.title).toMatch(TAMIL);
   });
 

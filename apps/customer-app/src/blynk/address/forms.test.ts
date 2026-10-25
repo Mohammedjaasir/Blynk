@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import {
-  COPY, lineError, metresBetween, notesError, numParam, otherPhoneError, phoneError, recipientNameError, safeReturn,
-  townFromHub, validateAddress,
+  ADDRESS_TAGS, COPY, lineError, metresBetween, notesError, numParam, otherPhoneError, phoneError, recipientNameError, safeReturn,
+  resolveLabel, suggestTag, TAG_NAME_MAX, tagFromLabel, townFromHub, validateAddress,
 } from './forms';
 
 const ok = { name: 'Nimal Perera', phone: '077 123 4567', other: '', line: '12/3 Main Street, near the mosque', notes: '' };
@@ -75,4 +75,27 @@ test('numbers from params and distances', () => {
   expect(numParam('x')).toBeNull();
   expect(Math.round(metresBetween({ lat: 6.4413, lng: 80.0114 }, { lat: 6.4382, lng: 80.0274 }))).toBeGreaterThan(1700);
   expect(metresBetween(pin, pin)).toBe(0);
+});
+
+// Owner, 2026-10-25: "all the addresses show as Home - we have to be able to name them differently".
+test('an address is saved as Home, Work, or the name the customer typed for Other', () => {
+  expect(ADDRESS_TAGS).toEqual(['Home', 'Work', 'Other']);
+  expect(resolveLabel('Home', 'ignored')).toBe('Home');
+  expect(resolveLabel('Work', 'ignored')).toBe('Work');
+  expect(resolveLabel('Other', "  Mum's   house ")).toBe("Mum's house");
+  expect(resolveLabel('Other', '')).toBe('Other');
+  expect(resolveLabel('Other', '   ')).toBe('Other');
+  expect(resolveLabel('Other', 'x'.repeat(60))).toHaveLength(TAG_NAME_MAX);
+});
+
+test('the form starts from the stored label, and a second address is not another "Home"', () => {
+  expect(tagFromLabel('Home')).toEqual({ tag: 'Home', custom: '' });
+  expect(tagFromLabel('work')).toEqual({ tag: 'Work', custom: '' });
+  expect(tagFromLabel('Other')).toEqual({ tag: 'Other', custom: '' });
+  expect(tagFromLabel("Mum's house")).toEqual({ tag: 'Other', custom: "Mum's house" });
+  expect(tagFromLabel('')).toEqual({ tag: 'Home', custom: '' });
+  expect(tagFromLabel(null)).toEqual({ tag: 'Home', custom: '' });
+  expect(suggestTag([])).toBe('Home');
+  expect(suggestTag(['Work'])).toBe('Home');
+  expect(suggestTag(['Work', 'home'])).toBe('Other');
 });

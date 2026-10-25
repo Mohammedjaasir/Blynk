@@ -12,6 +12,36 @@ export const STORE_AREA = { lat: 6.441313, lng: 80.011437 } as const;
 export const DEFAULT_TOWN = 'Dharga Town';
 export const DEFAULT_LABEL = 'Home';
 
+/*
+ * What the customer calls an address (owner, 2026-10-25: "all the addresses show as Home - we have to be able to
+ * name them differently"). Three choices on the form: Home, Work, or Other with a name of their own ("Mum's
+ * house"). The stored label is the text itself, so older apps and the address book show it as it is; "Home" and
+ * "Work" are translated for display (address/words.ts labelText).
+ */
+export const ADDRESS_TAGS = ['Home', 'Work', 'Other'] as const;
+export type AddressTag = (typeof ADDRESS_TAGS)[number];
+export const TAG_NAME_MAX = 24;
+
+/** The label to store: Home, Work, or the customer's own name for "Other" ("Other" when they leave it empty). */
+export function resolveLabel(tag: AddressTag, custom: string): string {
+  if (tag !== 'Other') return tag;
+  const name = normalizeText(custom).slice(0, TAG_NAME_MAX);
+  return name || 'Other';
+}
+
+/** The form's starting choice for a stored label (a custom name is "Other" plus that name). */
+export function tagFromLabel(label: string | null | undefined): { tag: AddressTag; custom: string } {
+  const l = normalizeText(label ?? '');
+  if (!l || l.toLowerCase() === 'home') return { tag: 'Home', custom: '' };
+  if (l.toLowerCase() === 'work') return { tag: 'Work', custom: '' };
+  return { tag: 'Other', custom: l.toLowerCase() === 'other' ? '' : l };
+}
+
+/** A new address starts as Home, unless the book already has one: then Other (so two are never both "Home"). */
+export function suggestTag(existingLabels: readonly string[]): AddressTag {
+  return existingLabels.some((l) => normalizeText(l).toLowerCase() === 'home') ? 'Other' : 'Home';
+}
+
 export const NAME_MIN = 2;
 export const NAME_MAX = 80;
 export const LINE_MIN = 3;

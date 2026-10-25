@@ -27,10 +27,10 @@ import { goBack } from '@/lib/nav';
 import { C, F } from '@/lib/theme';
 import { addressErrorText, isOutsideRadius, type SavedAddress, type UpdateAddressBody } from './api';
 import {
-  COPY, DEFAULT_LABEL, metresBetween, numParam, PHONE_HINT, safeReturn, townFromHub, validateAddress,
-  type AddressFields, type FieldErrors, type Pin as LatLng,
+  ADDRESS_TAGS, COPY, metresBetween, numParam, PHONE_HINT, resolveLabel, safeReturn, suggestTag, TAG_NAME_MAX, tagFromLabel, townFromHub,
+  validateAddress, type AddressFields, type AddressTag, type FieldErrors, type Pin as LatLng,
 } from './forms';
-import { LIVE_ADDRESS } from './words';
+import { labelText, LIVE_ADDRESS } from './words';
 import {
   loadMapLibre, locateOnce, MAP_ATTRIBUTION, MAP_STYLE, MAP_ZOOM, type MlMap,
 } from './maplibre';
@@ -379,6 +379,11 @@ function AddressForm({ pin, area: autoArea, choices, editing, signedIn, prefill,
 }) {
   const insets = useSafeAreaInsets();
   const guest = getLocationState().guest;
+  const startTag = editing
+    ? tagFromLabel(editing.label)
+    : !signedIn && guest?.tag
+      ? tagFromLabel(guest.tag)
+      : { tag: suggestTag((getLocationState().book?.list ?? []).map((a) => a.label)), custom: '' };
   const [f, setF] = useState<AddressFields>(() => (editing ? {
     name: editing.recipient_name,
     phone: formatPhone(editing.recipient_phone),
@@ -394,6 +399,9 @@ function AddressForm({ pin, area: autoArea, choices, editing, signedIn, prefill,
   }));
   // the area comes from the pin; the customer can change it (owner, 2026-10-22: a Beruwala address was saved as Dharga Town)
   const [town, setTown] = useState(autoArea);
+  // what the customer calls this address: Home, Work or a name of their own (owner, 2026-10-25)
+  const [tag, setTag] = useState<AddressTag>(() => startTag.tag);
+  const [tagCustom, setTagCustom] = useState(() => startTag.custom);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [out, setOut] = useState(false);
@@ -415,21 +423,21 @@ function AddressForm({ pin, area: autoArea, choices, editing, signedIn, prefill,
     setError(null);
     setOut(false);
     if (!signedIn) {
-      setGuestLocation({ lat: pin.lat, lng: pin.lng, label: details.address_line1, details, city: town });
+      setGuestLocation({ lat: pin.lat, lng: pin.lng, label: details.address_line1, details, city: town, tag: resolveLabel(tag, tagCustom) });
       onDone();
       return;
     }
     setBusy(true);
     try {
       if (editing) {
-        const patch: UpdateAddressBody = { ...details, city: town };
+        const patch: UpdateAddressBody = { ...details, city: town, label: resolveLabel(tag, tagCustom) };
         if (metresBetween(pin, { lat: editing.latitude, lng: editing.longitude }) > 0.5) {
           patch.latitude = pin.lat;
           patch.longitude = pin.lng;
         }
         await saveAddressEdit(editing.id, patch);
       } else {
-        await saveNewAddress({ label: DEFAULT_LABEL, ...details, city: town, latitude: pin.lat, longitude: pin.lng, is_default: true });
+        await saveNewAddress({ label: resolveLabel(tag, tagCustom), ...details, city: town, latitude: pin.lat, longitude: pin.lng, is_default: true });
       }
       markSheetDone();
       if (mounted.current) onDone();
@@ -466,6 +474,17 @@ function AddressForm({ pin, area: autoArea, choices, editing, signedIn, prefill,
           </Animated.View>
         )}
 
+        <View style={{ marginTop: 16 }}>
+          <Text style={styles.label}>{T.saveAs}</Text>
+          <View style={styles.chips}>
+            {ADDRESS_TAGS.map((a) => (
+              <Pressable key={a} onPress={() => setTag(a)} accessibilityRole="button" accessibilityState={{ selected: a === tag }} style={[styles.chip, a === tag && styles.chipOn]}>
+                <Text style={[styles.chipTxt, a === tag && styles.chipTxtOn]}>{labelText(a)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+        {tag === 'Other' && <Field label={T.tagName} value={tagCustom} placeholder={T.tagNameHint} onChange={setTagCustom} maxLength={TAG_NAME_MAX} />}
         <Field label={COPY.name} value={f.name} placeholder={COPY.nameHint} onChange={put('name')} error={errors.name} autoComplete="name" maxLength={80} />
         <Field label={COPY.phone} value={f.phone} placeholder={PHONE_HINT} onChange={put('phone')} error={errors.phone} keyboardType="phone-pad" autoComplete="tel" maxLength={20} />
         <Field label={COPY.other} value={f.other} placeholder={COPY.otherHint} onChange={put('other')} error={errors.other} keyboardType="phone-pad" maxLength={20} />

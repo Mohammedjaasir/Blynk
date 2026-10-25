@@ -34,6 +34,9 @@ export const LIVE_ADDRESS = localized(
     guestNote: "We'll keep this on your phone and save it to your account when you sign in.",
     movePin: 'Move the pin',
     gone: 'This address no longer exists.',
+    saveAs: 'Save as',
+    tagName: 'Name this place (optional)',
+    tagNameHint: "e.g. Mum's house",
   } as const,
   {
     si: {
@@ -61,6 +64,9 @@ export const LIVE_ADDRESS = localized(
       guestNote: 'මෙය ඔබේ දුරකථනයේ තබාගෙන, ඔබ ඇතුල් වූ විට ඔබේ ගිණුමට සුරකිමු.',
       movePin: 'පින් එක ගෙන යන්න',
       gone: 'මෙම ලිපිනය තවදුරටත් නැත.',
+      saveAs: 'සුරකින්නේ',
+      tagName: 'මෙම ස්ථානයට නමක් දෙන්න (අවශ්‍ය නම්)',
+      tagNameHint: 'උදා: අම්මාගේ ගෙදර',
     },
     ta: {
       search: 'வரைபடத்தை உங்கள் டெலிவரி இடத்துக்கு நகர்த்துங்கள்',
@@ -87,6 +93,9 @@ export const LIVE_ADDRESS = localized(
       guestNote: 'இதை உங்கள் போனில் வைத்திருந்து, நீங்கள் உள்நுழையும்போது உங்கள் கணக்கில் சேமிப்போம்.',
       movePin: 'பின்னை நகர்த்து',
       gone: 'இந்த முகவரி இப்போது இல்லை.',
+      saveAs: 'இப்படிச் சேமி',
+      tagName: 'இந்த இடத்துக்குப் பெயர் (விருப்பம்)',
+      tagNameHint: 'எ.கா: அம்மா வீடு',
     },
   },
   'address.LIVE_ADDRESS',
@@ -112,6 +121,8 @@ export const ADDRESS_BOOK = localized(
     guestPin: 'Your delivery spot (on this phone)',
     preview: 'Saved addresses arrive with ordering. This is a preview.',
     home: 'Home',
+    work: 'Work',
+    other: 'Other',
   } as const,
   {
     si: {
@@ -132,6 +143,8 @@ export const ADDRESS_BOOK = localized(
       guestPin: 'ඔබේ බෙදාහැරීමේ ස්ථානය (මෙම දුරකථනයේ)',
       preview: 'සුරකින ලද ලිපින ඇණවුම් සමඟ පැමිණේ. මෙය පෙරදසුනකි.',
       home: 'ගෙදර',
+      work: 'වැඩ',
+      other: 'වෙනත්',
     },
     ta: {
       title: 'சேமித்த முகவரிகள்',
@@ -151,13 +164,16 @@ export const ADDRESS_BOOK = localized(
       guestPin: 'உங்கள் டெலிவரி இடம் (இந்த போனில்)',
       preview: 'சேமித்த முகவரிகள் ஆர்டர் வசதியுடன் வரும். இது ஒரு முன்னோட்டம்.',
       home: 'வீடு',
+      work: 'வேலை',
+      other: 'மற்றவை',
     },
   },
   'address.ADDRESS_BOOK',
 );
 
-/** The default address label the app saves ("Home") reads in the chosen language; other labels are the customer's own. */
-export const labelText = (label: string): string => (label === 'Home' ? ADDRESS_BOOK.home : label);
+/** The labels the app itself offers (Home, Work, Other) read in the chosen language; a name the customer typed is shown as typed. */
+export const labelText = (label: string): string =>
+  label === 'Home' ? ADDRESS_BOOK.home : label === 'Work' ? ADDRESS_BOOK.work : label === 'Other' ? ADDRESS_BOOK.other : label;
 
 /** What the address calls say when they fail (src/blynk/address/api.ts). */
 export const ADDRESS_ERRORS = localized(

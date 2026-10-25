@@ -129,6 +129,20 @@ test('a guest spot is saved to the account after sign-in', async () => {
   expect(v).toMatchObject({ address: { id: 'g' }, guestPin: null, syncError: null, syncing: false });
 });
 
+test('a guest spot keeps the name it was given: it becomes the address label after sign-in', async () => {
+  const a = await load();
+  a.store.setGuestLocation({ lat: 6.4413, lng: 80.0114, label: details.address_line1, details, city: 'Dharga Town', tag: "Mum's house" });
+  // survives a page load
+  const { session, store } = await load();
+  expect(store.getLocationState().guest).toMatchObject({ tag: "Mum's house" });
+  signIn(session);
+  const f = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(ok({ addresses: [] }))
+    .mockResolvedValueOnce(ok({ address: row('g', { label: "Mum's house", is_default: true, address_line1: details.address_line1 }) }, 201));
+  expect(await store.syncGuest()).toBe('saved');
+  expect(JSON.parse(f.mock.calls[1][1]?.body as string)).toMatchObject({ label: "Mum's house" });
+});
+
 test('a guest spot that is already saved is reused, not duplicated', async () => {
   const { session, store } = await load();
   store.setGuestLocation({ lat: 6.4413, lng: 80.0114, details });
