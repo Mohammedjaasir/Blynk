@@ -49,11 +49,12 @@ describe('buy again', () => {
   test('what the rail shows', () => {
     const entries = parseBuyAgain({ items: [{ product_id: 'p-milk' }] });
     expect(buyAgainView({ demo: true, signedIn: true, entries, products: [milk] })).toEqual({ kind: 'hidden' });
-    expect(buyAgainView({ demo: false, signedIn: false, entries: null, products: null })).toEqual({ kind: 'empty' });
+    // Owner, 2026-10-25: nothing is shown before a first order - no empty card for guests either.
+    expect(buyAgainView({ demo: false, signedIn: false, entries: null, products: null })).toEqual({ kind: 'hidden' });
     expect(buyAgainView({ demo: false, signedIn: true, entries: null, products: [milk] })).toEqual({ kind: 'hidden' });
     expect(buyAgainView({ demo: false, signedIn: true, entries: 'failed', products: [milk] })).toEqual({ kind: 'hidden' });
-    expect(buyAgainView({ demo: false, signedIn: true, entries: [], products: [milk] })).toEqual({ kind: 'empty' });
-    expect(buyAgainView({ demo: false, signedIn: true, entries: parseBuyAgain({ items: [{ product_id: 'x' }] }), products: [milk] })).toEqual({ kind: 'empty' });
+    expect(buyAgainView({ demo: false, signedIn: true, entries: [], products: [milk] })).toEqual({ kind: 'hidden' });
+    expect(buyAgainView({ demo: false, signedIn: true, entries: parseBuyAgain({ items: [{ product_id: 'x' }] }), products: [milk] })).toEqual({ kind: 'hidden' });
     const v = buyAgainView({ demo: false, signedIn: true, entries, products: [milk] });
     expect(v.kind === 'cards' && v.cards[0].product.id).toBe('p-milk');
     expect([boughtText(1), boughtText(2), boughtText(6)]).toEqual(['Bought once', 'Bought twice', 'Bought 6 times']);

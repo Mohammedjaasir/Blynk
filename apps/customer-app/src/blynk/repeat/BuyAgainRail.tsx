@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -7,10 +6,9 @@ import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import { useCatalog } from '@/blynk/catalog/CatalogContext';
 import { ChevronIcon } from '@/components/icons';
 import { ProductCard } from '@/components/ProductCard';
-import { PressScale } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
-import { C, F, SPACE, T } from '@/lib/theme';
-import { BasketPopArt, LoopIcon } from './art';
+import { C, SPACE, T } from '@/lib/theme';
+import { LoopIcon } from './art';
 import { boughtText, buyAgainView } from './buyAgain';
 import { useBuyAgain, useRepeatBaskets } from './hooks';
 import { REPEAT_WORDS } from './words';
@@ -37,7 +35,7 @@ export function BuyAgainRail({ style }: { style?: StyleProp<ViewStyle> }) {
   if (view.kind === 'hidden') return null;
 
   const count = repeat.list?.length ?? 0;
-  const repeatLink = repeat.on && (view.kind === 'cards' || count > 0) ? (
+  const repeatLink = repeat.on ? (
     <Pressable
       onPress={() => router.push('/repeat-baskets')}
       hitSlop={8}
@@ -59,37 +57,13 @@ export function BuyAgainRail({ style }: { style?: StyleProp<ViewStyle> }) {
         </View>
         {repeatLink}
       </View>
-      {view.kind === 'cards' ? (
-        <>
-          <Text style={st.sub}>{REPEAT_WORDS.buyAgain.sub}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.rail}>
-            {view.cards.map((c, i) => (
-              <ProductCard key={c.product.id} product={c.product} index={i} width={CARD_W} sub={boughtText(c.timesBought)} />
-            ))}
-          </ScrollView>
-        </>
-      ) : (
-        <EmptyCard />
-      )}
+      <Text style={st.sub}>{REPEAT_WORDS.buyAgain.sub}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.rail}>
+        {view.cards.map((c, i) => (
+          <ProductCard key={c.product.id} product={c.product} index={i} width={CARD_W} sub={boughtText(c.timesBought)} />
+        ))}
+      </ScrollView>
     </Animated.View>
-  );
-}
-
-/** The animated empty state: "Your favourites will appear here after your first order". */
-function EmptyCard() {
-  return (
-    <View style={st.emptyWrap}>
-      <LinearGradient colors={[C.brandTint, '#FFFDF3']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.empty}>
-        <BasketPopArt scale={0.86} style={{ marginLeft: -6, marginRight: 2 }} />
-        <View style={{ flex: 1 }}>
-          <Text style={st.emptyTitle}>{REPEAT_WORDS.buyAgain.emptyTitle}</Text>
-          <Text style={st.emptySub}>{REPEAT_WORDS.buyAgain.emptySub}</Text>
-          <PressScale onPress={() => router.push('/categories')} haptic scaleTo={0.95} style={st.cta} accessibilityRole="button">
-            <Text style={st.ctaTxt}>{REPEAT_WORDS.buyAgain.startShopping}</Text>
-          </PressScale>
-        </View>
-      </LinearGradient>
-    </View>
   );
 }
 
@@ -100,13 +74,4 @@ const st = StyleSheet.create({
   repeatLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   sub: { ...T.meta, paddingHorizontal: SPACE.gutter, marginTop: 2, marginBottom: SPACE.head },
   rail: { paddingHorizontal: SPACE.gutter, gap: 15 },
-  emptyWrap: { paddingHorizontal: SPACE.gutter, marginTop: SPACE.head },
-  empty: {
-    flexDirection: 'row', alignItems: 'center', borderRadius: 18, paddingVertical: 12, paddingRight: 14, paddingLeft: 6,
-    borderWidth: 1, borderColor: C.brandSoft, overflow: 'hidden',
-  },
-  emptyTitle: { fontFamily: F.bold, fontSize: 15.5, color: C.ink, letterSpacing: -0.2, lineHeight: 20 },
-  emptySub: { fontFamily: F.regular, fontSize: 12.5, color: C.sub, marginTop: 3, lineHeight: 17 },
-  cta: { alignSelf: 'flex-start', marginTop: 10, backgroundColor: C.brand, borderRadius: 16, paddingHorizontal: 14, height: 32, justifyContent: 'center' },
-  ctaTxt: { fontFamily: F.semi, fontSize: 13, color: C.brandInk },
 });

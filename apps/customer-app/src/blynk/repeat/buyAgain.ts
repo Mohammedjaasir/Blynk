@@ -37,11 +37,11 @@ export function joinBuyAgain(entries: BuyAgainEntry[], products: Product[], max 
 }
 
 /**
- * What the rail shows: nothing while unknown (no flash of the empty card), the cards, or the
- * animated empty card (a guest, or a customer who has not ordered yet). A failed call on a
- * signed-in customer hides the rail (an older API has no endpoint: never claim "no history").
+ * What the rail shows: the cards, or nothing at all. Owner, 2026-10-25: "it should only show when the
+ * customer has bought at least one product" - a guest, a customer who has not ordered yet, an unknown
+ * state (still loading) and a failed call (an older API has no endpoint) all hide the whole section.
  */
-export type BuyAgainView = { kind: 'hidden' } | { kind: 'empty' } | { kind: 'cards'; cards: BuyAgainCard[] };
+export type BuyAgainView = { kind: 'hidden' } | { kind: 'cards'; cards: BuyAgainCard[] };
 
 export function buyAgainView(args: {
   demo: boolean;
@@ -51,11 +51,11 @@ export function buyAgainView(args: {
   products: Product[] | null;
 }): BuyAgainView {
   if (args.demo) return { kind: 'hidden' };
-  if (!args.signedIn) return { kind: 'empty' };
+  if (!args.signedIn) return { kind: 'hidden' };
   if (args.entries === 'failed') return { kind: 'hidden' };
   if (args.entries === null || args.products === null) return { kind: 'hidden' };
   const cards = joinBuyAgain(args.entries, args.products);
-  return cards.length ? { kind: 'cards', cards } : { kind: 'empty' };
+  return cards.length ? { kind: 'cards', cards } : { kind: 'hidden' };
 }
 
 /** The small line under a card: "Bought 5 times" / "Bought once". */
