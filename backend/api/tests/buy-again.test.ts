@@ -7,7 +7,7 @@ import { customerFixtures, expectCreated } from './helpers/customers.js';
 
 /**
  * "Buy again" (owner, 2026-10-24; contract 2026-10-24-buy-again-repeat.md
- * section 1): GET /me/buy-again ranks the products of the customer's DELIVERED
+ * section 1): GET /me/buy-again ranks the products of the customer's bought (placed, packed, on the way, delivered)
  * orders of the last 180 days (loose items, not removed/substituted) by times
  * bought, then by when last bought; deleted products left out.
  */
@@ -49,15 +49,24 @@ afterAll(async () => {
 });
 
 describe('GET /me/buy-again', () => {
-  it('a customer with no delivered orders has nothing', async () => {
+  it('a customer with no orders has nothing; a placed order shows at once; a cancelled one does not', async () => {
     const me = await people.customer(1);
     expect(await buyAgain(me.token)).toEqual([]);
-    // A placed (not delivered) order does not count either.
-    await expectCreated(await me.placeOrder([{ product_id: p[0], quantity: 1 }]));
-    expect(await buyAgain(me.token)).toEqual([]);
+    // Owner, 2026-10-25: it shows after the customer buys - no need to wait for the delivery.
+    const placed = await expectCreated(await me.placeOrder([{ product_id: p[0], quantity: 1 }]));
+    expect((await buyAgain(me.token)).map((i) => i.product_id)).toEqual([p[0]]);
+    // Cancelled, failed, missed or still unpaid orders were never bought.
+    for (const status of ['CANCELLED', 'FAILED', 'CUSTOMER_UNAVAILABLE', 'AWAITING_PAYMENT']) {
+      await pool.query('UPDATE orders SET order_status = $2 WHERE id = $1', [placed.id, status]);
+      expect(await buyAgain(me.token), status).toEqual([]);
+    }
+    for (const status of ['PACKED', 'OUT_FOR_DELIVERY', 'DELIVERED']) {
+      await pool.query('UPDATE orders SET order_status = $2 WHERE id = $1', [placed.id, status]);
+      expect((await buyAgain(me.token)).map((i) => i.product_id), status).toEqual([p[0]]);
+    }
   });
 
-  it('ranks by times bought, then last bought; only delivered, last 180 days, loose, kept items', async () => {
+  it('ranks by times bought, then last bought; last 180 days, loose, kept items', async () => {
     const me = await people.customer(2);
     const o1 = await expectCreated(await me.placeOrder([{ product_id: p[0], quantity: 2 }, { product_id: p[1], quantity: 1 }]));
     await delivered(o1.id, 10);

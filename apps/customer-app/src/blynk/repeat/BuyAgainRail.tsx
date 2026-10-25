@@ -16,9 +16,9 @@ import { useBuyAgain, useRepeatBaskets } from './hooks';
 import { REPEAT_WORDS } from './words';
 
 /*
- * Home's "Buy again" (owner, 2026-10-24): the signed-in customer's delivered favourites, best
+ * Home's "Buy again" (owner, 2026-10-24): the signed-in customer's favourites (anything they have ordered and not cancelled), best
  * first, as Home's product cards with the quick "+" (sold-out ones last, greyed by the card). A
- * guest, or a customer before a first delivered order, sees an animated card instead: groceries
+ * guest, or a customer before a first order, sees an animated card instead: groceries
  * pop up one after another and drop into a basket. While repeat baskets are on, the header links
  * to them. Reads everything itself, so Home mounts it with one line.
  */

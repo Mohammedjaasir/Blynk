@@ -4,7 +4,10 @@ import { db } from '../../database/connection.js';
 /**
  * "Buy again" (owner, 2026-10-24; contract docs/superpowers/plans/
  * 2026-10-24-buy-again-repeat.md section 1): what the customer buys most,
- * from their DELIVERED orders placed in the last 180 days.
+ * from the orders they have BOUGHT in the last 180 days: placed, being packed, on the way or
+ * delivered. A product shows up as soon as the order is placed (owner, 2026-10-25: "it should show
+ * after the customer buys"); a cancelled or failed order, one still waiting for its online payment,
+ * and a delivery the customer missed do not count.
  *
  * - Loose items only: products bought inside a combo pack are left out.
  * - Items the store removed (UNAVAILABLE) or replaced (SUBSTITUTED) do not count.
@@ -16,6 +19,8 @@ import { db } from '../../database/connection.js';
  * - Ranked by times_bought desc, then last_bought_at desc; at most 24.
  */
 export const BUY_AGAIN_DAYS = 180;
+/** Orders that count as bought. */
+export const BUY_AGAIN_STATUSES = ['PLACED', 'PACKED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'ITEM_UNAVAILABLE'] as const;
 export const BUY_AGAIN_LIMIT = 24;
 
 export interface BuyAgainItem {
@@ -41,7 +46,7 @@ export async function customerBuyAgain(customerId: string): Promise<{ items: Buy
         JOIN products p ON p.id = oi.product_id
         LEFT JOIN product_variants pv ON pv.id = oi.variant_id
        WHERE o.customer_id = ${customerId}
-         AND o.order_status = 'DELIVERED'
+         AND o.order_status IN (${sql.join(BUY_AGAIN_STATUSES.map((s) => sql.lit(s)))})
          AND o.placed_at >= now() - make_interval(days => ${BUY_AGAIN_DAYS})
          AND oi.order_combo_id IS NULL
          AND oi.item_status NOT IN ('UNAVAILABLE', 'SUBSTITUTED')

@@ -3,7 +3,7 @@ import type { BuyAgainEntry } from './models';
 import { REPEAT_WORDS } from './words';
 
 /*
- * Home's "Buy again" rail: GET /me/buy-again (the customer's delivered products, ranked by how
+ * Home's "Buy again" rail: GET /me/buy-again (the customer's bought products - placed, packed, on the way or delivered, ranked by how
  * often and how recently) joined with the live catalogue for today's name, photo, price and
  * stock. Orderable products keep the server's order; sold-out / switched-off ones go to the end
  * (greyed by the card). A product bought in several sizes is one card (the "+" opens its size
@@ -38,7 +38,7 @@ export function joinBuyAgain(entries: BuyAgainEntry[], products: Product[], max 
 
 /**
  * What the rail shows: nothing while unknown (no flash of the empty card), the cards, or the
- * animated empty card (a guest, or a customer without a delivered order yet). A failed call on a
+ * animated empty card (a guest, or a customer who has not ordered yet). A failed call on a
  * signed-in customer hides the rail (an older API has no endpoint: never claim "no history").
  */
 export type BuyAgainView = { kind: 'hidden' } | { kind: 'empty' } | { kind: 'cards'; cards: BuyAgainCard[] };
