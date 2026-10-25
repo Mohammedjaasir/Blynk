@@ -327,8 +327,11 @@ export interface KmTier {
   lkr: number;
 }
 
-/** FLAT: everyone pays fee_lkr; DISTANCE_TIERS: per-km tiers on the road distance (owner, 2026-10-10). */
-export type DeliveryFeeMode = 'FLAT' | 'DISTANCE_TIERS';
+/**
+ * FLAT: everyone pays fee_lkr; DISTANCE_TIERS: per-km tiers on the road distance (owner, 2026-10-10);
+ * BASE_PER_KM: a base fee for the first base_km, then per_km_lkr for each extra started km (owner, 2026-10-25).
+ */
+export type DeliveryFeeMode = 'FLAT' | 'DISTANCE_TIERS' | 'BASE_PER_KM';
 
 /** GET/PATCH /admin/settings/delivery-fee */
 export interface DeliveryFeeSetting {
@@ -339,6 +342,10 @@ export interface DeliveryFeeSetting {
   tiers?: KmTier[];
   /** null = no cap. */
   max_fee_lkr?: number | null;
+  /** "Base + per km" (owner, 2026-10-25): always sent by the new API (defaults 120 / 2 / 40); optional for an older one. */
+  base_lkr?: number;
+  base_km?: number;
+  per_km_lkr?: number;
   updated_at: string | null;
 }
 
@@ -348,6 +355,15 @@ export interface DeliveryFeeInput {
   fee_mode?: DeliveryFeeMode;
   tiers?: KmTier[];
   max_fee_lkr?: number | null;
+  base_lkr?: number;
+  base_km?: number;
+  per_km_lkr?: number;
+}
+
+/** GET/PATCH /admin/settings/delivery-radius (owner, 2026-10-25): the active store's service radius. */
+export interface DeliveryRadiusSetting {
+  radius_km: number;
+  store_name: string;
 }
 
 /** GET/PATCH /admin/settings/checkout - checkout switches (owner, 2026-10-08). */
@@ -373,12 +389,25 @@ export interface CheckoutSettings {
    * (owner, 2026-10-12). Optional: a backend from before it leaves it out.
    */
   order_for_someone_else?: OrderForSomeoneElseSetting;
+  /**
+   * Small-order fee (owner, 2026-10-25): items under `min_subtotal_lkr` pay `fee_lkr` on top of delivery. Off by
+   * default. Optional: a backend from before it leaves it out.
+   */
+  small_order_fee?: SmallOrderFeeSetting;
+  /** false until migration 063 has been run by hand; switching the fee on then answers 409 SMALL_ORDER_FEE_NOT_READY. */
+  small_order_fee_ready?: boolean;
   updated_at: string | null;
 }
 
 export interface BasketFreeDeliverySetting {
   enabled: boolean;
   min_subtotal_lkr: number;
+}
+
+export interface SmallOrderFeeSetting {
+  enabled: boolean;
+  min_subtotal_lkr: number;
+  fee_lkr: number;
 }
 
 export interface OrderForSomeoneElseSetting {
@@ -964,6 +993,8 @@ export interface OrderDetail {
   payment?: OrderPayment | null;
   subtotal_amount: number;
   delivery_fee: number;
+  /** Small-order fee (owner, 2026-10-25; migration 063): 0 / absent when none. Included in total_amount. */
+  small_order_fee?: number;
   /** Coupon discount (backend migration 018); total = subtotal + delivery fee - discount. */
   discount_amount?: number;
   coupon_code?: string | null;
@@ -1573,6 +1604,8 @@ export interface CustomerOrderRow {
   payment_status: PaymentStatus | string;
   subtotal_amount: number;
   delivery_fee: number;
+  /** Small-order fee (owner, 2026-10-25): 0 / absent when none. */
+  small_order_fee?: number;
   discount_amount: number;
   total_amount: number;
   /** Blynk Wallet (docs/api/wallet.md): what the wallet paid; total_amount stays what is still to pay. Absent on an older API. */

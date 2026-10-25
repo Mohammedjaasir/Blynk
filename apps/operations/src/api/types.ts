@@ -210,9 +210,11 @@ export interface OrderDetail {
   payment_expires_at?: string | null;
   /** The payment row with the gateway fields; absent on older data. */
   payment?: OrderPayment | null;
-  /** Bill lines (backend migration 018): total = subtotal + delivery_fee - discount_amount. */
+  /** Bill lines (backend migration 018): total = subtotal + delivery_fee + small_order_fee - discount_amount. */
   subtotal_amount?: number;
   delivery_fee?: number;
+  /** Small-order fee (2026-10-25): 0 / absent when none; already part of total_amount. */
+  small_order_fee?: number;
   discount_amount?: number;
   coupon_code?: string | null;
   /** The customer's birthday gift (owner, 2026-10-09): when > 0 it is the
@@ -1383,8 +1385,10 @@ export interface KmTier {
 }
 
 /** FLAT = everyone pays `fee_lkr`; DISTANCE_TIERS = the tier table on the
- * road distance hub -> address, optionally capped (owner, 2026-10-10). */
-export type DeliveryFeeMode = 'FLAT' | 'DISTANCE_TIERS';
+ * road distance hub -> address, optionally capped (owner, 2026-10-10);
+ * BASE_PER_KM = `base_lkr` up to `base_km`, then `per_km_lkr` for every
+ * started km beyond it, optionally capped (2026-10-25, docs/superpowers/plans/2026-10-25-fees.md). */
+export type DeliveryFeeMode = 'FLAT' | 'DISTANCE_TIERS' | 'BASE_PER_KM';
 
 /** `GET|PATCH /admin/settings/delivery-fee`. The mode, tiers and cap are
  * optional only because an API from before per-km tiers leaves them out
@@ -1396,6 +1400,11 @@ export interface DeliveryFeeSetting {
   tiers?: KmTier[];
   /** null = no cap. */
   max_fee_lkr?: number | null;
+  /** Base + per km (2026-10-25): always sent by the new API (defaults 120 / 2 / 40);
+   * absent on an older one. */
+  base_lkr?: number;
+  base_km?: number;
+  per_km_lkr?: number;
   updated_at: string | null;
 }
 
@@ -1405,6 +1414,12 @@ export interface DeliveryFeeInput {
   fee_mode?: DeliveryFeeMode;
   tiers?: KmTier[];
   max_fee_lkr?: number | null;
+  /** 0-1000, 2 decimals. */
+  base_lkr?: number;
+  /** 0.5-20, at most 1 decimal. */
+  base_km?: number;
+  /** 0-1000, 2 decimals. */
+  per_km_lkr?: number;
 }
 
 /** `GET|PATCH /admin/settings/checkout` - checkout switches (owner, 2026-10-08). */
@@ -1424,12 +1439,32 @@ export interface CheckoutSettings {
   /** "Allow ordering for someone else" and "Send delivery code to receiver"
    * (owner, 2026-10-12). Optional: a backend from before it leaves it out. */
   order_for_someone_else?: OrderForSomeoneElseSetting;
+  /** Small-order fee (2026-10-25): off by default. Optional: a backend from before it leaves it out. */
+  small_order_fee?: SmallOrderFeeSetting;
+  /** False until migration 063 has been run by hand in Coolify (switching it on then answers 409
+   * SMALL_ORDER_FEE_NOT_READY). Absent on a backend from before it. */
+  small_order_fee_ready?: boolean;
   updated_at: string | null;
 }
 
 export interface BasketFreeDeliverySetting {
   enabled: boolean;
   min_subtotal_lkr: number;
+}
+
+/** Customers whose item total is UNDER `min_subtotal_lkr` pay `fee_lkr` on top of delivery. */
+export interface SmallOrderFeeSetting {
+  enabled: boolean;
+  /** 1..100000, 2 decimals. */
+  min_subtotal_lkr: number;
+  /** 0.01..1000, 2 decimals. */
+  fee_lkr: number;
+}
+
+/** `GET|PATCH /admin/settings/delivery-radius`: the active store's service radius. */
+export interface DeliveryRadiusSetting {
+  radius_km: number;
+  store_name: string;
 }
 
 export interface OrderForSomeoneElseSetting {

@@ -14,6 +14,8 @@ export function OrderBill({
   order: {
     subtotal_amount: number;
     delivery_fee: number;
+    /** Small-order fee (owner, 2026-10-25): 0 / absent when none; already inside total_amount. */
+    small_order_fee?: number;
     discount_amount?: number;
     coupon_code?: string | null;
     birthday_discount_amount?: number;
@@ -27,6 +29,7 @@ export function OrderBill({
   };
 }) {
   const discount = order.discount_amount ?? 0;
+  const smallOrderFee = Number(order.small_order_fee ?? 0) || 0;
   // A birthday gift is the whole discount, never with a coupon (owner, 2026-10-09).
   const birthday = (order.birthday_discount_amount ?? 0) > 0;
   const wallet = walletUsed(order);
@@ -44,6 +47,14 @@ export function OrderBill({
             {order.delivery_fee_waiver && !(order.delivery_fee > 0) ? 'Free (waived by staff)' : formatMoney(order.delivery_fee)}
           </dd>
         </div>
+        {smallOrderFee > 0 ? (
+          <div className="bill__row">
+            <dt>Small-order fee</dt>
+            <dd className="mono" data-testid="bill-small-order-fee">
+              {formatMoney(smallOrderFee)}
+            </dd>
+          </div>
+        ) : null}
         {discount > 0 ? (
           <div className="bill__row bill__row--discount">
             <dt>{birthday ? 'Birthday gift' : `Discount${order.coupon_code ? ` (${order.coupon_code})` : ''}`}</dt>

@@ -29,6 +29,14 @@ export function OrderBill({ order }: { order: OrderDetail }) {
           </dd>
         </div>
       ) : null}
+      {Number(order.small_order_fee ?? 0) > 0 ? (
+        <div className="order-bill__row">
+          <dt>Small-order fee</dt>
+          <dd className="mono" data-testid="bill-small-order-fee">
+            {formatMoney(Number(order.small_order_fee))}
+          </dd>
+        </div>
+      ) : null}
       {discount > 0 ? (
         <div className="order-bill__row order-bill__row--discount">
           <dt>{birthday ? 'Birthday gift' : `Discount${order.coupon_code ? ` (${order.coupon_code})` : ''}`}</dt>

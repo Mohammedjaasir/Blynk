@@ -55,6 +55,8 @@ import type {
   DeliveryFeeSetting,
   CheckoutSettings,
   BasketFreeDeliverySetting,
+  SmallOrderFeeSetting,
+  DeliveryRadiusSetting,
   OrderForSomeoneElseSetting,
   CustomerSmsLanguageMode,
   CustomerSmsLanguageSetting,
@@ -1171,8 +1173,16 @@ export const settings = {
       basket_free_delivery?: BasketFreeDeliverySetting;
       /** Owner, 2026-10-12: either switch alone keeps the other. */
       order_for_someone_else?: Partial<OrderForSomeoneElseSetting>;
+      /** 2026-10-25: 409 SMALL_ORDER_FEE_NOT_READY when switched on before migration 063. */
+      small_order_fee?: SmallOrderFeeSetting;
     }) =>
       apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
+  },
+  /** Delivery radius (2026-10-25): how far from the active store orders are accepted. */
+  deliveryRadius: {
+    get: () => apiRequest<DeliveryRadiusSetting>('/admin/settings/delivery-radius'),
+    update: (radius_km: number) =>
+      apiRequest<DeliveryRadiusSetting>('/admin/settings/delivery-radius', { method: 'PATCH', body: { radius_km } }),
   },
   /** Customer SMS language (owner, 2026-10-12): order / sign-in / dental / rider texts. */
   customerSmsLanguage: {

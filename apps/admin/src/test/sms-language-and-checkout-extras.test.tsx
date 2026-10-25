@@ -94,7 +94,7 @@ describe('Settings - checkout switches (owner, 2026-10-12)', () => {
     });
     renderPage();
     const panel = await screen.findByRole('region', { name: 'Checkout' });
-    const basket = await within(panel).findByRole('checkbox', { name: 'Free delivery above a basket amount' });
+    const basket = await within(panel).findByRole('checkbox', { name: /Free delivery when the item total is at least LKR/ });
     const amount = within(panel).getByLabelText(/Free delivery from \(LKR\)/);
     const forOthers = within(panel).getByRole('checkbox', { name: 'Allow ordering for someone else' });
     const code = within(panel).getByRole('checkbox', { name: 'Send delivery code to receiver' });
@@ -123,7 +123,7 @@ describe('Settings - checkout switches (owner, 2026-10-12)', () => {
     const api = mockApi((c) => (c.path === '/admin/settings/checkout' ? ok(CHECKOUT) : undefined));
     renderPage();
     const panel = await screen.findByRole('region', { name: 'Checkout' });
-    await user.click(await within(panel).findByRole('checkbox', { name: 'Free delivery above a basket amount' }));
+    await user.click(await within(panel).findByRole('checkbox', { name: /Free delivery when the item total is at least LKR/ }));
     const amount = within(panel).getByLabelText(/Free delivery from \(LKR\)/);
     await user.clear(amount);
     await user.type(amount, '0');

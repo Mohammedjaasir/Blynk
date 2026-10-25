@@ -19,6 +19,10 @@ import { parseMaxFee, parseTierRows, tierAmountText, tiersSummary, tiersToRows }
 import { formatPercent, parseCommissionPercent } from '../lib/riderPay';
 import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
 import { checkoutExtrasPatch, parseBasketAmount } from '../lib/checkoutExtras';
+import { basePerKmOf, basePerKmText, basketFreeDeliveryText, parseBasePerKm } from '../lib/deliveryFee';
+import { BasePerKmFields } from '../components/BasePerKmFields';
+import { SmallOrderFeeCard } from '../components/SmallOrderFeeCard';
+import { DeliveryRadiusCard } from '../components/DeliveryRadiusCard';
 import { CustomerSmsLanguageCard } from '../components/CustomerSmsLanguageCard';
 import { AppVersionCard } from '../components/AppUpdate';
 import { AppUpdatesSettingsCard } from '../components/AppUpdatesSettingsCard';
@@ -240,6 +244,10 @@ export function More() {
       </ul>
 
       <DeliveryFeeCard />
+      {/* Small-order fee (2026-10-25): off by default; needs migration 063. */}
+      <SmallOrderFeeCard />
+      {/* Delivery radius (2026-10-25): how far from the store orders are accepted. */}
+      <DeliveryRadiusCard />
       {/* Selling prices (owner, 2026-10-13): the markup products fall back to. */}
       <DefaultMarkupCard />
       <CheckoutSettingsCard />
@@ -271,10 +279,14 @@ export function More() {
  * Owner, 2026-10-10: the fee is either the same for every order (FLAT) or
  * worked out by distance (DISTANCE_TIERS): a per-km tier table on the road
  * distance from the store to the delivery address - every started km
- * counts, the last km's amount repeats - with an optional maximum. */
+ * counts, the last km's amount repeats - with an optional maximum.
+ *
+ * 2026-10-25: BASE_PER_KM - a base fee for the first km, then an amount for
+ * every started km beyond it (optional maximum), with a live preview. */
 const FEE_MODES: ReadonlyArray<{ id: DeliveryFeeMode; text: string }> = [
   { id: 'FLAT', text: 'Same fee for every order' },
   { id: 'DISTANCE_TIERS', text: 'By distance (per km)' },
+  { id: 'BASE_PER_KM', text: 'Base + per km' },
 ];
 
 function DeliveryFeeCard() {
@@ -284,6 +296,7 @@ function DeliveryFeeCard() {
   const [value, setValue] = useState('');
   const [rows, setRows] = useState<string[]>([]);
   const [cap, setCap] = useState('');
+  const [bpk, setBpk] = useState({ base: '', baseKm: '', perKm: '' });
   const [error, setError] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<(string | undefined)[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -295,6 +308,8 @@ function DeliveryFeeCard() {
     setValue(String(fee.fee_lkr));
     setRows(tiersToRows(fee.tiers));
     setCap(typeof fee.max_fee_lkr === 'number' ? String(Number(fee.max_fee_lkr.toFixed(2))) : '');
+    const f = basePerKmOf(fee);
+    setBpk({ base: String(f.base_lkr), baseKm: String(f.base_km), perKm: String(f.per_km_lkr) });
   }
 
   useEffect(() => {
@@ -326,6 +341,18 @@ function DeliveryFeeCard() {
         return;
       }
       body = { fee_mode: 'FLAT', fee_lkr: parsed.value };
+    } else if (mode === 'BASE_PER_KM') {
+      const parsed = parseBasePerKm(bpk);
+      if ('error' in parsed) {
+        setError(parsed.error);
+        return;
+      }
+      const max = parseMaxFee(cap);
+      if ('error' in max) {
+        setError(`Maximum fee: ${max.error}`);
+        return;
+      }
+      body = { fee_mode: 'BASE_PER_KM', ...parsed.value, max_fee_lkr: max.value };
     } else {
       const parsed = parseTierRows(rows);
       if ('error' in parsed) {
@@ -347,10 +374,13 @@ function DeliveryFeeCard() {
     try {
       const saved = await settings.deliveryFee.update(body);
       show(saved);
+      const savedMode = saved.fee_mode ?? 'FLAT';
       setNotice(
-        (saved.fee_mode ?? 'FLAT') === 'DISTANCE_TIERS'
+        savedMode === 'DISTANCE_TIERS'
           ? `Delivery fee saved: by distance, ${feeTiersText(saved)}.`
-          : `Delivery fee saved: LKR ${Number(saved.fee_lkr).toFixed(2)}.`
+          : savedMode === 'BASE_PER_KM'
+            ? `Delivery fee saved: ${feeFormulaText(saved)}.`
+            : `Delivery fee saved: LKR ${Number(saved.fee_lkr).toFixed(2)}.`
       );
     } catch (err) {
       setError(catalogErrorMessage(err));
@@ -363,6 +393,7 @@ function DeliveryFeeCard() {
   const parsedCap = parseMaxFee(cap);
   const capValue = 'value' in parsedCap ? parsedCap.value : null;
   const currentByDistance = (current?.fee_mode ?? 'FLAT') === 'DISTANCE_TIERS';
+  const currentBasePerKm = current?.fee_mode === 'BASE_PER_KM';
 
   return (
     <section className="card" aria-labelledby="delivery-fee-title">
@@ -374,12 +405,17 @@ function DeliveryFeeCard() {
           <p className="card__row">
             <span className="card__label">Current fee</span>
             <span className="card__value mono">
-              {currentByDistance ? 'By distance' : `LKR ${Number(current.fee_lkr).toFixed(2)}`}
+              {currentByDistance ? 'By distance' : currentBasePerKm ? 'Base + per km' : `LKR ${Number(current.fee_lkr).toFixed(2)}`}
             </span>
           </p>
           {currentByDistance ? (
             <p className="quiet" data-testid="fee-tiers-now">
               {feeTiersText(current)}
+            </p>
+          ) : null}
+          {currentBasePerKm ? (
+            <p className="quiet" data-testid="fee-formula-now">
+              {feeFormulaText(current)}
             </p>
           ) : null}
         </>
@@ -401,7 +437,9 @@ function DeliveryFeeCard() {
           <span className="field__hint">
             {mode === 'FLAT'
               ? 'Every order pays the same fee.'
-              : 'Worked out from the road distance, store to the delivery address. Free deliveries still apply.'}
+              : mode === 'BASE_PER_KM'
+                ? 'The base fee covers the first km, then every started km beyond it adds the per-km amount. Road distance, store to the delivery address. Free deliveries still apply.'
+                : 'Worked out from the road distance, store to the delivery address. Free deliveries still apply.'}
           </span>
         </div>
         {mode === 'FLAT' ? (
@@ -423,17 +461,29 @@ function DeliveryFeeCard() {
           </div>
         ) : (
           <>
-            <KmTierEditor
-              label="Price per km"
-              rows={rows}
-              onChange={(next) => {
-                setRows(next);
-                setRowErrors([]);
-              }}
-              rowErrors={rowErrors}
-              cap={capValue}
-              disabled={loading}
-            />
+            {mode === 'BASE_PER_KM' ? (
+              <BasePerKmFields
+                base={bpk.base}
+                baseKm={bpk.baseKm}
+                perKm={bpk.perKm}
+                onChange={setBpk}
+                cap={capValue}
+                error={error}
+                disabled={loading}
+              />
+            ) : (
+              <KmTierEditor
+                label="Price per km"
+                rows={rows}
+                onChange={(next) => {
+                  setRows(next);
+                  setRowErrors([]);
+                }}
+                rowErrors={rowErrors}
+                cap={capValue}
+                disabled={loading}
+              />
+            )}
             <div className="field">
               <label className="field">
                 <span className="field__label">Maximum fee (LKR, optional)</span>
@@ -458,6 +508,11 @@ function DeliveryFeeCard() {
       <p className="page__note">Orders already placed keep the fee they were placed with.</p>
     </section>
   );
+}
+
+/** "LKR 120 up to 2 km, then LKR 40 for each extra km · max LKR 250" for a base + per km fee. */
+function feeFormulaText(fee: DeliveryFeeSetting): string {
+  return basePerKmText(basePerKmOf(fee), typeof fee.max_fee_lkr === 'number' ? fee.max_fee_lkr : null);
 }
 
 /** "km 1 LKR 100, km 2 LKR 60, km 3+ LKR 50 · max LKR 250" for a by-distance fee. */
@@ -634,7 +689,10 @@ function CheckoutSettingsCard() {
             <input type="checkbox" checked={basketOn} onChange={(e) => setBasketOn(e.target.checked)} />
             <span>
               <strong>Free delivery above a basket amount</strong>
-              <em>Item total after product offers, before coupons. Does not use up a free delivery. Not on the website.</em>
+              <em>
+                {basketFreeDeliveryText(basketAmount)} The rider is still paid their normal share of the delivery fee; Blynk covers it.
+                Item total is after product offers, before coupons. Does not use up a free delivery. Not on the website.
+              </em>
             </span>
           </label>
           <label className="field">

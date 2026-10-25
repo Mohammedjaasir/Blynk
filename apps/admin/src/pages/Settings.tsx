@@ -16,6 +16,9 @@ import type {
   RiderTripsSetting,
   SmsLanguageCode,
 } from '../api/types';
+import { BasePerKmEditor, type BasePerKmDrafts, type BasePerKmErrors } from '../components/BasePerKmEditor';
+import { DeliveryRadiusCard } from '../components/DeliveryRadiusCard';
+import { SmallOrderFeeCard } from '../components/SmallOrderFeeCard';
 import { KmTierEditor, ModeChoice } from '../components/KmTierEditor';
 import { PageHeader } from '../components/Layout';
 import { StoreScheduleSettings } from '../components/StoreSchedulePanels';
@@ -30,8 +33,19 @@ import { AppUpdatesPanel } from '../components/AppUpdatesPanel';
 import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui';
 import { MAX_BIRTHDAY_SMS, fillPercent, parseBirthdayPercent, percentText } from '../lib/birthday';
 import { formatDay } from '../lib/coupons';
-import { parseBasketAmount, parseDeliveryFee, parseFreeDeliveryCount } from '../lib/deliveryFee';
-import { parseFeeCap, parseTierDrafts, tiersSummary, tiersToDrafts, type TierErrors } from '../lib/kmTiers';
+import {
+  DEFAULT_BASE_KM,
+  DEFAULT_BASE_LKR,
+  DEFAULT_PER_KM_LKR,
+  basePerKmSummary,
+  parseBaseFee,
+  parseBaseKm,
+  parseBasketAmount,
+  parseDeliveryFee,
+  parseFreeDeliveryCount,
+  parsePerKmFee,
+} from '../lib/deliveryFee';
+import { formatTierLkr, parseFeeCap, parseTierDrafts, tiersSummary, tiersToDrafts, type TierErrors } from '../lib/kmTiers';
 import { formatMoney } from '../lib/orders';
 import { formatPercent, parsePercent } from '../lib/riderPay';
 import { MAX_DROPOFF_KM, MIN_DROPOFF_KM, TRIP_ORDER_CHOICES, formatKm, parseDropoffKm, tripOrdersLabel } from '../lib/riderTrips';
@@ -76,9 +90,13 @@ export function Settings() {
       <PageHeader title="Settings" description="Store-wide values the customer app uses." />
       <StoreScheduleSettings />
       <DeliveryFeeSettingPanel />
+      {/* Delivery radius (owner, 2026-10-25). */}
+      <DeliveryRadiusCard />
       {/* Global default markup (migration 044; owner, 2026-10-13). */}
       <DefaultMarkupPanel />
       <CheckoutSettingsPanel />
+      {/* Small-order fee (owner, 2026-10-25): off by default; needs migration 063. */}
+      <SmallOrderFeeCard />
       {/* PayHere online payments (migration 047; docs/api/payhere.md). */}
       <PaymentGatewayCard />
       {/* Customer SMS language (owner, 2026-10-12). */}
@@ -314,12 +332,29 @@ function RiderTripsPanel() {
 const FEE_MODE_OPTIONS: { value: DeliveryFeeMode; label: string }[] = [
   { value: 'FLAT', label: 'Same fee for every order' },
   { value: 'DISTANCE_TIERS', label: 'By distance (per km)' },
+  { value: 'BASE_PER_KM', label: 'Base + per km' },
 ];
 
-/** "LKR 150 per order" or "by distance: km 1 LKR 100, km 2+ LKR 60, at most LKR 400". */
+/** The "Base + per km" numbers of a stored fee, with the defaults for an API that has none yet. */
+function baseDraftsOf(setting: DeliveryFeeSetting): BasePerKmDrafts {
+  return {
+    base: String(Number((setting.base_lkr ?? DEFAULT_BASE_LKR).toFixed(2))),
+    baseKm: String(Number((setting.base_km ?? DEFAULT_BASE_KM).toFixed(1))),
+    perKm: String(Number((setting.per_km_lkr ?? DEFAULT_PER_KM_LKR).toFixed(2))),
+  };
+}
+
+/** "LKR 150 per order", "by distance: km 1 LKR 100, km 2+ LKR 60, at most LKR 400" or "LKR 120 up to 2 km, then LKR 40 for each extra km". */
 function feeText(setting: DeliveryFeeSetting): string {
-  if (setting.fee_mode !== 'DISTANCE_TIERS') return `${formatMoney(setting.fee_lkr)} per order`;
   const cap = typeof setting.max_fee_lkr === 'number' ? `, at most ${formatMoney(setting.max_fee_lkr)}` : '';
+  if (setting.fee_mode === 'BASE_PER_KM') {
+    return `${basePerKmSummary({
+      baseLkr: setting.base_lkr ?? DEFAULT_BASE_LKR,
+      baseKm: setting.base_km ?? DEFAULT_BASE_KM,
+      perKmLkr: setting.per_km_lkr ?? DEFAULT_PER_KM_LKR,
+    })}${cap}`;
+  }
+  if (setting.fee_mode !== 'DISTANCE_TIERS') return `${formatMoney(setting.fee_lkr)} per order`;
   return `by distance: ${tiersSummary(setting.tiers ?? [])}${cap}`;
 }
 
@@ -340,12 +375,20 @@ function DeliveryFeeSettingPanel() {
   const [error, setError] = useState<string | null>(null);
   const [tierErrors, setTierErrors] = useState<TierErrors | undefined>();
   const [capError, setCapError] = useState<string | undefined>();
+  // "Base + per km" (owner, 2026-10-25).
+  const [baseDrafts, setBaseDrafts] = useState<BasePerKmDrafts>({
+    base: String(DEFAULT_BASE_LKR),
+    baseKm: String(DEFAULT_BASE_KM),
+    perKm: String(DEFAULT_PER_KM_LKR),
+  });
+  const [baseErrors, setBaseErrors] = useState<BasePerKmErrors | undefined>();
   const [saving, setSaving] = useState(false);
 
   function show(setting: DeliveryFeeSetting) {
     setCurrent(setting);
     setMode(setting.fee_mode ?? 'FLAT');
     setValue(String(setting.fee_lkr));
+    setBaseDrafts(baseDraftsOf(setting));
     setTierDrafts(tiersToDrafts(setting.tiers));
     setCap(typeof setting.max_fee_lkr === 'number' ? String(Number(setting.max_fee_lkr.toFixed(2))) : '');
   }
@@ -382,6 +425,27 @@ function DeliveryFeeSettingPanel() {
       }
       // An API from before the tiers knows only fee_lkr.
       body = current?.fee_mode === undefined ? parsed.fee : { fee_mode: 'FLAT', fee_lkr: parsed.fee };
+    } else if (mode === 'BASE_PER_KM') {
+      const base = parseBaseFee(baseDrafts.base);
+      const baseKm = parseBaseKm(baseDrafts.baseKm);
+      const perKm = parsePerKmFee(baseDrafts.perKm);
+      const capRead = parseFeeCap(cap);
+      const problems: BasePerKmErrors = {
+        base: 'error' in base ? base.error : undefined,
+        baseKm: 'error' in baseKm ? baseKm.error : undefined,
+        perKm: 'error' in perKm ? perKm.error : undefined,
+      };
+      const bad = Boolean(problems.base || problems.baseKm || problems.perKm);
+      setBaseErrors(bad ? problems : undefined);
+      setCapError('error' in capRead ? capRead.error : undefined);
+      if ('error' in base || 'error' in baseKm || 'error' in perKm || 'error' in capRead) return;
+      body = {
+        fee_mode: 'BASE_PER_KM',
+        base_lkr: base.value,
+        base_km: baseKm.value,
+        per_km_lkr: perKm.value,
+        max_fee_lkr: capRead.cap,
+      };
     } else {
       const read = parseTierDrafts(tierDrafts);
       const capRead = parseFeeCap(cap);
@@ -394,6 +458,7 @@ function DeliveryFeeSettingPanel() {
     setError(null);
     setTierErrors(undefined);
     setCapError(undefined);
+    setBaseErrors(undefined);
     try {
       const updated = await settingsApi.setDeliveryFee(body);
       show(updated);
@@ -436,13 +501,22 @@ function DeliveryFeeSettingPanel() {
             </Field>
           ) : (
             <>
-              <KmTierEditor
-                label="Fee for each km"
-                drafts={tierDrafts}
-                onChange={setTierDrafts}
-                errors={tierErrors}
-                capLkr={'cap' in liveCap ? liveCap.cap : null}
-              />
+              {mode === 'BASE_PER_KM' ? (
+                <BasePerKmEditor
+                  drafts={baseDrafts}
+                  onChange={setBaseDrafts}
+                  errors={baseErrors}
+                  capLkr={'cap' in liveCap ? liveCap.cap : null}
+                />
+              ) : (
+                <KmTierEditor
+                  label="Fee for each km"
+                  drafts={tierDrafts}
+                  onChange={setTierDrafts}
+                  errors={tierErrors}
+                  capLkr={'cap' in liveCap ? liveCap.cap : null}
+                />
+              )}
               <Field
                 label="Maximum fee (LKR, optional)"
                 hint="Blank = no maximum. Up to 10,000. A longer trip never costs more than this."
@@ -580,6 +654,8 @@ function CheckoutSettingsPanel() {
     }
   }
 
+  const liveBasket = parseBasketAmount(basketAmount);
+
   return (
     <section className="panel" id="checkout" aria-label="Checkout">
       <h2 className="panel__title">Checkout</h2>
@@ -620,7 +696,10 @@ function CheckoutSettingsPanel() {
           ) : null}
           <label className="toggle">
             <input type="checkbox" checked={basketOn} onChange={(e) => setBasketOn(e.target.checked)} />
-            <span>Free delivery above a basket amount</span>
+            <span>
+              Free delivery when the item total is at least LKR{' '}
+              {'amount' in liveBasket ? formatTierLkr(liveBasket.amount) : 'X'}
+            </span>
           </label>
           <Field
             label="Free delivery from (LKR)"
@@ -635,6 +714,9 @@ function CheckoutSettingsPanel() {
               onChange={(e) => setBasketAmount(e.target.value)}
             />
           </Field>
+          <p className="form__note">
+            The rider is still paid their normal share of the delivery fee; Blynk covers it.
+          </p>
           <p className="form__note">
             The app shows &quot;Add LKR X more for free delivery&quot;. An order free this way does not use up the
             customer&apos;s free deliveries. Not shown on the website.

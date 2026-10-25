@@ -208,6 +208,12 @@ export function PackingSlip() {
               <dd className="mono">{formatMoney(order.delivery_fee)}</dd>
             </div>
           ) : null}
+          {Number(order.small_order_fee ?? 0) > 0 ? (
+            <div data-testid="slip-small-order-fee">
+              <dt>Small-order fee</dt>
+              <dd className="mono">{formatMoney(Number(order.small_order_fee))}</dd>
+            </div>
+          ) : null}
           {(order.discount_amount ?? 0) > 0 ? (
             <div className="packing-slip__discount">
               <dt>

@@ -58,6 +58,8 @@ import type {
   DefaultMarkupSetting,
   DeliveryFeeInput,
   DeliveryFeeSetting,
+  DeliveryRadiusSetting,
+  SmallOrderFeeSetting,
   CheckoutSettings,
   BasketFreeDeliverySetting,
   OrderForSomeoneElseSetting,
@@ -449,7 +451,7 @@ export const settings = {
 
   getDeliveryFee: () => apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee'),
 
-  /** A number = only the flat fee (the old body); an object = any of fee_lkr / fee_mode / tiers / max_fee_lkr (owner, 2026-10-10). */
+  /** A number = only the flat fee (the old body); an object = any of fee_lkr / fee_mode / tiers / max_fee_lkr / base_lkr / base_km / per_km_lkr (owner, 2026-10-10, 2026-10-25). */
   setDeliveryFee: (input: number | DeliveryFeeInput) =>
     apiRequest<DeliveryFeeSetting>('/admin/settings/delivery-fee', {
       method: 'PATCH',
@@ -467,8 +469,16 @@ export const settings = {
     basket_free_delivery?: BasketFreeDeliverySetting;
     /** Owner, 2026-10-12: either switch alone keeps the other. */
     order_for_someone_else?: Partial<OrderForSomeoneElseSetting>;
+    /** Owner, 2026-10-25: the small-order fee (switching it on needs migration 063; else 409 SMALL_ORDER_FEE_NOT_READY). */
+    small_order_fee?: SmallOrderFeeSetting;
   }) =>
     apiRequest<CheckoutSettings>('/admin/settings/checkout', { method: 'PATCH', body }),
+
+  /** Delivery radius (owner, 2026-10-25): the active store's service radius in km. */
+  getDeliveryRadius: () => apiRequest<DeliveryRadiusSetting>('/admin/settings/delivery-radius'),
+
+  setDeliveryRadius: (radiusKm: number) =>
+    apiRequest<DeliveryRadiusSetting>('/admin/settings/delivery-radius', { method: 'PATCH', body: { radius_km: radiusKm } }),
 
   /** Customer SMS language (owner, 2026-10-12): order / sign-in / dental / rider texts. */
   getCustomerSmsLanguage: () => apiRequest<CustomerSmsLanguageSetting>('/admin/settings/customer-sms-language'),
