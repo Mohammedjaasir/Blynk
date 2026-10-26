@@ -5,6 +5,7 @@ import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { tokens, auth, users } from './helpers/stock.js';
 import { sellerFixtures } from './helpers/seller-fixtures.js';
+import { setPushSenderForTests, type PushSender } from '../src/modules/notifications/index.js';
 
 /**
  * Seller portal, staff side (docs/superpowers/plans/2026-10-24-seller-portal.md): approving /
@@ -26,8 +27,17 @@ const reject = (id: string, body: unknown, token = tokens.admin) =>
   request(app).post(`${A}/seller-submissions/${id}/reject`).set(auth(token)).send(body as object);
 const customerProduct = (id: string) => request(app).get(`/api/v1/products/${id}`);
 
-beforeAll(fx.setup);
-afterAll(fx.cleanup);
+// Sellers get app notifications (push), never SMS (owner, 2026-10-26): a fake push sender is on for the file.
+const fakePush: PushSender = { send: async (ts) => ts.map((token) => ({ token, ok: true as const })) };
+
+beforeAll(async () => {
+  setPushSenderForTests(fakePush);
+  await fx.setup();
+});
+afterAll(async () => {
+  setPushSenderForTests(undefined);
+  await fx.cleanup();
+});
 
 /** A live product of the seller, as an earlier NEW approval left it. */
 async function liveProduct(sellerId: string, price = 80, selling = 100) {
@@ -108,8 +118,9 @@ describe('Seller list and detail', () => {
 });
 
 describe('Approving, rejecting and suspending a seller', () => {
-  it('approving a pending seller: status, reviewer, SMS, audit', async () => {
+  it('approving a pending seller: status, reviewer, app notification (no SMS), audit', async () => {
     const s = await fx.seller({ status: 'PENDING' });
+    await fx.withDevice(s.userId);
     const res = await patchSeller(s.id, { status: 'APPROVED' });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.data.seller).toMatchObject({ id: s.id, status: 'APPROVED', rejection_reason: null });
@@ -118,10 +129,14 @@ describe('Approving, rejecting and suspending a seller', () => {
     expect(db.reviewed_by).toBe(users.admin.id);
     expect(db.reviewed_at).not.toBeNull();
 
-    const sms = await fx.texts(s.userId, 'SELLER_APPROVED');
-    expect(sms).toHaveLength(1);
-    expect(sms[0]!.recipient).toBe(s.phone);
-    expect(sms[0]!.payload.text).toBe('Blynk: your seller account is approved. You can add products now: https://blynk-seller.valgrowlabs.com');
+    const pushes = await fx.pushes(s.userId);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0]).toMatchObject({
+      notification_type: 'PUSH_SELLER',
+      recipient: s.userId,
+      payload: { title: 'Your seller account is approved', body: 'You can add products now.', data: { type: 'SELLER_APPROVED', url: '/' } },
+    });
+    expect(await fx.smsRows(s.userId)).toEqual([]);
 
     const audit = await fx.audits('SELLER_UPDATED', s.id);
     expect(audit).toHaveLength(1);
@@ -131,12 +146,13 @@ describe('Approving, rejecting and suspending a seller', () => {
 
     // approving again changes nothing: no second text, no second audit row
     expect((await patchSeller(s.id, { status: 'APPROVED' })).status).toBe(200);
-    expect(await fx.texts(s.userId, 'SELLER_APPROVED')).toHaveLength(1);
+    expect(await fx.pushes(s.userId)).toHaveLength(1);
     expect(await fx.audits('SELLER_UPDATED', s.id)).toHaveLength(1);
   });
 
-  it('rejecting needs a reason, only works on a pending seller, texts the reason', async () => {
+  it('rejecting needs a reason, only works on a pending seller, notifies the reason', async () => {
     const s = await fx.seller({ status: 'PENDING' });
+    await fx.withDevice(s.userId);
     expect((await patchSeller(s.id, { status: 'REJECTED' })).status).toBe(400);
     expect((await patchSeller(s.id, { status: 'REJECTED', rejection_reason: 'no' })).status).toBe(400);
     expect((await fx.row('SELECT status FROM sellers WHERE id = $1', [s.id])).status).toBe('PENDING');
@@ -144,9 +160,14 @@ describe('Approving, rejecting and suspending a seller', () => {
     const res = await patchSeller(s.id, { status: 'REJECTED', rejection_reason: ' Shop address could not be verified ' }, opsToken);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.data.seller).toMatchObject({ status: 'REJECTED', rejection_reason: 'Shop address could not be verified' });
-    const sms = await fx.texts(s.userId, 'SELLER_REJECTED');
-    expect(sms).toHaveLength(1);
-    expect(sms[0]!.payload.text).toBe("Blynk: your seller application wasn't approved. Reason: Shop address could not be verified");
+    const pushes = await fx.pushes(s.userId);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0]!.payload).toMatchObject({
+      title: 'Seller application not approved',
+      body: 'Shop address could not be verified',
+      data: { type: 'SELLER_REJECTED', url: '/' },
+    });
+    expect(await fx.smsRows(s.userId)).toEqual([]);
     expect((await fx.audits('SELLER_UPDATED', s.id))[0].new_values).toMatchObject({ status: 'REJECTED', rejection_reason: 'Shop address could not be verified' });
 
     // an approved seller is suspended, not rejected
@@ -162,6 +183,7 @@ describe('Approving, rejecting and suspending a seller', () => {
 
   it('suspending needs an approved seller, switches their products off, and re-approving does not switch them on', async () => {
     const s = await fx.seller({ status: 'APPROVED' });
+    await fx.withDevice(s.userId);
     const pending = await fx.seller({ status: 'PENDING' });
     expect((await patchSeller(pending.id, { status: 'SUSPENDED' })).body.error.code).toBe('SELLER_STATUS_INVALID');
 
@@ -179,8 +201,9 @@ describe('Approving, rejecting and suspending a seller', () => {
     expect(rows.every((r) => r.is_active === false)).toBe(true);
     expect((await customerProduct(p1.id)).status).toBe(404);
     expect((await fx.audits('SELLER_UPDATED', s.id)).at(-1)!.new_values).toMatchObject({ status: 'SUSPENDED', products_switched_off: 2 });
-    // no text for a suspension (the contract only texts approvals and rejections)
-    expect((await fx.texts(s.userId)).filter((t) => t.notification_type.startsWith('SELLER_') && t.notification_type !== 'SELLER_PRODUCT_APPROVED')).toHaveLength(0);
+    // no notification for a suspension (the contract only notifies approvals and rejections), and never an SMS
+    expect((await fx.pushes(s.userId)).filter((t) => t.payload.data.type !== 'SELLER_PRODUCT_APPROVED')).toHaveLength(0);
+    expect(await fx.smsRows(s.userId)).toEqual([]);
 
     // a suspended seller's waiting submissions cannot be approved
     const waiting = await fx.submission(s.id);
@@ -285,8 +308,9 @@ describe('Approving a NEW product', () => {
     expect((await approve('nope', { selling_price: 100 })).status).toBe(400);
   });
 
-  it('creates a live product: seller price as cost, fixed customer price, seller, stock row, "Sold by"; SMS and audit', async () => {
+  it('creates a live product: seller price as cost, fixed customer price, seller, stock row, "Sold by"; notification and audit', async () => {
     const s = await fx.seller({ shop: `Amma's Kitchen ${fx.stamp}` });
+    await fx.withDevice(s.userId);
     const sub = await fx.submission(s.id, { price: 80.5, name: `Pickle ${fx.stamp}` });
     const res = await approve(sub, { selling_price: 120 }, opsToken);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -334,9 +358,15 @@ describe('Approving a NEW product', () => {
     expect(listed.body.data.products).toHaveLength(1);
     expect(listed.body.data.products[0]).toMatchObject({ id: product.id, sold_by: s.shop });
 
-    const sms = await fx.texts(s.userId, 'SELLER_PRODUCT_APPROVED');
-    expect(sms).toHaveLength(1);
-    expect(sms[0]!.payload.text).toBe(`Blynk: Pickle ${fx.stamp} is live.`);
+    const pushes = await fx.pushes(s.userId);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0]).toMatchObject({
+      notification_type: 'PUSH_SELLER',
+      recipient: s.userId,
+      idempotency_key: `seller-product-approved:${sub}`,
+      payload: { title: `Pickle ${fx.stamp} is live`, body: 'Customers can order it now.', data: { type: 'SELLER_PRODUCT_APPROVED', url: '/' } },
+    });
+    expect(await fx.smsRows(s.userId)).toEqual([]);
     const audit = await fx.audits('SELLER_SUBMISSION_APPROVED', sub);
     expect(audit).toHaveLength(1);
     expect(audit[0].new_values).toMatchObject({ kind: 'NEW', product_id: product.id, seller_price: 80.5, selling_price: 120, seller_id: s.id });
@@ -400,6 +430,7 @@ describe('Approving a NEW product', () => {
 describe('Approving an EDIT', () => {
   it('without a price change: applies the fields, keeps the price, slug and SKU; selling price optional', async () => {
     const s = await fx.seller();
+    await fx.withDevice(s.userId);
     const product = await liveProduct(s.id, 80, 100);
     const edit = await fx.submission(s.id, {
       kind: 'EDIT',
@@ -426,7 +457,7 @@ describe('Approving an EDIT', () => {
       seller_id: s.id,
     });
     expect((await customerProduct(product.id)).body.data.product).toMatchObject({ name: `Renamed ${fx.stamp}`, selling_price: 100 });
-    expect((await fx.texts(s.userId, 'SELLER_PRODUCT_APPROVED')).at(-1)!.payload.text).toBe(`Blynk: Renamed ${fx.stamp} is live.`);
+    expect((await fx.pushes(s.userId)).at(-1)!.payload).toMatchObject({ title: `Renamed ${fx.stamp} is live`, data: { type: 'SELLER_PRODUCT_APPROVED' } });
     expect((await fx.audits('SELLER_SUBMISSION_APPROVED', edit))[0].new_values).toMatchObject({ kind: 'EDIT', product_id: product.id });
   });
 
@@ -510,8 +541,9 @@ describe('Approving an EDIT', () => {
 });
 
 describe('Rejecting a submission', () => {
-  it('needs a reason; records it; texts the seller; audited; the live product is untouched', async () => {
+  it('needs a reason; records it; notifies the seller; audited; the live product is untouched', async () => {
     const s = await fx.seller();
+    await fx.withDevice(s.userId);
     const product = await liveProduct(s.id, 80, 100);
     const edit = await fx.submission(s.id, { kind: 'EDIT', productId: product.id, price: 40, payload: { name: 'Cheap trick' } });
 
@@ -527,10 +559,15 @@ describe('Rejecting a submission', () => {
     expect((await fx.row('SELECT reviewed_by FROM seller_submissions WHERE id = $1', [edit])).reviewed_by).toBe(users.admin.id);
     expect((await fx.row('SELECT name, purchase_cost::float AS c FROM products WHERE id = $1', [product.id])).c).toBe(80);
 
-    const texts = await fx.texts(s.userId, 'SELLER_PRODUCT_REJECTED');
-    expect(texts).toHaveLength(1);
+    const pushes = (await fx.pushes(s.userId)).filter((p) => p.payload.data.type === 'SELLER_PRODUCT_REJECTED');
+    expect(pushes).toHaveLength(1);
     const name = (await fx.row('SELECT name FROM products WHERE id = $1', [product.id])).name;
-    expect(texts[0]!.payload.text).toBe(`Blynk: Cheap trick was not approved: Price is below the market`);
+    expect(pushes[0]!.payload).toMatchObject({
+      title: 'Cheap trick was not approved',
+      body: 'Price is below the market',
+      data: { type: 'SELLER_PRODUCT_REJECTED', url: '/' },
+    });
+    expect(await fx.smsRows(s.userId)).toEqual([]);
     expect(name).not.toBe('Cheap trick');
     const audit = await fx.audits('SELLER_SUBMISSION_REJECTED', edit);
     expect(audit).toHaveLength(1);
@@ -543,19 +580,45 @@ describe('Rejecting a submission', () => {
 
   it('a NEW product rejection creates no product; a seller who is not approved can still be answered', async () => {
     const s = await fx.seller({ status: 'PENDING' });
+    await fx.withDevice(s.userId);
     const sub = await fx.submission(s.id, { name: `Declined ${fx.stamp}` });
     const res = await reject(sub, { reason: 'Not something we sell' });
     expect(res.status).toBe(200);
     expect((await pool.query('SELECT count(*)::int AS n FROM products WHERE seller_id = $1', [s.id])).rows[0].n).toBe(0);
-    expect((await fx.texts(s.userId, 'SELLER_PRODUCT_REJECTED'))[0]!.payload.text).toBe(`Blynk: Declined ${fx.stamp} was not approved: Not something we sell`);
+    expect((await fx.pushes(s.userId))[0]!.payload).toMatchObject({
+      title: `Declined ${fx.stamp} was not approved`,
+      body: 'Not something we sell',
+    });
   });
 
-  it('a failed SMS never fails the approval', async () => {
-    // a phone that is a placeholder (staff-style) is skipped by the outbox; the decision still stands
+  it('long names and reasons are shortened (name 50, reason 120 characters)', async () => {
+    const s = await fx.seller({ status: 'PENDING' });
+    await fx.withDevice(s.userId);
+    const sub = await fx.submission(s.id, { name: `${'N'.repeat(70)} ${fx.stamp}` });
+    expect((await reject(sub, { reason: 'R'.repeat(200) })).status).toBe(200);
+    const { title, body } = (await fx.pushes(s.userId))[0]!.payload;
+    expect(title).toBe(`${'N'.repeat(47)}... was not approved`);
+    expect(body).toBe(`${'R'.repeat(117)}...`);
+  });
+
+  it('no device or push not set up: nothing is queued (and never an SMS), the decision still stands', async () => {
+    // an email-only seller (placeholder phone) with no device: nothing to send to
     const s = await fx.seller();
     await pool.query(`UPDATE users SET phone = $1 WHERE id = $2`, [`nophone:${String(fx.stamp).slice(-8)}`, s.userId]);
     const sub = await fx.submission(s.id);
     expect((await approve(sub, { selling_price: 100 })).status).toBe(200);
-    expect((await fx.texts(s.userId, 'SELLER_PRODUCT_APPROVED'))).toHaveLength(0);
+    expect(await fx.pushes(s.userId)).toHaveLength(0);
+    expect(await fx.texts(s.userId)).toHaveLength(0);
+
+    // a device, but push is not configured on the server
+    const t = await fx.seller();
+    await fx.withDevice(t.userId);
+    setPushSenderForTests(null);
+    try {
+      expect((await approve(await fx.submission(t.id), { selling_price: 100 })).status).toBe(200);
+    } finally {
+      setPushSenderForTests(fakePush);
+    }
+    expect(await fx.texts(t.userId)).toHaveLength(0);
   });
 });

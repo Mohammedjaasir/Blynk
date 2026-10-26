@@ -7,7 +7,7 @@ import { publicPhone } from '../../utils/phone.js';
 import { writeAudit, type AuditActor } from '../audit/audit.writer.js';
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { lockInventoryRow, recordStockMovement } from '../inventory/stock-ledger.js';
-import { insertPayout, textSeller } from './admin-sellers.service.js';
+import { insertPayout, notifySeller, payoutDeclinedPush, payoutPaidPush } from './admin-sellers.service.js';
 import { assertSellerRequestsReady } from './seller-requests.guard.js';
 import { sellerService } from './seller.service.js';
 import { sellerStatement } from './seller.statement.js';
@@ -33,12 +33,16 @@ import {
  *     PURCHASE_RESTOCK movement - so stock history, low-stock and back-in-stock alerts work exactly as
  *     for a restock typed in Inventory - and the seller gets an SMS. Either side may cancel a note
  *     that is still SENT.
+ *     Since 2026-10-26 sellers type their own stock (seller.stock.ts) and the apps no longer use
+ *     stock notes; these routes stay so an older Ops / Admin app keeps working, and receiving a note
+ *     sends the seller nothing.
  *
  *   Payout requests (seller_payout_requests, migration 057)
  *     The seller asks to be paid: an amount up to what is due now (seller.statement.ts), bank or
  *     cash, one waiting request at a time. Staff pay it - a seller_payouts entry made by the same
  *     code as "Record payment" (admin-sellers.service insertPayout), linked to the request - or
- *     decline it with a reason; the seller may withdraw it while it waits. SMS on paid / declined.
+ *     decline it with a reason; the seller may withdraw it while it waits. App notification (push) on
+ *     paid / declined.
  *
  *   Insights (GET /seller/insights; no migration needed)
  *     Units and seller-price gross per product over the last N days (Colombo, today included), the
@@ -72,20 +76,10 @@ export function addDays(dayKey: string, n: number): string {
 }
 
 // ----------------------------------------------------------------------------
-// SMS texts (short, English, no hours)
+// Money text (the app notifications live in admin-sellers.service.ts: payoutPaidPush, payoutDeclinedPush)
 // ----------------------------------------------------------------------------
 
-const SMS_REASON_MAX = 120;
-const smsName = (name: string) => (name.length > 50 ? `${name.slice(0, 47).trimEnd()}...` : name);
-const smsReason = (reason: string) =>
-  reason.length > SMS_REASON_MAX ? `${reason.slice(0, SMS_REASON_MAX - 3).trimEnd()}...` : reason;
 const smsLkr = (n: number) => `LKR ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-export const stockReceivedSms = (name: string, quantity: number) => `Blynk: we received ${quantity} of ${smsName(name)}. Thank you!`;
-export const payoutPaidSms = (amount: number, method: 'BANK' | 'CASH') =>
-  `Blynk: we paid you ${smsLkr(amount)} (${method === 'BANK' ? 'bank transfer' : 'cash'}).`;
-export const payoutDeclinedSms = (amount: number, reason: string) =>
-  `Blynk: your payout request of ${smsLkr(amount)} was declined: ${smsReason(reason)}`;
 
 // ----------------------------------------------------------------------------
 // Rows and presenters
@@ -561,11 +555,10 @@ export async function receiveStockNote(id: string, receivedQuantity: number, act
         adjustment_id: moved.adjustment.id,
       },
     });
-    const user = await trx.selectFrom('users').select(['id', 'phone']).where('id', '=', seller.user_id).executeTakeFirstOrThrow();
-    return { user, productName: product.name, row: (await stockNoteRow(trx, id))! };
+    return { row: (await stockNoteRow(trx, id))! };
   });
 
-  await textSeller(out.user, 'SELLER_STOCK_RECEIVED', stockReceivedSms(out.productName, receivedQuantity), `seller-stock-received:${id}`);
+  // No notification: sellers type their own stock now (seller.stock.ts), so there is nothing to tell them.
   logger.info({ stockNoteId: id, received: receivedQuantity, by: actor.actorId }, 'Seller stock received');
   const stockNote = presentStaffStockNote(out.row);
   return { stock_note: stockNote, stock_on_hand: stockNote.stock_on_hand };
@@ -662,7 +655,7 @@ export async function payPayoutRequest(id: string, input: PayPayoutRequestInput,
     return { payout, user, sellerId: seller.id, amount, method: req.method, row: (await payoutRequestRow(trx, id))! };
   });
 
-  await textSeller(out.user, 'SELLER_PAYOUT_PAID', payoutPaidSms(out.amount, out.method), `seller-payout-paid:${id}`);
+  await notifySeller(out.user, 'SELLER_PAYOUT_PAID', payoutPaidPush(out.amount, out.method), `seller-payout-paid:${id}`);
   logger.info({ payoutRequestId: id, payoutId: out.payout.id, by: actor.actorId }, 'Seller payout request paid');
   return { payout_request: presentStaffPayoutRequest(out.row), payout: out.payout, statement: await sellerStatement(out.sellerId) };
 }
@@ -686,7 +679,7 @@ export async function declinePayoutRequest(id: string, reason: string, actor: Au
     const user = await trx.selectFrom('users').select(['id', 'phone']).where('id', '=', seller.user_id).executeTakeFirstOrThrow();
     return { user, amount: round2(Number(req.amount)), row: (await payoutRequestRow(trx, id))! };
   });
-  await textSeller(out.user, 'SELLER_PAYOUT_DECLINED', payoutDeclinedSms(out.amount, reason), `seller-payout-declined:${id}`);
+  await notifySeller(out.user, 'SELLER_PAYOUT_DECLINED', payoutDeclinedPush(out.amount, reason), `seller-payout-declined:${id}`);
   logger.info({ payoutRequestId: id, by: actor.actorId }, 'Seller payout request declined');
   return { payout_request: presentStaffPayoutRequest(out.row) };
 }

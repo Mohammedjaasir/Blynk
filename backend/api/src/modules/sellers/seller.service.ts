@@ -77,6 +77,12 @@ export interface SellerProductDto {
   seller_price: number;
   selling_price: number | null;
   stock_on_hand: number | null;
+  /** Held for open orders (the stock the seller cannot go below); null without a counted stock. */
+  stock_reserved: number | null;
+  /** False only when staff switched the product's stock counting off (the seller cannot set it then). */
+  stock_tracked: boolean;
+  /** Sizes (variants) are kept by staff; the seller cannot set stock for these. */
+  has_variants: boolean;
   units_sold: number;
   live: boolean;
   pending: SubmissionDto | null;
@@ -178,6 +184,9 @@ interface ProductRow {
   custom_markup_percent: string | null;
   mrp: string | null;
   stock_on_hand: string | null;
+  stock_reserved: string | null;
+  stock_tracked: boolean;
+  has_variants: boolean;
   units_sold: string;
 }
 
@@ -277,6 +286,12 @@ export class SellerService {
                p.custom_markup_percent::text AS custom_markup_percent, p.mrp::text AS mrp,
                (SELECT SUM(i.quantity_on_hand)::text FROM inventory i
                  WHERE i.product_id = p.id AND i.tracking_mode = 'TRACKED') AS stock_on_hand,
+               (SELECT SUM(i.quantity_reserved)::text FROM inventory i
+                 WHERE i.product_id = p.id AND i.tracking_mode = 'TRACKED') AS stock_reserved,
+               -- counted unless staff switched it off; no row yet = counted from the seller's first save
+               (NOT EXISTS (SELECT 1 FROM inventory i WHERE i.product_id = p.id)
+                 OR EXISTS (SELECT 1 FROM inventory i WHERE i.product_id = p.id AND i.tracking_mode = 'TRACKED')) AS stock_tracked,
+               EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.deleted_at IS NULL) AS has_variants,
                COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
                           WHERE oi.product_id = p.id AND o.order_status = 'DELIVERED'
                             AND oi.item_status NOT IN ('UNAVAILABLE', 'SUBSTITUTED')), 0)::text AS units_sold
@@ -335,6 +350,9 @@ export class SellerService {
           seller_price: Number(r.purchase_cost),
           selling_price: price ? price.sellingPrice : null,
           stock_on_hand: r.stock_on_hand === null ? null : Number(r.stock_on_hand),
+          stock_reserved: r.stock_reserved === null ? null : Number(r.stock_reserved),
+          stock_tracked: r.stock_tracked,
+          has_variants: r.has_variants,
           units_sold: Number(r.units_sold),
           live,
           pending: pending ? toSubmissionDto(pending) : null,
@@ -364,6 +382,9 @@ export class SellerService {
           seller_price: Number(s.seller_price),
           selling_price: null,
           stock_on_hand: null,
+          stock_reserved: null,
+          stock_tracked: false,
+          has_variants: false,
           units_sold: 0,
           live: false,
           pending: s.status === 'PENDING' ? toSubmissionDto(s) : null,

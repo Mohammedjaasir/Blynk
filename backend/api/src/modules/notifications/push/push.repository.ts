@@ -20,6 +20,11 @@ export const PUSH_TYPES = {
   LOW_RATING: 'PUSH_LOW_RATING',
   /** Staff: automatic assignment found no rider for an order (owner, 2026-10-25). */
   AUTO_ASSIGN_NO_RIDER: 'PUSH_AUTO_ASSIGN_NO_RIDER',
+  /**
+   * Seller: an account / product / payout decision (owner, 2026-10-26: "put an app and send
+   * notifications"; replaces the SMS). The event is in data.type (SELLER_PRODUCT_APPROVED ...).
+   */
+  SELLER: 'PUSH_SELLER',
 } as const;
 
 /** What a PUSH outbox row carries; the worker sends exactly this. */

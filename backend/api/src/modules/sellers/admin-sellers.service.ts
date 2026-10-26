@@ -12,7 +12,7 @@ import { assertOfferAllowed } from '../catalog/catalog.offers.js';
 import { priceForProduct } from '../catalog/catalog.pricing.js';
 import { generateUniqueSlug, randomSlugSuffix } from '../catalog/catalog.slugs.js';
 import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
-import { notificationService } from '../notifications/notification.service.js';
+import { enqueuePush, PUSH_TYPES } from '../notifications/push/push.repository.js';
 import { phoneHash } from '../users/phone-identity.js';
 import { sellerStatement } from './seller.statement.js';
 import { commissionContext, earnedSql, type CommissionContext } from './seller.commission.js';
@@ -43,8 +43,9 @@ import {
  *   - review what sellers submit - a NEW product or an EDIT of a live one - and set the customer
  *     price when approving (POST /admin/seller-submissions/:id/approve | reject),
  *   - keep the payouts ledger (POST|DELETE /admin/sellers/:id/payouts).
- * Every change is one transaction with its audit row; the SMS to the seller is queued after the
- * commit and a failure there never fails the request.
+ * Every change is one transaction with its audit row; the app notification (push) to the seller is
+ * queued after the commit and a failure there never fails the request. Sellers get no SMS but the
+ * sign-in code (owner, 2026-10-26).
  *
  * Rules worth knowing:
  *   - A seller is REJECTED only while PENDING, SUSPENDED only while APPROVED; re-approving a
@@ -52,18 +53,14 @@ import {
  *   - A submission can only be approved while its seller is APPROVED.
  *   - A NEW approval creates the product like Admin's create does (slug and SKU generated), at a
  *     FIXED customer price, purchase_cost = the seller's price, seller_id set, and a TRACKED
- *     inventory row at 0 - Blynk holds the stock, so the product shows as sold out until staff
- *     receive the seller's goods in Inventory.
+ *     inventory row at 0 - the product shows as sold out until the seller types their stock
+ *     (PUT /seller/products/:id/stock, seller.stock.ts) or staff restock it in Inventory.
  *   - An EDIT applies the proposed fields to the live product (slug and SKU never change). The
  *     price only changes when the seller's price did (then the selling price is required) or when
  *     staff send one.
  */
 
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
-/** Where sellers sign in (owner, 2026-10-24); SELLER_APP_URL overrides it. */
-const SHOP_URL = process.env.SELLER_APP_URL?.trim() || 'https://blynk-seller.valgrowlabs.com';
-const SMS_REASON_MAX = 120;
-
 type Trx = Transaction<Database>;
 
 // ----------------------------------------------------------------------------
@@ -186,48 +183,70 @@ function presentSubmission(r: SubmissionRow) {
 }
 
 // ----------------------------------------------------------------------------
-// SMS to the seller (after the commit; never fails the request)
+// Notifications to the seller (app push, after the commit; never fails the request)
 // ----------------------------------------------------------------------------
 
-const smsReason = (reason: string) =>
-  reason.length > SMS_REASON_MAX ? `${reason.slice(0, SMS_REASON_MAX - 3).trimEnd()}...` : reason;
-const smsName = (name: string) => (name.length > 50 ? `${name.slice(0, 47).trimEnd()}...` : name);
+// Owner, 2026-10-26: sellers get an app notification (the installable seller site, web push through
+// the existing push outbox), never an SMS - the sign-in code is the only SMS a seller receives.
 
-export const SELLER_APPROVED_SMS = `Blynk: your seller account is approved. You can add products now: ${SHOP_URL}`;
-export const sellerRejectedSms = (reason: string) => `Blynk: your seller application wasn't approved. Reason: ${smsReason(reason)}`;
-export const productApprovedSms = (name: string) => `Blynk: ${smsName(name)} is live.`;
-export const productRejectedSms = (name: string, reason: string) => `Blynk: ${smsName(name)} was not approved: ${smsReason(reason)}`;
+const REASON_MAX = 120;
+const reasonText = (reason: string) =>
+  reason.length > REASON_MAX ? `${reason.slice(0, REASON_MAX - 3).trimEnd()}...` : reason;
+const shortName = (name: string) => (name.length > 50 ? `${name.slice(0, 47).trimEnd()}...` : name);
+const lkr = (n: number) => `LKR ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** Every SMS type sent to sellers (each one is a pass-through text in notification.templates.ts). */
-export type SellerSmsType =
+export interface SellerPushText {
+  title: string;
+  body: string;
+}
+
+export const sellerApprovedPush = (): SellerPushText => ({ title: 'Your seller account is approved', body: 'You can add products now.' });
+export const sellerRejectedPush = (reason: string): SellerPushText => ({
+  title: 'Seller application not approved',
+  body: reasonText(reason),
+});
+export const productApprovedPush = (name: string): SellerPushText => ({
+  title: `${shortName(name)} is live`,
+  body: 'Customers can order it now.',
+});
+export const productRejectedPush = (name: string, reason: string): SellerPushText => ({
+  title: `${shortName(name)} was not approved`,
+  body: reasonText(reason),
+});
+export const payoutPaidPush = (amount: number, method: 'BANK' | 'CASH'): SellerPushText => ({
+  title: 'Payment sent',
+  body: `We paid you ${lkr(amount)} (${method === 'BANK' ? 'bank transfer' : 'cash'}).`,
+});
+export const payoutDeclinedPush = (amount: number, reason: string): SellerPushText => ({
+  title: 'Payout request declined',
+  body: `${lkr(amount)}: ${reasonText(reason)}`,
+});
+
+/** Every notification a seller gets (data.type of the push; the outbox type is PUSH_SELLER). */
+export type SellerNotificationType =
   | 'SELLER_APPROVED'
   | 'SELLER_REJECTED'
   | 'SELLER_PRODUCT_APPROVED'
   | 'SELLER_PRODUCT_REJECTED'
   // migration 057 (seller-requests.service.ts)
-  | 'SELLER_STOCK_RECEIVED'
   | 'SELLER_PAYOUT_PAID'
   | 'SELLER_PAYOUT_DECLINED';
 
-export async function textSeller(user: { id: string; phone: string }, type: SellerSmsType, text: string, key: string) {
-  // A seller who signed up with an email has no phone: nothing to text (they
-  // see the change when they next open the seller site).
-  const phone = publicPhone(user.phone);
-  if (!phone) {
-    logger.info({ type, userId: user.id }, 'Seller SMS skipped: the seller has no phone number');
-    return;
-  }
+/**
+ * Queues the seller's app notification (a PUSH outbox row, sent to every device the seller turned
+ * notifications on for; no device or push not set up = nothing queued). Tapping it opens the seller
+ * site root. Best effort: a failure is logged and never fails the staff action.
+ */
+export async function notifySeller(user: { id: string }, type: SellerNotificationType, text: SellerPushText, key: string) {
   try {
-    await notificationService.enqueue({
-      user_id: user.id,
-      channel: 'SMS',
-      notification_type: type,
-      recipient: phone,
-      idempotency_key: key,
-      payload: { text },
+    await enqueuePush(db, {
+      userId: user.id,
+      type: PUSH_TYPES.SELLER,
+      idempotencyKey: key,
+      payload: { title: text.title, body: text.body, data: { type, url: '/' } },
     });
   } catch (err) {
-    logger.warn({ err, type }, 'Seller SMS could not be queued');
+    logger.warn({ err, type }, 'Seller notification could not be queued');
   }
 }
 
@@ -436,12 +455,12 @@ export async function updateSeller(id: string, input: PatchSellerInput, actor: A
   if (out.switchedOff > 0) notifyCatalogChanged('products');
   const at = out.reviewedAt.getTime();
   if (out.statusChanged && input.status === 'APPROVED') {
-    await textSeller(out.user, 'SELLER_APPROVED', SELLER_APPROVED_SMS, `seller-approved:${id}:${at}`);
+    await notifySeller(out.user, 'SELLER_APPROVED', sellerApprovedPush(), `seller-approved:${id}:${at}`);
   } else if (out.statusChanged && input.status === 'REJECTED') {
-    await textSeller(
+    await notifySeller(
       out.user,
       'SELLER_REJECTED',
-      sellerRejectedSms(input.rejection_reason ?? ''),
+      sellerRejectedPush(input.rejection_reason ?? ''),
       `seller-rejected:${id}:${at}`
     );
   }
@@ -802,7 +821,7 @@ export async function approveSubmission(id: string, input: ApproveSubmissionInpu
   });
 
   notifyCatalogChanged('products');
-  await textSeller(out.user, 'SELLER_PRODUCT_APPROVED', productApprovedSms(out.productName), `seller-product-approved:${id}`);
+  await notifySeller(out.user, 'SELLER_PRODUCT_APPROVED', productApprovedPush(out.productName), `seller-product-approved:${id}`);
   logger.info({ submissionId: id, productId: out.productId, by: actor.actorId }, 'Seller submission approved');
   const product = await catalogService.getProductByIdAdmin(out.productId);
   return { submission: out.submission, product: { ...product, seller_id: out.sellerId } };
@@ -837,7 +856,7 @@ export async function rejectSubmission(id: string, reason: string, actor: AuditA
     }
     return { submission: presentSubmission(row as unknown as SubmissionRow), user, name: name ?? 'Your product' };
   });
-  await textSeller(out.user, 'SELLER_PRODUCT_REJECTED', productRejectedSms(out.name, reason), `seller-product-rejected:${id}`);
+  await notifySeller(out.user, 'SELLER_PRODUCT_REJECTED', productRejectedPush(out.name, reason), `seller-product-rejected:${id}`);
   logger.info({ submissionId: id, by: actor.actorId }, 'Seller submission rejected');
   return { submission: out.submission };
 }

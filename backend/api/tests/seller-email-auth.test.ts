@@ -6,6 +6,7 @@ import { authRateLimiter } from '../src/modules/auth/auth.rate-limiter.js';
 import { LOGIN_MAX_ATTEMPTS } from '../src/modules/auth/auth.service.js';
 import { bearer, sellerFixtures } from './helpers/seller.js';
 import { tokens } from './helpers/stock.js';
+import { setPushSenderForTests } from '../src/modules/notifications/index.js';
 
 /**
  * Seller portal email + password (owner, 2026-10-24; no email provider, so no
@@ -225,12 +226,25 @@ describe('Admin and SMS for an email-only seller', () => {
     expect(me.body.data.seller.status).toBe('APPROVED');
   });
 
-  it('a phone seller is still texted on approval', async () => {
+  it('a seller with a registered device gets an app notification on approval, never an SMS', async () => {
     const s = await fx.makeSeller(50, 'PENDING');
-    const res = await request(app).patch(`/api/v1/admin/sellers/${s.sellerId}`).set(bearer(tokens.admin)).send({ status: 'APPROVED' });
-    expect(res.status).toBe(200);
-    expect(res.body.data.seller).toMatchObject({ phone: s.phone, email: null });
-    const texts = (await pool.query('SELECT recipient, notification_type FROM notifications WHERE user_id = $1', [s.userId])).rows;
-    expect(texts).toEqual([{ recipient: s.phone, notification_type: 'SELLER_APPROVED' }]);
+    await pool.query(`INSERT INTO device_tokens (user_id, token, platform) VALUES ($1, $2, 'web')`, [s.userId, `seller-email-auth-device-${Date.now()}`]);
+    setPushSenderForTests({ send: async (ts) => ts.map((token) => ({ token, ok: true as const })) });
+    try {
+      const res = await request(app).patch(`/api/v1/admin/sellers/${s.sellerId}`).set(bearer(tokens.admin)).send({ status: 'APPROVED' });
+      expect(res.status).toBe(200);
+      expect(res.body.data.seller).toMatchObject({ phone: s.phone, email: null });
+    } finally {
+      setPushSenderForTests(undefined);
+    }
+    const rows = (await pool.query('SELECT recipient, channel, notification_type, payload FROM notifications WHERE user_id = $1', [s.userId])).rows;
+    expect(rows).toEqual([
+      {
+        recipient: s.userId,
+        channel: 'PUSH',
+        notification_type: 'PUSH_SELLER',
+        payload: { title: 'Your seller account is approved', body: 'You can add products now.', data: { type: 'SELLER_APPROVED', url: '/' } },
+      },
+    ]);
   });
 });

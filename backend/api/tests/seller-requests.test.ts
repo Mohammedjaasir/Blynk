@@ -4,7 +4,8 @@ import { createApp } from '../src/app.js';
 import { pool } from '../src/database/connection.js';
 import { generateAccessToken } from '../src/modules/auth/token.service.js';
 import { setSellerRequestTablesForTests } from '../src/modules/sellers/seller-requests.guard.js';
-import { payoutDeclinedSms, payoutPaidSms, stockReceivedSms } from '../src/modules/sellers/seller-requests.service.js';
+import { payoutPaidPush } from '../src/modules/sellers/admin-sellers.service.js';
+import { setPushSenderForTests, type PushSender } from '../src/modules/notifications/index.js';
 import { auth, stockFixtures, tokens, users } from './helpers/stock.js';
 import { sellerFixtures, type FixtureSeller } from './helpers/seller-fixtures.js';
 
@@ -18,6 +19,7 @@ import { sellerFixtures, type FixtureSeller } from './helpers/seller-fixtures.js
  * test categories, the commission setting).
  */
 const app = createApp();
+const fakePush: PushSender = { send: async (ts) => ts.map((token) => ({ token, ok: true as const })) };
 const fx = sellerFixtures('req');
 const orders = stockFixtures(app, 'SELREQ-');
 const opsToken = generateAccessToken({ ...users.admin, role: 'OPERATIONS' });
@@ -75,6 +77,7 @@ async function newCategory(name: string, parentId: string | null = null) {
 }
 
 beforeAll(async () => {
+  setPushSenderForTests(fakePush); // sellers get app notifications (owner, 2026-10-26)
   await orders.setup();
   await fx.setup();
   savedCommission = (await pool.query(`SELECT value FROM system_configurations WHERE key = 'seller_commission'`)).rows[0]?.value;
@@ -84,6 +87,7 @@ afterEach(() => setSellerRequestTablesForTests(null));
 
 afterAll(async () => {
   setSellerRequestTablesForTests(null);
+  setPushSenderForTests(undefined);
   await orders.cleanup();
   // sellers added through POST /admin/sellers
   const invited = (await pool.query(`SELECT id FROM users WHERE phone LIKE $1`, [`+9475${stamp}%`])).rows.map((r) => r.id as string);
@@ -163,8 +167,9 @@ describe('Who may use what', () => {
 });
 
 describe('Stock notes', () => {
-  it('a seller announces goods; staff receive what arrived onto the tracked stock through the ledger; SMS and audit', async () => {
+  it('a seller announces goods; staff receive what arrived onto the tracked stock through the ledger; audit, and the seller is told nothing', async () => {
     const s = await fx.seller();
+    await fx.withDevice(s.userId);
     const other = await fx.seller();
     const pending = await fx.seller({ status: 'PENDING' });
     const productId = await liveProduct(s, { name: `Note jam ${fx.stamp}` });
@@ -238,9 +243,9 @@ describe('Stock notes', () => {
     const audit = await fx.audits('SELLER_STOCK_RECEIVED', note.id);
     expect(audit).toHaveLength(1);
     expect(audit[0].new_values).toMatchObject({ seller_id: s.id, product_id: productId, quantity: 20, received_quantity: 18, stock_on_hand: 18 });
-    expect(await fx.texts(s.userId, 'SELLER_STOCK_RECEIVED')).toEqual([
-      { notification_type: 'SELLER_STOCK_RECEIVED', recipient: s.phone, payload: { text: stockReceivedSms(`Note jam ${fx.stamp}`, 18) } },
-    ]);
+    // owner, 2026-10-26: no "stock received" SMS and no push either (sellers type their own stock now)
+    expect((await fx.pushes(s.userId)).filter((p) => p.payload.data.type !== 'SELLER_PRODUCT_APPROVED')).toEqual([]);
+    expect(await fx.smsRows(s.userId)).toEqual([]);
 
     // once only; the seller can no longer cancel it
     expect((await staffPost(`/seller-stock-notes/${note.id}/receive`, { received_quantity: 1 })).body.error.code).toBe('STOCK_NOTE_NOT_OPEN');
@@ -289,6 +294,7 @@ describe('Payout requests and insights after real deliveries', () => {
 
   beforeAll(async () => {
     s = await fx.seller({ commission: 0 });
+    await fx.withDevice(s.userId);
     jam = await liveProduct(s, { price: 100, selling: 150, name: `Jam ${fx.stamp}` });
     tea = await liveProduct(s, { price: 50, selling: 80, name: `Tea ${fx.stamp}` });
     // stock arrives through stock notes
@@ -429,13 +435,33 @@ describe('Payout requests and insights after real deliveries', () => {
     expect(none.body.error.code).toBe('AMOUNT_OVER_DUE');
     expect(none.body.error.details).toMatchObject({ due: 0 });
 
-    // SMS: paid and declined ones
-    const texts = (await fx.texts(s.userId)).filter((t) => t.notification_type.startsWith('SELLER_PAYOUT'));
-    expect(texts.map((t) => t.payload.text)).toEqual([
-      payoutDeclinedSms(120, 'Come to the store on Friday'),
-      payoutDeclinedSms(300, 'Part was paid in cash'),
-      payoutPaidSms(250, 'BANK'),
+    // app notifications (no SMS): declined, declined, paid
+    const pushes = (await fx.pushes(s.userId)).filter((p) => p.payload.data.type.startsWith('SELLER_PAYOUT'));
+    expect(pushes.map((p) => ({ key: p.idempotency_key, type: p.notification_type, ...p.payload }))).toEqual([
+      {
+        key: `seller-payout-declined:${second.id}`,
+        type: 'PUSH_SELLER',
+        title: 'Payout request declined',
+        body: 'LKR 120.00: Come to the store on Friday',
+        data: { type: 'SELLER_PAYOUT_DECLINED', url: '/' },
+      },
+      {
+        key: `seller-payout-declined:${third.id}`,
+        type: 'PUSH_SELLER',
+        title: 'Payout request declined',
+        body: 'LKR 300.00: Part was paid in cash',
+        data: { type: 'SELLER_PAYOUT_DECLINED', url: '/' },
+      },
+      {
+        key: `seller-payout-paid:${fourth.id}`,
+        type: 'PUSH_SELLER',
+        title: 'Payment sent',
+        body: 'We paid you LKR 250.00 (bank transfer).',
+        data: { type: 'SELLER_PAYOUT_PAID', url: '/' },
+      },
     ]);
+    expect(payoutPaidPush(1500, 'CASH')).toEqual({ title: 'Payment sent', body: 'We paid you LKR 1,500.00 (cash).' });
+    expect(await fx.smsRows(s.userId)).toEqual([]);
     // the full history for staff
     const all = (await staffGet(`/seller-payout-requests?status=ALL&seller_id=${s.id}`)).body.data.payout_requests.map((r: { status: string }) => r.status);
     expect(all.sort()).toEqual(['DECLINED', 'DECLINED', 'PAID', 'WITHDRAWN']);

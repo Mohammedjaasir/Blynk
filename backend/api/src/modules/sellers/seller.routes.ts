@@ -14,6 +14,7 @@ import {
   statementQuerySchema,
 } from './seller.schema.js';
 import { sellerService } from './seller.service.js';
+import { setProductStock, setStockSchema, stockParamSchema } from './seller.stock.js';
 import {
   createPayoutRequestSchema,
   createStockNoteSchema,
@@ -99,6 +100,19 @@ sellerRouter.patch(
   handle(async (req) => ({ data: await sellerService.editSubmission(req.user!.id, String(req.params.id), req.body) }))
 );
 
+// Sellers type their own stock (owner, 2026-10-26; seller.stock.ts): the number becomes the live stock.
+sellerRouter.put(
+  '/products/:id/stock',
+  validate({ params: stockParamSchema, body: setStockSchema }),
+  handle(async (req) => ({
+    data: await setProductStock(req.user!.id, String(req.params.id), req.body, {
+      actorId: req.user!.id,
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    }),
+  }))
+);
+
 sellerRouter.delete(
   '/submissions/:id',
   validate({ params: idParamSchema }),
@@ -131,7 +145,8 @@ sellerRouter.get(
 );
 
 // ----------------------------------------------------------------------------
-// Stock notes, payout requests (migration 057) and the dashboard (seller-requests.service.ts)
+// Stock notes (no longer used by the apps), payout requests (migration 057) and the dashboard
+// (seller-requests.service.ts)
 // ----------------------------------------------------------------------------
 
 sellerRouter.post(

@@ -92,6 +92,35 @@ export function sellerFixtures(tag: string) {
       )
     ).rows as { notification_type: string; recipient: string; payload: { text: string } }[];
 
+  /** Rows the seller was SMSed (anything but the sign-in code must be empty: sellers get push, owner 2026-10-26). */
+  const smsRows = async (userId: string) =>
+    (await pool.query(`SELECT notification_type, payload FROM notifications WHERE user_id = $1 AND channel = 'SMS' ORDER BY created_at`, [userId])).rows as {
+      notification_type: string;
+      payload: { text: string };
+    }[];
+
+  /** The seller's app notifications (PUSH outbox rows), oldest first. Needs a device (withDevice) and a push sender. */
+  const pushes = async (userId: string) =>
+    (
+      await pool.query(
+        `SELECT notification_type, recipient, idempotency_key, payload FROM notifications WHERE user_id = $1 AND channel = 'PUSH' ORDER BY created_at, id`,
+        [userId]
+      )
+    ).rows as {
+      notification_type: string;
+      recipient: string;
+      idempotency_key: string | null;
+      payload: { title: string; body: string; data: Record<string, string> };
+    }[];
+
+  /** Registers a web device for the user (removed with the user by cleanup()). */
+  async function withDevice(userId: string) {
+    seq += 1;
+    const token = `seller-fixture-device-${tag}-${stamp}-${seq}`;
+    await pool.query(`INSERT INTO device_tokens (user_id, token, platform) VALUES ($1, $2, 'web')`, [userId, token]);
+    return token;
+  }
+
   async function cleanup() {
     const ids = sellers.map((s) => s.id);
     const userIds = sellers.map((s) => s.userId);
@@ -127,6 +156,9 @@ export function sellerFixtures(tag: string) {
     row,
     audits,
     texts,
+    smsRows,
+    pushes,
+    withDevice,
     get categoryId() {
       return categoryId;
     },

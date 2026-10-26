@@ -264,13 +264,18 @@ describe('GET /seller/products', () => {
       seller_price: 120,
       selling_price: 180,
       stock_on_hand: 7,
+      stock_reserved: 0,
+      stock_tracked: true,
+      has_variants: false,
       units_sold: 0,
       live: true,
       pending: null,
       last_rejected: null,
     });
-    expect(byId.get(untracked)).toMatchObject({ stock_on_hand: null, selling_price: 90, live: true });
-    expect(byId.get(off)).toMatchObject({ live: false, is_active: false, selling_price: null });
+    // staff switched the stock counting off: no number, and the seller cannot set one (stock_tracked false)
+    expect(byId.get(untracked)).toMatchObject({ stock_on_hand: null, stock_reserved: null, stock_tracked: false, selling_price: 90, live: true });
+    // no inventory row yet: counted from the seller's first save
+    expect(byId.get(off)).toMatchObject({ live: false, is_active: false, selling_price: null, stock_on_hand: null, stock_tracked: true });
 
     const theirs = await api(b.token).get('/products');
     expect((theirs.body.data.products as { id: string }[]).map((p) => p.id)).toEqual([others]);
@@ -293,6 +298,9 @@ describe('GET /seller/products', () => {
       is_active: false,
       selling_price: null,
       stock_on_hand: null,
+      stock_reserved: null,
+      stock_tracked: false,
+      has_variants: false,
       units_sold: 0,
       seller_price: 300,
       unit: '1 jar',
