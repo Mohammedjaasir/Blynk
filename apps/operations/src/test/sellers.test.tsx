@@ -7,7 +7,7 @@ import { OPERATIONS_STAFF, fail, ok, renderAs, type Call } from './helpers';
 /**
  * More -> Sellers, Seller products and Seller commission (owner, 2026-10-25: the seller admin inside
  * Ops) against a fake API shaped like the Admin contract (/admin/sellers*, /admin/seller-submissions*,
- * /admin/seller-stock-notes*, /admin/seller-payout-requests*, /admin/settings/seller-commission).
+ * /admin/seller-payout-requests*, /admin/settings/seller-commission).
  */
 configure({ asyncUtilTimeout: 5_000 });
 vi.setConfig({ testTimeout: 40_000 });
@@ -48,25 +48,6 @@ const statement = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const sellerRef = { id: 's1', shop_name: 'Jaffna Spice House', phone: '+94771234567', email: null };
-const stockNote = (over: Record<string, unknown> = {}) => ({
-  id: 'n1',
-  product_id: 'p1',
-  product_name: 'Curry powder 250g',
-  image_url: null,
-  unit: 'pack',
-  pack_size: '250g',
-  quantity: 20,
-  expected_on: '2026-10-28',
-  note: 'Tuesday morning',
-  status: 'SENT',
-  received_quantity: null,
-  received_at: null,
-  cancelled_at: null,
-  created_at: '2026-10-24T04:00:00.000Z',
-  stock_on_hand: 3,
-  seller: sellerRef,
-  ...over,
-});
 const payoutRequest = (over: Record<string, unknown> = {}) => ({
   id: 'r1',
   amount: 500,
@@ -116,7 +97,6 @@ describe('More -> Sellers list', () => {
   ];
   const listHandlers = {
     'GET /admin/sellers': (c: Call) => ok({ sellers: c.query.status ? rows.filter((r) => r.status === c.query.status) : rows }),
-    'GET /admin/seller-stock-notes': () => ok({ stock_notes: [stockNote(), stockNote({ id: 'n2' })] }),
     'GET /admin/seller-payout-requests': () => ok({ payout_requests: [payoutRequest({ seller: { ...sellerRef, id: 's2', shop_name: 'Galle Sweets' } })] }),
   };
 
@@ -143,7 +123,7 @@ describe('More -> Sellers list', () => {
     expect(within(first).getByText('Waiting')).toBeInTheDocument();
     expect(within(first).getByRole('link', { name: '2 waiting for Jaffna Spice House' })).toHaveAttribute('href', '/more/seller-products?seller=s1');
     expect(within(first).getByText('No location')).toBeInTheDocument();
-    expect(await within(first).findByText('2 stock notes')).toBeInTheDocument();
+    expect(within(first).queryByText(/stock note/i)).toBeNull();
     const second = screen.getByRole('listitem', { name: 'Seller Galle Sweets' });
     expect(second).toHaveTextContent('commission 7.5%');
     expect(second).toHaveTextContent('due LKR 1,250.00');
@@ -176,7 +156,6 @@ describe('More -> Sellers list', () => {
         return ok({ seller: seller({ id: 's9', shop_name: 'Kandy Crafts', phone: '+94771112222', status: 'APPROVED' }) });
       },
       'GET /admin/sellers/:id': () => ok({ seller: seller({ id: 's9', shop_name: 'Kandy Crafts', phone: '+94771112222', status: 'APPROVED' }), statement: emptyStatement() }),
-      'GET /admin/seller-stock-notes': () => ok({ stock_notes: [] }),
       'GET /admin/seller-payout-requests': () => ok({ payout_requests: [] }),
     });
     await screen.findByRole('listitem', { name: 'Seller Galle Sweets' });
@@ -236,7 +215,6 @@ describe('More -> Sellers list', () => {
 describe('Seller detail', () => {
   const detail = (over: Record<string, unknown> = {}, extra: Record<string, (c: Call) => unknown> = {}) => ({
     'GET /admin/sellers/:id': () => ok({ seller: seller(over), statement: statement() }),
-    'GET /admin/seller-stock-notes': () => ok({ stock_notes: [] }),
     'GET /admin/seller-payout-requests': () => ok({ payout_requests: [] }),
     ...extra,
   });
@@ -255,7 +233,7 @@ describe('Seller detail', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(api.find('PATCH', '/admin/sellers/s1')).toHaveLength(1));
     expect(api.find('PATCH', '/admin/sellers/s1')[0]!.body).toEqual({ status: 'APPROVED' });
-    expect(await screen.findByText('Jaffna Spice House is approved and gets an SMS.')).toBeInTheDocument();
+    expect(await screen.findByText('Jaffna Spice House is approved and gets an app notification.')).toBeInTheDocument();
     // An approved seller can be suspended, not approved again.
     expect(screen.getByRole('button', { name: 'Suspend' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
@@ -461,43 +439,13 @@ describe('Seller detail', () => {
     expect(within(section).getByText(/Due now:/)).toHaveTextContent('LKR 960.00');
   });
 
-  it('receives goods with the counted quantity, or cancels a note', async () => {
-    const user = userEvent.setup();
-    const { api } = renderAs(
-      OPERATIONS_STAFF,
-      '/more/sellers/s1',
-      detail(
-        { status: 'APPROVED' },
-        {
-          'GET /admin/seller-stock-notes': () => ok({ stock_notes: [stockNote(), stockNote({ id: 'n2', product_name: 'Chilli flakes', quantity: 5 })] }),
-          'POST /admin/seller-stock-notes/:id/receive': (c) => ok({ stock_note: stockNote({ status: 'RECEIVED', received_quantity: c.body.received_quantity }), stock_on_hand: 21 }),
-          'POST /admin/seller-stock-notes/:id/cancel': () => ok({ stock_note: stockNote({ id: 'n2', status: 'CANCELLED' }) }),
-        }
-      )
-    );
-    const section = await screen.findByRole('region', { name: 'Stock coming in' });
-    await within(section).findByRole('group', { name: 'Stock note for Curry powder 250g' });
-    await user.click(within(section).getByRole('button', { name: 'Receive Curry powder 250g' }));
-    const dialog = screen.getByRole('dialog', { name: 'Receive stock' });
-    const quantity = within(dialog).getByLabelText(/^Received quantity/);
-    expect(quantity).toHaveValue('20');
-    await user.clear(quantity);
-    await user.type(quantity, '0');
-    await user.click(within(dialog).getByRole('button', { name: 'Receive' }));
-    expect(within(dialog).getByText(/At least 1/)).toBeInTheDocument();
-    expect(api.find('POST', '/admin/seller-stock-notes/n1/receive')).toHaveLength(0);
-    await user.clear(quantity);
-    await user.type(quantity, '18');
-    await user.click(within(dialog).getByRole('button', { name: 'Receive' }));
-    await waitFor(() => expect(api.find('POST', '/admin/seller-stock-notes/n1/receive')).toHaveLength(1));
-    expect(api.find('POST', '/admin/seller-stock-notes/n1/receive')[0]!.body).toEqual({ received_quantity: 18 });
-    expect(await screen.findByText('18 of Curry powder 250g received. Stock now 21.')).toBeInTheDocument();
-    expect(within(section).queryByRole('group', { name: 'Stock note for Curry powder 250g' })).toBeNull();
-
-    await user.click(within(section).getByRole('button', { name: 'Cancel stock note for Chilli flakes' }));
-    await user.click(within(screen.getByRole('dialog', { name: 'Cancel this stock note?' })).getByRole('button', { name: 'Cancel note' }));
-    await waitFor(() => expect(api.find('POST', '/admin/seller-stock-notes/n2/cancel')).toHaveLength(1));
-    expect(await screen.findByText('Stock note cancelled.')).toBeInTheDocument();
+  it('has no "Stock coming in" card and never asks for stock notes (sellers manage their own stock)', async () => {
+    const { api } = renderAs(OPERATIONS_STAFF, '/more/sellers/s1', detail({ status: 'APPROVED' }));
+    await screen.findByRole('heading', { name: 'Jaffna Spice House' });
+    await screen.findByRole('region', { name: 'Payout requests' });
+    expect(screen.queryByRole('region', { name: 'Stock coming in' })).toBeNull();
+    expect(screen.queryByText(/Stock coming in|stock note|on its way/i)).toBeNull();
+    expect(api.calls.some((c) => c.path.includes('stock-notes'))).toBe(false);
   });
 
   it('pays a payout request (statement updates) or declines another with a reason', async () => {
@@ -546,20 +494,19 @@ describe('Seller detail', () => {
     expect(await screen.findByText('Payout request declined.')).toBeInTheDocument();
   });
 
-  it('before the database update the stock and payout sections say so (no server error)', async () => {
+  it('before the database update the payout requests section says so (no server error)', async () => {
     renderAs(
       OPERATIONS_STAFF,
       '/more/sellers/s1',
       detail(
         { status: 'APPROVED' },
         {
-          'GET /admin/seller-stock-notes': () => fail(503, 'SELLER_REQUESTS_NOT_READY'),
           'GET /admin/seller-payout-requests': () => fail(503, 'SELLER_REQUESTS_NOT_READY'),
         }
       )
     );
     await screen.findByRole('heading', { name: 'Jaffna Spice House' });
-    await waitFor(() => expect(screen.getAllByText('Available after the next database update.')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByText('Available after the next database update.')).toHaveLength(1));
     expect(screen.queryByText(/Blynk API had a problem/)).toBeNull();
   });
 });
@@ -601,7 +548,7 @@ describe('More -> Seller products', () => {
     await user.click(within(card).getByRole('button', { name: 'Approve Chilli flakes' }));
     await waitFor(() => expect(api.find('POST', '/admin/seller-submissions/sub1/approve')).toHaveLength(1));
     expect(api.find('POST', '/admin/seller-submissions/sub1/approve')[0]!.body).toEqual({ selling_price: 120, category_id: 'c2' });
-    expect(await screen.findByText('Chilli flakes is approved and live. The seller gets an SMS.')).toBeInTheDocument();
+    expect(await screen.findByText('Chilli flakes is approved and live. The seller gets an app notification.')).toBeInTheDocument();
     expect(screen.queryByRole('listitem', { name: 'New product Chilli flakes' })).toBeNull();
   });
 

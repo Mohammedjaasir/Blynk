@@ -11,8 +11,7 @@ import {
   commissionBody,
   newSellerBody,
   normalisePhone,
-  openCounts,
-  parseQuantity,
+  payoutRequesters,
   phoneInUseText,
   type CategoryRate,
 } from '../lib/sellers';
@@ -21,8 +20,7 @@ import { fail, mockApi, ok, type Call, type Reply } from './mockApi';
 /**
  * Seller portal, Admin side, second round (2026-10-24): sellers are invite-only (Add seller, edit the
  * sign-in phone), commission by category (the Seller commission panel, "Use category rates" vs
- * "Own rate"), goods sellers say are coming (receive / cancel) and their payout requests (pay /
- * decline). The API is the fake in mockApi.
+ * "Own rate") and their payout requests (pay / decline). The API is the fake in mockApi.
  */
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -58,25 +56,6 @@ const statement = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const sellerRef = { id: 's1', shop_name: 'Jaffna Spice House', phone: '+94771234567', email: null };
-const note = (over: Record<string, unknown> = {}) => ({
-  id: 'n1',
-  product_id: 'p1',
-  product_name: 'Curry powder 250g',
-  image_url: null,
-  unit: 'pack',
-  pack_size: '250g',
-  quantity: 20,
-  expected_on: '2026-10-28',
-  note: 'Tuesday morning',
-  status: 'SENT',
-  received_quantity: null,
-  received_at: null,
-  cancelled_at: null,
-  created_at: '2026-10-24T04:00:00.000Z',
-  stock_on_hand: 3,
-  seller: sellerRef,
-  ...over,
-});
 const payoutRequest = (over: Record<string, unknown> = {}) => ({
   id: 'r1',
   amount: 500,
@@ -165,14 +144,10 @@ describe('seller rules (lib)', () => {
     expect(commissionBody('2', { c1: '200' })).toHaveProperty('error');
   });
 
-  it('reads a received quantity and counts open items per seller', () => {
-    expect(parseQuantity('18')).toEqual({ value: 18 });
-    expect(parseQuantity('0')).toHaveProperty('error');
-    expect(parseQuantity('1.5')).toHaveProperty('error');
-    expect(parseQuantity('10001')).toHaveProperty('error');
-    const counts = openCounts([{ seller: { id: 's1' } }, { seller: { id: 's1' } }], [{ seller: { id: 's2' } }]);
-    expect(counts.get('s1')).toEqual({ stock: 2, payout: 0 });
-    expect(counts.get('s2')).toEqual({ stock: 0, payout: 1 });
+  it('lists the sellers that have a payout request waiting', () => {
+    const waiting = payoutRequesters([{ seller: { id: 's1' } }, { seller: { id: 's1' } }, { seller: { id: 's2' } }]);
+    expect([...waiting].sort()).toEqual(['s1', 's2']);
+    expect(waiting.has('s3')).toBe(false);
   });
 });
 
@@ -181,17 +156,16 @@ describe('seller rules (lib)', () => {
 describe('Sellers page', () => {
   const rows = [seller(), seller({ id: 's2', shop_name: 'Galle Sweets', commission_percent: 4, phone: '+94779990000' })];
 
-  it('shows badges for goods on their way and waiting payout requests, and the rate', async () => {
+  it('shows the waiting payout request badge and the rate (no stock-note badge)', async () => {
     renderAt('/sellers', (c) => {
       if (c.method === 'GET' && c.path === '/admin/sellers') return ok({ sellers: rows });
-      if (c.method === 'GET' && c.path === '/admin/seller-stock-notes') return ok({ stock_notes: [note(), note({ id: 'n2' })] });
       if (c.method === 'GET' && c.path === '/admin/seller-payout-requests') return ok({ payout_requests: [payoutRequest({ seller: { ...sellerRef, id: 's2' } })] });
       return undefined;
     });
     const table = await screen.findByRole('table', { name: 'Sellers' });
     const first = within(table).getByText('Jaffna Spice House').closest('tr')!;
     const second = within(table).getByText('Galle Sweets').closest('tr')!;
-    expect(await within(first).findByText('2 stock notes')).toBeInTheDocument();
+    expect(within(first).queryByText(/stock note/i)).toBeNull();
     expect(within(first).queryByText('Payout requested')).toBeNull();
     expect(within(second).getByText('Payout requested')).toBeInTheDocument();
     expect(within(first).getByText('Category rates')).toBeInTheDocument();
@@ -284,26 +258,15 @@ describe('Sellers page', () => {
 
 // ---------------------------------------------------------------- Seller detail
 
-describe('Seller detail: stock, payout requests, commission, details', () => {
-  function open(opts: { s?: Record<string, unknown>; notes?: unknown[] | 'not-ready'; requests?: unknown[] | 'not-ready' } = {}) {
+describe('Seller detail: payout requests, commission, details', () => {
+  function open(opts: { s?: Record<string, unknown>; requests?: unknown[] | 'not-ready' } = {}) {
     let current = opts.s ?? seller();
     let stmt = statement();
-    let notes = opts.notes ?? [note()];
     let requests = opts.requests ?? [payoutRequest()];
     return renderAt('/sellers/s1', (c) => {
       if (c.method === 'GET' && c.path === '/admin/sellers/s1') return ok({ seller: current, statement: stmt });
-      if (c.method === 'GET' && c.path === '/admin/seller-stock-notes') {
-        return notes === 'not-ready' ? fail(503, 'SELLER_REQUESTS_NOT_READY') : ok({ stock_notes: notes });
-      }
       if (c.method === 'GET' && c.path === '/admin/seller-payout-requests') {
         return requests === 'not-ready' ? fail(503, 'SELLER_REQUESTS_NOT_READY') : ok({ payout_requests: requests });
-      }
-      if (c.method === 'POST' && c.path === '/admin/seller-stock-notes/n1/receive') {
-        notes = [];
-        return ok({ stock_note: note({ status: 'RECEIVED', received_quantity: c.body.received_quantity }), stock_on_hand: 3 + c.body.received_quantity });
-      }
-      if (c.method === 'POST' && c.path.startsWith('/admin/seller-stock-notes/') && c.path.endsWith('/cancel')) {
-        return ok({ stock_note: note({ status: 'CANCELLED' }) });
       }
       if (c.method === 'POST' && c.path === '/admin/seller-payout-requests/r1/pay') {
         stmt = { ...stmt, paid: 860, due: 100, payouts: [{ id: 'po2', amount: 500, note: c.body.note ?? null, paid_on: c.body.paid_on }, ...stmt.payouts] };
@@ -328,34 +291,13 @@ describe('Seller detail: stock, payout requests, commission, details', () => {
     expect(within(stmt).getByText('LKR 40.00 (4%)')).toBeInTheDocument();
   });
 
-  it('receives goods with the counted quantity, or cancels a note', async () => {
-    const user = userEvent.setup();
-    const api = open({ notes: [note(), note({ id: 'n2', product_name: 'Chilli flakes', quantity: 5, expected_on: null, note: null })] });
-    const section = await screen.findByRole('region', { name: 'Stock coming in' });
-    const table = await within(section).findByRole('table', { name: 'Stock notes' });
-    expect(within(table).getByText('Tuesday morning')).toBeInTheDocument();
-    expect(within(table).getByText('Not said')).toBeInTheDocument();
-
-    await user.click(within(table).getByRole('button', { name: 'Receive Curry powder 250g' }));
-    const dialog = screen.getByRole('dialog', { name: 'Receive stock' });
-    const qty = within(dialog).getByLabelText('Received quantity');
-    expect(qty).toHaveValue('20');
-    await user.clear(qty);
-    await user.type(qty, '0');
-    await user.click(within(dialog).getByRole('button', { name: 'Receive' }));
-    expect(within(dialog).getByText(/At least 1/)).toBeInTheDocument();
-    await user.clear(qty);
-    await user.type(qty, '18');
-    await user.click(within(dialog).getByRole('button', { name: 'Receive' }));
-    await waitFor(() => expect(api.find('POST', '/admin/seller-stock-notes/n1/receive')).toHaveLength(1));
-    expect(api.find('POST', '/admin/seller-stock-notes/n1/receive')[0]!.body).toEqual({ received_quantity: 18 });
-    expect(await screen.findByText('18 of Curry powder 250g received. Stock now 21.')).toBeInTheDocument();
-    expect(within(table).queryByText('Curry powder 250g')).toBeNull();
-
-    await user.click(within(table).getByRole('button', { name: 'Cancel stock note for Chilli flakes' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel note' }));
-    await waitFor(() => expect(api.find('POST', '/admin/seller-stock-notes/n2/cancel')).toHaveLength(1));
-    expect(await screen.findByText('Stock note cancelled.')).toBeInTheDocument();
+  it('has no "Stock coming in" card and never asks for stock notes (sellers manage their own stock)', async () => {
+    const api = open();
+    await screen.findByRole('heading', { name: 'Jaffna Spice House' });
+    await screen.findByRole('region', { name: 'Payout requests' });
+    expect(screen.queryByRole('region', { name: 'Stock coming in' })).toBeNull();
+    expect(screen.queryByText(/Stock coming in|stock note|on its way/i)).toBeNull();
+    expect(api.calls.some((c) => c.path.includes('stock-notes'))).toBe(false);
   });
 
   it('pays a payout request (the statement updates) or declines it with a reason', async () => {
@@ -402,10 +344,9 @@ describe('Seller detail: stock, payout requests, commission, details', () => {
     expect(await screen.findByText('Payout request declined.')).toBeInTheDocument();
   });
 
-  it('before the database update both sections say so', async () => {
-    open({ notes: 'not-ready', requests: 'not-ready' });
+  it('before the database update the payout requests section says so', async () => {
+    open({ requests: 'not-ready' });
     await screen.findByRole('heading', { name: 'Jaffna Spice House' });
-    expect(await within(screen.getByRole('region', { name: 'Stock coming in' })).findByText('Available after the next database update.')).toBeInTheDocument();
     expect(await within(screen.getByRole('region', { name: 'Payout requests' })).findByText('Available after the next database update.')).toBeInTheDocument();
   });
 

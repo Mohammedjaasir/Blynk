@@ -308,7 +308,7 @@ describe('Seller detail', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(api.find('PATCH', '/admin/sellers/s1')).toHaveLength(1));
     expect(api.find('PATCH', '/admin/sellers/s1')[0]!.body).toEqual({ status: 'APPROVED' });
-    expect(await screen.findByText('Jaffna Spice House is approved and gets an SMS.')).toBeInTheDocument();
+    expect(await screen.findByText('Jaffna Spice House is approved and gets an app notification.')).toBeInTheDocument();
     // An approved seller can be suspended, not approved again.
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Suspend' })).toBeInTheDocument();
@@ -462,7 +462,7 @@ describe('Seller products approval queue', () => {
     await user.click(within(card).getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(api.find('POST', '/admin/seller-submissions/sub1/approve')).toHaveLength(1));
     expect(api.find('POST', '/admin/seller-submissions/sub1/approve')[0]!.body).toEqual({ selling_price: 100, category_id: 'c2' });
-    expect(await screen.findByText('Chilli flakes is approved and live. The seller gets an SMS.')).toBeInTheDocument();
+    expect(await screen.findByText('Chilli flakes is approved and live. The seller gets an app notification.')).toBeInTheDocument();
     expect(await screen.findByText('Nothing waiting for approval')).toBeInTheDocument();
   });
 

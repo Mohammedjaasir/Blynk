@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiError } from '../../api/client';
-import { sellerPayoutRequests, sellerStockNotes, sellers as sellersApi } from '../../api/sellers';
+import { sellerPayoutRequests, sellers as sellersApi } from '../../api/sellers';
 import { PageHeader } from '../../components/Layout';
 import { EmptyState, Spinner } from '../../components/ui';
 import { errorMessage } from '../../lib/errors';
@@ -14,7 +14,7 @@ import {
   lkr,
   locationWaiting,
   newSellerBody,
-  openCounts,
+  payoutRequesters,
   phoneInUseText,
   sellerContact,
   statusCounts,
@@ -28,9 +28,8 @@ import './sellers.css';
 /**
  * More -> Sellers (owner, 2026-10-25: the seller admin inside Ops; same API as Admin's Sellers page).
  * Sellers are invite-only: staff add each shop with the phone it signs in with (an SMS code on the
- * seller site). Each card shows the status, what is waiting (products, a shop location, goods on the
- * way, a payout request) and what Blynk owes; open one to decide, set the commission, receive goods
- * and pay. Their product submissions wait under Seller products.
+ * seller site). Each card shows the status, what is waiting (products, a shop location, a payout
+ * request) and what Blynk owes; open one to decide, set the commission and pay. Their product submissions wait under Seller products.
  */
 export function Sellers() {
   const navigate = useNavigate();
@@ -38,7 +37,7 @@ export function Sellers() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<SellerStatus | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
-  const [open, setOpen] = useState<Map<string, { stock: number; payout: number }>>(new Map());
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -63,12 +62,13 @@ export function Sellers() {
     };
   }, [search]);
 
-  // Badges: goods on their way and waiting payout requests (migration 057). An extra: a failure
+  // Badge: a waiting payout request (migration 057). An extra: a failure
   // (or the API before the migration) just shows no badges.
   useEffect(() => {
     let live = true;
-    Promise.all([sellerStockNotes.list({ status: 'SENT' }), sellerPayoutRequests.list({ status: 'REQUESTED' })])
-      .then(([notes, requests]) => live && setOpen(openCounts(notes, requests)))
+    sellerPayoutRequests
+      .list({ status: 'REQUESTED' })
+      .then((requests) => live && setOpen(payoutRequesters(requests)))
       .catch(() => undefined);
     return () => {
       live = false;
@@ -134,7 +134,7 @@ export function Sellers() {
       ) : (
         <ul className="cat-list" aria-label="Sellers">
           {shown.map((s) => (
-            <SellerCard key={s.id} seller={s} open={open.get(s.id)} />
+            <SellerCard key={s.id} seller={s} payoutWaiting={open.has(s.id)} />
           ))}
         </ul>
       )}
@@ -153,7 +153,7 @@ export function Sellers() {
   );
 }
 
-function SellerCard({ seller: s, open }: { seller: AdminSeller; open: { stock: number; payout: number } | undefined }) {
+function SellerCard({ seller: s, payoutWaiting }: { seller: AdminSeller; payoutWaiting: boolean }) {
   const person = s.contact_name ?? s.full_name;
   return (
     <li className="card" aria-label={`Seller ${s.shop_name}`}>
@@ -187,12 +187,7 @@ function SellerCard({ seller: s, open }: { seller: AdminSeller; open: { stock: n
             <span className="sellers-chip">No location</span>
           </li>
         ) : null}
-        {open && open.stock > 0 ? (
-          <li>
-            <span className="sellers-chip sellers-chip--stock">{open.stock === 1 ? '1 stock note' : `${open.stock} stock notes`}</span>
-          </li>
-        ) : null}
-        {open && open.payout > 0 ? (
+        {payoutWaiting ? (
           <li>
             <span className="sellers-chip sellers-chip--payout">Payout requested</span>
           </li>

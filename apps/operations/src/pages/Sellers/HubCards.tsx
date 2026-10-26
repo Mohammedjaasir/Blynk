@@ -29,7 +29,7 @@ export function SellerHubCards() {
   return (
     <>
       <li>
-        {/* Invite-only seller shops: add, approve, commission, goods, payouts (owner, 2026-10-25). */}
+        {/* Invite-only seller shops: add, approve, commission, payouts (owner, 2026-10-25). */}
         <Link className="cat-hub__card" to="/more/sellers">
           <span className="cat-hub__title">Sellers</span>
           {waitingSellers > 0 ? (

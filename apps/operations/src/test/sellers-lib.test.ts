@@ -7,8 +7,7 @@ import {
   newSellerBody,
   normalisePhone,
   notReady,
-  openCounts,
-  parseQuantity,
+  payoutRequesters,
   phoneInUseText,
   type CategoryRate,
   approvedPoint,
@@ -238,14 +237,10 @@ describe('seller rules (lib)', () => {
     expect(commissionBody('2', { c1: '200' })).toHaveProperty('error');
   });
 
-  it('reads a received quantity and counts open items per seller', () => {
-    expect(parseQuantity('18')).toEqual({ value: 18 });
-    expect(parseQuantity('0')).toHaveProperty('error');
-    expect(parseQuantity('1.5')).toHaveProperty('error');
-    expect(parseQuantity('10001')).toHaveProperty('error');
-    const counts = openCounts([{ seller: { id: 's1' } }, { seller: { id: 's1' } }], [{ seller: { id: 's2' } }]);
-    expect(counts.get('s1')).toEqual({ stock: 2, payout: 0 });
-    expect(counts.get('s2')).toEqual({ stock: 0, payout: 1 });
+  it('lists the sellers that have a payout request waiting', () => {
+    const waiting = payoutRequesters([{ seller: { id: 's1' } }, { seller: { id: 's1' } }, { seller: { id: 's2' } }]);
+    expect([...waiting].sort()).toEqual(['s1', 's2']);
+    expect(waiting.has('s3')).toBe(false);
   });
 });
 

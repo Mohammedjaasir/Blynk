@@ -16,8 +16,6 @@ import type {
   SellerPayout,
   SellerStatement,
   SellerStatus,
-  StockNote,
-  StockNoteStatus,
   SubmissionStatus,
 } from '../lib/sellers';
 import type {
@@ -1056,22 +1054,6 @@ const sellerQuery = (params: { status?: string; seller_id?: string }) => {
   if (params.seller_id) query.set('seller_id', params.seller_id);
   const qs = query.toString();
   return qs ? `?${qs}` : '';
-};
-
-/** Goods sellers say they are bringing (migration 057). Receiving adds the counted quantity to the product's tracked stock. */
-export const sellerStockNotes = {
-  /** SENT (still coming, soonest first) unless asked; ALL = every status. */
-  list: (params: { status?: StockNoteStatus | 'ALL'; seller_id?: string } = {}) =>
-    apiRequest<{ stock_notes: StockNote[] }>(`/admin/seller-stock-notes${sellerQuery(params)}`).then((d) => d.stock_notes ?? []),
-  receive: (id: string, received_quantity: number) =>
-    apiRequest<{ stock_note: StockNote; stock_on_hand: number | null }>(`/admin/seller-stock-notes/${id}/receive`, {
-      method: 'POST',
-      body: { received_quantity },
-    }),
-  cancel: (id: string, reason?: string) =>
-    apiRequest<{ stock_note: StockNote }>(`/admin/seller-stock-notes/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }).then(
-      (d) => d.stock_note
-    ),
 };
 
 /** Sellers asking to be paid (migration 057). Paying records the payout (the same ledger as "Record payment"). */

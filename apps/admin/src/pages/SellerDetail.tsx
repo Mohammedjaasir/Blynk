@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { sellerPayoutRequests, sellerStockNotes, sellers as sellersApi } from '../api/resources';
+import { sellerPayoutRequests, sellers as sellersApi } from '../api/resources';
 import { ApiError } from '../api/client';
 import { DatePicker } from '../components/DatePicker';
 import { PageHeader } from '../components/Layout';
@@ -26,28 +26,24 @@ import {
   notReady,
   parseCommission,
   parseMoney,
-  parseQuantity,
   phoneInUseText,
   readablePhone,
   sellerContact,
   reasonProblem,
   sellerActions,
   sellerStatusTone,
-  STOCK_NOTE_MAX,
   type AdminSeller,
   type PayoutRequest,
   type SellerPayout,
   type SellerStatement,
-  type StockNote,
 } from '../lib/sellers';
 import './sellers.css';
 
 /**
  * One seller: profile (staff keep the sign-in phone and contact details: sellers are invite-only),
  * status decisions (approve / reject with a reason / suspend), commission (their own rate, or the
- * category rates), goods they say are coming (receive onto the stock / cancel), the statement of
- * what Blynk owes them, their payout requests (pay / decline) and the payouts ledger (payments are
- * made by hand and recorded here; a mistaken entry can be deleted).
+ * category rates), the statement of what Blynk owes them, their payout requests (pay / decline) and
+ * the payouts ledger (payments are made by hand and recorded here; a mistaken entry can be deleted).
  */
 const stamp = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' });
 const dayText = (key: string) => (/^\d{4}-\d{2}-\d{2}/.test(key) ? stamp.format(new Date(`${key.slice(0, 10)}T00:00:00+05:30`)) : key);
@@ -117,7 +113,7 @@ export function SellerDetail() {
       );
       adopt({ ...seller, ...updated });
       toast.success(
-        kind === 'approve' ? `${seller.shop_name} is approved and gets an SMS.` : kind === 'suspend' ? `${seller.shop_name} is suspended.` : `${seller.shop_name} was rejected.`
+        kind === 'approve' ? `${seller.shop_name} is approved and gets an app notification.` : kind === 'suspend' ? `${seller.shop_name} is suspended.` : `${seller.shop_name} was rejected.`
       );
       setDeciding(null);
       setReason('');
@@ -350,8 +346,6 @@ export function SellerDetail() {
 
       <LocationSection seller={seller} onChanged={(s) => adopt({ ...seller, ...s })} />
 
-      <StockNotesSection seller={seller} />
-
       <StatementSection statement={statement} />
 
       <PayoutRequestsSection seller={seller} onPaid={(s) => setStatement(s)} />
@@ -369,8 +363,8 @@ export function SellerDetail() {
             <h2 className="modal__title">Approve {seller.shop_name}?</h2>
             <p className="modal__message">
               {seller.status === 'SUSPENDED'
-                ? 'They can add products again and get an SMS. Products that were switched off when they were suspended stay off until you switch them on in Products.'
-                : 'They can add products from now on and get an SMS.'}
+                ? 'They can add products again and get an app notification. Products that were switched off when they were suspended stay off until you switch them on in Products.'
+                : 'They can add products from now on and get an app notification.'}
             </p>
             {/* A warning, not a block (lead, 2026-10-24): the seller can pin the shop later. */}
             {approvedPoint(seller) ? null : (
@@ -423,7 +417,7 @@ export function SellerDetail() {
           >
             <h2 className="modal__title">Reject {seller.shop_name}?</h2>
             <label className="field">
-              <span className="field__label">Reason (sent to the seller by SMS)</span>
+              <span className="field__label">Reason (sent to the seller as an app notification)</span>
               <textarea
                 className="input"
                 rows={3}
@@ -1006,165 +1000,8 @@ function ListState({ state, empty }: { state: Loaded<unknown>; empty: string }) 
 }
 
 /**
- * Goods the seller says they are bringing (migration 057). Receiving puts the counted quantity on
- * the product's tracked stock (a restock in the stock history) and texts the seller.
- */
-function StockNotesSection({ seller }: { seller: AdminSeller }) {
-  const toast = useToast();
-  const [state, setRows] = useSellerList<StockNote>(() => sellerStockNotes.list({ status: 'SENT', seller_id: seller.id }), [seller.id]);
-  const [receiving, setReceiving] = useState<StockNote | null>(null);
-  const [quantity, setQuantity] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [cancelling, setCancelling] = useState<StockNote | null>(null);
-  const [busy, setBusy] = useState(false);
-  const rows = state && 'rows' in state ? state.rows : [];
-
-  async function receive(note: StockNote) {
-    const read = parseQuantity(quantity);
-    if ('error' in read) {
-      setError(read.error);
-      return;
-    }
-    setBusy(true);
-    try {
-      const r = await sellerStockNotes.receive(note.id, read.value);
-      setRows(rows.filter((n) => n.id !== note.id));
-      setReceiving(null);
-      toast.success(`${read.value} of ${note.product_name} received. Stock now ${r.stock_on_hand ?? read.value}.`);
-    } catch (err) {
-      setError(errorMessage(err, 'Could not receive the goods.'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function cancel(note: StockNote) {
-    setBusy(true);
-    try {
-      await sellerStockNotes.cancel(note.id);
-      setRows(rows.filter((n) => n.id !== note.id));
-      toast.success('Stock note cancelled.');
-    } catch (err) {
-      toast.error(errorMessage(err, 'Could not cancel the stock note.'));
-    } finally {
-      setCancelling(null);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="seller-card" aria-label="Stock coming in">
-      <h2 className="form__section-title">Stock coming in</h2>
-      <p className="form__note">Goods the seller says they are bringing. Count what arrives and receive it: it goes onto the product's stock.</p>
-      <ListState state={state} empty="Nothing on its way." />
-      {rows.length > 0 ? (
-        <div className="table-wrap">
-          <table className="table" aria-label="Stock notes">
-            <thead>
-              <tr>
-                <th scope="col">Product</th>
-                <th scope="col" className="num">
-                  Coming
-                </th>
-                <th scope="col">Expected</th>
-                <th scope="col" className="num">
-                  In stock now
-                </th>
-                <th scope="col">Note</th>
-                <th scope="col" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((n) => (
-                <tr key={n.id}>
-                  <td>{n.product_name}</td>
-                  <td className="num">{n.quantity}</td>
-                  <td>{n.expected_on ? dayText(n.expected_on) : 'Not said'}</td>
-                  <td className="num">{n.stock_on_hand ?? '—'}</td>
-                  <td>{n.note || '—'}</td>
-                  <td>
-                    <div className="row-actions">
-                      <button
-                        type="button"
-                        className="button button--sm"
-                        aria-label={`Receive ${n.product_name}`}
-                        onClick={() => {
-                          setQuantity(String(n.quantity));
-                          setError(null);
-                          setReceiving(n);
-                        }}
-                      >
-                        Receive
-                      </button>
-                      <button type="button" className="button button--sm button--ghost" aria-label={`Cancel stock note for ${n.product_name}`} onClick={() => setCancelling(n)}>
-                        Cancel
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-
-      {receiving ? (
-        <div className="modal" role="dialog" aria-modal="true" aria-label="Receive stock">
-          <form
-            className="modal__panel"
-            noValidate
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!busy) void receive(receiving);
-            }}
-          >
-            <h2 className="modal__title">Receive {receiving.product_name}</h2>
-            <p className="modal__message">The seller said {receiving.quantity}. Enter how many actually arrived; that number goes onto the stock and the seller gets an SMS.</p>
-            <label className="field">
-              <span className="field__label">Received quantity</span>
-              <input
-                className="input"
-                inputMode="numeric"
-                maxLength={String(STOCK_NOTE_MAX).length + 1}
-                value={quantity}
-                onChange={(e) => {
-                  setQuantity(e.target.value);
-                  setError(null);
-                }}
-              />
-              {error ? <span className="field__error">{error}</span> : null}
-            </label>
-            <div className="modal__actions">
-              <button type="button" className="button button--ghost" onClick={() => setReceiving(null)}>
-                Cancel
-              </button>
-              <button type="submit" className="button" disabled={busy}>
-                {busy ? 'Receiving…' : 'Receive'}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
-
-      {cancelling ? (
-        <ConfirmDialog
-          title="Cancel this stock note?"
-          message={`${cancelling.quantity} of ${cancelling.product_name} will no longer be expected. Nothing changes in the stock.`}
-          confirmLabel={busy ? 'Cancelling…' : 'Cancel note'}
-          destructive
-          onConfirm={() => {
-            if (!busy) void cancel(cancelling);
-          }}
-          onCancel={() => setCancelling(null)}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-/**
  * The seller's waiting payout request (migration 057). Paying records the payout in the ledger below
- * (same as Record payment) and texts the seller; declining needs a reason, which is texted too.
+ * (same as Record payment) and notifies the seller in the app; declining needs a reason, which is sent too.
  */
 function PayoutRequestsSection({ seller, onPaid }: { seller: AdminSeller; onPaid(s: SellerStatement): void }) {
   const toast = useToast();
@@ -1288,7 +1125,7 @@ function PayoutRequestsSection({ seller, onPaid }: { seller: AdminSeller; onPaid
           >
             <h2 className="modal__title">Paid {lkr(paying.amount)}?</h2>
             <p className="modal__message">
-              Pay {seller.shop_name} yourself ({METHOD_LABEL[paying.method].toLowerCase()}), then record it here. It is added to the payments below and the seller gets an SMS.
+              Pay {seller.shop_name} yourself ({METHOD_LABEL[paying.method].toLowerCase()}), then record it here. It is added to the payments below and the seller gets an app notification.
             </p>
             <div className="field">
               <span className="field__label">Paid on</span>
@@ -1327,7 +1164,7 @@ function PayoutRequestsSection({ seller, onPaid }: { seller: AdminSeller; onPaid
           >
             <h2 className="modal__title">Decline {lkr(declining.amount)}?</h2>
             <label className="field">
-              <span className="field__label">Reason (sent to the seller by SMS)</span>
+              <span className="field__label">Reason (sent to the seller as an app notification)</span>
               <textarea
                 className="input"
                 rows={3}

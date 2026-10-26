@@ -464,29 +464,9 @@ export function commissionBody(
 export const commissionText = (pct: number | null | undefined): string =>
   pct === null || pct === undefined ? 'Category rates' : `${Number(pct)}%`;
 
-// ---------------------------------------------------------------- stock notes and payout requests (migration 057)
+// ---------------------------------------------------------------- payout requests (migration 057)
 
-export type StockNoteStatus = 'SENT' | 'RECEIVED' | 'CANCELLED';
 export type PayoutRequestStatus = 'REQUESTED' | 'PAID' | 'DECLINED' | 'WITHDRAWN';
-
-export interface StockNote {
-  id: string;
-  product_id: string;
-  product_name: string;
-  image_url: string | null;
-  unit: string;
-  pack_size: string | null;
-  quantity: number;
-  expected_on: string | null;
-  note: string | null;
-  status: StockNoteStatus;
-  received_quantity: number | null;
-  received_at: string | null;
-  cancelled_at: string | null;
-  created_at: string;
-  stock_on_hand: number | null;
-  seller: { id: string; shop_name: string; phone: string | null; email: string | null };
-}
 
 export interface PayoutRequest {
   id: string;
@@ -505,32 +485,9 @@ export interface PayoutRequest {
   due: number;
 }
 
-export const STOCK_NOTE_MAX = 10_000;
-
-/** A received quantity typed by staff: a whole number 1 to 10,000. */
-export function parseQuantity(text: string): { value: number } | { error: string } {
-  const t = text.trim().replace(/,/g, '');
-  if (!/^\d+$/.test(t)) return { error: 'Enter how many arrived (a whole number).' };
-  const value = Number(t);
-  if (value < 1) return { error: 'At least 1. Cancel the note if nothing came.' };
-  if (value > STOCK_NOTE_MAX) return { error: `At most ${STOCK_NOTE_MAX.toLocaleString('en-US')}.` };
-  return { value };
-}
-
-/** Open stock notes and payout requests per seller id, for the Sellers list badges. */
-export function openCounts(
-  notes: ReadonlyArray<{ seller: { id: string } }>,
-  requests: ReadonlyArray<{ seller: { id: string } }>
-): Map<string, { stock: number; payout: number }> {
-  const out = new Map<string, { stock: number; payout: number }>();
-  const bump = (id: string, key: 'stock' | 'payout') => {
-    const c = out.get(id) ?? { stock: 0, payout: 0 };
-    c[key] += 1;
-    out.set(id, c);
-  };
-  for (const n of notes) bump(n.seller.id, 'stock');
-  for (const r of requests) bump(r.seller.id, 'payout');
-  return out;
+/** The ids of sellers that have a payout request waiting, for the Sellers list badge. */
+export function payoutRequesters(requests: ReadonlyArray<{ seller: { id: string } }>): Set<string> {
+  return new Set(requests.map((r) => r.seller.id));
 }
 
 export const METHOD_LABEL: Record<PayoutRequest['method'], string> = { BANK: 'Bank transfer', CASH: 'Cash' };

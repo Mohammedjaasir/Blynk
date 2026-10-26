@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { sellerCommission, sellerPayoutRequests, sellerStockNotes, sellers as sellersApi } from '../api/resources';
+import { sellerCommission, sellerPayoutRequests, sellers as sellersApi } from '../api/resources';
 import { PageHeader } from '../components/Layout';
 import { Badge, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
@@ -16,7 +16,7 @@ import {
   lkr,
   newSellerBody,
   notReady,
-  openCounts,
+  payoutRequesters,
   phoneInUseText,
   sellerContact,
   sellerStatusTone,
@@ -31,7 +31,7 @@ import './sellers.css';
 /**
  * Sellers (seller portal, 2026-10-24). Sellers are invite-only: staff add each shop here with the
  * phone number it signs in with (SMS code on the seller site). Open one to approve, reject or
- * suspend them, set their commission, receive the goods they bring, see what Blynk owes them, pay
+ * suspend them, set their commission, see what Blynk owes them, pay
  * their payout requests and record payouts. Their product submissions wait under Seller products.
  * The "Seller commission" panel sets what Blynk keeps: a default and per-category rates.
  */
@@ -43,7 +43,7 @@ export function Sellers() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<SellerStatus | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
-  const [open, setOpen] = useState<Map<string, { stock: number; payout: number }>>(new Map());
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [showCommission, setShowCommission] = useState(false);
 
@@ -69,12 +69,13 @@ export function Sellers() {
     };
   }, [search]);
 
-  // Badges: goods on their way and waiting payout requests (migration 057). An extra: a failure
+  // Badge: a waiting payout request (migration 057). An extra: a failure
   // (or the API before the migration) just shows no badges.
   useEffect(() => {
     let live = true;
-    Promise.all([sellerStockNotes.list({ status: 'SENT' }), sellerPayoutRequests.list({ status: 'REQUESTED' })])
-      .then(([notes, requests]) => live && setOpen(openCounts(notes, requests)))
+    sellerPayoutRequests
+      .list({ status: 'REQUESTED' })
+      .then((requests) => live && setOpen(payoutRequesters(requests)))
       .catch(() => undefined);
     return () => {
       live = false;
@@ -175,7 +176,7 @@ export function Sellers() {
             </thead>
             <tbody>
               {shown.map((s) => {
-                const o = open.get(s.id);
+                const payoutWaiting = open.has(s.id);
                 return (
                   <tr key={s.id}>
                     <td>
@@ -188,10 +189,7 @@ export function Sellers() {
                       ) : !approvedPoint(s) ? (
                         <span className="sellers__chip">No location</span>
                       ) : null}
-                      {o && o.stock > 0 ? (
-                        <span className="sellers__chip sellers__chip--stock">{o.stock === 1 ? '1 stock note' : `${o.stock} stock notes`}</span>
-                      ) : null}
-                      {o && o.payout > 0 ? <span className="sellers__chip sellers__chip--payout">Payout requested</span> : null}
+                      {payoutWaiting ? <span className="sellers__chip sellers__chip--payout">Payout requested</span> : null}
                     </td>
                     <td className="mono">{sellerContact(s)}</td>
                     <td>

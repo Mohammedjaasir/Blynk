@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
-import { sellerPayoutRequests, sellerStockNotes, sellers as sellersApi } from '../../api/sellers';
+import { sellerPayoutRequests, sellers as sellersApi } from '../../api/sellers';
 import { PageHeader } from '../../components/Layout';
 import { ConfirmDialog, EmptyState, Spinner } from '../../components/ui';
 import { colomboTodayDay } from '../../lib/catalog';
@@ -11,7 +11,6 @@ import {
   METHOD_LABEL,
   NOT_READY_TEXT,
   REASON_LIMITS,
-  STOCK_NOTE_MAX,
   approvedPoint,
   dayText,
   distanceText,
@@ -23,7 +22,6 @@ import {
   notReady,
   parseCommission,
   parseMoney,
-  parseQuantity,
   pendingPoint,
   phoneInUseText,
   readablePhone,
@@ -36,7 +34,6 @@ import {
   type PayoutRequest,
   type SellerPayout,
   type SellerStatement,
-  type StockNote,
 } from '../../lib/sellers';
 import { BackToMore, SellerStatusPill, Sheet, TextField, type Loaded } from './parts';
 import './sellers.css';
@@ -45,9 +42,9 @@ import './sellers.css';
  * One seller (owner, 2026-10-25: the seller admin inside Ops; same API as Admin's SellerDetail).
  * Profile (staff keep the sign-in phone and contact details: sellers are invite-only), the status
  * decisions (approve / reject with a reason / suspend), the commission (their own rate or the
- * category rates), the shop location (approve / reject the pin the seller set), goods they say are
- * coming (receive onto the stock / cancel), the statement, their payout requests (pay / decline) and
- * the payouts ledger (payments are made by hand and recorded here; a mistaken entry can be deleted).
+ * category rates), the shop location (approve / reject the pin the seller set), the statement, their
+ * payout requests (pay / decline) and the payouts ledger (payments are made by hand and recorded
+ * here; a mistaken entry can be deleted).
  */
 type Decision = 'approve' | 'reject' | 'suspend';
 type Notify = (text: string) => void;
@@ -110,7 +107,7 @@ export function SellerDetail() {
         kind === 'approve' ? { status: 'APPROVED' } : kind === 'suspend' ? { status: 'SUSPENDED' } : { status: 'REJECTED', rejection_reason: reason.trim() }
       );
       adopt({ ...seller, ...updated });
-      setNotice(kind === 'approve' ? `${seller.shop_name} is approved and gets an SMS.` : kind === 'suspend' ? `${seller.shop_name} is suspended.` : `${seller.shop_name} was rejected.`);
+      setNotice(kind === 'approve' ? `${seller.shop_name} is approved and gets an app notification.` : kind === 'suspend' ? `${seller.shop_name} is suspended.` : `${seller.shop_name} was rejected.`);
       setDeciding(null);
       setReason('');
     } catch (err) {
@@ -335,8 +332,6 @@ export function SellerDetail() {
 
       <LocationSection seller={seller} onChanged={(s) => adopt({ ...seller, ...s })} onNotify={setNotice} />
 
-      <StockNotesSection seller={seller} onNotify={setNotice} />
-
       <StatementSection statement={statement} />
 
       <PayoutRequestsSection seller={seller} onPaid={(s) => setStatement(s)} onNotify={setNotice} />
@@ -349,8 +344,8 @@ export function SellerDetail() {
             <h2 className="modal__title">Approve {seller.shop_name}?</h2>
             <p className="modal__message">
               {seller.status === 'SUSPENDED'
-                ? 'They can add products again and get an SMS. Products that were switched off when they were suspended stay off until you switch them on in Products.'
-                : 'They can add products from now on and get an SMS.'}
+                ? 'They can add products again and get an app notification. Products that were switched off when they were suspended stay off until you switch them on in Products.'
+                : 'They can add products from now on and get an app notification.'}
             </p>
             {/* A warning, not a block: the seller can pin the shop later. */}
             {approvedPoint(seller) ? null : (
@@ -403,7 +398,7 @@ export function SellerDetail() {
           onClose={() => setDeciding(null)}
           onSubmit={() => void decide('reject')}
         >
-          <TextField label="Reason (sent to the seller by SMS)" error={reasonError}>
+          <TextField label="Reason (sent to the seller as an app notification)" error={reasonError}>
             <textarea
               className="input"
               rows={3}
@@ -903,127 +898,8 @@ function ListState({ state, empty }: { state: Loaded<unknown>; empty: string }) 
 }
 
 /**
- * Goods the seller says they are bringing (migration 057). Receiving puts the counted quantity on
- * the product's tracked stock (a restock in the stock history) and texts the seller.
- */
-function StockNotesSection({ seller, onNotify }: { seller: AdminSeller; onNotify: Notify }) {
-  const [state, setRows] = useSellerList<StockNote>(() => sellerStockNotes.list({ status: 'SENT', seller_id: seller.id }), [seller.id]);
-  const [receiving, setReceiving] = useState<StockNote | null>(null);
-  const [quantity, setQuantity] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [cancelling, setCancelling] = useState<StockNote | null>(null);
-  const [busy, setBusy] = useState(false);
-  const rows = state && 'rows' in state ? state.rows : [];
-
-  async function receive(note: StockNote) {
-    const read = parseQuantity(quantity);
-    if ('error' in read) {
-      setError(read.error);
-      return;
-    }
-    setBusy(true);
-    try {
-      const r = await sellerStockNotes.receive(note.id, read.value);
-      setRows(rows.filter((n) => n.id !== note.id));
-      setReceiving(null);
-      onNotify(`${read.value} of ${note.product_name} received. Stock now ${r.stock_on_hand ?? read.value}.`);
-    } catch (err) {
-      setError(notReady(err) ? NOT_READY_TEXT : errorMessage(err, 'Could not receive the goods.'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function cancel(note: StockNote) {
-    setBusy(true);
-    try {
-      await sellerStockNotes.cancel(note.id);
-      setRows(rows.filter((n) => n.id !== note.id));
-      onNotify('Stock note cancelled.');
-    } catch (err) {
-      onNotify(notReady(err) ? NOT_READY_TEXT : errorMessage(err, 'Could not cancel the stock note.'));
-    } finally {
-      setCancelling(null);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="card" aria-label="Stock coming in">
-      <h2 className="growth-card__title">Stock coming in</h2>
-      <p className="sellers-card__meta">Goods the seller says they are bringing. Count what arrives and receive it: it goes onto the product&apos;s stock.</p>
-      <ListState state={state} empty="Nothing on its way." />
-      {rows.map((n) => (
-        <div key={n.id} className="seller-point" role="group" aria-label={`Stock note for ${n.product_name}`}>
-          <p className="seller-point__title">{n.product_name}</p>
-          <p className="sellers-card__meta">
-            {n.quantity} coming · expected {n.expected_on ? dayText(n.expected_on) : 'not said'} · in stock now {n.stock_on_hand ?? '—'}
-          </p>
-          {n.note ? <p className="sellers-card__meta">{n.note}</p> : null}
-          <div className="sellers-actions">
-            <button
-              type="button"
-              className="button button--ink"
-              aria-label={`Receive ${n.product_name}`}
-              onClick={() => {
-                setQuantity(String(n.quantity));
-                setError(null);
-                setReceiving(n);
-              }}
-            >
-              Receive
-            </button>
-            <button type="button" className="button" aria-label={`Cancel stock note for ${n.product_name}`} onClick={() => setCancelling(n)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      ))}
-
-      {receiving ? (
-        <Sheet
-          label="Receive stock"
-          title={`Receive ${receiving.product_name}`}
-          message={`The seller said ${receiving.quantity}. Enter how many actually arrived; that number goes onto the stock and the seller gets an SMS.`}
-          busy={busy}
-          submitLabel={busy ? 'Receiving…' : 'Receive'}
-          onClose={() => setReceiving(null)}
-          onSubmit={() => void receive(receiving)}
-        >
-          <TextField label="Received quantity" error={error}>
-            <input
-              className="input"
-              inputMode="numeric"
-              maxLength={String(STOCK_NOTE_MAX).length + 1}
-              value={quantity}
-              onChange={(e) => {
-                setQuantity(e.target.value);
-                setError(null);
-              }}
-            />
-          </TextField>
-        </Sheet>
-      ) : null}
-
-      {cancelling ? (
-        <ConfirmDialog
-          title="Cancel this stock note?"
-          message={`${cancelling.quantity} of ${cancelling.product_name} will no longer be expected. Nothing changes in the stock.`}
-          confirmLabel={busy ? 'Cancelling…' : 'Cancel note'}
-          destructive
-          onConfirm={() => {
-            if (!busy) void cancel(cancelling);
-          }}
-          onCancel={() => setCancelling(null)}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-/**
  * The seller's waiting payout request (migration 057). Paying records the payout in the ledger
- * (same as Record payment) and texts the seller; declining needs a reason, which is texted too.
+ * (same as Record payment) and notifies the seller in the app; declining needs a reason, which is sent too.
  */
 function PayoutRequestsSection({ seller, onPaid, onNotify }: { seller: AdminSeller; onPaid(s: SellerStatement): void; onNotify: Notify }) {
   const today = colomboTodayDay();
@@ -1138,7 +1014,7 @@ function PayoutRequestsSection({ seller, onPaid, onNotify }: { seller: AdminSell
         <Sheet
           label="Pay the seller"
           title={`Paid ${lkr(paying.amount)}?`}
-          message={`Pay ${seller.shop_name} yourself (${METHOD_LABEL[paying.method].toLowerCase()}), then record it here. It is added to the payments and the seller gets an SMS.`}
+          message={`Pay ${seller.shop_name} yourself (${METHOD_LABEL[paying.method].toLowerCase()}), then record it here. It is added to the payments and the seller gets an app notification.`}
           busy={busy}
           submitLabel={busy ? 'Recording…' : 'Record payment'}
           onClose={() => setPaying(null)}
@@ -1164,7 +1040,7 @@ function PayoutRequestsSection({ seller, onPaid, onNotify }: { seller: AdminSell
           onClose={() => setDeclining(null)}
           onSubmit={() => void decline(declining)}
         >
-          <TextField label="Reason (sent to the seller by SMS)" error={error}>
+          <TextField label="Reason (sent to the seller as an app notification)" error={error}>
             <textarea
               className="input"
               rows={3}

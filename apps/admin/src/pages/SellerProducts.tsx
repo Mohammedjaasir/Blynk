@@ -167,7 +167,7 @@ function SubmissionCard({
     setBusy(true);
     try {
       await sellerSubmissions.approve(sub.id, read.body);
-      onDone(`${name} is approved${isEdit ? '' : ' and live'}. The seller gets an SMS.`);
+      onDone(`${name} is approved${isEdit ? '' : ' and live'}. The seller gets an app notification.`);
     } catch (err) {
       setError(errorMessage(err, 'Could not approve this.'));
       setBusy(false);
@@ -183,7 +183,7 @@ function SubmissionCard({
     setBusy(true);
     try {
       await sellerSubmissions.reject(sub.id, reason.trim());
-      onDone(`${name} was rejected. The seller gets an SMS.`);
+      onDone(`${name} was rejected. The seller gets an app notification.`);
     } catch (err) {
       onFailed(errorMessage(err, 'Could not reject this.'));
       setRejecting(false);
@@ -353,7 +353,7 @@ function SubmissionCard({
           >
             <h2 className="modal__title">Reject {name}?</h2>
             <label className="field">
-              <span className="field__label">Reason (sent to the seller by SMS)</span>
+              <span className="field__label">Reason (sent to the seller as an app notification)</span>
               <textarea
                 className="input"
                 rows={3}

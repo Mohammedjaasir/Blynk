@@ -53,8 +53,7 @@
   .submission__body { grid-template-columns: 1fr; }
 }
 
-/* Invite-only sellers, commission by category, stock notes and payout requests (migration 057) */
-.sellers__chip--stock { background: #e8f0fe; color: #1a3d8f; }
+/* Invite-only sellers, commission by category and payout requests (migration 057) */
 .sellers__chip--payout { background: #e6f4ea; color: #1b5e20; }
 .sellers__check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .sellers__commission { max-width: 720px; }
