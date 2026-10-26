@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { sellerApi } from '../api/resources';
 import type { InsightDays, InsightProduct, Insights } from '../api/types';
 import { errorMessage } from '../lib/apiErrors';
 import { formatDate, formatNumber, lkr } from '../lib/format';
 import { isFeatureOff, stockLine, trendOf, type Trend } from '../lib/requests';
-import { IconMinus, IconSpark, IconTrendDown, IconTrendUp, IconTruck } from './icons';
+import { IconBox, IconMinus, IconSpark, IconTrendDown, IconTrendUp } from './icons';
 import { Illustration } from './Illustration';
 import { ErrorState } from './ui';
 
@@ -54,11 +55,11 @@ function TrendMark({ trend, days, size = 16 }: { trend: Trend; days: InsightDays
 
 /**
  * "Best sellers this week" on the home screen: the top products by units sold,
- * with a trend arrow against the period before, a bar, stock left at Blynk and
+ * with a trend arrow against the period before, a bar, stock left and
  * a "Restock soon" badge. 7 / 30 days. Hidden while the server has no insights
  * yet (503 SELLER_REQUESTS_NOT_READY or 404).
  */
-export function BestSellers({ onBringMore }: { onBringMore?: (productId: string) => void }) {
+export function BestSellers() {
   const [days, setDays] = useState<InsightDays>(7);
   const [data, setData] = useState<Insights | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'off' | 'error'>('loading');
@@ -182,7 +183,6 @@ export function BestSellers({ onBringMore }: { onBringMore?: (productId: string)
                   index={index}
                   max={max}
                   days={days}
-                  onBringMore={onBringMore}
                 />
               ))}
             </ol>
@@ -198,13 +198,11 @@ function BestRow({
   index,
   max,
   days,
-  onBringMore,
 }: {
   item: InsightProduct;
   index: number;
   max: number;
   days: InsightDays;
-  onBringMore?: (productId: string) => void;
 }) {
   const trend = trendOf(item.units, item.units_prev_period);
   const share = Math.max(3, Math.round(((Number(item.units) || 0) / max) * 100));
@@ -245,15 +243,10 @@ function BestRow({
               Restock soon
             </span>
           ) : null}
-          {item.restock_suggested && onBringMore ? (
-            <button
-              type="button"
-              className="brow__more"
-              onClick={() => onBringMore(item.product_id)}
-              aria-label={`Bring more ${item.name}`}
-            >
-              <IconTruck size={15} /> Bring more
-            </button>
+          {item.restock_suggested ? (
+            <Link to="/stock" className="brow__more" aria-label={`Update stock of ${item.name}`}>
+              <IconBox size={15} /> Update stock
+            </Link>
           ) : null}
         </div>
       </div>

@@ -270,3 +270,25 @@ export const IconSpark = (p: IconProps) => (
     <path d="M18.5 16.5v4M16.5 18.5h4" />
   </Svg>
 );
+
+export const IconBell = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15L6 16.5Z" />
+    <path d="M10 20.5a2.2 2.2 0 0 0 4 0" />
+  </Svg>
+);
+
+export const IconDownload = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" />
+    <path d="M4.5 19.5h15" />
+  </Svg>
+);
+
+/** Shelves: the My stock tab. */
+export const IconStock = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3.5" y="3.5" width="17" height="17" rx="2.6" />
+    <path d="M3.5 12h17M12 3.5V12M8 12v8.5M16 12v8.5" />
+  </Svg>
+);

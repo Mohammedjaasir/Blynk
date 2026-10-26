@@ -107,8 +107,12 @@ export interface SellerProduct {
   seller_price: number;
   /** What customers pay; null while the product is not live. */
   selling_price: number | null;
-  /** null when Blynk does not track stock for the product. */
+  /** null when Blynk does not count stock for the product (or has no number yet). */
   stock_on_hand: number | null;
+  /** How many of the on-hand units open orders have reserved; null when not counted. */
+  stock_reserved: number | null;
+  /** false when Blynk staff switched the product to untracked: the seller cannot set its stock. */
+  stock_tracked: boolean;
   units_sold: number;
   live: boolean;
   pending: Submission | null;
@@ -145,36 +149,18 @@ export interface Statement {
 }
 
 /*
- * Seller requests (stock notes, payout requests) and insights. Create actions are
+ * Seller requests (payout requests) and insights. Create actions are
  * for APPROVED shops only; until the database change is live every route answers
  * 503 SELLER_REQUESTS_NOT_READY and the portal leaves these parts out.
  */
 
-export type StockNoteStatus = 'SENT' | 'RECEIVED' | 'CANCELLED';
-
-/** "I am bringing N of this product to the Blynk store on this day." */
-export interface StockNote {
-  id: string;
+/** What PUT /seller/products/:id/stock answers: the live numbers after the change. */
+export interface StockSetResult {
   product_id: string;
-  product_name: string;
-  quantity: number;
-  /** YYYY-MM-DD */
-  expected_on: string;
-  note: string | null;
-  status: StockNoteStatus;
-  /** What Blynk counted when it arrived (may differ from quantity). */
-  received_quantity: number | null;
-  received_at: string | null;
-  created_at: string;
-}
-
-export interface StockNoteInput {
-  product_id: string;
-  /** 1 - 10000 */
-  quantity: number;
-  /** YYYY-MM-DD */
-  expected_on: string;
-  note?: string;
+  stock_on_hand: number;
+  stock_reserved: number | null;
+  /** The on-hand number before this change. */
+  previous: number;
 }
 
 export type PayoutMethod = 'BANK' | 'CASH';

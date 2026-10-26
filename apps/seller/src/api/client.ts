@@ -11,6 +11,9 @@ const BASE_URL: string =
   (import.meta.env?.VITE_API_BASE_URL as string | undefined) ??
   'http://localhost:4000/api/v1';
 
+/** The API address, for the few calls that cannot go through `apiRequest` (see lib/push/devices.ts). */
+export const API_BASE_URL = BASE_URL;
+
 const ACCESS_TOKEN_KEY = 'blynk.seller.accessToken';
 const REFRESH_TOKEN_KEY = 'blynk.seller.refreshToken';
 

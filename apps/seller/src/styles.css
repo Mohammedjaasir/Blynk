@@ -3221,7 +3221,7 @@ textarea:disabled {
 }
 
 /* ===================================================== seller requests */
-/* Best sellers, Send stock to Blynk, Ask for payment (and the sheet they open in). */
+/* Best sellers, Ask for payment (and the sheet it opens in). */
 
 .sr-only {
   position: absolute;
@@ -3334,47 +3334,13 @@ textarea:disabled {
   background: #ececf1;
   transform: rotate(90deg);
 }
-
-/* ---------------------------------------------------- send stock form */
-.stockform__product {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-  padding: 8px;
-  border-radius: 20px;
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--hair);
-}
-.stockform__thumb {
-  flex: none;
-  width: 56px;
-  height: 56px;
-  border-radius: 15px;
-  object-fit: cover;
-}
-.stockform__thumb--none,
-.onhand__thumb--none,
 .brow__thumb--none {
   display: grid;
   place-items: center;
   background: radial-gradient(80% 100% at 25% 15%, #fffbe8 0%, #fff4c4 55%, #fbe9a2 100%);
 }
-.stockform__thumb--none .illo,
-.onhand__thumb--none .illo,
 .brow__thumb--none .illo {
   width: 82%;
-}
-.stockform__product-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  font-size: 14px;
-}
-.stockform__product-text strong {
-  font-size: 16.5px;
-  font-weight: 650;
-  color: var(--ink);
 }
 .stepper {
   display: grid;
@@ -3406,29 +3372,6 @@ input.stepper__input {
   font-weight: 700;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
-}
-.daypick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.daypick__pill {
-  min-height: 40px;
-  font-size: 14.5px;
-}
-.daypick__pill.is-on,
-.daypick__pill.is-on:hover {
-  color: #fff;
-  background: var(--ink);
-}
-
-/* --------------------------------------------------------- stock screen */
-.stock__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
 }
 .stock__core {
   padding: 18px 16px 10px;
@@ -3464,17 +3407,6 @@ input.stepper__input {
   margin: 2px 0 0;
   font-size: 14px;
 }
-.stock__group {
-  margin: 4px 2px 8px;
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.stock__group ~ .stock__group {
-  margin-top: 16px;
-}
 .empty--soft {
   margin-bottom: 8px;
   padding: 18px 16px 22px;
@@ -3496,32 +3428,6 @@ input.stepper__input {
 .empty--soft p {
   margin-bottom: 0;
   font-size: 14.5px;
-}
-
-/* A stock note: the calendar tile, what, how many, and its state. */
-.snotes {
-  display: grid;
-  gap: 8px;
-  margin: 0 0 8px;
-  padding: 0;
-  list-style: none;
-}
-.snote {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 20px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--line);
-  transition: box-shadow 320ms var(--ease), transform 420ms var(--ease);
-}
-.snote--wait {
-  background: linear-gradient(180deg, #fffdf3 0%, #fff 70%);
-  box-shadow: inset 0 0 0 1px rgba(242, 198, 0, 0.32);
-}
-.snote--off {
-  opacity: 0.72;
 }
 .dtile {
   flex: none;
@@ -3560,130 +3466,6 @@ input.stepper__input {
 .dtile--off .dtile__m {
   color: var(--sub);
   background: #efeff3;
-}
-.snote__body {
-  flex: 1;
-  min-width: 0;
-}
-.snote__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px 8px;
-}
-.snote__name {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.snote__meta {
-  margin: 3px 0 0;
-  font-size: 14px;
-  color: var(--sub);
-}
-.snote__meta strong {
-  color: var(--ink);
-}
-.snote__note {
-  margin: 6px 0 0;
-  font-size: 14px;
-  color: var(--text);
-}
-.snote__actions {
-  margin: 2px 0 -8px -6px;
-}
-
-/* Stock at Blynk now. */
-.onhand {
-  margin: 0 0 6px;
-  padding: 0;
-  list-style: none;
-}
-.onhand__row {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 12px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
-}
-.onhand__row:last-child {
-  border-bottom: 0;
-}
-.onhand__thumb {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  object-fit: cover;
-  box-shadow: inset 0 0 0 1px var(--hair);
-}
-.onhand__text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.onhand__name {
-  font-weight: 650;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.onhand__sub {
-  font-size: 13.5px;
-}
-.onhand__count {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.1;
-}
-.onhand__count strong {
-  font-size: 22px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-.onhand__count small {
-  font-size: 12px;
-  color: var(--sub);
-}
-.onhand__more {
-  grid-column: 2 / -1;
-  justify-self: start;
-  min-height: 40px;
-  margin-top: 4px;
-}
-.tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 2px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.tag--way {
-  color: var(--wait-text);
-  background: var(--wait-tint);
-}
-.tag--low {
-  color: var(--danger);
-  background: var(--danger-tint);
-}
-
-/* On a product card. */
-.note--way {
-  background: #f3f6ff;
-  color: #2a3a78;
-}
-.button--bring {
-  gap: 6px;
 }
 
 /* --------------------------------------------------------- best sellers */
@@ -4315,13 +4097,6 @@ input.stepper__input {
 }
 
 @media (min-width: 560px) {
-  .onhand__row {
-    grid-template-columns: 48px minmax(0, 1fr) auto auto;
-  }
-  .onhand__more {
-    grid-column: auto;
-    margin-top: 0;
-  }
 }
 @media (min-width: 760px) {
   .sheet__panel {
@@ -4382,10 +4157,6 @@ input.stepper__input {
     bottom: 28px;
     margin: 0;
   }
-  .stock__grid--split {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 20px;
-  }
   .best__grid {
     grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
     gap: 22px;
@@ -4412,4 +4183,295 @@ input.stepper__input {
   .spinner__dot {
     animation-duration: 2.4s !important;
   }
+}
+
+/* ------------------------------------------------------------ my stock */
+.sedits {
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+.sedit {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.sedit:last-child {
+  border-bottom: 0;
+}
+.sedit__thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.sedit__thumb--none {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(80% 100% at 25% 15%, #fffbe8 0%, #fff4c4 55%, #fbe9a2 100%);
+}
+.sedit__thumb--none .illo {
+  width: 82%;
+}
+.sedit__main {
+  min-width: 0;
+}
+.sedit__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.sedit__name {
+  font-weight: 650;
+  color: var(--ink);
+}
+.sedit__meta {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+}
+.sedit__form {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+.sedit__count {
+  display: flex;
+  flex-direction: column;
+  min-width: 64px;
+  line-height: 1.1;
+}
+.sedit__count strong {
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sedit__count small {
+  font-size: 12px;
+  color: var(--sub);
+}
+.sedit__stepper {
+  display: grid;
+  grid-template-columns: 44px 92px 44px;
+  gap: 6px;
+}
+.sedit__btn {
+  height: 48px;
+  border-radius: 14px;
+}
+input.stepper__input.sedit__input {
+  min-height: 48px;
+  padding: 6px;
+  font-size: 20px;
+}
+.sedit__save {
+  margin-left: auto;
+}
+.sedit__untracked,
+.sedit__msg {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 14px;
+}
+.sedit__saved {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--green-text);
+}
+.stock__waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 2px 0;
+  font-size: 14px;
+}
+a.brow__more {
+  text-decoration: none;
+}
+.button--stock {
+  gap: 6px;
+}
+@media (min-width: 560px) {
+  .sedit {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .sedit__form {
+    grid-column: 3;
+    flex-wrap: nowrap;
+  }
+  .sedit__untracked {
+    grid-column: 3;
+    max-width: 260px;
+  }
+  .sedit__msg {
+    grid-column: 2 / -1;
+  }
+}
+
+/* ----------------------------------------------------- notifications */
+.notify {
+  margin: 0 0 16px;
+}
+.notify__core {
+  padding: 16px;
+}
+.notify__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.notify__badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  color: var(--yellow);
+  background: var(--ink);
+}
+.notify__title {
+  margin: 0;
+  font-size: 18.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.notify__lede {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+.notify__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.notify__state {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14.5px;
+}
+.notify__state svg {
+  flex: none;
+  margin-top: 2px;
+}
+.notify__state--ok {
+  font-weight: 600;
+  color: var(--green-text);
+}
+.notify__state--warn {
+  color: var(--wait-text);
+}
+.notify__error {
+  margin: 10px 0 0;
+}
+
+/* ------------------------------------------------------ install the app */
+.install {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  color: #fff;
+  background: var(--ink);
+}
+.install__icon {
+  display: inline-flex;
+  color: var(--yellow);
+}
+.install__text {
+  display: flex;
+  flex: 1 1 200px;
+  flex-direction: column;
+  margin: 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.78);
+}
+.install__text strong {
+  font-size: 15.5px;
+  color: #fff;
+}
+.install__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.install .button--link {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* -------------------------------------------- a push while the app is open */
+.toasts {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: 12px;
+  right: 12px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(440px, 100%);
+  padding: 12px 8px 12px 14px;
+  border-radius: 18px;
+  color: #fff;
+  background: var(--ink);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  animation: rise 420ms var(--ease) both;
+}
+.toast__icon {
+  display: inline-flex;
+  margin-top: 2px;
+  color: var(--yellow);
+}
+.toast__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.82);
+}
+.toast__text strong {
+  font-size: 15.5px;
+  color: #fff;
+}
+.toast__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: transparent;
+  cursor: pointer;
+}
+.toast__close:hover {
+  background: rgba(255, 255, 255, 0.14);
 }

@@ -4,7 +4,7 @@ import { IconClose } from './icons';
 
 /**
  * A bottom sheet on phones and a centred card on laptops, for the short forms
- * (send stock, ask for payment). A real dialog: focus moves in and comes back,
+ * (ask for payment). A real dialog: focus moves in and comes back,
  * Escape and the backdrop close it, the page behind does not scroll.
  */
 export function Sheet({

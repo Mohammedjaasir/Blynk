@@ -2,13 +2,15 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useSeller } from '../auth/SellerContext';
 import markUrl from '../assets/blynk-mark.png';
-import { IconBox, IconReceipt, IconSignOut, IconStore, IconTruck } from './icons';
+import { IconBox, IconReceipt, IconSignOut, IconStock, IconStore } from './icons';
 import { ErrorState, PageLoading } from './ui';
+import { InstallPrompt } from './InstallPrompt';
 import { StatusBanner } from './StatusBanner';
+import { Toaster } from './Toaster';
 
 const NAV = [
   { to: '/products', label: 'My products', icon: IconBox },
-  { to: '/stock', label: 'Stock', icon: IconTruck },
+  { to: '/stock', label: 'My stock', icon: IconStock },
   { to: '/statement', label: 'Statement', icon: IconReceipt },
   { to: '/shop', label: 'My shop', icon: IconStore },
 ];
@@ -52,6 +54,7 @@ export function Layout() {
       </header>
 
       <main className="page">
+        <InstallPrompt />
         {seller ? <StatusBanner seller={seller} /> : null}
         {status === 'loading' ? (
           <PageLoading label="Loading your shop" />
@@ -63,6 +66,7 @@ export function Layout() {
           </div>
         )}
       </main>
+      <Toaster />
     </div>
   );
 }

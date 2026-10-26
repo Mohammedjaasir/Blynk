@@ -9,7 +9,6 @@ import type {
   Seller,
   SellerProduct,
   Statement,
-  StockNote,
   Submission,
 } from '../api/types';
 import { fail, ok, type Call, type Reply } from './mockApi';
@@ -63,6 +62,8 @@ export function product(overrides: Partial<SellerProduct> = {}): SellerProduct {
     seller_price: 450,
     selling_price: 520,
     stock_on_hand: 12,
+    stock_reserved: 0,
+    stock_tracked: true,
     units_sold: 30,
     live: true,
     pending: null,
@@ -91,22 +92,6 @@ export function statement(overrides: Partial<Statement> = {}): Statement {
       { product_id: 'p2', name: 'Mango Jam', units: 5, gross: 1000 },
     ],
     payouts: [{ id: 'po1', amount: 6000, note: 'Bank transfer', paid_on: '2026-10-15' }],
-    ...overrides,
-  };
-}
-
-export function stockNote(overrides: Partial<StockNote> = {}): StockNote {
-  return {
-    id: 'n1',
-    product_id: 'p1',
-    product_name: 'Kithul Treacle',
-    quantity: 24,
-    expected_on: '2026-10-27',
-    note: null,
-    status: 'SENT',
-    received_quantity: null,
-    received_at: null,
-    created_at: '2026-10-24T04:30:00.000Z',
     ...overrides,
   };
 }

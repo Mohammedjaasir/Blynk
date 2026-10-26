@@ -13,17 +13,14 @@ import {
   IconPencil,
   IconPlus,
   IconRefresh,
-  IconTruck,
   IconWallet,
 } from '../components/icons';
-import { StockNoteSheet } from '../components/StockNoteSheet';
+import { NotificationsNudge } from '../components/NotificationsCard';
 import { EmptyState, ErrorState, Eyebrow, Kpi, PageLoading } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
 import { formatDate, formatNumber, lkr } from '../lib/format';
 import { onboarding } from '../lib/onboarding';
 import { isSubmissionOnly, productState } from '../lib/products';
-import { onTheWay, useSellerRequest, whenWords } from '../lib/requests';
-import { stockable } from './Stock';
 
 /**
  * My products is the seller's home: a welcome card, the getting-started
@@ -38,10 +35,6 @@ export function Products() {
   const [error, setError] = useState<string | null>(null);
   const [money, setMoney] = useState<Statement | null | 'failed'>(null);
   const [notice, setNotice] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null);
-  // "Send stock to Blynk" from a card: the notes list tells us the feature is on (and what is on the way).
-  const notes = useSellerRequest(sellerApi.stockNotes, 'Could not load your stock notes.');
-  const [notesOff, setNotesOff] = useState(false);
-  const [bringing, setBringing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -88,21 +81,6 @@ export function Products() {
   const showTracker = Boolean(steps && !steps.complete && seller?.status !== 'SUSPENDED');
   const showKpis = hasMoney && products !== null && products.length > 0;
   const showBest = seller?.status === 'APPROVED' && products !== null && products.length > 0;
-  const choices = products ? stockable(products) : [];
-  const canBring = canSell && notes.state === 'ready' && !notesOff;
-  const coming = notes.state === 'ready' ? onTheWay(notes.data) : null;
-  const bringMore = canBring
-    ? (id: string) => {
-        if (choices.some((p) => p.id === id)) setBringing(id);
-      }
-    : undefined;
-
-  async function afterStockNote(message: string) {
-    setBringing(null);
-    setNotice(message);
-    await notes.reload();
-  }
-
   const kpis = showKpis ? (
     <dl className={`kpis${showTracker ? ' kpis--row' : ''}`} aria-label="Your shop at a glance">
       <Kpi
@@ -129,7 +107,8 @@ export function Products() {
         </div>
       ) : null}
       {showTracker ? kpis : null}
-      {showBest ? <BestSellers onBringMore={bringMore} /> : null}
+      <NotificationsNudge />
+      {showBest ? <BestSellers /> : null}
 
       <div className="catalogue">
         <div className="page__head page__head--catalogue">
@@ -197,29 +176,12 @@ export function Products() {
                   canSell={canSell}
                   onWithdrawn={afterWithdraw}
                   onError={setError}
-                  coming={coming?.get(product.id) ?? null}
-                  onBringMore={
-                    canBring && choices.some((p) => p.id === product.id) ? () => setBringing(product.id) : undefined
-                  }
                 />
               </li>
             ))}
           </ul>
         )}
       </div>
-
-      {bringing ? (
-        <StockNoteSheet
-          products={choices}
-          productId={bringing}
-          onClose={() => setBringing(null)}
-          onNotReady={() => {
-            setBringing(null);
-            setNotesOff(true);
-          }}
-          onSent={(message) => void afterStockNote(message)}
-        />
-      ) : null}
     </section>
   );
 }
@@ -236,17 +198,11 @@ function ProductCard({
   canSell,
   onWithdrawn,
   onError,
-  coming,
-  onBringMore,
 }: {
   product: SellerProduct;
   canSell: boolean;
   onWithdrawn(): Promise<void>;
   onError(message: string): void;
-  /** Stock the seller said is on the way to Blynk. */
-  coming: { quantity: number; next: string } | null;
-  /** "Bring more": open the send-stock note for this product. */
-  onBringMore?: () => void;
 }) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
@@ -310,7 +266,7 @@ function ProductCard({
             <dd>{product.live && product.selling_price !== null ? lkr(product.selling_price) : 'Blynk sets it'}</dd>
           </div>
           <div className="fact">
-            <dt>Stock at Blynk</dt>
+            <dt>In stock</dt>
             <dd>{product.stock_on_hand === null ? 'Not counted' : formatNumber(product.stock_on_hand)}</dd>
           </div>
           <div className="fact">
@@ -319,14 +275,6 @@ function ProductCard({
           </div>
         </dl>
 
-        {coming ? (
-          <p className="note note--way">
-            <IconTruck size={18} />
-            <span>
-              {formatNumber(coming.quantity)} on the way to Blynk, coming {whenWords(coming.next)}.
-            </span>
-          </p>
-        ) : null}
         {product.pending ? (
           <p className="note note--wait">
             <IconClock size={18} />
@@ -367,10 +315,10 @@ function ProductCard({
               <IconRefresh size={17} /> Fix and send again
             </button>
           ) : null}
-          {onBringMore ? (
-            <button type="button" className="button button--ghost button--small button--bring" onClick={onBringMore}>
-              <IconTruck size={17} /> Bring more
-            </button>
+          {canSell && !submissionOnly && product.live && product.stock_tracked !== false ? (
+            <Link to="/stock" className="button button--ghost button--small button--stock">
+              <IconBox size={17} /> Update stock
+            </Link>
           ) : null}
           {product.pending ? (
             confirming ? (

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/client';
-import type { InsightProduct, PayoutRequest, StockNote } from '../api/types';
+import type { InsightProduct, PayoutRequest } from '../api/types';
 import type { ChipTone } from './products';
 import { errorMessage } from './apiErrors';
-import { formatNumber, todayColombo } from './format';
+import { formatNumber } from './format';
 
 /**
- * Stock notes, payment requests and best sellers need a database change on the
+ * Payment requests and best sellers need a database change on the
  * server. Until it is live every route answers 503 SELLER_REQUESTS_NOT_READY;
  * an older API without the routes answers 404. Either way the portal leaves
  * the part out instead of showing an error.
@@ -25,7 +25,7 @@ export const PAYOUT_OPEN_MESSAGE =
   'You already have a payment request waiting. Blynk will handle that one first - you can withdraw it to ask again.';
 export const AMOUNT_OVER_DUE_MESSAGE = 'That is more than Blynk owes you. Ask for the amount due or less.';
 
-/** A refused stock note or payment request in plain words. */
+/** A refused payment request in plain words. */
 export function requestMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     if (isRequestsNotReady(err)) return NOT_READY_MESSAGE;
@@ -86,57 +86,6 @@ export function useSellerRequest<T>(
   return { ...value, reload };
 }
 
-// ------------------------------------------------------------------ dates
-/** YYYY-MM-DD plus n days. */
-export function addDays(day: string, n: number): string {
-  const d = new Date(`${day}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-/** "Today", "Tomorrow", or "Mon 27 Oct" for a YYYY-MM-DD (Colombo). */
-export function friendlyDay(day: string, today = todayColombo()): string {
-  if (day === today) return 'Today';
-  if (day === addDays(today, 1)) return 'Tomorrow';
-  if (day === addDays(today, -1)) return 'Yesterday';
-  const date = new Date(`${day}T00:00:00+05:30`);
-  if (Number.isNaN(date.getTime())) return day;
-  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Colombo' });
-}
-
-/** For a sentence: "today", "tomorrow", "on Mon 27 Oct". */
-export function whenWords(day: string, today = todayColombo()): string {
-  const when = friendlyDay(day, today);
-  return when === 'Today' || when === 'Tomorrow' || when === 'Yesterday' ? when.toLowerCase() : `on ${when}`;
-}
-
-// ------------------------------------------------------------ stock notes
-export function noteChip(note: StockNote): { label: string; tone: ChipTone } {
-  if (note.status === 'RECEIVED') {
-    const got = note.received_quantity ?? note.quantity;
-    return {
-      label: got === note.quantity ? `Received ${formatNumber(got)}` : `Received ${formatNumber(got)} of ${formatNumber(note.quantity)}`,
-      tone: 'ok',
-    };
-  }
-  if (note.status === 'CANCELLED') return { label: 'Cancelled', tone: 'off' };
-  return { label: 'On its way', tone: 'wait' };
-}
-
-/** Units on the way for each product (SENT notes only). */
-export function onTheWay(notes: StockNote[]): Map<string, { quantity: number; next: string }> {
-  const out = new Map<string, { quantity: number; next: string }>();
-  for (const note of notes) {
-    if (note.status !== 'SENT') continue;
-    const current = out.get(note.product_id);
-    out.set(note.product_id, {
-      quantity: (current?.quantity ?? 0) + Number(note.quantity || 0),
-      next: current && current.next < note.expected_on ? current.next : note.expected_on,
-    });
-  }
-  return out;
-}
-
 // --------------------------------------------------------- payout requests
 export const METHOD_LABEL: Record<PayoutRequest['method'], string> = {
   BANK: 'Bank transfer',
@@ -172,7 +121,7 @@ export function trendOf(units: number, prev: number): Trend {
 /** "12 left · about 4 days" for a best seller. */
 export function stockLine(item: InsightProduct): string {
   if (item.stock_on_hand === null || item.stock_on_hand === undefined) return 'Stock not counted';
-  if (item.stock_on_hand <= 0) return 'Out of stock at Blynk';
+  if (item.stock_on_hand <= 0) return 'Out of stock';
   const left = `${formatNumber(item.stock_on_hand)} left`;
   const days = item.days_of_stock_left;
   if (days === null || days === undefined || !Number.isFinite(Number(days))) return left;

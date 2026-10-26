@@ -11,6 +11,7 @@ import {
 import { ApiError, onSessionEnded, tokenStore } from '../api/client';
 import { auth as authApi, type SessionPayload } from '../api/resources';
 import type { AuthUser } from '../api/types';
+import { pushManager } from '../lib/push';
 
 /**
  * Seller session, built on the existing Blynk phone + SMS code sign-in with
@@ -58,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setSessionEnded(true);
         setStatus('anonymous');
+        // No session to unregister with: just let go of this device's token at Firebase.
+        void pushManager.signedOut(null);
       }),
     []
   );
@@ -100,6 +103,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
+  // Push (installed-app notifications): start once a seller is signed in and, when the browser
+  // already allows notifications, register this device quietly. Nothing here prompts.
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    void pushManager.start().then(() => pushManager.signedIn());
+  }, [status]);
+
   // Only a SELLER keeps the session the sign-in returns.
   const adopt = useCallback((data: SessionPayload) => {
     if (data.user.role !== 'SELLER') {
@@ -121,6 +131,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     signingOut.current = true;
+    // Take this device off the seller's notifications while the session still works (the access
+    // token is sent explicitly: logout revokes the session). A slow network must not hold up signing out.
+    const accessToken = tokenStore.access;
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      pushManager.signedOut(accessToken).catch(() => undefined),
+      new Promise<void>((resolve) => {
+        giveUp = setTimeout(resolve, 4000);
+      }),
+    ]);
+    clearTimeout(giveUp);
     try {
       await authApi.logout();
     } catch {

@@ -132,24 +132,20 @@ describe('best sellers on the home screen', () => {
     expect(await screen.findByTestId('best-units')).toHaveTextContent('31');
   });
 
-  it('"Bring more" on a Restock soon product opens the send-stock note for it', async () => {
+  it('"Update stock" on a Restock soon product goes to My stock', async () => {
     mockApi(
       worldHandler({
         products: PRODUCTS,
-        extra: (call) => {
-          if (call.path === '/seller/insights') return ok(insights());
-          if (call.method === 'GET' && call.path === '/seller/stock-notes') return ok({ notes: [] });
-          return undefined;
-        },
+        extra: (call) => (call.path === '/seller/insights' ? ok(insights()) : undefined),
       })
     );
     renderApp('/products');
     const section = (await screen.findByRole('heading', { name: 'Best sellers this week' })).closest('section')!;
     // Only the restock product offers it in the list.
-    const more = await within(section).findByRole('button', { name: 'Bring more Kithul Treacle' });
-    expect(within(section).queryByRole('button', { name: 'Bring more Mango Jam' })).not.toBeInTheDocument();
+    const more = await within(section).findByRole('link', { name: 'Update stock of Kithul Treacle' });
+    expect(within(section).queryByRole('link', { name: 'Update stock of Mango Jam' })).not.toBeInTheDocument();
     await userEvent.click(more);
-    expect(await screen.findByRole('dialog', { name: 'Bring more Kithul Treacle' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'My stock' })).toBeInTheDocument();
   });
 });
 
@@ -165,7 +161,7 @@ describe('best seller helpers', () => {
     const base = insights().top[0]!;
     expect(stockLine({ ...base, stock_on_hand: 6, days_of_stock_left: 1 })).toBe('6 left · about 1 day');
     expect(stockLine({ ...base, stock_on_hand: 2, days_of_stock_left: 0.4 })).toBe('2 left · runs out today');
-    expect(stockLine({ ...base, stock_on_hand: 0 })).toBe('Out of stock at Blynk');
+    expect(stockLine({ ...base, stock_on_hand: 0 })).toBe('Out of stock');
     expect(stockLine({ ...base, stock_on_hand: 12, days_of_stock_left: null })).toBe('12 left');
   });
 });

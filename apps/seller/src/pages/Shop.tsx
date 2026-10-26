@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useSeller } from '../auth/SellerContext';
 import { IconCalendar, IconLock, IconPhone, IconStore } from '../components/icons';
 import { LocationCard } from '../components/LocationCard';
+import { NotificationsCard } from '../components/NotificationsCard';
 import { Eyebrow, Field, describedBy } from '../components/ui';
 import { errorMessage, fieldErrors } from '../lib/apiErrors';
 import { formatDate, formatNumber } from '../lib/format';
@@ -139,6 +140,8 @@ export function Shop() {
           Your shop is switched off, so the details cannot be changed. Please contact Blynk.
         </p>
       ) : null}
+
+      <NotificationsCard />
 
       <div className="shop__grid">
         <LocationCard

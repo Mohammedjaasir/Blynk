@@ -13,8 +13,7 @@ import type {
   SellerMe,
   SellerProduct,
   Statement,
-  StockNote,
-  StockNoteInput,
+  StockSetResult,
   StoreInfo,
   Submission,
 } from './types';
@@ -103,15 +102,17 @@ export const sellerApi = {
     return apiRequest<Statement>(`/seller/statement${qs ? `?${qs}` : ''}`);
   },
 
-  // ------------------------------------------------- stock notes (SENT -> RECEIVED / CANCELLED)
-  stockNotes: () => apiRequest<{ notes: StockNote[] }>('/seller/stock-notes').then((r) => r.notes ?? []),
-
-  sendStockNote: (input: StockNoteInput) =>
-    apiRequest<{ note: StockNote }>('/seller/stock-notes', { method: 'POST', body: { ...input } }),
-
-  /** Cancel a note Blynk has not received yet. */
-  cancelStockNote: (id: string) =>
-    apiRequest<unknown>(`/seller/stock-notes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // ------------------------------------------------- my stock
+  /**
+   * The seller types how many they have; that number becomes the live stock (SELLER role, own
+   * approved products only). Refusals carry a friendly message: 400 below what open orders have
+   * reserved, 409 PRODUCT_NOT_TRACKED / PRODUCT_NOT_APPROVED / PRODUCT_HAS_VARIANTS.
+   */
+  setStock: (productId: string, quantity: number) =>
+    apiRequest<StockSetResult>(`/seller/products/${encodeURIComponent(productId)}/stock`, {
+      method: 'PUT',
+      body: { quantity },
+    }),
 
   // ------------------------------------------------- payout requests (one open at a time)
   payoutRequests: () =>
