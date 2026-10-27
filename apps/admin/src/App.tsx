@@ -42,6 +42,7 @@ import { SmsOffers } from './pages/SmsOffers';
 import { Notifications } from './pages/Notifications';
 import { Staff } from './pages/Staff';
 import { Sellers } from './pages/Sellers';
+import { SellerApplications } from './pages/SellerApplications';
 import { SellerDetail } from './pages/SellerDetail';
 import { SellerProducts } from './pages/SellerProducts';
 import { RepeatBaskets } from './pages/RepeatBaskets';
@@ -113,6 +114,8 @@ export function AppRoutes() {
         {/* Seller portal (2026-10-24): approve sellers, their products and prices, record payouts. */}
         <Route path="sellers" element={<AdminOnly><Sellers /></AdminOnly>} />
         <Route path="sellers/:id" element={<AdminOnly><SellerDetail /></AdminOnly>} />
+        {/* Seller applications from blynk.lk/seller (2026-10-27). */}
+        <Route path="seller-applications" element={<AdminOnly><SellerApplications /></AdminOnly>} />
         <Route path="seller-products" element={<AdminOnly><SellerProducts /></AdminOnly>} />
         <Route path="category-groups" element={<AdminOnly><CategoryGroups /></AdminOnly>} />
         <Route path="combos" element={<AdminOnly><Combos /></AdminOnly>} />

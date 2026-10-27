@@ -139,6 +139,8 @@ export function pushOpenPath(data: unknown): string {
   const type = typeof d.type === 'string' ? d.type : '';
   const orderId = typeof d.order_id === 'string' ? d.order_id : '';
   if (orderId && /rating/i.test(type)) return `/orders/${encodeURIComponent(orderId)}`;
+  // A shop applied at blynk.lk/seller (owner's brother, 2026-10-27).
+  if (type === 'staff_seller_application') return '/more/seller-applications';
   return '/orders';
 }
 

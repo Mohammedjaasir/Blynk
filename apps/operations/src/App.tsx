@@ -70,6 +70,7 @@ import { Expiry } from './pages/Expiry';
 import { Sellers } from './pages/Sellers/Sellers';
 import { SellerDetail } from './pages/Sellers/SellerDetail';
 import { SellerProducts } from './pages/Sellers/SellerProducts';
+import { SellerApplications } from './pages/Sellers/SellerApplications';
 import { SellerCommission } from './pages/Sellers/SellerCommission';
 import { ProductRequests } from './pages/Catalog/ProductRequests';
 import { Orders as PurchasingOrders } from './pages/Purchasing/Orders';
@@ -246,6 +247,8 @@ export function AppRoutes() {
         <Route path="more/sellers" element={<Sellers />} />
         <Route path="more/sellers/:id" element={<SellerDetail />} />
         <Route path="more/seller-products" element={<SellerProducts />} />
+        {/* Seller applications from blynk.lk/seller (owner's brother, 2026-10-27). */}
+        <Route path="more/seller-applications" element={<SellerApplications />} />
         <Route path="more/seller-commission" element={<SellerCommission />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

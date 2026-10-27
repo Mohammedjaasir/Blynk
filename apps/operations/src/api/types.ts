@@ -1467,6 +1467,12 @@ export interface DeliveryRadiusSetting {
   store_name: string;
 }
 
+/** GET/PATCH /admin/settings/cart-rules (owner, 2026-10-27): rules about what a cart may hold. `one_seller_per_order`
+ * is ON until switched off; the shape has room for more rules (mixed carts for nearby sellers come later). */
+export interface CartRulesSetting {
+  one_seller_per_order: { enabled: boolean };
+}
+
 export interface OrderForSomeoneElseSetting {
   enabled: boolean;
   send_code_to_receiver: boolean;

@@ -23,6 +23,7 @@ import { basePerKmOf, basePerKmText, basketFreeDeliveryText, parseBasePerKm } fr
 import { BasePerKmFields } from '../components/BasePerKmFields';
 import { SmallOrderFeeCard } from '../components/SmallOrderFeeCard';
 import { DeliveryRadiusCard } from '../components/DeliveryRadiusCard';
+import { CartRulesCard } from '../components/CartRulesCard';
 import { CustomerSmsLanguageCard } from '../components/CustomerSmsLanguageCard';
 import { AppVersionCard } from '../components/AppUpdate';
 import { AppUpdatesSettingsCard } from '../components/AppUpdatesSettingsCard';
@@ -248,6 +249,8 @@ export function More() {
       <SmallOrderFeeCard />
       {/* Delivery radius (2026-10-25): how far from the store orders are accepted. */}
       <DeliveryRadiusCard />
+      {/* Cart rules (owner, 2026-10-27): one seller per order, on by default. */}
+      <CartRulesCard />
       {/* Selling prices (owner, 2026-10-13): the markup products fall back to. */}
       <DefaultMarkupCard />
       <CheckoutSettingsCard />

@@ -96,6 +96,7 @@ describe('Admin app access', () => {
       'Product requests',
       'Expiry',
       'Sellers',
+      'Seller applications',
       'Seller products',
       'Promotions',
       'Promo band',

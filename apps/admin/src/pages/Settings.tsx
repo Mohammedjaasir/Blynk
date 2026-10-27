@@ -19,6 +19,7 @@ import type {
 import { BasePerKmEditor, type BasePerKmDrafts, type BasePerKmErrors } from '../components/BasePerKmEditor';
 import { DeliveryRadiusCard } from '../components/DeliveryRadiusCard';
 import { SmallOrderFeeCard } from '../components/SmallOrderFeeCard';
+import { CartRulesCard } from '../components/CartRulesCard';
 import { KmTierEditor, ModeChoice } from '../components/KmTierEditor';
 import { PageHeader } from '../components/Layout';
 import { StoreScheduleSettings } from '../components/StoreSchedulePanels';
@@ -97,6 +98,8 @@ export function Settings() {
       <CheckoutSettingsPanel />
       {/* Small-order fee (owner, 2026-10-25): off by default; needs migration 063. */}
       <SmallOrderFeeCard />
+      {/* Cart rules (owner, 2026-10-27): one seller per order, on by default. */}
+      <CartRulesCard />
       {/* PayHere online payments (migration 047; docs/api/payhere.md). */}
       <PaymentGatewayCard />
       {/* Customer SMS language (owner, 2026-10-12). */}

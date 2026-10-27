@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { riderApplications, sellerSubmissions } from '../api/resources';
+import { sellerApplications } from '../api/sellerApplications';
 import { useAuth } from '../auth/AuthContext';
 import blynkMark from '../assets/blynk-mark.png';
 import blynkWordmark from '../assets/blynk-wordmark-light.png';
@@ -21,6 +22,7 @@ export function Layout() {
   const { pathname } = useLocation();
   const [pendingRiders, setPendingRiders] = useState(0);
   const [pendingSellerProducts, setPendingSellerProducts] = useState(0);
+  const [newSellerApplications, setNewSellerApplications] = useState(0);
 
   // Waiting rider applications, refreshed on every page change.
   useEffect(() => {
@@ -42,6 +44,19 @@ export function Layout() {
     sellerSubmissions
       .pendingCount()
       .then((n) => live && setPendingSellerProducts(n))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [isAdmin, pathname]);
+
+  // Seller applications from blynk.lk/seller still NEW (2026-10-27).
+  useEffect(() => {
+    if (!isAdmin) return;
+    let live = true;
+    sellerApplications
+      .list({ status: 'NEW' })
+      .then((r) => live && setNewSellerApplications(r.new_count))
       .catch(() => undefined);
     return () => {
       live = false;
@@ -143,6 +158,14 @@ export function Layout() {
               <p className="nav__group">Sellers</p>
               <NavLink to="/sellers" className="nav__item">
                 Sellers
+              </NavLink>
+              <NavLink to="/seller-applications" className="nav__item">
+                Seller applications
+                {newSellerApplications > 0 ? (
+                  <span className="nav__badge" aria-label={`${newSellerApplications} new`}>
+                    {newSellerApplications}
+                  </span>
+                ) : null}
               </NavLink>
               <NavLink to="/seller-products" className="nav__item">
                 Seller products

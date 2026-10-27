@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { sellerCommission, sellerPayoutRequests, sellers as sellersApi } from '../api/resources';
+import { sellerApplications as applicationsApi } from '../api/sellerApplications';
 import { PageHeader } from '../components/Layout';
 import { Badge, EmptyState, Spinner, useToast } from '../components/ui';
 import { errorMessage } from '../lib/apiErrors';
@@ -26,6 +27,7 @@ import {
   type NewSellerForm,
   type SellerStatus,
 } from '../lib/sellers';
+import { readAddSellerState, type AddSellerPrefill } from '../lib/sellerApplications';
 import './sellers.css';
 
 /**
@@ -34,18 +36,28 @@ import './sellers.css';
  * suspend them, set their commission, see what Blynk owes them, pay
  * their payout requests and record payouts. Their product submissions wait under Seller products.
  * The "Seller commission" panel sets what Blynk keeps: a default and per-category rates.
+ * "Add as seller" on a seller application (2026-10-27) lands here with the Add seller form open and the shop,
+ * name and phone filled in (router state); once the seller is added the application is marked Approved.
  */
 const when = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' });
 
 export function Sellers() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [prefill, setPrefill] = useState<AddSellerPrefill | null>(() => readAddSellerState(location.state));
   const [rows, setRows] = useState<AdminSeller[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<SellerStatus | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<Set<string>>(new Set());
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(prefill !== null);
   const [showCommission, setShowCommission] = useState(false);
+
+  // The prefill is used once: a reload or a Back does not reopen the form.
+  useEffect(() => {
+    if (readAddSellerState(location.state)) navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -218,9 +230,15 @@ export function Sellers() {
 
       {adding ? (
         <AddSellerDialog
-          onClose={() => setAdding(false)}
+          initial={prefill}
+          onClose={() => {
+            setAdding(false);
+            setPrefill(null);
+          }}
           onAdded={(s) => {
             setAdding(false);
+            if (prefill) void applicationsApi.update(prefill.application_id, { status: 'APPROVED' }).catch(() => undefined);
+            setPrefill(null);
             setRows((r) => [s, ...(r ?? [])]);
             navigate(`/sellers/${s.id}`);
           }}
@@ -233,9 +251,11 @@ export function Sellers() {
 const EMPTY_FORM: NewSellerForm = { shop_name: '', phone: '', contact_name: '', address: '', commission: '', approve: true };
 
 /** Sellers are invite-only (2026-10-24): the shop and the phone it signs in with. */
-function AddSellerDialog({ onClose, onAdded }: { onClose(): void; onAdded(s: AdminSeller): void }) {
+function AddSellerDialog({ initial, onClose, onAdded }: { initial?: AddSellerPrefill | null; onClose(): void; onAdded(s: AdminSeller): void }) {
   const toast = useToast();
-  const [form, setForm] = useState<NewSellerForm>(EMPTY_FORM);
+  const [form, setForm] = useState<NewSellerForm>(
+    initial ? { ...EMPTY_FORM, shop_name: initial.shop_name, contact_name: initial.contact_name, phone: initial.phone } : EMPTY_FORM
+  );
   const [error, setError] = useState<{ text: string; field?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (key: keyof NewSellerForm) => (e: React.ChangeEvent<HTMLInputElement>) => {

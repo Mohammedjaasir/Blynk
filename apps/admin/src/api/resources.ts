@@ -57,6 +57,7 @@ import type {
   DeliveryFeeInput,
   DeliveryFeeSetting,
   DeliveryRadiusSetting,
+  CartRulesSetting,
   SmallOrderFeeSetting,
   CheckoutSettings,
   BasketFreeDeliverySetting,
@@ -477,6 +478,12 @@ export const settings = {
 
   setDeliveryRadius: (radiusKm: number) =>
     apiRequest<DeliveryRadiusSetting>('/admin/settings/delivery-radius', { method: 'PATCH', body: { radius_km: radiusKm } }),
+
+  /** Cart rules (owner, 2026-10-27): one seller per order (ON by default). */
+  getCartRules: () => apiRequest<CartRulesSetting>('/admin/settings/cart-rules'),
+
+  setCartRules: (body: { one_seller_per_order: { enabled: boolean } }) =>
+    apiRequest<CartRulesSetting>('/admin/settings/cart-rules', { method: 'PATCH', body }),
 
   /** Customer SMS language (owner, 2026-10-12): order / sign-in / dental / rider texts. */
   getCustomerSmsLanguage: () => apiRequest<CustomerSmsLanguageSetting>('/admin/settings/customer-sms-language'),

@@ -57,6 +57,7 @@ import type {
   BasketFreeDeliverySetting,
   SmallOrderFeeSetting,
   DeliveryRadiusSetting,
+  CartRulesSetting,
   OrderForSomeoneElseSetting,
   CustomerSmsLanguageMode,
   CustomerSmsLanguageSetting,
@@ -1183,6 +1184,12 @@ export const settings = {
     get: () => apiRequest<DeliveryRadiusSetting>('/admin/settings/delivery-radius'),
     update: (radius_km: number) =>
       apiRequest<DeliveryRadiusSetting>('/admin/settings/delivery-radius', { method: 'PATCH', body: { radius_km } }),
+  },
+  /** Cart rules (owner, 2026-10-27): one seller per order (ON by default). */
+  cartRules: {
+    get: () => apiRequest<CartRulesSetting>('/admin/settings/cart-rules'),
+    update: (body: { one_seller_per_order: { enabled: boolean } }) =>
+      apiRequest<CartRulesSetting>('/admin/settings/cart-rules', { method: 'PATCH', body }),
   },
   /** Customer SMS language (owner, 2026-10-12): order / sign-in / dental / rider texts. */
   customerSmsLanguage: {
