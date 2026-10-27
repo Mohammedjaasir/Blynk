@@ -8,6 +8,7 @@ import { collectEntries } from '@/blynk/cart/sellerGuard';
 import { withLeftOut } from '@/blynk/cart/sellerRule';
 import { cartActions, getCartSnapshot } from '@/lib/cart';
 import { C, F, SPACE, T } from '@/lib/theme';
+import { hideUsuals, useBuyAgainShown } from '../repeat/shownStore';
 import { USUALS } from '../ui/strings';
 import { useUsuals } from './useUsuals';
 import { addUsualsInto, availableUsuals, showUsuals, usualsAddedMessage } from './usuals';
@@ -16,14 +17,17 @@ import { addUsualsInto, availableUsuals, showUsuals, usualsAddedMessage } from '
  * "Your usuals" on Home (Flutter HomeUsualsRow, owner 2026-10-10): the products of the signed-in
  * customer's last order that was not cancelled, as Home's product cards, with "Add all" putting
  * every product on sale now in the cart at its last quantity. Nothing for a guest, while unknown,
- * on a failure, or before a first order.
+ * on a failure, or before a first order - and not when "Buy again" already shows all of its products.
  */
 export function UsualsRow({ cardWidth = 140 }: { cardWidth?: number }) {
   const session = useSession();
   const signedIn = !!session && !needsRegistration(session);
   const usuals = useUsuals();
+  const buyAgain = useBuyAgainShown();
   useTrackList(showUsuals(signedIn, usuals) ? 'Your usuals' : null, usuals?.items.map((u) => u.product) ?? []);
   if (!showUsuals(signedIn, usuals)) return null;
+  // Owner's brother, 2026-10-27: the same product under Buy again and Your usuals is a distraction - one is enough.
+  if (hideUsuals(buyAgain, usuals.items.map((u) => u.product.id))) return null;
   const canAdd = availableUsuals(usuals).length > 0;
 
   const addAll = () => {

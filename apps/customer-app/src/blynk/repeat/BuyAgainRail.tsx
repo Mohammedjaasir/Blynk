@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
@@ -11,6 +11,7 @@ import { C, SPACE, T } from '@/lib/theme';
 import { LoopIcon } from './art';
 import { boughtText, buyAgainView } from './buyAgain';
 import { useBuyAgain, useRepeatBaskets } from './hooks';
+import { setBuyAgainShown } from './shownStore';
 import { REPEAT_WORDS } from './words';
 
 /*
@@ -31,6 +32,14 @@ export function BuyAgainRail({ style }: { style?: StyleProp<ViewStyle> }) {
     () => buyAgainView({ demo: DEMO, signedIn, entries, products: data?.products ?? null }),
     [signedIn, entries, data],
   );
+  // tell "Your usuals" what this rail shows (it stays away when it would only repeat it)
+  useEffect(() => {
+    setBuyAgainShown({
+      resolved: DEMO || !signedIn || (entries !== null && data?.products != null),
+      ids: view.kind === 'cards' ? view.cards.map((c) => c.product.id) : [],
+    });
+  }, [view, entries, signedIn, data]);
+  useEffect(() => () => setBuyAgainShown(null), []);
   useTrackList(view.kind === 'cards' ? 'Buy again' : null, view.kind === 'cards' ? view.cards.map((c) => c.product) : []);
   if (view.kind === 'hidden') return null;
 
