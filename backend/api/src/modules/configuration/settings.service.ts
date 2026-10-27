@@ -39,6 +39,7 @@ import { publicPointsProgram } from '../loyalty/points.rules.js';
 import { hasProductRequestsTable } from '../catalog/product-requests.ready.js';
 import { ratingsReady } from '../ratings/ratings.ready.js';
 import { repeatBasketsReady } from '../repeat-baskets/repeat.ready.js';
+import { cartRulesService } from './cart-rules.js';
 
 /**
  * Store-wide settings and the public store facts (GET /store).
@@ -939,6 +940,9 @@ export class SettingsService {
       // discovery and booking routes answer 404 DOCTORS_DISABLED; a
       // customer's existing appointments stay viewable and cancellable).
       doctors_enabled: doctorsShown(doctors),
+      // Owner's brother, 2026-10-27: a cart holds the items of one seller (or only Blynk's own)
+      // while this is true; the customer app asks to start a new cart (cart-rules.ts).
+      one_seller_per_order: (await cartRulesService.read()).one_seller_per_order.enabled,
       // PayHere (migration 047; owner, 2026-10-14): whether "Pay online" is offered.
       online_payment: await publicOnlinePayment(),
       // Home promo band (owner, 2026-10-14): set in Admin and Ops; null while

@@ -131,6 +131,8 @@ export interface CustomerProductDto {
    * <shop>"), null for Blynk's own products and for a seller who is not approved.
    */
   sold_by: string | null;
+  /** The same approved seller's id (one-seller-per-order cart rule); null for Blynk's own products. */
+  seller_id: string | null;
   /**
    * Migration 060 (owner, 2026-10-25): the other categories this product is also listed in (its
    * category_id stays the main one: offers, hours and the name on the card follow that). The app
@@ -189,6 +191,7 @@ function toCustomerProduct(
     earliest_delivery_date: lead > 0 ? earliestDeliveryDay(orderingClock.now(), lead).date : null,
     show_offer_cut: p.show_offer_cut !== false,
     sold_by: p.sold_by ?? null,
+    seller_id: p.seller_id ?? null,
     extra_category_ids: p.extra_category_ids ?? [],
     ...(withVariants ? { variants: variants ?? [] } : {}),
   };

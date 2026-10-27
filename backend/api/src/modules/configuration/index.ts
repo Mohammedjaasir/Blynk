@@ -32,6 +32,7 @@ import { customerSmsLanguageService, updateCustomerSmsLanguageSchema } from '../
 import { smsLanguagePreview } from '../notifications/sms-language.preview.js';
 import { smallOrderFeeReady } from '../orders/small-order-fee.js';
 import { deliveryRadiusService, updateDeliveryRadiusSchema } from './delivery-radius.js';
+import { cartRulesService, updateCartRulesSchema } from './cart-rules.js';
 import { defaultMarkupSettings, updateDefaultMarkupSchema } from '../catalog/catalog.pricing.js';
 
 export const configurationRouter = Router();
@@ -110,6 +111,25 @@ adminSettingsRouter.patch('/settings/delivery-radius', requireAuth, requireRoles
   try {
     const input = updateDeliveryRadiusSchema.parse(req.body);
     res.json({ success: true, data: await deliveryRadiusService.set(input, actorOf(req)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Cart rules (owner's brother, 2026-10-27): "one seller per order" on/off (ON by default). Audited
+// (CART_RULES_UPDATED); applies to orders placed afterwards. See modules/configuration/cart-rules.ts.
+adminSettingsRouter.get('/settings/cart-rules', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await cartRulesService.get() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminSettingsRouter.patch('/settings/cart-rules', requireAuth, requireRoles(['ADMIN', 'OPERATIONS']), async (req, res, next) => {
+  try {
+    const input = updateCartRulesSchema.parse(req.body);
+    res.json({ success: true, data: await cartRulesService.set(input, actorOf(req)) });
   } catch (err) {
     next(err);
   }

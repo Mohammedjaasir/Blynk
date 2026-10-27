@@ -25,6 +25,8 @@ export const PUSH_TYPES = {
    * notifications"; replaces the SMS). The event is in data.type (SELLER_PRODUCT_APPROVED ...).
    */
   SELLER: 'PUSH_SELLER',
+  /** Staff: a seller application arrived from blynk.lk/seller (owner's brother, 2026-10-27; migration 064). */
+  SELLER_APPLICATION: 'PUSH_SELLER_APPLICATION',
 } as const;
 
 /** What a PUSH outbox row carries; the worker sends exactly this. */

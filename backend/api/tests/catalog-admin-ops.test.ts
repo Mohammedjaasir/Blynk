@@ -254,6 +254,8 @@ describe('Delivery fee setting and GET /store', () => {
       delivery_fee_from_lkr: expect.any(Number),
       // Owner's brother, 2026-10-25: the base + per km formula (null in the other modes) and the small-order fee (off).
       delivery_fee_formula: null,
+      // Owner's brother, 2026-10-27: one seller per order (its own contract is tests/cart-rules.test.ts); the suites pin it off.
+      one_seller_per_order: expect.any(Boolean),
       small_order_fee: { enabled: false, min_subtotal_lkr: 1000, fee_lkr: 50 },
       hub_name: expect.any(String),
       delivery_hours: { start: '08:00', end: '21:00', timezone: 'Asia/Colombo' },

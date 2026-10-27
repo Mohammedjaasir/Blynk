@@ -118,6 +118,11 @@ async function placeBasket(basket: BasketRow, runAt: Date, now: Date): Promise<O
           }
         }
         if (err instanceof AppError && err.code === 'STORE_CLOSED') return { status: 'SKIPPED', reason: 'Store closed', notify: true };
+        // One seller per order (2026-10-27): a basket that mixes sellers (or a seller and Blynk) is not placed
+        // half-way; the run is FAILED with a reason that tells the customer what to change.
+        if (err instanceof AppError && err.code === 'MIXED_SELLERS_NOT_ALLOWED') {
+          return { status: 'FAILED', reason: 'This basket has items from different sellers. Please keep items from one seller only', notify: true };
+        }
         if (err instanceof AppError && err.statusCode < 500) {
           return { status: 'FAILED', reason: clip(err.message, 300), notify: true };
         }

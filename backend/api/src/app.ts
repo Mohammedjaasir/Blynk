@@ -49,6 +49,8 @@ import { adminRatingsRouter, orderRatingsRouter } from './modules/ratings/index.
 import { adminPurchasingRouter } from './modules/purchasing/purchasing.routes.js';
 // The 9 pm daily report SMS (owner, 2026-10-25; no migration).
 import { adminDailyReportRouter } from './modules/daily-report/daily-report.routes.js';
+// Seller applications from blynk.lk/seller (owner's brother, 2026-10-27; migration 064).
+import { adminSellerApplicationsRouter, sellerApplicationsRouter } from './modules/sellers/seller-applications.js';
 
 export function createApp(): Express {
   const app = express();
@@ -167,6 +169,7 @@ export function createApp(): Express {
   apiRouter.use('/riders', ridersRouter);
   apiRouter.use('/notifications', notificationsRouter);
   apiRouter.use('/seller', sellerRouter);
+  apiRouter.use('/seller-applications', sellerApplicationsRouter);
   apiRouter.use('/admin', adminSellersRouter);
   apiRouter.use('/admin', adminRepeatRouter);
   apiRouter.use('/admin', adminExpiryRouter);
@@ -174,6 +177,7 @@ export function createApp(): Express {
   apiRouter.use('/admin', adminRatingsRouter);
   apiRouter.use('/admin', adminPurchasingRouter);
   apiRouter.use('/admin', adminDailyReportRouter);
+  apiRouter.use('/admin', adminSellerApplicationsRouter);
   apiRouter.use('/admin', adminRouter);
   apiRouter.use('/audit', auditRouter);
   apiRouter.use('/configuration', configurationRouter);

@@ -78,6 +78,12 @@ const soldBy = (ok: boolean) =>
     ? sql<string | null>`(SELECT s.shop_name FROM products sp JOIN sellers s ON s.id = sp.seller_id
         WHERE sp.id = v_product_catalog.id AND s.status = 'APPROVED')`.as('sold_by')
     : sql<string | null>`NULL`.as('sold_by');
+/** The same seller as soldBy (approved only), as an id: the customer app's one-seller-per-order cart rule. */
+const sellerIdOf = (ok: boolean) =>
+  ok
+    ? sql<string | null>`(SELECT s.id::text FROM products sp JOIN sellers s ON s.id = sp.seller_id
+        WHERE sp.id = v_product_catalog.id AND s.status = 'APPROVED')`.as('seller_id')
+    : sql<string | null>`NULL`.as('seller_id');
 
 /**
  * Migration 060: the extra categories a customer product is also listed in (never its primary,
@@ -339,6 +345,7 @@ export class CatalogRepository {
         showOfferCut(cut),
         // Migration 052: the approved seller's shop ("Sold by"), else null.
         soldBy(sellers),
+        sellerIdOf(sellers),
         // Migration 060: the extra categories it is also listed in.
         extraCategoryIds(extras),
       ])
@@ -494,6 +501,7 @@ export class CatalogRepository {
         showOfferCut(cut),
         // Migration 052: the approved seller's shop ("Sold by"), else null.
         soldBy(sellers),
+        sellerIdOf(sellers),
         // Migration 060: the extra categories it is also listed in.
         extraCategoryIds(extras),
       ])

@@ -49,6 +49,8 @@ import { checkoutRiderTip, checkoutTipInfo, staffOrderRating } from '../ratings/
 import { applyBundles, noBundles } from './bundle-apply.js';
 import { bundleSummary, withBundleFields, withBundleSummary } from './bundle-view.js';
 import { bundleOffersReady } from './bundle-offers.ready.js';
+// One seller per order (owner's brother, 2026-10-27).
+import { assertSingleSource } from './order-sources.js';
 
 function generateOrderNumber(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -384,6 +386,11 @@ export class OrderService {
       );
       return { order: await withPointsPreview(sanitizeCustomerOrder(existingOrder)), is_idempotent_replay: true };
     }
+
+    // 1a. One seller per order (owner's brother, 2026-10-27; setting cart_rules, ON by default): a cart
+    // of several sellers (or a seller and Blynk) is refused before any stock, price or fee work, so
+    // nothing is reserved. After the replay check, so an order accepted earlier still replays.
+    await assertSingleSource(input.items, input.combos ?? []);
 
     // 1b. Store timing (owner, 2026-10-10: set by Ops and Admin - opening
     // hours, "close the store now", holidays, delivery slots). After the

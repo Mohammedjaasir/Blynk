@@ -1253,7 +1253,30 @@ export interface ProductCategoriesTable {
   created_at: Generated<Date>;
 }
 
+/** Migration 064 (owner's brother, 2026-10-27): the seller application form at blynk.lk/seller (modules/sellers/seller-applications.ts). */
+export type SellerApplicationStatus = 'NEW' | 'CONTACTED' | 'APPROVED' | 'DECLINED';
+export interface SellerApplicationsTable {
+  id: Generated<string>;
+  shop_name: string;
+  owner_name: string;
+  /** Normalized +94XXXXXXXXX. */
+  phone: string;
+  email: string | null;
+  town: string;
+  what_they_sell: string;
+  message: string | null;
+  status: ColumnType<SellerApplicationStatus, SellerApplicationStatus | undefined, SellerApplicationStatus>;
+  staff_note: string | null;
+  handled_by: string | null;
+  handled_at: Date | null;
+  source: ColumnType<string, string | undefined, string>;
+  ip_hash: string | null;
+  created_at: Generated<Date>;
+  updated_at: ColumnType<Date, Date | undefined, Date>;
+}
+
 export interface Database {
+  seller_applications: SellerApplicationsTable;
   product_categories: ProductCategoriesTable;
   product_requests: ProductRequestsTable;
   sellers: SellersTable;
