@@ -188,6 +188,37 @@ describe('My day - staff-controlled pay (owner, 2026-10-10)', () => {
     );
   });
 
+  // Owner's brother, 2026-10-27: Ops set per-km tiers (LKR 55 for km 1, LKR 35 after) but the app said "LKR 50 + LKR 20/km".
+  it('per-km tiers read as the tiers, not as base + per km', async () => {
+    show({
+      ...extended,
+      pay_model: {
+        ...extended.pay_model,
+        model: 'DISTANCE',
+        distance_mode: 'TIERS',
+        km_tiers: [{ km: 1, lkr: 55 }, { km: 2, lkr: 35 }],
+        min_lkr: null,
+      },
+    });
+    const card = await screen.findByRole('region', { name: 'Your earnings' });
+    expect(card).toHaveTextContent('You earn LKR 55 for km 1, then LKR 35 for every km after');
+    expect(card).not.toHaveTextContent('/km per delivery');
+  });
+
+  it('tiers: three rows, one row, a floor, and linear mode (or an older API) keep their wording', async () => {
+    const { tiersText } = await import('../pages/MyDay');
+    expect(tiersText([{ km: 1, lkr: 100 }, { km: 2, lkr: 60 }, { km: 3, lkr: 50 }])).toBe('LKR 100 for km 1, LKR 60 for km 2, then LKR 50 for every km after');
+    expect(tiersText([{ km: 1, lkr: 55 }])).toBe('LKR 55 for every km');
+
+    show({ ...extended, pay_model: { ...extended.pay_model, model: 'DISTANCE', distance_mode: 'TIERS', km_tiers: [{ km: 1, lkr: 55 }, { km: 2, lkr: 35 }], min_lkr: 60 } });
+    expect(await screen.findByRole('region', { name: 'Your earnings' })).toHaveTextContent('You earn LKR 55 for km 1, then LKR 35 for every km after · min LKR 60');
+  });
+
+  it('linear distance pay and an empty tier table still read "LKR 50 + LKR 20/km"', async () => {
+    show({ ...extended, pay_model: { ...extended.pay_model, model: 'DISTANCE', distance_mode: 'LINEAR', km_tiers: [], min_lkr: null } });
+    expect(await screen.findByRole('region', { name: 'Your earnings' })).toHaveTextContent('You earn LKR 50 + LKR 20/km per delivery');
+  });
+
   it('a percent model with a floor reads "80% of each delivery charge · min LKR 70"', async () => {
     show({ ...extended, pay_model: { ...extended.pay_model, model: 'PERCENT', min_lkr: 70 } });
     const card = await screen.findByRole('region', { name: 'Your earnings' });

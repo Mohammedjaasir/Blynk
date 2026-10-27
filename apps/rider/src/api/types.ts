@@ -250,6 +250,12 @@ export interface PayParams {
   base_lkr: number;
   /** DISTANCE: + LKR per km of road distance store -> drop-off. */
   per_km_lkr: number;
+  /**
+   * DISTANCE only (migration 040, owner 2026-10-10): LINEAR = base + per km as above; TIERS = `km_tiers`, one
+   * amount per started km, the last row repeating. Absent on an older API (read as LINEAR).
+   */
+  distance_mode?: 'LINEAR' | 'TIERS';
+  km_tiers?: { km: number; lkr: number }[];
   /** Optional floor per delivery (any model); null = no floor. */
   min_lkr: number | null;
 }

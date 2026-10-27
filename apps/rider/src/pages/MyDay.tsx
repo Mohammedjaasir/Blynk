@@ -257,15 +257,26 @@ const boostText = (mode: BoostMode, amount: number) =>
 /**
  * "You earn 80% of each delivery charge" / "You earn LKR 80 per delivery" /
  * "You earn LKR 50 + LKR 20/km per delivery", plus " · min LKR 60" when the
- * pay has a floor (owner, 2026-10-10).
+ * pay has a floor (owner, 2026-10-10). Per-km tiers (owner's brother, 2026-10-27: "I set 55 for the first km and
+ * 35 after, the rider app says 50 + 20/km") read "LKR 55 for km 1, then LKR 35 for every km after".
  */
+export function tiersText(tiers: { km: number; lkr: number }[]): string {
+  const last = tiers[tiers.length - 1]!;
+  if (tiers.length === 1) return `${formatMoney(last.lkr)} for every km`;
+  const first = tiers.slice(0, -1).map((t) => `${formatMoney(t.lkr)} for km ${t.km}`);
+  return `${first.join(', ')}, then ${formatMoney(last.lkr)} for every km after`;
+}
+
 function payModelText(p: PayParams): string {
+  const tiered = p.model === 'DISTANCE' && p.distance_mode === 'TIERS' && (p.km_tiers?.length ?? 0) > 0;
   const rate =
     p.model === 'PERCENT'
       ? `${percent.format(p.percent)}% of each delivery charge`
       : p.model === 'FIXED'
         ? `${formatMoney(p.fixed_lkr)} per delivery`
-        : `${formatMoney(p.base_lkr)} + ${formatMoney(p.per_km_lkr)}/km per delivery`;
+        : tiered
+          ? tiersText(p.km_tiers!)
+          : `${formatMoney(p.base_lkr)} + ${formatMoney(p.per_km_lkr)}/km per delivery`;
   const floor = p.min_lkr !== null && p.min_lkr !== undefined ? ` · min ${formatMoney(p.min_lkr)}` : '';
   return `You earn ${rate}${floor}`;
 }
