@@ -1,11 +1,15 @@
 import { ReactNode, useSyncExternalStore } from 'react';
 import type { Combo, Product } from '@/blynk/api/types';
 import {
-  applyRefusal, comboQuantityOf, itemCount, keyOf, lineAvailable, lineQuantityOf, loadCart, reconcile, reconcileCombos, reconcileVariants,
+  applyRefusal, clampQty, comboQuantityOf, itemCount, keyOf, lineAvailable, lineQuantityOf, loadCart, reconcile, reconcileCombos, reconcileVariants,
   regularTotal, saveCart, setComboQuantity, setQuantity, subtotal, type CartLine, type CartState, type CartVariant, type ComboLine,
   type LineRefusal,
 } from '@/blynk/cart/cartStore';
 import { trackCartChange } from '@/blynk/analytics/track';
+import { showNotice } from '@/blynk/account/notice';
+import { createSellerGuard, type AddOutcome } from '@/blynk/cart/sellerGuard';
+import { oneSellerRuleOn, type AddEntry } from '@/blynk/cart/sellerRule';
+import { openStartNewCart } from '@/blynk/cart/startNewCart';
 
 type Address = { title: string; line: string };
 
@@ -89,15 +93,51 @@ const getSnapshot = () => snap;
 export const getCartSnapshot = () => snap;
 const state = (): CartState => ({ lines: snap.lines, combos: snap.combos });
 
+/** Units of a product line (or size) / packs of a combo in the cart right now. */
+const qtyOfEntry = (e: AddEntry) =>
+  e.kind === 'combo' ? comboQuantityOf(state(), e.combo.id) : lineQuantityOf(state(), keyOf({ product: e.product, variant: e.variant }));
+
+/**
+ * One seller per order (2026-10-27): every add that can bring a NEW source into the cart goes through
+ * this guard. With the rule on and a different source already in the cart, the add is held and the
+ * customer is asked "Start a new cart?" (StartNewCartHost); otherwise it is applied as before.
+ */
+const guard = createSellerGuard({
+  rule: oneSellerRuleOn,
+  lines: () => snap.lines,
+  combos: () => snap.combos,
+  qtyOf: qtyOfEntry,
+  apply: (e) => {
+    if (e.kind === 'combo') userSet(setComboQuantity(state(), e.combo, comboQuantityOf(state(), e.combo.id) + e.quantity));
+    else userSet(setQuantity(state(), e.product, lineQuantityOf(state(), keyOf({ product: e.product, variant: e.variant })) + e.quantity, e.variant), e.variant);
+  },
+  clear: () => userSet({ lines: [], combos: [] }),
+  replace: (lines, combos) => userSet({ lines, combos }),
+  prompt: openStartNewCart,
+  notice: showNotice,
+});
+
 export const cartActions = {
   /** One more of a product, or of one size of it (`v`). */
-  add: (p: Product, v?: CartVariant | null) => userSet(setQuantity(state(), p, lineQuantityOf(state(), keyOf({ product: p, variant: v })) + 1, v), v),
+  add: (p: Product, v?: CartVariant | null) => { guard.attempt([{ kind: 'product', product: p, variant: v, quantity: 1 }]); },
+  /**
+   * Many items at once (Add all, order again): the rule asks once for the whole list. `onDone` hears
+   * what went in - now, or after "Clear cart and add"; never after "Keep current cart".
+   */
+  addMany: (entries: AddEntry[], onDone?: (o: AddOutcome) => void) => guard.attempt(entries, onDone),
+  /** Checkout refused a cart that mixes sellers: keep only the first source's items; returns the units removed. */
+  keepFirstSource: () => guard.keepFirstSource(),
   /** One less of a line: `key` is the product id, or `lineKey(productId, variantId)` for a size. */
   remove: (key: string) => {
     const line = snap.lines.find((l) => keyOf(l) === key);
     if (line) userSet(setQuantity(state(), line.product, line.quantity - 1, line.variant));
   },
-  setQty: (p: Product, n: number, v?: CartVariant | null) => userSet(setQuantity(state(), p, n, v), v),
+  setQty: (p: Product, n: number, v?: CartVariant | null) => {
+    const have = lineQuantityOf(state(), keyOf({ product: p, variant: v }));
+    // more of a line (or a new one) can bring in a new source; fewer / removing never can
+    if (clampQty(n) > have) guard.attempt([{ kind: 'product', product: p, variant: v, quantity: clampQty(n) - have }]);
+    else userSet(setQuantity(state(), p, n, v), v);
+  },
   /** A product page / size picker answer: fresh prices and stock for that product's size lines. */
   syncVariants: (p: Product) => {
     if (!snap.lines.some((l) => l.product.id === p.id)) return;
@@ -110,9 +150,13 @@ export const cartActions = {
     if (next.lines !== snap.lines) setLines(next);
   },
   /** One more pack of a combo (at most 20 packs, 20 different combos); the snapshot becomes `c`. */
-  addCombo: (c: Combo) => userSet(setComboQuantity(state(), c, comboQuantityOf(state(), c.id) + 1)),
+  addCombo: (c: Combo) => { guard.attempt([{ kind: 'combo', combo: c, quantity: 1 }]); },
   removeCombo: (c: Combo) => userSet(setComboQuantity(state(), c, comboQuantityOf(state(), c.id) - 1)),
-  setComboQty: (c: Combo, n: number) => userSet(setComboQuantity(state(), c, n)),
+  setComboQty: (c: Combo, n: number) => {
+    const have = comboQuantityOf(state(), c.id);
+    if (n > have) guard.attempt([{ kind: 'combo', combo: c, quantity: n - have }]);
+    else userSet(setComboQuantity(state(), c, n));
+  },
   /** Fresh combos (GET /combos) update saved combo lines' prices, items and availability. */
   syncCombos: (fresh: Combo[]) => { if (snap.combos.length) setLines(reconcileCombos(state(), fresh)); },
   /** Keep prices and availability in step with a fresh catalogue. */

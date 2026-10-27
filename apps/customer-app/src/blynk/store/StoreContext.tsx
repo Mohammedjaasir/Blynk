@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { getStore } from '../api/catalog';
 import type { StoreInfo } from '../api/types';
+import { ruleFromStore, setOneSellerRule } from '../cart/sellerRule';
 import { appHidden, onVisible } from '../lib/visibility';
 import { DEMO } from '@/demo/mode';
 
@@ -11,7 +12,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (DEMO) return; // design mock: nothing is fetched
     let alive = true;
-    const load = () => getStore().then((d) => { if (alive) setS(d); }).catch(() => {});
+    const load = () => getStore().then((d) => { if (alive) { setOneSellerRule(ruleFromStore(d)); setS(d); } }).catch(() => {});
     void load();
     const t = setInterval(() => { if (!appHidden()) void load(); }, 30_000);
     const off = onVisible(() => void load());

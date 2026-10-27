@@ -34,6 +34,8 @@ import { refundNotice } from '@/blynk/wallet/models';
 import { BackIcon } from '@/components/icons';
 import { PressScale, Skeleton } from '@/components/ui';
 import { DEMO } from '@/demo/mode';
+import { collectEntries } from '@/blynk/cart/sellerGuard';
+import { withLeftOut } from '@/blynk/cart/sellerRule';
 import { cartActions, getCartSnapshot } from '@/lib/cart';
 import { C, F } from '@/lib/theme';
 
@@ -110,22 +112,21 @@ export default function OrderStatus() {
     if (!order || reordering) return;
     setReordering(true);
     try {
+      // one seller per order: the adds are collected, checked together (one question at most), then go in
+      const bulk = collectEntries((k) => getCartSnapshot().lineQty[k] ?? 0, (cid) => getCartSnapshot().comboQty[cid] ?? 0);
       const r = await reorderInto(order, {
         fetchProduct: (pid) => fetchProductDetail(pid).then((d) => d.product),
         fetchCombos: () => getCombos().then((x) => x.combos ?? []),
-        comboQty: (cid) => getCartSnapshot().comboQty[cid] ?? 0,
-        addCombo: cartActions.addCombo,
-        addProduct: (p, n, v) => {
-          // per line: the product, or one size of it (migration 045)
-          const key = v ? `${p.id}:${v.id}` : p.id;
-          const before = getCartSnapshot().lineQty[key] ?? 0;
-          cartActions.setQty(p, before + n, v);
-          return (getCartSnapshot().lineQty[key] ?? 0) - before;
-        },
+        comboQty: bulk.comboQty,
+        addCombo: bulk.addCombo,
+        // per line: the product, or one size of it (migration 045)
+        addProduct: (p, n, v) => bulk.addProduct(p, n, v),
       });
-      const m = reorderMessage(r);
-      showNotice(m.text, m.ok ? 'info' : 'problem');
-      if (m.ok) router.push('/cart');
+      cartActions.addMany(bulk.entries, (o) => {
+        const m = reorderMessage({ ...r, addedUnits: o.addedUnits });
+        showNotice(withLeftOut(m.text, o.leftOut), m.ok ? 'info' : 'problem');
+        if (m.ok) router.push('/cart');
+      });
     } finally {
       setReordering(false);
     }

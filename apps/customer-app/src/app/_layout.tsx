@@ -22,6 +22,7 @@ import { StoreProvider } from '@/blynk/store/StoreContext';
 import { RatingPromptHost } from '@/blynk/ratings/RatingPrompt';
 import { AskUsHost } from '@/blynk/requests/AskUs';
 import { SizePickerHost } from '@/components/SizePicker';
+import { StartNewCartHost } from '@/components/StartNewCart';
 import { ThemeColor } from '@/components/ThemeColor';
 import { SplashHandoverHost } from '@/components/SplashHandover';
 import { ConfigProblemScreen } from '@/components/ConfigProblem';
@@ -94,6 +95,8 @@ function AppShell() {
               <ShareStartup />
               {/* the size picker for products sold in sizes (migration 045) */}
               <SizePickerHost />
+              {/* "Your cart has items from <Seller>. Start a new cart?" (one seller per order); after the size picker so it sits on top */}
+              <StartNewCartHost />
               {/* "Can't find it? Ask us" and the one-time "How was your order?" (migrations 055 / 056) */}
               <AskUsHost />
               <RatingPromptHost />

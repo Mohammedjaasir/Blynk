@@ -43,6 +43,12 @@ export interface Product {
    */
   sold_by?: string | null;
   /**
+   * One seller per order (2026-10-27): the id of that approved seller (same condition as `sold_by`);
+   * null / absent for Blynk's own products (and on an older server). The cart's source is this id
+   * (fallback `sold_by`); see cart/sellerRule.ts.
+   */
+  seller_id?: string | null;
+  /**
    * Multi-category products (migration 060, 2026-10-25): the other categories this product is also
    * listed in; category_id stays the main one. Absent / [] on an older server. Use
    * catalog/membership.ts, never compare category_id alone.
@@ -131,6 +137,12 @@ export interface StoreInfo {
   is_open_now: boolean; closed_kind: 'OPEN' | 'OUTSIDE_HOURS' | 'CLOSED_DAY' | 'HOLIDAY' | 'CLOSED_NOW';
   closed_reason: string | null; next_open_at: string | null; reopens_at?: string | null; delivery_slots_enabled: boolean;
   doctors_require_sign_in: boolean;
+  /**
+   * One seller per order (2026-10-27, Admin / Ops "Cart rules"): true = a cart may hold items from only
+   * one seller (or only Blynk's own); the server refuses a mixed order (422 MIXED_SELLERS_NOT_ALLOWED).
+   * Absent on an older server = no rule (off).
+   */
+  one_seller_per_order?: boolean;
   /** Doctor channelling shown to customers (2026-10-14). false: hide the doctors section. Absent on an older backend. */
   doctors_enabled?: boolean;
   /**

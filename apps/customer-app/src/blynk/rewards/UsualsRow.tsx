@@ -4,6 +4,8 @@ import { showNotice } from '@/blynk/account/notice';
 import { useTrackList } from '@/blynk/analytics/AnalyticsHost';
 import { needsRegistration, useSession } from '@/blynk/auth/session';
 import { ProductCard } from '@/components/ProductCard';
+import { collectEntries } from '@/blynk/cart/sellerGuard';
+import { withLeftOut } from '@/blynk/cart/sellerRule';
 import { cartActions, getCartSnapshot } from '@/lib/cart';
 import { C, F, SPACE, T } from '@/lib/theme';
 import { USUALS } from '../ui/strings';
@@ -25,13 +27,13 @@ export function UsualsRow({ cardWidth = 140 }: { cardWidth?: number }) {
   const canAdd = availableUsuals(usuals).length > 0;
 
   const addAll = () => {
-    const r = addUsualsInto(usuals, (p, n) => {
-      const before = getCartSnapshot().qty[p.id] ?? 0;
-      cartActions.setQty(p, before + n);
-      return (getCartSnapshot().qty[p.id] ?? 0) - before;
+    // one seller per order: the whole list is checked together (and asks once), then goes in
+    const bulk = collectEntries((k) => getCartSnapshot().lineQty[k] ?? 0, (id) => getCartSnapshot().comboQty[id] ?? 0);
+    const r = addUsualsInto(usuals, (p, n) => bulk.addProduct(p, n));
+    cartActions.addMany(bulk.entries, (o) => {
+      const m = usualsAddedMessage({ ...r, addedUnits: o.addedUnits });
+      showNotice(withLeftOut(m.text, o.leftOut), m.ok ? 'info' : 'problem');
     });
-    const m = usualsAddedMessage(r);
-    showNotice(m.text, m.ok ? 'info' : 'problem');
   };
 
   return (

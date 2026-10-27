@@ -1,5 +1,6 @@
 import { ApiError } from '@/blynk/api/client';
 import type { LineRefusal } from '@/blynk/cart/cartStore';
+import { SELLER_RULE_WORDS } from '@/blynk/cart/sellerWords';
 import { ORDER_NOTE_WORDS, PLACE_ERROR_WORDS } from './words';
 
 /*
@@ -29,6 +30,11 @@ export type PlaceErrorAction =
   | 'payment'
   | 'signin'
   | 'retry'
+  /**
+   * One seller per order (2026-10-27, MIXED_SELLERS_NOT_ALLOWED): the cart mixes sellers (it was saved
+   * before the rule). The screen offers "Start a new cart" (cartActions.keepFirstSource).
+   */
+  | 'mixed-sellers'
   | null;
 
 export interface PlaceErrorCopy { title: string; message: string; action: PlaceErrorAction }
@@ -97,10 +103,26 @@ const SERVER_WORDED = new Set([
   'LEAD_TIME_REQUIRES_SLOT', 'SLOT_BEFORE_LEAD_TIME',
 ]);
 
+/** The shops named in a refusal's `details.sources` ([{ seller_id, name }]), without repeats. */
+function mixedSourceNames(details: unknown): string[] {
+  const list = (details as { sources?: unknown } | null | undefined)?.sources;
+  if (!Array.isArray(list)) return [];
+  const names = list.map((s) => (s && typeof (s as { name?: unknown }).name === 'string' ? (s as { name: string }).name.trim() : '')).filter(Boolean);
+  return [...new Set(names)];
+}
+
+/** MIXED_SELLERS_NOT_ALLOWED: the app's own words (naming the shops when the server did). */
+function mixedSellersCopy(e: ApiError): PlaceErrorCopy {
+  const names = mixedSourceNames(e.details);
+  const c = SELLER_RULE_WORDS.checkout;
+  return { title: c.title, message: names.length >= 2 ? c.messageNamed(names.join(', ')) : c.message, action: 'mixed-sellers' };
+}
+
 /** Clear copy for any failure of POST /orders (or the coupon preview). */
 export function placeErrorCopy(e: unknown): PlaceErrorCopy {
   const w = PLACE_ERROR_WORDS;
   if (!(e instanceof ApiError)) return { ...w.generic, action: 'retry' };
+  if (e.code === 'MIXED_SELLERS_NOT_ALLOWED') return mixedSellersCopy(e);
   const known = e.code ? knownCopy(e.code) : undefined;
   if (known) {
     // the server's own sentence for these (the Flutter shop's serverWordedOrderRefusals):

@@ -51,6 +51,7 @@ import {
   checkoutBill, checkoutKeyFor, checkoutSignature, forgetCheckoutKey, orderCombos, orderItems,
   rememberPlaced, type CheckoutBill,
 } from '@/blynk/orders/checkout';
+import { SELLER_RULE_WORDS } from '@/blynk/cart/sellerWords';
 import { OUTSIDE_AREA, placeErrorCopy, refusedProduct, stockRefusal, stockRefusalNote, type PlaceErrorCopy } from '@/blynk/orders/errors';
 import type { CheckoutInfo, CouponPreview } from '@/blynk/orders/types';
 import { openPolicy } from '@/blynk/legal/open';
@@ -1269,6 +1270,11 @@ function LiveCheckoutPanel({ loc, checkout, quoteFailed, onRetryQuote, closedNow
       {error && (
         <ErrorBox title={error.title} message={error.message} action={error.action === 'address' ? (
           <Pressable onPress={() => router.push('/addresses?return=/cart')} hitSlop={8}><Text style={styles.change}>{CART.chooseAnother}</Text></Pressable>
+        ) : error.action === 'mixed-sellers' ? (
+          // a cart saved before "one seller per order": keep the first seller's items only
+          <Pressable onPress={() => { cartActions.keepFirstSource(); }} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.change}>{SELLER_RULE_WORDS.checkout.startNew}</Text>
+          </Pressable>
         ) : undefined} />
       )}
       <View style={styles.whereRow}>
