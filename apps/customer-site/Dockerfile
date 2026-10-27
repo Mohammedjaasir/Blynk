@@ -42,6 +42,8 @@ COPY apps/customer-site/index.html apps/customer-site/styles.css apps/customer-s
      apps/customer-site/manifest.webmanifest apps/customer-site/firebase-messaging-sw.js \
      apps/customer-site/walkthrough.js apps/customer-site/analytics.js \
      apps/customer-site/privacy.html apps/customer-site/terms.html apps/customer-site/refunds.html apps/customer-site/delete-account.html /usr/share/nginx/html/
+# The seller application form at /seller (owner's brother, 2026-10-27): built by scripts/build-legal-pages.mjs.
+COPY apps/customer-site/seller.html apps/customer-site/seller.css apps/customer-site/seller.js /usr/share/nginx/html/
 COPY apps/customer-site/assets /usr/share/nginx/html/assets
 # SEO pages (owner's SEO brief, 2026-10-15): pages/ goes to the site root as it
 # is - the area and category pages (<name>/index.html), the Sinhala and Tamil
@@ -58,8 +60,10 @@ COPY --from=app /src/build/web /usr/share/nginx/html/app
 # Ops set from this API and writes them into every page.
 ARG API_BASE_URL
 # q.js (QR links, owner 2026-10-22) asks the same API where a printed QR code leads.
-RUN sed -i "s#__BLYNK_API__#${API_BASE_URL%/}#g" /usr/share/nginx/html/store-hours.js /usr/share/nginx/html/q.js \
- && ! grep -q "__BLYNK_API__" /usr/share/nginx/html/store-hours.js /usr/share/nginx/html/q.js
+# seller.js (owner's brother, 2026-10-27) posts the seller application form (blynk.lk/seller) to it; the
+# API's CORS_ORIGINS must list this site's address (store-hours.js already needs that).
+RUN sed -i "s#__BLYNK_API__#${API_BASE_URL%/}#g" /usr/share/nginx/html/store-hours.js /usr/share/nginx/html/q.js /usr/share/nginx/html/seller.js \
+ && ! grep -q "__BLYNK_API__" /usr/share/nginx/html/store-hours.js /usr/share/nginx/html/q.js /usr/share/nginx/html/seller.js
 # Google Tag Manager (owner, 2026-10-10): fill in the container ID and the
 # consent default in both pages, or remove the snippet when GTM_ID is empty.
 # The SEO pages (every <folder>/index.html outside /app/) carry the same

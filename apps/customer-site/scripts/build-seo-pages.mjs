@@ -841,12 +841,15 @@ ${scripts(`\n  <script src="/app.js?v=20261014b" defer></script>`)}`;
 // pages are built by build-legal-pages.mjs; their date is the "Last updated"
 // in legal/legal-config.json.
 const LEGAL_UPDATED = JSON.parse(readFileSync(join(siteDir, 'legal', 'legal-config.json'), 'utf8')).lastUpdated;
+const SELLER_PAGE_UPDATED = '2026-10-27';
 export const STATIC_PAGES = [
   { path: '/', lastmod: LASTMOD, alternates: { en: '/', si: '/si/', ta: '/ta/' } },
   { path: '/privacy', lastmod: LEGAL_UPDATED },
   { path: '/terms', lastmod: LEGAL_UPDATED },
   { path: '/refunds', lastmod: LEGAL_UPDATED },
   { path: '/delete-account', lastmod: LEGAL_UPDATED },
+  // The seller application form (owner's brother, 2026-10-27), built by build-legal-pages.mjs.
+  { path: '/seller', lastmod: SELLER_PAGE_UPDATED },
 ];
 
 function sitemap(entries) {
@@ -888,7 +891,7 @@ export function build() {
   for (const area of AREAS) for (const lang of LANGS) add(areaPage(area, lang));
   for (const c of CATEGORY_PAGES) add(categoryPage(c));
   // Sitemap order: home pages, areas, categories, legal.
-  const rank = (p) => (p === '/' || /^\/(si|ta)\/$/.test(p) ? 0 : /^\/(privacy|terms|refunds)$/.test(p) ? 3
+  const rank = (p) => (p === '/' || /^\/(si|ta)\/$/.test(p) ? 0 : /^\/(privacy|terms|refunds|seller)$/.test(p) ? 3
     : CATEGORY_PAGES.some((c) => p === `/${c.slug}`) ? 2 : 1);
   entries.sort((a, b) => rank(a.path) - rank(b.path));
   files.set('sitemap.xml', sitemap(entries));

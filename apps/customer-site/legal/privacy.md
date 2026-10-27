@@ -16,6 +16,7 @@ This policy explains how **{{business}}**, operating Blynk.lk, collects and uses
 | Ratings and requests | Star ratings and comments on an order, products you ask us to stock, feedback you send | You |
 | Notifications | A device token, so we can send you order updates and offers you agreed to | Your phone, with your permission |
 | Communications | Calls, WhatsApp messages, support requests | You |
+| Seller applications | Shop name, your name, phone number, town, what you sell, and an email or message if you add one | You, when you apply at blynk.lk/seller |
 
 ### 2. How we use it
 
@@ -59,6 +60,7 @@ We use cookies and Google Tag Manager to keep you logged in, remember your cart,
 - Order and payment records — up to **6 years** for tax and accounting
 - Call and chat records — up to **6 months**
 - Appointment records — up to **12 months** after the appointment
+- Seller applications — we use what you send at blynk.lk/seller only to call you about selling with Blynk, keep it for up to **12 months**, and delete it when you ask us to
 - Marketing data — until you opt out
 
 ### 7. Security

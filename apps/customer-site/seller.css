@@ -1,0 +1,57 @@
+/* blynk.lk/seller, "Sell with Blynk" (owner's brother, 2026-10-27). Loaded after styles.css, which
+   gives the header, footer, buttons, .legal-head and the colour tokens. Mobile first. */
+
+.seller { display: grid; gap: 22px; max-width: 640px; padding-bottom: clamp(40px, 8vw, 88px); }
+
+.seller-how { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: how; }
+.seller-how li {
+  position: relative; padding: 14px 16px 14px 56px; border-radius: var(--radius);
+  background: #fff; border: 1px solid var(--line); color: var(--ink-2); font-size: 16.5px; line-height: 1.5;
+  counter-increment: how;
+}
+.seller-how li::before {
+  content: counter(how); position: absolute; left: 14px; top: 12px; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--yellow); color: var(--ink); font-weight: 800;
+}
+.seller-how strong { color: var(--ink); }
+
+.seller-noscript, .seller-fallback {
+  margin: 0; padding: 12px 14px; border-radius: 14px; background: #fff4bf; color: var(--ink); font-weight: 500;
+}
+.seller-noscript a, .seller-fallback a { color: var(--green); font-weight: 700; }
+
+.seller-card {
+  padding: clamp(18px, 4vw, 28px); border-radius: 24px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.seller-card h2 { margin: 0 0 14px; font-size: clamp(22px, 3vw, 28px); font-weight: 800; letter-spacing: -0.02em; }
+
+.seller-form { display: grid; gap: 16px; }
+.seller-field { display: grid; gap: 6px; }
+.seller-field label { font-weight: 700; font-size: 16px; color: var(--ink); }
+.seller-optional { font-weight: 500; color: var(--ink-3); }
+.seller-field input, .seller-field textarea {
+  width: 100%; min-height: 48px; padding: 12px 14px; border-radius: 14px; border: 1.5px solid #d9d5c3; background: #fff;
+  font: inherit; font-size: 17px; color: var(--ink);
+}
+.seller-field textarea { resize: vertical; min-height: 96px; line-height: 1.45; }
+.seller-field input:focus-visible, .seller-field textarea:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.seller-field [aria-invalid="true"] { border-color: #b3261e; background: #fff7f6; }
+.seller-hint { margin: 0; color: var(--ink-3); font-size: 14.5px; }
+.seller-error { margin: 0; color: #b3261e; font-weight: 600; font-size: 15px; }
+
+/* The honeypot: off the page for people and screen readers, still in the form for bots. */
+.seller-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+.seller-status { margin: 0; padding: 12px 14px; border-radius: 14px; background: #fdecea; color: #8c1d18; font-weight: 600; }
+.seller-consent { margin: 0; color: var(--ink-2); font-size: 15px; line-height: 1.5; }
+.seller-consent a { color: var(--green); font-weight: 600; }
+.seller-submit { width: 100%; font-size: 18px; min-height: 54px; }
+.seller-submit:disabled { opacity: 0.65; cursor: progress; }
+
+.seller-success { display: grid; gap: 12px; justify-items: start; }
+.seller-success:focus { outline: none; }
+.seller-success p { margin: 0; font-size: 18px; line-height: 1.5; color: var(--ink-2); }
+
+@media (min-width: 720px) {
+  .seller-submit { width: auto; padding-inline: 40px; justify-self: start; }
+}

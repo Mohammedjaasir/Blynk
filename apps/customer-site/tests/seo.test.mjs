@@ -14,7 +14,9 @@ import { spawnSync } from 'node:child_process';
 const site = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pagesDir = join(site, 'pages');
 const SITE = 'https://blynk.lk';
-const LEGAL = ['/privacy', '/terms', '/refunds', '/delete-account'];
+// The hand-written root pages that are built without tracking: the legal pages and, since 2026-10-27, the seller
+// application form (/seller, which takes personal details; built by build-legal-pages.mjs like them).
+const LEGAL = ['/privacy', '/terms', '/refunds', '/delete-account', '/seller'];
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {

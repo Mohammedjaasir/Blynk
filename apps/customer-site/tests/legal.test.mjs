@@ -174,12 +174,12 @@ test('once the owner fills in the details they appear on the pages', () => {
 
 test('each page: owner title, Last updated date, a contents list that matches its sections, no tracking', () => {
   const c = readConfig();
-  assert.equal(c.lastUpdated, '2026-10-25');
+  assert.equal(c.lastUpdated, '2026-10-27');
   const titles = { terms: 'Terms and Conditions', privacy: 'Privacy Policy', refunds: 'Return, Refund and Cancellation Policy' };
   for (const n of NAMES) {
     const html = pages[n];
     assert.match(html, new RegExp(`<h1>${titles[n].replace(/[,]/g, '\\$&')}</h1>`), n);
-    assert.match(html, /<p class="legal-meta">Last updated: <time datetime="2026-10-25">25 October 2026<\/time><\/p>/, n);
+    assert.match(html, /<p class="legal-meta">Last updated: <time datetime="2026-10-27">27 October 2026<\/time><\/p>/, n);
     const toc = [...html.match(/<nav class="legal-toc"[\s\S]*?<\/nav>/)[0].matchAll(/href="#([^"]+)"/g)].map((m) => m[1]);
     const sections = [...html.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]);
     assert.ok(toc.length >= 7, `${n}: ${toc.length} contents entries`);
@@ -204,6 +204,7 @@ test('the Dockerfile ships the legal pages and the customer app still links to /
   const docker = read('Dockerfile');
   assert.match(docker, /apps\/customer-site\/privacy\.html apps\/customer-site\/terms\.html apps\/customer-site\/refunds\.html apps\/customer-site\/delete-account\.html \/usr\/share\/nginx\/html\//);
   const policies = readFileSync(join(site, '..', 'customer-app', 'src', 'blynk', 'legal', 'policies.ts'), 'utf8');
-  for (const n of NAMES) assert.match(policies, new RegExp(`path: '/${n}'`));
+  // The policy pages live in POLICY_PATHS (never translated), one entry per page.
+  for (const n of NAMES) assert.match(policies, new RegExp(`${n}: '/${n}'`));
   assert.match(policies, /SITE = 'https:\/\/blynk\.lk'/);
 });
