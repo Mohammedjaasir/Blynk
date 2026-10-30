@@ -3,6 +3,7 @@
 
 .seller { display: grid; gap: 22px; max-width: 640px; padding-bottom: clamp(40px, 8vw, 88px); }
 
+.seller-tagline { display: inline-block; margin: 0 0 12px; padding: 6px 14px; border-radius: 999px; background: #fff3b0; color: #5c4a00; font-weight: 700; font-size: 0.95rem; }
 .seller-how { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: how; }
 .seller-how li {
   position: relative; padding: 14px 16px 14px 56px; border-radius: var(--radius);

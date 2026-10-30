@@ -26,7 +26,8 @@ export function sellerMain(tok) {
       <div class="legal-head">
         <p class="kicker">For shops</p>
         <h1>Sell with Blynk</h1>
-        <p class="lead">Do you make or sell something people in Dharga Town and Aluthgama would buy? Apply here and we will call you.</p>
+        <p class="seller-tagline">Open to sellers in Dharga Town only, for now.</p>
+        <p class="lead">Do you make or sell something people in Dharga Town would buy? Apply here and we will call you.</p>
       </div>
 
       <div class="seller">

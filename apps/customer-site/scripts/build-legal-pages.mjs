@@ -41,7 +41,7 @@ export const SELLER_PAGE = {
   name: 'seller',
   title: 'Sell with Blynk',
   fullTitle: 'Sell with Blynk — apply to become a seller',
-  description: 'Apply to sell your products through Blynk in Dharga Town and Aluthgama, Sri Lanka. Tell us about your shop and we will call you to talk it through.',
+  description: 'Apply to sell your products through Blynk in Dharga Town, Sri Lanka (open to sellers in Dharga Town only, for now). Tell us about your shop and we will call you to talk it through.',
 };
 
 export const LEGAL_PAGES = [
