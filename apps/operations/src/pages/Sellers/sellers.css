@@ -346,3 +346,63 @@
 .seller-sheet__actions .button {
   flex: 1 1 0;
 }
+
+/* Seller detail -> Products, commission-free period, set location (2026-10-30). */
+.seller-products {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.seller-products li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.seller-products__thumb {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  object-fit: cover;
+  background: var(--canvas);
+}
+
+.seller-products__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.seller-products__chip {
+  flex: 0 0 auto;
+}
+
+.seller-free {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--canvas);
+  border-radius: var(--radius);
+}
+
+.seller-free__summary {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.seller-photo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

@@ -67,3 +67,13 @@
 .seller-commission__hint { margin: 0; max-width: 420px; }
 .seller-request { display: grid; gap: 10px; padding: 12px; border: 1px solid #e0b100; background: #fffbea; border-radius: var(--radius); }
 .seller-list__error { color: var(--ink-3); }
+
+/* Commission-free period, a seller's products and setting the shop pin (2026-10-30) */
+.sellers__chip--free { background: #e6f4ea; color: #1b5e20; }
+.seller-free { display: grid; gap: 8px; padding: 10px 12px; background: var(--canvas); border-radius: var(--radius); }
+.seller-free__text { margin: 0; font-weight: 700; }
+.seller-products__thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: var(--canvas); display: block; }
+.seller-products__thumb--empty { display: grid; place-items: center; color: var(--ink-3); font-size: 11px; }
+.seller-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.seller-form-grid .field--wide { grid-column: 1 / -1; }
+.seller-location__set { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

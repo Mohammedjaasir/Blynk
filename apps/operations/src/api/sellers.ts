@@ -11,6 +11,7 @@ import type {
   SellerStatus,
   SubmissionStatus,
 } from '../lib/sellers';
+import type { NewShopProductBody, SellerShopProduct } from '../lib/sellerShop';
 
 /**
  * Seller admin for Blynk Ops (owner, 2026-10-25: "an Add seller, and the rest of the seller admin,
@@ -47,6 +48,8 @@ export const sellers = {
       contact_name?: string | null;
       address?: string | null;
       note?: string | null;
+      /** Migration 065: end of the commission-free period (ISO instant); null = none. */
+      commission_free_until?: string | null;
     }
   ) => apiRequest<{ seller: AdminSeller }>(`/admin/sellers/${id}`, { method: 'PATCH', body: { ...body } }).then((d) => d.seller),
   recordPayout: (id: string, body: { amount: number; note?: string; paid_on?: string }) =>
@@ -58,6 +61,15 @@ export const sellers = {
     apiRequest<{ seller: AdminSeller }>(`/admin/sellers/${id}/location/approve`, { method: 'POST', body: {} }).then((d) => d.seller),
   rejectLocation: (id: string, reason: string) =>
     apiRequest<{ seller: AdminSeller }>(`/admin/sellers/${id}/location/reject`, { method: 'POST', body: { reason } }).then((d) => d.seller),
+  /** Staff set the shop pin directly: it becomes the approved location (2026-10-30). The seller row comes back when the API sends it. */
+  setLocation: (id: string, body: { latitude: number; longitude: number; how_to_find?: string }) =>
+    apiRequest<{ seller?: AdminSeller }>(`/admin/sellers/${id}/location`, { method: 'PUT', body: { ...body } }).then((d) => d?.seller ?? null),
+  /** The seller's products with their status (LIVE / PAUSED / OFF) and stock. */
+  products: (id: string) =>
+    apiRequest<{ products: SellerShopProduct[] }>(`/admin/sellers/${id}/products`).then((d) => d.products ?? []),
+  /** Staff add a live product for an APPROVED seller; the photo is required (400 IMAGE_REQUIRED). */
+  addProduct: (id: string, body: NewShopProductBody) =>
+    apiRequest<{ product: SellerShopProduct }>(`/admin/sellers/${id}/products`, { method: 'POST', body: { ...body } }).then((d) => d.product),
 };
 
 export const sellerSubmissions = {
@@ -90,6 +102,6 @@ export const sellerPayoutRequests = {
 /** What Blynk keeps from seller sales: a default %, optional per-category rates (a sub-category falls back to its main one); a seller's own rate beats both. */
 export const sellerCommission = {
   get: () => apiRequest<CommissionSettings>('/admin/settings/seller-commission'),
-  save: (body: { default_percent: number; categories: { category_id: string; percent: number | null }[] }) =>
+  save: (body: { default_percent: number; categories: { category_id: string; percent: number | null }[]; free_days?: number }) =>
     apiRequest<CommissionSettings>('/admin/settings/seller-commission', { method: 'PUT', body: { ...body } }),
 };

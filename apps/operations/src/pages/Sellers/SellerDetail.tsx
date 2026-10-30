@@ -36,13 +36,16 @@ import {
   type SellerStatement,
 } from '../../lib/sellers';
 import { BackToMore, SellerStatusPill, Sheet, TextField, type Loaded } from './parts';
+import { SellerShopProducts } from './SellerShopProducts';
+import { FreePeriodControl, SetLocationSheet } from './SellerShopTools';
 import './sellers.css';
 
 /**
  * One seller (owner, 2026-10-25: the seller admin inside Ops; same API as Admin's SellerDetail).
  * Profile (staff keep the sign-in phone and contact details: sellers are invite-only), the status
  * decisions (approve / reject with a reason / suspend), the commission (their own rate or the
- * category rates), the shop location (approve / reject the pin the seller set), the statement, their
+ * category rates, the commission-free period), the Products they sell (and Add product for them, 2026-10-30),
+ * the shop location (approve / reject the pin the seller set, or set it for them), the statement, their
  * payout requests (pay / decline) and the payouts ledger (payments are made by hand and recorded
  * here; a mistaken entry can be deleted).
  */
@@ -89,6 +92,14 @@ export function SellerDetail() {
       live = false;
     };
   }, [id, adopt]);
+
+  /** A product was added: the live count on the profile follows (the commission form keeps what is typed). */
+  const refreshSeller = useCallback(() => {
+    sellersApi
+      .get(id)
+      .then((d) => setSeller((prev) => (prev ? { ...prev, ...d.seller } : d.seller)))
+      .catch(() => undefined);
+  }, [id]);
 
   /** Status changes return only the seller; the statement stays as loaded. */
   async function decide(kind: Decision) {
@@ -263,9 +274,12 @@ export function SellerDetail() {
         </dl>
       </section>
 
+      <SellerShopProducts seller={seller} onAdded={refreshSeller} onNotify={setNotice} />
+
       <section className="card" aria-label="Commission">
         <h2 className="growth-card__title">Commission</h2>
         <p className="sellers-card__meta">The % Blynk keeps from the seller&apos;s price on each sale.</p>
+        <FreePeriodControl seller={seller} onChanged={(s) => adopt({ ...seller, ...s })} onNotify={setNotice} />
         <form
           className="field"
           noValidate
@@ -330,7 +344,17 @@ export function SellerDetail() {
         </form>
       </section>
 
-      <LocationSection seller={seller} onChanged={(s) => adopt({ ...seller, ...s })} onNotify={setNotice} />
+      <LocationSection
+        seller={seller}
+        onChanged={(s) => adopt({ ...seller, ...s })}
+        onReload={() =>
+          sellersApi
+            .get(seller.id)
+            .then((d) => adopt({ ...seller, ...d.seller }))
+            .catch(() => undefined)
+        }
+        onNotify={setNotice}
+      />
 
       <StatementSection statement={statement} />
 
@@ -445,8 +469,20 @@ export function SellerDetail() {
  * Where the seller's shop is (migration 053): the approved point (riders collect there and delivery
  * is measured from it) next to the one the seller asked for, which waits for Approve / Reject.
  */
-function LocationSection({ seller, onChanged, onNotify }: { seller: AdminSeller; onChanged(s: AdminSeller): void; onNotify: Notify }) {
+function LocationSection({
+  seller,
+  onChanged,
+  onReload,
+  onNotify,
+}: {
+  seller: AdminSeller;
+  onChanged(s: AdminSeller): void;
+  /** The API did not send the seller back after Set shop location: read it again. */
+  onReload(): void;
+  onNotify: Notify;
+}) {
   const [busy, setBusy] = useState(false);
+  const [setting, setSetting] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -491,6 +527,11 @@ function LocationSection({ seller, onChanged, onNotify }: { seller: AdminSeller;
     <section className="card" aria-label="Shop location">
       <h2 className="growth-card__title">Shop location</h2>
       <p className="sellers-card__meta">Where riders collect this seller&apos;s goods. Only the approved point is used for delivery.</p>
+      <div className="sellers-actions">
+        <button type="button" className="button" disabled={busy} onClick={() => setSetting(true)}>
+          Set shop location
+        </button>
+      </div>
       {!approved && !pending ? (
         <p className="sellers-card__meta">No location set yet</p>
       ) : (
@@ -536,6 +577,19 @@ function LocationSection({ seller, onChanged, onNotify }: { seller: AdminSeller;
           ) : null}
         </>
       )}
+
+      {setting ? (
+        <SetLocationSheet
+          seller={seller}
+          onClose={() => setSetting(false)}
+          onSaved={(s) => {
+            setSetting(false);
+            if (s) onChanged(s);
+            else onReload();
+            onNotify(`${seller.shop_name}'s shop location is set and approved.`);
+          }}
+        />
+      ) : null}
 
       {rejecting ? (
         <Sheet
@@ -810,6 +864,7 @@ function EditDetailsSheet({ seller, onClose, onSaved }: { seller: AdminSeller; o
   const [phone, setPhone] = useState(seller.phone ? readablePhone(seller.phone) : '');
   const [contact, setContact] = useState(seller.contact_name ?? '');
   const [address, setAddress] = useState(seller.address ?? '');
+  const [note, setNote] = useState(seller.note ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -834,6 +889,7 @@ function EditDetailsSheet({ seller, onClose, onSaved }: { seller: AdminSeller; o
     }
     if (contact.trim() !== (seller.contact_name ?? '')) body.contact_name = contact.trim() || null;
     if (address.trim() !== (seller.address ?? '')) body.address = address.trim() || null;
+    if (note.trim() !== (seller.note ?? '')) body.note = note.trim() || null;
     if (Object.keys(body).length === 0) {
       onClose();
       return;
@@ -862,6 +918,9 @@ function EditDetailsSheet({ seller, onClose, onSaved }: { seller: AdminSeller; o
       </TextField>
       <TextField label="Address">
         <input className="input" maxLength={255} value={address} onChange={(e) => setAddress(e.target.value)} />
+      </TextField>
+      <TextField label="Note">
+        <textarea className="input" rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
       </TextField>
       {error ? (
         <p className="field__error" role="alert">

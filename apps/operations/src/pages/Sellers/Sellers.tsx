@@ -24,6 +24,7 @@ import {
   type SellerStatus,
 } from '../../lib/sellers';
 import { readAddSellerState, type AddSellerPrefill } from '../../lib/sellerApplications';
+import { productsLiveText } from '../../lib/sellerShop';
 import { BackToMore, Sheet, SellerStatusPill, TextField } from './parts';
 import './sellers.css';
 
@@ -186,7 +187,7 @@ function SellerCard({ seller: s, payoutWaiting }: { seller: AdminSeller; payoutW
         <span className="mono">{sellerContact(s)}</span>
       </p>
       <p className="sellers-card__meta">
-        {s.products_live} live · commission {commissionText(s.commission_percent)} · due {lkr(s.due)} · joined {dayText(s.created_at)}
+        {productsLiveText(s.products_live, s.products_total)} · commission {commissionText(s.commission_percent)} · due {lkr(s.due)} · joined {dayText(s.created_at)}
       </p>
       <ul className="sellers-chips" aria-label="Waiting">
         {s.submissions_pending > 0 ? (

@@ -13,6 +13,7 @@ import {
   categoryTree,
   commissionBody,
   commissionText,
+  freeDaysLeft,
   locationWaiting,
   lkr,
   newSellerBody,
@@ -207,7 +208,12 @@ export function Sellers() {
                     <td>
                       <Badge tone={sellerStatusTone(s.status)}>{SELLER_STATUS_LABEL[s.status]}</Badge>
                     </td>
-                    <td className="num">{s.products_live}</td>
+                    <td className="num">
+                      {s.products_live}
+                      {typeof s.products_total === 'number' && s.products_total > s.products_live ? (
+                        <span className="cell__secondary">{s.products_total} in all</span>
+                      ) : null}
+                    </td>
                     <td className="num">
                       {s.submissions_pending > 0 ? (
                         <Link className="sellers__waiting" to={`/seller-products?seller=${s.id}`} aria-label={`${s.submissions_pending} waiting for ${s.shop_name}`}>
@@ -217,7 +223,12 @@ export function Sellers() {
                         0
                       )}
                     </td>
-                    <td className="num">{commissionText(s.commission_percent)}</td>
+                    <td className="num">
+                      {commissionText(s.commission_percent)}
+                      {(freeDaysLeft(s.commission_free_until) ?? 0) > 0 ? (
+                        <span className="sellers__chip sellers__chip--free">Free, {freeDaysLeft(s.commission_free_until)}d left</span>
+                      ) : null}
+                    </td>
                     <td className="num">{lkr(s.due)}</td>
                     <td>{when.format(new Date(s.created_at))}</td>
                   </tr>
@@ -356,12 +367,14 @@ function CommissionPanel({ onClose }: { onClose(): void }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [defaultText, setDefaultText] = useState('');
   const [rates, setRates] = useState<Record<string, string>>({});
+  const [freeDays, setFreeDays] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const adopt = (s: CommissionSettings) => {
     setSettings(s);
     setDefaultText(String(s.default_percent));
+    setFreeDays(typeof s.free_days === 'number' ? String(s.free_days) : '');
     setRates(Object.fromEntries(s.categories.map((c) => [c.category_id, c.percent === null ? '' : String(c.percent)])));
   };
 
@@ -377,7 +390,7 @@ function CommissionPanel({ onClose }: { onClose(): void }) {
   }, []);
 
   async function save() {
-    const read = commissionBody(defaultText, rates);
+    const read = commissionBody(defaultText, rates, typeof settings?.free_days === 'number' ? freeDays : undefined);
     if ('error' in read) {
       setError(read.error);
       return;
@@ -435,7 +448,25 @@ function CommissionPanel({ onClose }: { onClose(): void }) {
               }}
             />
           </label>
-          {settings.ready === false ? <p className="form__note">Category rates can be set after the next database update.</p> : null}
+          {typeof settings.free_days === 'number' ? (
+            <label className="field">
+              <span className="field__label">Free month for new sellers (days)</span>
+              <input
+                className="input seller-commission__input"
+                inputMode="numeric"
+                aria-label="Free days for new sellers"
+                value={freeDays}
+                onChange={(e) => {
+                  setFreeDays(e.target.value);
+                  setError(null);
+                }}
+              />
+              <span className="field__hint">
+                No commission for this many days from the day a seller is approved (0 = none). Open a seller to change their own date.
+              </span>
+            </label>
+          ) : null}
+          {settings.ready === false ?<p className="form__note">Category rates can be set after the next database update.</p> : null}
           {tree.length > 0 ? (
             <div className="table-wrap">
               <table className="table" aria-label="Category commission">

@@ -31,6 +31,10 @@ export interface AdminSeller {
   products_live: number;
   submissions_pending: number;
   due: number;
+  /** All the seller's products that are not deleted (migration 065 API; optional, an older API leaves it out). */
+  products_total?: number;
+  /** The free-commission period ends then (migration 065, 2026-10-30); null / missing = none. */
+  commission_free_until?: string | null;
   /*
    * The shop pin (migration 053). Optional: an API from before it leaves them out, and until the
    * migration runs they are null / 'NONE'. latitude / longitude / location_note are the APPROVED
@@ -430,6 +434,8 @@ export interface CommissionSettings {
   categories: CategoryRate[];
   /** false until migration 057 has run (category rates cannot be saved yet). */
   ready?: boolean;
+  /** Days of free commission a seller gets from approval (0 = none); an API from before 2026-10-30 leaves it out. */
+  free_days?: number;
 }
 
 /** Main categories, each followed by its sub-categories (a sub-category whose main one is gone counts as main). */
@@ -447,8 +453,9 @@ export function categoryTree(rows: readonly CategoryRate[]): { row: CategoryRate
 /** The commission settings form, read into the PUT body (or the first problem). Blank category = no rate (null). */
 export function commissionBody(
   defaultText: string,
-  rates: Readonly<Record<string, string>>
-): { body: { default_percent: number; categories: { category_id: string; percent: number | null }[] } } | { error: string } {
+  rates: Readonly<Record<string, string>>,
+  freeDaysText?: string
+): { body: { default_percent: number; categories: { category_id: string; percent: number | null }[]; free_days?: number } } | { error: string } {
   const d = parseCommission(defaultText);
   if ('error' in d) return { error: `Default: ${d.error}` };
   const categories: { category_id: string; percent: number | null }[] = [];
@@ -457,7 +464,194 @@ export function commissionBody(
     if ('error' in r) return { error: r.error };
     categories.push({ category_id, percent: r.value });
   }
-  return { body: { default_percent: d.value, categories } };
+  // free_days is sent only when the API reported it (an older API would refuse the unknown field).
+  if (freeDaysText === undefined) return { body: { default_percent: d.value, categories } };
+  const days = parseFreeDays(freeDaysText);
+  if ('error' in days) return { error: days.error };
+  return { body: { default_percent: d.value, categories, free_days: days.value } };
+}
+
+// ---------------------------------------------------------------- free commission period (2026-10-30)
+
+export const MAX_FREE_DAYS = 365;
+
+/** "Free month for new sellers (days)": a whole number 0 to 365 (0 = none). */
+export function parseFreeDays(text: string): { value: number } | { error: string } {
+  const t = text.trim();
+  if (!t) return { error: 'Free days: enter a number of days (0 for none).' };
+  if (!/^\d+$/.test(t)) return { error: 'Free days must be a whole number.' };
+  const value = Number(t);
+  if (value > MAX_FREE_DAYS) return { error: `Free days can be at most ${MAX_FREE_DAYS}.` };
+  return { value };
+}
+
+const DAY_MS = 86_400_000;
+
+/** Whole days left until `until` (rounded up, never negative); null when there is no date. */
+export function freeDaysLeft(until: string | null | undefined, now: Date = new Date()): number | null {
+  if (!until) return null;
+  const end = new Date(until).getTime();
+  if (!Number.isFinite(end)) return null;
+  return Math.max(0, Math.ceil((end - now.getTime()) / DAY_MS));
+}
+
+/** "Commission-free until 29 Nov 2026 (23 days left)", "Commission-free period ended on ...", or "No commission-free period." */
+export function freePeriodText(until: string | null | undefined, now: Date = new Date()): string {
+  const left = freeDaysLeft(until, now);
+  if (left === null || !until) return 'No commission-free period.';
+  const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' }).format(new Date(until));
+  if (left === 0) return `Commission-free period ended on ${day}. Normal rates apply.`;
+  return `Commission-free until ${day} (${left} ${left === 1 ? 'day' : 'days'} left)`;
+}
+
+/** The end of a Colombo calendar day, as the instant the API stores ("2026-11-29" -> "...T23:59:59+05:30"). */
+export const endOfColomboDay = (dateKey: string): string => `${dateKey}T23:59:59+05:30`;
+
+/** Extend by `days`: from the current end when it is still running, else from now. */
+export function extendFreePeriod(until: string | null | undefined, days = 30, now: Date = new Date()): string {
+  const current = until ? new Date(until).getTime() : NaN;
+  const base = Number.isFinite(current) && current > now.getTime() ? current : now.getTime();
+  return new Date(base + days * DAY_MS).toISOString();
+}
+
+// ---------------------------------------------------------------- a seller's products (2026-10-30)
+
+export type SellerProductStatus = 'LIVE' | 'PAUSED' | 'OFF';
+
+/** GET /admin/sellers/:id/products item. */
+export interface SellerProductRow {
+  id: string;
+  name: string;
+  image_url: string | null;
+  category_name: string | null;
+  selling_price: number | null;
+  seller_price: number | null;
+  is_active: boolean;
+  is_available: boolean;
+  status: SellerProductStatus;
+  stock_on_hand: number | null;
+}
+
+export const PRODUCT_STATUS_LABEL: Record<SellerProductStatus, string> = { LIVE: 'Live', PAUSED: 'Paused', OFF: 'Off' };
+
+/** The Badge tone for a seller product's status chip. */
+export const productStatusTone = (s: SellerProductStatus): 'active' | 'inactive' | 'muted' | 'offer' =>
+  s === 'LIVE' ? 'active' : s === 'PAUSED' ? 'offer' : 'muted';
+
+export interface NewSellerProductForm {
+  name: string;
+  category_id: string;
+  unit: string;
+  pack_size: string;
+  description: string;
+  image_url: string | null;
+  seller_price: string;
+  selling_price: string;
+  barcode: string;
+  stock_quantity: string;
+}
+
+export const EMPTY_PRODUCT_FORM: NewSellerProductForm = {
+  name: '',
+  category_id: '',
+  unit: '',
+  pack_size: '',
+  description: '',
+  image_url: null,
+  seller_price: '',
+  selling_price: '',
+  barcode: '',
+  stock_quantity: '',
+};
+
+export type ProductFormField = 'name' | 'category_id' | 'unit' | 'image_url' | 'seller_price' | 'selling_price' | 'stock_quantity';
+
+export interface CreateSellerProductBody {
+  name: string;
+  category_id: string;
+  unit: string;
+  pack_size?: string;
+  description?: string;
+  image_url: string;
+  seller_price: number;
+  selling_price: number;
+  barcode?: string;
+  stock_quantity?: number;
+}
+
+/** The add-product form, read into the POST body, or every problem keyed by field (the photo is required). */
+export function newSellerProductBody(
+  form: NewSellerProductForm
+): { body: CreateSellerProductBody } | { errors: Partial<Record<ProductFormField, string>> } {
+  const errors: Partial<Record<ProductFormField, string>> = {};
+  const name = form.name.trim();
+  if (name.length < 2) errors.name = 'Enter the product name (at least 2 characters).';
+  else if (name.length > 160) errors.name = 'The name can be at most 160 characters.';
+  if (!form.category_id) errors.category_id = 'Choose a category.';
+  if (!form.unit.trim()) errors.unit = 'Enter the unit, e.g. 1 L or pack.';
+  if (!form.image_url) errors.image_url = 'Add a photo of the product.';
+  const cost = parseMoney(form.seller_price, "seller's price");
+  if ('error' in cost) errors.seller_price = cost.error;
+  const price = parseMoney(form.selling_price, 'customer price');
+  if ('error' in price) errors.selling_price = price.error;
+  let stock: number | null = null;
+  if (form.stock_quantity.trim()) {
+    const raw = form.stock_quantity.trim();
+    if (!/^\d+$/.test(raw) || Number(raw) > 100_000) errors.stock_quantity = 'Opening stock must be a whole number from 0 to 100,000.';
+    else stock = Number(raw);
+  }
+  if (Object.keys(errors).length > 0) return { errors };
+  return {
+    body: {
+      name,
+      category_id: form.category_id,
+      unit: form.unit.trim(),
+      ...(form.pack_size.trim() ? { pack_size: form.pack_size.trim() } : {}),
+      ...(form.description.trim() ? { description: form.description.trim() } : {}),
+      image_url: form.image_url as string,
+      seller_price: (cost as { value: number }).value,
+      selling_price: (price as { value: number }).value,
+      ...(form.barcode.trim() ? { barcode: form.barcode.trim() } : {}),
+      ...(stock !== null ? { stock_quantity: stock } : {}),
+    },
+  };
+}
+
+// ---------------------------------------------------------------- setting a shop location (2026-10-30)
+
+/**
+ * Latitude and longitude as typed, or a pasted Google Maps "7.2906, 80.6337" text (also "7.2906 80.6337"
+ * and a maps URL containing "@7.29,80.63" or "q=7.29,80.63"). Null when no pair can be read.
+ */
+export function parsePastedPoint(text: string): MapPoint | null {
+  const t = text.trim();
+  if (!t) return null;
+  const pair = /(-?\d{1,3}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)/;
+  const m = /[@=](-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/.exec(t) ?? pair.exec(t);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+}
+
+export const HOW_TO_FIND_MAX = 200;
+
+/** The set-location form, read into the PUT body (or the first problem per field). */
+export function shopLocationBody(
+  latText: string,
+  lngText: string,
+  howToFind: string
+): { body: { latitude: number; longitude: number; how_to_find?: string } } | { errors: { latitude?: string; longitude?: string; how_to_find?: string } } {
+  const errors: { latitude?: string; longitude?: string; how_to_find?: string } = {};
+  const num = (t: string) => (/^-?\d+(\.\d+)?$/.test(t.trim()) ? Number(t.trim()) : NaN);
+  const lat = num(latText);
+  const lng = num(lngText);
+  if (!Number.isFinite(lat) || Math.abs(lat) > 90) errors.latitude = 'Latitude is a number from -90 to 90, like 7.2906.';
+  if (!Number.isFinite(lng) || Math.abs(lng) > 180) errors.longitude = 'Longitude is a number from -180 to 180, like 80.6337.';
+  const how = howToFind.trim();
+  if (how.length > HOW_TO_FIND_MAX) errors.how_to_find = `At most ${HOW_TO_FIND_MAX} characters.`;
+  if (Object.keys(errors).length > 0) return { errors };
+  return { body: { latitude: lat, longitude: lng, ...(how ? { how_to_find: how } : {}) } };
 }
 
 /** How a seller's rate reads: their own rate, else category rates. */

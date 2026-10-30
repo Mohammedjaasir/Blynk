@@ -1,19 +1,36 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { sellerPayoutRequests, sellers as sellersApi } from '../api/resources';
+import { categories as categoriesApi, sellerPayoutRequests, sellers as sellersApi } from '../api/resources';
+import type { Category } from '../api/types';
 import { ApiError } from '../api/client';
 import { DatePicker } from '../components/DatePicker';
+import { ImageUploader } from '../components/ImageUploader';
 import { PageHeader } from '../components/Layout';
-import { Badge, ConfirmDialog, EmptyState, Spinner, useToast } from '../components/ui';
-import { errorMessage } from '../lib/apiErrors';
+import { Badge, ConfirmDialog, EmptyState, Field, Spinner, useToast } from '../components/ui';
+import { errorMessage, fieldErrors } from '../lib/apiErrors';
+import { categoryOptions } from '../lib/categoryTree';
 import { colomboDateKey } from '../lib/schedule';
 import {
+  EMPTY_PRODUCT_FORM,
+  HOW_TO_FIND_MAX,
   LOCATION_REASON_MAX,
+  PRODUCT_STATUS_LABEL,
   REASON_LIMITS,
   SELLER_STATUS_LABEL,
   approvedPoint,
   distanceText,
+  endOfColomboDay,
+  extendFreePeriod,
+  freeDaysLeft,
+  freePeriodText,
   googleMapsUrl,
+  newSellerProductBody,
+  parsePastedPoint,
+  productStatusTone,
+  shopLocationBody,
+  type NewSellerProductForm,
+  type ProductFormField,
+  type SellerProductRow,
   locationReasonProblem,
   locationWaiting,
   osmEmbedUrl,
@@ -342,7 +359,11 @@ export function SellerDetail() {
             Save commission
           </button>
         </form>
+
+        <FreePeriod seller={seller} onChanged={(s) => setSeller({ ...seller, ...s })} />
       </section>
+
+      <ProductsSection seller={seller} />
 
       <LocationSection seller={seller} onChanged={(s) => adopt({ ...seller, ...s })} />
 
@@ -480,6 +501,7 @@ function LocationSection({ seller, onChanged }: { seller: AdminSeller; onChanged
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
+  const [setting, setSetting] = useState(false);
 
   const approved = approvedPoint(seller);
   const pending = pendingPoint(seller);
@@ -521,6 +543,12 @@ function LocationSection({ seller, onChanged }: { seller: AdminSeller; onChanged
     <section className="seller-card" aria-label="Shop location">
       <h2 className="form__section-title">Shop location</h2>
       <p className="form__note">Where riders collect this seller's goods. Only the approved point is used for delivery.</p>
+      <div className="seller-location__set">
+        <button type="button" className="button button--ghost" disabled={busy} onClick={() => setSetting(true)}>
+          Set shop location
+        </button>
+        <span className="form__note">For a seller who cannot pin the shop themselves: it is approved straight away.</span>
+      </div>
       {!approved && !pending ? (
         <p className="seller-location__empty">No location set yet</p>
       ) : (
@@ -569,6 +597,18 @@ function LocationSection({ seller, onChanged }: { seller: AdminSeller; onChanged
         </div>
       )}
 
+      {setting ? (
+        <SetLocationDialog
+          seller={seller}
+          onClose={() => setSetting(false)}
+          onSaved={(s) => {
+            setSetting(false);
+            onChanged(s);
+            toast.success(`${seller.shop_name}'s shop location is set and approved.`);
+          }}
+        />
+      ) : null}
+
       {rejecting ? (
         <div className="modal" role="dialog" aria-modal="true" aria-label="Reject shop location">
           <form
@@ -607,6 +647,450 @@ function LocationSection({ seller, onChanged }: { seller: AdminSeller; onChanged
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Commission-free period (2026-10-30): a seller pays no commission on orders delivered before this
+ * date (30 days from approval by default). Staff can pick another date, add 30 days or end it now.
+ */
+function FreePeriod({ seller, onChanged }: { seller: AdminSeller; onChanged(s: AdminSeller): void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [date, setDate] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const until = seller.commission_free_until ?? null;
+  const left = freeDaysLeft(until);
+  const today = colomboDateKey();
+
+  async function change(next: string, done: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      onChanged(await sellersApi.update(seller.id, { commission_free_until: next }));
+      setPicking(false);
+      toast.success(done);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not change the commission-free date.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="seller-free" role="group" aria-label="Commission-free period">
+      <p className="seller-free__text">{freePeriodText(until)}</p>
+      <p className="form__note">
+        No commission is taken on orders delivered before this date; after it the rates above apply. New sellers get the free days set under Sellers → Seller commission.
+      </p>
+      <div className="row-actions">
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          disabled={busy}
+          onClick={() => {
+            setDate(until ? colomboDateKey(until) : today);
+            setError(null);
+            setPicking((v) => !v);
+          }}
+        >
+          Edit date
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          disabled={busy}
+          onClick={() => void change(extendFreePeriod(until, 30), 'Commission-free period extended by 30 days.')}
+        >
+          Extend by 30 days
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          disabled={busy || !left}
+          onClick={() => void change(new Date().toISOString(), 'Commission-free period ended. Normal rates apply from now.')}
+        >
+          End now
+        </button>
+      </div>
+      {picking ? (
+        <div className="seller-commission">
+          <div className="field">
+            <span className="field__label">Commission-free until (end of that day)</span>
+            <DatePicker value={date} onChange={setDate} label="Commission-free until" today={today} markPast={false} />
+          </div>
+          <button type="button" className="button" disabled={busy || !date} onClick={() => void change(endOfColomboDay(date), 'Commission-free date saved.')}>
+            {busy ? 'Saving…' : 'Save date'}
+          </button>
+        </div>
+      ) : null}
+      {error ? (
+        <p className="field__error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * What the seller sells (2026-10-30): the products with their status (Live = on sale, Paused = the seller
+ * switched it off, Off = staff switched it off) and, for an approved seller, "Add product" for sellers who do
+ * not know how: staff create a live product for them.
+ */
+function ProductsSection({ seller }: { seller: AdminSeller }) {
+  const toast = useToast();
+  const [state, setRows] = useSellerList<SellerProductRow>(() => sellersApi.products(seller.id), [seller.id]);
+  const [adding, setAdding] = useState(false);
+  const rows = state && 'rows' in state ? state.rows : [];
+  const approved = seller.status === 'APPROVED';
+
+  return (
+    <section className="seller-card" aria-label="Products">
+      <div className="seller-card__head">
+        <h2 className="form__section-title">
+          Products{state && 'rows' in state ? ` (${rows.filter((p) => p.status === 'LIVE').length} live of ${rows.length})` : ''}
+        </h2>
+        {approved ? (
+          <button type="button" className="button" onClick={() => setAdding(true)}>
+            Add product
+          </button>
+        ) : null}
+      </div>
+      {!approved ? <p className="form__note">Products can be added for this seller once they are approved.</p> : null}
+      <ListState state={state} empty="This seller has no products yet." />
+      {rows.length > 0 ? (
+        <div className="table-wrap">
+          <table className="table" aria-label="Seller's products">
+            <thead>
+              <tr>
+                <th scope="col">Photo</th>
+                <th scope="col">Product</th>
+                <th scope="col">Category</th>
+                <th scope="col" className="num">
+                  Seller price
+                </th>
+                <th scope="col" className="num">
+                  Customer price
+                </th>
+                <th scope="col">Status</th>
+                <th scope="col" className="num">
+                  Stock
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.id}>
+                  <td>
+                    {p.image_url ? (
+                      <img className="seller-products__thumb" src={p.image_url} alt={p.name} />
+                    ) : (
+                      <span className="seller-products__thumb seller-products__thumb--empty">No photo</span>
+                    )}
+                  </td>
+                  <td>{p.name}</td>
+                  <td>{p.category_name ?? '—'}</td>
+                  <td className="num">{p.seller_price === null || p.seller_price === undefined ? '—' : lkr(p.seller_price)}</td>
+                  <td className="num">{p.selling_price === null || p.selling_price === undefined ? '—' : lkr(p.selling_price)}</td>
+                  <td>
+                    <Badge tone={productStatusTone(p.status)}>{PRODUCT_STATUS_LABEL[p.status]}</Badge>
+                  </td>
+                  <td className="num">{p.stock_on_hand === null || p.stock_on_hand === undefined ? '—' : p.stock_on_hand}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {adding ? (
+        <AddProductDialog
+          seller={seller}
+          onClose={() => setAdding(false)}
+          onAdded={async (product) => {
+            setAdding(false);
+            toast.success(`${product.name} is added for ${seller.shop_name} and is live.`);
+            try {
+              setRows(await sellersApi.products(seller.id));
+            } catch {
+              setRows([...rows, product]);
+            }
+          }}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+const PRODUCT_FIELDS: readonly ProductFormField[] = ['name', 'category_id', 'unit', 'image_url', 'seller_price', 'selling_price', 'stock_quantity'];
+
+/** Staff add a product for the seller: name, category, unit, a required photo, both prices, opening stock. */
+function AddProductDialog({ seller, onClose, onAdded }: { seller: AdminSeller; onClose(): void; onAdded(p: SellerProductRow): void }) {
+  const [form, setForm] = useState<NewSellerProductForm>(EMPTY_PRODUCT_FORM);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [errors, setErrors] = useState<Partial<Record<ProductFormField, string>>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    categoriesApi
+      .listAdmin()
+      .then((rows) => live && setCategories(rows))
+      .catch(() => live && setCategories([]));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const text = (key: keyof NewSellerProductForm) => (e: { target: { value: string } }) => {
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+    setErrors((er) => ({ ...er, [key]: undefined }));
+    setFormError(null);
+  };
+
+  async function save() {
+    const read = newSellerProductBody(form);
+    if ('errors' in read) {
+      setErrors(read.errors);
+      setFormError(null);
+      return;
+    }
+    setErrors({});
+    setFormError(null);
+    setBusy(true);
+    try {
+      onAdded(await sellersApi.createProduct(seller.id, read.body));
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'IMAGE_REQUIRED') {
+        setErrors({ image_url: err.message || 'Add a photo of the product.' });
+      } else {
+        const server = fieldErrors(err);
+        const inline: Partial<Record<ProductFormField, string>> = {};
+        for (const f of PRODUCT_FIELDS) if (server[f]) inline[f] = server[f];
+        setErrors(inline);
+        setFormError(errorMessage(err, 'Could not add the product.', Object.keys(inline)));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label="Add product for seller">
+      <form
+        className="modal__panel modal__panel--wide"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy) void save();
+        }}
+      >
+        <h2 className="modal__title">Add a product for {seller.shop_name}</h2>
+        <p className="modal__message">It goes live in the customer app straight away, at the customer price you set.</p>
+        <div className="seller-form-grid">
+          <div className="field--wide">
+            <Field label="Product name" error={errors.name}>
+              <input className="input" maxLength={160} value={form.name} onChange={text('name')} />
+            </Field>
+          </div>
+          <Field label="Category" error={errors.category_id}>
+            <select className="input" value={form.category_id} onChange={text('category_id')}>
+              <option value="">Select a category</option>
+              {categoryOptions(categories).map(({ category, label }) => (
+                <option key={category.id} value={category.id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Unit" hint="e.g. 1 L, 500 g, pack" error={errors.unit}>
+            <input className="input" value={form.unit} onChange={text('unit')} />
+          </Field>
+          <Field label="Pack size" hint="Optional">
+            <input className="input" value={form.pack_size} onChange={text('pack_size')} />
+          </Field>
+          <Field label="Barcode" hint="Optional">
+            <input className="input" value={form.barcode} onChange={text('barcode')} />
+          </Field>
+          <div className="field--wide">
+            <Field label="Description" hint="Optional">
+              <textarea className="input" rows={2} value={form.description} onChange={text('description')} />
+            </Field>
+          </div>
+          <Field label="Seller's price (LKR)" hint="What Blynk pays the seller" error={errors.seller_price}>
+            <input className="input" inputMode="decimal" value={form.seller_price} onChange={text('seller_price')} />
+          </Field>
+          <Field label="Customer price (LKR)" hint="What customers pay" error={errors.selling_price}>
+            <input className="input" inputMode="decimal" value={form.selling_price} onChange={text('selling_price')} />
+          </Field>
+          <Field label="Opening stock" hint="Optional, a whole number" error={errors.stock_quantity}>
+            <input className="input" inputMode="numeric" value={form.stock_quantity} onChange={text('stock_quantity')} />
+          </Field>
+        </div>
+        <div className="field--wide">
+          <ImageUploader
+            value={form.image_url}
+            folder="products"
+            label="Product photo (required)"
+            onChange={(url) => {
+              setForm((f) => ({ ...f, image_url: url }));
+              setErrors((er) => ({ ...er, image_url: undefined }));
+              setFormError(null);
+            }}
+          />
+          {errors.image_url ? (
+            <span className="field__error" role="alert">
+              {errors.image_url}
+            </span>
+          ) : null}
+        </div>
+        {formError ? (
+          <p className="field__error" role="alert">
+            {formError}
+          </p>
+        ) : null}
+        <div className="modal__actions">
+          <button type="button" className="button button--ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="button" disabled={busy}>
+            {busy ? 'Adding…' : 'Add product'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Staff set the shop pin themselves (2026-10-30): latitude, longitude and how to find it; a pasted
+ * Google Maps "lat, lng" (or a maps link) fills both. The point is approved straight away.
+ */
+function SetLocationDialog({ seller, onClose, onSaved }: { seller: AdminSeller; onClose(): void; onSaved(s: AdminSeller): void }) {
+  const current = approvedPoint(seller);
+  const [lat, setLat] = useState(current ? String(current.lat) : '');
+  const [lng, setLng] = useState(current ? String(current.lng) : '');
+  const [paste, setPaste] = useState('');
+  const [how, setHow] = useState(seller.location_note ?? '');
+  const [errors, setErrors] = useState<{ latitude?: string; longitude?: string; how_to_find?: string }>({});
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const preview = (() => {
+    const plain = /^-?\d+(\.\d+)?$/;
+    if (!plain.test(lat.trim()) || !plain.test(lng.trim())) return null;
+    const la = Number(lat);
+    const ln = Number(lng);
+    return Math.abs(la) <= 90 && Math.abs(ln) <= 180 ? { lat: la, lng: ln } : null;
+  })();
+
+  function fromText(value: string) {
+    const point = parsePastedPoint(value);
+    if (!point) return false;
+    setLat(String(point.lat));
+    setLng(String(point.lng));
+    setErrors({});
+    setError(null);
+    return true;
+  }
+
+  async function save() {
+    const read = shopLocationBody(lat, lng, how);
+    if ('errors' in read) {
+      setErrors(read.errors);
+      return;
+    }
+    setErrors({});
+    setError(null);
+    setBusy(true);
+    try {
+      onSaved(await sellersApi.setLocation(seller.id, read.body));
+    } catch (err) {
+      setError(errorMessage(err, 'Could not set the shop location.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label="Set shop location">
+      <form
+        className="modal__panel"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy) void save();
+        }}
+      >
+        <h2 className="modal__title">Set the shop location of {seller.shop_name}</h2>
+        <p className="modal__message">Riders collect the goods here and delivery is measured from it. It is approved straight away.</p>
+        <label className="field">
+          <span className="field__label">Paste from Google Maps</span>
+          <input
+            className="input"
+            aria-label="Paste coordinates"
+            placeholder="7.290572, 80.633728"
+            value={paste}
+            onChange={(e) => {
+              setPaste(e.target.value);
+              fromText(e.target.value);
+            }}
+          />
+          <span className="field__hint">In Google Maps press and hold the shop, then copy the two numbers shown, and paste them here.</span>
+        </label>
+        <div className="seller-form-grid">
+          <Field label="Latitude" error={errors.latitude}>
+            <input
+              className="input"
+              inputMode="decimal"
+              value={lat}
+              onChange={(e) => {
+                const v = e.target.value;
+                // A "lat, lng" pair pasted into the first box fills both.
+                if (!/^-?\d+(\.\d+)?$/.test(v.trim()) && fromText(v)) return;
+                setLat(v);
+                setErrors((er) => ({ ...er, latitude: undefined }));
+              }}
+            />
+          </Field>
+          <Field label="Longitude" error={errors.longitude}>
+            <input
+              className="input"
+              inputMode="decimal"
+              value={lng}
+              onChange={(e) => {
+                setLng(e.target.value);
+                setErrors((er) => ({ ...er, longitude: undefined }));
+              }}
+            />
+          </Field>
+        </div>
+        <Field label="How to find it" hint="Optional: a landmark or directions for the rider" error={errors.how_to_find}>
+          <textarea className="input" rows={2} maxLength={HOW_TO_FIND_MAX} value={how} onChange={(e) => setHow(e.target.value)} />
+        </Field>
+        {preview ? (
+          <a className="button button--ghost button--sm" href={googleMapsUrl(preview)} target="_blank" rel="noopener noreferrer">
+            Open in Google Maps
+          </a>
+        ) : null}
+        {error ? (
+          <p className="field__error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="modal__actions">
+          <button type="button" className="button button--ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="button" disabled={busy}>
+            {busy ? 'Saving…' : 'Save location'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -887,6 +1371,7 @@ function EditDetailsDialog({ seller, onClose, onSaved }: { seller: AdminSeller; 
   const [phone, setPhone] = useState(seller.phone ? readablePhone(seller.phone) : '');
   const [contact, setContact] = useState(seller.contact_name ?? '');
   const [address, setAddress] = useState(seller.address ?? '');
+  const [note, setNote] = useState(seller.note ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -911,6 +1396,7 @@ function EditDetailsDialog({ seller, onClose, onSaved }: { seller: AdminSeller; 
     }
     if (contact.trim() !== (seller.contact_name ?? '')) body.contact_name = contact.trim() || null;
     if (address.trim() !== (seller.address ?? '')) body.address = address.trim() || null;
+    if (note.trim() !== (seller.note ?? '')) body.note = note.trim() || null;
     if (Object.keys(body).length === 0) {
       onClose();
       return;
@@ -952,6 +1438,10 @@ function EditDetailsDialog({ seller, onClose, onSaved }: { seller: AdminSeller; 
         <label className="field">
           <span className="field__label">Address</span>
           <input className="input" maxLength={255} value={address} onChange={(e) => setAddress(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">Note</span>
+          <textarea className="input" rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
         {error ? (
           <p className="field__error" role="alert">

@@ -47,6 +47,10 @@ export interface AdminSeller {
   location_reject_reason?: string | null;
   distance_km_from_store?: number | null;
   pending_distance_km_from_store?: number | null;
+  /** Migration 065: the end of the commission-free month (null = none); absent on an older API. */
+  commission_free_until?: string | null;
+  /** Every non-deleted product of the seller (live, paused or off), when the API sends it. */
+  products_total?: number;
 }
 
 // ---------------------------------------------------------------- shop location
@@ -431,6 +435,8 @@ export interface CommissionSettings {
   categories: CategoryRate[];
   /** false until migration 057 has run (category rates cannot be saved yet). */
   ready?: boolean;
+  /** Days of commission-free selling a newly approved seller gets (0 = none); absent on an older API. */
+  free_days?: number;
 }
 
 /** Main categories, each followed by its sub-categories (a sub-category whose main one is gone counts as main). */

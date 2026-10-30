@@ -11,9 +11,11 @@ import type {
   AdminSubmission,
   CommissionSettings,
   CreateSellerBody,
+  CreateSellerProductBody,
   PayoutRequest,
   PayoutRequestStatus,
   SellerPayout,
+  SellerProductRow,
   SellerStatement,
   SellerStatus,
   SubmissionStatus,
@@ -1024,9 +1026,22 @@ export const sellers = {
       contact_name?: string | null;
       address?: string | null;
       note?: string | null;
+      /** The free-commission period ends then (ISO); null clears it. */
+      commission_free_until?: string | null;
     }
   ) =>
     apiRequest<{ seller: AdminSeller }>(`/admin/sellers/${id}`, { method: 'PATCH', body: { ...body } }).then((d) => d.seller),
+  /** The seller's products, deleted ones left out (2026-10-30). */
+  products: (id: string) =>
+    apiRequest<{ products: SellerProductRow[] }>(`/admin/sellers/${id}/products`).then((d) => d.products ?? []),
+  /** Staff add a live product for an APPROVED seller; 400 IMAGE_REQUIRED without a photo. */
+  createProduct: (id: string, body: CreateSellerProductBody) =>
+    apiRequest<{ product: SellerProductRow }>(`/admin/sellers/${id}/products`, { method: 'POST', body: { ...body } }).then((d) => d.product),
+  /** Staff write the shop's APPROVED location directly. Answers the seller (or, if it does not, it is read again). */
+  setLocation: (id: string, body: { latitude: number; longitude: number; how_to_find?: string }) =>
+    apiRequest<{ seller?: AdminSeller }>(`/admin/sellers/${id}/location`, { method: 'PUT', body: { ...body } }).then(
+      async (d) => d.seller ?? (await sellers.get(id)).seller
+    ),
   recordPayout: (id: string, body: { amount: number; note?: string; paid_on?: string }) =>
     apiRequest<{ payout: SellerPayout; statement: SellerStatement }>(`/admin/sellers/${id}/payouts`, { method: 'POST', body: { ...body } }),
   deletePayout: (id: string, payoutId: string) =>
@@ -1082,7 +1097,7 @@ export const sellerPayoutRequests = {
 /** What Blynk keeps from seller sales: a default %, optional per-category rates (a sub-category falls back to its main one); a seller's own rate beats both. */
 export const sellerCommission = {
   get: () => apiRequest<CommissionSettings>('/admin/settings/seller-commission'),
-  save: (body: { default_percent: number; categories: { category_id: string; percent: number | null }[] }) =>
+  save: (body: { default_percent: number; categories: { category_id: string; percent: number | null }[]; free_days?: number }) =>
     apiRequest<CommissionSettings>('/admin/settings/seller-commission', { method: 'PUT', body: { ...body } }),
 };
 
