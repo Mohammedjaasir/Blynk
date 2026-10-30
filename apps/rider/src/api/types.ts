@@ -56,6 +56,29 @@ export type OrderStatus =
   | 'CUSTOMER_UNAVAILABLE'
   | 'ITEM_UNAVAILABLE';
 
+/**
+ * Where an order's goods are collected (backend orders/pickup-points.ts,
+ * owner 2026-10-30): the Blynk store, or a seller's shop. GET /riders/deliveries/:id
+ * carries them as `pickups`. Every field after lat/lng is optional: an older API
+ * sends only kind/lat/lng (read as ready, nothing else to show).
+ */
+export interface PickupPoint {
+  kind: 'STORE' | 'SELLER';
+  seller_id?: string;
+  /** The shop's name; 'Blynk store' for the store. */
+  shop_name?: string;
+  /** NUMERIC columns can arrive as strings; see lib/route.ts toLatLng. */
+  lat: number | string;
+  lng: number | string;
+  address?: string | null;
+  /** The approved location's note: how to find the shop. */
+  how_to_find?: string | null;
+  /** The shop contact (the seller's phone); null for the store. */
+  phone?: string | null;
+  /** The order is packed: the goods are ready to collect. Always true for the store. */
+  ready?: boolean;
+}
+
 export interface DeliverySummary {
   delivery_id: string;
   order_id: string;
@@ -102,6 +125,12 @@ export interface DeliverySummary {
   scheduled_for?: string | null;
   /** The slot end, ISO; null for ASAP orders and for older scheduled orders (owner, 2026-10-10). */
   scheduled_until?: string | null;
+  /**
+   * Seller orders (owner, 2026-10-30): where to collect the goods. The detail
+   * endpoint always sends it; the list may not - lib/pickups.ts asks for the
+   * detail when the list leaves it out. Absent on an older API.
+   */
+  pickups?: PickupPoint[];
 }
 
 export interface DeliveryItem {

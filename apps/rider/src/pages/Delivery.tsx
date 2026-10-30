@@ -2,14 +2,23 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { deliveriesApi } from '../api/resources';
-import { DELIVERY_CODE_LENGTH, type DeliveryDetail } from '../api/types';
+import { DELIVERY_CODE_LENGTH, type DeliveryDetail, type PickupPoint } from '../api/types';
 import { Banner } from '../components/Banner';
 import { Header } from '../components/Header';
 import { Sheet } from '../components/Sheet';
 import { StatusRail } from '../components/StatusRail';
 import { TrackingStatus } from '../components/TrackingStatus';
 import { DeliveryMap } from '../components/DeliveryMap';
-import { Navigation } from 'lucide-react';
+import { MapPin, Navigation, Store } from 'lucide-react';
+import {
+  PREPARING_TEXT,
+  READY_TEXT,
+  beingPackedNote,
+  isPickupReady,
+  mapPickup,
+  pickupLatLng,
+  pickupName,
+} from '../lib/pickups';
 import { googleMapsDirectionsUrl, toLatLng } from '../lib/route';
 import {
   bagRows,
@@ -246,6 +255,10 @@ function Slip({
   const closed = action.kind === 'none' && (action.reason === 'cancelled' || action.reason === 'failed');
   // Scheduled orders say when the customer expects them (owner, 2026-10-10).
   const slot = formatScheduledSlot(d.scheduled_for, d.scheduled_until);
+  // Seller orders (owner, 2026-10-30): where to collect the goods, until the rider has them.
+  const pickups = d.pickups ?? [];
+  const showPickups = pickups.length > 0 && !done && !closed && stage(d) === 0;
+  const shop = showPickups ? mapPickup(pickups) : null;
 
   return (
     <article className="slip slip--detail">
@@ -287,7 +300,7 @@ function Slip({
         </section>
       ) : null}
       {action.kind === 'none' && action.reason === 'being-packed' ? (
-        <p className="slip__note">The store hasn't packed this order yet. Wait for it before leaving.</p>
+        <p className="slip__note">{beingPackedNote(d.pickups)}</p>
       ) : null}
       {action.kind === 'none' && action.reason === 'cancelled' ? (
         <p className="slip__note slip__note--stop">This order was cancelled. Don't deliver it — check with the store.</p>
@@ -296,8 +309,21 @@ function Slip({
         <p className="slip__note slip__note--stop">You reported: {d.failure_reason}</p>
       ) : null}
 
-      {/* The route to the customer while the rider still has to get there. */}
-      {destination && !done && !closed ? <DeliveryMap destination={destination} /> : null}
+      {/* "1. Pick up" (owner, 2026-10-30): the shop(s) first, then the customer below. */}
+      {showPickups ? <PickupCards pickups={pickups} /> : null}
+      {showPickups ? (
+        <h2 className="step" data-testid="deliver-heading">
+          2. Deliver to the customer
+        </h2>
+      ) : null}
+      {shop && destination ? (
+        <p className="route-header" data-testid="route-header">
+          Shop → Customer
+        </p>
+      ) : null}
+
+      {/* The route to the customer while the rider still has to get there; from the shop for a seller order. */}
+      {destination && !done && !closed ? <DeliveryMap destination={destination} pickup={shop?.at ?? null} /> : null}
       {done || closed ? null : (
         <a
           className="navigate"
@@ -427,6 +453,77 @@ function Slip({
         </section>
       ) : null}
     </article>
+  );
+}
+
+/**
+ * "1. Pick up": one card per place the goods are collected. The Blynk store is
+ * just its name. A seller's shop shows its name (large), address, how to find
+ * it, a Call shop link, Navigate to shop (Google Maps) and whether the seller
+ * has marked the order ready.
+ */
+function PickupCards({ pickups }: { pickups: PickupPoint[] }) {
+  return (
+    <section className="pickup" aria-label="Pick up">
+      <h2 className="step">1. Pick up</h2>
+      {pickups.map((p, i) => (
+        <PickupCard key={p.seller_id ?? `${p.kind}-${i}`} pickup={p} />
+      ))}
+    </section>
+  );
+}
+
+function PickupCard({ pickup: p }: { pickup: PickupPoint }) {
+  if (p.kind === 'STORE') {
+    return (
+      <div className="pickup__card pickup__card--store" data-testid="pickup-store">
+        <p className="pickup__name">
+          <Store size={22} aria-hidden="true" />
+          <span>{pickupName(p)}</span>
+        </p>
+      </div>
+    );
+  }
+  const at = pickupLatLng(p);
+  const ready = isPickupReady(p);
+  const name = pickupName(p);
+  return (
+    <div className="pickup__card" data-testid="pickup-seller">
+      <p className="pickup__name">
+        <MapPin size={22} aria-hidden="true" />
+        <span>{name}</span>
+      </p>
+      {p.address ? <p className="pickup__address">{p.address}</p> : null}
+      {p.how_to_find ? (
+        <p className="dest__note" data-testid="pickup-how-to-find">
+          <span className="dest__note-label">Where to find it</span>
+          {p.how_to_find}
+        </p>
+      ) : null}
+      <p className={`pickup__status pickup__status--${ready ? 'ready' : 'preparing'}`} data-testid="pickup-status">
+        {ready ? READY_TEXT : PREPARING_TEXT}
+      </p>
+      <div className="pickup__actions">
+        {p.phone ? (
+          <a className="call" href={`tel:${p.phone}`} aria-label={`Call shop ${name}`}>
+            <PhoneIcon />
+            <span>Call shop</span>
+            <span className="call__number">{formatPhone(p.phone)}</span>
+          </a>
+        ) : null}
+        {at || p.address ? (
+          <a
+            className="navigate navigate--shop"
+            href={googleMapsDirectionsUrl(at, [name, p.address].filter(Boolean).join(', '))}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Navigation size={20} aria-hidden="true" />
+            <span>Navigate to shop</span>
+          </a>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

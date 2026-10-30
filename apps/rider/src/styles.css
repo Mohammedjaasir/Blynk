@@ -2573,3 +2573,85 @@ a {
   line-height: 1;
   cursor: pointer;
 }
+
+/* ---------------------------------------------------------------------------
+   Seller orders (owner, 2026-10-30): "1. Pick up" cards, the step headings,
+   the Shop -> Customer route header and the pickup hint on the lists.
+   Green text --green on --paper is 4.69:1; --ink on the amber wash is > 12:1.
+   ------------------------------------------------------------------------- */
+.step {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.pickup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pickup__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.pickup__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: clamp(26px, 7.5vw, 32px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.pickup__address {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.pickup__status {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 800;
+}
+.pickup__status--ready {
+  background: var(--green-wash);
+  color: var(--green);
+}
+.pickup__status--preparing {
+  background: #fff1d6;
+  color: #7a4a00;
+}
+.pickup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.navigate--shop {
+  flex: 1 1 200px;
+}
+.route-header {
+  margin: 8px 0 0;
+  font-weight: 800;
+  font-size: 17px;
+}
+.pickup-line {
+  font-size: 14px;
+  font-weight: 800;
+  color: #7a4a00;
+}
+.pickup-line--ready {
+  color: var(--green);
+}

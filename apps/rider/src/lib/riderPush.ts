@@ -13,6 +13,12 @@ import { apiRequest } from '../api/client';
 const TOKEN_KEY = 'blynk.rider.pushToken';
 /** The channel the server's pushes name (backend push.sender.ts ORDERS_CHANNEL_ID). */
 export const ORDERS_CHANNEL = 'orders';
+/**
+ * Seller orders (owner, 2026-10-30): when the seller marks an order ready the server pushes
+ * `rider_order_ready` (data: delivery_id, order_id) to the assigned rider: "Order #1283 is ready".
+ * It is opened and shown exactly like "New delivery assigned" (both carry delivery_id).
+ */
+export const ORDER_READY_PUSH = 'rider_order_ready';
 /** Screens listening for this re-read at once (lib/useRevalidate.ts). */
 export const ASSIGNMENT_EVENT = 'blynk:assignment';
 
@@ -31,7 +37,13 @@ const isAndroidApp = () => {
   }
 };
 
-const deliveryIdOf = (data: unknown) => {
+/** The pushes the server names for this app: what the title says when a message arrives without one. */
+export function defaultPushTitle(data: unknown): string {
+  const type = (data as { type?: unknown } | undefined)?.type;
+  return type === ORDER_READY_PUSH ? 'Order is ready' : 'New delivery assigned';
+}
+
+export const deliveryIdOf = (data: unknown) => {
   const id = (data as { delivery_id?: unknown } | undefined)?.delivery_id;
   return typeof id === 'string' && id ? id : null;
 };
@@ -44,7 +56,7 @@ export async function startRiderPush(handlers: RiderPushHandlers): Promise<() =>
     await PushNotifications.createChannel({
       id: ORDERS_CHANNEL,
       name: 'Deliveries',
-      description: 'New deliveries assigned to you',
+      description: 'New deliveries assigned to you and orders ready to pick up',
       importance: 5,
       visibility: 1,
       vibration: true,
@@ -66,7 +78,7 @@ export async function startRiderPush(handlers: RiderPushHandlers): Promise<() =>
     handles.push(
       await PushNotifications.addListener('pushNotificationReceived', (n) => {
         window.dispatchEvent(new Event(ASSIGNMENT_EVENT));
-        handlers.onForeground(n.title ?? 'New delivery assigned', n.body ?? '', deliveryIdOf(n.data));
+        handlers.onForeground(n.title ?? defaultPushTitle(n.data), n.body ?? '', deliveryIdOf(n.data));
       }),
     );
     handles.push(

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 // The maplibre-gl stand-in from test/setup.ts exposes what the map was asked.
 // @ts-expect-error - mapInstances exists only on the test stand-in.
@@ -111,5 +111,68 @@ describe('DeliveryMap', () => {
       watcher!({ coords: { latitude: RIDER_HERE.lat, longitude: RIDER_HERE.lng } } as GeolocationPosition);
     });
     expect(screen.getByRole('status')).toHaveTextContent('Route unavailable');
+  });
+
+  it('a seller order draws the road route SHOP -> CUSTOMER with both pins, and does not route from the rider', async () => {
+    let watcher: ((p: GeolocationPosition) => void) | null = null;
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      geolocation: { watchPosition: (ok: (p: GeolocationPosition) => void) => ((watcher = ok), 1), clearWatch: vi.fn() },
+    });
+    const SHOP = { lat: 6.41, lng: 80.03 };
+    const api = mockApi({
+      'GET /routing/route': () => ({
+        route: {
+          distance_m: 3100,
+          duration_s: 540,
+          coordinates: [
+            [SHOP.lng, SHOP.lat],
+            [CUSTOMER.lng, CUSTOMER.lat],
+          ],
+        },
+      }),
+    });
+
+    render(<DeliveryMap destination={CUSTOMER} pickup={SHOP} />);
+    const map = mapInstances[0];
+    expect(map.fitted).not.toBeNull(); // shop and customer in view before any GPS fix
+    expect(screen.getByRole('region', { name: 'Route from the shop to the customer' })).toBeInTheDocument();
+    act(() => map.handlers.load());
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Shop to customer: 3.1 km · 9 min'));
+    expect(map.sources.route.data).toMatchObject({
+      geometry: { type: 'LineString', coordinates: [[SHOP.lng, SHOP.lat], [CUSTOMER.lng, CUSTOMER.lat]] },
+    });
+    const asked = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]));
+    expect(asked.filter((u) => u.includes('/routing/route'))).toHaveLength(1);
+    expect(asked[0]).toContain('from=6.410000,80.030000');
+
+    // The rider's own fix moves the dot and widens the view, but does not ask for a rider -> customer route.
+    await act(async () => {
+      watcher!({ coords: { latitude: RIDER_HERE.lat, longitude: RIDER_HERE.lng } } as GeolocationPosition);
+    });
+    expect(api.find('GET', '/routing/route')).toHaveLength(1);
+    expect(screen.getByRole('status')).toHaveTextContent('Shop to customer');
+  });
+
+  it('a seller order draws the route even if it arrives before the map style has loaded', async () => {
+    vi.stubGlobal('navigator', { ...navigator, geolocation: { watchPosition: () => 1, clearWatch: vi.fn() } });
+    mockApi({
+      'GET /routing/route': () => ({
+        route: { distance_m: 900, duration_s: 120, coordinates: [[80.03, 6.41], [CUSTOMER.lng, CUSTOMER.lat]] },
+      }),
+    });
+    render(<DeliveryMap destination={CUSTOMER} pickup={{ lat: 6.41, lng: 80.03 }} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('900 m · 2 min'));
+    const map = mapInstances[0];
+    expect(map.sources.route).toBeUndefined(); // style not loaded yet
+    act(() => map.handlers.load());
+    expect(map.sources.route.data).toMatchObject({ geometry: { type: 'LineString' } });
+  });
+
+  it("says so, and keeps both pins, when the shop's route cannot be drawn", async () => {
+    vi.stubGlobal('navigator', { ...navigator, geolocation: { watchPosition: () => 1, clearWatch: vi.fn() } });
+    mockApi({ 'GET /routing/route': () => ({ status: 503, error: { code: 'ROUTING_UNAVAILABLE', message: 'down' } }) });
+    render(<DeliveryMap destination={CUSTOMER} pickup={{ lat: 6.41, lng: 80.03 }} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Route unavailable'));
   });
 });

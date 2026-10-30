@@ -1,12 +1,13 @@
 import { useCallback, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { deliveriesApi } from '../api/resources';
-import type { DeliverySummary } from '../api/types';
+import type { DeliverySummary, PickupPoint } from '../api/types';
 import { Banner } from '../components/Banner';
 import { Header } from '../components/Header';
 import { HomeTipNotice } from '../components/TipNotice';
 import { isPaidByWallet, isPaidOnline, nextAction, PAID_BY_WALLET_NOTE, PAID_ONLINE_NOTE, splitQueue, statusLabel, statusTone } from '../lib/delivery';
 import { errorMessage } from '../lib/errors';
+import { pickupListLine, sellerPickups, usePickups } from '../lib/pickups';
 import { formatMoney, formatScheduledSlot, shortOrderNumber } from '../lib/format';
 import { syncTrackingFromList } from '../lib/tracker-session';
 import { formatAway, formatByRoad, isTripStop, orderTrip, useRiderPosition, useRoadOrder, type TripStop } from '../lib/trip';
@@ -33,6 +34,8 @@ export function Queue() {
     if (data) syncTrackingFromList(data).catch(() => undefined);
   }, [data]);
 
+  // Seller orders (owner, 2026-10-30): which shop to collect from, and whether it is ready.
+  const pickups = usePickups(data ?? null);
   const queue = data ? splitQueue(data) : null;
   // Rider trips: two or more orders to act on are one trip, shown as its
   // stops in order. A single delivery keeps the ordinary "Now" slip.
@@ -63,7 +66,11 @@ export function Queue() {
 
         {queue ? (
           <>
-            {trip ? <TripView stops={trip} /> : queue.now ? <NowSlip delivery={queue.now} /> : null}
+            {trip ? (
+              <TripView stops={trip} pickups={pickups} />
+            ) : queue.now ? (
+              <NowSlip delivery={queue.now} pickups={pickups.get(queue.now.delivery_id)} />
+            ) : null}
 
             {!queue.now && queue.next.length === 0 ? (
               <section className="empty">
@@ -94,6 +101,7 @@ export function Queue() {
                         <span className="row__where">
                           <span className="row__place">{d.delivery_address_line1}</span>
                           <span className={`row__status tone--${statusTone(d)}`}>{statusLabel(d)}</span>
+                          <PickupLine pickups={pickups.get(d.delivery_id)} className="row__pickup" />
                           {/* Scheduled slot, when the customer picked one (owner, 2026-10-10). */}
                           {formatScheduledSlot(d.scheduled_for, d.scheduled_until) ? (
                             <span className="row__slot">{formatScheduledSlot(d.scheduled_for, d.scheduled_until)}</span>
@@ -141,7 +149,18 @@ export function Queue() {
   );
 }
 
-function NowSlip({ delivery: d }: { delivery: DeliverySummary }) {
+/** "At <shop>" while the seller prepares the order, green "Ready at <shop>" once it is ready. */
+function PickupLine({ pickups, className }: { pickups: PickupPoint[] | undefined; className: string }) {
+  const line = pickupListLine(pickups);
+  if (!line) return null;
+  return (
+    <span className={`${className} pickup-line pickup-line--${line.ready ? 'ready' : 'preparing'}`} data-testid="pickup-line">
+      {line.text}
+    </span>
+  );
+}
+
+function NowSlip({ delivery: d, pickups }: { delivery: DeliverySummary; pickups: PickupPoint[] | undefined }) {
   const number = shortOrderNumber(d.order_number);
   const slot = formatScheduledSlot(d.scheduled_for, d.scheduled_until);
   return (
@@ -152,6 +171,7 @@ function NowSlip({ delivery: d }: { delivery: DeliverySummary }) {
         </h2>
         <span className={`slip__state tone--${statusTone(d)}`}>{statusLabel(d)}</span>
       </div>
+      <PickupLine pickups={pickups} className="slip__pickup" />
       <p className="slip__dest">{d.delivery_address_line1}</p>
       {d.delivery_address_line2 ? <p className="slip__dest-2">{d.delivery_address_line2}</p> : null}
       <p className="slip__meta">
@@ -184,8 +204,10 @@ function NowSlip({ delivery: d }: { delivery: DeliverySummary }) {
  * in order: at the door, then on the road (road order when known, else
  * nearest first), then still at the store (lib/trip.ts).
  */
-function TripView({ stops }: { stops: TripStop[] }) {
+function TripView({ stops, pickups }: { stops: TripStop[]; pickups: Map<string, PickupPoint[]> }) {
   const toPickUp = stops.filter((s) => nextAction(s.delivery).kind === 'pickUp').length;
+  // A seller's order is collected at the shop, not the store.
+  const atShops = stops.some((s) => nextAction(s.delivery).kind === 'pickUp' && sellerPickups(pickups.get(s.delivery.delivery_id)).length > 0);
   const cash = stops.filter((s) => owesCash(s.delivery)).reduce((sum, s) => sum + s.delivery.total_amount, 0);
   return (
     <section className="trip" aria-labelledby="trip-heading">
@@ -196,9 +218,13 @@ function TripView({ stops }: { stops: TripStop[] }) {
         {cash > 0 ? <span className="trip__cash">{formatMoney(cash)} cash in all</span> : null}
       </div>
       {toPickUp > 1 ? (
-        <p className="slip__note">Pick up all {toPickUp} orders at the store before you leave.</p>
+        <p className="slip__note">
+          {atShops ? `Pick up all ${toPickUp} orders (store and shops) before you leave.` : `Pick up all ${toPickUp} orders at the store before you leave.`}
+        </p>
       ) : toPickUp === 1 && stops.length > 1 ? (
-        <p className="slip__note">One order is still at the store. Pick it up when you are there.</p>
+        <p className="slip__note">
+          {atShops ? 'One order is still to pick up. Collect it when you are there.' : 'One order is still at the store. Pick it up when you are there.'}
+        </p>
       ) : null}
       <ol className="trip__stops">
         {stops.map((s, i) => {
@@ -210,6 +236,7 @@ function TripView({ stops }: { stops: TripStop[] }) {
                 <span className="trip__n">Stop {i + 1}</span>
                 <span className={`slip__state tone--${statusTone(d)}`}>{statusLabel(d)}</span>
               </div>
+              <PickupLine pickups={pickups.get(d.delivery_id)} className="slip__pickup" />
               <p className="slip__dest">{d.delivery_address_line1}</p>
               <p className="slip__meta">
                 <span className="mono">#{number}</span>
