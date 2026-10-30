@@ -1,8 +1,8 @@
 {
   "app": "rider",
-  "version_code": 392,
-  "version_name": "1.9",
-  "sha256": "f64366e280fefe73660c7222df3975dd0a33f68720bb4ceb67744a1509e623c6",
-  "size": 5856880,
-  "released_at": "2026-10-27T13:16:24.496Z"
+  "version_code": 400,
+  "version_name": "2.0",
+  "sha256": "451080c1842d5d06fc2a82225bf9e2c31cc5de0c88ec0469b35ba644c82290d4",
+  "size": 5858919,
+  "released_at": "2026-10-30T11:02:02.120Z"
 }
