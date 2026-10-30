@@ -58,6 +58,8 @@ describe('Seller portal, seller and staff sides together', () => {
       category_id: categoryId,
       unit: '250 ml',
       description: 'Fresh pressed',
+      // a photo is mandatory for a new product (2026-10-30)
+      image_url: '/uploads/products/seller-e2e-test.png',
       seller_price: 80,
     });
     expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);

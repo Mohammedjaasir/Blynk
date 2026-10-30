@@ -12,7 +12,7 @@ import { AppError } from '../../middleware/error.middleware.js';
 import { priceForProduct } from '../catalog/catalog.pricing.js';
 import type { CreateProductInput, EditProductInput, ProfileInput } from './seller.schema.js';
 import { sellerStatement, type Statement } from './seller.statement.js';
-import { commissionRule } from './seller.commission.js';
+import { commissionFreeDays, commissionRule, freeDaysLeft, hasCommissionFreeColumn } from './seller.commission.js';
 
 /**
  * Seller-facing logic (role SELLER; docs/superpowers/plans/2026-10-24-seller-portal.md). A seller
@@ -101,6 +101,8 @@ export const toSellerDto = (s: SellerRow, ctx: LocationContext): SellerDto => ({
   created_at: s.created_at,
   ...presentLocation(s as unknown as Record<string, unknown>, ctx),
 });
+
+const imageRequired = () => new AppError('Add a photo of the product.', 400, 'IMAGE_REQUIRED', { field: 'image_url' });
 
 const coord = (v: unknown): number | null => (v === null || v === undefined || v === '' ? null : Number(v));
 const samePoint = (a: number | null, b: number | null) => a !== null && b !== null && Math.round(a * 1e6) === Math.round(b * 1e6);
@@ -222,11 +224,21 @@ export class SellerService {
       locationContext(),
     ]);
     const dto = toSellerDto(seller, ctx);
+    // The commission-free month (migration 065; owner's brother, 2026-10-30): when it ends and whole days
+    // left (rounded up, 0 once over, null = no free period or 065 not run); `commission_free_days` is
+    // the setting (the length of a new seller's month). Beside `seller`, not inside it (the profile save returns the same shape).
+    const freeUntil = (await hasCommissionFreeColumn()) && seller.commission_free_until ? new Date(seller.commission_free_until) : null;
+    const free = {
+      commission_free_until: freeUntil ? freeUntil.toISOString() : null,
+      commission_free_days_left: freeDaysLeft(freeUntil),
+      commission_free_days: await commissionFreeDays(),
+    };
     return {
       seller: dto,
       counts: { products: Number(products.n), pending: Number(pending.n) },
       // What Blynk keeps (owner, 2026-10-24): the seller's own rate, else per category, else the default.
       commission_rule: await commissionRule(dto.commission_percent),
+      ...free,
     };
   }
 
@@ -410,6 +422,8 @@ export class SellerService {
   async createSubmission(userId: string, input: CreateProductInput) {
     const seller = await this.sellerOf(userId);
     this.assertApproved(seller);
+    // A photo is mandatory for a new product (owner's brother, 2026-10-30).
+    if (!input.image_url) throw imageRequired();
     await this.assertCategory(input.category_id);
     const payload: SubmissionPayload = {
       name: input.name,
@@ -436,6 +450,8 @@ export class SellerService {
   async editSubmission(userId: string, productId: string, input: EditProductInput) {
     const seller = await this.sellerOf(userId);
     this.assertApproved(seller);
+    // An edit keeps the product's photo unless it sends another one; it cannot remove it.
+    if (input.image_url !== undefined && !input.image_url) throw imageRequired();
     if (input.category_id) await this.assertCategory(input.category_id);
 
     const row = await db.transaction().execute(async (trx) => {

@@ -190,7 +190,9 @@ describe('The fee from the pickup points', () => {
     const order = await fx.placeOrder([{ product_id: blynk, quantity: 1 }]);
     expect(await orderRow(order.id)).toMatchObject({ fee: FEE_2_3, standard: FEE_2_3, mode: 'DISTANCE_TIERS', km: 2.3, estimated: false });
     const store = (await pool.query('SELECT latitude::float AS lat, longitude::float AS lng FROM dark_stores WHERE id = (SELECT dark_store_id FROM orders WHERE id = $1)', [order.id])).rows[0];
-    expect((await adminDetail(order.id)).pickups).toEqual([{ kind: 'STORE', lat: store.lat, lng: store.lng }]);
+    expect((await adminDetail(order.id)).pickups).toEqual([
+      { kind: 'STORE', shop_name: 'Blynk store', lat: store.lat, lng: store.lng, address: null, how_to_find: null, phone: null, ready: true },
+    ]);
   });
 
   it("a seller's cart is charged from the seller's approved shop point", async () => {
@@ -198,7 +200,17 @@ describe('The fee from the pickup points', () => {
     const order = await fx.placeOrder([{ product_id: farProduct, quantity: 1 }]);
     expect(await orderRow(order.id)).toMatchObject({ fee: FEE_4_1, standard: FEE_4_1, km: 4.1 });
     expect((await adminDetail(order.id)).pickups).toEqual([
-      { kind: 'SELLER', seller_id: sellers.far, shop_name: 'Pickup Far Shop', lat: FAR.lat, lng: FAR.lng },
+      {
+        kind: 'SELLER',
+        seller_id: sellers.far,
+        shop_name: 'Pickup Far Shop',
+        lat: FAR.lat,
+        lng: FAR.lng,
+        address: null,
+        how_to_find: null,
+        phone: `${PHONE_BASE}01`,
+        ready: false,
+      },
     ]);
   });
 
@@ -216,7 +228,7 @@ describe('The fee from the pickup points', () => {
     expect(await orderRow(order.id)).toMatchObject({ fee: FEE_4_1, km: 4.1 });
     const pickups = (await adminDetail(order.id)).pickups;
     expect(pickups.map((p: { kind: string; shop_name?: string }) => [p.kind, p.shop_name ?? null])).toEqual([
-      ['STORE', null],
+      ['STORE', 'Blynk store'],
       ['SELLER', 'Pickup Far Shop'],
       ['SELLER', 'Pickup Near Shop'],
     ]);
@@ -288,7 +300,7 @@ describe('Rider distance pay uses the same distance', () => {
     const detail = await request(app).get(`/api/v1/riders/deliveries/${deliveryId}`).set(auth(rider.token));
     expect(detail.status, JSON.stringify(detail.body)).toBe(200);
     expect(detail.body.data.delivery.pickups.map((p: { kind: string; shop_name?: string }) => [p.kind, p.shop_name ?? null])).toEqual([
-      ['STORE', null],
+      ['STORE', 'Blynk store'],
       ['SELLER', 'Pickup Far Shop'],
     ]);
     expect((await fx.riderStep(deliveryId, { status: 'PICKED_UP' }, rider.token)).status).toBe(200);

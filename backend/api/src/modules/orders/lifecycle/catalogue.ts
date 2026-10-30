@@ -52,6 +52,12 @@ export interface CatalogueEntry {
    * given instead of the note, which is then the written override.
    */
   codeReplacesNotes?: boolean;
+  /**
+   * A SELLER (role SELLER, with req.sellerId) may also run this action, over an order that is
+   * entirely their own (seller portal, 2026-10-30: "Order is ready"). Only PACK carries it; the
+   * action itself re-checks the ownership under the order lock.
+   */
+  sellerMayRun?: boolean;
   /** Customer SMS outbox types this action enqueues. */
   notifications: readonly string[];
   /** What the action does to tracked stock (inventory plan §4). */
@@ -91,7 +97,7 @@ export const CATALOGUE: Record<ActionName, CatalogueEntry> = {
   },
   PACK: {
     action: 'PACK', from: ['PLACED', 'ITEM_UNAVAILABLE'], to: 'PACKED', roles: STORE,
-    lock: 'allItems', notesRequired: false, stock: 'TAKE_PENDING_STOCK', notifications: [],
+    lock: 'allItems', notesRequired: false, stock: 'TAKE_PENDING_STOCK', notifications: [], sellerMayRun: true,
   },
   ASSIGN_RIDER: {
     action: 'ASSIGN_RIDER', from: ['PACKED'], to: null, roles: ADMIN,

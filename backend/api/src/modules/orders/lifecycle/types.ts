@@ -56,6 +56,12 @@ export interface TransitionRequest {
   deliveryId?: string;
   /** ... and the caller's rider profile, which must own it. */
   riderId?: string;
+  /**
+   * A SELLER actor's own sellers row (seller portal, 2026-10-30): the only thing that lets a SELLER
+   * run an action that is flagged sellerMayRun in the catalogue (PACK, "the order is ready").
+   * Resolved from the authenticated user, never from the request body.
+   */
+  sellerId?: string;
   input?: TransitionInput;
 }
 

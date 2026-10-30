@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { normalizeSriLankanPhone } from '../../utils/phone.js';
+import { mediaStorage } from '../../utils/storage.js';
+import { FREE_DAYS_MAX } from './seller.commission.js';
+import { LOCATION_NOTE_MAX, SRI_LANKA_BOUNDS } from './seller.location.js';
 
 /**
  * Staff side of the seller portal (docs/superpowers/plans/2026-10-24-seller-portal.md):
@@ -109,6 +112,13 @@ export const createSellerSchema = z
   .strict();
 export type CreateSellerInput = z.infer<typeof createSellerSchema>;
 
+/** An ISO date-time (with its offset), at most 5 years ahead; null = no free period. */
+const freeUntil = z
+  .string({ invalid_type_error: 'The date must be text' })
+  .datetime({ offset: true, message: 'Use a date and time like 2026-11-30T23:59:59+05:30' })
+  .refine((v) => new Date(v).getTime() <= Date.now() + 5 * 365 * 86_400_000, 'The free period cannot run more than 5 years')
+  .nullable();
+
 /** PATCH /admin/sellers/:id */
 export const patchSellerSchema = z
   .object({
@@ -122,6 +132,8 @@ export const patchSellerSchema = z
     contact_name: profileText('Contact name', 80),
     address: profileText('Address', 255),
     note: profileText('Note', 500),
+    // migration 065: when the seller's commission-free month ends (null = no free period)
+    commission_free_until: freeUntil.optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
@@ -186,6 +198,13 @@ export type RecordPayoutInput = z.infer<typeof recordPayoutSchema>;
 export const commissionSettingsSchema = z
   .object({
     default_percent: percent('Default commission'),
+    // the free month for sellers approved from now on, in days (0 = none); left out = unchanged
+    free_days: z
+      .number({ invalid_type_error: 'Free days must be a number' })
+      .int('Free days must be a whole number')
+      .min(0, 'Free days cannot be negative')
+      .max(FREE_DAYS_MAX, `Free days cannot be above ${FREE_DAYS_MAX}`)
+      .optional(),
     categories: z
       .array(
         z
@@ -200,6 +219,52 @@ export const commissionSettingsSchema = z
   })
   .strict();
 export type CommissionSettingsInput = z.infer<typeof commissionSettingsSchema>;
+
+/** POST /admin/sellers/:id/products - the photo is checked by the service (400 IMAGE_REQUIRED). */
+export const createSellerProductSchema = z
+  .object({
+    name: z.string({ required_error: 'Name is required' }).trim().min(2, 'Name must be at least 2 characters').max(120, 'Name must be at most 120 characters'),
+    category_id: z.string({ required_error: 'Category is required' }).uuid('Choose one of the listed categories'),
+    unit: z.string({ required_error: 'Unit is required' }).trim().min(1, 'Unit is required').max(32, 'Unit must be at most 32 characters'),
+    pack_size: profileText('Pack size', 64),
+    description: profileText('Description', 2000),
+    image_url: z
+      .string({ invalid_type_error: 'The photo must be an uploaded image' })
+      .trim()
+      .max(500)
+      .refine((u) => u === '' || mediaStorage.keyFromUrl(u) !== null || /^https?:\/\//i.test(u), 'Upload the photo with the image uploader')
+      .nullable()
+      .optional()
+      .transform((v) => (v ? v : null)),
+    seller_price: money('Seller price').refine((n) => n <= 1_000_000, 'Seller price must be at most 1,000,000'),
+    selling_price: money('Selling price'),
+    barcode: profileText('Barcode', 64),
+    stock_quantity: z
+      .number({ invalid_type_error: 'Stock must be a number' })
+      .int('Stock must be a whole number')
+      .min(0, 'Stock cannot be negative')
+      .max(100_000, 'Stock must be at most 100,000')
+      .optional(),
+  })
+  .strict();
+export type CreateSellerProductInput = z.infer<typeof createSellerProductSchema>;
+
+/** PUT /admin/sellers/:id/location - the shop pin (inside Sri Lanka, like the seller's own) and how to find it. */
+const pinCoordinate = (what: 'Latitude' | 'Longitude', min: number, max: number) =>
+  z
+    .number({ required_error: `${what} is required`, invalid_type_error: `${what} must be a number` })
+    .finite(`${what} must be a number`)
+    .min(min, 'Pin a place in Sri Lanka')
+    .max(max, 'Pin a place in Sri Lanka');
+
+export const adminSellerLocationSchema = z
+  .object({
+    latitude: pinCoordinate('Latitude', SRI_LANKA_BOUNDS.minLat, SRI_LANKA_BOUNDS.maxLat),
+    longitude: pinCoordinate('Longitude', SRI_LANKA_BOUNDS.minLng, SRI_LANKA_BOUNDS.maxLng),
+    how_to_find: profileText('How to find it', LOCATION_NOTE_MAX),
+  })
+  .strict();
+export type AdminSellerLocationInput = z.infer<typeof adminSellerLocationSchema>;
 
 /**
  * What the seller proposed (seller_submissions.payload, written by the seller API). Read leniently:

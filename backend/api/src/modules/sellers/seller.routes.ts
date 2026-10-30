@@ -14,6 +14,8 @@ import {
   statementQuerySchema,
 } from './seller.schema.js';
 import { sellerService } from './seller.service.js';
+import { listSellerOrders, markSellerOrderReady, sellerOrdersQuerySchema, type SellerOrderStatus } from './seller.orders.js';
+import { availabilitySchema, setProductAvailability } from './seller.availability.js';
 import { setProductStock, setStockSchema, stockParamSchema } from './seller.stock.js';
 import {
   createPayoutRequestSchema,
@@ -100,6 +102,19 @@ sellerRouter.patch(
   handle(async (req) => ({ data: await sellerService.editSubmission(req.user!.id, String(req.params.id), req.body) }))
 );
 
+// A seller pauses / resumes a product (2026-10-30; seller.availability.ts): paused = unavailable to customers.
+sellerRouter.patch(
+  '/products/:id/availability',
+  validate({ params: idParamSchema, body: availabilitySchema }),
+  handle(async (req) => ({
+    data: await setProductAvailability(req.user!.id, String(req.params.id), req.body, {
+      actorId: req.user!.id,
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    }),
+  }))
+);
+
 // Sellers type their own stock (owner, 2026-10-26; seller.stock.ts): the number becomes the live stock.
 sellerRouter.put(
   '/products/:id/stock',
@@ -111,6 +126,19 @@ sellerRouter.put(
       userAgent: req.get('user-agent') ?? null,
     }),
   }))
+);
+
+// The seller's orders and "Order is ready" (2026-10-30; seller.orders.ts): never any customer detail.
+sellerRouter.get(
+  '/orders',
+  validate({ query: sellerOrdersQuerySchema }),
+  handle(async (req) => ({ data: await listSellerOrders(req.user!.id, (req.query as { status?: SellerOrderStatus }).status) }))
+);
+
+sellerRouter.post(
+  '/orders/:id/ready',
+  validate({ params: idParamSchema }),
+  handle(async (req) => ({ data: await markSellerOrderReady(req.user!.id, String(req.params.id)) }))
 );
 
 sellerRouter.delete(

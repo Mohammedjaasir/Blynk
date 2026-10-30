@@ -4,8 +4,10 @@ import { requireRoles } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import type { AuditActor } from '../audit/audit.writer.js';
 import {
+  adminSellerLocationSchema,
   approveSubmissionSchema,
   commissionSettingsSchema,
+  createSellerProductSchema,
   createSellerSchema,
   idParamSchema,
   listSellersQuerySchema,
@@ -30,6 +32,7 @@ import {
   rejectSubmission,
   updateSeller,
 } from './admin-sellers.service.js';
+import { createSellerProduct, listSellerProducts, setSellerLocation } from './admin-sellers.tools.js';
 import { getCommissionSettings, setCommissionSettings } from './seller.commission.js';
 import {
   cancelStockNoteSchema,
@@ -57,7 +60,10 @@ import {
  *   GET    /admin/sellers                              ?status=&search=
  *   POST   /admin/sellers                              add a seller (invite-only, 2026-10-24)
  *   GET    /admin/sellers/:id                          seller + statement (?from=&to=)
- *   PATCH  /admin/sellers/:id                          approve / reject / suspend, commission
+ *   PATCH  /admin/sellers/:id                          approve / reject / suspend, commission, commission_free_until, shop details
+ *   GET    /admin/sellers/:id/products                 what the seller sells (LIVE / PAUSED / OFF)      (admin-sellers.tools.ts)
+ *   POST   /admin/sellers/:id/products                 add a live product for the seller (photo required)
+ *   PUT    /admin/sellers/:id/location                 { latitude, longitude, how_to_find? } - approved at once
  *   POST   /admin/sellers/:id/location/approve         the seller's waiting shop pin becomes the one in use
  *   POST   /admin/sellers/:id/location/reject          { reason }
  *   GET    /admin/seller-submissions                   ?status=PENDING (default)&seller_id=
@@ -66,7 +72,7 @@ import {
  *   POST   /admin/sellers/:id/payouts                  { amount, note?, paid_on? }
  *   DELETE /admin/sellers/:id/payouts/:payoutId
  *   GET    /admin/settings/seller-commission           default % + category rates (seller.commission.ts)
- *   PUT    /admin/settings/seller-commission           { default_percent, categories?: [{ category_id, percent|null }] }
+ *   PUT    /admin/settings/seller-commission           { default_percent, free_days?, categories?: [{ category_id, percent|null }] }
  *   GET    /admin/seller-stock-notes                   ?status=SENT (default)&seller_id=   (migration 057)
  *   POST   /admin/seller-stock-notes/:id/receive       { received_quantity } - onto the tracked stock
  *   POST   /admin/seller-stock-notes/:id/cancel        { reason? }
@@ -130,6 +136,33 @@ adminSellersRouter.patch(
   validate({ params: idParamSchema, body: patchSellerSchema }),
   handle(async (req, res) => {
     res.status(200).json({ success: true, data: await updateSeller(req.params.id as string, req.body, actorOf(req)) });
+  })
+);
+
+adminSellersRouter.get(
+  '/sellers/:id/products',
+  ...staff,
+  validate({ params: idParamSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await listSellerProducts(req.params.id as string) });
+  })
+);
+
+adminSellersRouter.post(
+  '/sellers/:id/products',
+  ...staff,
+  validate({ params: idParamSchema, body: createSellerProductSchema }),
+  handle(async (req, res) => {
+    res.status(201).json({ success: true, data: await createSellerProduct(req.params.id as string, req.body, actorOf(req)) });
+  })
+);
+
+adminSellersRouter.put(
+  '/sellers/:id/location',
+  ...staff,
+  validate({ params: idParamSchema, body: adminSellerLocationSchema }),
+  handle(async (req, res) => {
+    res.status(200).json({ success: true, data: await setSellerLocation(req.params.id as string, req.body, actorOf(req)) });
   })
 );
 

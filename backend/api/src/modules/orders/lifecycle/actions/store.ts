@@ -8,6 +8,7 @@ import { recomputeBirthdayDiscount } from '../../../birthday/birthday.offer.js';
 import { recomputeOrderRewards } from '../../../loyalty/order-rewards.js';
 import { settleWalletAfterItemChange } from '../../../wallet/wallet.service.js';
 import { setOrderStatus, updateOrderFields } from '../status-writer.js';
+import { enqueueOrderReadyPush } from '../../../notifications/push/seller-order.events.js';
 import { recomputeBundleFreeUnits } from '../../bundle-recompute.js';
 import type { ActionImpl, Actor, DeliveryRow, ItemRow, LockedState, OrderRow, Trx } from '../types.js';
 import { dispatch, invalidTransition } from './shared.js';
@@ -188,6 +189,30 @@ async function sourcePendingItems(trx: Trx, order: OrderRow, items: ItemRow[], a
 }
 
 /**
+ * A seller's "Order is ready" (seller portal, 2026-10-30) is this same PACK, run by the seller's
+ * user for exactly one case, re-checked here under the order lock: the order is still PLACED (new)
+ * and every item still in the bag is a product of THIS seller. Anything else is refused with the
+ * seller routes' own codes (409 ORDER_NOT_NEW, 409 SELLER_ORDER_MIXED); staff packing is unchanged.
+ */
+async function assertSellerOwnsWholeNewOrder(trx: Trx, order: OrderRow, sellerId: string): Promise<void> {
+  if (order.order_status !== 'PLACED') {
+    throw new AppError('This order is not new any more.', 409, 'ORDER_NOT_NEW', { order_id: order.id, order_status: order.order_status });
+  }
+  const others = await trx
+    .selectFrom('order_items as oi')
+    .innerJoin('products as p', 'p.id', 'oi.product_id')
+    .select('oi.id')
+    .where('oi.order_id', '=', order.id)
+    .where('oi.item_status', '!=', 'UNAVAILABLE')
+    .where((eb) => eb.or([eb('p.seller_id', 'is', null), eb('p.seller_id', '!=', sellerId)]))
+    .limit(1)
+    .executeTakeFirst();
+  if (others) {
+    throw new AppError('Blynk will collect this order.', 409, 'SELLER_ORDER_MIXED', { order_id: order.id });
+  }
+}
+
+/**
  * #3 PACK - the bag is packed (§G). Items not yet sourced are sourced here at
  * their estimated cost (sourcePendingItems); items already sourced keep their
  * recorded cost.
@@ -203,6 +228,7 @@ export const pack: ActionImpl<OrderRow> = {
     }
   },
   async apply(trx, { order, items }, req) {
+    if (req.actor.role === 'SELLER') await assertSellerOwnsWholeNewOrder(trx, order, req.sellerId!);
     await sourcePendingItems(trx, order, items ?? [], req.actor);
     // D8: the bag is packed, so are the items in it.
     await trx
@@ -211,9 +237,15 @@ export const pack: ActionImpl<OrderRow> = {
       .where('order_id', '=', order.id)
       .where('item_status', '=', 'SOURCED')
       .execute();
-    return await setOrderStatus(trx, order, 'PACKED', req.actor, req.input?.notes?.trim() || 'Packed', {
+    const packed = await setOrderStatus(trx, order, 'PACKED', req.actor, req.input?.notes?.trim() || 'Packed', {
       packed_at: new Date(),
     });
+    // The seller's "Order is ready" tells the rider (or staff, when no rider holds it yet).
+    if (req.actor.role === 'SELLER') {
+      const shop = await trx.selectFrom('sellers').select('shop_name').where('id', '=', req.sellerId!).executeTakeFirst();
+      await enqueueOrderReadyPush(trx, { order: packed, shopName: shop?.shop_name ?? 'the shop' });
+    }
+    return packed;
   },
 };
 

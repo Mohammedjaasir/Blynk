@@ -33,11 +33,15 @@ const uploaded: string[] = [];
 // A tiny but real PNG header + padding: the route sniffs the magic number.
 const png = (bytes = 64) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(bytes)]);
 
+// A photo is mandatory for a new product (2026-10-30): any Blynk upload URL passes the schema.
+const PHOTO = `/uploads/products/seller-portal-test-${stamp}.png`;
+
 const newProduct = (over: Record<string, unknown> = {}) => ({
   name: `Seller Jam ${stamp}`,
   category_id: categoryId,
   unit: '1 jar',
   seller_price: 450,
+  image_url: PHOTO,
   ...over,
 });
 
@@ -92,6 +96,8 @@ describe('GET /seller/me and PUT /seller/profile', () => {
       pending_distance_km_from_store: null,
     });
     expect(res.body.data.counts).toEqual({ products: 1, pending: 1 });
+    // the commission-free month (migration 065; tests/seller-commission-free.test.ts): none for this fixture seller
+    expect(res.body.data).toMatchObject({ commission_free_until: null, commission_free_days_left: null, commission_free_days: expect.any(Number) });
     expect(res.body.data.commission_rule).toEqual({ override_percent: null, default_percent: expect.any(Number) });
   });
 
@@ -175,7 +181,7 @@ describe('Submissions: a new product', () => {
         unit: '1 jar',
         pack_size: '500 g',
         description: 'Home made',
-        image_url: null,
+        image_url: PHOTO,
         barcode: '4791234567890',
       },
       seller_price: 449.5,
@@ -209,6 +215,17 @@ describe('Submissions: a new product', () => {
     }
     // 1,000,000 itself is allowed.
     expect((await api(s.token).post('/products', newProduct({ seller_price: 1_000_000 }))).status).toBe(201);
+  });
+
+  it('a photo is mandatory: no image_url (missing, null or blank) is 400 IMAGE_REQUIRED and nothing is saved', async () => {
+    const s = await fx.makeSeller(40);
+    for (const image_url of [undefined, null, '']) {
+      const res = await api(s.token).post('/products', newProduct({ image_url }));
+      expect(res.status, String(image_url)).toBe(400);
+      expect(res.body.error.code).toBe('IMAGE_REQUIRED');
+      expect(res.body.error.message).toBe('Add a photo of the product.');
+    }
+    expect((await pool.query('SELECT 1 FROM seller_submissions WHERE seller_id = $1', [s.sellerId])).rowCount).toBe(0);
   });
 
   it('the category must exist and be active', async () => {
@@ -396,6 +413,19 @@ describe('Submissions: editing a product', () => {
     const res = await api(s.token).patch(`/products/${s.productId}`, { name: 'Suspended' });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('SELLER_NOT_APPROVED');
+  });
+
+  it('an edit keeps the existing photo: it may leave the photo out but cannot remove it', async () => {
+    const s = await liveProduct(41);
+    await pool.query(`UPDATE products SET image_url = $2 WHERE id = $1`, [s.productId, PHOTO]);
+    const keep = await api(s.token).patch(`/products/${s.productId}`, { name: 'Same photo' });
+    expect(keep.status).toBe(200);
+    expect(keep.body.data.submission.payload.image_url).toBe(PHOTO);
+    for (const image_url of [null, '']) {
+      const res = await api(s.token).patch(`/products/${s.productId}`, { image_url });
+      expect(res.status, String(image_url)).toBe(400);
+      expect(res.body.error.code).toBe('IMAGE_REQUIRED');
+    }
   });
 
   it('validates the edit fields', async () => {

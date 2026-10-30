@@ -4,6 +4,7 @@ import { AppError } from '../../../middleware/error.middleware.js';
 import type { Actor, OrderRow, Trx } from './types.js';
 import { INITIAL_ORDER_STATUS } from './catalogue.js';
 import { enqueueNewOrderStaffPush, enqueueOrderStatusPush } from '../../notifications/push/push.events.js';
+import { enqueueSellerNewOrderPush, enqueueSellerOrderCancelledPush } from '../../notifications/push/seller-order.events.js';
 
 /** Order columns an action may change alongside the status - never the status itself. */
 export type OrderFields = Omit<Updateable<OrdersTable>, 'order_status' | 'id'>;
@@ -57,7 +58,14 @@ export async function setOrderStatus(
   // effort: it can never fail or block the transition.
   await enqueueOrderStatusPush(trx, updated, order.order_status, to);
   // an online order whose payment just went through is a new order for staff (owner, 2026-10-19)
-  if (order.order_status === 'AWAITING_PAYMENT' && to === 'PLACED') await enqueueNewOrderStaffPush(trx, updated);
+  if (order.order_status === 'AWAITING_PAYMENT' && to === 'PLACED') {
+    await enqueueNewOrderStaffPush(trx, updated);
+    // ... and for the sellers whose products are on it (seller portal, 2026-10-30)
+    await enqueueSellerNewOrderPush(trx, updated);
+  }
+  // A seller who was told about an order is told when it is cancelled. An online order that never
+  // got paid (AWAITING_PAYMENT) was never announced to them, so it is not announced as cancelled.
+  if (to === 'CANCELLED' && order.order_status !== 'AWAITING_PAYMENT') await enqueueSellerOrderCancelledPush(trx, updated);
 
   return updated;
 }

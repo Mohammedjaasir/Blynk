@@ -834,7 +834,7 @@ export class OrderService {
       // Repeat baskets (migration 054): the "Repeat" tag; null before 054.
       repeat_basket_id: order.repeat_basket_id ?? null,
       delivery_fee_waiver: await deliveryFeeWaiver(order.id),
-      pickups: await orderPickups({ id: order.id, dark_store_id: order.dark_store_id }),
+      pickups: await orderPickups({ id: order.id, dark_store_id: order.dark_store_id, order_status: order.order_status }),
       // Ratings (migration 055): the customer's rating of this order, or null.
       rating: await staffOrderRating(order.id),
     };

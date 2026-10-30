@@ -39,7 +39,9 @@ export async function runTransition<R = unknown>(name: ActionName, req: Transiti
     return await db.transaction().execute(async (trx) => {
       const state = await lockFor(trx, entry.lock, req);
       impl.checkState(state, req);
-      if (!entry.roles.includes(req.actor.role)) {
+      // A seller runs only the actions flagged for them, and only with their own sellers row.
+      const sellerAllowed = req.actor.role === 'SELLER' && entry.sellerMayRun === true && !!req.sellerId;
+      if (!entry.roles.includes(req.actor.role) && !sellerAllowed) {
         throw new AppError('Your role cannot make this change.', 403, 'TRANSITION_NOT_PERMITTED_FOR_ROLE', {
           action: name,
           role: req.actor.role,

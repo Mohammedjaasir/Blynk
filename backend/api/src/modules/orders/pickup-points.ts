@@ -1,5 +1,7 @@
+import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
-import { sellerPickupPoints } from '../sellers/seller.location.js';
+import type { OrderStatus } from '../../database/types.js';
+import { hasSellerLocationColumns, sellerPickupPoints } from '../sellers/seller.location.js';
 import type { DBConnection } from './order.repository.js';
 
 /*
@@ -103,10 +105,10 @@ export async function orderProductIds(orderId: string, executor: DBConnection = 
 }
 
 /**
- * The pickup points of a stored order (staff / rider order details; rider
- * pay). Without `dark_store_id` the order's own is read.
+ * The bare pickup points of a stored order (rider pay: only where each leg starts). Without
+ * `dark_store_id` the order's own is read.
  */
-export async function orderPickups(
+export async function orderPickupPoints(
   order: { id: string; dark_store_id?: string },
   executor: DBConnection = db
 ): Promise<PickupPoint[]> {
@@ -122,4 +124,91 @@ export async function orderPickups(
     .where('id', '=', storeId)
     .executeTakeFirst();
   return await pickupPointsFor(productIds, hub ?? null);
+}
+
+/**
+ * A pickup as the rider and staff see it (seller portal, 2026-10-30: "the rider doesn't know where
+ * to pick up the items from the seller"): the point plus what is needed to find the place and to
+ * know whether the goods are waiting.
+ *   - SELLER: shop name, the seller's shop address, how to find it (the approved location's note),
+ *     the seller's sign-in phone as the shop contact (null for an email-only account), and
+ *     `ready` = the order is PACKED or later (the seller pressed "Order is ready", or staff packed it).
+ *   - STORE: 'Blynk store', no address / note / phone, always ready (staff pack it themselves).
+ */
+export interface OrderPickup extends PickupPoint {
+  shop_name: string;
+  address: string | null;
+  how_to_find: string | null;
+  phone: string | null;
+  ready: boolean;
+}
+
+/** Order states in which the goods have been put together: the order was packed and is still alive. */
+const READY_STATUSES: readonly OrderStatus[] = ['PACKED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'CUSTOMER_UNAVAILABLE'];
+export const orderIsReady = (status: OrderStatus | string | null | undefined): boolean =>
+  READY_STATUSES.includes(status as OrderStatus);
+
+const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+
+/** The shop contact details of these sellers; empty (never an error) when they cannot be read. */
+async function sellerContacts(
+  ids: string[],
+  executor: DBConnection
+): Promise<Map<string, { address: string | null; how_to_find: string | null; phone: string | null }>> {
+  const out = new Map<string, { address: string | null; how_to_find: string | null; phone: string | null }>();
+  if (!ids.length) return out;
+  try {
+    // location_note exists only from migration 053.
+    const note = (await hasSellerLocationColumns()) ? sql`s.location_note` : sql`NULL::text`;
+    const { rows } = await sql<{ id: string; address: string | null; how_to_find: string | null; phone: string | null }>`
+      SELECT s.id, s.address, ${note} AS how_to_find, u.phone
+        FROM sellers s
+        JOIN users u ON u.id = s.user_id
+       WHERE s.id = ANY(${ids}::uuid[])`.execute(executor);
+    for (const r of rows) {
+      const phone = text(r.phone);
+      out.set(r.id, {
+        address: text(r.address),
+        how_to_find: text(r.how_to_find),
+        // Email-only accounts hold a placeholder, not a number.
+        phone: phone && !phone.startsWith('nophone:') ? phone : null,
+      });
+    }
+  } catch {
+    // Contact details are an extra: the point itself still shows.
+  }
+  return out;
+}
+
+/**
+ * The pickups of a stored order (staff / rider order details), worked out on read. Pass
+ * `order_status` when it is at hand; otherwise it is read.
+ */
+export async function orderPickups(
+  order: { id: string; dark_store_id?: string; order_status?: OrderStatus },
+  executor: DBConnection = db
+): Promise<OrderPickup[]> {
+  const points = await orderPickupPoints(order, executor);
+  const status =
+    order.order_status ??
+    (await executor.selectFrom('orders').select('order_status').where('id', '=', order.id).executeTakeFirst())?.order_status;
+  const ready = orderIsReady(status);
+  const contacts = await sellerContacts(
+    points.filter((p) => p.kind === 'SELLER' && p.seller_id).map((p) => p.seller_id!),
+    executor
+  );
+  return points.map((p) => {
+    if (p.kind !== 'SELLER') {
+      return { ...p, shop_name: 'Blynk store', address: null, how_to_find: null, phone: null, ready: true };
+    }
+    const c = contacts.get(p.seller_id!);
+    return {
+      ...p,
+      shop_name: p.shop_name ?? '',
+      address: c?.address ?? null,
+      how_to_find: c?.how_to_find ?? null,
+      phone: c?.phone ?? null,
+      ready,
+    };
+  });
 }

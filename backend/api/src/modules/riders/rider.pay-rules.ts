@@ -13,7 +13,7 @@ import type { DBConnection } from '../orders/order.repository.js';
 import type { DeliveryRow, OrderRow } from '../orders/lifecycle/types.js';
 import { haversineM, roadDistanceM } from '../routing/index.js';
 import { kmTiersFrom, kmTiersSchema, priceByKmTiers, type KmTier } from '../pricing/km-tiers.js';
-import { farthestPickupDistance, orderPickups, type PickupPoint } from '../orders/pickup-points.js';
+import { farthestPickupDistance, orderPickupPoints, type PickupPoint } from '../orders/pickup-points.js';
 
 /*
  * Rider pay controls (migration 038; owner, 2026-10-10): "give the option in
@@ -612,7 +612,7 @@ export async function computePaySnapshot(
     // road distance from any of the order's pickup points (the store for
     // Blynk's products, a seller's approved shop for theirs) to the drop-off.
     // A Blynk-only order: store -> drop-off, as before.
-    const points = await orderPickups({ id: order.id, dark_store_id: order.dark_store_id }, executor);
+    const points = await orderPickupPoints({ id: order.id, dark_store_id: order.dark_store_id }, executor);
     const far = await farthestPickupDistance(
       points,
       { lat: Number(order.delivery_latitude), lng: Number(order.delivery_longitude) },

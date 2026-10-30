@@ -9,6 +9,7 @@ import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { lockInventoryRow, recordStockMovement } from '../inventory/stock-ledger.js';
 import { insertPayout, notifySeller, payoutDeclinedPush, payoutPaidPush } from './admin-sellers.service.js';
 import { assertSellerRequestsReady } from './seller-requests.guard.js';
+import { commissionContext, earnedSql, type CommissionContext } from './seller.commission.js';
 import { sellerService } from './seller.service.js';
 import { sellerStatement } from './seller.statement.js';
 import {
@@ -168,22 +169,17 @@ interface PayoutRequestRow {
   shop_name: string;
   phone: string;
   email: string | null;
-  commission_percent: string;
-  gross: string;
+  /** delivered sales less commission, line by line, free month included (seller.commission.ts) */
+  earned: string;
   paid: string;
 }
 
-const payoutRequestSelect = sql`
+const payoutRequestSelect = (ctx: CommissionContext) => sql`
   SELECT r.id, r.seller_id, r.amount::text AS amount, r.method, r.bank_details, r.note, r.status,
          r.decline_reason, r.payout_id, to_char(sp.paid_on, 'YYYY-MM-DD') AS paid_on, r.handled_at, r.created_at,
-         s.shop_name, u.phone, u.email, s.commission_percent::text AS commission_percent,
-         -- what is due now (seller.statement.ts rules), for staff deciding
-         (SELECT COALESCE(SUM(oi.quantity * oi.estimated_unit_cost), 0)::text
-            FROM order_items oi
-            JOIN orders o ON o.id = oi.order_id
-            JOIN products p ON p.id = oi.product_id
-           WHERE p.seller_id = s.id AND o.order_status = 'DELIVERED'
-             AND oi.item_status NOT IN ('UNAVAILABLE', 'SUBSTITUTED')) AS gross,
+         s.shop_name, u.phone, u.email,
+         -- what is due now (seller.statement.ts rules: rates per line, the free month), for staff deciding
+         ${earnedSql(sql`s.id`, ctx)} AS earned,
          (SELECT COALESCE(SUM(x.amount), 0)::text FROM seller_payouts x WHERE x.seller_id = s.id) AS paid
     FROM seller_payout_requests r
     JOIN sellers s ON s.id = r.seller_id
@@ -207,8 +203,7 @@ function presentPayoutRequest(r: PayoutRequestRow) {
 }
 
 function presentStaffPayoutRequest(r: PayoutRequestRow) {
-  const gross = round2(Number(r.gross));
-  const earned = round2(gross - round2((gross * Number(r.commission_percent)) / 100));
+  const earned = round2(Number(r.earned));
   return {
     ...presentPayoutRequest(r),
     seller: { id: r.seller_id, shop_name: r.shop_name, phone: publicPhone(r.phone), email: r.email },
@@ -217,7 +212,7 @@ function presentStaffPayoutRequest(r: PayoutRequestRow) {
 }
 
 async function payoutRequestRow(executor: typeof db | Trx, id: string): Promise<PayoutRequestRow | undefined> {
-  return (await sql<PayoutRequestRow>`${payoutRequestSelect} WHERE r.id = ${id}`.execute(executor)).rows[0];
+  return (await sql<PayoutRequestRow>`${payoutRequestSelect(await commissionContext())} WHERE r.id = ${id}`.execute(executor)).rows[0];
 }
 
 const isUniqueViolation = (err: unknown) => (err as { code?: string } | null)?.code === '23505';
@@ -339,8 +334,9 @@ export async function createPayoutRequest(userId: string, input: CreatePayoutReq
 export async function listSellerPayoutRequests(userId: string) {
   await assertReady();
   const seller = await sellerService.sellerOf(userId);
+  const ctx = await commissionContext();
   const [rows, statement] = await Promise.all([
-    sql<PayoutRequestRow>`${payoutRequestSelect}
+    sql<PayoutRequestRow>`${payoutRequestSelect(ctx)}
       WHERE r.seller_id = ${seller.id} AND r.status <> 'WITHDRAWN'
       ORDER BY (r.status = 'REQUESTED') DESC, r.created_at DESC, r.id DESC
       LIMIT 200`.execute(db),
@@ -594,7 +590,8 @@ export async function listPayoutRequests(query: StaffPayoutRequestsQuery) {
     query.status === 'REQUESTED'
       ? sql`ORDER BY r.created_at ASC, r.id ASC`
       : sql`ORDER BY (r.status = 'REQUESTED') DESC, COALESCE(r.handled_at, r.created_at) DESC, r.id DESC`;
-  const rows = (await sql<PayoutRequestRow>`${payoutRequestSelect} WHERE ${sql.join(where, sql` AND `)} ${order} LIMIT 300`.execute(db)).rows;
+  const ctx = await commissionContext();
+  const rows = (await sql<PayoutRequestRow>`${payoutRequestSelect(ctx)} WHERE ${sql.join(where, sql` AND `)} ${order} LIMIT 300`.execute(db)).rows;
   return { payout_requests: rows.map(presentStaffPayoutRequest) };
 }
 

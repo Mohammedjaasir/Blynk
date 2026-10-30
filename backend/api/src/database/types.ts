@@ -1157,6 +1157,8 @@ export interface SellersTable {
   location_reject_reason: ColumnType<string | null, string | null | undefined, string | null>;
   location_reviewed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
   location_reviewed_by: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Migration 065: sales delivered before this moment carry no commission (NULL = no free period; seller.commission.ts guards the column). */
+  commission_free_until: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
   created_at: Generated<Date>;
   updated_at: ColumnType<Date, Date | string | undefined, Date | string>;
 }

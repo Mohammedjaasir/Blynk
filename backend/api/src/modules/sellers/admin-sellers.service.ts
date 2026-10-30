@@ -15,7 +15,15 @@ import { DEFAULT_DARK_STORE_ID } from '../inventory/inventory.service.js';
 import { enqueuePush, PUSH_TYPES } from '../notifications/push/push.repository.js';
 import { phoneHash } from '../users/phone-identity.js';
 import { sellerStatement } from './seller.statement.js';
-import { commissionContext, earnedSql, type CommissionContext } from './seller.commission.js';
+import {
+  commissionContext,
+  earnedSql,
+  freeDaysLeft,
+  freePeriodNotReady,
+  freeUntilForApproval,
+  hasCommissionFreeColumn,
+  type CommissionContext,
+} from './seller.commission.js';
 import { hasSellerRequestTables, requestsNotReady } from './seller-requests.guard.js';
 import {
   hasSellerLocationColumns,
@@ -86,6 +94,9 @@ interface SellerRow {
   /** delivered sales less commission, line by line (seller.commission.ts) */
   earned: string;
   paid: string;
+  products_total: number;
+  /** migration 065 (NULL until it has run) */
+  commission_free_until: Date | null;
   // migration 053 (NULL / 'NONE' until it has run: locationSelect)
   latitude: number | null;
   longitude: number | null;
@@ -117,6 +128,11 @@ function presentSeller(r: SellerRow, ctx: LocationContext) {
     full_name: r.full_name,
     products_live: Number(r.products_live),
     submissions_pending: Number(r.submissions_pending),
+    // every product of the shop that is not deleted (live, paused or off)
+    products_total: Number(r.products_total),
+    // the commission-free month (migration 065): when it ends, and whole days left (0 once over; null = none)
+    commission_free_until: r.commission_free_until ? new Date(r.commission_free_until).toISOString() : null,
+    commission_free_days_left: freeDaysLeft(r.commission_free_until),
     due: round2(earned - round2(Number(r.paid))),
     // the shop pin: approved (used for delivery) and waiting (seller.location.ts)
     ...presentLocation(r as unknown as Record<string, unknown>, ctx),
@@ -135,6 +151,8 @@ async function sellerRows(
     SELECT s.id, s.shop_name, s.contact_name, s.address, s.note, s.status, s.rejection_reason,
            s.commission_percent::text AS commission_percent, s.created_at, s.user_id, u.phone, u.email, u.full_name,
            ${locationSelect(located)},
+           ${commission.free ? sql`s.commission_free_until AS commission_free_until` : sql`NULL::timestamptz AS commission_free_until`},
+           (SELECT count(*)::int FROM products p WHERE p.seller_id = s.id AND p.deleted_at IS NULL) AS products_total,
            (SELECT count(*)::int FROM products p WHERE p.seller_id = s.id AND p.deleted_at IS NULL AND p.is_active) AS products_live,
            (SELECT count(*)::int FROM seller_submissions x WHERE x.seller_id = s.id AND x.status = 'PENDING') AS submissions_pending,
            ${earnedSql(sql`s.id`, commission)} AS earned,
@@ -146,7 +164,7 @@ async function sellerRows(
   return r.rows;
 }
 
-async function oneSeller(executor: typeof db | Trx, id: string) {
+export async function oneSeller(executor: typeof db | Trx, id: string) {
   const [ctx, commission] = await Promise.all([locationContext(), commissionContext()]);
   const [row] = await sellerRows(executor, [sql`s.id = ${id}`], ctx.columns, commission);
   if (!row) throw new AppError('Seller not found.', 404, 'SELLER_NOT_FOUND');
@@ -301,6 +319,8 @@ export async function createSeller(input: CreateSellerInput, actor: AuditActor) 
   const commission = await commissionContext();
   // Before migration 057 every seller needs a rate of their own: none given = 0 (the old default).
   const pct = input.commission_percent === undefined || input.commission_percent === null ? (commission.ready ? null : 0) : input.commission_percent;
+  // Approved straight away = the free month starts now (migration 065; null when none or not run yet).
+  const freeUntil = input.status === 'APPROVED' ? await freeUntilForApproval() : null;
   try {
     const seller = await db.transaction().execute(async (trx) => {
       await assertPhoneFree(trx, input.phone);
@@ -320,6 +340,7 @@ export async function createSeller(input: CreateSellerInput, actor: AuditActor) 
           commission_percent: pct,
           status: input.status,
           ...(input.status === 'APPROVED' ? { reviewed_by: actor.actorId, reviewed_at: sql`now()` } : {}),
+          ...(freeUntil ? { commission_free_until: freeUntil } : {}),
         })
         .returning(['id'])
         .executeTakeFirstOrThrow();
@@ -334,6 +355,7 @@ export async function createSeller(input: CreateSellerInput, actor: AuditActor) 
           phone: input.phone,
           status: input.status,
           commission_percent: pct,
+          ...(freeUntil ? { commission_free_until: freeUntil.toISOString() } : {}),
         },
       });
       return oneSeller(trx, created.id);
@@ -392,6 +414,27 @@ export async function updateSeller(id: string, input: PatchSellerInput, actor: A
       set.commission_percent = input.commission_percent;
       oldValues.commission_percent = currentPct;
       newValues.commission_percent = input.commission_percent;
+    }
+
+    // The commission-free month (migration 065): approving a seller who has no date starts it now;
+    // staff can also set / clear it per seller (an explicit date wins over the approval's default).
+    const freeColumn = await hasCommissionFreeColumn();
+    const currentFree = freeColumn && current.commission_free_until ? new Date(current.commission_free_until) : null;
+    if (input.commission_free_until !== undefined) {
+      if (!freeColumn) throw freePeriodNotReady();
+      const next = input.commission_free_until === null ? null : new Date(input.commission_free_until);
+      if ((next?.getTime() ?? null) !== (currentFree?.getTime() ?? null)) {
+        set.commission_free_until = next;
+        oldValues.commission_free_until = currentFree ? currentFree.toISOString() : null;
+        newValues.commission_free_until = next ? next.toISOString() : null;
+      }
+    } else if (statusChanged && input.status === 'APPROVED' && freeColumn && currentFree === null) {
+      const until = await freeUntilForApproval(trx);
+      if (until) {
+        set.commission_free_until = until;
+        oldValues.commission_free_until = null;
+        newValues.commission_free_until = until.toISOString();
+      }
     }
 
     // Profile fields staff keep for invite-only sellers (2026-10-24).
@@ -643,7 +686,7 @@ export async function listSubmissions(query: ListSubmissionsQuery) {
 }
 
 /** A free SKU for a seller product: "SLR-" + 6 base36 characters, checked against products and variants. */
-async function freeSku(trx: Trx): Promise<string> {
+export async function freeSku(trx: Trx): Promise<string> {
   for (;;) {
     const sku = `SLR-${randomSlugSuffix().toUpperCase()}`;
     const hit =
@@ -653,7 +696,7 @@ async function freeSku(trx: Trx): Promise<string> {
   }
 }
 
-async function liveCategory(trx: Trx, id: string) {
+export async function liveCategory(trx: Trx, id: string) {
   const c = await trx.selectFrom('categories').select(['id', 'name']).where('id', '=', id).where('deleted_at', 'is', null).executeTakeFirst();
   if (!c) throw new AppError('Specified category does not exist.', 400, 'CATEGORY_NOT_FOUND', { field: 'category_id' });
   return c;

@@ -1,7 +1,7 @@
 import { sql } from 'kysely';
 import { db } from '../../database/connection.js';
 import { AppError } from '../../middleware/error.middleware.js';
-import { commissionContext, linePercentSql } from './seller.commission.js';
+import { appliedPercentSql, commissionContext, groupFreeSql } from './seller.commission.js';
 
 /**
  * A seller's statement (seller portal, docs/superpowers/plans/2026-10-24-seller-portal.md).
@@ -18,6 +18,9 @@ import { commissionContext, linePercentSql } from './seller.commission.js';
  *   earned     = gross - commission
  *   paid       = SUM(seller_payouts.amount)                        - the manual payouts ledger
  *   due        = earned - paid
+ * Free month (migration 065): sales of orders delivered before the seller's commission_free_until
+ * carry no commission (percent 0). A product sold both inside and after that window shows two lines,
+ * one at 0 % and one at the normal rate, so every line's percent is the one actually applied.
  * Items packed as UNAVAILABLE or SUBSTITUTED were not delivered as the seller's product and do
  * not count. The delivery date is orders.delivered_at (set when the cash is collected), read in
  * Asia/Colombo; an optional from / to (YYYY-MM-DD, inclusive) limits both the sales and the
@@ -66,7 +69,7 @@ export async function sellerStatement(
   const to = opts.to ? sql` AND (${delivered})::date <= ${opts.to}::date` : sql``;
 
   const ctx = await commissionContext();
-  const pct = linePercentSql(ctx);
+  const pct = appliedPercentSql(ctx);
   const lineRows = (
     await sql<{ product_id: string; name: string; units: string; gross: string; pct: string; commission: string }>`
       SELECT p.id AS product_id, p.name,
@@ -82,7 +85,7 @@ export async function sellerStatement(
          AND o.order_status = 'DELIVERED'
          AND oi.item_status NOT IN ('UNAVAILABLE', 'SUBSTITUTED')
          ${from} ${to}
-       GROUP BY p.id, p.name, ss.id
+       GROUP BY p.id, p.name, ss.id${groupFreeSql(ctx)}
        ORDER BY SUM(oi.quantity * oi.estimated_unit_cost) DESC, p.name ASC`.execute(db)
   ).rows;
 
