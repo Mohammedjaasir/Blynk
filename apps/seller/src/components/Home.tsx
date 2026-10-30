@@ -5,6 +5,7 @@ import { greeting } from '../lib/onboarding';
 import { STATUS_CHIP, initials, monthYear } from '../lib/status';
 import { IconArrowRight, IconReceipt, IconStore } from './icons';
 import { Illustration } from './Illustration';
+import { Tagline } from './Tagline';
 
 /** The welcome card at the top of My products: who you are and where the shop stands. */
 export function WelcomeHero({ seller, complete }: { seller: Seller; complete: boolean }) {
@@ -34,6 +35,7 @@ export function WelcomeHero({ seller, complete }: { seller: Seller; complete: bo
           </p>
         </div>
         <p className="hero__shop">{seller.shop_name}</p>
+        <Tagline className="tagline--hero" />
         <div className="hero__meta">
           <span className={`chip chip--${chip.tone} chip--onyellow`}>
             <span className="chip__dot" aria-hidden="true" />

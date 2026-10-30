@@ -1,8 +1,9 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { useOrders } from '../auth/OrdersContext';
 import { useSeller } from '../auth/SellerContext';
 import markUrl from '../assets/blynk-mark.png';
-import { IconBox, IconReceipt, IconSignOut, IconStock, IconStore } from './icons';
+import { IconBag, IconBox, IconReceipt, IconSignOut, IconStock, IconStore } from './icons';
 import { ErrorState, PageLoading } from './ui';
 import { InstallPrompt } from './InstallPrompt';
 import { StatusBanner } from './StatusBanner';
@@ -10,6 +11,7 @@ import { Toaster } from './Toaster';
 
 const NAV = [
   { to: '/products', label: 'My products', icon: IconBox },
+  { to: '/orders', label: 'Orders', icon: IconBag },
   { to: '/stock', label: 'My stock', icon: IconStock },
   { to: '/statement', label: 'Statement', icon: IconReceipt },
   { to: '/shop', label: 'My shop', icon: IconStore },
@@ -22,6 +24,7 @@ const NAV = [
 export function Layout() {
   const { signOut } = useAuth();
   const { seller, status, error, reload } = useSeller();
+  const { newCount } = useOrders();
 
   return (
     <div className="app">
@@ -41,8 +44,12 @@ export function Layout() {
               <NavLink key={to} to={to} className={({ isActive }) => `nav__link${isActive ? ' is-active' : ''}`}>
                 <span className="nav__icon" aria-hidden="true">
                   <Icon size={22} />
+                  {to === '/orders' && newCount > 0 ? <span className="nav__badge">{newCount > 9 ? '9+' : newCount}</span> : null}
                 </span>
                 <span className="nav__label">{label}</span>
+                {to === '/orders' && newCount > 0 ? (
+                  <span className="sr-only">{newCount === 1 ? '1 new order' : `${newCount} new orders`}</span>
+                ) : null}
               </NavLink>
             ))}
           </nav>

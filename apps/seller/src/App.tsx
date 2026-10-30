@@ -1,8 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { OrdersProvider } from './auth/OrdersContext';
 import { SellerProvider } from './auth/SellerContext';
 import { Layout } from './components/Layout';
 import { PageLoading } from './components/ui';
+import { Orders } from './pages/Orders';
 import { ProductForm } from './pages/ProductForm';
 import { Products } from './pages/Products';
 import { Shop } from './pages/Shop';
@@ -64,7 +66,9 @@ export function AppRoutes() {
           element={
             <RequireSeller>
               <SellerProvider>
-                <Layout />
+                <OrdersProvider>
+                  <Layout />
+                </OrdersProvider>
               </SellerProvider>
             </RequireSeller>
           }
@@ -72,6 +76,7 @@ export function AppRoutes() {
           <Route path="/products" element={<Products />} />
           <Route path="/products/new" element={<ProductForm mode="new" />} />
           <Route path="/products/:id/edit" element={<ProductForm mode="edit" />} />
+          <Route path="/orders" element={<Orders />} />
           <Route path="/stock" element={<Stock />} />
           <Route path="/statement" element={<Statement />} />
           <Route path="/shop" element={<Shop />} />

@@ -37,11 +37,20 @@ describe('status banner and gating by shop status', () => {
     expect(screen.getByRole('button', { name: /add a product/i })).toBeDisabled();
   });
 
-  it('APPROVED: says so, and lets the seller add products', async () => {
+  it('APPROVED: no banner at all (the old "Your shop is approved." is gone), and the seller can add products', async () => {
     mockApi(worldHandler({ seller: seller({ status: 'APPROVED' }) }));
     renderApp('/products');
-    expect(await screen.findByText(/your shop is approved/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /add a product/i })).toHaveAttribute('href', '/products/new');
+    expect(await screen.findByRole('link', { name: /add a product/i })).toHaveAttribute('href', '/products/new');
+    expect(screen.queryByText(/your shop is approved/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/blynk checks each one and sets the customer price/i)).not.toBeInTheDocument();
+    expect(document.querySelector('.banner')).toBeNull();
+  });
+
+  it('APPROVED: no banner on the other screens either', async () => {
+    mockApi(worldHandler({ seller: seller({ status: 'APPROVED' }) }));
+    renderApp('/statement');
+    await screen.findByRole('heading', { name: /statement/i });
+    expect(document.querySelector('.banner')).toBeNull();
   });
 
   it('shows the banner on every screen, not only on products', async () => {

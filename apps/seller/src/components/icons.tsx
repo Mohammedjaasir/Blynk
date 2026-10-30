@@ -292,3 +292,11 @@ export const IconStock = (p: IconProps) => (
     <path d="M3.5 12h17M12 3.5V12M8 12v8.5M16 12v8.5" />
   </Svg>
 );
+
+/** A shopping bag: the Orders tab. */
+export const IconBag = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 8h14l-1 12H6L5 8Z" />
+    <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+  </Svg>
+);

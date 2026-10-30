@@ -212,3 +212,40 @@ describe('edit a product', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not find that product/i);
   });
 });
+
+describe('the photo rule on an edit', () => {
+  const PHOTO = 'https://media.blynk.lk/products/treacle.webp';
+
+  it('an edit keeps the existing photo and sends without asking for a new one', async () => {
+    const api = mockApi((call) =>
+      call.method === 'PATCH' && call.path === '/seller/products/p1'
+        ? { status: 200, data: { submission: EDIT_SUBMISSION } }
+        : worldHandler({ products: [product({ id: 'p1', image_url: PHOTO })] })(call)
+    );
+    renderApp('/products/p1/edit');
+    const price = await screen.findByLabelText(/your price/i);
+    expect(screen.getByRole('img', { name: /product photo preview/i })).toHaveAttribute('src', PHOTO);
+    await userEvent.clear(price);
+    await userEvent.type(price, '480');
+    await userEvent.click(screen.getByRole('button', { name: /send change to blynk for approval/i }));
+    await screen.findByRole('heading', { name: /my products/i });
+    expect(api.find('PATCH', '/seller/products/p1')[0]!.body).toEqual({ seller_price: 480 });
+  });
+
+  it('an edit cannot take the photo away: it asks for a photo of your product', async () => {
+    const api = mockApi(worldHandler({ products: [product({ id: 'p1', image_url: PHOTO })] }));
+    renderApp('/products/p1/edit');
+    await screen.findByRole('img', { name: /product photo preview/i });
+    await userEvent.click(screen.getByRole('button', { name: /remove photo/i }));
+    await userEvent.click(screen.getByRole('button', { name: /send change to blynk for approval/i }));
+    expect(await screen.findByText('Add a photo of your product.')).toBeInTheDocument();
+    expect(api.find('PATCH', '/seller/products/p1')).toHaveLength(0);
+  });
+
+  it('a product that never had a photo can still be edited without one (photo stays optional)', async () => {
+    mockApi(worldHandler({ products: [product({ id: 'p1', image_url: null })] }));
+    renderApp('/products/p1/edit');
+    await screen.findByLabelText(/your price/i);
+    expect(screen.getByRole('heading', { name: /^photo/i })).toHaveTextContent(/optional/i);
+  });
+});

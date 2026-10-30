@@ -4,6 +4,7 @@ import { sellerApi } from '../api/resources';
 import type { SellerProduct, Statement } from '../api/types';
 import { useSeller } from '../auth/SellerContext';
 import { BestSellers } from '../components/BestSellers';
+import { CommissionFreeCard } from '../components/CommissionFree';
 import { Tracker, WelcomeHero } from '../components/Home';
 import { Illustration } from '../components/Illustration';
 import {
@@ -20,7 +21,7 @@ import { EmptyState, ErrorState, Eyebrow, Kpi, PageLoading } from '../components
 import { errorMessage } from '../lib/apiErrors';
 import { formatDate, formatNumber, lkr } from '../lib/format';
 import { onboarding } from '../lib/onboarding';
-import { isSubmissionOnly, productState } from '../lib/products';
+import { canPause, isSubmissionOnly, productState } from '../lib/products';
 
 /**
  * My products is the seller's home: a welcome card, the getting-started
@@ -107,6 +108,7 @@ export function Products() {
         </div>
       ) : null}
       {showTracker ? kpis : null}
+      <CommissionFreeCard />
       <NotificationsNudge />
       {showBest ? <BestSellers /> : null}
 
@@ -207,7 +209,13 @@ function ProductCard({
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const state = productState(product);
+  // The seller's on-sale switch: shown at once, put back if the API refuses.
+  const [available, setAvailable] = useState(product.is_available !== false);
+  const [pausing, setPausing] = useState(false);
+  const [pauseError, setPauseError] = useState<string | null>(null);
+  const shown: SellerProduct = { ...product, is_available: available };
+  const state = productState(shown);
+  const paused = available === false && canPause(product);
   const submissionOnly = isSubmissionOnly(product);
   const rejected = product.last_rejected && !product.pending ? product.last_rejected : null;
   const priceNow = product.pending ? product.pending.seller_price : product.seller_price;
@@ -226,8 +234,24 @@ function ProductCard({
     }
   }
 
+  async function toggleAvailability() {
+    if (pausing) return;
+    const next = !available;
+    setPausing(true);
+    setPauseError(null);
+    setAvailable(next);
+    try {
+      await sellerApi.setAvailability(product.id, next);
+    } catch (err) {
+      setAvailable(!next);
+      setPauseError(errorMessage(err, 'Could not change this. Please try again.'));
+    } finally {
+      setPausing(false);
+    }
+  }
+
   return (
-    <article className={`pcard pcard--${state.chip.tone}`} aria-label={product.name}>
+    <article className={`pcard pcard--${state.chip.tone}${paused ? ' pcard--paused' : ''}`} aria-label={product.name}>
       <div className="pcard__media">
         {product.image_url ? (
           <img className="pcard__img" src={product.image_url} alt="" loading="lazy" />
@@ -274,6 +298,35 @@ function ProductCard({
             <dd>{formatNumber(product.units_sold)}</dd>
           </div>
         </dl>
+
+        {canPause(product) ? (
+          <div className="sale">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={available}
+              className="switch"
+              disabled={!canSell || pausing}
+              onClick={() => void toggleAvailability()}
+            >
+              <span className="switch__track" aria-hidden="true">
+                <span className="switch__thumb" />
+              </span>
+              <span className="switch__label">
+                {available ? 'On sale' : 'Paused'}
+                <span className="sr-only"> {product.name}</span>
+              </span>
+            </button>
+            {paused ? (
+              <p className="muted sale__note">Paused, customers can&apos;t order it</p>
+            ) : null}
+            {pauseError ? (
+              <p className="field__error sale__error" role="alert">
+                {pauseError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {product.pending ? (
           <p className="note note--wait">

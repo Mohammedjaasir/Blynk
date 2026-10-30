@@ -14,11 +14,17 @@ export function isSubmissionOnly(product: SellerProduct): boolean {
   return product.id.startsWith('submission:');
 }
 
+/** Whether the seller can pause / resume this product: a real, live product Blynk has switched on. */
+export function canPause(product: SellerProduct): boolean {
+  return !isSubmissionOnly(product) && product.live && product.is_active;
+}
+
 /**
  * What a seller sees for one product:
  *  - not live yet: Waiting for approval (a NEW submission waits), Not approved (rejected), else Off;
  *  - live and on: Live (plus "Change waiting for approval" while an edit waits);
- *  - live but switched off: Off.
+ *  - live but paused by the seller: Paused;
+ *  - live but switched off by Blynk: Off.
  */
 export function productState(product: SellerProduct): ProductState {
   if (!product.live) {
@@ -26,7 +32,12 @@ export function productState(product: SellerProduct): ProductState {
     if (product.last_rejected) return { chip: { label: 'Not approved', tone: 'bad' }, extra: null };
     return { chip: { label: 'Off', tone: 'off' }, extra: null };
   }
-  const chip: ProductState['chip'] = product.is_active ? { label: 'Live', tone: 'ok' } : { label: 'Off', tone: 'off' };
+  // Live but paused by the seller (is_available false): customers see it as unavailable.
+  const chip: ProductState['chip'] = !product.is_active
+    ? { label: 'Off', tone: 'off' }
+    : product.is_available === false
+      ? { label: 'Paused', tone: 'off' }
+      : { label: 'Live', tone: 'ok' };
   return {
     chip,
     extra: product.pending ? { label: 'Change waiting for approval', tone: 'wait' } : null,

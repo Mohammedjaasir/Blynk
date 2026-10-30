@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ApiError } from '../api/client';
 import { sellerApi } from '../api/resources';
 import type { Category, ProductInput, SellerProduct } from '../api/types';
 import { useSeller } from '../auth/SellerContext';
@@ -60,7 +61,13 @@ function liveValues(product: SellerProduct): FormState {
   return fromProduct({ ...product, pending: null });
 }
 
-function validate(form: FormState): Errors {
+export const PHOTO_REQUIRED_MESSAGE = 'Add a photo of your product.';
+
+/**
+ * `photoRequired`: a new product needs a photo (the API refuses one without: IMAGE_REQUIRED). An
+ * edit keeps the photo the product already has, so the photo cannot be taken away by an edit.
+ */
+function validate(form: FormState, photoRequired: boolean): Errors {
   const errors: Errors = {};
   const name = form.name.trim();
   if (name.length < 2) errors.name = 'Enter the product name (at least 2 letters).';
@@ -71,6 +78,7 @@ function validate(form: FormState): Errors {
   if (form.pack_size.trim().length > 64) errors.pack_size = 'The pack size is too long (64 letters at most).';
   if (form.description.trim().length > 2000) errors.description = 'The description is too long (2000 letters at most).';
   if (form.barcode.trim().length > 64) errors.barcode = 'The barcode is too long (64 characters at most).';
+  if (photoRequired && !form.image_url) errors.image_url = PHOTO_REQUIRED_MESSAGE;
   const price = parsePrice(form.price);
   if (!form.price.trim()) errors.price = 'Enter the price you want for this product.';
   else if (price === null) errors.price = 'Enter the price as a number, for example 250 or 250.50.';
@@ -155,7 +163,7 @@ export function ProductForm({ mode }: { mode: 'new' | 'edit' }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setFormError(null);
-    const found = validate(form);
+    const found = validate(form, photoRequired);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setFormError('Please fix the highlighted boxes.');
@@ -198,6 +206,7 @@ export function ProductForm({ mode }: { mode: 'new' | 'edit' }) {
     } catch (err) {
       const server = fieldErrors(err);
       const mapped: Errors = {};
+      if (err instanceof ApiError && err.code === 'IMAGE_REQUIRED') mapped.image_url = PHOTO_REQUIRED_MESSAGE;
       for (const [field, message] of Object.entries(server)) {
         const key = SERVER_FIELD[field];
         if (key) mapped[key] = message;
@@ -214,6 +223,8 @@ export function ProductForm({ mode }: { mode: 'new' | 'edit' }) {
   }
 
   const title = mode === 'new' ? 'Add a product' : 'Edit product';
+  // A new product needs a photo; an edit of a product that has one keeps one.
+  const photoRequired = mode === 'new' || Boolean(initial.image_url);
   const dirty = mode === 'new' ? true : JSON.stringify(form) !== JSON.stringify(initial);
 
   if (loadError) {
@@ -395,7 +406,12 @@ export function ProductForm({ mode }: { mode: 'new' | 'edit' }) {
           <div className="pform__side">
             <div className="panel">
               <h2 className="panel__title" id="p-photo-label">
-                Photo <span className="field__opt">(optional)</span>
+                Photo{' '}
+                {photoRequired ? (
+                  <span className="field__req">(required)</span>
+                ) : (
+                  <span className="field__opt">(optional)</span>
+                )}
               </h2>
               <ImagePicker value={form.image_url} onChange={(url) => set('image_url', url)} onBusyChange={setUploading} />
               {errors.image_url ? (

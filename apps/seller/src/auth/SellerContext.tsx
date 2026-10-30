@@ -22,6 +22,21 @@ interface SellerState {
 
 const SellerContext = createContext<SellerState | null>(null);
 
+/** The commission-free fields may sit on `seller` or beside it in GET /seller/me: read either. */
+function withFreePeriod(data: SellerMe): SellerMe {
+  const s = data.seller;
+  const pick = <T,>(own: T | undefined, beside: T | undefined): T | undefined => (own !== undefined ? own : beside);
+  return {
+    ...data,
+    seller: {
+      ...s,
+      commission_free_until: pick(s.commission_free_until, data.commission_free_until),
+      commission_free_days_left: pick(s.commission_free_days_left, data.commission_free_days_left),
+      commission_free_days: pick(s.commission_free_days, data.commission_free_days),
+    },
+  };
+}
+
 export function SellerProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<SellerMe | null>(null);
   const [status, setStatus] = useState<SellerState['status']>('loading');
@@ -30,7 +45,7 @@ export function SellerProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async () => {
     try {
       const data = await sellerApi.me();
-      setMe(data);
+      setMe(withFreePeriod(data));
       setError(null);
       setStatus('ready');
     } catch (err) {
@@ -48,7 +63,16 @@ export function SellerProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   const setSeller = useCallback((seller: Seller) => {
-    setMe((current) => ({ seller, counts: current?.counts ?? { products: 0, pending: 0 } }));
+    // A profile / location answer carries no free-period numbers: keep the ones we have.
+    setMe((current) => ({
+      seller: {
+        ...seller,
+        commission_free_until: seller.commission_free_until ?? current?.seller.commission_free_until,
+        commission_free_days_left: seller.commission_free_days_left ?? current?.seller.commission_free_days_left,
+        commission_free_days: seller.commission_free_days ?? current?.seller.commission_free_days,
+      },
+      counts: current?.counts ?? { products: 0, pending: 0 },
+    }));
     setStatus('ready');
   }, []);
 

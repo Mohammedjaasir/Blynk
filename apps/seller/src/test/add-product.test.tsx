@@ -18,6 +18,16 @@ async function openForm() {
   await screen.findByRole('option', { name: 'Rice' });
 }
 
+/** Pick a photo and wait until it is uploaded (the send button waits for it). */
+async function addPhoto() {
+  await userEvent.upload(screen.getByLabelText(/choose a photo from the gallery/i), photo());
+  await screen.findByRole('img', { name: /product photo preview/i });
+  await waitFor(() => expect(screen.getByRole('button', { name: /send to blynk for approval/i })).toBeEnabled());
+}
+
+const uploadOk = (call: { method: string; path: string }) =>
+  call.method === 'POST' && call.path === '/seller/uploads/image' ? ok({ url: PHOTO_URL }) : undefined;
+
 async function fillRequired() {
   await userEvent.type(screen.getByLabelText(/product name/i), 'Mango Jam');
   await userEvent.selectOptions(screen.getByLabelText(/category/i), 'c-rice');
@@ -82,14 +92,17 @@ describe('add a product', () => {
     expect(await screen.findByText(/blynk will check "mango jam"/i)).toBeInTheDocument();
   });
 
-  it('sends empty optional boxes as nothing', async () => {
-    const api = mockApi((call) =>
-      call.method === 'POST' && call.path === '/seller/products'
-        ? { status: 201, data: { submission: submission() } }
-        : worldHandler()(call)
+  it('sends empty optional boxes as nothing (only the photo is kept)', async () => {
+    const api = mockApi(
+      (call) =>
+        uploadOk(call) ??
+        (call.method === 'POST' && call.path === '/seller/products'
+          ? { status: 201, data: { submission: submission() } }
+          : worldHandler()(call))
     );
     await openForm();
     await fillRequired();
+    await addPhoto();
     await userEvent.click(screen.getByRole('button', { name: /send to blynk for approval/i }));
     await screen.findByRole('heading', { name: /my products/i });
     expect(api.find('POST', '/seller/products')[0]!.body).toEqual({
@@ -99,9 +112,44 @@ describe('add a product', () => {
       pack_size: null,
       description: null,
       barcode: null,
-      image_url: null,
+      image_url: PHOTO_URL,
       seller_price: 1250.5,
     });
+  });
+
+  it('cannot be sent without a photo: says "Add a photo of your product." and sends nothing', async () => {
+    const api = mockApi(worldHandler());
+    await openForm();
+    await fillRequired();
+    expect(screen.getByRole('heading', { name: /^photo/i })).toHaveTextContent(/\(required\)/i);
+    await userEvent.click(screen.getByRole('button', { name: /send to blynk for approval/i }));
+    expect(await screen.findByText('Add a photo of your product.')).toBeInTheDocument();
+    expect(api.find('POST', '/seller/products')).toHaveLength(0);
+  });
+
+  it('clears the photo message once a photo is added', async () => {
+    mockApi((call) => uploadOk(call) ?? worldHandler()(call));
+    await openForm();
+    await fillRequired();
+    await userEvent.click(screen.getByRole('button', { name: /send to blynk for approval/i }));
+    await screen.findByText('Add a photo of your product.');
+    await addPhoto();
+    expect(screen.queryByText('Add a photo of your product.')).not.toBeInTheDocument();
+  });
+
+  it('shows the API refusal IMAGE_REQUIRED under the photo', async () => {
+    mockApi(
+      (call) =>
+        uploadOk(call) ??
+        (call.method === 'POST' && call.path === '/seller/products'
+          ? fail(400, 'IMAGE_REQUIRED', 'Add a photo of the product.')
+          : worldHandler()(call))
+    );
+    await openForm();
+    await fillRequired();
+    await addPhoto();
+    await userEvent.click(screen.getByRole('button', { name: /send to blynk for approval/i }));
+    expect(await screen.findAllByText('Add a photo of your product.')).not.toHaveLength(0);
   });
 
   it('says in plain words what is missing and sends nothing', async () => {
@@ -140,28 +188,34 @@ describe('add a product', () => {
   });
 
   it('shows the server\'s complaint next to the box it is about', async () => {
-    mockApi((call) =>
-      call.method === 'POST' && call.path === '/seller/products'
-        ? fail(400, 'VALIDATION_ERROR', 'Request validation failed', [
-            { field: 'seller_price', message: 'Your price can have at most 2 decimals.' },
-          ])
-        : worldHandler()(call)
+    mockApi(
+      (call) =>
+        uploadOk(call) ??
+        (call.method === 'POST' && call.path === '/seller/products'
+          ? fail(400, 'VALIDATION_ERROR', 'Request validation failed', [
+              { field: 'seller_price', message: 'Your price can have at most 2 decimals.' },
+            ])
+          : worldHandler()(call))
     );
     await openForm();
     await fillRequired();
+    await addPhoto();
     await userEvent.click(screen.getByRole('button', { name: /send to blynk for approval/i }));
     expect(await screen.findByText(/at most 2 decimals/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/your price/i)).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('says so when the shop is not approved (the API refused)', async () => {
-    mockApi((call) =>
-      call.method === 'POST' && call.path === '/seller/products'
-        ? fail(403, 'SELLER_NOT_APPROVED', 'Your seller account is not approved.')
-        : worldHandler()(call)
+    mockApi(
+      (call) =>
+        uploadOk(call) ??
+        (call.method === 'POST' && call.path === '/seller/products'
+          ? fail(403, 'SELLER_NOT_APPROVED', 'Your seller account is not approved.')
+          : worldHandler()(call))
     );
     await openForm();
     await fillRequired();
+    await addPhoto();
     await userEvent.click(screen.getByRole('button', { name: /send to blynk for approval/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/has not approved your shop yet/i);
   });

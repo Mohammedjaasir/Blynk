@@ -7,6 +7,7 @@ import type {
   Insights,
   PayoutRequest,
   Seller,
+  SellerOrder,
   SellerProduct,
   Statement,
   Submission,
@@ -68,6 +69,23 @@ export function product(overrides: Partial<SellerProduct> = {}): SellerProduct {
     live: true,
     pending: null,
     last_rejected: null,
+    ...overrides,
+  };
+}
+
+export function order(overrides: Partial<SellerOrder> = {}): SellerOrder {
+  return {
+    id: 'o1',
+    order_number: '1283',
+    placed_at: '2026-10-30T08:45:00.000Z',
+    status: 'NEW',
+    ready_at: null,
+    can_mark_ready: true,
+    items: [
+      { product_id: 'p1', name: 'Apple Pie', quantity: 2 },
+      { product_id: 'p2', name: 'Samosa', quantity: 1 },
+    ],
+    seller_amount: 1250,
     ...overrides,
   };
 }
@@ -158,6 +176,7 @@ export interface World {
   seller?: Seller;
   products?: SellerProduct[];
   statement?: Statement;
+  orders?: SellerOrder[];
   /** Extra handler tried first. */
   extra?: (call: Call) => Reply | undefined;
 }
@@ -177,6 +196,8 @@ export function worldHandler(world: World = {}) {
         return ok({ categories: CATEGORIES });
       case 'GET /seller/products':
         return ok({ products: world.products ?? [] });
+      case 'GET /seller/orders':
+        return ok({ orders: world.orders ?? [] });
       case 'GET /seller/statement':
         return ok(world.statement ?? statement());
       case 'POST /auth/logout':

@@ -11,6 +11,8 @@ import type {
   ProfileInput,
   Seller,
   SellerMe,
+  SellerOrder,
+  SellerOrderStatus,
   SellerProduct,
   Statement,
   StockSetResult,
@@ -113,6 +115,36 @@ export const sellerApi = {
       method: 'PUT',
       body: { quantity },
     }),
+
+  // ------------------------------------------------- pause / resume a product
+  /**
+   * Switch one of the seller's own approved products on or off sale (products.is_available).
+   * A paused product shows as unavailable to customers. 404 when it is not theirs, 403 when
+   * the shop is not approved.
+   */
+  setAvailability: (productId: string, available: boolean) =>
+    apiRequest<unknown>(`/seller/products/${encodeURIComponent(productId)}/availability`, {
+      method: 'PATCH',
+      body: { available },
+    }),
+
+  // ------------------------------------------------- orders
+  /** The seller's orders, newest first (last 60 days, at most 100). `status` narrows the list. */
+  orders: (status?: SellerOrderStatus) =>
+    apiRequest<{ orders: SellerOrder[] }>(`/seller/orders${status ? `?status=${status}` : ''}`).then(
+      (r) => r.orders ?? []
+    ),
+
+  /**
+   * "Order is ready": moves a NEW single-seller order to packed and tells the rider (or staff).
+   * Refusals: 409 SELLER_ORDER_MIXED (Blynk collects it), 409 ORDER_NOT_NEW, 404 not theirs.
+   * The answer is the order in the list shape (read either bare or as { order }).
+   */
+  markOrderReady: (orderId: string) =>
+    apiRequest<SellerOrder | { order: SellerOrder }>(`/seller/orders/${encodeURIComponent(orderId)}/ready`, {
+      method: 'POST',
+      body: {},
+    }).then((r) => ('order' in r && r.order ? r.order : (r as SellerOrder))),
 
   // ------------------------------------------------- payout requests (one open at a time)
   payoutRequests: () =>

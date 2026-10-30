@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { sellerApi } from '../api/resources';
 import { useAuth } from '../auth/AuthContext';
 import { useSeller } from '../auth/SellerContext';
+import { CommissionFreeCard } from '../components/CommissionFree';
 import { IconCalendar, IconLock, IconPhone, IconStore } from '../components/icons';
 import { LocationCard } from '../components/LocationCard';
 import { NotificationsCard } from '../components/NotificationsCard';
@@ -140,6 +141,8 @@ export function Shop() {
           Your shop is switched off, so the details cannot be changed. Please contact Blynk.
         </p>
       ) : null}
+
+      <CommissionFreeCard />
 
       <NotificationsCard />
 

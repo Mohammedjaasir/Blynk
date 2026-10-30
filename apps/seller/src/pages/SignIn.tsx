@@ -3,6 +3,7 @@ import { auth as authApi } from '../api/resources';
 import { useAuth, SESSION_ENDED_MESSAGE } from '../auth/AuthContext';
 import markUrl from '../assets/blynk-mark.png';
 import { IconInfo, IconLock, IconPhone, IconPin, IconScooter, IconWallet } from '../components/icons';
+import { Tagline } from '../components/Tagline';
 import { ButtonArrow, Field, describedBy, Spinner } from '../components/ui';
 import { isSellerNotRegistered, retryAfterSeconds, signInMessage } from '../lib/apiErrors';
 
@@ -22,7 +23,7 @@ export function looksLikePhone(raw: string): boolean {
 const BENEFITS = [
   {
     icon: IconPin,
-    title: 'Reach customers in Dharga Town & Aluthgama',
+    title: 'Reach customers in Dharga Town',
     text: 'Your products show in the Blynk app for homes nearby.',
   },
   {
@@ -58,6 +59,7 @@ export function SignIn() {
               Blynk <span>Sellers</span>
             </span>
           </div>
+          <Tagline className="tagline--brand" />
 
           <div className="signin__pitch">
             <p className="eyebrow eyebrow--brand">For local shops</p>

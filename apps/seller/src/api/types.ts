@@ -31,6 +31,14 @@ export interface Seller {
   /** Road-free distance from the Blynk store to the approved point. */
   distance_km_from_store?: number | null;
   pending_distance_km_from_store?: number | null;
+  /*
+   * The commission-free month (migration 065). All optional: an API without it leaves them out.
+   * `commission_free_days_left` is in whole days, rounded up, never negative; null when there is
+   * no free period. `commission_free_days` is the setting (how long the month is).
+   */
+  commission_free_until?: string | null;
+  commission_free_days_left?: number | null;
+  commission_free_days?: number;
 }
 
 export type LocationStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -49,6 +57,10 @@ export interface StoreInfo {
 export interface SellerMe {
   seller: Seller;
   counts: { products: number; pending: number };
+  /** The commission-free fields may also sit beside `seller`; the app reads either place. */
+  commission_free_until?: string | null;
+  commission_free_days_left?: number | null;
+  commission_free_days?: number;
 }
 
 export interface AuthUser {
@@ -224,4 +236,30 @@ export interface LocationInput {
   latitude: number | null;
   longitude: number | null;
   location_note?: string | null;
+}
+
+/*
+ * Orders (GET /seller/orders, POST /seller/orders/:id/ready). A seller never sees customer
+ * details: only the order number, the time, their own lines and what they earn for them.
+ */
+export type SellerOrderStatus = 'NEW' | 'READY' | 'ON_THE_WAY' | 'DELIVERED' | 'CANCELLED';
+
+export interface SellerOrderItem {
+  product_id: string;
+  name: string;
+  quantity: number;
+}
+
+export interface SellerOrder {
+  id: string;
+  order_number: string | number;
+  placed_at: string;
+  status: SellerOrderStatus;
+  /** When the order went to "packed"; null until then. */
+  ready_at: string | null;
+  /** True only for a NEW order that holds only this seller's products. */
+  can_mark_ready: boolean;
+  items: SellerOrderItem[];
+  /** What the seller earns for these items, before commission. */
+  seller_amount: number;
 }

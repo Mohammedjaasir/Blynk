@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Seller } from '../api/types';
-import { IconAlert, IconCheckCircle, IconClock, IconPause } from './icons';
+import { IconAlert, IconClock, IconPause } from './icons';
 
 function Banner({
   tone,
@@ -9,7 +9,7 @@ function Banner({
   icon,
   children,
 }: {
-  tone: 'wait' | 'bad' | 'ok';
+  tone: 'wait' | 'bad';
   status: Seller['status'];
   icon: ReactNode;
   children: ReactNode;
@@ -25,10 +25,10 @@ function Banner({
 }
 
 /**
- * Where the shop stands with Blynk, shown on every screen. Only an APPROVED
- * shop can add or change products.
+ * Where the shop stands with Blynk, shown on every screen while it is waiting, not approved or
+ * switched off. An APPROVED shop sees nothing here (it was "Your shop is approved." on every screen).
  */
-export function StatusBanner({ seller }: { seller: Seller }) {
+export function StatusBanner({ seller }: { seller: Seller }): JSX.Element | null {
   switch (seller.status) {
     case 'PENDING':
       return (
@@ -58,11 +58,7 @@ export function StatusBanner({ seller }: { seller: Seller }) {
         </Banner>
       );
     case 'APPROVED':
-      return (
-        <Banner tone="ok" status="APPROVED" icon={<IconCheckCircle size={22} />}>
-          <strong>Your shop is approved.</strong>
-          <span>Add products below. Blynk checks each one and sets the customer price before it goes live.</span>
-        </Banner>
-      );
+      // Nothing to tell an approved shop: the banner is only for a shop that needs attention.
+      return null;
   }
 }
